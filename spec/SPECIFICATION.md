@@ -245,8 +245,9 @@ file rather than an `Arc` clone. Each tick is partial in a way §6.5 states — 
 tick is batch shape's, on `ProjectionStore` rather than on `EventStore`, and it
 is *one-sided*: `SqliteProjectionStore` passes
 `projection_store_conformance!` at the replay-at-commit far end, while the
-live-transaction near end holds nothing that has run anything — so PS-2, which
-wants the suite green at both ends, is not cleared by it. The remaining two —
+live-transaction near end holds nothing that has run anything **and cannot be
+observed to, even once built** (ADR-0060) — so PS-2, which wants the suite green
+at both ends, is not cleared by it. The remaining two —
 transport and completeness — have nothing at
 either end. So
 the qualification is not hypothetical, it is not discharged by asserting it, and
@@ -388,8 +389,8 @@ unrelated crate wanted replication.
 
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
-| **`EventStore`** | `crates/happenstance-core/src/store.rs:141-316` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; two — transport and completeness — are empty at both ends. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
-| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five impls straddling the batch-shape axis — four of them still skeletons — owned write sets in `happenstance-sqlite`, `happenstance-neon` and `happenstance-ladybug`, a live borrowed handle in `live_handle.rs:174`, a `Transaction<'static, Postgres>` in `happenstance-postgres`. **Two** of the five are `todo!()` throughout — `LadybugProjectionStore` (`crates/happenstance-ladybug/src/projection_store.rs:270-292`) and `PostgresProjectionStore` (`crates/happenstance-postgres/src/projection_store.rs:105-127`). The other three carry real bodies: `NeonProjectionStore` in all four methods (`crates/happenstance-neon/src/projection_store.rs:164-202` — its two `todo!()`s are in the free functions `decode_checkpoint` and `decode_commit`, which are not port methods), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in **all four** since phase 8, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). That distinction is the whole reason the count is stated: a `todo!()` has type `!` and coerces to anything, so a body of them proves a signature is nameable, not that it can be satisfied. One of the five now runs against a suite — `SqliteProjectionStore`, through `happenstance_testkit::projection_store_conformance!` at `crates/happenstance-sqlite/tests/projection.rs`, against a real temporary file; the other four still run against nothing | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
+| **`EventStore`** | `crates/happenstance-core/src/store.rs:141-316` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it is the workspace's only adapter instrument to have *failed* a clause rather than passed one. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
+| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding cannot be discharged** — `begin` is total, synchronous and infallible and every route to a `sqlx` transaction is `async` and fallible — so it is now an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`). Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:354-420`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Four of the five now run against the suite** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, and `LadybugProjectionStore` since phase 11, each through `happenstance_testkit::projection_store_conformance!` against a real backing store. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:120`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point. `EventStore` is frozen because it has evidence:
@@ -452,8 +453,12 @@ answer.
   crate can declare for itself over a foreign trait, which is ordinary coherence
   (ADR-0009). What is left is naming and surface, and phase 4 owns it.
 - **The whole of `ProjectionStore`** until PS-2's bar is met. The batch shape, the
-  write seam, reset, read-your-writes and the failure policy are all specified,
-  and all of them are specified against zero adapters.
+  write seam, reset, read-your-writes and the failure policy are all specified —
+  and they are no longer specified against *zero* adapters: four pass the suite
+  since phase 11. What keeps the gate on is no longer the count. ADR-0060 records
+  the reason it replaced: the signatures a freeze would promise are the ones that
+  forbid the second batch shape from existing or from reporting itself, so
+  freezing now would make a promise out of the defect.
 - **Retention, deletion and completeness** (ES-39, CF-27). A store that has been
   deleted from is currently indistinguishable from a young one at every value in
   §2, and four of the six scenarios reach that from unrelated doors.
@@ -475,9 +480,11 @@ real implementation at durability's far end and still not a store that has met a
 *fault*; and its fixture hands out second `rusqlite::Connection`s onto one file,
 which is a real implementation at handle multiplicity's far end and still not a
 connection pool. The third far end is batch shape's, on the other port and from
-the same crate: `SqliteProjectionStore` passes `projection_store_conformance!`
-at the replay-at-commit end, and the live-transaction end holds nothing that has
-run anything, which is why PS-2 is not cleared by it. The other two —
+the same crate: four adapters now pass `projection_store_conformance!` at the
+replay-at-commit end, and the live-transaction end holds nothing that has run
+anything — which since ADR-0060 is known to be structural rather than a gap
+anyone can close by building one, because the probe seam cannot describe such a
+store even when it exists. PS-2 is not cleared by it. The other two —
 transport and completeness — are empty at both ends. Every
 port in this document has been checked against a population of implementations
 that agree with it: `MemoryEventStore`, a rusqlite adapter and a planned Durable
@@ -2980,7 +2987,7 @@ fixed no later than the first poll of the returned stream. Events appended after
 that instant MUST NOT be yielded. No event that was visible at that instant and
 matches the query MAY be omitted.
 
-**[PROVISIONAL — axis: **transport**, whose far end is unbuilt. `MemoryEventStore` snapshots under the lock at call time (`memory.rs:296-336`) and satisfies this for free; an adapter reaching its store over one-shot HTTP with no cursor can only self-paginate, and a self-paginating read is not a snapshot. Falsified by the first one-shot-HTTP adapter that cannot meet this in one round trip — which is the outcome to expect, and the reason to have settled it before the freeze rather than after.]**
+**[PROVISIONAL — axis: **transport**, and **its falsifier has fired**. `MemoryEventStore` snapshots under the lock at call time (`memory.rs:296-336`) and satisfies this for free. This marker predicted that the first one-shot-HTTP adapter would fail by self-paginating, and that the outcome was the one to expect. `happenstance-neon` is that adapter, arrived at phase 10b, and the prediction was **right about the outcome and wrong about the mechanism**: one read there is one statement buffered whole, so self-pagination is unreachable and the paging half of this clause holds by construction. It fails `read_result_is_stable_under_concurrent_append` intermittently — 3 red in 20 over HTTP/1.1, 1 in 40 over a single multiplexed HTTP/2 connection — because a read and an append are two independent requests with no ordering primitive the *store* honours between them. ADR-0061 records the finding, narrows the sufficiency condition below, and states that `happenstance-neon` does not satisfy this clause; it does not touch the MUST. The marker stays because what settles it is no longer whether this shape fails — it does — but whether a conformant one-shot-HTTP shape exists at all.]**
 
 This settles D7 and E2E-02. Two conformant adapters have opposite semantics
 today: `MemoryEventStore` filters, orders and truncates under the read lock and
@@ -3023,9 +3030,28 @@ What conforms is **handing the work to the runtime at the first poll**, rather
 than holding it as an inline future that advances only while a caller is polling
 it. The obligation is then met in the only sense available on that shape: the
 sample was *committed to* at that poll and no longer depends on the caller
-polling again. A read spawned at its first poll and an append spawned afterwards
-land in the same queue in that order, so the snapshot precedes the append without
-either operation having completed when the poll returned.
+polling again.
+
+**That is necessary and not sufficient, and the missing half is easy to miss
+because the driver this paragraph was written for supplies it for free.** Handing
+the work to the runtime orders the two operations *at the client*; what this clause
+needs is that the snapshot one takes precedes the commit the other makes *at the
+store*. A driver whose operations share one queue carries the client's order
+through to the store and buys both halves at once — `happenstance-postgres` does,
+because a read and an append both enter one `PgPool`. A driver with **no shared
+ordering primitive** between its operations buys only the first, and
+`happenstance-neon` is the built case: it issues each operation as an independent
+request to a pooled proxy that hands each to whichever backend it likes, it spawns
+at the first poll exactly as this paragraph prescribes, and it still fails the rule
+— measured at 3 red in 20 over HTTP/1.1 and 1 in 40 over a single multiplexed
+HTTP/2 connection.
+
+So the sufficiency condition is **spawned at the first poll, *and* ordered against
+a later append by something the store itself honours**. That is a narrowing rather
+than a widening: it removes a route to a conformance claim — spawn order alone —
+rather than admitting a shape the MUST would otherwise reject. ADR-0061 records it,
+together with the consequence, which is that `happenstance-neon` does not satisfy
+this clause rather than that this clause bends to admit it.
 
 The distinction is worth the paragraph because the failure is *consistent*, which
 makes the wrong diagnosis look structural. `happenstance-postgres` failed
@@ -3060,9 +3086,14 @@ argument for weakening the obligation rather than for supplying the primitive.
   `tests/` is the registered adapter that fails it: a store with no cursor
   issuing an independent statement per page against whatever it holds now.
 - **Cases:** E2E-02, E2E-01.
-- **Rejects:** the self-paginating one-shot-HTTP adapter above — the natural shape
-  for `happenstance-neon`, and one of the two instruments the workspace has
-  already chosen. It is conformant today.
+- **Rejects:** the self-paginating one-shot-HTTP adapter above — and, since phase
+  10b, `happenstance-neon`, which turned out **not** to be that adapter. It buffers
+  one statement's whole result set in one round trip, so self-pagination is
+  unreachable there; it fails on the ordering half instead, and ADR-0061 records
+  why. This bullet ended *"It is conformant today"* from 2026-08-06 (`12ecb1a`)
+  until that ADR, by which time the adapter it called hypothetical had been in the
+  tree for two phases — which is what a citation checker cannot catch and a
+  currency check would.
 
 **A coverage hole opened when this rule's neighbour was promoted, and it is
 recorded here so it is not rediscovered.** `a_live_read_stream_does_not_block_an_append`
@@ -3083,7 +3114,7 @@ over-specifying the port, and is the cheaper half if this stays blocked.
 Every item of a `Query` MUST be evaluated against the same snapshot as every
 other item of that same `read` call.
 
-**[PROVISIONAL — axis: **transport**, with ES-11, and strictly harder: an adapter that issues one statement per query item satisfies ES-11 per item and still fails this. Falsified by the same adapter, and the failure mode is quieter — an event matching item 1 that lands between two statements is missed while the observed maximum position sits above it, so a condition built on that boundary admits a write it should have rejected, with no error anywhere.]**
+**[PROVISIONAL — axis: **transport**, with ES-11, and strictly harder: an adapter that issues one statement per query item satisfies ES-11 per item and still fails this. The failure mode is quieter — an event matching item 1 that lands between two statements is missed while the observed maximum position sits above it, so a condition built on that boundary admits a write it should have rejected, with no error anywhere. **The same adapter arrived and this clause survived it**: `happenstance-neon` issues exactly one statement per `read` whatever the item count, so the defect above is unreachable there and `query_items_share_one_snapshot` passes. It is not immune, though, and the difference matters — that rule appends after the first poll and asserts the drained set unchanged, which is structurally ES-11's exposure, and sixty measured runs at the sibling rule's observed rate separate luck from immunity poorly. ADR-0061 carries both halves. The marker stays for the shape this clause actually forbids, which is still unbuilt.]**
 
 - **Rule:** `query_items_share_one_snapshot` — a two-item query whose items
   carry distinct type lists, built, **polled once**, then an event matching the
@@ -4752,27 +4783,32 @@ reading a stronger claim than this section makes.
 
 Four facts frame everything below.
 
-**The port has five implementers and, since phase 8, one adapter.** `grep -rn
+**The port has five implementers and, since phase 11, four adapters.** `grep -rn
 "ProjectionStore for"` matches `SqliteProjectionStore`
 (`crates/happenstance-sqlite/src/projection_store.rs:529`),
 `PostgresProjectionStore`
-(`crates/happenstance-postgres/src/projection_store.rs:94`),
+(`crates/happenstance-postgres/src/projection_store.rs:284`),
 `LadybugProjectionStore`
-(`crates/happenstance-ladybug/src/projection_store.rs:258`),
+(`crates/happenstance-ladybug/src/projection_store.rs:530`),
 `LiveHandleProjectionStore`
 (`experiments/live-handle-projection-batch/live_handle.rs:174`) and
 `NeonProjectionStore<T>`
-(`crates/happenstance-neon/src/projection_store.rs:153`). Four are still phase-2
-skeletons whose claims about transactions nothing has executed. The fifth is
-not: `SqliteProjectionStore` has real bodies in all four port methods and
-`crates/happenstance-sqlite/tests/projection.rs` mounts
-`happenstance_testkit::projection_store_conformance!` against a real temporary
-file, so **the suite it did not write now exists and it passes it**. What that
-does not buy is PS-2, which wants the suite green against two adapters at
-opposite ends of the batch-shape axis; this is a third replay-at-commit shape
-beside `MemoryProjectionStore` and the testkit's buffering variant, and no
-`rusqlite` adapter can supply the other end (a `rusqlite::Transaction<'_>` is
-`!Send`). For the other four the *kind* of ignorance is still what it was: the
+(`crates/happenstance-neon/src/projection_store.rs:210`). **This paragraph said
+four were phase-2 skeletons and one was an adapter, and that was true through
+phase 8.** Three of the four have since been written and have run the suite —
+`PostgresProjectionStore` and `NeonProjectionStore` at phase 10b,
+`LadybugProjectionStore` at phase 11 — leaving `LiveHandleProjectionStore`, which
+is an experiment rather than an adapter and is not going to run one.
+
+**What none of that buys is PS-2**, and the reason is now stronger than "nobody
+has got to it". The clause wants the suite green against two adapters at opposite
+ends of the batch-shape axis. All four are replay-at-commit shapes, beside
+`MemoryProjectionStore` and the testkit's buffering variant — six agreements at
+one end. And phase 10b established that the other end is **forbidden by the port**
+for both drivers PS-2 names: a `rusqlite::Transaction<'_>` is `!Send` and costs
+the `SendProjectionStore` impl, and a `sqlx` transaction cannot be produced by a
+`begin` that is total, synchronous and infallible. That is a finding against a
+`[FROZEN]` clause and is owed an ADR rather than an edit here. For the other four the *kind* of ignorance is still what it was: the
 signatures have been disagreed with by a type checker and nothing more.
 
 **`error[E0195]` is real, reproduced twice, and explains nothing about the
@@ -4958,8 +4994,33 @@ two adapters at opposite ends of the batch-shape axis have passed it.**
 **Rule:** a testkit-internal hostile store, `CheckpointOnlyStore`, in
 `crates/happenstance-testkit/tests/`, asserted to fail
 `commit_is_atomic_with_the_read_model`; plus the suite green against one adapter
-holding a live transaction (rusqlite or `sqlx`) and one that cannot hold
-anything across an await (Workers `SqlStorage` or Neon over one-shot HTTP).
+holding a live transaction and one that cannot hold anything across an await.
+
+**Amended by ADR-0060 at phase 12, on two findings. The MUST above is unchanged.**
+
+*The second end is occupied.* `happenstance-neon` — no connection, no interactive
+transaction, no cursor — passes the suite against a live endpoint since phase 10b.
+This Rule named Workers `SqlStorage` or Neon as candidates; Neon is the one that
+arrived.
+
+*The first end is unreachable as this Rule named it, and unobservable however it
+is built.* Both drivers it offered are refuted, by different mechanisms: `sqlx`'s
+`Transaction` cannot be produced by a `begin` that is total, synchronous and
+infallible (PS-6), and `rusqlite`'s `Transaction<'_>` is `!Send`, which costs the
+`SendProjectionStore` impl. **And the deeper problem is not the drivers.** A store
+whose batch genuinely is a live transaction can implement this port — see
+`crates/happenstance-core/tests/probe_live_transaction_shape.rs` — but it must
+declare `ProjectionProbe::READS_THROUGH_BATCH = false`, which that file's own
+comment calls *"a false statement about this store"*, because
+`probe_read_through` is synchronous, infallible and takes `&Self::Batch` while a
+driver borrows its connection mutably and the statement is I/O. So a conformant
+live-transaction adapter reports the **same capability profile** as a buffering
+one, and the suite has no way to tell the two ends apart.
+
+What an adapter at the first end would therefore have to be: a store whose batch
+holds a live handle **and** whose probe seam can describe it. ADR-0060 §3 proposes
+the signature change that would allow the second half and deliberately does not
+make it — that is this clause's owner's call.
 **Cases:** E2E-17, E2E-24.
 **Rejects:** the schedule that freezes this port against `MemoryProjectionStore`
 and an in-process rusqlite transaction. Both serialise their writers, both hold
@@ -8725,8 +8786,8 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 
 | Axis | Near end — what exists | Far end | Far end exists? | Kind of instrument needed |
 |---|---|---|---|---|
-| **Position allocation** | Assigned under the lock held until commit — `memory.rs:370-403`, and every planned adapter | Allocated outside the transaction; visibility order ≠ position order (`nextval()`) | **Fixture yes, adapter no.** `PreCommitPositionStore` in the testkit's own `tests/` takes its position before commit and publishes after, and `nothing_below_an_observed_position_appears_later` (CF-13) fails it deterministically on one thread. `happenstance-postgres` is still a phase-2 skeleton (`crates/happenstance-postgres/src/event_store.rs:121`), which falsifies a signature and is not a far end | Fixture (CF-13) — **done**; then a Postgres adapter to prove it passable, and at what cost |
-| **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **No.** `happenstance-neon` is a phase-2 skeleton (`crates/happenstance-neon/src/event_store.rs:168`), which falsifies a signature and is not a far end | Adapter |
+| **Position allocation** | Assigned under the lock held until commit — `memory.rs:370-403`, and every planned adapter | Allocated outside the transaction; visibility order ≠ position order (`nextval()`) | **Fixture yes, adapter no.** `PreCommitPositionStore` in the testkit's own `tests/` takes its position before commit and publishes after, and `nothing_below_an_observed_position_appears_later` (CF-13) fails it deterministically on one thread. This cell added *"`happenstance-postgres` is still a phase-2 skeleton, which falsifies a signature and is not a far end"* and said so until ADR-0061; since phase 10b that adapter is real and conformant, 101 of 101 including the concurrency family at 64 contenders, and ADR-0024 records the arm it buys ES-10 with. **Both ends of this axis are occupied and both pass** | Fixture (CF-13) — **done**; the Postgres adapter proved it passable, and ADR-0024 states the cost |
+| **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **Yes, since phase 10b, and the far end answered.** This cell read *"**No.** `happenstance-neon` is a phase-2 skeleton, which falsifies a signature and is not a far end"* until ADR-0061. `happenstance-neon` is now a real adapter run against a live endpoint — no connection, no interactive transaction, no cursor — and it is the only far end in this portfolio to have **failed** a clause rather than passed one: `read_result_is_stable_under_concurrent_append` goes red intermittently, and ES-11's marker and ADR-0061 carry the finding. That is the axis doing its job. A skeleton could not have produced it, which is the difference this column exists to record | Adapter — **done** |
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` | **Far end yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:552-679`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No, and nothing is planned.** New (CF-27) | Fixture first; a device adapter second |

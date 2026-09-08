@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-neon"
-description = "Neon serverless Postgres event store for happenstance, over the one-shot /sql HTTP endpoint. Not yet implemented."
+description = "Neon serverless PostgreSQL event store adapter for happenstance, over one-shot HTTP."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,19 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-publish = false
+# Still false, and it is a decision rather than an oversight. The suite is green
+# against a live endpoint, so the skeleton marker is gone from this crate — but
+# `0.2.0` ships five crates (`happenstance-core`, `happenstance`,
+# `happenstance-testkit`, `happenstance-sqlite`, `happenstance-cloudflare`) and
+# this is not one of them. `xtask/src/package.rs`'s `reconcile` holds that set
+# honest in both directions, so flipping this flag without also moving that set is
+# a red gate rather than a quiet publish. `deskeleton-and-package-readiness` owns
+# both halves.
+# Published from `0.2.0`, with one open clause question stated in the crate
+# root rather than hidden: ES-11's falsifier fired on this adapter, and the
+# clause is `[PROVISIONAL]` pending an ADR. The release set was re-opened at
+# the release review and settled at seven; see `SESSION-DECISIONS-0.2.0.md`'s
+# D-04.
 
 [dependencies]
 # `unstable-projection` is named rather than inherited. Feature unification is
@@ -20,6 +32,17 @@ publish = false
 # here it would reach every consumer of this crate whatever features they chose,
 # which is how a gate that two other crates maintain gets walked around by a third.
 happenstance-core = { workspace = true, features = ["std"] }
+# Payloads travel base64, not `\x` hex. Both round-trip through the endpoint
+# correctly — measured, in both directions — and the choice is arithmetic: hex is
+# two characters per byte and base64 is four per three, so a payload costs 100%
+# expansion against `MAX_RESPONSE_BYTES` one way and 33% the other, in the request
+# body and in every response that reads it back.
+#
+# Zero new `Cargo.lock` nodes: `base64 0.22.1` is already resolved here through
+# `happenstance-core`'s `serde` feature and through `sqlx`, and the workspace
+# entry pins `0.22` for exactly that reason. `std` is named rather than inherited
+# because the workspace entry is `default-features = false`.
+base64 = { workspace = true, features = ["std"] }
 futures-core.workspace = true
 # `std` is added rather than assumed: the workspace entry is
 # `default-features = false` so members state what they need, and `serde_json`
@@ -28,18 +51,107 @@ serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+# `proptest` is what the model family is behind: `event_store_model_conformance!`
+# does not exist without it, so omitting the feature does not fail to compile --
+# it silently mounts one fewer family, which is the failure this crate's gating is
+# written against.
+happenstance-testkit = { workspace = true, features = ["proptest"] }
+# `rt-multi-thread` is not decoration: the concurrency family starts `CONTENDERS`
+# contenders, and a current-thread runtime turns that family from a race into a
+# queue.
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+
+# --- the live transport, and why it is here and not behind a feature ---
+#
+# `tests/support/transport.rs` is the only HTTPS client in this crate, and it is a
+# DEV-dependency rather than an optional one. That is a hard requirement rather
+# than a preference: `cargo xtask ci` runs
+#
+#     cargo hack check -p happenstance-neon --target wasm32-unknown-unknown \
+#         --feature-powerset --no-dev-deps
+#
+# and a Cargo feature is not target-scoped. A `live-transport` feature would
+# therefore be switched ON in some member of that powerset, on `wasm32`, where
+# `hyper` and `ring` do not build -- so the feature would fail the very step this
+# crate exists to keep passing. `--no-dev-deps` is what makes the dev-dependency
+# invisible to both wasm32 powersets and to the msrv job, and it is
+# compiler-checked rather than argued.
+#
+# LICENCE VERDICT, taken before the dependency landed rather than after.
+# `cargo deny check licenses` passes against `deny.toml`'s UNMODIFIED allowlist,
+# and every node below was ALREADY in `Cargo.lock` via
+# `testcontainers` -> `bollard`: hyper 1.11.1, hyper-util 0.1.20,
+# hyper-rustls 0.27.9, rustls 0.23.43, rustls-webpki 0.103.15,
+# rustls-pki-types 1.15.1, tokio-rustls 0.26.5, rustls-native-certs 0.8.4,
+# http-body-util 0.1.5 and ring 0.17.14. So this adds edges, not nodes, and the
+# licence surface of the workspace does not move at all.
+#
+# `ring` rather than `aws-lc-rs`: the workspace manifest already records that
+# `ring` is `Apache-2.0 AND ISC` and passes.
+#
+# `native-tokio` rather than `webpki-tokio`, and this is the line to leave alone.
+# `webpki-tokio` reaches `webpki-roots`, which is `CDLA-Permissive-2.0` -- the
+# exact crate the workspace manifest names as the reason `sqlx`'s `tls-rustls`
+# fails this workspace's allowlist. It is the CA root *bundle* (data, not code)
+# that is the offender, and naming that feature here would fail `cargo deny` on a
+# test dependency. `rustls-native-certs` reads the platform store instead:
+# `schannel` on Windows, `security-framework` on macOS, the file system on Linux,
+# all already resolved.
+hyper = { version = "1.11", default-features = false, features = ["client", "http1", "http2"] }
+hyper-util = { version = "0.1", default-features = false, features = [
+  "client",
+  "client-legacy",
+  "http1",
+  "http2",
+  "tokio",
+] }
+hyper-rustls = { version = "0.27", default-features = false, features = [
+  "http1",
+  "http2",
+  "native-tokio",
+  "ring",
+  "tls12",
+] }
+http-body-util = "0.1"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+
 [features]
 # The event store only. `projection-store` left this set with ADR-0036: it forwards
 # an unfrozen port, and PS-3 says such a port ships behind an off-by-default flag.
 default = ["event-store"]
-# The transport and the error type are unconditional: they are the crate's
-# actual contribution and both roles are written in terms of them.
+# The transport and the error type are unconditional: they are the crate's actual
+# contribution and both roles are written in terms of them.
 event-store = []
 # Forwards the contract crate's own gate, the way `happenstance-sqlite` does. It was
 # empty while the dependency above carried the flag unconditionally — so the feature
 # named the capability while doing none of the gating, and turning it off changed
 # nothing a consumer could observe.
 projection-store = ["happenstance-core/unstable-projection"]
+# `impl ProjectionProbe for NeonProjectionStore`, and the probe table it writes
+# through. Off by default, because that table is the *suite's* read model and has
+# no business in an application's database.
+#
+# It forwards one flag on a dependency this crate already has and adds no edge to
+# the graph. The impl cannot go in `tests/`: that is a different crate, where
+# neither the trait nor the type is local and the orphan rule answers
+# `error[E0117]`, so it lives in `src/` under this feature and a crate cannot
+# `cfg` on a dependency's feature.
+#
+# Deliberately **not** implying `projection-store`, for the reason
+# `happenstance-postgres` gives: three features are eight combinations rather than
+# four, and `conformance` alone — with the port's own module configured out — is
+# one of them. The impl and the probe table are gated on both, so that combination
+# compiles to nothing rather than failing to compile.
+conformance = ["happenstance-core/conformance"]
 
 [lints]
 workspace = true
+
+# Both keys, for the reason every publishable crate here carries them: without
+# `all-features` docs.rs renders the default set and the projection half
+# disappears from the page, and `--cfg docsrs` is what makes `doc(cfg(...))`
+# render its gate rather than nothing.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

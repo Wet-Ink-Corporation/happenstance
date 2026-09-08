@@ -21,13 +21,15 @@ was missed rather than ignored, and say so — on the same thread, or by email.
 
 ## What is in scope
 
-The five crates this repository publishes, at their published versions:
+The seven crates this repository publishes, at their published versions:
 
 - `happenstance`
 - `happenstance-core`
 - `happenstance-testkit`
 - `happenstance-sqlite`
 - `happenstance-cloudflare`
+- `happenstance-postgres`
+- `happenstance-neon`
 
 The last two joined this list at `0.2.0`. Before that the only thing under either
 name on crates.io was a `0.0.0` placeholder with no functionality and no

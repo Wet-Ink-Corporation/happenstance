@@ -21,6 +21,7 @@
 
 use sqlx::PgExecutor;
 
+#[cfg(feature = "event-store")]
 use crate::error::PostgresEventStoreError;
 
 /// The schema this crate expects, as SQL.
@@ -31,16 +32,28 @@ use crate::error::PostgresEventStoreError;
 ///
 /// It is idempotent: every object is created `IF NOT EXISTS`, so applying it to
 /// a schema that already has it is a no-op rather than an error.
+#[cfg(feature = "event-store")]
 pub const MIGRATION_1: &str = include_str!("../migrations/0001_event_log.sql");
 
-/// The schema version this crate's code is written against.
+/// The **event log's** schema version.
 ///
-/// One, and it stays one until first publish. The slice that wires ADR-0024's
-/// mechanism adds its column to [`MIGRATION_1`] rather than opening a migration
-/// 2, because nothing has ever shipped this schema to a consumer — both
-/// `publish = false` — so there is no deployed table to alter and "migration"
-/// here is a schema-authoring concern rather than a data-movement one. That ends
-/// at first publish.
+/// One, and it stays one at first publish. The slice that wired ADR-0024's
+/// mechanism added its column to [`MIGRATION_1`] rather than opening a second
+/// migration, because nothing had ever shipped this schema to a consumer — both
+/// `publish = false` — so there was no deployed table to alter and "migration"
+/// was a schema-authoring concern rather than a data-movement one. It still is:
+/// this crate is not in the `0.2.0` release set, so no deployed table exists to
+/// alter. The licence to edit [`MIGRATION_1`] in place ends at *this crate's*
+/// first publish, not at the workspace's.
+///
+/// `migrations/0002_projection_checkpoint.sql` is not a counter-example. It adds
+/// no object to the event log and belongs to the other role's lineage, which
+/// carries its own `PROJECTION_SCHEMA_VERSION` — named in code rather than
+/// linked, because that constant is behind the `projection-store` feature and
+/// this one is not. The number in that filename is the directory's sequence, so
+/// that a DBA applying the files in order gets a working database for whichever
+/// roles they use.
+#[cfg(feature = "event-store")]
 pub const SCHEMA_VERSION: u32 = 1;
 
 /// Applies [`MIGRATION_1`] to whatever schema `executor` resolves against.
@@ -56,6 +69,7 @@ pub const SCHEMA_VERSION: u32 = 1;
 ///
 /// [`PostgresEventStoreError::Driver`] if the server rejects the statements —
 /// most plausibly because the role cannot create objects in the target schema.
+#[cfg(feature = "event-store")]
 pub async fn apply<'e, E>(executor: E) -> Result<(), PostgresEventStoreError>
 where
     E: PgExecutor<'e>,
@@ -68,10 +82,65 @@ where
     Ok(())
 }
 
+/// The projection store's schema, as SQL.
+///
+/// Exposed for the same reason `MIGRATION_1` is: a consumer running their own
+/// migration tooling needs the text, and the alternative is that they copy it out
+/// of the repository and it drifts. Applying it is [`apply_projection`].
+///
+/// It is idempotent, and it does **not** include the conformance suite's probe
+/// read model — that table is the suite's, lives behind the `conformance`
+/// feature, and has no business in an application's database.
+#[cfg(feature = "projection-store")]
+pub const MIGRATION_2: &str = include_str!("../migrations/0002_projection_checkpoint.sql");
+
+/// The projection schema version this crate's code is written against.
+///
+/// One, and separate from [`SCHEMA_VERSION`] on purpose. The two roles share a
+/// crate and a driver; they do not share a schema lineage. A consumer taking
+/// `event-store` alone applies migration 1 and never this one, so a single
+/// counter spanning both would report a version they are not at.
+///
+/// The file is named `0002_…` because that is the directory's sequence and a DBA
+/// applying the files in order should get a working database for both roles. The
+/// number in the filename and the number here answer different questions.
+#[cfg(feature = "projection-store")]
+pub const PROJECTION_SCHEMA_VERSION: u32 = 1;
+
+/// Applies [`MIGRATION_2`] to whatever schema `executor` resolves against.
+///
+/// Separate from [`apply`] rather than folded into it, and the separation is the
+/// point: an application using only the event store gets no
+/// `projection_checkpoint` table, and one using only the projection store gets no
+/// event log. A single `apply` would decide for both.
+///
+/// It does not set `search_path`, for the reason [`apply`] does not.
+///
+/// # Errors
+///
+/// [`Driver`](crate::error::PostgresProjectionStoreError::Driver) if the server
+/// rejects the statements
+/// — most plausibly because the role cannot create objects in the target schema.
+#[cfg(feature = "projection-store")]
+pub async fn apply_projection<'e, E>(
+    executor: E,
+) -> Result<(), crate::error::PostgresProjectionStoreError>
+where
+    E: PgExecutor<'e>,
+{
+    // `raw_sql` for the reason `apply` uses it: the extended protocol admits one
+    // statement, and a simple-protocol batch runs in an implicit transaction, so
+    // a failure part-way leaves no half-built table behind.
+    sqlx::raw_sql(MIGRATION_2).execute(executor).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "event-store")]
     use super::{MIGRATION_1, SCHEMA_VERSION};
 
+    #[cfg(feature = "event-store")]
     /// [`MIGRATION_1`] with its `--` line comments removed.
     ///
     /// The two guards below scan for words that must not appear in the schema —
@@ -94,6 +163,7 @@ mod tests {
             )
     }
 
+    #[cfg(feature = "event-store")]
     /// The stripper is itself load-bearing, so it gets a test.
     ///
     /// If it silently stopped stripping, both guards below would go green on a
@@ -112,6 +182,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "event-store")]
     /// The mechanism's column is present, and this test changed hands.
     ///
     /// It was written by `postgres-schema-and-live-fixture` asserting the
@@ -138,6 +209,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "event-store")]
     /// `position` must not be a sequence default, and the reason is one sentence
     /// long: a `serial` column is `nextval()`, and `nextval()` allocating outside
     /// the transaction is where ES-10's invariant is lost.
@@ -158,8 +230,49 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "event-store")]
     #[test]
     fn the_schema_version_is_one_until_first_publish() {
         assert_eq!(SCHEMA_VERSION, 1);
+    }
+
+    /// Migration 2 stores the authority rather than inferring it, and constrains
+    /// it to the two `Authority` variants.
+    ///
+    /// The cheap half of a guard whose live half — the CHECK actually refusing a
+    /// third value — is in the gated conformance target, where a real server can
+    /// disagree with the text.
+    #[cfg(feature = "projection-store")]
+    #[test]
+    fn migration_2_stores_a_constrained_authority() {
+        let sql = super::MIGRATION_2;
+        assert!(
+            sql.contains(
+                "authority     text   NOT NULL CHECK (authority IN ('live', 'rebuilding'))"
+            ),
+            "the authority column has lost its CHECK, so a row can record a state              `Checkpoint` cannot represent and `checkpoint` will fail on read              instead of the write failing where it happened"
+        );
+    }
+
+    /// The suite's probe table is not in the migrations directory.
+    ///
+    /// A `.sql` file there is, by construction, something a DBA applies. This is
+    /// the assertion that keeps the test read model out of an application's
+    /// database — the failure `happenstance-sqlite`'s own comment names and that
+    /// no test in this repository could otherwise catch, because every test
+    /// enables the feature that creates it.
+    #[cfg(feature = "projection-store")]
+    #[test]
+    fn no_migration_file_creates_the_probe_table() {
+        for sql in [
+            #[cfg(feature = "event-store")]
+            MIGRATION_1,
+            super::MIGRATION_2,
+        ] {
+            assert!(
+                !sql.contains("projection_probe"),
+                "a migration file creates the conformance probe table, so applying                  this crate's schema would put the suite's read model in a                  consumer's database"
+            );
+        }
     }
 }

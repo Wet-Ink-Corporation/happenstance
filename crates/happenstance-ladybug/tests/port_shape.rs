@@ -1,10 +1,16 @@
 //! What the projection store port permits, checked by the compiler rather than
 //! asserted in prose.
 //!
-//! Nothing here runs anything: every body in the crate is `todo!()`, so calling
-//! one would panic. What these tests do is *instantiate* generic code over the
-//! port, which is where the trait obligations are actually discharged. A
-//! signature that only holds for one batch shape fails here.
+//! Nothing here runs anything, and it did not when the bodies were `todo!()`
+//! either. What these tests do is *instantiate* generic code over the port,
+//! which is where the trait obligations are actually discharged. A signature
+//! that only holds for one batch shape fails here.
+//!
+//! That is still the whole of this file's job now that the bodies are real, and
+//! the division of labour is worth naming: `tests/projection.rs` runs the
+//! conformance suite and can only tell you that this store behaves, while this
+//! file is the only thing that says the *port* admits a store shaped like it
+//! from generic code that has never heard of it.
 //!
 //! # What changed when the batch stopped carrying a lifetime
 //!
@@ -19,6 +25,12 @@
 //! [`send_flavour`] below is the *measurement* PS-5 is arguing about, and it
 //! still fails when the shape regresses — see that module's documentation for
 //! which spellings are rejected and why.
+
+// The whole file is behind `driver`, because `LadybugProjectionStore` is: every
+// item in this crate names an `lbug` type, so without the feature there is no
+// store for generic code to be instantiated at. Under a bare
+// `cargo test -p happenstance-ladybug` this target configures out entirely.
+#![cfg(feature = "driver")]
 
 use happenstance_ladybug::LadybugProjectionStore;
 

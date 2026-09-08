@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-ladybug"
-description = "LadybugDB graph projection store adapter for happenstance. Not yet implemented."
+description = "LadybugDB graph projection store adapter for happenstance."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,14 +18,56 @@ publish = false
 happenstance-core = { workspace = true, features = ["std", "unstable-projection"] }
 thiserror.workspace = true
 
-# NOTE: the `lbug` crate is deliberately NOT a dependency yet. It compiles
-# LadybugDB's C++ via cxx and cmake from source, which would put a multi-minute
-# native build on every `cargo check` of this workspace. It gets added in the
-# pass that implements the adapter — which is also the reason this lives in its
-# own crate rather than behind a feature of another one.
-
 [dev-dependencies]
+# Versionless and path-only, the spelling `happenstance-sqlite` arrived at: a
+# dev-dependency carrying a version has to resolve from the registry at publish
+# time, and cargo strips a versionless one from the published manifest entirely.
+# It costs nothing here — this crate is `publish = false` — and the spelling that
+# reintroduces the coupling is one word shorter than this one and looks tidier.
+happenstance-testkit = { path = "../happenstance-testkit" }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+
+[features]
+# Nothing. **The driver is off by default and that is ADR-0025 §9**, taken on a
+# measurement rather than on the note that used to sit above the dependency
+# table. That note said `lbug` compiles LadybugDB's C++ via `cxx` and `cmake`
+# from source; it does not. `build.rs` tries a **prebuilt download first** and
+# only falls back to the source build, and on the machine that measured it the
+# prebuilt path succeeded with cmake never installed. What arrives instead is a
+# single **1.44 GB static archive** plus an OpenSSL toolchain that no feature
+# turns off — a different cost with a different remedy.
+#
+# The remedy: `cargo check` and `cargo clippy` do not link, `cargo test
+# --workspace --all-features` does, and it is gate step 3 on every machine and
+# all three CI platforms. So the dependency ships behind this flag, the
+# workspace steps in `xtask/src/main.rs` exclude this crate, and the conformance
+# run is a probed step that prints `skipped` when the driver is not configured —
+# the same shape `cargo deny` already has.
+default = []
+# The real LadybugDB driver. Without it this crate is its documentation: the
+# adapter and everything it names are `cfg`-ed out, because every one of them is
+# a type from `lbug`.
+#
+# A version requirement in a member manifest rather than in
+# `[workspace.dependencies]`, which is where every other third-party version in
+# this workspace lives. `happenstance-neon` is the precedent (`hyper`,
+# `hyper-util`, `hyper-rustls`, `rustls`): a dependency exactly one crate can
+# ever have, behind a flag, is not a version two members could disagree about.
+driver = ["dep:lbug"]
+# `impl ProjectionProbe for LadybugProjectionStore`, and the `__hs_probe` node
+# table it writes through. Off by default, because that table is the *suite's*
+# read model and has no business in an application's graph.
+#
+# It implies `driver`, and that is not a convenience: the probe is implemented
+# for a type that does not exist without it, so the two-flag combination
+# `conformance` without `driver` is not a configuration this crate has — and a
+# feature powerset would otherwise compile it and find nothing.
+conformance = ["driver", "happenstance-core/conformance"]
+
+[dependencies.lbug]
+version = "0.20.3"
+optional = true
+default-features = false
 
 [lints]
 workspace = true

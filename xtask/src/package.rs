@@ -105,6 +105,36 @@ const PUBLISHABLE: &[&str] = &[
     // report: a crate Cargo will publish that this step does not check, or a
     // name here Cargo will not publish.
     "happenstance-cloudflare",
+    // Phase 10b, and both arrived together at the release review rather than
+    // through a phase. The set was **five, decided**, and `HANDOVER.md` listed
+    // that under do-not-re-open; the owner re-opened it on the evidence, which
+    // is the one party entitled to. What changed is that both crates stopped
+    // being skeletons: `happenstance-postgres` clears 132 gated tests against a
+    // live server including the concurrency family at 64 contenders, and
+    // `happenstance-neon` clears 124 against a live endpoint.
+    //
+    // Both land here in the same change that deletes their `publish = false`,
+    // for the reason the Cloudflare row above records: either half alone is the
+    // drift [`reconcile`] exists to report.
+    //
+    // `happenstance-neon` ships with ES-11's falsifier fired against it and the
+    // clause still `[PROVISIONAL]`. That is deliberate rather than overlooked —
+    // a provisional clause is one a published crate may fail to satisfy, which
+    // is what provisional means, and the crate root says so.
+    //
+    // `happenstance-ladybug` is NOT here and is finished. `lbug` cannot render
+    // on docs.rs — its build script returns early under `DOCS_RS` before
+    // emitting the `cargo:rustc-env` lines its own `lib.rs` requires — and
+    // rendering is this project's bar for a published crate. That is a third
+    // meaning of `publish = false`, distinct from unfinished
+    // (`happenstance-sync`) and from out-of-this-release.
+    //
+    // Do not put a double-quoted phrase in a comment inside this array.
+    // [`scan_publishable`] reads it by pulling quoted strings out of the block,
+    // so a quotation here is indistinguishable from a crate name — which this
+    // comment discovered by being written with two of them.
+    "happenstance-postgres",
+    "happenstance-neon",
 ];
 
 /// The files every published artifact must contain.

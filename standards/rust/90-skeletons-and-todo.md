@@ -79,7 +79,17 @@ storage shape. It fits nothing: the impl is six `todo!()`s over two placeholders
 and the driver's real types are met by whoever writes the bodies — one phase
 after the port was frozen against them.
 
-**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:105 (type Batch = Transaction<'static, Postgres>)` ·
+**And the exemplar this rule used was itself refuted, which is the sharper
+lesson.** `happenstance-postgres` declared `type Batch = sqlx::Transaction<'static,
+Postgres>` — a real driver type, not a placeholder, and cited here as what a
+good skeleton looks like. It could not be implemented: `begin` is total,
+synchronous and infallible, and every route to a `sqlx` transaction is `async`
+and fallible. Five `todo!()` bodies type-checked against it anyway, because `!`
+coerces to everything. So a *real* associated type is necessary and still not
+sufficient — RS-90-2 is what catches the rest, and this is the case that proves
+the two rules are not one rule stated twice.
+
+**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:18 (type Batch = sqlx::Transaction)` ·
 `crates/happenstance-sqlite/src/projection_store.rs:638 (type Batch = SqliteBatch)` ·
 `references/adapter-shapes.md:10 (stubbed the only part)` ·
 `references/adapter-shapes.md:98 (code: None)` ·
@@ -258,6 +268,18 @@ error: this lint expectation is unfulfilled
     = note: `#[warn(unfulfilled_lint_expectations)]` on by default
 ```
 
+That transcript is kept, and the attribute it points at is **gone** — phase 10b
+wrote `decode_append_response`, the expectation went unfulfilled exactly as the
+`reason` predicted, and the same commit removed the attribute. The rule
+consuming its own worked example is the rule working, so the transcript stays as
+the recorded diagnostic and the Evidence line below cites a **live** instance of
+the same claim instead:
+`projection_mutation_coverage.rs`'s `StorePanic` arm, whose reason says it goes
+red the day a row uses it, beside the arm two entries above it whose
+`#[expect(dead_code)]` "came off" on the day its deferral ended. Both halves of
+the claim — the attribute that fires, and the attribute that is then removed
+rather than downgraded — are in that one file.
+
 **Rejects.** A workspace-wide `todo = "allow"` added for "intentionally
 unimplemented stub crates". This repository shipped one; a grep found no
 `todo!()` anywhere in the tree, so the allow protected nothing and stood ready to
@@ -266,9 +288,16 @@ accept the first real one silently. The same shape one level down is an
 attribute then hides the *next* dead variant, and nobody learns that until a
 reviewer reads the enum.
 
+The crate-level half of the Evidence line moved for the same reason and on the
+same day. It cited `happenstance-ladybug`'s `#![allow(clippy::todo)]`, whose
+comment named phase 11 as the phase that would remove it; phase 11 landed the
+driver, and the allow went with the last `todo!()`. A citation that survives the
+line it points at would be the defect this rule is about, so it moves to
+`happenstance-sync`, which is still a skeleton and still names its own removal.
+
 **Evidence.** `./Cargo.toml:236 (the allow protected nothing)` ·
-`crates/happenstance-ladybug/src/lib.rs:77 (Phase 11 removes both the bodies)` ·
-`crates/happenstance-neon/src/event_store.rs:239 (constructed by decode_append_response)`
+`crates/happenstance-sync/src/lib.rs:138 (removes both the bodies and this line)` ·
+`crates/happenstance-testkit/tests/projection_mutation_coverage.rs:177 (red the day a row uses it)`
 
 ---
 
@@ -344,7 +373,7 @@ transaction, no cursor, one round trip per operation, a hard 64 MiB response cap
 the far end of the transport axis. The limits are found by whoever writes the
 bodies, against a port already frozen on the strength of their absence.
 
-**Evidence.** `crates/happenstance-neon/src/event_store.rs:390 (It compiles, and that is the finding)` ·
-`crates/happenstance-neon/src/lib.rs:42 (would therefore rank this crate)` ·
+**Evidence.** `crates/happenstance-neon/src/event_store.rs:1116 (It compiles, and that is the finding)` ·
+`crates/happenstance-neon/src/lib.rs:71 (would therefore rank this crate)` ·
 `references/adapter-shapes.md:207 (limits that are not type errors)` ·
 [adapter-shapes §3](../../references/adapter-shapes.md)

@@ -32,11 +32,16 @@ crates/happenstance/             the typed layer. today a facade over the contra
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
 crates/happenstance-sqlite/      the first adapter. event store + projection store.
 crates/happenstance-cloudflare/  the second adapter. the workspace's only !Send store. wasm32.
-crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
-crates/happenstance-postgres/    the store that does not serialise its writers. event store
-                                 real and conformant at phase 10; 🔩 projection store still
-                                 a skeleton.
-crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
+crates/happenstance-ladybug/     graph projection store only. real and conformant at
+                                 phase 11, on the real driver. publish = false, and here
+                                 that means CANNOT: `lbug` does not render on docs.rs.
+crates/happenstance-postgres/    the store that does not serialise its writers. both roles
+                                 real and conformant at phase 10b. publish = false, by the
+                                 five-crate release decision rather than by unreadiness.
+crates/happenstance-neon/        Postgres over one-shot HTTP: no connection, no interactive
+                                 transaction, no cursor. real and conformant at phase 10b
+                                 against a live endpoint — and the adapter that falsified
+                                 ES-11. host + wasm32. publish = false.
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example. in memory.
 examples/transfers-on-sqlite/    the same library on a real database — the typed layer's
@@ -97,18 +102,35 @@ RUNBOOK.md                       the plan of record, and how far it has got.
 false`, and a scoped `#![allow(clippy::todo)]` naming the phase that removes it.
 A skeleton exists to be disagreed with by a type checker — it is an *instrument*
 first and a target second, and it is not an adapter until it has run the
-conformance suite. **Two have stopped being skeletons**: `happenstance-sqlite` at
-phase 8 and `happenstance-cloudflare` at phase 9, and both are published.
+conformance suite. **Four have stopped being skeletons**: `happenstance-sqlite`
+at phase 8, `happenstance-cloudflare` at phase 9, and `happenstance-postgres` and
+`happenstance-neon` at phase 10b. The first two are published; the second two are
+**not**, and that is the five-crate release decision rather than a judgement about
+readiness — a `publish = false` saying "not in this release" and one saying "not
+finished" look identical in a manifest, so each of those two says which in its own
+crate root.
 
-`happenstance-postgres` is the **half case**, and the marker is split rather than
-dropped. Its *event store* has run the suite — 101 of 101 against a live
-PostgreSQL 17.10, including the concurrency family at 64 contenders — so by the
-rule above it is an adapter, and the arm it buys ES-10 with is recorded in
-ADR-0024 rather than still open. Its *projection store* is untouched `todo!()`,
-which is what the crate's remaining `#![allow(clippy::todo)]` now covers, and
-`publish = false` stands until `deskeleton-and-package-readiness` removes it. The
-**three** that carry the marker whole — ladybug, neon, sync — have run nothing,
-and the marker is the claim.
+`happenstance-postgres` was the **half case** and is no longer one. Its event
+store ran 101 of 101 against a live PostgreSQL 17.10 including the concurrency
+family at 64 contenders, and ADR-0024 records the arm it buys ES-10 with; its
+projection store now clears the projection suite, and it is the first projection
+adapter over storage this workspace does not control to do so. Both crates'
+`#![allow(clippy::todo)]` left with their last stub, which is the contract those
+allows were written under.
+
+**One carries the marker whole, and it is `happenstance-sync`.** Read each crate's
+own root rather than this paragraph for which side of the line it is on — a count
+in a file that loads on every task is a count nobody re-reads, which this file
+already says one section down and has now been wrong about twice.
+
+**Three kinds of `publish = false` now live in this workspace and they are not the
+same fact.** `happenstance-sync` is unfinished. `happenstance-postgres` and
+`happenstance-neon` are finished and out of the five-crate release set.
+`happenstance-ladybug` is finished and **cannot** be published: `lbug`'s build
+script returns early under `DOCS_RS` before emitting the `cargo:rustc-env` lines
+its own `lib.rs` requires, so an undefined `env!` makes the docs.rs build a
+compile error — and rendering on docs.rs is phase 12's bar for a published crate.
+The manifests look identical; each crate root says which it means.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.
@@ -358,9 +380,10 @@ build of `happenstance-core` (three configurations in all with the workspace
 `--all-features` one, because a link from a `memory` page into a `conformance`
 item is broken at neither end of that range and only in the middle, which is
 where a consumer stands),
-and a `cargo package --list` assertion that each of the **five** publishable
+and a `cargo package --list` assertion that each of the **seven** publishable
 crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
-`happenstance-sqlite` and `happenstance-cloudflare` — carries both licence files
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
+`happenstance-neon` — carries both licence files
 and a README. The number is spelled with its members now because it had already
 drifted once: this sentence read *"three"* through phase 9's promotion of
 `happenstance-cloudflare` and did not move, so a count on its own turned out to

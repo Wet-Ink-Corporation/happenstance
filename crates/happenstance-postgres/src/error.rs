@@ -150,4 +150,32 @@ pub enum PostgresProjectionStoreError {
         /// The value as Postgres returned it.
         value: i64,
     },
+
+    /// A stored checkpoint recorded an authority that is not one of the two
+    /// [`Authority`](happenstance_core::Authority) variants.
+    ///
+    /// Migration 2 carries a `CHECK` that makes this unreachable through this
+    /// adapter, so reaching it means the table was written by something else —
+    /// which is precisely when a caller wants to be told rather than handed a
+    /// plausible default. Defaulting to `Live` would report a half-finished
+    /// rebuild as a live projection.
+    #[error("stored checkpoint authority {0:?} is neither `live` nor `rebuilding`")]
+    InvalidAuthority(String),
+
+    /// The batch was begun on a different store instance.
+    ///
+    /// [`CommitError::ForeignBatch`](happenstance_core::CommitError::ForeignBatch)
+    /// and its `reset` sibling carry this for those two operations;
+    /// [`rollback`](happenstance_core::ProjectionStore::rollback) returns the
+    /// store's own error type and so needs its own variant. The batch is consumed
+    /// either way — the refusal is how a caller learns it was holding the wrong
+    /// one, on the call that was meant to be the cleanup.
+    ///
+    /// A `sqlx::Transaction` would have been unforgeable and needed no such
+    /// variant. This adapter's batch is a buffer, for the reason the module
+    /// documentation gives, and a buffer is exactly as forgeable as
+    /// `happenstance-sqlite`'s — so it carries the same stamp and the same
+    /// refusal.
+    #[error("the batch was begun on a different store instance")]
+    ForeignBatch,
 }

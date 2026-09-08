@@ -163,7 +163,7 @@ turned out to be one DCB already provides.
 | 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
 | 10a | [Postgres event store](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | **done** | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
 | 10b | [Postgres projections, and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | in progress | `happenstance-neon`'s capability skip list — the transport axis's far end stated honestly — and no `todo!()` left on either crate |
-| 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
+| 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | done | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
 | 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10a** | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
 | 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10a, 10b, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
 | 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
@@ -715,7 +715,7 @@ seventeen.
 | A fixture's fault-injection promise | CF-39 | a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep | 8 and 10. **No adapter has armed a fault yet** |
 | A fixture's stated capacity ceilings | CF-40 | a real adapter whose ceiling is **not a constant** — a Postgres row whose TOAST threshold moves with the rest of the row, or a KV store whose per-value cap moves with the key — for which a single `Option<usize>` cannot say where the boundary is, and the rule built on it would assert a number the store cannot honour | 9 and 10, **whichever states a varying ceiling first**. Phase 9 has landed and answered the *constant-ceiling* half — `CloudflareFixture` states all three as `Some(…)`, as `SqliteFixture` does — so it added a second constant-ceiling store and left the live half untouched. That half is **phase 10's**: Postgres is where a ceiling that moves with the row first appears |
 | Durability's rule shape; benchmarks are not conformance | CF-17, CF-34 | a store that loses an acknowledged write, and an adapter that scans where it should seek and passes every rule | 8 |
-| **The portfolio's residual exposure** — the clauses §1.3 names as carrying CF-25's risk in their own markers rather than in a preamble. **Four, not five**: ES-10 was lifted at phase 4 and `[FROZEN]` since, and carrying it here is what made this table's count disagree with the specification's | ES-11, ES-12, ES-35, ES-40 | the far-end **adapter** on each axis, and nothing short of it: transport (ES-11, ES-12) by a one-shot-HTTP store that self-paginates; durability (ES-35) by a store that can lose a write to a fault; completeness (ES-40) by a store holding a suffix. A **fixture** instrument does not falsify any of them — CF-26 says so in terms | 10 (ES-11, ES-12), 8 (ES-35), 14 (ES-40) |
+| **The portfolio's residual exposure** — the clauses §1.3 names as carrying CF-25's risk in their own markers rather than in a preamble. **Four, not five**: ES-10 was lifted at phase 4 and `[FROZEN]` since, and carrying it here is what made this table's count disagree with the specification's | ES-11, ES-12, ES-35, ES-40 | the far-end **adapter** on each axis, and nothing short of it: transport (ES-11, ES-12) by a one-shot-HTTP store; durability (ES-35) by a store that can lose a write to a fault; completeness (ES-40) by a store holding a suffix. A **fixture** instrument does not falsify any of them — CF-26 says so in terms. **ES-11's falsifier has now FIRED, on the adapter its own marker named** (2026-09-08): `happenstance-neon` runs the suite and `read_result_is_stable_under_concurrent_append` fails intermittently — 3 red in 20 over HTTP/1.1, 1 in 40 over a single HTTP/2 connection. Not for the reason the marker anticipated: the read does **not** self-paginate, so ES-12 holds by construction. It fails because a read and an append are two independent requests to a pooled proxy, so ES-11's own sufficiency condition for asynchronous drivers — *"a read spawned at its first poll and an append spawned afterwards land in the same queue in that order"* — is false where there is no shared queue. One-shot HTTP is a third shape and the clause has two. **Owed an ADR**, staged at `.kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md`, and not amended here: check it against the escalation `HANDOVER.md` records as made in error and retracted, which claimed something different and weaker | 10 (ES-11, ES-12), 8 (ES-35), 14 (ES-40) |
 
 Every group names a phase in the [status table](#status). **PS-2 is the single
 gate under thirteen of these rows**, which is why phase 6 is worth its six days
@@ -4763,17 +4763,103 @@ skip list, which is the transport axis's far end stated honestly.
 
 `10b`:
 
-- [ ] Every rule `happenstance-neon` cannot pass is either a reported capability
-      skip or an amended clause — never a silent pass.
-- [ ] No `todo!()` on either path; `publish = false` removed. **Neither is true
-      of `happenstance-postgres` yet**, which is why this criterion is `10b`'s
-      and not `10a`'s: the event store is finished and the crate is not.
-- [ ] `PostgresFixture` arms `READ_FAULT` rather than declining it. Added
-      2026-09-07 by CF-18's new check, which found the fixture declining it in
-      the *testkit's* words on the one adapter whose read genuinely pages —
-      `PgReadStream` `FETCH`es a server-side cursor per chunk. Declining with a
-      stated reason is conformant and is what ships; arming it is this phase's,
-      and the injection is named in the fixture's own declension.
+- [~] Every rule `happenstance-neon` cannot pass is either a reported capability
+      skip or an amended clause — never a silent pass. **Met for three rules and
+      open for a fourth, and the fourth is the phase's real result.**
+
+      The three are reported skips carrying reasons true of *this* store:
+      `refused_reset_changes_nothing` (`RESET_REFUSAL` declined — the store holds
+      no protection policy), and `batch_reads_reflect_pending_writes` with
+      `rebuild_is_chunk_size_invariant` (`READS_THROUGH_BATCH = false` — a
+      `NeonWriteBatch` has been sent to the endpoint exactly never, and
+      `probe_read_through` is synchronous while every answer costs a round trip).
+      All four `Fixture` capabilities are armed for real and all three ceilings
+      stated, so nothing in the event-store, concurrency or model families skips.
+
+      **The fourth is `read_result_is_stable_under_concurrent_append`, and it is
+      neither a skip nor a weakened clause — deliberately.** ES-11's falsifier has
+      fired on the adapter its own marker named, and amending a clause that ES-12
+      reduces to is an ADR's work rather than an adapter lane's.
+
+      **That ADR landed at the release review: ADR-0061.** It corrects ES-11's
+      asynchronous-driver *sufficiency condition*, which asserted that a read and
+      an append "land in the same queue in that order" — a fact about pooled
+      drivers stated as one about async drivers generally. That is a **narrowing**:
+      it removes spawn-order-alone as a route to a conformance claim. ES-11's MUST,
+      maturity, `Rule` and `Cases` do not move, no capability is minted, and the
+      `live-neon` job stays strict. `happenstance-neon` **does not satisfy ES-11**,
+      as a stated limitation.
+
+      **This adapter's honest conformance statement is 104 of 105 rules observed**,
+      and the ADR records why that has a soft edge:
+      `query_items_share_one_snapshot` appends after the first poll and asserts the
+      drained set unchanged, which is structurally the same exposure, and sixty
+      measured runs at the sibling rule's rate separate luck from immunity poorly.
+      It passes; it is not proven immune.
+
+- [x] No `todo!()` on either path; `publish = false` removed. **Both halves, and
+      the second one only became true at the release review.** The Postgres half
+      is done: `PostgresProjectionStore`'s five bodies are written, the crate
+      carries no `todo!()`, and `#![allow(clippy::todo)]` left with the last one —
+      which is the contract that allow was written under. Neon's half is open.
+
+      **`publish = false` is gone from both crates**, which this criterion asked
+      for and which the session could not do: removing it collided with the
+      five-crate release decision, and `reconcile` holds `PUBLISHABLE` against the
+      manifests in both directions, so half the change reddens the gate. The
+      owner re-opened the release set at the review and settled it at **seven**.
+      Both crates now carry a README, both licence files and docs.rs metadata,
+      both render under `--cfg docsrs`, and `package-check` agrees on all seven.
+      Recorded at `SESSION-DECISIONS-0.2.0.md`'s D-04.
+
+- [x] `PostgresFixture` arms `READ_FAULT` rather than declining it.
+      `arming_a_read_fault_makes_the_stream_yield_an_error` runs against it and
+      passes: the stream yields an `Err` **item** rather than ending, so this
+      adapter does not report a fetch failure as the end of the log.
+
+      **Neither injection the declension named survives contact**, and the reasons
+      are worth more than the injection. Arming happens *before* the read starts —
+      the trait requires it — so there is no reader backend to terminate and no
+      cursor to close; terminating an *idle* pooled backend is absorbed by `sqlx`
+      testing connections before handing them out, which is CF-39's named hazard
+      one step earlier and would have made the rule pass **vacuously**; and a
+      cursor is session-local. What is injected instead is a view whose `WHERE`
+      raises above a threshold, so the fault arrives while the `FETCH` is
+      producing rows.
+
+- **2026-09-08 — `happenstance-neon` is written, runs the suite against a live
+  endpoint, and falsified ES-11 doing it.** All 16 `todo!()` bodies, a schema
+  concept (the proxy **discards** `options=-c search_path=…`, measured, so
+  isolation is schema-qualified identifiers rather than a session setting), two
+  migrations of its own, a dev-only HTTP/2 transport adding **zero** new
+  `Cargo.lock` nodes, four conformance mounts and a `live-neon` CI job. 105 of
+  105 event-store, concurrency and model tests and 19 of 19 projection tests
+  executed against PostgreSQL 18.6 behind the Neon pooler, with three reported
+  skips.
+
+  **The conditional append is a two-statement batch, not the single CTE this
+  crate documented**, and that is a measurement rather than a preference: the
+  endpoint honours `Neon-Batch-Isolation-Level` on a batch and **ignores it on a
+  single statement**, so the documented CTE would have run at READ COMMITTED and
+  two racers would both have probed empty and both inserted.
+
+  Four defects only a live endpoint found, each of which passed a smaller test
+  first: `ORDER BY position` binding to the `position::text` output alias rather
+  than the column (correct under ten events, wrong at 128); an empty `text[]`
+  rendering as `[""]` so every untagged event decoded as one invalid tag;
+  `#[tokio::test]` dropping its runtime per test, which killed a captured
+  `Handle` by the second one; and `--test-threads=1` being this adapter's
+  **visibility mechanism** rather than a flake workaround — `pg_snapshot_xmin` is
+  held back by any open write transaction on the branch, including sibling rules,
+  which is 67 of 105 red in parallel against 3 serially on the same commit.
+
+  **And the result the phase existed to produce.** ES-11's marker said the clause
+  would be *"falsified by the first one-shot-HTTP adapter that cannot meet this in
+  one round trip — which is the outcome to expect."* It was, though not for the
+  reason given: the read does not self-paginate, so ES-12 holds by construction.
+  It fails because a read and an append are two independent requests to a pooled
+  proxy, and ES-11's sufficiency condition for asynchronous drivers assumes one
+  queue. Reported and not amended; the ADR is owed.
 
 **Cases this makes writable.** E2E-01 against a store that can genuinely fail it.
 
@@ -4782,6 +4868,35 @@ skip list, which is the transport axis's far end stated honestly.
 an estimate nobody made.
 
 **Session log**
+
+- **2026-09-08 — the Postgres half of `10b` is done, and the batch type the
+  skeleton declared could not have been written.** `type Batch =
+  sqlx::Transaction<'static, Postgres>` type-checked against five `todo!()`s and
+  is unimplementable: `begin` is total, synchronous and infallible, every route to
+  a `sqlx` transaction is `async` and fallible with private fields, and
+  `probe_write` is synchronous and infallible too, so even given a live
+  transaction there is nowhere to issue a statement into it. `todo!()` has type
+  `!`, so nothing reported it. The batch is now an owned, `Send`, `'static`
+  stamped write set; PS-5's owned-batch evidence is untouched, because the type is
+  still owned and still `'static`.
+
+  **A result about PS-2 came out of it**, reported and deliberately not settled:
+  the clause names `rusqlite` or `sqlx` as the live-transaction axis end still to
+  be built, and **both are refuted, each by its own mechanism** — `rusqlite`'s
+  `Transaction<'_>` is `!Send` and costs the `SendProjectionStore` impl, and
+  `sqlx`'s cannot be produced by a total synchronous `begin`. The axis end is not
+  unbuilt; for those two drivers the port's own signatures forbid it. Thirteen
+  provisional clauses gate on PS-2 alone, so the choice of what to do about it is
+  the clause owner's. Staged at
+  `.kb/_intake/2026-09-08-ps-2-live-transaction-axis-is-forbidden-not-unbuilt.md`.
+
+  Verified rather than asserted: the whole gated suite green against a live
+  PostgreSQL 17.10 — **105 event-store, concurrency and model rules, 21
+  projection-target tests, 6 in the remaining targets, 0 failures**, with the
+  projection family's three skips each carrying a reason true of this store rather
+  than inherited. `PS-18`'s count is no longer unavailable as a result: this is
+  the first projection adapter over storage this workspace does not control to
+  clear the suite, and it **declines** `RESET_REFUSAL`.
 
 ---
 
@@ -4799,7 +4914,12 @@ monotonic append with a conditional write, and forcing that onto an engine built
 for analytical traversal produces something that satisfies the trait and not the
 specification.
 
-**Decisions it settles.** ADR-0025. Fills the batch-shape axis.
+**Decisions it settles.** ADR-0025. **Fills the write-vocabulary axis** — Cypher
+rather than SQL, a graph rather than tables. It was written here as *"fills the
+batch-shape axis"* and that is not what it filled: Ladybug is the fifth
+owned-buffered-batch implementer, so it is a sixth agreement at one end rather
+than the second shape PS-2 wants, and phase 10b established that PS-2's other end
+is forbidden by the port for both drivers the clause names.
 
 **Work**
 
@@ -4826,25 +4946,141 @@ have been three.
 
 **Exit criteria**
 
-- [ ] Projection conformance green, with capability skips reported.
-- [ ] The verdict on phase 6's freeze is written down either way — "it held" is a
-      result and must be recorded as one.
-- [ ] Build cost measured and the CI decision recorded here.
-- [ ] `publish = false` removed.
+- [x] Projection conformance green, with capability skips reported. **42 listed,
+      42 executed, 42 passed, 0 failed, 0 ignored** against the real driver. The
+      suite is mounted **twice** — once under an emitter that needs no runtime at
+      all — which is what makes "blocking-only costs the port nothing" a
+      falsifiable claim rather than an assertion. 14 rules Ran and 3 are reported
+      capability skips per mount.
+
+- [x] The verdict on phase 6's freeze is written down either way. **It held**,
+      against a rubric committed before any body was written (ADR-0025 §8): the
+      capability profile matched the prediction exactly on all four constants, and
+      none of the four named "it did not hold" conditions fired. The one thing the
+      port did not give the skeleton — a store stamp — is expressible as a private
+      field of the adapter's own owned batch, exactly as `SqliteBatch` carries one.
+
+      **Its worth is bounded, and was bounded before the run rather than after.**
+      Ladybug is the **fifth** owned-buffered-batch implementer, not PS-2's second
+      shape. Six implementations now agree at one end of the batch-shape axis, and
+      phase 10b established that the other end is *forbidden by the port* for both
+      drivers PS-2 names. A sixth agreement is weak evidence and this phase does
+      not claim otherwise.
+
+- [x] Build cost measured and the CI decision recorded here. The driver is a
+      **1.44 GB prebuilt static archive** plus an OpenSSL toolchain no feature
+      turns off, and CMake is not needed — which is the opposite of what the
+      crate's own manifest claimed. Measured in
+      `experiments/ladybug-driver-probes/`. `cargo check` and `cargo clippy` do
+      not link and `cargo test --workspace --all-features` does, so the driver is
+      behind an off-by-default feature, this crate is excluded from the workspace
+      steps, and the suite runs as a probed step that prints `skipped` when the
+      driver is not configured — the shape `cargo deny` already has. A **mandatory
+      no-driver step** sits beside it, because the exclusions otherwise take the
+      crate's default configuration off the gate entirely and a `cfg` typo would
+      be caught by nothing.
+
+- [~] `publish = false` removed. **It is not, and the block is upstream rather
+      than here.** `DOCS_RS=1 cargo check -p happenstance-ladybug --features
+      driver` fails with two `env!` errors: `lbug`'s build script returns early
+      under `DOCS_RS` *before* emitting the `cargo:rustc-env` lines its own
+      `src/lib.rs` requires, and an undefined `env!` is a compile error rather
+      than a fallback. So this crate cannot render on docs.rs, which is phase 12's
+      standing bar for a published crate. `PUBLISHABLE` and `CLAUDE.md`'s crate
+      set are therefore untouched. The flag says "cannot be published yet", not
+      "not finished" — the crate root says which.
 
 **Cases this makes writable.** The third-shape half of E2E-19 and E2E-24.
 
 **Estimate.** 6 days.
 
+**Frozen 2026-09-08, after the phase completed.** The adapter is finished, its
+suite is green and its exit criteria are met; what is parked is **further
+effort**, on the owner's instruction, until `lbug` stabilises upstream. Its
+published release does not build reliably, and three defects were found against
+0.20.3 while writing this adapter — no `rerun-if-env-changed` for `OPENSSL_DIR`,
+a segfault after a refused `BEGIN TRANSACTION`, and the one that decides it: **it
+cannot build on docs.rs**, which is this project's bar for a published crate.
+
+The freeze costs one line: the `ladybug` CI job is `if: false` with the reason
+written at it, so it shows as *skipped* rather than vanishing. Nothing else needed
+to move, and that is the crate's isolation paying off — the workspace gate steps
+exclude it, `cargo xtask ci` compiles it without its driver as a mandatory step,
+and the conformance run is probed on an opt-in. A developer who wants it opts in;
+nobody else pays.
+
+**To unfreeze:** a `lbug` release that builds on docs.rs. The three defects are
+recorded in `experiments/ladybug-driver-probes/README.md` and at the CI job, and
+were deliberately **not** filed upstream.
+
 **Session log**
+
+- **2026-09-08 — the adapter is real, the suite is green, and the pre-registered
+  verdict held.** ADR-0025 was written first, from measurements rather than from
+  the crate's own notes — three of which were calibrated against `lbug` 0.16.1 and
+  wrong about 0.20.3. The structural pass was written against the stand-in first
+  and then compiled against the real driver **with zero API mismatches**, which is
+  the whole argument for a skeleton stated as a result.
+
+  **Where ADR-0025 was wrong, and it is worth more than where it was right.** §8
+  predicted `COMMIT_FAULT = SUPPORTED` and gave a mechanism: a `CREATE` against a
+  pre-planted primary key raises, where a `MERGE` would not. Both halves are true,
+  and together they are fatal — **nothing a fixture can reach makes this store
+  issue a `CREATE`**, because the checkpoint write is a `MERGE` and so is the probe
+  write. §8's own observation, applied one step further than §8 applied it, rules
+  out §8's own injection. The capability prediction survived; its reason did not.
+  What landed instead recreates the probe table with a primary key the store's
+  `MERGE` cannot satisfy.
+
+  **And a named limitation the rule cannot see.** That injection faults the
+  *first* batch statement, so unlike SQLite's checkpoint-side trigger it does not
+  refute the specific wrong implementation the rule's message names — apply the
+  rows, fail the checkpoint, keep the rows. That is a property of the schema
+  rather than of the adapter: the rule's immediate checkpoint read-back needs
+  `__hs_checkpoint` intact down to both property types, so every fault arm-able on
+  that table breaks the assertion it arms for. Both near-misses are written into
+  the fixture with their measured errors.
+
+  **Four findings that are not in the ADR.** The driver **segfaults** — a
+  connection issuing a statement after its own `BEGIN TRANSACTION` was refused
+  kills the process with `STATUS_ACCESS_VIOLATION`; the adapter cannot reach it,
+  and a test pins the refactor that would reintroduce it. `BEGIN TRANSACTION`
+  claims a single writer slot, which is what made `WriteTransactionInUse`
+  constructible — it was one commit away from being the decorative variant
+  ADR-0025 deleted `PositionOutOfRange` for. `UInt64` coerces silently to `STRING`,
+  so type-mismatch injections do not raise. And `SystemConfig::default()` reserves
+  4 GiB per database, which is invisible for one and decisive for forty in a test
+  binary.
+
+  ADR-0025 §7 needs one refinement, recorded on `commit`: the **regression** path
+  must issue a `ROLLBACK`, because no statement failed there and the transaction
+  is still open. §7's prohibition is about the error path specifically.
 
 ---
 
 ## Phase 12 — Publish `0.2.0`
 
 **Goal.** `happenstance-core`, `happenstance`, `happenstance-testkit`,
-`happenstance-sqlite` and `happenstance-cloudflare` — **five crates**, decided at
-the `0.2.0` release pass — on crates.io, rendering on docs.rs.
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
+`happenstance-neon` — **seven crates** — on crates.io, rendering on docs.rs.
+
+**It was five, decided at the `0.2.0` release pass, and the owner re-opened it at
+the release review.** That decision sat on `HANDOVER.md`'s do-not-re-open list,
+and the owner is the one party entitled to re-open it. What changed is that both
+Postgres crates stopped being skeletons between the two decisions:
+`happenstance-postgres` clears 132 gated tests against a live PostgreSQL 17.10
+including the concurrency family at 64 contenders, and `happenstance-neon` clears
+124 against a live endpoint. Both render under `--cfg docsrs`, which is this
+phase's bar and which is checked before the claim rather than after.
+
+`happenstance-neon` ships with **ES-11's falsifier fired against it** and the
+clause still `[PROVISIONAL]`. That is deliberate: a provisional clause is one a
+published crate may fail to satisfy — that is what the marker means — and the
+crate's own README says which rule and why rather than leaving a reader to find
+out from a red CI job.
+
+`happenstance-ladybug` is finished and is **not** in the set, and cannot be:
+`lbug` does not render on docs.rs. See phase 11.
 
 **Why here.** Publication no longer waits on replication: with identity settled in
 phase 5 and `IngestStore` living in the sync crate, nothing in `happenstance-sync`
@@ -4932,17 +5168,90 @@ Most of the old phase-7 list moved to phase 0, where it was cheaper. What remain
 is the release.
 
 - [ ] `CHANGELOG.md` finalised for 0.2.0 — it has been accumulating since phase 0.
-- [ ] `cargo publish --dry-run` per crate; verify each `.crate` against phase 0's
-      `--list` assertion.
+- [x] Verify each `.crate` against phase 0's `--list` assertion. `cargo xtask
+      package-check` is green on all five: the publishable set agrees with the
+      manifests in both directions, and each carries `LICENSE-MIT`,
+      `LICENSE-APACHE` and `README.md` — 29, 38, 53, 25 and 21 files packaged.
+
+- [ ] `cargo publish --dry-run` per crate. **Only the first crate can be
+      dry-run before the release, and that is the constraint rather than a
+      shortfall.** `--dry-run` resolves dependencies from the *registry*, so
+      `happenstance-testkit`, `happenstance`, `happenstance-sqlite` and
+      `happenstance-cloudflare` all fail with *"failed to select a version for the
+      requirement `happenstance-core = ^0.2.0` … candidate versions found which
+      didn't match: 0.2.0-alpha.1, 0.0.0"* — which is precisely the
+      each-must-be-live-before-the-next ordering, arriving as an error message
+      instead of as a sentence. `happenstance-core`'s dry-run is the one that can
+      run now, and it does.
+
+      So the four downstream dry-runs happen **during** the publish, between one
+      crate going live and the next being pushed, and not before it. What covers
+      them beforehand is `package-check`'s `--list` assertion above, and what
+      covers them afterwards is `scripts/stranger-install-smoke.sh`.
 - [ ] Publish in dependency order: `happenstance-core` → `happenstance-testkit` →
-      `happenstance` → `happenstance-sqlite`. Each must be live before the next
-      resolves against it.
-- [ ] Set `clippy::todo` to `deny` with no per-crate exemptions in any published
+      `happenstance` → `happenstance-sqlite` → `happenstance-cloudflare` →
+      `happenstance-postgres` → `happenstance-neon`. Each must be live before the
+      next resolves against it. The order is forced rather than chosen: **all
+      four adapters dev-depend on the testkit at the workspace version**, and a
+      dev-dependency carrying a version has to resolve from the registry at
+      publish time.
+
+      This list named four crates while the goal said five, then five while the
+      goal said seven. It is spelled out in full each time for the reason the
+      goal paragraph gives: a count is the part nobody re-reads.
+- [x] Set `clippy::todo` to `deny` with no per-crate exemptions in any published
       crate. A clean build with it denied is the proof that no stub survives.
+      Denied workspace-wide already; **verified rather than assumed** — no
+      `todo!()` and no `#![allow(clippy::todo)]` in any of the five. The two
+      exemptions that remain are `happenstance-ladybug`'s and
+      `happenstance-sync`'s, and both crates are `publish = false`, so no
+      published artefact carries one. `happenstance-postgres`'s and
+      `happenstance-neon`'s left with their last stub at phase 10b, which is the
+      contract those allows were written under.
+- [ ] **Run `scripts/stranger-install-smoke.sh`** — DR-8, and the one check the
+      gate structurally cannot do. Every step of `cargo xtask ci` runs inside this
+      workspace, where the crates resolve by *path*: a path dependency ignores the
+      `include` list, ignores a file left out of the `.crate`, ignores a feature
+      that only unifies because a sibling turned it on, and ignores a `version`
+      requirement naming something the registry does not have. `cargo package
+      --list` is already a gate step and catches some of that; it cannot catch a
+      crate that packages correctly and then fails to *compile* for somebody who
+      has only the registry. The script is written and its Rust is validated
+      against the local crates, so it will not fail at the release for a typo —
+      what it has never done is resolve from crates.io, which is the whole
+      proposition and needs the release to exist. Its failure mode is a yank.
+
 - [ ] Tag; cut the GitHub release.
-- [ ] ADR-0004 loses `provisional`; the MSRV becomes a promise.
-- [ ] Repoint `cargo-semver-checks` to keep *both* baselines — the registry for
-      release safety, `--baseline-rev` for review signal.
+- [ ] ADR-0004 loses `provisional`; the MSRV becomes a promise. **Staged, not
+      applied** — `.kb/_intake/2026-09-08-adr-0004-msrv-becomes-a-promise-at-publication.md`.
+      Two reasons it cannot be done before the release and the second decides it:
+      it is not true yet, and an accepted decision atom is immutable, so lifting a
+      marker is a superseding atom rather than an edit — which is a
+      `/redkiln:kb-ingest` job, not a hand edit.
+- [x] Repoint `cargo-semver-checks` to keep *both* baselines — the registry for
+      release safety, `--baseline-rev` for review signal. **Written, and one word
+      from working.** The registry step is in the `semver` job carrying `if:
+      false` and the reason: omitting `baseline-rev` diffs against the newest
+      *compatible* published version, and there is none — the registry carries
+      `0.2.0-alpha.1`, and Cargo treats a prerelease as incompatible with the
+      release it precedes. Enabling it is deleting one line, in the same change
+      that marks this phase `done`. Written now rather than left as a checklist
+      entry because after a release is exactly when nobody reads checklists, and
+      `if: false` rather than absent for the reason the `backlog` job records: a
+      check that quietly stops running is worth less than none, and one that was
+      never written leaves nothing to mark the hole.
+
+- [x] **Decide the `benchmarks/` blind spot** — `HANDOVER.md` left it open with
+      *"whoever takes phase 12 should decide rather than inherit this."*
+      **Decided: a CI-only `cargo check --benches --tests`.** The crate calls the
+      public API and mounts the conformance suite, nothing compiled it, and on
+      2026-09-07 it was carrying three independent breakages all of them green —
+      including `commit`'s new return type, the first real downstream break this
+      workspace has produced, invisible for four commits. `cargo check` produces
+      no number, so this is not what CF-34 rejects: that clause is about a
+      threshold nobody can justify becoming a threshold everybody raises, and
+      there is no threshold here. CI-only rather than a gate step, so a developer
+      pays nothing and `benchmarks/` stays a crate the root manifest cannot see.
 - [ ] README status table: no more 🔲 for what shipped, and the "batteries"
       tagline reconciled with what actually shipped.
 
@@ -4957,20 +5266,87 @@ demonstrably reports something.
 - [ ] Crates live; docs.rs builds green.
 - [ ] `cargo-semver-checks` compares against a real published baseline, verified
       on the next pull request.
-- [ ] Every `[PROVISIONAL]` clause published at 0.1 either has its falsifier
-      scheduled in a later phase of this file, or is behind an unstable feature.
-      Audit it against [the provisional
-      ledger](#the-46-provisional-clauses) and `cargo xtask spec-trace`, not
-      against prose — the previous revision carried this criterion with nothing to
-      check it against.
-- [ ] **Every `[DEFERRED]` clause on a published surface is resolved, made
+- [x] **Every `[PROVISIONAL]` clause published at 0.1 either has its falsifier
+      scheduled in a later phase of this file, or is behind an unstable feature.**
+      Audited, and the audit is now a **gate step** rather than a pass somebody
+      did: `runbook_clause_ledgers_match_the_specification` reads §7.2 — which is
+      generated by `spec-trace` and equality-checked against it — and requires
+      [the provisional ledger](#the-46-provisional-clauses) to name exactly the
+      clauses marked `[PROVISIONAL]`, in both directions, with every group naming
+      an owning phase. It reports **46 clauses across 20 groups, every group
+      owned**. The criterion said to audit this against the ledger and
+      `spec-trace` and not against prose; a check that runs on every commit is
+      the strongest available reading of that, and it is what stops this table
+      going short again the way it did at phase 3 and again at phase 5.
+
+- [x] **Every `[DEFERRED]` clause on a published surface is resolved, made
       additively resolvable, or accepted in writing as a possible breaking 0.2.**
-      One qualifies, and it is safe: **WF-1** defers DCB wire interoperability to
-      phase 13, but the format is private and WF-8 puts a version first, so phase
-      13 can change it without a wire break. Confirm that is still true — it stops
-      being true the moment anything outside this workspace parses the format.
-      (**ES-24** was the other. It is settled at phase 4 and no longer deferred;
-      the criterion is kept because the next clause to land here will not be.)
+
+      **The count in this criterion was wrong, and the correction is the point of
+      re-running it.** It said *"one qualifies"* and named WF-1. Twelve clauses
+      are `[DEFERRED]`; classified by the crate that publishes the surface each
+      one is about, **seven are on a published surface and five are not**:
+
+      | Clause | Surface | Published at `0.2.0`? |
+      |---|---|---|
+      | WF-1 | `happenstance-core` §2.7, behind the off-by-default `serde` feature | yes |
+      | ES-39 | `happenstance-core`'s `EventStore`, default surface | yes |
+      | PS-18, PS-27, PS-30 | `happenstance-core`'s `ProjectionStore`, behind off-by-default `unstable-projection` | yes, gated |
+      | CF-14, CF-27 | `happenstance-testkit`'s conformance obligations | yes |
+      | SY-14, SY-18, SY-27, SY-28, SY-32 | `happenstance-sync`, `publish = false` | **no** |
+
+      Each of the seven, and the disposition it ships under:
+
+      - **WF-1** — unchanged and still safe. The format is private and WF-8 puts a
+        version first, so phase 13 can change it without a wire break. Re-confirmed:
+        nothing outside this workspace parses it, and the moment something does,
+        this stops being true.
+      - **ES-39** — *accepted in writing as a possible breaking 0.2*, **and
+        ratified by the owner at the release review** rather than asserted by the
+        lane that wrote it. A store reporting history it does not hold needs a
+        port surface to report it through, and adding a method to `EventStore` is
+        breaking for every implementer. It is phase 14's, it is not additively
+        resolvable, and this sentence is the acceptance the criterion asks for
+        rather than a promise it will turn out to be free.
+
+        **The seven-crate decision raised the price of this one**, and it is
+        recorded rather than left implicit: the release publishes **four**
+        adapters implementing `EventStore` — sqlite, cloudflare, postgres and
+        neon — where the five-crate set published two. A required method added at
+        phase 14 breaks all four, plus any implementer outside this workspace.
+        The acceptance was ratified with that number in front of it.
+      - **PS-18, PS-27, PS-30** — behind `unstable-projection`, which is
+        off by default and carries a written semver exemption (PS-3, decided here).
+        That is the same escape the provisional criterion offers one line up, and
+        it is the reason `projection-store` left `happenstance-sqlite`'s default
+        feature set: a consumer who runs `cargo add` cannot reach these clauses at
+        all.
+
+        **PS-18's count is no longer unavailable, and phase 10b is what changed
+        it.** Its deferral is owned by `projection-store-freeze`, *"which takes
+        the count when the first adapter over storage this workspace does not
+        control clears the projection suite."* `PostgresProjectionStore` is that
+        adapter and it has cleared the suite — and it **declines**
+        `RESET_REFUSAL`, on the ground that it holds no protection policy. So the
+        count is **one adapter, and it did not implement protection**. The
+        mechanism stays; what it still lacks is a caller, which is what the
+        deferral says.
+      - **CF-14, CF-27** — *accepted in writing as a possible breaking 0.2*, and
+        **ratified at the release review** on the ground that CF-32 already
+        carries this case: the testkit has its own version number precisely
+        because a conformance change is minor-in-semver and breaking-in-practice,
+        so no new promise is being made here. They are the cheapest of the seven. Both oblige **this workspace's own
+        instruments** rather than a signature a consumer binds against: CF-14
+        defers whether `REOPEN` can be honoured with one shape or whether
+        "durable" needs grading, and CF-27 defers building the suffix-store
+        instrument. If CF-14's answer turns out to be *grading*, `Fixture::REOPEN`
+        changes type and that is breaking for adapter authors — which is exactly
+        the case CF-32 already anticipates by giving `happenstance-testkit` its
+        own version number, on the ground that a conformance change is
+        minor-in-semver and breaking-in-practice.
+      - **The five `SY` clauses are out of scope on this release**, because
+        `happenstance-sync` is `publish = false` and nothing on crates.io can bind
+        them. They return the moment that changes, which is phase 13's.
 
 **Cases this makes writable.** None. Publication writes no clause; it makes the
 frozen ones cost something to change.
@@ -4978,6 +5354,67 @@ frozen ones cost something to change.
 **Estimate.** 2 days.
 
 **Session log**
+
+- **2026-09-08 — everything phase 12 can do before the release is done, and the
+  two criteria that cannot be are named rather than ticked.**
+
+  **The baseline was red and had been since the KB intake wave.** `cargo xtask ci`
+  failed on one citation: `.kb/decisions/0058`'s three ranges were stale on
+  arrival, inherited from a brief written on 2026-09-04 against a tree the
+  merge-join read path later moved. `a4616ca` repointed what that merge moved in
+  code and documentation and touched no `.kb` file, correctly — nothing there was
+  in scope, because `.kb/_intake` is excluded from the citation scan
+  (`xtask/src/lints.rs`). The ingest then promoted the brief into `.kb/decisions/`,
+  which *is* checked. **The ingest is the moment invisible drift becomes a red
+  gate, and it is the moment nobody is reading line numbers.** Staged as a finding
+  with two repairs, of which re-anchoring at promotion is the stronger.
+
+  **The `docs.rs` step covered three of the five publishable crates.** Its whole
+  argument is that a broken `doc(cfg(…))` fails where it can no longer be fixed —
+  and on the release that publishes five crates it was covering three of them.
+  `happenstance-cloudflare` needed its own step, because its manifest renders it
+  for `wasm32` and nothing else.
+
+  **Both auditable exit criteria are discharged, and one is now a gate step.**
+  `runbook_clause_ledgers_match_the_specification` holds both clause ledgers
+  against §7.2 — which `spec-trace` generates and equality-checks — in both
+  directions, with every provisional group required to name an owner. It reports
+  46 provisional across 20 groups and 12 deferred. Proven non-decorative before it
+  landed: a dropped clause, a clause the specification no longer marks, and a
+  blank owner cell are each rejected. The criterion said to audit *"against the
+  ledger and `spec-trace`, not against prose"*; a check that runs on every commit
+  is the strongest reading of that available, and the ledger has been wrong in
+  both directions twice with nothing noticing.
+
+  **The deferred criterion counted one and there are seven.** Classified by
+  publishing crate: WF-1, ES-39, PS-18, PS-27, PS-30, CF-14 and CF-27 are on a
+  published surface; the five `SY` clauses are not, because `happenstance-sync` is
+  `publish = false`. Each of the seven now ships under a stated disposition, and
+  two — ES-39 and CF-14 — are **accepted in writing as possible breaking 0.2s**
+  rather than assumed free.
+
+  **Packaging:** `package-check` green on all five, each carrying both licence
+  files and a README. `happenstance-core`'s `--dry-run` passes, verified by
+  compiling from its own tarball. **The other four cannot be dry-run before the
+  release** — `--dry-run` resolves from the registry and they fail with *"candidate
+  versions found which didn't match: 0.2.0-alpha.1, 0.0.0"*, which is the
+  each-must-be-live-before-the-next ordering arriving as a refusal rather than a
+  sentence. Those four happen during the publish.
+
+  **`scripts/stranger-install-smoke.sh` is written and its Rust validated against
+  the local crates**, so it cannot fail at the release for a typo — which already
+  paid, because the first draft did not compile. It has never resolved from
+  crates.io, which is the whole proposition and needs the release to exist.
+
+  **Not ticked, and neither can be before the release:** *crates live; docs.rs
+  green*, and *`cargo-semver-checks` against a real published baseline*. The
+  registry has to carry `0.2.0` before either means anything.
+
+  **The `0.2.0` milestone row is deliberately not added**, and phase 12 stays `in
+  progress`. `runbook_status_matches_the_registry` walks a milestone row's whole
+  dependency closure and requires every phase in it to read `done`; adding the row
+  now would either redden the gate or require marking phase 12 `done` over an
+  unpublished release. The order stays publish → mark `done` → add the row.
 
 ---
 

@@ -52,7 +52,7 @@ a feature line to blame. The gate's `--all-features` steps only ever see the
 "on" configuration, so the combination that fails is the one nothing runs.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:38 (serde?/std)` ·
-`spec/SPECIFICATION.md:375 (Cargo features are additive)` ·
+`spec/SPECIFICATION.md:376 (Cargo features are additive)` ·
 [Cargo Book — feature unification](https://doc.rust-lang.org/cargo/reference/features.html#feature-unification) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-51-2. Reach an optional dependency with `dep:` and `?/`; a bare `dep/feature` in a default feature enables the dependency.
@@ -124,7 +124,7 @@ release — with no commit of this workspace's behind it and no manifest line
 anywhere that changed.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:41 (stated rather than inherited)` ·
-`xtask/src/main.rs:693 (names serde/alloc and base64/alloc)` ·
+`xtask/src/main.rs:759 (names serde/alloc and base64/alloc)` ·
 `xtask/src/lints.rs:383 (fn core_alloc_features)` ·
 [ADR-0016](../../.kb/decisions/0016-the-wire-format.md)
 
@@ -232,5 +232,5 @@ crate makes is a build log, and the fix ships as the *next* version.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:101 (package.metadata.docs.rs)` ·
 `crates/happenstance-core/src/lib.rs:113 (feature(doc_cfg))` ·
-`xtask/src/main.rs:971 (is a cfg nobody sets except docs.rs)` ·
+`xtask/src/main.rs:1047 (is a cfg nobody sets except docs.rs)` ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*

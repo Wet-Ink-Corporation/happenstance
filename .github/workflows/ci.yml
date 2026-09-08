@@ -101,8 +101,17 @@ jobs:
       # skipped in CI" there. A `skipped` line that is expected on two runners is
       # a `skipped` line nobody reads on the third. Uniformity is worth the
       # minute.
+      #
+      # `--target wasm32-unknown-unknown` is load-bearing and was missing until
+      # the first pull request ran this job. `rust-toolchain.toml`'s `targets`
+      # key applies to the *pinned* toolchain, not to a second one installed
+      # beside it, so nightly arrived with a host std and nothing else — and the
+      # wasm32 half of the step below then failed with `can't find crate for
+      # core`, which reads like a broken crate and is a missing target. It went
+      # unseen because a lane-branch push runs no CI and every local machine
+      # that had run the step already had the target installed for nightly.
       - name: Install nightly, for the docs.rs configuration step
-        run: rustup toolchain install nightly --profile minimal
+        run: rustup toolchain install nightly --profile minimal --target wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
@@ -502,6 +511,348 @@ jobs:
           fi
           echo "no conformance failures"
 
+  # The LadybugDB projection conformance run. `live-postgres`'s third sibling,
+  # with the structural difference that decides its whole shape: it needs neither
+  # a daemon nor a credential — it needs a **1.44 GB static archive and an
+  # OpenSSL toolchain**, and it is that cost, not an unavailability, that keeps it
+  # off the gate (ADR-0025 §9).
+  #
+  # So this job is where `happenstance-ladybug`'s driver is compiled at all. The
+  # gate's own step for it is probed on `HAPPENSTANCE_LADYBUG_DRIVER` and prints
+  # `skipped:` everywhere else, which means a green gate says nothing about this
+  # adapter and this job is the only thing that does.
+  #
+  # `ubuntu-latest` only, and deliberately not the gate's three-platform matrix.
+  # The driver's link needs OpenSSL, which is preinstalled here and is a
+  # user-space vcpkg build on a Windows runner — five and a half minutes of it,
+  # measured. One platform that runs is worth more than three that are skipped;
+  # the day this adapter is published is the day that trade is re-taken.
+  ladybug:
+    name: conformance against a real LadybugDB
+    # FROZEN 2026-09-08, and `if: false` rather than deleted for the reason the
+    # `backlog` job records: a check that quietly stops running is worth less
+    # than none, because the green tick keeps arriving. A deleted job leaves
+    # nothing to mark the hole; a disabled one shows as *skipped*.
+    #
+    # The adapter is finished and its suite is green — 42 of 42 against the real
+    # driver, locally, with the verdict on phase 6's freeze pre-registered and
+    # held. What is frozen is the EFFORT, not the code, and the reason is
+    # upstream: `lbug`'s published release does not build reliably, and three
+    # defects were found against 0.20.3 while writing this adapter.
+    #
+    #   1. `build.rs` emits no `cargo:rerun-if-env-changed` for `OPENSSL_DIR`, so
+    #      setting it after a failed link changes nothing until `cargo clean -p
+    #      lbug`. Cost one build to diagnose.
+    #   2. It CANNOT BUILD ON DOCS.RS. `build.rs` returns early under `DOCS_RS`
+    #      before emitting the `cargo:rustc-env` lines its own `lib.rs` requires
+    #      through `env!`, and an undefined `env!` is a compile error rather than
+    #      a fallback. This is why `happenstance-ladybug` is not in
+    #      `PUBLISHABLE`: rendering on docs.rs is this project's bar.
+    #   3. The driver SEGFAULTS — a connection issuing a statement after its own
+    #      refused `BEGIN TRANSACTION` dies with `STATUS_ACCESS_VIOLATION`. The
+    #      adapter cannot reach it and a test pins the refactor that would.
+    #
+    # This job had never run when it was frozen, so nothing is known about the
+    # Linux archive's size or whether the cache covers it. Turning it on would
+    # put an unmeasured 1.4 GB download and an upstream C++ toolchain on the
+    # critical path of a release that does not depend on it.
+    #
+    # TO UNFREEZE: a `lbug` release that builds on docs.rs, then delete the
+    # `if: false` below. Nothing else about this job needs to move, and the local
+    # story is unaffected either way — the workspace gate steps exclude this
+    # crate, `cargo xtask ci` compiles it without its driver as a mandatory step,
+    # and the conformance run is probed on `HAPPENSTANCE_LADYBUG_DRIVER`, so a
+    # developer who wants it opts in and nobody else pays.
+    if: false
+    runs-on: ubuntu-latest
+    env:
+      # The opt-in `xtask ladybug-configured` probes for. It is set here and
+      # nowhere else, which is the whole of what "not on the gate" means.
+      HAPPENSTANCE_LADYBUG_DRIVER: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # No install step for the driver. `lbug`'s `build.rs` tries a prebuilt
+      # download first and only falls back to a cmake source build, so cmake is
+      # not needed — measured, and it is what the crate's own note used to get
+      # wrong. `libssl-dev` is preinstalled on this image and `pkg-config` finds
+      # it, so `OPENSSL_DIR` is a Windows concern rather than a runner one.
+
+      # Every rule is present in the binary before any of them runs.
+      #
+      # Not a formality, and `live-postgres` learned it the expensive way: the
+      # whole target is behind `#![cfg(feature = "conformance")]`, so one wrong
+      # flag turns the run below into `running 0 tests` and `cargo test` exits 0
+      # on that. The list is captured so the count assertion after the run can be
+      # made against it rather than against a number typed here, which would
+      # drift the first time a rule was added.
+      - name: Every gated test is present in the binary
+        run: |
+          cargo test -p happenstance-ladybug --all-features \
+            --test projection -- --list | tee gated.txt
+          count=$(grep -c ': test$' gated.txt)
+          echo "gated tests: $count"
+          # 17 projection rules, mounted TWICE — once under the blocking emitter
+          # and once under tokio, which is ADR-0025 §3's falsifier for
+          # runtime-agnosticism and the reason a count here is worth having at
+          # all: losing one mount is exactly the defect this number can see and
+          # a green suite cannot. Plus CF-18's
+          # `every_declined_capability_is_stated_by_this_fixture`, which
+          # `projection_store_conformance!` emits once per mount and which is not
+          # a rule, plus this crate's own 6 = 42.
+          #
+          # A floor rather than an equality, for `live-postgres`'s stated reason:
+          # an equality fails on the commit that *adds* a rule, which trains
+          # whoever adds one to edit this number without reading what it is for.
+          # The floor only fires when a whole mount stops being emitted.
+          if [ "$count" -lt 40 ]; then
+            echo "::error::only $count gated tests are present; a mount is missing"
+            exit 1
+          fi
+
+      # The run itself.
+      #
+      # `--show-output` because a declined capability's reason is printed only
+      # under it, and a trade nobody can read is a trade nobody recorded (CF-18).
+      # This fixture declines two of the four capabilities, so six such lines are
+      # expected across the two mounts.
+      #
+      # No `--test-threads=1`. The Postgres job needs it because its fixture
+      # sizes a connection pool per instance and a parallel run exhausts the
+      # server; this one opens an embedded database per fixture instance with an
+      # explicit 64 MiB `max_db_size` and a 16 MiB buffer pool, which is what
+      # makes the default parallel harness affordable. Measured both ways.
+      - name: The conformance suite against a real LadybugDB
+        run: |
+          cargo test -p happenstance-ladybug --all-features \
+            --test projection -- --show-output | tee run.txt
+
+      # The vacuity guard. The same flag that keeps the default gate green with
+      # no driver keeps a misconfigured job green with no tests, and the two are
+      # indistinguishable in a check mark.
+      - name: The run executed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' run.txt; then
+            echo "::error::no test result line; the suite did not run at all"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated.txt)
+          result=$(grep -E '^test result:' run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; executed $((passed + failed)) (passed $passed, failed $failed), ignored $ignored"
+
+          # `passed > 0` is NOT a sufficient guard, for the reason
+          # `live-postgres` writes out: a partial selection still passes it. What
+          # has to be asserted is that nothing was left ignored and that the
+          # executed count matches what `--list` found.
+          if [ "$ignored" -ne 0 ]; then
+            echo "::error::$ignored gated tests did not execute; the run is not the gated run"
+            exit 1
+          fi
+          if [ "$((passed + failed))" -ne "$expected" ]; then
+            echo "::error::executed $((passed + failed)) of $expected gated tests"
+            exit 1
+          fi
+
+      # Both mounts ran, which is the artefact rather than a formality.
+      #
+      # ADR-0025 §3 makes runtime-agnosticism falsifiable by mounting the suite
+      # twice — once under an emitter that needs no runtime at all. A store that
+      # reached for `spawn_blocking` panics under the first. The count check
+      # above would notice a mount that vanished; this notices one that was
+      # renamed, which is the same defect wearing a hat that still adds up.
+      - name: Both emitters mounted the suite
+        if: always()
+        run: |
+          for mount in blocking with_tokio; do
+            if ! grep -q "^test ${mount}::" run.txt; then
+              echo "::error::the ${mount} mount emitted no tests; ADR-0025 §3's falsifier is not running"
+              exit 1
+            fi
+          done
+          echo "both mounts ran"
+
+      # The suite must be green, and the failure list is empty on purpose.
+      - name: Every gated test passed
+        if: always()
+        run: |
+          failures=$(sed -n '/^failures:$/,/^test result:/p' run.txt \
+            | grep -oE '[a-z_0-9:]+::[a-z_0-9]+' | sort -u)
+          if [ -n "$failures" ]; then
+            echo "::error::conformance failures:"
+            echo "$failures"
+            exit 1
+          fi
+          echo "no conformance failures"
+
+  # The live-Neon conformance run. `live-postgres`'s sibling, with one structural
+  # difference that shapes the whole job: it needs a **credential**, not a daemon.
+  #
+  # `secrets` is not available in a job-level `if:` — the contexts there are
+  # `github`, `needs`, `vars` and `inputs` — so the gate is an env var set at job
+  # level and read by every step. On a pull request from a fork, `secrets` is
+  # empty, every step below skips, and this job is green having executed nothing.
+  # That is stated rather than hidden, because it is exactly the shape CLAUDE.md
+  # calls out at the disabled `backlog` job: a check that quietly stops running is
+  # worth less than none. The first step prints which of the two happened, so the
+  # log says so even when nobody reads the `if:`.
+  #
+  # The endpoint is a real Neon branch, not a container. Two consequences the
+  # Postgres job does not have: the schemas outlive the run, so the fixture sweeps
+  # its own leftovers by age on first use, and the round trip is 80-100 ms rather
+  # than 0.1 ms, which is why this job is minutes rather than seconds.
+  live-neon:
+    name: conformance against a live Neon endpoint
+    runs-on: ubuntu-latest
+    env:
+      NEON_CONNECTION: ${{ secrets.NEON_CONNECTION }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # Said out loud, because "skipped every step" and "ran and passed" are the
+      # same green tick otherwise.
+      - name: Whether there is an endpoint to run against
+        run: |
+          if [ -z "$NEON_CONNECTION" ]; then
+            echo "::notice::NEON_CONNECTION is not set (fork PR, or the secret is \
+          absent). Every step below is skipped and this job proves NOTHING."
+          else
+            echo "NEON_CONNECTION is set; the gated suites will run."
+          fi
+
+      # Every rule is present in the binary before any of them runs.
+      #
+      # Not a formality: whole-invocation gating means one wrong flag turns the
+      # runs below into `running 0 tests`, and `cargo test` exits 0 on that. The
+      # lists are captured so the count assertions afterwards are made against
+      # them rather than against numbers typed here, which would drift the first
+      # time a rule was added.
+      - name: Every gated test is present in the binaries
+        if: env.NEON_CONNECTION != ''
+        run: |
+          cargo test -p happenstance-neon --all-features \
+            --test neon_conformance -- --ignored --list | tee gated-events.txt
+          cargo test -p happenstance-neon --all-features \
+            --test neon_projection -- --ignored --list | tee gated-projection.txt
+          events=$(grep -c ': test$' gated-events.txt)
+          projection=$(grep -c ': test$' gated-projection.txt)
+          echo "gated tests: $events event-store, $projection projection"
+          # 89 event-store rules + 5 concurrency + 1 model + CF-18's
+          # `every_declined_capability_is_stated_by_this_fixture` + this crate's
+          # own 9 = 105; and 17 projection rules + 2 of this crate's own = 19. A
+          # run that finds materially fewer has lost an INVOCATION rather than a
+          # test, which is how a suite ships with a family silently unmounted and
+          # a count that looks right.
+          #
+          # Floors rather than equalities, deliberately: an equality fails on the
+          # commit that ADDS a rule, which trains whoever adds one to edit this
+          # number without reading what it is for.
+          if [ "$events" -lt 100 ]; then
+            echo "::error::only $events gated event-store tests are present; an invocation is missing"
+            exit 1
+          fi
+          if [ "$projection" -lt 17 ]; then
+            echo "::error::only $projection gated projection tests are present; an invocation is missing"
+            exit 1
+          fi
+
+      # The runs themselves.
+      #
+      # `--test-threads=1` is not a workaround for flakiness; it is this adapter's
+      # visibility mechanism. Reads carry `xact_id < pg_snapshot_xmin(…)`, and
+      # `pg_snapshot_xmin` is held back by the longest open write transaction
+      # ANYWHERE on the branch — including the other rules of this same run. In
+      # parallel, rules that append and read back see an empty log through no
+      # fault of the adapter: 67 of 105 failed that way on the first measured run
+      # and 3 of 105 serially. The frontier's cost is stated in the crate root and
+      # this is where the suite pays it.
+      #
+      # `--show-output` because a declined capability's reason is printed only
+      # under it, and a trade nobody can read is a trade nobody recorded (CF-18).
+      # This adapter reports three, all in the projection family.
+      - name: The conformance suites against a live Neon endpoint
+        if: env.NEON_CONNECTION != ''
+        run: |
+          cargo test -p happenstance-neon --all-features --test neon_conformance \
+            -- --ignored --show-output --test-threads=1 | tee run-events.txt
+          cargo test -p happenstance-neon --all-features --test neon_projection \
+            -- --ignored --show-output --test-threads=1 | tee run-projection.txt
+
+      # The vacuity guard, and the reason this job cannot be green having done
+      # nothing. The same flag that keeps the default gate green with no endpoint
+      # keeps a misconfigured job green with no tests, and the two are
+      # indistinguishable in a check mark.
+      - name: The runs executed every gated test
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          for pair in "run-events.txt:gated-events.txt" "run-projection.txt:gated-projection.txt"; do
+            run="${pair%%:*}"; gated="${pair##*:}"
+            if ! grep -qE '^test result:' "$run"; then
+              echo "::error::no test result line in $run; that suite did not run at all"
+              exit 1
+            fi
+            expected=$(grep -c ': test$' "$gated")
+            result=$(grep -E '^test result:' "$run" | tail -1)
+            passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+            failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+            ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+            echo "$run: expected $expected; executed $((passed + failed)) (passed $passed, failed $failed), ignored $ignored"
+            # `passed > 0` is NOT a sufficient guard. Drop `--ignored` from the
+            # run above and the target still executes its no-endpoint tests, so
+            # `passed` is non-zero and a `> 0` check waves through a run that
+            # touched no rule. What has to be asserted is that NOTHING was left
+            # ignored and that the executed count matches what `--list` found.
+            if [ "$ignored" -ne 0 ]; then
+              echo "::error::$ignored gated tests did not execute in $run; the run is not the gated run"
+              exit 1
+            fi
+            if [ "$((passed + failed))" -ne "$expected" ]; then
+              echo "::error::$run executed $((passed + failed)) of $expected gated tests"
+              exit 1
+            fi
+          done
+
+      # The suites must be green, and the failure list is empty on purpose.
+      #
+      # KEPT STRICT, and there is one rule that makes that a real cost.
+      # `read_result_is_stable_under_concurrent_append` is a **network race** for
+      # this adapter and cannot be made otherwise: a read and an append are two
+      # independent requests to a proxy, so nothing orders one backend's snapshot
+      # against another's commit. Measured over the conformance transport, twenty
+      # runs per configuration: 3 red in 20 over HTTP/1.1, and 1 red in 40 over a
+      # single HTTP/2 connection, which is why the transport is HTTP/2 with a
+      # one-connection pool.
+      #
+      # So this job will occasionally be red for a reason that is not a
+      # regression, and that is deliberate rather than overlooked. Tolerating a
+      # NAMED set of failures is the alternative and it is worse: `live-postgres`
+      # records that a gate which tolerates a named set is one commit away from
+      # tolerating the wrong one, and it already tolerated a set that should never
+      # have been there. The residual belongs to ES-11's owner as a clause
+      # question — one-shot HTTP is a shape its sufficiency condition for
+      # asynchronous drivers does not cover — and hiding it behind an allowlist
+      # here would be this job answering it.
+      - name: Every gated test passed
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          failures=$(cat run-events.txt run-projection.txt \
+            | sed -n '/^failures:$/,/^test result:/p' \
+            | grep -oE '[a-z_0-9:]+::[a-z_0-9]+' | sort -u)
+          if [ -n "$failures" ]; then
+            echo "::error::conformance failures:"
+            echo "$failures"
+            exit 1
+          fi
+          echo "no conformance failures"
+
   msrv:
     name: minimum supported Rust version
     runs-on: ubuntu-latest
@@ -598,7 +949,61 @@ jobs:
           # than remembering to add the line later, and a public surface no
           # instrument watches is the thing this job exists to prevent. That
           # foresight is why this line needed no edit at the release.
+          #
+          # **Two names are deliberately absent, and only from this baseline.**
+          # `happenstance-postgres` and `happenstance-neon` had no published
+          # version before `0.2.0`: on `main` they are phase-2 skeletons, so
+          # diffing their surface against the base commit compares two states a
+          # consumer has never been able to install, and every difference it
+          # finds is a "break" against nothing. The first pull request to run
+          # this job proved the point rather than argued it — it failed on
+          # `inherent_method_const_removed` for `NeonProjectionStore::new`,
+          # which stopped being `const` because the store gained a per-instance
+          # stamp and a `const fn` would hand every instance the same one
+          # (`crates/happenstance-neon/src/projection_store.rs:224-228`). A true
+          # finding, about a crate with no consumers.
+          #
+          # **They rejoin the moment `0.2.0` is on the registry**, which is the
+          # same moment the registry baseline below turns on — and that one
+          # watches them for the thing that actually matters. Until then this
+          # line is the honest scope of a rev baseline, not a hole in it.
           package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
+
+      # THE REGISTRY BASELINE, AND IT IS ONE WORD FROM WORKING.
+      #
+      # This is the outstanding half of phase 12's `cargo-semver-checks` work,
+      # written out at the `0.2.0` closeout so that turning it on is an edit to
+      # `if:` rather than a step somebody has to compose from a checklist line
+      # after a release, which is exactly when nobody is reading checklists.
+      #
+      # It is `if: false` rather than absent, and the two are not the same. The
+      # `backlog` job one file-section up records the argument in full: a check
+      # that quietly stops running is worth less than none, because the green
+      # tick keeps arriving. A check that was never written is worse still —
+      # nothing marks the hole.
+      #
+      # **Why it cannot run yet, and it is not shyness.** Omitting `baseline-rev`
+      # makes the action diff against the newest *compatible* published version.
+      # There is none: the registry carries `0.2.0-alpha.1`, and Cargo treats a
+      # prerelease as incompatible with the release it precedes, so this step
+      # fails today with "no baseline" for a reason that has nothing to do with
+      # the code. A job that fails because the version it names does not exist
+      # teaches nobody anything, and it teaches them it loudly.
+      #
+      # **To enable it:** delete the `if: false` line below, in the same change
+      # that marks phase 12 `done`. Nothing else about this step needs to move.
+      #
+      # Both baselines are kept rather than one replacing the other, and they
+      # answer different questions. The rev baseline above catches a break
+      # introduced *by this pull request* and is silent about a break merged two
+      # pull requests ago, which is part of its baseline. This one catches breaks
+      # against the last thing a consumer can actually install, and is silent
+      # about which pull request introduced them.
+      - name: semver against the published baseline
+        if: false # ← delete this line when `0.2.0` is on crates.io
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
+        with:
+          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare, happenstance-postgres, happenstance-neon
 
   # A newly published advisory against a dependency nobody has touched is the one
   # class of failure that arrives with no commit behind it, so it needs a clock
@@ -622,3 +1027,51 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo deny check advisories
+
+  # The benchmark crate is a CONSUMER, and nothing compiled it.
+  #
+  # `benchmarks/` sits outside the workspace behind a bare `[workspace]` table
+  # and `affected.rs` lists it as INERT. Both are right and neither is in
+  # question: CF-34 forbids a benchmark *result* gating a merge, `run.sh` says it
+  # must never become a gate step, and the crate installs a counting
+  # `#[global_allocator]` that the root's `unsafe_code = "forbid"` physically
+  # cannot host.
+  #
+  # But it calls the public API and it mounts the conformance suite over its own
+  # SQLite fixture. On 2026-09-07 it was found carrying three independent
+  # breakages, all of them green: `commit`'s new return type unnoticed for four
+  # commits — the first real downstream break this workspace has produced, and it
+  # was invisible — a seventh fixture inheriting `READ_FAULT`, missed because
+  # CF-18's check cannot run where it is not compiled, and a `Cargo.lock` still
+  # recording the path dependencies at `0.2.0-alpha.1`.
+  #
+  # **This is a decision taken at phase 12 rather than inherited**, which is what
+  # `HANDOVER.md` asked of whoever took it. `cargo check` produces no number, so
+  # this is not what CF-34 rejects — that clause is about a threshold nobody can
+  # justify becoming a threshold everybody raises, and there is no threshold here.
+  # Against that: adding a step to the gate for a crate whose entire design is to
+  # sit outside it deserves an argument. The argument is that the crate is a
+  # consumer, downstream breaks are exactly what a consumer catches, and this one
+  # caught the only one this workspace has produced — four commits late, by hand.
+  #
+  # CI-only rather than a `cargo xtask ci` step, deliberately. A developer running
+  # the gate pays nothing; the check runs where it costs nobody's inner loop, and
+  # `benchmarks/` stays a crate the root manifest cannot see.
+  #
+  # `--benches --tests`, no `--run`: this compiles the harness and never executes
+  # a measurement, so no number is produced and none can drift into a threshold.
+  benchmarks:
+    name: the benchmark crate still compiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: benchmarks
+      # Its own lockfile, because it is its own workspace. `--locked` would fail
+      # the first time a path dependency's manifest changed, which is the event
+      # this job exists to notice rather than to refuse.
+      - name: Compile the benchmark harness and its tests
+        working-directory: benchmarks
+        run: cargo check --benches --tests

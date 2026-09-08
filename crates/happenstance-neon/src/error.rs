@@ -105,12 +105,82 @@ pub enum NeonError<E> {
 
     /// A `position` column held a value `SequencePosition` cannot represent.
     ///
-    /// Postgres `bigserial` is signed and starts at 1, so this is only reachable
-    /// through a hand-seeded sequence — but the column is `bigint` on the wire
-    /// and the conversion is fallible, so the failure has to be nameable.
+    /// The column is `bigint`, which is signed and admits zero, against a
+    /// `NonZeroU64` — so the conversion is fallible and the failure has to be
+    /// nameable. The rejected alternative is `unsigned_abs()`, which reads like a
+    /// guard and turns a stored `-3` into position 3.
     #[error("the store returned position {value}, which is not a valid SequencePosition")]
     InvalidPosition {
         /// The rejected value.
         value: i64,
     },
+
+    /// The response was well-formed JSON of the right *shape* and did not carry
+    /// a column the decoder needs.
+    ///
+    /// Distinct from [`MalformedResponse`](Self::MalformedResponse), which is a
+    /// `serde_json` failure against the wire types. This one is the adapter's own
+    /// `SELECT` and its own decoder disagreeing, which is a bug in this crate
+    /// rather than a drift at the endpoint — and the two send a reader to very
+    /// different places.
+    #[error("the /sql response carried no `{column}` column where this adapter expected one")]
+    MissingColumn {
+        /// The column the decoder asked for.
+        column: &'static str,
+    },
+
+    /// A stored `event_type` no longer satisfies the contract's validation.
+    ///
+    /// Reachable only from a row this adapter did not write, or from validation
+    /// tightening under a store that already holds data. A named variant rather
+    /// than a panic, because the alternative to a variant is a panic in a
+    /// library.
+    #[error("a stored event type is not a valid EventType")]
+    StoredEventType(#[source] happenstance_core::InvalidEventType),
+
+    /// A stored tag no longer satisfies the contract's validation.
+    #[error("a stored tag is not a valid Tag")]
+    StoredTag(#[source] happenstance_core::InvalidTag),
+
+    /// A row carries no `EventId`, so the store cannot say what it is.
+    ///
+    /// `origin_store` and `origin_position` are nullable because a replication
+    /// ingest may hold rows minted elsewhere before this store stamps its own.
+    /// A row *this* store wrote always has both — unless migration 1's
+    /// `store_meta` row is absent, which is the reachable cause and is why this
+    /// is not spelled as a decode failure.
+    #[error("the event at position {position} carries no EventId; is the store_meta row present?")]
+    UnstampedEvent {
+        /// Where the unstamped row sits.
+        position: u64,
+    },
+
+    /// An `origin_store` column held something other than sixteen bytes.
+    #[error("a stored StoreId was {len} bytes, not 16")]
+    MalformedIdentity {
+        /// The length that was refused.
+        len: usize,
+    },
+
+    /// A `bytea` column did not arrive as the base64 this adapter asked for.
+    ///
+    /// Every `SELECT` here spells `encode(col, 'base64')` explicitly, so this is
+    /// the endpoint and this crate disagreeing rather than a caller's data being
+    /// wrong.
+    #[error("a bytea column did not decode as base64")]
+    MalformedPayload,
+
+    /// A projection batch was begun on a different store instance.
+    ///
+    /// `rollback` is the one method on the projection port whose error type is
+    /// the *adapter's* rather than a dedicated enum, so the refusal
+    /// `CommitError::ForeignBatch` and `ResetError::ForeignBatch` spell has to be
+    /// nameable here too. Written as plain code spans rather than intra-doc
+    /// links: both live behind `unstable-projection`, and a link to a gated item
+    /// breaks the doc build for every feature set that does not enable it — which
+    /// is the default one. The batch is consumed either way; the
+    /// refusal is how a caller learns it was holding the wrong one, on the call
+    /// that was meant to be the cleanup.
+    #[error("the batch was begun on a different store instance")]
+    ForeignBatch,
 }

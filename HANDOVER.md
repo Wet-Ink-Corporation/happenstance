@@ -50,10 +50,17 @@ Postgres half landed separately and is also in.
 
 ## The one thing that will mislead you
 
-**The tree describes `0.2.0` as published, in the present tense, in five places** —
+**The tree describes `0.2.0` as published, in the present tense, in six places** —
 `README.md`'s status banner and table, `SECURITY.md`'s scope and supported-versions
-table, `CHANGELOG.md`'s dated `## [0.2.0]` section, `Cargo.toml`'s version, and
-`spec/SPECIFICATION.md` §1.3. It is not published.
+table, `CHANGELOG.md`'s dated `## [0.2.0]` section, `Cargo.toml`'s version,
+`spec/SPECIFICATION.md` §1.3, and `.github/workflows/ci.yml`'s `semver` job, whose
+comment says *"All five crates now have a real published predecessor"*. It is not
+published.
+
+The last of the six was found by the `0.2.0` closeout session and is the one
+worth noticing: it is not prose a reader discounts but a comment justifying why a
+**check** is configured the way it is. The other five are documents; that one is
+an argument about the gate.
 
 That was a deliberate choice: the documents were written when the release looked
 imminent, the release was then deferred, and the owner chose to leave them rather
@@ -62,16 +69,20 @@ containment is weaker than it reads: visibility is **`INTERNAL`**, not private, 
 the audience is everyone in the organisation rather than only whoever picks the
 tree up.
 
-**There is a sixth, and it is the one that is an action rather than prose.**
+**There is a seventh, and it is the one that is an action rather than prose.**
 `CHANGELOG.md`'s `[0.2.0]` section and `SECURITY.md`'s supported-versions table
 both state that `0.2.0-alpha.1` **is yanked**. It is not — all three live crates
 still resolve it. Yanking is on phase 12's list; until it happens, that sentence
-is the only one of the six a `cargo add` can disagree with.
+is the only one of the seven a `cargo add` can disagree with.
 
-`CHANGELOG.md` also carries an `## [Unreleased]` section (the ES-10 poll-schedule
-change) sitting *above* the dated `## [0.2.0] — 2026-09-06`. Publishing means
-folding one into the other and correcting the date — a small thing that is easy
-to lose because the section below it already looks finished.
+`CHANGELOG.md` also carries an `## [Unreleased]` section sitting *above* the
+dated `## [0.2.0] — 2026-09-06`. Publishing means folding one into the other and
+correcting the date — a small thing that is easy to lose because the section
+below it already looks finished. **It is no longer just the ES-10 poll-schedule
+change**: the `0.2.0` closeout added the Postgres projection store, the armed
+`READ_FAULT`, and two gate changes to it. They were put there rather than into
+the dated section deliberately — dating an unpublished release is the defect this
+paragraph exists to warn about, one turn further in.
 
 **`RUNBOOK.md`'s phase 12 preamble is the one place that states the truth
 plainly.** Trust it over any prose that says the release happened.
@@ -85,7 +96,7 @@ is the expensive failure mode here, not implementing them.
 
 | Decision | Where |
 |---|---|
-| **Five crates** in `0.2.0`, cloudflare included | `xtask/src/package.rs`'s `PUBLISHABLE`; README, SECURITY.md and ci.yml reconciled to it |
+| ~~**Five crates** in `0.2.0`, cloudflare included~~ **→ seven.** Re-opened by the owner at the `0.2.0` release review and settled at seven: `happenstance-postgres` and `happenstance-neon` joined once both stopped being skeletons and both were shown to render under `--cfg docsrs`. | `xtask/src/package.rs`'s `PUBLISHABLE`; README, SECURITY.md, CHANGELOG and ci.yml reconciled to it. `SESSION-DECISIONS-0.2.0.md`'s D-04 |
 | **Stable `0.2.0`**, not another alpha | `Cargo.toml`'s version comment |
 | **ES-42 frozen** — nothing needs `dyn EventStore` the E11 wrapper cannot box | `.kb/_intake/es-42-marker-earned-off-at-0-2-0.md` |
 | **Seventeen briefs ratified** — nine on their own recommendations, eight reviewed | `.kb/_intake/ratifications-2026-09-06-pre-publication.md` |

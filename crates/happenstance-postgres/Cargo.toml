@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-postgres"
-description = "Postgres event store and projection store adapters for happenstance. Not yet implemented."
+description = "PostgreSQL event store and projection store adapters for happenstance."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,11 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-publish = false
+# Published from `0.2.0`. The five-crate release set was re-opened at the
+# release review and settled at seven: this crate clears 132 gated tests
+# against a live PostgreSQL 17.10, including the concurrency family at 64
+# contenders, and its projection store clears the projection suite. See
+# `SESSION-DECISIONS-0.2.0.md`'s D-04.
 
 [dependencies]
 # `unstable-projection` is named rather than inherited. Feature unification is
@@ -48,7 +52,13 @@ sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
 # crate's own code and its error enum. `rt` only: nothing here starts a runtime,
 # it joins the one the caller is already on. `happenstance-sqlite` carries tokio
 # for the same reason one layer down.
-tokio = { workspace = true, features = ["rt"] }
+# `time` joins `rt` for the conditional append's retry backoff: a bare retry loop
+# with no wait turns twelve contenders on one relation-wide SSI predicate lock
+# into a thundering herd, which `event_store.rs`'s `backoff` documents. It adds
+# no requirement a consumer was not already meeting — `sqlx`'s pool enforces an
+# acquire timeout, so a runtime with no timer could never have supplied a
+# connection in the first place.
+tokio = { workspace = true, features = ["rt", "time"] }
 
 [dev-dependencies]
 # `proptest` is what the model family is behind: `event_store_model_conformance!`
@@ -78,6 +88,23 @@ event-store = []
 # named the capability while doing none of the gating, and turning it off changed
 # nothing a consumer could observe.
 projection-store = ["happenstance-core/unstable-projection"]
+# `impl ProjectionProbe for PostgresProjectionStore`, and the probe table it
+# writes through. Off by default, because that table is the *suite's* read model
+# and has no business in an application's database.
+#
+# It forwards one flag on a dependency this crate already has and adds no edge to
+# the graph — the same economic argument that puts `ProjectionProbe` in
+# `happenstance-core` rather than in the testkit. The impl cannot go in
+# `tests/projection.rs`: that is a different crate, where neither the trait nor
+# the type is local and the orphan rule answers `error[E0117]`, so it lives in
+# `src/` under this feature and a crate cannot `cfg` on a dependency's feature.
+#
+# Deliberately **not** implying `projection-store`, for the reason
+# `happenstance-sqlite` gives: three features are eight combinations rather than
+# four, and `conformance` alone — with the port's own module configured out — is
+# one of them. The impl and the probe table are gated on both, so that
+# combination compiles to nothing rather than failing to compile.
+conformance = ["happenstance-core/conformance"]
 # The negative control, and off by default in the strongest sense: no consumer
 # can reach it, and the default build does not contain it.
 #
@@ -93,3 +120,11 @@ naive-arm = []
 
 [lints]
 workspace = true
+
+# Both keys, for the reason every publishable crate here carries them: without
+# `all-features` docs.rs renders the default set and the projection half
+# disappears from the page, and `--cfg docsrs` is what makes `doc(cfg(...))`
+# render its gate rather than nothing.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

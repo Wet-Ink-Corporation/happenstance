@@ -144,7 +144,7 @@ signature they cannot change without a breaking release.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:117 (async fn count_all<S: EventStore>)` ·
 `crates/happenstance-core/src/memory.rs:615 (async fn count<S: EventStore>)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:43 (pub(crate) async fn advance<S: ProjectionStore>)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:55 (pub(crate) async fn advance<S: ProjectionStore>)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
@@ -194,7 +194,7 @@ changing, which is exactly the shape a reviewer scrolls past.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:37 (error[E0034]: multiple applicable items in scope)` ·
 `crates/happenstance-core/tests/frozen_signatures.rs:43 (multiple applicable items in scope)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:28 (makes every method call ambiguous)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:40 (makes every method call ambiguous)` ·
 [SPECIFICATION ES-1](../../spec/SPECIFICATION.md) *(one name per module)* ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md)
 
@@ -325,7 +325,7 @@ If the port itself genuinely must be erased, `dynosaur` generates the wrapper;
 its 0.3 spelling is `#[dynosaur::dynosaur(DynStore = dyn(box) EventStore)]`, and
 it is not a dependency of this workspace.
 
-**Evidence.** `crates/happenstance-neon/src/event_store.rs:303 (Pin<Box<dyn Future)` ·
+**Evidence.** `crates/happenstance-neon/src/event_store.rs:1030 (Pin<Box<dyn Future)` ·
 [SPECIFICATION ES-42](../../spec/SPECIFICATION.md) *(the hand-written
 `Pin<Box<dyn Stream + 'a>>` wrapper, and why it needs no `Unpin` bound)* ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·

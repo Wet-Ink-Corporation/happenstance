@@ -1,7 +1,8 @@
 # Changelog
 
 Notable changes to `happenstance`, `happenstance-core`, `happenstance-testkit`,
-`happenstance-sqlite` and `happenstance-cloudflare` — every crate this
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
+`happenstance-neon` — every crate this
 workspace currently publishes.
 
 `cargo xtask lints` derives that set from `xtask/src/package.rs`'s
@@ -29,6 +30,94 @@ not the same as what a user needed to be told.
   suite. See [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
 ## [Unreleased]
+
+### Added
+
+- **`happenstance-postgres` and `happenstance-neon` join the published set**, at
+  the `0.2.0` release review. Both previously held `0.0.0` placeholders, which are
+  not predecessors: there is no upgrade path from one because there was never
+  anything under it.
+
+  The release set was **five, decided**, and the owner re-opened it. What changed
+  between the two decisions is that both crates stopped being skeletons:
+  `happenstance-postgres` clears 132 gated tests against a live PostgreSQL 17.10
+  including the concurrency family at 64 contenders — the only adapter here that
+  clears that family against a store which does not serialise its writers — and
+  `happenstance-neon` clears 124 against a live Neon endpoint.
+
+  `happenstance-neon` ships with **one conformance rule it does not pass**:
+  `read_result_is_stable_under_concurrent_append` is a network race for a store
+  whose read and append are two independent HTTP requests, and ES-11's own
+  `[PROVISIONAL]` marker named a one-shot-HTTP adapter as the thing that would
+  falsify it. The clause is owed an amendment; the crate's README names the rule,
+  the measurement and the reason rather than leaving it to be found in CI.
+
+  `happenstance-ladybug` is finished and is **not** published: `lbug` does not
+  render on docs.rs, which is this project's bar for a published crate.
+
+- **`happenstance-postgres` has a projection store.** `PostgresProjectionStore`
+  implements `SendProjectionStore` over a live server and clears the projection
+  conformance suite: 17 rules, 14 run and 3 reported as skips, against
+  PostgreSQL 17.10. It is the first projection adapter over storage this
+  workspace does not control, which is the count PS-18's and PS-38's deferrals
+  were both waiting on.
+
+  Its batch is **not** `sqlx::Transaction<'static, Postgres>`, which the skeleton
+  declared. That binding cannot be discharged: `begin` is total, synchronous and
+  infallible, every route to a `sqlx` transaction is `async` and fallible, and
+  `ProjectionProbe::probe_write` is synchronous and infallible too — so there is
+  no point at which the adapter could issue a statement into a live transaction
+  even if it had one. Five `todo!()` bodies type-checked against it regardless,
+  because `!` coerces to everything. The batch is an owned, `Send`, `'static`
+  list of parameterised statements replayed inside a transaction that `commit`
+  and `reset` open for themselves; PS-5's owned-batch evidence is untouched,
+  because the type is still owned and still `'static`.
+
+  **This settles something about PS-2 that is not the adapter's to change.** The
+  clause is `[FROZEN]` and names a live-transaction adapter as the far end of the
+  batch-shape axis still to be built, offering `rusqlite` or `sqlx`. Both are now
+  refuted, each by its own mechanism: `rusqlite`'s `Transaction<'_>` is `!Send`
+  and costs the `SendProjectionStore` impl, and `sqlx`'s cannot be produced by a
+  total synchronous `begin`. For the two drivers the clause names, the port's own
+  signatures forbid the axis end rather than merely leaving it unbuilt.
+
+  `READS_THROUGH_BATCH` is `false` and the cost is stated rather than left to be
+  discovered: a projection whose `apply` must read what it has already written in
+  the same batch cannot be written against this adapter.
+
+- **`PostgresFixture` arms `READ_FAULT`.** It is the one paged adapter in the
+  workspace — `PgReadStream` `FETCH`es a server-side cursor per chunk — and it
+  had been declining the capability in the testkit's own words, which CF-18's
+  declension-by-inheritance check surfaced.
+  `arming_a_read_fault_makes_the_stream_yield_an_error` now runs against it and
+  passes: the stream yields an `Err` **item** rather than ending, so this adapter
+  does not report a fetch failure as the end of the log.
+
+  Neither injection the fixture's own declension named survives contact, and both
+  are recorded rather than quietly replaced. Arming happens *before* the read
+  starts, so there is no reader backend to terminate and no cursor to close;
+  terminating an idle pooled backend is absorbed by the pool, which is CF-39's
+  named hazard arriving one step earlier; and a cursor is session-local. What is
+  injected instead is a view whose `WHERE` raises above a threshold, so the fault
+  arrives while the `FETCH` is producing rows.
+
+### Changed
+
+- **The `docs.rs configuration (nightly)` gate step covers all five publishable
+  crates**, and covered three until now. The step exists because `docsrs` is a
+  cfg nobody sets except docs.rs, which builds *after* publication — so its whole
+  argument is that the failure is unfixable afterwards, and it was not covering
+  two of the artifacts it would be unfixable for. `happenstance-cloudflare` gets
+  its own step, because its manifest sets `default-target =
+  "wasm32-unknown-unknown"` and docs.rs renders it for that target and no other.
+
+- **`cargo xtask lints` holds `RUNBOOK.md`'s clause ledgers against
+  `spec/SPECIFICATION.md` §7.2.** The provisional and deferred ledgers must name
+  exactly the clauses marked that way, in both directions, with every provisional
+  group naming an owning phase. Phase 12's exit criteria audit those tables
+  against `spec-trace` rather than against prose; this is what makes that a check
+  rather than a pass somebody did, on a ledger that has been wrong in both
+  directions twice without anything noticing.
 
 ### Changed
 

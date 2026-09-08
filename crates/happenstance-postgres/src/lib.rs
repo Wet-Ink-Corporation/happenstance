@@ -8,10 +8,20 @@
 //! workspace has cleared that family against a store whose writers are **not**
 //! serialised, which is the whole reason the crate is in the tree.
 //!
-//! The projection store beside it is still a skeleton — every body that would
-//! touch a server is `todo!()`, which is what the crate's remaining
-//! `#![allow(clippy::todo)]` covers — and the crate is `publish = false` until
-//! it is packaged.
+//! **The projection store beside it is implemented too**, and the crate carries
+//! no `todo!()` and no `#![allow(clippy::todo)]` any more — the allow left with
+//! the last stub, which is the contract it was written under.
+//!
+//! Its batch is **not** `sqlx::Transaction<'static, Postgres>`, which is what the
+//! skeleton declared. That binding cannot be discharged: `begin` is total,
+//! synchronous and infallible, and every route to a `sqlx` transaction is
+//! `async` and fallible. A skeleton did not report it because `todo!()` has type
+//! `!` and coerces to anything. The account is in
+//! [`projection_store`]'s module documentation, along with what it settles about
+//! PS-2's live-transaction axis.
+//!
+//! The crate stays `publish = false`. That is a **release-set** decision rather
+//! than a readiness one — `0.2.0` ships five crates, and this is not one of them.
 //!
 //! # Why this crate exists
 //!
@@ -125,18 +135,17 @@
 //! feature of this one.
 
 #![doc(html_no_source)]
-// `clippy::todo` is denied workspace-wide. The allow is scoped to this crate
-// rather than left open in the workspace manifest so that it is visible in
-// review, and it disappears with the last `todo!()` rather than outliving it.
-// Phase 10 removes both the bodies and this line.
-#![allow(clippy::todo)]
-
 pub mod error;
 
 #[cfg(feature = "event-store")]
 pub mod event_store;
 
-#[cfg(feature = "event-store")]
+// Both roles' schemas live here, each item gated on its own feature. The module
+// is reachable from either, because a `projection-store`-only build needs
+// `apply_projection` and has no event log at all — and a module gated on
+// `event-store` would have hidden it, which is the defect this line exists to
+// avoid rather than a preference about layout.
+#[cfg(any(feature = "event-store", feature = "projection-store"))]
 pub mod migration;
 
 #[cfg(feature = "event-store")]
