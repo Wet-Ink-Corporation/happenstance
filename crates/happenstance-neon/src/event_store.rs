@@ -89,9 +89,16 @@
 //!
 //! Measured at 64 simultaneous contenders on one boundary against the live
 //! endpoint, six runs: exactly one commit and sixty-three
-//! `ConditionViolated` every time, and **no contender ever needed more than one
-//! retry** — which is what [`NeonEventStore::SERIALISATION_ATTEMPTS`] is derived
-//! from rather than copied.
+//! `ConditionViolated` every time, and no contender needing more than one retry.
+//!
+//! That measurement is real and it is **not** what sets the retry count, which is
+//! worth saying because taking it at face value is how this adapter shipped a
+//! number that failed half its runs. Contenders on *disjoint* boundaries do not
+//! drain the way contenders on one boundary do: the SSI predicate lock is
+//! relation-wide on a small table, so a retry that finds no conflict on its own
+//! boundary goes straight back into the same fight.
+//! [`NeonEventStore::SERIALISATION_ATTEMPTS`] carries both numbers and the table
+//! that decides between them.
 
 use core::future::Future;
 use core::pin::Pin;
@@ -121,11 +128,22 @@ use crate::wire::{ResponseBody, ResultSet};
 /// which is the whole of this adapter's answer to "the endpoint renders
 /// everything as JSON": a `bigint` would otherwise arrive as a string anyway and
 /// a `bytea` as `\x…` hex at 100% expansion, where base64 costs 33%.
+///
+/// `tags` is `to_jsonb(tags)` and **not** the bare column, which is not a
+/// preference. A `text[]` selected raw is rendered by the endpoint's driver from
+/// Postgres' array literal, and it gets the empty case wrong: `{}` comes back as
+/// `[""]` — a one-element array holding an empty string — where the correct
+/// answer is `[]`. Measured, and it is the exact failure that turned
+/// `read should succeed` into `StoredTag(Empty)` on nineteen rules of the first
+/// live run, because every event with no tags decoded as an event with one
+/// invalid tag. `to_jsonb` makes the server produce the JSON, so `{}` is `[]`
+/// and an array element is a string because Postgres said so rather than because
+/// a parser guessed.
 const SELECTED_COLUMNS: &str = "position::text AS position, \
                                 event_type, \
                                 encode(data, 'base64') AS data, \
                                 encode(metadata, 'base64') AS metadata, \
-                                tags, \
+                                to_jsonb(tags) AS tags, \
                                 encode(origin_store, 'base64') AS origin_store, \
                                 origin_position::text AS origin_position, \
                                 recorded_at::text AS recorded_at";
@@ -199,21 +217,45 @@ impl<T> NeonEventStore<T> {
     /// two-writer case" says nothing about a transport with a thousand times the
     /// transaction latency and 64 contenders.
     ///
-    /// The measurement: 64 simultaneous conditional appends on one boundary
-    /// against the live endpoint, six runs. Exactly one commit and sixty-three
-    /// `ConditionViolated` in every run; the number of contenders that saw a
-    /// `40001` at all ranged from 0 to 25, and **no contender ever reached a
-    /// third attempt**. The reason is structural rather than lucky: the moment
-    /// the winner commits, every retry *sees* the winner's row and answers
-    /// `ConditionViolated` instead of racing again, so the retry population
-    /// drains in one round rather than compounding.
+    /// **The one-boundary measurement says three, and it is the wrong
+    /// measurement.** 64 simultaneous conditional appends on *one* boundary
+    /// against the live endpoint, six runs: exactly one commit and sixty-three
+    /// `ConditionViolated` every time, between 0 and 25 contenders seeing a
+    /// `40001` at all, and no contender ever reaching a third attempt. The reason
+    /// is structural — the moment the winner commits, every retry *sees* the
+    /// winner's row and answers `ConditionViolated` instead of racing again, so
+    /// the population drains in one round.
     ///
-    /// Three therefore carries one full attempt of headroom over the worst
-    /// observed. Exhaustion is not silent: it surfaces as
-    /// `AppendError::Store(NeonError::Sql(…))` carrying SQLSTATE `40001`, which
-    /// is a named, documented outcome rather than a `ConditionViolated` this
-    /// adapter invented.
-    pub const SERIALISATION_ATTEMPTS: u32 = 3;
+    /// **Disjoint boundaries do not drain, and that is what sets this number.**
+    /// `k_disjoint_boundaries_admit_exactly_k_commits` runs twelve contenders
+    /// over four separate boundaries, and the SSI predicate lock is *not* per
+    /// boundary: with a small table the planner takes a sequential scan and the
+    /// lock is relation-wide, so every contender conflicts with every other
+    /// regardless of which boundary it is racing. A retry that finds no conflict
+    /// on its own boundary goes back into the same fight, and the population
+    /// drains one round at a time rather than all at once.
+    ///
+    /// Measured against that rule, four runs per value:
+    ///
+    /// | attempts | result |
+    /// |---|---|
+    /// | 3 | **failed 2 of 4** — a contender exhausted and answered `40001` |
+    /// | 4 | 4 of 4 green |
+    /// | 5 | 4 of 4 green |
+    /// | 8 | 5 of 5 green |
+    ///
+    /// Eight is double the smallest sufficient value rather than one above it,
+    /// because the observed floor sits one attempt away from a failure that
+    /// reproduced half the time — a margin of one on a measurement that noisy is
+    /// not a margin. It costs nothing when it is not needed: a retry happens only
+    /// after a `40001`, and the retry itself is the backoff, at one round trip
+    /// each.
+    ///
+    /// Exhaustion is not silent: it surfaces as
+    /// `AppendError::Store(NeonError::Sql(…))` carrying SQLSTATE `40001`, which is
+    /// a named, documented outcome rather than a `ConditionViolated` this adapter
+    /// invented — and it is exactly what the failures at three looked like.
+    pub const SERIALISATION_ATTEMPTS: u32 = 8;
 
     /// Builds a store over `transport`.
     pub const fn new(transport: T, config: NeonConfig) -> Self {
@@ -312,9 +354,20 @@ impl<T: SqlTransport> NeonEventStore<T> {
             .limit
             .map_or_else(String::new, |limit| format!(" LIMIT {limit}"));
 
+        // `ORDER BY {table}.position`, **qualified**, and the qualification is
+        // load-bearing rather than tidy. Postgres resolves a bare name in
+        // `ORDER BY` against the SELECT's OUTPUT columns first, and this SELECT
+        // aliases `position::text AS position` — so `ORDER BY position` sorts the
+        // *text*: 1, 10, 100, 101, …, 109, 11, 110. `WHERE` has no such rule and
+        // was always right, which is why the bug survived every rule with fewer
+        // than ten events and appeared at 128 as
+        // `store_accepts_the_guaranteed_minimum_batch_size` returning the batch in
+        // lexicographic order, and in the model family as
+        // "positions must be strictly increasing, but 2 follows 10".
+        let event_table = self.config.qualified_event();
         let sql = format!(
-            "SELECT {SELECTED_COLUMNS} FROM {} WHERE {} ORDER BY position {order}{limit}",
-            self.config.qualified_event(),
+            "SELECT {SELECTED_COLUMNS} FROM {event_table} WHERE {} \
+             ORDER BY {event_table}.position {order}{limit}",
             clauses.join(" AND ")
         );
 
@@ -907,9 +960,29 @@ fn as_i64(position: SequencePosition) -> i64 {
 /// nothing is sent when it is called; the request sits unsent in the state
 /// machine below until the first `poll_next`. That is load-bearing on `wasm32`,
 /// where issuing a `fetch` outside a polled future is not merely wasteful but
-/// happens off the event loop the runtime owns — and it is what ES-11 asks for:
-/// the read's state is fixed no later than the first poll, and since the whole
-/// answer is one statement there is no second sample for it to drift against.
+/// happens off the event loop the runtime owns.
+///
+/// # What this adapter cannot promise about ES-11
+///
+/// Half of ES-11 is free here and the other half is not, and the difference is
+/// worth stating where a caller meets it. **One read is one statement**, so there
+/// is no second sample for the answer to drift against: the paging defect ES-11
+/// is mostly about — a store that re-queries per page and grows under the
+/// caller's feet — is unreachable by construction.
+///
+/// What is *not* promised is that the snapshot the endpoint takes precedes an
+/// `append` this caller issues immediately afterwards. The request is dispatched
+/// at the first poll, which is the earliest the port permits, and then it is one
+/// of two independent requests to a proxy that hands each to whichever backend it
+/// likes. There is no session, no queue and no protocol ordering between them.
+///
+/// This is measured rather than hedged: over the conformance transport,
+/// `read_result_is_stable_under_concurrent_append` fails 3 runs in 20 over
+/// HTTP/1.1 and 1 in 40 over a single HTTP/2 connection — always in the same
+/// direction, with the read seeing an event appended after it was issued. A
+/// caller that needs the two ordered must sequence them itself; this store has
+/// nothing it could do about it, and the transport's own documentation carries
+/// the numbers and the clause question they raise.
 pub struct NeonReadStream<'a, T: SqlTransport> {
     state: ReadState<'a, T>,
     max_response_bytes: usize,
@@ -1237,7 +1310,8 @@ mod tests {
             AppendCondition::new(Query::from_item(QueryItem::tagged(tags.clone()).unwrap()));
         let event = Event::new("T", b"x".to_vec()).unwrap().with_tags(tags);
 
-        let request = store.conditional_append_request(core::slice::from_ref(&event), Some(&condition));
+        let request =
+            store.conditional_append_request(core::slice::from_ref(&event), Some(&condition));
         assert_eq!(request.statements.len(), 2);
         assert!(
             request
@@ -1298,6 +1372,28 @@ mod tests {
         );
     }
 
+    /// The `ORDER BY` names the table's column and not the output alias.
+    ///
+    /// A bare `ORDER BY position` binds to `position::text AS position` in the
+    /// SELECT list, because Postgres resolves output-column names first there —
+    /// and then the log comes back in lexicographic order: 1, 10, 100, 101, …,
+    /// 11, 110. It is correct for every batch under ten events, which is why the
+    /// whole event-store family passed it and only the 128-event minimum-batch
+    /// rule and the model family did not.
+    #[test]
+    fn the_order_by_names_the_column_and_not_the_text_alias() {
+        let store = store();
+        let sql = store
+            .read_request(&Query::all(), ReadOptions::new())
+            .statements[0]
+            .query
+            .clone();
+        assert!(
+            sql.contains(r#"ORDER BY "hs_1"."event".position ASC"#),
+            "the sort must be over the bigint column, not the `::text` projection: {sql}"
+        );
+    }
+
     /// Reading backwards swaps the comparisons, not the roles.
     #[test]
     fn backwards_bounds_the_older_end_with_to() {
@@ -1311,7 +1407,7 @@ mod tests {
             .clone();
         assert!(sql.contains("position <= 9"), "{sql}");
         assert!(sql.contains("position >= 2"), "{sql}");
-        assert!(sql.contains("ORDER BY position DESC"), "{sql}");
+        assert!(sql.contains("position DESC"), "{sql}");
     }
 
     /// A body recorded from the live endpoint: a conditional append that won.

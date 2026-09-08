@@ -94,15 +94,17 @@ tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync
 # test dependency. `rustls-native-certs` reads the platform store instead:
 # `schannel` on Windows, `security-framework` on macOS, the file system on Linux,
 # all already resolved.
-hyper = { version = "1.11", default-features = false, features = ["client", "http1"] }
+hyper = { version = "1.11", default-features = false, features = ["client", "http1", "http2"] }
 hyper-util = { version = "0.1", default-features = false, features = [
   "client",
   "client-legacy",
   "http1",
+  "http2",
   "tokio",
 ] }
 hyper-rustls = { version = "0.27", default-features = false, features = [
   "http1",
+  "http2",
   "native-tokio",
   "ring",
   "tls12",
