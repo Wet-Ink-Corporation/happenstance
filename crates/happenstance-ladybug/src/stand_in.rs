@@ -86,10 +86,13 @@ impl core::error::Error for Exception {}
 pub enum LogicalType {
     /// A boolean.
     Bool,
-    /// A 64-bit signed integer. The widest integer LadybugDB stores, and the
-    /// reason [`SequencePosition`](happenstance_core::SequencePosition) cannot
-    /// round-trip through a property without a checked conversion.
+    /// A 64-bit signed integer.
     Int64,
+    /// A 64-bit unsigned integer. The widest integer LadybugDB stores, and wide
+    /// enough that [`SequencePosition`](happenstance_core::SequencePosition)
+    /// round-trips through a property with **no** narrowing — which is the
+    /// opposite of what this table claimed until phase 11 measured it.
+    UInt64,
     /// A UTF-8 string.
     String,
     /// A node. Read-only across the FFI boundary, hence
@@ -109,6 +112,15 @@ pub enum Value {
     Bool(bool),
     /// A 64-bit signed integer.
     Int64(i64),
+    /// A 64-bit **unsigned** integer.
+    ///
+    /// Absent from this module until phase 11 measured the real driver, and its
+    /// absence is why the adapter's error enum carried a `PositionOutOfRange`
+    /// variant no code path could construct: the stand-in's calibration table
+    /// said `INT64` was LadybugDB's widest integer, and it is not.
+    /// `experiments/ladybug-driver-probes/` stored `u64::MAX - 1` into a `UINT64`
+    /// column and read it back exactly.
+    UInt64(u64),
     /// A UTF-8 string.
     String(String),
 }
@@ -323,9 +335,15 @@ impl QueryResult<'_> {
     pub fn column_names(&self) -> Vec<String> {
         todo!("phase 11 replaces this module with the real `lbug` crate")
     }
+}
 
-    /// The next row, or `None` when the result is drained.
-    pub fn next_row(&mut self) -> Option<Vec<Value>> {
+/// `lbug` 0.20.3 spells row iteration as [`Iterator`], not as a `next_row`
+/// cursor method — checked against the vendored source rather than against the
+/// 0.16.1 documentation this module was first calibrated to.
+impl Iterator for QueryResult<'_> {
+    type Item = Vec<Value>;
+
+    fn next(&mut self) -> Option<Self::Item> {
         todo!("phase 11 replaces this module with the real `lbug` crate")
     }
 }
