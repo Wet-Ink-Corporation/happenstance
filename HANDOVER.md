@@ -242,6 +242,40 @@ entries — not that the numbers look better.
 break the instrument". Contended-run artefacts are preserved in this session's
 scratchpad for diffing.
 
+**Run `--fast` from a clean tree and `git checkout -- benchmarks/results/`
+afterwards.** It overwrites `results/raw/` with a partial run's output, and
+there is no guard: `run.sh` refuses to write a `results/history/` entry for a
+partial run, on the stated grounds that it must not displace a complete one under
+the same filename, and the raw directory is not covered by that refusal.
+
+### The blind spot this crate sits in, which cost three breakages on 2026-09-07
+
+`benchmarks/` carries an empty `[workspace]` table so cargo cannot reach it from
+the root, and `affected.rs`'s INERT list names it. Both are right — CF-34 forbids
+a benchmark *result* gating a merge, and `run.sh` says it must never become a
+gate step.
+
+But the crate **calls the public API** (three `commit`/`commit_with` sites) and
+**mounts the conformance suite** over its own SQLite fixture. It is a consumer,
+and nothing in thirty-five gate steps compiles it. On 2026-09-07 it was found
+carrying three independent breakages, all of them green:
+
+- `commit`'s new return type, unnoticed for four commits — the **first real
+  downstream break** this workspace has produced, and it was invisible;
+- a seventh fixture inheriting `READ_FAULT`, missed by CF-18's new check because
+  the check cannot run where it is not compiled;
+- a `Cargo.lock` still recording the path dependencies at `0.2.0-alpha.1`,
+  silently rewritten by every run and reverted by everyone who did not commit it.
+
+**Left open deliberately, and it is a decision worth taking before the release.**
+A `cargo check --benches --tests` on this crate produces no number, so it is
+arguably not what CF-34 rejects — that clause is about a threshold nobody can
+justify becoming a threshold everybody raises. Against that: adding a step to the
+gate for a crate whose entire design is to sit outside it deserves an argument,
+and the cheaper half-measure is to run the check in CI only, where it costs a
+developer nothing. Whoever takes phase 12 should decide rather than inherit
+this.
+
 ### 5. Then phase 12 itself
 
 `RUNBOOK.md`'s phase 12 work list is accurate. The publish order is forced —
