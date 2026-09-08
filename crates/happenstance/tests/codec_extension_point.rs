@@ -339,7 +339,9 @@ mod behaviour {
             Ok::<_, core::convert::Infallible>(vec![Rune::Cut])
         })
         .await
-        .expect("the command loop writes under a codec of your own");
+        .expect("the command loop writes under a codec of your own")
+        .committed()
+        .expect("the decision produced events, so the command committed");
         assert_eq!(written.attempts, 1);
 
         let mut ward = Ward::new();
@@ -387,7 +389,9 @@ mod behaviour {
             Ok::<_, core::convert::Infallible>(vec![Rune::Cut])
         })
         .await
-        .expect("the command loop writes under a codec of your own");
+        .expect("the command loop writes under a codec of your own")
+        .committed()
+        .expect("the decision produced events, so the command committed");
         assert_eq!(written.attempts, 1);
 
         let mut ward = Ward::new();
@@ -450,7 +454,9 @@ mod behaviour {
             |_: &Ward| Ok::<_, core::convert::Infallible>(vec![Rune::Cut]),
         )
         .await
-        .expect("the command loop writes under a codec of your own");
+        .expect("the command loop writes under a codec of your own")
+        .committed()
+        .expect("the decision produced events, so the command committed");
         assert_eq!(written.attempts, 1);
 
         let mut ward = Ward::new();

@@ -206,6 +206,65 @@ not the same as what a user needed to be told.
   the reason it survives is exactly the thing a reader needs to understand about
   what landed.
 
+- **BREAKING (`happenstance`): `commit` and `commit_with` return
+  `CommandOutcome`, which has two success shapes.** A decision that produces no
+  events is `CommandOutcome::Nothing` and is a **success**. Until now an empty
+  `Vec` from the closure reached `EventStore::append`, which refuses an empty
+  batch (ES-20), so the commonest shape of an idempotent command — *"already
+  done, nothing to add"* — came back as `CommandError::Append` carrying
+  `AppendError::NoEvents`. A caller had to know that one variant of one store
+  error meant *your decision was fine* and every other meant *your store is
+  not*.
+
+  An enum rather than an `Option` or a field, because it puts the choice at
+  compile time on every call site, which is where the bug it catches lives:
+  forgetting to `push` into the decided `Vec` has no local symptom, and the
+  command returns `Ok` with the events simply absent. It carries no
+  `#[non_exhaustive]`, deliberately — RS-13-5's argument, since a command either
+  appended or it did not.
+
+  Migration: `let done = commit(…).await?;` followed by `done.attempts` becomes
+  `done.committed().expect(…)` or, better, a `match` that names the second arm.
+  ES-20 is untouched: the store still refuses an empty batch, and what changed
+  is that a *decision* no longer routes through it.
+
+- **BREAKING (`happenstance`): a decided event that does not match the boundary
+  it was decided on is refused, as `CommandError::OutsideBoundary`.** Nothing is
+  appended; the check runs after the closure returns and before the single
+  irreversible act, and reuses `Query::matches` rather than inventing a second
+  vocabulary for *"is this event in this boundary"*.
+
+  **The lost update this forbids.** The append condition guards the query the
+  decision was read on. An event that does not match that query is not in the
+  set the condition protects, so the next command over the same boundary reads a
+  log without it, decides as though it never happened, and its own condition is
+  satisfied. Both commands return `Ok` and the invariant they shared is gone,
+  with nothing failing anywhere.
+
+  The shape is ordinary rather than exotic — an event type whose `tags()`
+  returns `Tags::empty()` inside a model with a real scope produces it on the
+  first append — and **two of this crate's own rendered doctests taught exactly
+  that spelling**. Both are repaired: `DecisionModel`'s example now carries the
+  course tag its boundary is scoped by, and the tuple-boundary example in
+  `composition` carries both members' tags, which is what makes a composite
+  boundary mean anything.
+
+  What it does not catch, stated on the variant rather than left to be
+  discovered: `Query::Items` matches on **any** item, so on a composite boundary
+  an event matching one member satisfies the check even if it belongs to
+  another's scope. That is the union grain of the derived query rather than a
+  gap in the check, and closing it means asking which *member* an event belongs
+  to — which a boundary does not currently say.
+
+  Each of the two changes above is held by a test verified against its own wrong
+  implementation: deleting the early return fails
+  `a_decision_that_emits_nothing_is_a_success` and nothing else, and deleting the
+  scope check fails
+  `an_event_outside_its_boundary_is_refused_and_nothing_is_appended` and nothing
+  else. The first also asserts that **nothing was appended**, because a repair
+  that returned `Nothing` after submitting an empty batch would satisfy the
+  headline and change nothing.
+
 ## [0.2.0] — 2026-09-06
 
 The first stable release, and the first to carry all five crates. What the

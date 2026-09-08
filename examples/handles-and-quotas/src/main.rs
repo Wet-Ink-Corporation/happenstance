@@ -10,8 +10,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Boundary, Codec, CodecError, CommandError, Committed, DecisionModel, DomainEvent, EventStore,
-    EventType, InvalidTag, Query, ReadOptions, Retry, SequencePosition, Tag, Tags, collect, commit,
+    Boundary, Codec, CodecError, CommandError, CommandOutcome, DecisionModel, DomainEvent,
+    EventStore, EventType, InvalidTag, Query, ReadOptions, Retry, SequencePosition, Tag, Tags,
+    collect, commit,
 };
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
 use serde::{Deserialize, Serialize};
@@ -833,13 +834,31 @@ async fn change_plan(
 /// `CommandError`'s own `Display` says "the decision refused", which is a
 /// category rather than a value.
 fn settle(
-    result: core::result::Result<Committed, CommandError<SqliteEventStoreError, Refusal>>,
+    result: core::result::Result<CommandOutcome, CommandError<SqliteEventStoreError, Refusal>>,
 ) -> Result<Outcome> {
     match result {
-        Ok(committed) => Ok(Outcome::Applied {
+        Ok(CommandOutcome::Committed(committed)) => Ok(Outcome::Applied {
             position: committed.position.get(),
             attempts: committed.attempts,
         }),
+
+        // **This example refuses instead of deciding nothing, and the arm is
+        // here to say that is a choice.** `CommandOutcome::Nothing` and
+        // `Refusal::AlreadyApplied` both mean *this delivery was already
+        // handled*; they differ in what they can carry. `Nothing` carries no
+        // payload, and the whole point of the idempotent path below is
+        // reporting `landed` — what the *first* delivery did — which a handler
+        // that returned an empty `Vec` would have thrown away before this
+        // function saw it.
+        //
+        // So reaching this arm means a handler returned no events on a path
+        // that was supposed to refuse, and it is reported rather than folded
+        // into `Applied` with a fabricated position. Deciding nothing is the
+        // right shape when there is nothing to say; here there is.
+        Ok(CommandOutcome::Nothing) => bail!(
+            "a handler decided no events: this example's idempotent path              refuses with `AlreadyApplied` so that it can report what the              first delivery landed, and an empty decision has nowhere to put it"
+        ),
+
         Err(CommandError::Refused(Refusal::AlreadyApplied { landed })) => {
             Ok(Outcome::Replayed { landed })
         }

@@ -218,7 +218,9 @@ async fn commit_binds_the_weak_flavour() {
         }])
     })
     .await
-    .expect("an uncontended commit against a !Send store");
+    .expect("an uncontended commit against a !Send store")
+    .committed()
+    .expect("the decision produced events, so the command committed");
 
     assert_eq!(done.attempts, 1);
     assert_eq!(store.len(), 1);
@@ -340,7 +342,9 @@ async fn every_entry_point_binds_the_weak_flavour() {
         }])
     })
     .await
-    .expect("an uncontended commit against a !Send store");
+    .expect("an uncontended commit against a !Send store")
+    .committed()
+    .expect("the decision produced events, so the command committed");
     assert_eq!(done.attempts, 1);
 
     // `commit_with` — the ungated door, with the codec spelled out.
@@ -350,7 +354,9 @@ async fn every_entry_point_binds_the_weak_flavour() {
         }])
     })
     .await
-    .expect("an uncontended commit against a !Send store");
+    .expect("an uncontended commit against a !Send store")
+    .committed()
+    .expect("the decision produced events, so the command committed");
     assert_eq!(done.attempts, 1);
     assert_eq!(store.len(), 2);
 

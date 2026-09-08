@@ -15,8 +15,9 @@ use std::path::Path;
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Checkpoint, Codec, CodecError, CommandError, DecisionModel, DomainEvent, EventType, InvalidTag,
-    Projection, ProjectionId, ProjectionStore, Retry, SequencePosition, Tag, Tags, commit,
+    Checkpoint, Codec, CodecError, CommandError, CommandOutcome, DecisionModel, DomainEvent,
+    EventType, InvalidTag, Projection, ProjectionId, ProjectionStore, Retry, SequencePosition, Tag,
+    Tags, commit,
 };
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
@@ -519,10 +520,21 @@ pub async fn reserve(events: &SqliteEventStore, seat: &str, patron: &str) -> Res
     .await;
 
     match outcome {
-        Ok(committed) => Reservation::Taken {
+        Ok(CommandOutcome::Committed(committed)) => Reservation::Taken {
             position: committed.position.get(),
             attempts: committed.attempts,
         },
+
+        // The handler above returns exactly one event or refuses, so this arm
+        // is unreachable *for this handler* — and it is spelled out rather than
+        // folded in with a `_`, because the compiler is the only thing that
+        // will notice the day somebody adds an early `return Ok(vec![])` to it.
+        // A 200 carrying a fabricated position would be worse than a 500.
+        Ok(CommandOutcome::Nothing) => Reservation::Failed {
+            why: "the handler decided no events, which this endpoint has no                   seat to report"
+                .to_owned(),
+        },
+
         Err(CommandError::Refused(refusal)) => Reservation::Refused {
             why: refusal.to_string(),
         },

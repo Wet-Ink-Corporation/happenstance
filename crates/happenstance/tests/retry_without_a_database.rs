@@ -98,7 +98,9 @@ async fn retry_succeeds_after_an_injected_violation() {
         Ok::<_, core::convert::Infallible>(vec![Subscribed])
     })
     .await
-    .expect("the loop re-decided and committed");
+    .expect("the loop re-decided and committed")
+    .committed()
+    .expect("the decision produced events, so the command committed");
 
     assert_eq!(
         done.attempts, 2,
@@ -120,7 +122,9 @@ async fn retry_refolds_from_a_pristine_model() {
         Ok::<_, core::convert::Infallible>(vec![Subscribed])
     })
     .await
-    .expect("the seeding commit");
+    .expect("the seeding commit")
+    .committed()
+    .expect("the decision produced events, so the command committed");
     assert_eq!(seeded.attempts, 1, "the seeding commit was uncontended");
 
     let store = store.violate_next(1);
@@ -136,7 +140,9 @@ async fn retry_refolds_from_a_pristine_model() {
         Ok::<_, core::convert::Infallible>(vec![Subscribed])
     })
     .await
-    .expect("the retried commit");
+    .expect("the retried commit")
+    .committed()
+    .expect("the decision produced events, so the command committed");
 
     assert_eq!(done.attempts, 2);
     assert_eq!(

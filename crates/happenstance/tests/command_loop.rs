@@ -12,10 +12,10 @@ use core::convert::Infallible;
 use futures_core::Stream;
 use happenstance::bytes::Bytes;
 use happenstance::{
-    AppendCondition, AppendError, Boundary, Codec, CodecError, CommandError, ConditionViolated,
-    DecisionModel, DomainEvent, Event, EventStore, EventType, Json, MemoryEventStore,
-    MemoryStoreError, Query, ReadOptions, Retry, SequencePosition, SequencedEvent, Tags, commit,
-    commit_with,
+    AppendCondition, AppendError, Boundary, Codec, CodecError, CommandError, CommandOutcome,
+    ConditionViolated, DecisionModel, DomainEvent, Event, EventStore, EventType, Json,
+    MemoryEventStore, MemoryStoreError, Query, ReadOptions, Retry, SequencePosition,
+    SequencedEvent, Tags, commit, commit_with,
 };
 use serde::{Deserialize, Serialize};
 
@@ -278,7 +278,9 @@ async fn after_anchor_comes_from_the_read() {
         Ok::<_, Infallible>(vec![subscribed("s1")])
     })
     .await
-    .expect("the second attempt commits");
+    .expect("the second attempt commits")
+    .committed()
+    .expect("the decision produced events, so the command committed");
 
     assert_eq!(done.attempts, 2, "the interloper did not force a retry");
 
@@ -385,7 +387,9 @@ async fn retry_refolds_from_pristine_state() {
         },
     )
     .await
-    .expect("the second attempt commits");
+    .expect("the second attempt commits")
+    .committed()
+    .expect("the decision produced events, so the command committed");
 
     assert_eq!(done.attempts, 2);
     assert_eq!(
@@ -407,7 +411,9 @@ async fn retry_does_not_resubmit_the_previous_batch() {
         Ok::<_, Infallible>(vec![subscribed(&format!("s{}", attempt.get()))])
     })
     .await
-    .expect("the second attempt commits");
+    .expect("the second attempt commits")
+    .committed()
+    .expect("the decision produced events, so the command committed");
 
     assert_eq!(done.attempts, 2);
     let watch = store.watch.borrow();
@@ -433,7 +439,9 @@ async fn retries_when_conflicting_position_is_none() {
         Ok::<_, Infallible>(vec![subscribed("s1")])
     })
     .await
-    .expect("a violation with no named conflict still retries");
+    .expect("a violation with no named conflict still retries")
+    .committed()
+    .expect("the decision produced events, so the command committed");
 
     assert_eq!(done.attempts, 2);
 }
@@ -532,7 +540,9 @@ async fn commit_is_commit_with_json() {
         Ok::<_, Infallible>(vec![Enrolment::Defined { capacity: 2 }])
     })
     .await
-    .expect("an uncontended commit");
+    .expect("an uncontended commit")
+    .committed()
+    .expect("the decision produced events, so the command committed");
 
     assert_eq!(done.attempts, 1);
     let held = store.snapshot();
@@ -544,4 +554,143 @@ async fn commit_is_commit_with_json() {
             .encode(&Enrolment::Defined { capacity: 2 })
             .expect("the fixture encodes")
     );
+}
+
+// ---------------------------------------------------------------------------
+// Two success shapes, and the boundary the decision has to land inside
+// ---------------------------------------------------------------------------
+
+/// A decision that emits no events is a success, not an append failure.
+///
+/// **The wrong implementation this rejects is the one that shipped until
+/// `0.2.0`.** An empty `Vec` reached `EventStore::append`, which refuses an
+/// empty batch (ES-20), so the commonest shape of an idempotent command —
+/// *"already done, nothing to add"* — arrived as `CommandError::Append`
+/// carrying `AppendError::NoEvents`. A caller had to know that one variant of
+/// one store error meant *your decision was fine*.
+///
+/// Deleting the early return in `commit_with` puts that back, and this test is
+/// what says so. Note what it also asserts: **nothing was appended**. A repair
+/// that returned `Nothing` after submitting an empty batch would satisfy the
+/// first assertion and change nothing about the defect.
+#[tokio::test]
+async fn a_decision_that_emits_nothing_is_a_success() {
+    let store = MemoryEventStore::new();
+
+    let outcome = commit(&store, Seats::for_course(), three(), |_: &Seats| {
+        Ok::<_, Infallible>(Vec::new())
+    })
+    .await
+    .expect("an empty decision is not a failure");
+
+    assert_eq!(outcome, CommandOutcome::Nothing);
+    assert_eq!(
+        outcome.committed(),
+        None,
+        "there is no commit to report, and `committed()` must not invent one"
+    );
+    assert!(
+        store.snapshot().is_empty(),
+        "nothing was appended: the store was never asked, which is what makes \
+         this a decision rather than a refused append"
+    );
+}
+
+/// An event that does not match its own boundary is refused before the append.
+///
+/// **The lost update this forbids.** The append condition guards the query the
+/// decision was read on. An event that does not match that query is not in the
+/// set the condition protects, so the next command over the same boundary reads
+/// a log without it, decides as though it never happened, and its own condition
+/// is satisfied. Both commands return `Ok` and the shared invariant is gone,
+/// with nothing failing anywhere.
+///
+/// The wrong implementation is therefore not a crash — it is `Ok`. Deleting the
+/// check in `encode` makes this test's append succeed, which is exactly the
+/// state that used to be reachable, and two of this crate's own rendered
+/// doctests taught the spelling that produces it.
+#[tokio::test]
+async fn an_event_outside_its_boundary_is_refused_and_nothing_is_appended() {
+    /// Carries no tags at all, inside a boundary scoped to one course.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct Untagged;
+
+    impl DomainEvent for Untagged {
+        const EVENT_TYPES: &'static [EventType] = &[DEFINED];
+
+        fn event_type(&self) -> EventType {
+            DEFINED
+        }
+
+        fn tags(&self) -> Tags {
+            Tags::empty()
+        }
+
+        fn encode<C: Codec>(&self, codec: &C) -> Result<Bytes, CodecError> {
+            codec.encode(self)
+        }
+
+        fn decode<C: Codec>(
+            codec: &C,
+            _event_type: &EventType,
+            data: &Bytes,
+        ) -> Result<Self, CodecError> {
+            codec.decode(data)
+        }
+    }
+
+    #[derive(Clone)]
+    struct Scoped(Tags);
+
+    impl DecisionModel for Scoped {
+        type Event = Untagged;
+
+        fn scope(&self) -> &Tags {
+            &self.0
+        }
+
+        fn apply(&mut self, _event: Untagged) {}
+    }
+
+    let store = MemoryEventStore::new();
+
+    let refusal = commit(&store, Scoped(course_tags()), three(), |_: &Scoped| {
+        Ok::<_, Infallible>(vec![Untagged])
+    })
+    .await
+    .expect_err("an event outside its own boundary is refused");
+
+    match refusal {
+        CommandError::OutsideBoundary { event_type, tags } => {
+            assert_eq!(event_type, DEFINED);
+            assert!(tags.is_empty(), "the tags it carried travel with the error");
+        }
+        other => panic!("expected `OutsideBoundary`, got {other:?}"),
+    }
+
+    assert!(
+        store.snapshot().is_empty(),
+        "the refusal happens before the single irreversible act"
+    );
+}
+
+/// An event carrying its boundary's tags is accepted, which keeps the check honest.
+///
+/// The positive control. Without it the test above passes against a `commit`
+/// that refuses *every* batch, which is a check nobody could ever satisfy
+/// rather than a check.
+#[tokio::test]
+async fn an_event_inside_its_boundary_still_commits() {
+    let store = MemoryEventStore::new();
+
+    let done = commit(&store, Seats::for_course(), three(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Enrolment::Defined { capacity: 2 }])
+    })
+    .await
+    .expect("the event carries the boundary's own tags")
+    .committed()
+    .expect("one event was decided, so one was appended");
+
+    assert_eq!(done.attempts, 1);
+    assert_eq!(store.snapshot().len(), 1);
 }

@@ -188,7 +188,13 @@ pub trait DomainEvent: Sized {
 ///             Self::Freed => Self::EVENT_TYPES[1].clone(),
 ///         }
 ///     }
-///     fn tags(&self) -> Tags { Tags::empty() }
+///     // The event carries the tags its boundary is scoped by. One
+///     // that did not would not match the query the append condition
+///     // guards, so the next command over this boundary would not see
+///     // it — `commit` refuses such a batch rather than append it.
+///     fn tags(&self) -> Tags {
+///         Tags::from_pairs([("course", "c1")]).expect("a valid tag")
+///     }
 ///     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
 ///         c.encode(self)
 ///     }

@@ -8,7 +8,7 @@ use core::num::NonZeroU32;
 use happenstance_core::bytes::Bytes;
 use happenstance_core::{
     AppendCondition, AppendError, ConditionViolated, Event, EventStore, EventType, InvalidQuery,
-    SequencePosition, read_decision_model,
+    Query, SequencePosition, Tags, read_decision_model,
 };
 
 use crate::boundary::Boundary;
@@ -88,6 +88,70 @@ pub struct Committed {
     pub attempts: u32,
 }
 
+/// What a command did, when it did not fail.
+///
+/// **Two success shapes, because a decision that produces no events is not a
+/// failure and was reported as one.** Until `0.2.0` an empty `Vec` from the
+/// closure reached `EventStore::append`, which refuses an empty batch (ES-20),
+/// so *"nothing to do here"* — the single commonest shape of an idempotent
+/// command — came back as [`CommandError::Append`] carrying `NoEvents`. A
+/// caller had to know that one `AppendError` variant meant *your decision was
+/// fine* and every other meant *your store is not*.
+///
+/// # Why an enum, rather than an `Option` or a field
+///
+/// It puts the choice at **compile time on every call site**, which is where
+/// the bug it catches lives. Forgetting to `push` into the decided `Vec` is an
+/// ordinary mistake with no local symptom: the command returns `Ok`, the caller
+/// carries on, and the events are simply not there. As an enum, that path
+/// cannot be read without naming it. `Option<Committed>` would have the same
+/// shape and none of the vocabulary — `None` is the answer to a question, and
+/// *"was anything appended"* is not one this type wants a caller to have to
+/// reconstruct.
+///
+/// No `#[non_exhaustive]`, deliberately, and [RS-13-5] is the reason: this enum
+/// is designed not to grow. A command either appended or it did not, and the
+/// attribute would cost every downstream `match` a `_ =>` arm forever while
+/// permanently silencing the report an author of a third variant would want.
+///
+/// [RS-13-5]: https://github.com/Wet-Ink-Corporation/happenstance/blob/main/standards/rust/13-sealing-and-exhaustiveness.md
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use = "a CommandOutcome says whether anything was appended, and a \
+              decision that appended nothing is not a decision that failed"]
+pub enum CommandOutcome {
+    /// The decision produced events and the store accepted them.
+    Committed(Committed),
+
+    /// The decision produced no events, so nothing was appended.
+    ///
+    /// The store was read and the condition was never submitted, because there
+    /// was nothing to condition. This is the ordinary answer for an idempotent
+    /// command whose work is already done — the second call of a *"grant this
+    /// once"* handler, a reconciliation that found nothing to reconcile.
+    ///
+    /// **It is not a refusal**, and the distinction is worth keeping: a
+    /// refusal is the caller's own type travelling in
+    /// [`CommandError::Refused`], and it means *the decision said no*. This
+    /// means the decision said nothing.
+    Nothing,
+}
+
+impl CommandOutcome {
+    /// The commit, if there was one.
+    ///
+    /// A convenience for a caller who genuinely does not care — a metric, a
+    /// log line. It does not defeat the point of the enum: the `Option` still
+    /// has to be opened, so the second shape cannot be read past by accident,
+    /// and a caller who *should* branch is not helped into not branching.
+    #[must_use]
+    pub const fn committed(self) -> Option<Committed> {
+        match self {
+            Self::Committed(committed) => Some(committed),
+            Self::Nothing => None,
+        }
+    }
+}
+
 /// Why a command did not commit.
 ///
 /// The vocabulary is the contract's, extended by two type parameters and never
@@ -151,6 +215,43 @@ pub enum CommandError<E: core::error::Error + 'static, D: core::error::Error + '
     #[error("the decision refused")]
     Refused(#[source] D),
 
+    /// A decided event does not match the boundary the decision was read on.
+    ///
+    /// **Nothing was appended.** The check runs after the closure returns and
+    /// before the single irreversible act.
+    ///
+    /// # The lost update this refuses
+    ///
+    /// A command reads a query, decides, and appends conditioned on *that same
+    /// query* matching nothing new. If an appended event does not itself match
+    /// the query, the boundary does not contain what the boundary just wrote:
+    /// the next command over it reads a log that does not include this event,
+    /// decides as though it never happened, and its append condition is
+    /// satisfied. Two commands both succeed and the invariant they shared is
+    /// gone, with no failure anywhere.
+    ///
+    /// The shape is ordinary rather than exotic. An event type whose `tags()`
+    /// returns [`Tags::empty`] inside a model with a real scope produces it on
+    /// the first append, and two of this crate's own rendered doctests taught
+    /// exactly that spelling until `0.2.0`.
+    ///
+    /// # What it does not catch
+    ///
+    /// `Query::Items` matches on **any** item, so on a composite boundary an
+    /// event that matches one member satisfies this check even if it belongs to
+    /// another member's scope. That is a real residual and it is the union
+    /// grain of the derived query rather than a gap in the check — closing it
+    /// means asking which *member* an event belongs to, which the boundary does
+    /// not currently say. It is recorded here rather than in a comment because
+    /// a caller reading this variant is exactly who needs to know its edge.
+    #[error("a decided `{event_type}` event is outside the boundary it was decided on")]
+    OutsideBoundary {
+        /// The event type that does not match.
+        event_type: EventType,
+        /// The tags it carried, which are the half a caller usually has to fix.
+        tags: Tags,
+    },
+
     /// Every attempt was contended.
     ///
     /// A distinct outcome from a store failure and from a refusal. The last
@@ -212,9 +313,14 @@ pub enum CommandError<E: core::error::Error + 'static, D: core::error::Error + '
 ///   appended.
 /// * [`CommandError::Encode`] if a decided event cannot be encoded. Nothing is
 ///   appended.
+/// * [`CommandError::OutsideBoundary`] if a decided event does not match the
+///   boundary it was decided on. Nothing is appended.
 /// * [`CommandError::Append`] if the store fails the append for its own
 ///   reasons.
 /// * [`CommandError::Exhausted`] if every attempt was contended.
+///
+/// A decision that produces no events is **not** in this list: it is
+/// [`CommandOutcome::Nothing`], which is a success.
 #[cfg(feature = "json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 pub async fn commit<S, B, D, F>(
@@ -222,7 +328,7 @@ pub async fn commit<S, B, D, F>(
     boundary: B,
     retry: Retry,
     decide: F,
-) -> Result<Committed, CommandError<S::Error, D>>
+) -> Result<CommandOutcome, CommandError<S::Error, D>>
 where
     S: EventStore,
     B: Boundary + Clone,
@@ -278,7 +384,7 @@ pub async fn commit_with<S, B, C, D, F>(
     codec: &C,
     retry: Retry,
     mut decide: F,
-) -> Result<Committed, CommandError<S::Error, D>>
+) -> Result<CommandOutcome, CommandError<S::Error, D>>
 where
     S: EventStore,
     B: Boundary + Clone,
@@ -313,13 +419,31 @@ where
         }
 
         let decided = decide(&model).map_err(CommandError::Refused)?;
-        let batch = encode::<B::Event, C, S::Error, D>(&decided, codec)?;
+
+        // Before `encode`, and before the append that would refuse an empty
+        // batch as `AppendError::NoEvents`. ES-20's refusal is the store's and
+        // is correct; what was wrong was routing a *decision* through it, so
+        // that "nothing to do" arrived as a store error. Returning here is what
+        // makes `CommandOutcome::Nothing` reachable at all.
+        //
+        // No retry: contention is a property of an append, and there is none.
+        if decided.is_empty() {
+            return Ok(CommandOutcome::Nothing);
+        }
+
+        // The decision has to land inside the boundary it was taken on, or the
+        // condition guards a set the events are not in. `query` is still live
+        // here and is moved into the condition below, which is the whole reason
+        // the check sits between the two.
+        let batch = encode::<B::Event, C, S::Error, D>(&decided, codec, &query)?;
 
         // From the read, and only from the read.
         let condition = AppendCondition::new(query).after_opt(anchor);
 
         match store.append(&batch, Some(&condition)).await {
-            Ok(position) => return Ok(Committed { position, attempts }),
+            Ok(position) => {
+                return Ok(CommandOutcome::Committed(Committed { position, attempts }));
+            }
             Err(err) => {
                 // The error is collapsed to a control decision here, and
                 // dropped before the next read's await. `S::Error` carries no
@@ -342,7 +466,17 @@ where
 }
 
 /// Encodes one decision's events, tagging each with the codec that wrote it.
-fn encode<E, C, S, D>(decided: &[E], codec: &C) -> Result<Vec<Event>, CommandError<S, D>>
+///
+/// Also the one place each event is checked against `query`, the boundary the
+/// decision was read on. Two jobs in one loop rather than two, and the reason
+/// is [`DomainEvent::tags`]: it returns an owned [`Tags`] by value, so a
+/// separate checking pass would build every event's tags twice. Here they are
+/// built once, tested, and moved into the event.
+fn encode<E, C, S, D>(
+    decided: &[E],
+    codec: &C,
+    query: &Query,
+) -> Result<Vec<Event>, CommandError<S, D>>
 where
     E: DomainEvent,
     C: Codec,
@@ -352,6 +486,16 @@ where
     let mut batch = Vec::with_capacity(decided.len());
     for event in decided {
         let event_type = event.event_type();
+        let tags = event.tags();
+
+        // `Query::matches` rather than a second predicate spelled from the same
+        // two inputs — the same argument `Boundary::absorb` already makes about
+        // its own nomination check. A second vocabulary for "is this event in
+        // this boundary" is a second place for the answer to differ.
+        if !query.matches(&event_type, &tags) {
+            return Err(CommandError::OutsideBoundary { event_type, tags });
+        }
+
         let data: Bytes = event.encode(codec).map_err(|source| CommandError::Encode {
             event_type: event_type.clone(),
             source,
@@ -365,7 +509,7 @@ where
 
         batch.push(
             built
-                .with_tags(event.tags())
+                .with_tags(tags)
                 .with_metadata(crate::codec::frame::<C>(None)),
         );
     }
@@ -503,7 +647,9 @@ mod tests {
             Ok::<_, Infallible>(vec![Turnstile::Passed])
         })
         .await
-        .expect("an uncontended commit");
+        .expect("an uncontended commit")
+        .committed()
+        .expect("the decision produced events, so the command committed");
 
         assert_eq!(done.attempts, 1, "an uncontended commit is one attempt");
         // Compared against the position the store actually assigned, never a

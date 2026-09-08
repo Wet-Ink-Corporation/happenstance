@@ -59,7 +59,7 @@
 //! let take =
 //!     |_: &Seats| Ok::<_, core::convert::Infallible>(vec![Seat::Taken]);
 //! let done = commit(&store, seats, retry, take).await?;
-//! assert_eq!(done.attempts, 1);
+//! assert_eq!(done.committed().expect("a seat was taken").attempts, 1);
 //! # Ok::<(), Box<dyn Error>>(()) }
 //! ```
 //!
@@ -230,7 +230,7 @@ pub use codec::{Codec, CodecError};
 #[cfg(feature = "json")]
 #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 pub use command::commit;
-pub use command::{CommandError, Committed, Retry, commit_with};
+pub use command::{CommandError, CommandOutcome, Committed, Retry, commit_with};
 pub use domain::{DecisionModel, DomainEvent};
 // Off by default, and the badge is what says so on the rendered page: an
 // item that only exists behind a feature and does not name it is the reader

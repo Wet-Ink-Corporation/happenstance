@@ -68,8 +68,8 @@ use std::sync::Barrier;
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Boundary, Codec, CodecError, CommandError, Committed, DecisionModel, DomainEvent, EventType,
-    InvalidTag, Json, Retry, Tag, Tags, commit, read_decision_model,
+    Boundary, Codec, CodecError, CommandError, CommandOutcome, Committed, DecisionModel,
+    DomainEvent, EventType, InvalidTag, Json, Retry, Tag, Tags, commit, read_decision_model,
 };
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
 use serde::{Deserialize, Serialize};
@@ -205,7 +205,11 @@ fn race(db: &TempDb) -> Vec<Committed> {
 
                     runtime.block_on(async {
                         let events = SqliteEventStore::open(path).unwrap();
-                        transfer(&events, AMOUNT, Some(barrier)).await.unwrap()
+                        transfer(&events, AMOUNT, Some(barrier))
+                            .await
+                            .unwrap()
+                            .committed()
+                            .expect("every contender decides a transfer, so every one commits")
                     })
                 })
             })
@@ -227,7 +231,7 @@ async fn transfer(
     events: &SqliteEventStore,
     amount: u32,
     gate: Option<&Barrier>,
-) -> Result<Committed, CommandError<SqliteEventStoreError, Refusal>> {
+) -> Result<CommandOutcome, CommandError<SqliteEventStoreError, Refusal>> {
     // Unwrapped rather than `?`, because `CommandError` has no `From<InvalidTag>`
     // — its `Boundary` arm carries `InvalidQuery`, which is a different failure.
     // `src/main.rs` hides the distinction behind `anyhow::Result`; a function
@@ -304,7 +308,9 @@ fn seed(db: &TempDb) {
             },
         )
         .await
-        .unwrap();
+        .unwrap()
+        .committed()
+        .expect("the seed decides one deposit, so it commits");
 
         assert_eq!(
             committed.attempts, 1,
