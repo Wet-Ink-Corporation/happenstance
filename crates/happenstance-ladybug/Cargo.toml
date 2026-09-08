@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-ladybug"
-description = "LadybugDB graph projection store adapter for happenstance. Not yet implemented."
+description = "LadybugDB graph projection store adapter for happenstance."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

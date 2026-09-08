@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-postgres"
-description = "Postgres event store and projection store adapters for happenstance. Not yet implemented."
+description = "PostgreSQL event store and projection store adapters for happenstance."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
