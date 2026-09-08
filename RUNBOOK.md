@@ -161,10 +161,11 @@ turned out to be one DCB already provides.
 | — | **`0.2.0-alpha.1`** | 7 | — | — |
 | 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | done | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
 | 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
-| 10 | [Postgres and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | in progress | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
+| 10a | [Postgres event store](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | **done** | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
+| 10b | [Postgres projections, and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | in progress | `happenstance-neon`'s capability skip list — the transport axis's far end stated honestly — and no `todo!()` left on either crate |
 | 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | not started | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
-| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10** | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
-| 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10a** | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
+| 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10a, 10b, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
 | 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
 
 State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in
@@ -247,7 +248,7 @@ phase 3 into phase 6 while the table above makes phase 4 depend on it, and nobod
 noticed for a whole document revision.
 
 ```
-0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.2.0-alpha.1] ─▶ 8 ─▶ 10 ─▶ 12 ─▶ 13 ─▶ 14
+0 ─▶ 1 ─▶ 2 ─▶ 4 ─▶ 6 ─▶ 7 ─▶ [0.2.0-alpha.1] ─▶ 8 ─▶ 10a ─▶ 12 ─▶ 13 ─▶ 14
 
 one branch that rejoins the trunk:
     1 ─▶ 3 ─▶ 4          phase 4 is frozen against the instrument phase 3 builds
@@ -255,12 +256,22 @@ one branch that rejoins the trunk:
 one that floats — after 4, before 12, otherwise unconstrained:
     4 ─▶ 5               the wire format; nothing between it and 12 reads it
 
+one that rejoins late — after 4, before 13, and NOT before 12:
+    2, 4, 6 ─▶ 10b       the rest of phase 10; publication does not wait on it
+
 two that never rejoin — off the 0.1 path:
     2, 4    ─▶ 9
     6       ─▶ 11
 ```
 
-**Serial and unavoidable: 0 → 1 → 2 → 4 → 6 → 7 → 8 → 10 → 12**, with 3 on it too
+**10a and 10b are one phase drawn as two nodes**, and the split is what carries
+the 2026-09-07 decision into a shape the tooling can read. Publication waits on
+the Postgres **event store** and on nothing else phase 10 owns: that is what
+answered F2-5's residual, and it is what `12`'s dependency row now names.
+Replication waits on both, because nothing decided otherwise and splitting a node
+must not silently drop an edge.
+
+**Serial and unavoidable: 0 → 1 → 2 → 4 → 6 → 7 → 8 → 10a → 12**, with 3 on it too
 unless a second pair of hands takes it. Phase 3 depends only on phase 1, so it
 *can* run alongside the trunk — but it is not optional and cannot be skipped,
 because 4 waits on it. Solo it is serial and the estimate below says so.
@@ -308,8 +319,11 @@ No comparison against the old plan is offered, because the old plan carried no
 estimate anywhere in its 529 lines (`PRESSURE-TEST.md:401-407`) and the two 0.1s
 are not like-for-like.
 
-Post-0.1: phases 9 (8 days), 10 (11), 11 (6), 13 (12) and 14 (5). Phases 9, 10
-and 11 touch disjoint crates and parallelise freely. Phase 13 does not — it needs
+Post-0.1: phases 9 (8 days), 10 (11), 11 (6), 13 (12) and 14 (5). The eleven
+days were estimated for phase 10 whole and are not re-cut by the 10a/10b split;
+what can be said is that 10a is spent and 10b holds the remainder, which now also
+carries the `READ_FAULT` injection CF-18's check surfaced. Phases 9, 10 and 11
+touch disjoint crates and parallelise freely. Phase 13 does not — it needs
 three real stores, because proving a port takes two unlike implementations and an
 oracle.
 
@@ -4651,6 +4665,31 @@ reporting that it does — is deliberately **not** built here and stays
 
 ## Phase 10 — `happenstance-postgres` and `happenstance-neon`
 
+**One section, two status rows — `10a` and `10b`.** The heading and the design
+argument below are shared and stay whole, because the two halves were reasoned
+about together and neither is legible alone. What is split is the *state*, and it
+is split because the table is machine-read: `runbook_status_matches_the_registry`
+requires every phase in a released version's dependency closure to read `done`,
+so a single row covering finished and unfinished work would force a choice
+between marking unbuilt work `done` and leaving the release out of the table
+altogether. Both are worse than two rows.
+
+- **`10a` — the Postgres event store. `done`.** 101 of 101 conformance rules
+  against a live PostgreSQL 17.10, the concurrency family at 64 contenders, and
+  ADR-0024's visibility cost measured. Since 2026-09-07 that is a claim CI makes
+  rather than one machine's: the `live-postgres` job runs it under Docker. This
+  is the half publication waits on, because it is the half that answered F2-5's
+  residual.
+- **`10b` — the Postgres projection store, and `happenstance-neon`. `in
+  progress`.** Five `todo!()` in `PostgresProjectionStore`, sixteen in
+  `happenstance-neon`, `publish = false` on both, and — added by evidence rather
+  than by plan — the `READ_FAULT` injection CF-18's new check surfaced, which is
+  a fault path the one paged adapter in the workspace can supply and has not.
+  **Publication does not wait on any of it**, decided 2026-09-07.
+
+Read the exit criteria at the foot of this section with those labels attached;
+they are marked there rather than duplicated here.
+
 **Goal.** Two adapters that fill two empty far ends: a store that does not
 serialise its writers, and a store with no connection, no interactive transaction
 and no cursor.
@@ -4715,17 +4754,32 @@ skip list, which is the transport axis's far end stated honestly.
 
 **Exit criteria**
 
-- [ ] Four macros green against a real Postgres.
-- [ ] `PreCommitPositionStore`'s rule is one this adapter had to *work* to pass,
+`10a`, and all of them are met:
+
+- [x] Four macros green against a real Postgres.
+- [x] `PreCommitPositionStore`'s rule is one this adapter had to *work* to pass,
       and ADR-0024 says what that work cost.
+- [x] The default `cargo xtask ci` path still runs without Docker.
+
+`10b`:
+
 - [ ] Every rule `happenstance-neon` cannot pass is either a reported capability
       skip or an amended clause — never a silent pass.
-- [ ] The default `cargo xtask ci` path still runs without Docker.
-- [ ] No `todo!()` on either path; `publish = false` removed.
+- [ ] No `todo!()` on either path; `publish = false` removed. **Neither is true
+      of `happenstance-postgres` yet**, which is why this criterion is `10b`'s
+      and not `10a`'s: the event store is finished and the crate is not.
+- [ ] `PostgresFixture` arms `READ_FAULT` rather than declining it. Added
+      2026-09-07 by CF-18's new check, which found the fixture declining it in
+      the *testkit's* words on the one adapter whose read genuinely pages —
+      `PgReadStream` `FETCH`es a server-side cursor per chunk. Declining with a
+      stated reason is conformant and is what ships; arming it is this phase's,
+      and the injection is named in the fixture's own declension.
 
 **Cases this makes writable.** E2E-01 against a store that can genuinely fail it.
 
-**Estimate.** 11 days.
+**Estimate.** 11 days, for the phase whole. Not re-cut across `10a` and `10b`:
+`10a` is spent, and a number invented after the fact for the remainder would be
+an estimate nobody made.
 
 **Session log**
 
@@ -4847,17 +4901,26 @@ sentence. Phase 10 stays `in progress` in the status table rather than being
 marked `done` over half its scope, and Neon is 16 `todo!()` bodies, not the six
 that a count of `EventStore` trait methods suggests.
 
-**The dependency row above still reads `7, 8, 10`, deliberately, and here is
-why it is not being narrowed to say so.** `xtask`'s
-`runbook_status_matches_the_registry` parses that cell by splitting on commas
-and matching each entry against a phase number. `10 (Postgres half)` parses as
-one entry that matches no row, so it would resolve to nothing and the check
-would quietly stop verifying phase 10 through this edge — a false negative,
-which is the direction that lint's own documentation says it will not accept.
-The qualification lives here, in prose the parser never reads, and the row stays
-a row the parser can. **Anyone re-reading that row for its scope should land
-here**, which is the failure mode the paragraph it replaced predicted and did
-not prevent.
+**The dependency row above now reads `7, 8, 10a`, and that is the decision
+written where the parser can see it.** It said `7, 8, 10` until 2026-09-07, and
+the qualification lived in this paragraph — which was the second-best answer and
+is worth recording as such, because the first attempt at it was worse still.
+Narrowing the cell to something like `10 (Postgres half)` does not work:
+`runbook_status_matches_the_registry` splits that cell on commas and matches each
+entry against a phase number, so the annotated entry would resolve to no row and
+the check would quietly stop verifying phase 10 through this edge — a false
+negative, the direction that lint says it will not accept.
+
+Splitting the phase into two rows is what makes the qualification a *number*.
+`10a` is the Postgres event store and is `done`; `10b` is the Postgres projection
+store and Neon, and is not. Publication waits on the first and not the second,
+which is now a fact the tooling checks rather than a sentence in prose nobody
+re-reads. **That distinction is the whole reason the split exists**, and it was
+taken before the release rather than under it: the moment phase 12 adds the
+`0.2.0` milestone row this table needs, axis 1 walks that row's closure and
+requires every phase in it to read `done`. With one phase-10 row the only ways
+through were to mark unbuilt work finished or to leave the release out of the
+table — and leaving it out is the omission the lint's own bail message names.
 
 And what "why here" is *not*: it is not "publishing freezes the public API". The
 API was frozen in phases 4 – 6, on evidence, which is what makes publishing safe.

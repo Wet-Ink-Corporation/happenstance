@@ -283,8 +283,26 @@ core → testkit → happenstance → sqlite → cloudflare — because both ada
 dev-depend on the testkit at the workspace version. There is **no release
 workflow**; publishing is manual with the owner's token.
 
-**One tripwire that has to be resolved before the release rather than during
-it, and it carries a decision.** `xtask`'s `runbook_status_matches_the_registry`
+**The status-table tripwire is resolved — phase 10 is split into `10a` and
+`10b`** (decided 2026-09-07). `10a` is the Postgres event store and reads
+`done`; `10b` is the Postgres projection store and Neon and reads `in progress`.
+Phase 12 depends on `10a`; phase 13 depends on both, because nothing decided
+otherwise and splitting a node must not silently drop an edge.
+
+Verified by simulation rather than by reasoning: inserting the `0.2.0` milestone
+row phase 12 will need leaves **one** complaint, and it is phase 12's own
+`not started`. So the release sequence is publish → mark phase 12 `done` → add
+the milestone row, and the lint is satisfied at each step. `10b` is not in that
+closure at all, which is the whole point.
+
+What follows for whoever runs phase 12: add the milestone row **after** flipping
+phase 12's state, not before, or the gate goes red between two commits that are
+each individually correct.
+
+The paragraph below is what that replaced, kept because the reasoning is the
+record of why the split was the answer rather than the obvious alternatives.
+
+**The tripwire, as it was found.** `xtask`'s `runbook_status_matches_the_registry`
 holds the status table against the changelog on two axes, and axis 1 is: *a
 released version vouches for every phase it waited on.* It finds the milestone
 row whose name equals a dated `## [x]` heading and requires every phase in that
@@ -305,9 +323,17 @@ holding nothing. **Marking phase 10 `done`** is a lie about two unbuilt things.
 **Splitting the row** — `10a` Postgres `done`, `10b` Neon `in progress`, with the
 `0.2.0` milestone depending on `7, 8, 10a` — is honest, parses (the lint matches
 dependency entries as strings against the `#` column), and says structurally what
-the phase 12 preamble currently says only in prose. It also costs an edit to the
-critical-path diagram. **That is the repository owner's call**, and it is worth
-taking before the release rather than under it.
+the phase 12 preamble had been saying only in prose. **That is the one that was
+taken**, and the cost was the edit to the critical-path diagram plus a definition
+of what `10a` can honestly claim.
+
+That definition is the part worth carrying: `10a` is the **Postgres event
+store**, not `happenstance-postgres`. The crate still holds five `todo!()` in its
+projection store and `publish = false`, so a row named after the crate could not
+have read `done` either, and the split would have bought nothing. What is
+finished is the thing that answered F2-5 — the event store — and that is exactly
+what publication needs. A split drawn along crate boundaries instead of along
+finished work would have reproduced the original problem one row down.
 
 Two items in that list are still owed and easy to forget: repointing
 `cargo-semver-checks` to keep the registry baseline *as well as* `baseline-rev`
