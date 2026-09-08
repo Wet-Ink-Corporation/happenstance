@@ -557,7 +557,7 @@ jobs:
           # a green suite cannot. Plus CF-18's
           # `every_declined_capability_is_stated_by_this_fixture`, which
           # `projection_store_conformance!` emits once per mount and which is not
-          # a rule, plus this crate's own 5 = 41.
+          # a rule, plus this crate's own 6 = 42.
           #
           # A floor rather than an equality, for `live-postgres`'s stated reason:
           # an equality fails on the commit that *adds* a rule, which trains

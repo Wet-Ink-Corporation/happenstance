@@ -1119,7 +1119,7 @@ const OPTIONAL: &[Step] = &[
     },
     Step {
         // The LadybugDB projection conformance run: 17 rules over two emitters,
-        // plus this crate's own five, against a real graph on disk.
+        // plus this crate's own six, against a real graph on disk.
         //
         // PROBED -- and the probe asks a different question from every other
         // probe in this list, which is the one way it departs from `cargo

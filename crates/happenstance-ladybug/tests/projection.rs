@@ -522,6 +522,96 @@ async fn a_clone_accepts_its_origins_write_set_and_a_second_handle_does_not() {
     );
 }
 
+/// A commit that meets an open write transaction is refused as
+/// [`projection_store::LadybugProjectionStoreError::WriteTransactionInUse`], and
+/// the store is usable again afterwards.
+///
+/// # Why this test exists at all
+///
+/// ADR-0025 §1 deletes `PositionOutOfRange` because no code path could construct
+/// it, invoking this repository's own corollary that a rule no adapter can fail
+/// is decorative. `WriteTransactionInUse` was one commit from the same fate: it
+/// survived the skeleton describing a real engine rule that nothing classified,
+/// and `lbug::Error::FailedQuery` carries a `String` and no code — so the only
+/// way to reach the variant is a message match, and the only way a message match
+/// stays honest is a test that would notice the engine rewording it.
+///
+/// The classification is deliberately **narrowing-only**: an unrecognised message
+/// stays a `Driver`, so a reworded message costs a caller its retry hint and
+/// never gives a wrong answer. This test is what would turn that cost into a
+/// visible failure rather than a silent one.
+///
+/// # And the crash it stays on the safe side of
+///
+/// Measured while choosing the commit-fault injection: a connection that issues
+/// a statement **after its own `BEGIN TRANSACTION` was refused** takes the
+/// process down with `STATUS_ACCESS_VIOLATION`. `commit` returns the moment
+/// `BEGIN` fails and issues nothing further on that connection, which is what
+/// makes this test a test rather than a crash — and is worth pinning, because
+/// the shape that would reintroduce it is "try the statements anyway and let
+/// them report the error".
+#[tokio::test]
+async fn a_commit_that_meets_an_open_write_transaction_is_refused_and_recovers() {
+    use happenstance_core::{
+        Authority, Checkpoint, CommitError, ProjectionId, ProjectionProbe, ProjectionStore,
+        SequencePosition,
+    };
+
+    let fixture = LadybugProjectionFixture::new();
+    let blocker = fixture.connect().await;
+    let store = fixture.connect().await;
+    let id = ProjectionId::new("a_commit_that_meets_an_open_write_transaction");
+
+    // LadybugDB permits many readers and exactly one writer, and it is the
+    // *write* that claims the slot rather than the `BEGIN` alone — so the
+    // blocker does both.
+    let held = blocker.connect().expect("the fixture can connect");
+    held.query("BEGIN TRANSACTION")
+        .expect("the blocking transaction is the test environment's");
+    held.query("CREATE (:__hs_probe {k: 'blocker', v: 1})")
+        .expect("the blocking write is the test environment's");
+
+    let mut batch = store.begin();
+    store.probe_write(&mut batch, KEY, VALUE);
+    match store
+        .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
+        .await
+    {
+        Err(CommitError::Store(
+            projection_store::LadybugProjectionStoreError::WriteTransactionInUse,
+        )) => {}
+        outcome => panic!(
+            "a commit that meets an open write transaction must be classified as \
+             `WriteTransactionInUse` rather than arriving as an opaque `Driver` \
+             string every caller would have to pattern-match on, and this store \
+             answered {outcome:?}. If the message is the only thing that changed, \
+             the repair is `WRITE_CONFLICT_NEEDLE` -- not deleting this test"
+        ),
+    }
+
+    held.query("ROLLBACK")
+        .expect("releasing the blocking transaction is the test environment's");
+    drop(held);
+
+    assert_eq!(
+        fixture
+            .connect()
+            .await
+            .checkpoint(&id)
+            .await
+            .expect("the read succeeds"),
+        Checkpoint::NeverRun,
+        "a commit refused at `BEGIN` never reached either half, so nothing moved"
+    );
+
+    let mut batch = store.begin();
+    store.probe_write(&mut batch, KEY, VALUE);
+    store
+        .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
+        .await
+        .expect("the store must be usable once the write slot is free again");
+}
+
 /// A second `Database` on one directory is refused, which is why the store owns
 /// an `Arc`.
 ///
