@@ -444,39 +444,20 @@ impl Fixture for PostgresFixture {
     /// unit `append` promises.
     const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
 
-    /// Declined **by scope, not by incapacity**, and this fixture is the one
-    /// that owes it.
+    /// **Supported, and armed for real.** This fixture is the one that owed it.
     ///
-    /// Until `0.2.0` this constant was not written at all, so the adapter
-    /// inherited the trait's default — *"the injection has to come from the
-    /// adapter and this one has none to offer"* — and CF-18's new check is what
-    /// found it. That sentence is **false about this store**, which is exactly
-    /// the misrepresentation an inherited declension produces: the default says
-    /// the same thing about every adapter, including the ones for which it is
-    /// wrong.
+    /// The capability's default declension says the injection "has to come from
+    /// the adapter and this one has none to offer", and that was false here:
+    /// `PgReadStream` opens a `REPEATABLE READ READ ONLY` transaction, `DECLARE`s
+    /// a server-side cursor and issues a `FETCH` per chunk, so it is exactly the
+    /// paged adapter the capability was invented for. `happenstance-sqlite`
+    /// declines saying *"the paged adapters are where this capability has
+    /// something to inject"*; this is a paged adapter, and CF-18's
+    /// declension-by-inheritance check is what surfaced the gap.
     ///
-    /// It is wrong here because this is the paged adapter. `sqlite` declines
-    /// `READ_FAULT` saying *"the paged adapters are where this capability has
-    /// something to inject"*, and `cloudflare` declines it saying its read
-    /// "does not fetch a page at a time across an await". This one does:
-    /// `PgReadStream` opens a `REPEATABLE READ` transaction, `DECLARE`s a
-    /// server-side cursor and issues a `FETCH` per chunk, so there is a real
-    /// fetch between two pages and a real place for one to fail.
-    ///
-    /// What arming it would mean, so the next person does not have to rediscover
-    /// it: `pg_terminate_backend` against the reader's own connection between
-    /// two `FETCH`es, or `CLOSE`ing the cursor underneath it. Both are reachable
-    /// from a second pooled connection, which this fixture already opens for
-    /// `SECOND_HANDLE`.
-    ///
-    /// It is not armed here because that is a rule this adapter has never run
-    /// and a fault path this adapter has never had, and landing both in the
-    /// release pass that discovered the gap would be shipping an untested
-    /// injection to satisfy a check. Declining with the reason stated is what
-    /// CF-18 asks for; supplying the far end is phase 10's remainder.
-    const READ_FAULT: Capability = Capability::declined(
-        "this fixture can make its store fail part way through a read and does          not yet arm it: PgReadStream FETCHes a server-side cursor per chunk, so          terminating the reader's backend or closing the cursor between two          FETCHes is a real injection this adapter has simply not built",
-    );
+    /// See [`PostgresFixture::arm_read_fault`] for what is injected and why the
+    /// two obvious injections are not.
+    const READ_FAULT: Capability = Capability::SUPPORTED;
 
     /// Mirrored from the adapter's own constants, never restated as literals.
     ///
@@ -528,6 +509,60 @@ impl Fixture for PostgresFixture {
             .expect("a broken test environment: could not arm the mid-batch fault");
     }
 
+    /// Arms the next `read` to fail while the cursor is producing rows.
+    ///
+    /// # What is injected
+    ///
+    /// The `event` relation is renamed aside and replaced by a view over it whose
+    /// `WHERE` calls a `plpgsql` function that raises above a threshold. The
+    /// reader's `DECLARE … CURSOR FOR SELECT … FROM event` then plans and opens
+    /// normally, and the raise arrives **while the `FETCH` is producing rows** —
+    /// which is the failure this capability is about. A `read` that failed at
+    /// name resolution would be a different fault wearing the same name.
+    ///
+    /// The threshold is 2 and the rule appends 4, so the fault is genuinely
+    /// part-way rather than at the first row. `FETCH_CHUNK` is 1024, so all four
+    /// rows are asked for in one `FETCH`; the raise is what that `FETCH` answers
+    /// with instead of a page.
+    ///
+    /// # Why not the two injections this fixture's declension used to name
+    ///
+    /// It said `pg_terminate_backend` against the reader's own backend between
+    /// two `FETCH`es, or closing the cursor beneath it. Neither survives contact:
+    ///
+    /// * **Arming happens before the read starts.** The trait requires it —
+    ///   *"a rule connects before it arms"* — so at this point there is no reader
+    ///   backend in flight to terminate and no cursor to close. Both injections
+    ///   presuppose a read already running, which is a fixture API this port does
+    ///   not have and CF-39 says it should not acquire: `arm_read_fault` takes no
+    ///   index precisely because a read's granularity belongs to the adapter.
+    /// * **A pool absorbs the first one anyway.** Terminating an *idle* pooled
+    ///   backend is invisible: `sqlx` tests a connection before handing it out and
+    ///   opens a fresh one. That is CF-39's named hazard — *"a connection killed
+    ///   mid-statement behind a reconnect-and-retry pool"* — arriving one step
+    ///   earlier, and a fixture whose arming is silently absorbed passes this rule
+    ///   vacuously, which is the outcome CF-39 forbids.
+    /// * **A cursor is session-local.** `pg_cursors` shows only the current
+    ///   session's, so no second connection can close another's.
+    ///
+    /// The rename is reversible and destroys nothing: the rows stay in
+    /// `event_read_fault_source`, and the view reads them. It fires for the life
+    /// of this fixture instance, which is honest rather than convenient — the
+    /// rule reads exactly once after arming, and every rule gets its own fixture,
+    /// so "fires once" and "fires from now on" are the same run.
+    ///
+    /// # Panics
+    ///
+    /// On any failure to reach or prepare the server. See the module docs.
+    async fn arm_read_fault(&self) {
+        let pool = self.pool().await;
+        pool.execute(READ_FAULT_INJECTION)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("a broken test environment, not a non-conformant adapter: {error}")
+            });
+    }
+
     async fn reopen(&self) {
         // Every handle this fixture handed out owns its own `PgPool`, and this
         // fixture keeps none of them — so there is nothing here to close, and
@@ -543,6 +578,32 @@ impl Fixture for PostgresFixture {
         // `connect()` open a genuinely new pool.
     }
 }
+
+/// The read-fault injection, as SQL.
+///
+/// A constant so that the dollar-quoted `plpgsql` bodies sit on their own rather
+/// than inside a method: they are the pieces of this file that are not Rust, and
+/// burying them in an `unwrap_or_else` chain is how they stop being readable as
+/// SQL.
+///
+/// Wrapped in a `DO` block guarded on `to_regclass`, so that arming twice on one
+/// fixture instance is a no-op rather than an error: the rule arms once, and a
+/// fixture whose arming is not idempotent fails on the second call for a reason
+/// that has nothing to do with the adapter.
+const READ_FAULT_INJECTION: &str = concat!(
+    "CREATE OR REPLACE FUNCTION read_fault_guard(p bigint) RETURNS boolean AS ",
+    "$guard$ BEGIN ",
+    "IF p > 2 THEN RAISE EXCEPTION 'the fixture armed a read fault'; END IF; ",
+    "RETURN true; ",
+    "END; $guard$ LANGUAGE plpgsql;\n",
+    "DO $arm$ BEGIN ",
+    "IF to_regclass('event_read_fault_source') IS NULL THEN ",
+    "ALTER TABLE event RENAME TO event_read_fault_source; ",
+    "CREATE VIEW event AS SELECT * FROM event_read_fault_source ",
+    "WHERE read_fault_guard(position); ",
+    "END IF; ",
+    "END $arm$;",
+);
 
 // -------------------------------------------------------------------------
 // The projection fixture
