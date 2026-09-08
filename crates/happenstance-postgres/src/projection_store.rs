@@ -698,7 +698,10 @@ mod tests {
     /// `assert_static::<Batch<'_>>()` proved nothing — `'_` in a turbofish is
     /// merely *inferred* and the compiler picked `'static`, so the assertion
     /// passed against `type Batch<'a> = Transaction<'a, Postgres>`, the exact
-    /// shape it existed to reject.
+    /// shape it existed to reject. It was written that way first. Argument
+    /// position was the fix, because `'_` there elides to a fresh
+    /// universally-quantified lifetime rather than to whatever inference finds
+    /// convenient.
     ///
     /// The port no longer has a lifetime to elide, so that hazard cannot recur —
     /// and the test is not therefore vacuous. `type Batch;` is still bindable to

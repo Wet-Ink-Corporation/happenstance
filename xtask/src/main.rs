@@ -981,11 +981,17 @@ const OPTIONAL: &[Step] = &[
         // on all three runners, so the check is real there. (D13)
         //
         // Named crate by crate rather than `--workspace`, because a skeleton's
-        // `todo!()` bodies have nothing to say to docs.rs. `happenstance-testkit`
-        // joined the list when it acquired `#![cfg_attr(docsrs, feature(doc_cfg))]`
-        // and a `doc(cfg(feature = "proptest"))`: it is one of the three
-        // publishable crates, so its rendering fails in the same
-        // yankable-but-not-removable place.
+        // `todo!()` bodies have nothing to say to docs.rs.
+        //
+        // **It is every publishable crate that renders on the host, and it was
+        // three of five until the `0.2.0` closeout.** The list was written when
+        // three crates were publishable and did not move when `happenstance-sqlite`
+        // and `happenstance-cloudflare` joined `PUBLISHABLE` at phases 8 and 9 —
+        // so the one check whose whole argument is that this failure cannot be
+        // fixed after publication was not covering two of the artifacts it would
+        // be unfixable for. `package.rs`'s `reconcile` holds the publishable set
+        // against the manifests in both directions; nothing held this list
+        // against that set, and a count is exactly the thing nobody re-reads.
         name: "docs.rs configuration (nightly)",
         program: "cargo",
         args: &[
@@ -998,6 +1004,37 @@ const OPTIONAL: &[Step] = &[
             "happenstance",
             "-p",
             "happenstance-testkit",
+            "-p",
+            "happenstance-sqlite",
+            "--all-features",
+            "--no-deps",
+        ],
+        env: &[("RUSTDOCFLAGS", "--cfg docsrs -D warnings")],
+        probe: Some(&["cargo", "+nightly", "--version"]),
+    },
+    Step {
+        // The fifth publishable crate, and it needs its own step rather than a
+        // fifth `-p` above: `happenstance-cloudflare`'s manifest sets
+        // `default-target = "wasm32-unknown-unknown"` and `targets = []`, so
+        // docs.rs renders it for wasm32 and nothing else. Rendering it on the
+        // host would check a configuration docs.rs will never build, and would
+        // pass or fail for reasons unrelated to the page a consumer sees.
+        //
+        // It is the crate with the most to lose from this check being absent: it
+        // is the only one whose documented target is not the one the gate
+        // otherwise builds, so a `doc(cfg(…))` that compiles everywhere else can
+        // still fail here — in the place a release can be yanked but not
+        // removed.
+        name: "docs.rs configuration for wasm32 (nightly)",
+        program: "cargo",
+        args: &[
+            "+nightly",
+            "doc",
+            "--locked",
+            "-p",
+            "happenstance-cloudflare",
+            "--target",
+            "wasm32-unknown-unknown",
             "--all-features",
             "--no-deps",
         ],

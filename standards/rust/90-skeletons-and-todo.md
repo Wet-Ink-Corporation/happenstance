@@ -79,7 +79,17 @@ storage shape. It fits nothing: the impl is six `todo!()`s over two placeholders
 and the driver's real types are met by whoever writes the bodies — one phase
 after the port was frozen against them.
 
-**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:105 (type Batch = Transaction<'static, Postgres>)` ·
+**And the exemplar this rule used was itself refuted, which is the sharper
+lesson.** `happenstance-postgres` declared `type Batch = sqlx::Transaction<'static,
+Postgres>` — a real driver type, not a placeholder, and cited here as what a
+good skeleton looks like. It could not be implemented: `begin` is total,
+synchronous and infallible, and every route to a `sqlx` transaction is `async`
+and fallible. Five `todo!()` bodies type-checked against it anyway, because `!`
+coerces to everything. So a *real* associated type is necessary and still not
+sufficient — RS-90-2 is what catches the rest, and this is the case that proves
+the two rules are not one rule stated twice.
+
+**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:18 (type Batch = sqlx::Transaction)` ·
 `crates/happenstance-sqlite/src/projection_store.rs:638 (type Batch = SqliteBatch)` ·
 `references/adapter-shapes.md:10 (stubbed the only part)` ·
 `references/adapter-shapes.md:98 (code: None)` ·

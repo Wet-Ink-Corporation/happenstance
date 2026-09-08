@@ -90,7 +90,7 @@ then satisfied by a clippy run, and the failure surfaces at the first Workers
 adapter — as a design that cannot be implemented, not as a red build.
 
 **Evidence.** `xtask/src/main.rs:98 (struct Step)` ·
-`xtask/src/main.rs:1209 (fn wasm_steps)` · `xtask/src/main.rs:1249 (fn steps_named)` ·
+`xtask/src/main.rs:1246 (fn wasm_steps() -> Vec)` · `xtask/src/main.rs:1286 (fn steps_named)` ·
 [CONTRIBUTING §The gate](../../CONTRIBUTING.md)
 
 ---
@@ -173,8 +173,8 @@ every probed tool on every runner, so the step is not skipped there — it is
 arrives without a commit to trigger it into decoration nobody reads.
 
 **Evidence.** `xtask/src/main.rs:141 (probe is not forced to be an invocation of the thing it is probing)` ·
-`xtask/src/main.rs:1306 (let Some(probe) = step.probe)` ·
-`xtask/src/main.rs:1340 (fn is_available)`
+`xtask/src/main.rs:1343 (let Some(probe) = step.probe)` ·
+`xtask/src/main.rs:1377 (fn is_available)`
 
 ---
 
@@ -368,7 +368,7 @@ disagree is a consumer on the old compiler, after publication, when the number
 has stopped being a note and become a promise.
 
 **Evidence.** `Cargo.toml:26 (rust-version = "1.97.1")` · `clippy.toml:1 (msrv = "1.97.1")` ·
-`xtask/src/main.rs:1299 (A let-chain, and the first in the workspace)` ·
+`xtask/src/main.rs:1336 (A let-chain, and the first in the workspace)` ·
 [ADR-0029](../../.kb/decisions/0029-msrv-raised-to-1-97-1.md) ·
 [ADR-0004](../../.kb/decisions/0004-edition-and-msrv.md) ·
 [cargo rust-version resolution](https://doc.rust-lang.org/cargo/reference/resolver.html) *(checked 2026-08-09, rustc 1.97.1)*
