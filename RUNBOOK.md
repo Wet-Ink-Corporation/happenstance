@@ -4976,7 +4976,12 @@ is the release.
       proposition and needs the release to exist. Its failure mode is a yank.
 
 - [ ] Tag; cut the GitHub release.
-- [ ] ADR-0004 loses `provisional`; the MSRV becomes a promise.
+- [ ] ADR-0004 loses `provisional`; the MSRV becomes a promise. **Staged, not
+      applied** — `.kb/_intake/2026-09-08-adr-0004-msrv-becomes-a-promise-at-publication.md`.
+      Two reasons it cannot be done before the release and the second decides it:
+      it is not true yet, and an accepted decision atom is immutable, so lifting a
+      marker is a superseding atom rather than an edit — which is a
+      `/redkiln:kb-ingest` job, not a hand edit.
 - [ ] Repoint `cargo-semver-checks` to keep *both* baselines — the registry for
       release safety, `--baseline-rev` for review signal.
 - [ ] README status table: no more 🔲 for what shipped, and the "batteries"
