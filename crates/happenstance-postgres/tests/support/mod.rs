@@ -56,6 +56,8 @@ use std::time::Duration;
 
 use happenstance_postgres::event_store::PostgresEventStore;
 use happenstance_postgres::migration;
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+use happenstance_postgres::projection_store::PostgresProjectionStore;
 use happenstance_postgres::sqlx::postgres::PgPoolOptions;
 use happenstance_postgres::sqlx::{Executor, PgPool};
 use happenstance_testkit::concurrency::CONTENDERS;
@@ -302,83 +304,21 @@ impl PostgresFixture {
 
     /// Builds this instance's pool and prepares its schema. Called once.
     async fn build_pool(&self) -> PgPool {
-        let server = server().await;
-        let schema = self.schema.clone();
-
-        // Sized from `CONTENDERS` rather than from the literal 8. The concurrency
-        // family starts that many contenders, and a pool smaller than the number
-        // of simultaneous handles **deadlocks rather than failing** — CF-33 says
-        // there is no watchdog to tell the two apart, and the symptom is a CI
-        // timeout, which is the least diagnosable failure this fixture could
-        // ship. The headroom covers `SECOND_HANDLE`'s extra handle and any
-        // bookkeeping connection a rule opens beside its contenders.
-        let size = u32::try_from(CONTENDERS).expect("CONTENDERS fits in a u32") + 4;
-
-        let pool = PgPoolOptions::new()
-            .max_connections(size)
-            // Nothing is held open just in case. Around ninety fixture
-            // instances are constructed over one run of the event-store family,
-            // and a pool that keeps a floor of idle connections turns that into
-            // a server-side connection leak that only shows up near the end.
-            .min_connections(0)
-            .idle_timeout(Duration::from_secs(5))
-            // Finite and short. The default is thirty seconds, which turns the
-            // undersized-pool failure into four minutes of nothing and reads as
-            // a hang — the least diagnosable failure this fixture could ship
-            // (CF-33: there is no watchdog). Five seconds is far longer than a
-            // healthy checkout on loopback and short enough that the message
-            // below arrives while anyone is still watching.
-            .acquire_timeout(Duration::from_secs(5))
-            // Every connection in this pool, including ones created later to
-            // meet demand, must land in this instance's schema — so the
-            // `search_path` is set per connection rather than once after
-            // construction. A pool that sets it on the first connection only is
-            // a pool whose isolation quietly depends on how many rules ran.
-            .after_connect(move |connection, _meta| {
-                let schema = schema.clone();
-                Box::pin(async move {
-                    connection
-                        .execute(format!(r#"SET search_path TO "{schema}""#).as_str())
-                        .await?;
-                    Ok(())
-                })
-            })
-            .connect(&server.admin_url())
-            .await
-            .unwrap_or_else(|error| {
-                panic!(
-                    "a broken test environment, not a non-conformant adapter: could not open \
-                     a pool onto schema `{}` at {} ({error})",
-                    self.schema,
-                    server.admin_url(),
-                )
-            });
-
+        let pool = open_pool(&self.schema).await;
         self.prepare(&pool).await;
         pool
     }
 
-    /// Creates this instance's schema if it does not exist and applies
-    /// migration 1 inside it.
+    /// Applies migration 1 inside this instance's schema.
+    ///
+    /// The schema itself is created by [`open_pool`]; what is left here is the
+    /// one thing the two fixtures in this module do differently.
     ///
     /// Idempotent in both halves, because `connect()` may be called many times
     /// on one instance and the second call must not fail. EC-004's requirement
     /// is that this fails at fixture construction with a message naming the
     /// environment rather than part way through a conformance rule.
     async fn prepare(&self, pool: &PgPool) {
-        // `CREATE SCHEMA` is not run through the pool's own `after_connect`
-        // path — that sets a `search_path` pointing at a schema that does not
-        // exist yet, which Postgres tolerates — so the statement below names the
-        // schema explicitly rather than relying on it.
-        pool.execute(format!(r#"CREATE SCHEMA IF NOT EXISTS "{}""#, self.schema).as_str())
-            .await
-            .unwrap_or_else(|error| {
-                panic!(
-                    "a broken test environment: could not create schema `{}` ({error})",
-                    self.schema
-                )
-            });
-
         migration::apply(pool).await.unwrap_or_else(|error| {
             panic!(
                 "a broken test environment: migration 1 failed in schema `{}` ({error}). \
@@ -388,6 +328,86 @@ impl PostgresFixture {
             )
         });
     }
+}
+
+/// Opens a pool whose every connection resolves unqualified names in `schema`,
+/// creating the schema first.
+///
+/// Free rather than a method, because two fixtures in this module need the same
+/// pool and the same isolation and differ only in **which migration** they then
+/// apply. Extracting it is what stops the second fixture from being a copy of
+/// the first with two lines changed — and a copy is how one of them would later
+/// acquire a pool size the other does not have.
+///
+/// # Panics
+///
+/// On any failure to reach or prepare the server. See the module docs: an
+/// environment failure must say so rather than surface as a conformance rule
+/// failing for a reason that has nothing to do with the adapter.
+async fn open_pool(schema_name: &str) -> PgPool {
+    let server = server().await;
+    let schema = schema_name.to_owned();
+
+    // Sized from `CONTENDERS` rather than from the literal 8. The concurrency
+    // family starts that many contenders, and a pool smaller than the number
+    // of simultaneous handles **deadlocks rather than failing** — CF-33 says
+    // there is no watchdog to tell the two apart, and the symptom is a CI
+    // timeout, which is the least diagnosable failure this fixture could
+    // ship. The headroom covers `SECOND_HANDLE`'s extra handle and any
+    // bookkeeping connection a rule opens beside its contenders.
+    let size = u32::try_from(CONTENDERS).expect("CONTENDERS fits in a u32") + 4;
+
+    let pool = PgPoolOptions::new()
+        .max_connections(size)
+        // Nothing is held open just in case. Around ninety fixture
+        // instances are constructed over one run of the event-store family,
+        // and a pool that keeps a floor of idle connections turns that into
+        // a server-side connection leak that only shows up near the end.
+        .min_connections(0)
+        .idle_timeout(Duration::from_secs(5))
+        // Finite and short. The default is thirty seconds, which turns the
+        // undersized-pool failure into four minutes of nothing and reads as
+        // a hang — the least diagnosable failure this fixture could ship
+        // (CF-33: there is no watchdog). Five seconds is far longer than a
+        // healthy checkout on loopback and short enough that the message
+        // below arrives while anyone is still watching.
+        .acquire_timeout(Duration::from_secs(5))
+        // Every connection in this pool, including ones created later to
+        // meet demand, must land in this instance's schema — so the
+        // `search_path` is set per connection rather than once after
+        // construction. A pool that sets it on the first connection only is
+        // a pool whose isolation quietly depends on how many rules ran.
+        .after_connect(move |connection, _meta| {
+            let schema = schema.clone();
+            Box::pin(async move {
+                connection
+                    .execute(format!(r#"SET search_path TO "{schema}""#).as_str())
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&server.admin_url())
+        .await
+        .unwrap_or_else(|error| {
+            panic!(
+                "a broken test environment, not a non-conformant adapter: could not open \
+                     a pool onto schema `{}` at {} ({error})",
+                schema_name,
+                server.admin_url(),
+            )
+        });
+
+    // `CREATE SCHEMA` is not run through the pool's own `after_connect` path —
+    // that sets a `search_path` pointing at a schema that does not exist yet,
+    // which Postgres tolerates — so the statement below names the schema
+    // explicitly rather than relying on it.
+    pool.execute(format!(r#"CREATE SCHEMA IF NOT EXISTS "{schema_name}""#).as_str())
+        .await
+        .unwrap_or_else(|error| {
+            panic!("a broken test environment: could not create schema `{schema_name}` ({error})")
+        });
+
+    pool
 }
 
 impl Fixture for PostgresFixture {
@@ -523,3 +543,202 @@ impl Fixture for PostgresFixture {
         // `connect()` open a genuinely new pool.
     }
 }
+
+// -------------------------------------------------------------------------
+// The projection fixture
+// -------------------------------------------------------------------------
+
+/// One isolated Postgres schema, and projection-store handles onto it.
+///
+/// Beside [`PostgresFixture`] rather than in `tests/projection.rs`, because both
+/// need the same container, the same schema-per-instance isolation and the same
+/// pool sizing — and a second copy of that is how the two would later disagree
+/// about `max_connections`. What differs is the migration each applies, which is
+/// the one thing [`open_pool`] deliberately does not do.
+///
+/// One instance is one backing store, which is CLAUDE.md's fixture rule and the
+/// premise `commit_rejects_a_foreign_batch` rests on: it opens the fixture
+/// **twice** and expects the two to be strangers.
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+#[derive(Debug)]
+pub(crate) struct PostgresProjectionFixture {
+    /// The schema this instance owns. Unique per instance per process.
+    schema: String,
+    /// This instance's one pool, built on first use. See [`PostgresFixture`]'s
+    /// field of the same name for why it is one pool and not one per `connect`.
+    pool: OnceCell<PgPool>,
+}
+
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+impl PostgresProjectionFixture {
+    /// Mints a fresh, empty schema name for this instance.
+    ///
+    /// Nothing reaches the server here, for the reason [`PostgresFixture::new`]
+    /// gives: the macro calls this in expression position.
+    ///
+    /// The prefix is `hsp_` rather than `hs_` so that the two fixtures cannot
+    /// collide on a developer's manually started server. They mint from separate
+    /// counters, so `hs_1234_1` would otherwise name two different schemas in one
+    /// process — and the symptom would be one fixture's rows appearing in the
+    /// other's isolation rule, which is the failure the process id is already
+    /// there to prevent between binaries.
+    pub(crate) fn new() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let ordinal = NEXT.fetch_add(1, Ordering::Relaxed);
+        Self {
+            schema: format!("hsp_{}_{ordinal}", std::process::id()),
+            pool: OnceCell::new(),
+        }
+    }
+
+    /// This instance's pool, for a test that needs to drive raw SQL against the
+    /// same schema its handles use.
+    pub(crate) async fn pool_for_test(&self) -> PgPool {
+        self.pool().await
+    }
+
+    /// The schema this instance owns.
+    pub(crate) fn schema(&self) -> &str {
+        &self.schema
+    }
+
+    async fn pool(&self) -> PgPool {
+        self.pool.get_or_init(|| self.build_pool()).await.clone()
+    }
+
+    /// Builds this instance's pool and applies the projection schema.
+    ///
+    /// Migration 2 **and** the probe table, in that order. The probe table is the
+    /// suite's own read model and is deliberately not a file in `migrations/`, so
+    /// the fixture is the thing that has to create it — which is also the check
+    /// that `PROBE_TABLE` stays applicable SQL rather than drifting into prose.
+    async fn build_pool(&self) -> PgPool {
+        let pool = open_pool(&self.schema).await;
+
+        migration::apply_projection(&pool)
+            .await
+            .unwrap_or_else(|error| {
+                panic!(
+                    "a broken test environment: migration 2 failed in schema `{}` ({error}). \
+                     A conformance rule that fails because `projection_checkpoint` is \
+                     missing is an environment failure wearing an adapter defect's clothes.",
+                    self.schema
+                )
+            });
+
+        pool.execute(happenstance_postgres::projection_store::PROBE_TABLE)
+            .await
+            .unwrap_or_else(|error| {
+                panic!(
+                    "a broken test environment: the probe table failed in schema `{}` ({error})",
+                    self.schema
+                )
+            });
+
+        pool
+    }
+}
+
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+impl happenstance_testkit::ProjectionFixture for PostgresProjectionFixture {
+    type Store = PostgresProjectionStore;
+
+    /// A MUST, and this adapter meets it for real. A second `connect` is a second
+    /// store over the same pool, and a `PgPool` hands out a different pooled
+    /// connection per statement — so two handles execute on **different backend
+    /// sessions**, which is exactly the per-session hazard this capability exists
+    /// to expose. It is not a refcount clone: the two stores carry distinct
+    /// stamps, so they are strangers to each other's batches and neighbours in
+    /// the same schema, which is the pair of properties the rules need.
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+
+    /// Declined, and the reason is the store's rather than the fixture's
+    /// convenience: `PostgresProjectionStore` holds **no protection policy**.
+    ///
+    /// PS-18 makes refusal a mechanism the port supplies and leaves *what to
+    /// protect* to the domain. This adapter owns the checkpoint row and the
+    /// transaction that carries it, and knows nothing about which projection a
+    /// regulator already holds a hash chain for, so `reset` returns
+    /// `ResetError::Refused` on no path at all and a fixture claiming the
+    /// capability would fail `refused_reset_changes_nothing` at its first
+    /// assertion.
+    ///
+    /// The same alternative loses here as it does for `happenstance-sqlite`, and
+    /// for the same reason: a protected-projections table invented so that one
+    /// more rule reports `Ran` would put a domain policy inside an adapter
+    /// designed to keep the domain out.
+    const RESET_REFUSAL: Capability = Capability::declined(
+        "PostgresProjectionStore holds no protection policy: the read model \
+         belongs to the caller and this adapter owns only the checkpoint row and \
+         the transaction that carries it, so there is no projection it could \
+         decline to reset and `reset` returns `Refused` on no path at all. The \
+         alternative — a protected-projections table invented here so that one \
+         more rule reports `Ran` — would put a domain policy into an adapter \
+         designed to keep the domain out",
+    );
+
+    /// Supported, and armed for real: a `BEFORE INSERT OR UPDATE` trigger on
+    /// `projection_checkpoint` raising an exception aborts the **checkpoint** half
+    /// of a commit whose read-model half has already run in the same transaction.
+    ///
+    /// That is the only way PS-1's second conjunct is observable at all — nothing
+    /// a caller holds can make a conformant `commit` fail — and it is the same
+    /// mechanism `PostgresFixture::arm_mid_batch_fault` uses one layer down.
+    const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+
+    /// One more store over this fixture's pool.
+    ///
+    /// A distinct instance rather than a clone, so it mints its own stamp: a
+    /// clone is the same store and would accept the other's batches, which would
+    /// make `commit_rejects_a_foreign_batch` pass for the wrong reason if the
+    /// suite ever narrowed to one fixture instance.
+    async fn connect(&self) -> Self::Store {
+        PostgresProjectionStore::new(self.pool().await)
+    }
+
+    /// Arms a trigger that aborts the checkpoint half of the next commit.
+    ///
+    /// Two objects rather than one, which is the whole difference from SQLite's
+    /// inline `RAISE(ABORT, …)`: Postgres has no inline trigger body, so this is a
+    /// `plpgsql` function and then a trigger that calls it. Both are created in
+    /// this instance's schema, because the pool's `search_path` points there.
+    ///
+    /// `CREATE OR REPLACE` for the function and `DROP … IF EXISTS` before the
+    /// trigger, because Postgres has no `CREATE TRIGGER IF NOT EXISTS` and a
+    /// fixture whose arming is not idempotent fails on its second call rather
+    /// than arming twice.
+    ///
+    /// `BEFORE INSERT OR UPDATE` covers both arms because the checkpoint write is
+    /// an upsert, so which one Postgres reaches depends on whether the projection
+    /// has committed before.
+    ///
+    /// It stays armed for the life of this fixture instance, which is honest
+    /// rather than convenient: the rule that arms it commits exactly once
+    /// afterwards, and every rule gets its own fixture, so "fires once" and
+    /// "fires from now on" are the same run.
+    async fn arm_commit_fault(&self) {
+        let pool = self.pool().await;
+        pool.execute(COMMIT_FAULT_TRIGGER)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("a broken test environment, not a non-conformant adapter: {error}")
+            });
+    }
+}
+
+/// The commit-fault injection, as SQL.
+///
+/// A constant so that the dollar-quoted `plpgsql` body sits on its own rather
+/// than inside a method: the body is the one piece of this file that is not Rust,
+/// and burying it in an `unwrap_or_else` chain is how it stops being readable as
+/// SQL.
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+const COMMIT_FAULT_TRIGGER: &str = concat!(
+    "CREATE OR REPLACE FUNCTION projection_commit_fault() RETURNS trigger AS ",
+    "$fault$ BEGIN RAISE EXCEPTION 'the fixture armed a commit fault'; END; $fault$ ",
+    "LANGUAGE plpgsql;\n",
+    "DROP TRIGGER IF EXISTS projection_commit_fault_trigger ON projection_checkpoint;\n",
+    "CREATE TRIGGER projection_commit_fault_trigger ",
+    "BEFORE INSERT OR UPDATE ON projection_checkpoint ",
+    "FOR EACH ROW EXECUTE FUNCTION projection_commit_fault();",
+);
