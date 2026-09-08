@@ -139,7 +139,7 @@ checkpoint until the runner has caught up, and `200` after.
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ on crates.io at `0.2.0`; passes the suite against a real file |
 | [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ on crates.io at `0.2.0`; passes the suite on `wasm32` — read the note below |
 | [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ both roles pass their suites against a live server; **not** in the `0.2.0` release set |
-| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | 🔲 stub, design notes only |
+| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ passes its suites against a live Neon endpoint, with one open clause question; **not** in the `0.2.0` release set |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
 | [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
 
@@ -148,7 +148,7 @@ that the adapter has run `happenstance-testkit` and cleared it, which is what
 this project means by an adapter existing at all. It is not a claim of production
 mileage: nothing here has run anywhere but a test.
 
-The three 🔲 rows are not placeholders in the empty sense: each carries the design
+The two 🔲 rows are not placeholders in the empty sense: each carries the design
 constraints and open decisions for its pass, so the next session starts from the
 real questions rather than rediscovering them.
 

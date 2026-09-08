@@ -33,10 +33,13 @@ crates/happenstance-testkit/     conformance suite. the bar every adapter must c
 crates/happenstance-sqlite/      the first adapter. event store + projection store.
 crates/happenstance-cloudflare/  the second adapter. the workspace's only !Send store. wasm32.
 crates/happenstance-ladybug/     🔩 skeleton. graph projection store only.
-crates/happenstance-postgres/    the store that does not serialise its writers. event store
-                                 real and conformant at phase 10; 🔩 projection store still
-                                 a skeleton.
-crates/happenstance-neon/        🔩 skeleton. Postgres over one-shot HTTP. host + wasm32.
+crates/happenstance-postgres/    the store that does not serialise its writers. both roles
+                                 real and conformant at phase 10b. publish = false, by the
+                                 five-crate release decision rather than by unreadiness.
+crates/happenstance-neon/        Postgres over one-shot HTTP: no connection, no interactive
+                                 transaction, no cursor. real and conformant at phase 10b
+                                 against a live endpoint — and the adapter that falsified
+                                 ES-11. host + wasm32. publish = false.
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example. in memory.
 examples/transfers-on-sqlite/    the same library on a real database — the typed layer's
@@ -97,18 +100,30 @@ RUNBOOK.md                       the plan of record, and how far it has got.
 false`, and a scoped `#![allow(clippy::todo)]` naming the phase that removes it.
 A skeleton exists to be disagreed with by a type checker — it is an *instrument*
 first and a target second, and it is not an adapter until it has run the
-conformance suite. **Two have stopped being skeletons**: `happenstance-sqlite` at
-phase 8 and `happenstance-cloudflare` at phase 9, and both are published.
+conformance suite. **Four have stopped being skeletons**: `happenstance-sqlite`
+at phase 8, `happenstance-cloudflare` at phase 9, and `happenstance-postgres` and
+`happenstance-neon` at phase 10b. The first two are published; the second two are
+**not**, and that is the five-crate release decision rather than a judgement about
+readiness — a `publish = false` saying "not in this release" and one saying "not
+finished" look identical in a manifest, so each of those two says which in its own
+crate root.
 
-`happenstance-postgres` is the **half case**, and the marker is split rather than
-dropped. Its *event store* has run the suite — 101 of 101 against a live
-PostgreSQL 17.10, including the concurrency family at 64 contenders — so by the
-rule above it is an adapter, and the arm it buys ES-10 with is recorded in
-ADR-0024 rather than still open. Its *projection store* is untouched `todo!()`,
-which is what the crate's remaining `#![allow(clippy::todo)]` now covers, and
-`publish = false` stands until `deskeleton-and-package-readiness` removes it. The
-**three** that carry the marker whole — ladybug, neon, sync — have run nothing,
-and the marker is the claim.
+`happenstance-postgres` was the **half case** and is no longer one. Its event
+store ran 101 of 101 against a live PostgreSQL 17.10 including the concurrency
+family at 64 contenders, and ADR-0024 records the arm it buys ES-10 with; its
+projection store now clears the projection suite, and it is the first projection
+adapter over storage this workspace does not control to do so. Both crates'
+`#![allow(clippy::todo)]` left with their last stub, which is the contract those
+allows were written under.
+
+**Two carry the marker whole — `happenstance-ladybug` and `happenstance-sync` —
+and for one of them the marker is already half spent.** Ladybug's decision record
+is written first, as the phase-11 protocol requires (ADR-0025), and its driver is
+measured (`experiments/ladybug-driver-probes/`); what it has not done is run the
+suite, which is the line between an instrument and an adapter. Read its crate root
+rather than this paragraph — a count in a file that loads on every task is a count
+nobody re-reads, which this file already says one section down and has now been
+wrong about twice.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.
