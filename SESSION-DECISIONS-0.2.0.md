@@ -351,6 +351,25 @@ clears the projection suite."* `PostgresProjectionStore` is that adapter, it has
 cleared the suite, and it **declines** `RESET_REFUSAL`. The count is one adapter
 and it did not implement protection.
 
+**Both acceptances ratified at review**, which matters because *"accepted in
+writing as a possible breaking 0.2"* is a promise about what the owner will
+tolerate breaking, and the lane wrote it without asking.
+
+ES-39 was ratified **with a number in front of it that had changed since the
+disposition was written**: the seven-crate decision means the release publishes
+four adapters implementing `EventStore` — sqlite, cloudflare, postgres and neon —
+where five crates published two. A required method at phase 14 breaks all four
+plus any implementer outside this workspace. The alternatives offered were
+constraining phase 14 to an additive resolution up front, or deferring the
+acceptance itself and leaving the criterion formally unmet on one clause; the
+breaking risk was taken knowingly.
+
+CF-14 was ratified on the narrower ground that **CF-32 already carries this
+case** — the testkit has its own version number precisely because a conformance
+change is minor-in-semver and breaking-in-practice — so the acceptance makes no
+new promise. The rejected alternative was a warning paragraph in the testkit's
+README; declined, because the mechanism that would carry it already exists.
+
 ### D-07 — the `READ_FAULT` injection is not either of the two the fixture named
 
 `PostgresFixture`'s declension named `pg_terminate_backend` between two `FETCH`es,

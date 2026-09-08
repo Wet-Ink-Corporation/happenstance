@@ -5270,12 +5270,20 @@ demonstrably reports something.
         version first, so phase 13 can change it without a wire break. Re-confirmed:
         nothing outside this workspace parses it, and the moment something does,
         this stops being true.
-      - **ES-39** — *accepted in writing as a possible breaking 0.2.* A store
-        reporting history it does not hold needs a port surface to report it
-        through, and adding a method to `EventStore` is breaking for every
-        implementer. It is phase 14's, it is not additively resolvable, and this
-        sentence is the acceptance the criterion asks for rather than a promise it
-        will turn out to be free.
+      - **ES-39** — *accepted in writing as a possible breaking 0.2*, **and
+        ratified by the owner at the release review** rather than asserted by the
+        lane that wrote it. A store reporting history it does not hold needs a
+        port surface to report it through, and adding a method to `EventStore` is
+        breaking for every implementer. It is phase 14's, it is not additively
+        resolvable, and this sentence is the acceptance the criterion asks for
+        rather than a promise it will turn out to be free.
+
+        **The seven-crate decision raised the price of this one**, and it is
+        recorded rather than left implicit: the release publishes **four**
+        adapters implementing `EventStore` — sqlite, cloudflare, postgres and
+        neon — where the five-crate set published two. A required method added at
+        phase 14 breaks all four, plus any implementer outside this workspace.
+        The acceptance was ratified with that number in front of it.
       - **PS-18, PS-27, PS-30** — behind `unstable-projection`, which is
         off by default and carries a written semver exemption (PS-3, decided here).
         That is the same escape the provisional criterion offers one line up, and
@@ -5293,7 +5301,10 @@ demonstrably reports something.
         mechanism stays; what it still lacks is a caller, which is what the
         deferral says.
       - **CF-14, CF-27** — *accepted in writing as a possible breaking 0.2*, and
-        they are the cheapest of the seven. Both oblige **this workspace's own
+        **ratified at the release review** on the ground that CF-32 already
+        carries this case: the testkit has its own version number precisely
+        because a conformance change is minor-in-semver and breaking-in-practice,
+        so no new promise is being made here. They are the cheapest of the seven. Both oblige **this workspace's own
         instruments** rather than a signature a consumer binds against: CF-14
         defers whether `REOPEN` can be honoured with one shape or whether
         "durable" needs grading, and CF-27 defers building the suffix-store
