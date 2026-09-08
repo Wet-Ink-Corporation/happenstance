@@ -277,6 +277,33 @@ as the end of the log.
 
 ---
 
+### D-08 — the ADR number for Ladybug is 0025, and this session got that wrong first
+
+**Recorded because the error was mine and the correction came from a check I did
+not do.** I read `ls .kb/decisions/` as "0001–0059 all taken, so the next free
+number is 0060", and wrote that into the plan. It is false: the two directories
+together hold **0001–0024 and 0029–0059**, and **0025, 0026, 0027 and 0028 are
+free** — reserved by `RUNBOOK.md`'s ADR queue for phases 11, 13, 13 and 14
+respectively, and left empty because those phases have not run.
+
+The scan that produced the wrong answer had a real bug in it — it zero-padded an
+already-padded loop variable, so every number came back "missing" and I took the
+`ls` output instead without diffing the two. The lesson is the ordinary one: a
+gap in a sequence is invisible to a listing and obvious to a diff.
+
+**Consequence.** Phase 11's record is **ADR-0025**, which is what
+`RUNBOOK.md:392`, `:585`, `:4802` and `:4810` all already say. Taking 0060 would
+have orphaned four rows of a queue whose entire purpose is that a number is
+allocated before the question is answered. Filling a reserved slot late is this
+repository's own established move: `references/adr/0024` was written a month
+after `0029`.
+
+Everything else this session numbered — nothing — is unaffected; the two
+knowledge-base documents it produced are **briefs**, which carry no ADR number by
+construction.
+
+---
+
 ## Left for the owner
 
 1. **A UAC dialog is open on the desktop.** `winget install
