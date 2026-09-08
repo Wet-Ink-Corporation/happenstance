@@ -810,8 +810,10 @@ rather than left to be re-derived.
 | D-05 | Ratified, with an accidental asymmetry corrected: the ledger lint now requires an owner on both tables. |
 | D-06 | Both acceptances ratified — ES-39 with a price that had changed underneath it. |
 | D-07, D-08, D-09 | Stand as recorded. Ladybug **frozen** until `lbug` stabilises; the three upstream defects recorded locally and deliberately not filed. |
+| D-10 | **Reviewed 2026-09-08 and closed.** ADR-0061 written; the release set does not move; `SERIALISATION_ATTEMPTS` stays at 8 with its cost stated. One fact in the finding was wrong and one was soft — both corrected below. |
+| D-11 | **Reviewed and deferred**, on the freeze. It is a question for whoever unfreezes `lbug`, not for this release. |
 
-### D-10, unreviewed — and one fact moved under it
+### D-10 — reviewed 2026-09-08, and one fact had moved under it
 
 **The release set going to seven changed what this decision is about.**
 `happenstance-neon` was unpublished when D-10 was written. It now **ships at
@@ -847,7 +849,7 @@ Three questions were queued and not asked:
    value on a four-runs-per-value measurement. Defensible, and a reader could
    reasonably want three or five.
 
-### D-11, unreviewed
+### D-11 — reviewed 2026-09-08
 
 One real question: **Ladybug's `COMMIT_FAULT` injection faults the *first* batch
 statement**, so unlike SQLite's checkpoint-side trigger it does not refute the
@@ -856,3 +858,109 @@ checkpoint, keep the rows. That is a property of the schema rather than the
 adapter, and both near-misses are written into the fixture with their measured
 errors. It is now **frozen along with the rest of the effort**, so it is a
 question for whenever `lbug` stabilises rather than one for this release.
+
+---
+
+## The walkthrough's outcomes — D-10 and D-11, 2026-09-08
+
+The three questions above were put to the owner with the evidence checked first.
+All three recommendations were taken, and two claims the finding rested on did not
+survive being checked.
+
+### D-10.1 — ES-11's ADR: **ADR-0061, and it takes a fourth reading of option 1**
+
+**The distinction from the retracted escalation holds, and by a stronger argument
+than the brief made.** The brief argued it: the retracted claim was *no async
+driver can conform*, this one is *a driver with no shared queue between its
+operations cannot*, and the refutation of the first does not touch the second.
+What settles it is not the argument but a fact neither the brief nor the marker
+foregrounded — **`happenstance-neon` already does the thing that refuted the old
+claim.** `crates/happenstance-neon/tests/support/transport.rs:22-24` spawns at call
+time rather than holding an inline future, `:40-46` quotes ES-11's own sufficiency
+sentence back at it, and `:83-102` records that the Postgres-shaped
+`Handle::try_current()` capture is what it shipped *first* and why that specific
+shape fails here. The remedy from the retraction has been applied and the failure
+survives it, which makes this the residual rather than the old claim restated.
+
+**The chosen way out was none of the three as written.** Option 1 was *amend ES-11
+to name one-shot HTTP as a shape its sufficiency condition does not cover* — a
+scope narrowing, which is the weakening the clause's own text warns against at
+`spec/SPECIFICATION.md` thirteen lines below the sentence at issue. What ADR-0061
+does instead is **correct a sentence that is simply false**:
+
+> A read spawned at its first poll and an append spawned afterwards land in the
+> same queue in that order
+
+That is a fact about *pooled* drivers presented as the general conformance path for
+asynchronous ones. Correcting it to require an ordering primitive the **store**
+honours — not merely the client — **narrows the sufficiency condition**: it removes
+spawn order alone as a route to a conformance claim. Nothing an adapter must do
+gets easier, which is why it is not the widening the clause fears. Option 2's
+stated limitation is taken alongside it; option 3 is refused in the ADR, on the
+ground that a `Capability` says what a fixture can *arm* and not whether a store
+provides a guarantee, so a skip would print "skipped" where the truth is "does not
+conform".
+
+**Two corrections to the finding, both found while checking it.**
+
+*The CI cost is not "red about 1 run in 40". It is zero.* `NEON_CONNECTION` is
+**not a repository secret**: `gh secret list` on `Wet-Ink-Corporation/happenstance`
+returns nothing at exit 0, `actions/secrets` reports `total_count: 0`, there are no
+environments, and the only organisation secret visible to the repository is
+`REDKILN_TOKEN`. Every step of `live-neon` is gated on it, so the job prints its own
+*"proves NOTHING"* notice and stops. The decision to keep it strict is unchanged and
+is now free; it should be re-read on the day someone adds the secret, not before.
+
+*"104 of 105" has a soft edge.* `query_items_share_one_snapshot` passes, and ES-12's
+own predicted defect — one statement per `QueryItem` — is unreachable on an adapter
+that issues one statement per `read`. But that rule **appends after the first poll
+and asserts the drained set is unchanged** (`crates/happenstance-testkit/src/suite.rs:6150`,
+`:6164-6167`), which is structurally identical to ES-11's rule at `:6062-6065`. Sixty
+measured runs at the sibling rule's observed rate separate luck from immunity poorly.
+The honest figure is **104 of 105 observed**, and the ADR says so rather than
+rounding it to a clean claim.
+
+**And the falsifier's arrival had quietly falsified four passages of prose**, none
+of which any gate could catch, because `spec-trace` checks that citations resolve
+and not that they are still true. §6.5's Transport row still called Neon a phase-2
+skeleton and "not a far end"; its Position allocation row said the same of Postgres,
+real since phase 10b; §3's `EventStore` cell said transport was "empty at both
+ends"; and ES-11's `Rejects:` bullet still ended *"It is conformant today"* —
+written 2026-08-06 at `12ecb1a` and untouched through the two phases in which that
+adapter was built and shipped. All four are repaired in ADR-0061's commit. **The
+transferable lesson is the one worth keeping: a falsifier firing invalidates prose
+that names its axis, and nothing mechanical goes looking.**
+
+### D-10.2 — a published crate shipping a known failing rule: **it ships**
+
+`[PROVISIONAL]` means precisely *a clause a published crate may fail to satisfy
+while the question it holds is open*, and this is the clause whose own marker named
+this adapter as its falsifier. Nothing is concealed: the README leads with *"The one
+rule this adapter does not pass"* and the measurements, and the gated tests carry
+`#[ignore]` with a reason naming the requirement
+(`crates/happenstance-neon/tests/neon_conformance.rs:79`), so a consumer's
+`cargo test` never runs them and never silently skips them — they list under
+`-- --ignored --list`. The release set stays at **seven**, as decided at D-04.
+
+### D-10.3 — `SERIALISATION_ATTEMPTS = 8`: **kept, with the other half of the ledger**
+
+The measurement justifies the margin and the doc block already carries it. Its gap
+was on the cost side: it said the number *"costs nothing when it is not needed"* and
+never said what it costs when it is. **There is no sleep between attempts, so the
+budget is up to eight serial round trips before a `40001` surfaces** — the one path
+in this store where one `append` spends eight network latencies. Now stated, with
+who pays it (the disjoint-boundary case, where the relation-wide predicate lock puts
+a retry back into the same fight) and with the escape named: `ConditionViolated` and
+`Sql(40001)` are distinct outcomes, so a caller may put its own policy above this one.
+
+### D-11 — deferred to whenever `lbug` stabilises
+
+Confirmed with the owner rather than assumed. Ladybug is frozen, `publish = false`,
+and **cannot** publish while `lbug`'s build script breaks the docs.rs build. Both
+near-misses are already written into the fixture with their measured errors, so
+nothing is lost by waiting and the question is re-read with the schema in front of
+whoever unfreezes it.
+
+---
+
+**The decision review is complete.** O-4 and D-01 through D-11 are closed.
