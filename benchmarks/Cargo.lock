@@ -323,7 +323,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "ciborium",
  "futures-core",
@@ -358,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-core"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "futures-core",
@@ -369,7 +369,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-sqlite"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -380,7 +380,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-testkit"
-version = "0.2.0-alpha.1"
+version = "0.2.0"
 dependencies = [
  "futures-core",
  "happenstance-core",

@@ -369,7 +369,9 @@ fn retry_cost(criterion: &mut Criterion) {
                             Ok::<_, NeverRefuses>(vec![Recorded::new(ACCOUNT, 1, 64)])
                         })
                         .await
-                        .expect("the command lands on its second attempt");
+                        .expect("the command lands on its second attempt")
+                        .committed()
+                        .expect("the decision emits one event, so the command commits");
                     total += started.elapsed();
 
                     assert_eq!(

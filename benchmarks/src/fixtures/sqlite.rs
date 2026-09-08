@@ -209,6 +209,19 @@ impl Fixture for SqliteFixture {
          already answers with a real AFTER INSERT trigger",
     );
 
+    /// Declined by scope too, and for the same reason one path over.
+    ///
+    /// It is the adapter's own answer — `SqliteEventStore` reads through one
+    /// `rusqlite` statement held open across polls over a local file, so there
+    /// is no fetch between two pages to fail — carried here because this
+    /// fixture wraps that same store. What is *this* fixture's own is the
+    /// second half: even where an injection existed, arming it in a harness
+    /// whose output is a table of timings would put a correctness claim into a
+    /// measurement run.
+    const READ_FAULT: Capability = Capability::declined(
+        "by scope, and by the adapter's shape: SqliteEventStore reads through          one statement held open across polls over a local file, so there is no          fetch between two pages to fail; and a fault path armed inside a          measurement harness would report a correctness result in a table of          timings",
+    );
+
     /// Mirrored from the adapter's own constant rather than restated.
     const MAX_EVENT_DATA_LEN: Option<usize> = Some(SqliteEventStore::MAX_EVENT_DATA_LEN);
 
