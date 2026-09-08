@@ -382,6 +382,18 @@ impl happenstance_testkit::Fixture for LocalFixture {
          durable medium to reopen over",
     );
 
+    // `MemoryFixture`'s two answers, one flavour over. `Rc<RefCell<Vec<_>>>`
+    // and `Arc<RwLock<Vec<_>>>` differ in what they cost to share across a
+    // thread and in nothing a fault could be injected into: one borrow, one
+    // extend, no interior for a fault to fire inside.
+    const MID_BATCH_FAULT: Capability = Capability::declined(
+        "LocalMemoryEventStore appends by extending one Vec through one          RefCell borrow, so there is no moment between two rows of a batch at          which a fault could fire",
+    );
+
+    const READ_FAULT: Capability = Capability::declined(
+        "LocalMemoryEventStore reads by iterating a Vec it already holds, so          there is no fetch part way through a read to fail; injecting one means          wrapping the store, which is what FaultyStore is for",
+    );
+
     // Spelled `async fn` deliberately, where the trait declares
     // `-> impl Future`. They are the same signature after desugaring, and the
     // `async_fn_in_trait` lint fires only on a public trait's *declaration* —

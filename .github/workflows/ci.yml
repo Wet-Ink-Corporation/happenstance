@@ -395,9 +395,18 @@ jobs:
           count=$(grep -c ': test$' gated.txt)
           echo "gated tests: $count"
           # 89 event-store rules + 5 concurrency + 1 model + this crate's own 6
-          # = 101. A run that finds materially fewer has lost an INVOCATION
-          # rather than a test, which is how the first draft of this job shipped
-          # with two families silently unmounted and a count that looked right.
+          # + CF-18's `every_declined_capability_is_stated_by_this_fixture`,
+          # which `event_store_conformance!` emits once per mounted suite and
+          # which is not a rule = 102. A run that finds materially fewer has
+          # lost an INVOCATION rather than a test, which is how the first draft
+          # of this job shipped with two families silently unmounted and a count
+          # that looked right.
+          #
+          # The threshold stays a floor rather than becoming an equality, and
+          # deliberately: an equality fails on the commit that *adds* a rule,
+          # which trains whoever adds one to edit this number without reading
+          # what it is for. The floor only fires when a whole family stops being
+          # mounted, which is the defect it was written for.
           if [ "$count" -lt 100 ]; then
             echo "::error::only $count gated tests are present; an invocation is missing"
             exit 1

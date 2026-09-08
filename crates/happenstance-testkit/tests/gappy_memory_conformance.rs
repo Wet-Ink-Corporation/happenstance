@@ -86,6 +86,17 @@ impl Fixture for GappyFixture {
          from discarding the events",
     );
 
+    // The same two answers `MemoryFixture` gives, and for the same reason: this
+    // store differs from that one only in how it *numbers* what it holds, and
+    // sparse positions change nothing about where a fault could fire.
+    const MID_BATCH_FAULT: Capability = Capability::declined(
+        "GappyMemoryStore appends by extending one Vec under one write lock, so          there is no moment between two rows of a batch at which a fault could          fire; only the positions it assigns are unlike MemoryEventStore's",
+    );
+
+    const READ_FAULT: Capability = Capability::declined(
+        "GappyMemoryStore reads by iterating a Vec it already holds, so there is          no fetch part way through a read to fail; injecting one means wrapping          the store, which is what FaultyStore is for",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         core::future::ready(GappyHandle(Arc::clone(&self.0)))
     }

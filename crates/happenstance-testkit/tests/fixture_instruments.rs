@@ -180,6 +180,18 @@ impl Fixture for DurableFixture {
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
     const REOPEN: Capability = Capability::SUPPORTED;
 
+    // This fixture exists to make `REOPEN` execute, and it declines the two
+    // fault capabilities for the same reason `MemoryFixture` does — it is a
+    // `MemoryEventStore` with a committed log beside it, and the log changes
+    // what survives a reopen, not where a fault could fire.
+    const MID_BATCH_FAULT: Capability = Capability::declined(
+        "DurableFixture is a MemoryEventStore with a replay log beside it;          append still extends one Vec under one lock, so there is no moment          between two rows of a batch at which a fault could fire",
+    );
+
+    const READ_FAULT: Capability = Capability::declined(
+        "DurableFixture reads through the live MemoryEventStore, which iterates          a Vec it already holds, so there is no fetch part way through a read          to fail",
+    );
+
     async fn connect(&self) -> Self::Store {
         DurableHandle {
             live: Arc::clone(&self.live.lock().unwrap()),

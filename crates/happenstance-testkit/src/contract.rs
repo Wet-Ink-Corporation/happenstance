@@ -274,11 +274,7 @@ pub trait Fixture {
     /// which every fixture must answer deliberately — because an in-memory store
     /// has no fault to inject and demanding an answer would buy one more line of
     /// boilerplate per fixture and no information.
-    const MID_BATCH_FAULT: Capability = Capability::declined(
-        "this fixture cannot make its store fail between two rows of one batch; \
-         nothing in the port can reach inside an `append`, so the injection has \
-         to come from the adapter and this one has none to offer",
-    );
+    const MID_BATCH_FAULT: Capability = Capability::declined(UNSTATED_MID_BATCH_FAULT);
 
     /// Whether this fixture can make its store **fail part way through a
     /// `read`**.
@@ -323,11 +319,7 @@ pub trait Fixture {
     /// that can absorb every read fault its fixture is able to arm MUST decline
     /// this capability with that as its stated reason**, rather than declare it
     /// and contribute a full, successful read.
-    const READ_FAULT: Capability = Capability::declined(
-        "this fixture cannot make its store fail part way through a `read`; the \
-         failure lives inside the adapter's own fetch, so the injection has to \
-         come from the adapter and this one has none to offer",
-    );
+    const READ_FAULT: Capability = Capability::declined(UNSTATED_READ_FAULT);
 
     /// The largest `data` payload this fixture's store accepts, in bytes, or
     /// `None` if it has no ceiling.
@@ -737,13 +729,7 @@ pub trait ProjectionFixture {
     /// is *rejected* by
     /// [`commit_advances_the_checkpoint`](crate::projection::rules::commit_advances_the_checkpoint)
     /// rather than skipped by it.
-    const SECOND_HANDLE: Capability = Capability::declined(
-        "this fixture has not said whether it can open a second, independent \
-         handle onto its projection store, and the default answer to an \
-         unanswered MUST is no: every rule in this family reads the read model \
-         and the checkpoint back through a fresh handle, so a fixture that \
-         cannot open one cannot observe PS-1 at all",
-    );
+    const SECOND_HANDLE: Capability = Capability::declined(UNSTATED_PROJECTION_SECOND_HANDLE);
 
     /// Whether this fixture's store can be made to **refuse** a reset for a
     /// projection it protects.
@@ -811,12 +797,7 @@ pub trait ProjectionFixture {
     /// CF-39 was written for one port over. Minting that clause is the
     /// specification owner's act and is not taken here; it is recorded in
     /// `.kb/_intake/remediation-2026-09-04-briefs/projection-declension-obligations.md`.
-    const RESET_REFUSAL: Capability = Capability::declined(
-        "this fixture has not said whether its store can refuse a reset; PS-18 \
-         leaves what to protect to the domain, so a store with no protection \
-         policy has nothing to refuse and this is that answer given by default \
-         rather than by its author",
-    );
+    const RESET_REFUSAL: Capability = Capability::declined(UNSTATED_RESET_REFUSAL);
 
     /// Whether this fixture can make a `commit` **report failure**.
     ///
@@ -862,12 +843,7 @@ pub trait ProjectionFixture {
     /// absorb every fault its fixture is able to arm MUST **decline** this
     /// capability with that as its stated reason, rather than declare it and
     /// contribute an `Ok`.
-    const COMMIT_FAULT: Capability = Capability::declined(
-        "this fixture has not said whether it can make a commit report failure; \
-         nothing a caller holds can make a conformant `commit` fail, so the \
-         injection has to come from the adapter and this fixture has offered \
-         none",
-    );
+    const COMMIT_FAULT: Capability = Capability::declined(UNSTATED_COMMIT_FAULT);
 
     /// Arms the store so that the **next** `commit` fails.
     ///
@@ -1105,6 +1081,44 @@ pub const NO_CEILING_REASON: &str = "this fixture states no ceiling for any stor
      refusal for a rule to observe; a store with no ceiling is reporting a fact \
      about itself rather than declining to co-operate";
 
+// ---------------------------------------------------------------------------
+// The declensions a fixture inherits by saying nothing
+// ---------------------------------------------------------------------------
+//
+// Five capabilities default to a declension, and the reason each carries is
+// THIS CRATE'S prose. That is what makes them different in kind from every
+// other declined capability, and the difference is the one `NO_CEILING_REASON`
+// above already names: a declined capability's reason is the adapter's account
+// of a trade it made and only the adapter can write it.
+//
+// A fixture that says nothing therefore prints the testkit's words as though
+// they were its own account of its own store. Naming them here is what lets a
+// rule tell the two apart, which is what `assert_declensions_are_stated` does
+// and what CF-18's `Rejects:` paragraph has always asked for.
+//
+// These are `pub` on purpose: an adapter author who wants to know exactly what
+// their silence says can read it, and a fixture that deliberately agrees with
+// one can name it rather than paraphrase it into something that only looks
+// different.
+
+/// What [`Fixture::MID_BATCH_FAULT`] says when a fixture does not.
+pub const UNSTATED_MID_BATCH_FAULT: &str = "this fixture cannot make its store fail between two rows of one batch;      nothing in the port can reach inside an `append`, so the injection has to      come from the adapter and this one has none to offer";
+
+/// What [`Fixture::READ_FAULT`] says when a fixture does not.
+pub const UNSTATED_READ_FAULT: &str = "this fixture cannot make its store fail part way through a `read`; the      failure lives inside the adapter's own fetch, so the injection has to come      from the adapter and this one has none to offer";
+
+/// What [`ProjectionFixture::SECOND_HANDLE`] says when a fixture does not.
+///
+/// The only one of the five that defaults a **MUST**, which is why the rules
+/// reject rather than skip on it: an unanswered MUST is answered `no`.
+pub const UNSTATED_PROJECTION_SECOND_HANDLE: &str = "this fixture has not said whether it can open a second, independent handle      onto its projection store, and the default answer to an unanswered MUST is      no: every rule in this family reads the read model and the checkpoint back      through a fresh handle, so a fixture that cannot open one cannot observe      PS-1 at all";
+
+/// What [`ProjectionFixture::RESET_REFUSAL`] says when a fixture does not.
+pub const UNSTATED_RESET_REFUSAL: &str = "this fixture has not said whether its store can refuse a reset; PS-18      leaves what to protect to the domain, so a store with no protection policy      has nothing to refuse and this is that answer given by default rather than      by its author";
+
+/// What [`ProjectionFixture::COMMIT_FAULT`] says when a fixture does not.
+pub const UNSTATED_COMMIT_FAULT: &str = "this fixture has not said whether it can make a commit report failure;      nothing a caller holds can make a conformant `commit` fail, so the      injection has to come from the adapter and this fixture has offered none";
+
 /// What a conformance rule did.
 ///
 /// There is no `Failed` variant, and its absence is deliberate: a failing rule
@@ -1195,4 +1209,132 @@ impl RuleOutcome {
             println!("{line}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// CF-18's machine-checked half, emitted into the adapter's own test binary
+// ---------------------------------------------------------------------------
+
+/// Panics unless every capability `F` declines carries `F`'s own reason.
+///
+/// # What CF-18 asks for, and what libtest could not give it
+///
+/// CF-18 requires a rule whose capability requirement is unmet to be emitted as
+/// a test that **reports** the skip with the fixture's stated reason, and its
+/// `Rejects:` paragraph turns on that landing *"in the adapter's CI log where a
+/// reviewer and a user of the adapter can both see it."*
+///
+/// A skipped rule is a test that **passes**, and libtest discards a passing
+/// test's stdout. So [`RuleOutcome::report`] writes into a void unless somebody
+/// passes `--show-output`, which exactly one CI in the world does — this
+/// repository's. The named victim was never the adapter author: it is the
+/// person who chose an adapter on the strength of a README saying it passes the
+/// happenstance conformance suite, over a fixture that legally declined
+/// [`REOPEN`](Fixture::REOPEN) and [`MID_BATCH_FAULT`](Fixture::MID_BATCH_FAULT),
+/// and who finds out when an acknowledged write is not there after a restart.
+///
+/// # What this asserts, which is not what the brief first proposed
+///
+/// The obvious reading — *fail if a capability is declined without a stated
+/// reason* — describes a state that **cannot be constructed**.
+/// [`Capability::declined`] refuses an empty reason, and
+/// [`SUPPORTED`](Capability::SUPPORTED) *is* the absence of one, so declining
+/// and carrying a reason are the same act. A check written that way would pass
+/// on every fixture that will ever exist, which is the decorative rule this
+/// repository's own operating notes warn about, arriving from the direction
+/// nobody watches.
+///
+/// The gap that is real is **declension by inheritance**. Five capabilities
+/// default to a declension whose words are *this crate's*, so a fixture that
+/// says nothing prints the testkit's prose as though it were its own account of
+/// its own store — which is precisely the misrepresentation CF-18 exists to
+/// prevent, one level in from where it was looking. That is what this rejects,
+/// by comparing each constant against the `UNSTATED_*` value it would inherit.
+///
+/// # Its own limits, stated rather than discovered
+///
+/// **It cannot see a reason that is merely bad.** A fixture that writes
+/// `"n/a"` passes. Nothing mechanical can tell a considered account from a
+/// plausible one, and a check that tried would be a style gate wearing a
+/// conformance rule's clothes.
+///
+/// **It is emitted by the suite macro, not by the emitter**, so it runs once
+/// per mounted suite rather than once per rule. That is deliberate: CF-23 makes
+/// the emitter the *caller's*, and putting this in the emitters would let a
+/// third-party emitter drop it silently — the same incentive inversion CF-18
+/// exists to close.
+///
+/// # Errors
+///
+/// Panics, which is how a rule fails here — see [`RuleOutcome`] for why there
+/// is no `Failed` variant.
+///
+/// # Panics
+///
+/// If any capability `F` declines carries the reason it would have inherited by
+/// saying nothing.
+pub fn assert_declensions_are_stated<F: Fixture>(_opener: impl AsyncFn() -> F) {
+    inherited(&[
+        (
+            "MID_BATCH_FAULT",
+            F::MID_BATCH_FAULT,
+            UNSTATED_MID_BATCH_FAULT,
+        ),
+        ("READ_FAULT", F::READ_FAULT, UNSTATED_READ_FAULT),
+    ]);
+}
+
+/// [`assert_declensions_are_stated`]'s sibling for the projection port.
+///
+/// Three capabilities rather than two, and one of them —
+/// [`SECOND_HANDLE`](ProjectionFixture::SECOND_HANDLE) — defaults a **MUST**,
+/// so a fixture that inherits it is not merely silent about a trade: it is
+/// silently failing every rule in the family for a reason it did not write.
+///
+/// # Panics
+///
+/// If any capability `F` declines carries the reason it would have inherited by
+/// saying nothing.
+pub fn assert_projection_declensions_are_stated<F: ProjectionFixture>(
+    _opener: impl AsyncFn() -> F,
+) {
+    inherited(&[
+        (
+            "SECOND_HANDLE",
+            F::SECOND_HANDLE,
+            UNSTATED_PROJECTION_SECOND_HANDLE,
+        ),
+        ("RESET_REFUSAL", F::RESET_REFUSAL, UNSTATED_RESET_REFUSAL),
+        ("COMMIT_FAULT", F::COMMIT_FAULT, UNSTATED_COMMIT_FAULT),
+    ]);
+}
+
+/// Panics naming every capability whose reason is the one it would inherit.
+///
+/// All of them in one message rather than the first: a fixture that inherited
+/// one declension has usually inherited the others, and reporting them one
+/// build at a time turns a single edit into three red runs.
+fn inherited(declared: &[(&str, Capability, &'static str)]) {
+    let unstated: Vec<&str> = declared
+        .iter()
+        .filter(|(_, capability, default)| capability.reason() == Some(*default))
+        .map(|(name, _, _)| *name)
+        .collect();
+
+    assert!(
+        unstated.is_empty(),
+        "this fixture declines {} without saying why: the reason printed on \
+         every run is the testkit's own words, not this adapter's account of \
+         this store.\n\nCF-18 requires a declined capability to carry the \
+         fixture's *stated* reason, because that reason is the only record of \
+         the trade — a user who chose this adapter on a README saying it passes \
+         the conformance suite has no other way to learn what it declined. A \
+         default written by the suite cannot be that record: it says the same \
+         thing about every store, including the ones for which it is false.\n\n\
+         Write the constant on your `impl`, with the reason this store cannot \
+         co-operate. If the inherited wording is exactly right, name the \
+         `UNSTATED_*` constant rather than paraphrasing it — that is a \
+         deliberate agreement rather than a silence, and it says so.",
+        unstated.join(", ")
+    );
 }

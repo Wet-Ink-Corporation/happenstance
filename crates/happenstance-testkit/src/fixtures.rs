@@ -285,9 +285,27 @@ impl Fixture for MemoryFixture {
          from discarding the events",
     );
 
-    // Stated rather than inherited, because the reference fixture is the one an
-    // adapter author copies and a capability nobody mentions is a capability
-    // nobody thinks about. The reason is the real one and it is REOPEN's shape:
+    // Stated, and the sibling below is the reason this one had to become an
+    // enforced rule rather than a convention. The comment under `READ_FAULT`
+    // makes exactly the argument CF-18's check now makes — "the reference
+    // fixture is the one an adapter author copies and a capability nobody
+    // mentions is a capability nobody thinks about" — and this constant, three
+    // lines above it, was inherited anyway until `0.2.0`. The author knew the
+    // principle, applied it to one of the two, and nothing in the tree noticed
+    // for two phases. A rule everybody agrees with and nothing checks is a
+    // rule that holds until the second time somebody is busy.
+    //
+    // The reason is the store's own: `append` extends one `Vec` while holding
+    // one write lock, so there is no moment between two rows of a batch for a
+    // fault to fire in. That is a stronger statement than the inherited
+    // default's "the injection has to come from the adapter" — this store has
+    // no *interior* to inject into, which is why `FaultyStore` wraps it from
+    // outside rather than reaching in.
+    const MID_BATCH_FAULT: Capability = Capability::declined(
+        "MemoryEventStore appends by extending one Vec under one write lock, so          there is no moment between two rows of a batch at which a fault could          fire; a wrapper can fail the whole call and nothing can fail it part          way through",
+    );
+
+    // The reason is the real one and it is REOPEN's shape:
     // this store reads by iterating a `Vec` it already holds, so there is no
     // fetch part way through to fail. Injecting one means *wrapping* the store,
     // which is what `FaultyStore` is for — and `tests/faulty_store_conformance.rs`

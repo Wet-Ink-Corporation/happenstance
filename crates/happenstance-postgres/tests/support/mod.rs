@@ -424,6 +424,40 @@ impl Fixture for PostgresFixture {
     /// unit `append` promises.
     const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
 
+    /// Declined **by scope, not by incapacity**, and this fixture is the one
+    /// that owes it.
+    ///
+    /// Until `0.2.0` this constant was not written at all, so the adapter
+    /// inherited the trait's default — *"the injection has to come from the
+    /// adapter and this one has none to offer"* — and CF-18's new check is what
+    /// found it. That sentence is **false about this store**, which is exactly
+    /// the misrepresentation an inherited declension produces: the default says
+    /// the same thing about every adapter, including the ones for which it is
+    /// wrong.
+    ///
+    /// It is wrong here because this is the paged adapter. `sqlite` declines
+    /// `READ_FAULT` saying *"the paged adapters are where this capability has
+    /// something to inject"*, and `cloudflare` declines it saying its read
+    /// "does not fetch a page at a time across an await". This one does:
+    /// `PgReadStream` opens a `REPEATABLE READ` transaction, `DECLARE`s a
+    /// server-side cursor and issues a `FETCH` per chunk, so there is a real
+    /// fetch between two pages and a real place for one to fail.
+    ///
+    /// What arming it would mean, so the next person does not have to rediscover
+    /// it: `pg_terminate_backend` against the reader's own connection between
+    /// two `FETCH`es, or `CLOSE`ing the cursor underneath it. Both are reachable
+    /// from a second pooled connection, which this fixture already opens for
+    /// `SECOND_HANDLE`.
+    ///
+    /// It is not armed here because that is a rule this adapter has never run
+    /// and a fault path this adapter has never had, and landing both in the
+    /// release pass that discovered the gap would be shipping an untested
+    /// injection to satisfy a check. Declining with the reason stated is what
+    /// CF-18 asks for; supplying the far end is phase 10's remainder.
+    const READ_FAULT: Capability = Capability::declined(
+        "this fixture can make its store fail part way through a read and does          not yet arm it: PgReadStream FETCHes a server-side cursor per chunk, so          terminating the reader's backend or closing the cursor between two          FETCHes is a real injection this adapter has simply not built",
+    );
+
     /// Mirrored from the adapter's own constants, never restated as literals.
     ///
     /// A number restated here is a number that drifts from the one `append`

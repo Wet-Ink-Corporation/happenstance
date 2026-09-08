@@ -307,7 +307,7 @@ run it, the change is to the rule, in the same commit, with the wrong
 implementation it now rejects added to the testkit's own `tests/`.
 
 **Evidence.** `crates/happenstance-testkit/src/lib.rs:12 (not considered to exist)` ·
-`crates/happenstance-testkit/src/lib.rs:604 (Migrating from)` ·
+`crates/happenstance-testkit/src/lib.rs:606 (Migrating from)` ·
 `crates/happenstance-testkit/src/fixtures.rs:254 (Creates a fixture over an **existing** store)` ·
 `references/adapter-shapes.md:302 (A skeleton falsifies a signature)` ·
 [SPECIFICATION CF-1](../../spec/SPECIFICATION.md) ·

@@ -241,7 +241,7 @@ fails.
 **Evidence.** `crates/happenstance-cloudflare/src/lib.rs:604 (struct Probe)` ·
 `crates/happenstance-cloudflare/src/lib.rs:660 (pub(crate) fn the_probe_is_not_vacuous)` ·
 `crates/happenstance-cloudflare/src/lib.rs:615 (is the entire mechanism)` ·
-`crates/happenstance-testkit/tests/local_conformance.rs:426 (is the entire mechanism)` ·
+`crates/happenstance-testkit/tests/local_conformance.rs:438 (is the entire mechanism)` ·
 [SPECIFICATION ES-6](../../spec/SPECIFICATION.md)
 
 ---

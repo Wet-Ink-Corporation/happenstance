@@ -8195,6 +8195,41 @@ build green gets a green build and no record of the trade. Requiring a non-empty
 reason string alongside each `false` puts the trade in the log where a reviewer
 and a user of the adapter can both see it.
 
+**The last sentence of that paragraph became machinery at `0.2.0`, and the
+clause is unchanged by it.** The MUST above is untouched and stays `[FROZEN]`;
+what changed is that something now enforces it in the place it was always about.
+`capability_skips_are_reported` is a meta-test in this repository's own `tests/`
+and never runs in an adapter's CI, and `RuleOutcome::report` writes to a stdout
+libtest discards unless `--show-output` is passed — which exactly one CI in the
+world passes. So the obligation as written had never been met outside this
+repository.
+
+`event_store_conformance!` and `projection_store_conformance!` now emit
+`every_declined_capability_is_stated_by_this_fixture` into the adapter's own
+test binary, observable in a default `cargo test`. It rejects **declension by
+inheritance**: five capabilities default to a declension whose words are the
+testkit's, so a fixture that says nothing prints this crate's prose as though it
+were its own account of its own store — which is the misrepresentation this
+clause is about, one level in from where it was looking. The candidate the
+brief first proposed — *fail if a capability is declined without a stated
+reason* — describes a state `Capability::declined` already makes
+unconstructible, and a rule no adapter can fail is decorative.
+
+Two things it deliberately does not do. It does not judge whether a stated
+reason is *good*: `"n/a"` passes, because nothing mechanical separates a
+considered account from a plausible one. And it is emitted by the **suite
+macro**, not by the emitter, because CF-23 makes the emitter the caller's and a
+third-party emitter that never expanded the check would drop it silently — the
+same incentive inversion this clause exists to close. A `cfg_attr` pair carries
+it onto `wasm32`, where a plain `#[test]` is neither run nor listed.
+
+Two in-tree fixtures failed it on the commit that added it, which is what
+records that it can fail at all: `MemoryFixture` — the reference implementation,
+whose own comment three lines away argues that *"a capability nobody mentions is
+a capability nobody thinks about"* — inherited `MID_BATCH_FAULT`, and
+`PostgresFixture` inherited `READ_FAULT` while being the one paged adapter for
+which the inherited sentence is false.
+
 The clause governs a capability that is a genuine **trade**, which on `Fixture`
 means `REOPEN` and `MID_BATCH_FAULT`. `SECOND_HANDLE` is a MUST (CF-16) and a
 MUST is not skippable, so the rule requiring it fails rather than skips; the two

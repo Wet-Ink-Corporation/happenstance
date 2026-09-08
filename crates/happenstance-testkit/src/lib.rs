@@ -478,7 +478,9 @@ mod suite;
 
 pub use contract::{
     Capability, Fixture, NO_BATCH_READ_PATH, NO_BATCH_READ_PATH_REASON, NO_CEILING_REASON,
-    NO_STORE_LIMITS, ProjectionFixture, RuleOutcome,
+    NO_STORE_LIMITS, ProjectionFixture, RuleOutcome, UNSTATED_COMMIT_FAULT,
+    UNSTATED_MID_BATCH_FAULT, UNSTATED_PROJECTION_SECOND_HANDLE, UNSTATED_READ_FAULT,
+    UNSTATED_RESET_REFUSAL,
 };
 pub use faulty::{FaultyStore, FaultyStoreError, SendFaultyStore};
 #[cfg(feature = "memory")]
@@ -634,6 +636,28 @@ macro_rules! event_store_conformance {
                 $fixture
             }
 
+            // CF-18's machine-checked half, emitted here rather than by `$emit`.
+            //
+            // **The suite body, not the emitter, and that is the whole design
+            // decision.** CF-23 makes the emitter the *caller's*: a third-party
+            // emitter that never expanded this check would drop it silently,
+            // which is the same incentive inversion CF-18 exists to close. One
+            // place, expanded for every mount, whatever emitter is chosen.
+            //
+            // **The `cfg_attr` pair is what makes it run on `wasm32` too.**
+            // `#[test]` items are neither run nor listed by
+            // `wasm-bindgen-test-runner`, so a plain one would have been a
+            // blind spot on the only target CF-20 and CF-23 exist for. A false
+            // `cfg_attr` predicate is stripped before name resolution, so the
+            // `::wasm_bindgen_test` path is never resolved on a native build
+            // and no native adapter gains a dependency for it. On `wasm32` the
+            // adapter already has that crate, because `__emit_wasm` names it.
+            #[cfg_attr(not(target_arch = "wasm32"), test)]
+            #[cfg_attr(target_arch = "wasm32", ::wasm_bindgen_test::wasm_bindgen_test)]
+            fn every_declined_capability_is_stated_by_this_fixture() {
+                $crate::__private::assert_declensions_are_stated(__conformance_fixture);
+            }
+
             // `$emit` is `$crate::`-qualified by the caller. A bare name here
             // would be substituted verbatim and resolve in the *adapter's*
             // crate, where the testkit's emitters do not exist.
@@ -722,6 +746,16 @@ macro_rules! projection_store_conformance {
                 $fixture
             }
 
+            // CF-18's machine-checked half. The event-store suite's copy
+            // carries the argument for the placement and the `cfg_attr` pair;
+            // three capabilities here rather than two, and one of them is a
+            // MUST.
+            #[cfg_attr(not(target_arch = "wasm32"), test)]
+            #[cfg_attr(target_arch = "wasm32", ::wasm_bindgen_test::wasm_bindgen_test)]
+            fn every_declined_capability_is_stated_by_this_fixture() {
+                $crate::__private::assert_projection_declensions_are_stated(__conformance_fixture);
+            }
+
             // `$emit` is `$crate::`-qualified by the caller. A bare name here
             // would be substituted verbatim and resolve in the *adapter's*
             // crate, where the testkit's emitters do not exist.
@@ -770,7 +804,10 @@ macro_rules! projection_store_conformance {
 /// exists for.
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::contract::{Fixture, ProjectionFixture};
+    pub use crate::contract::{
+        Fixture, ProjectionFixture, assert_declensions_are_stated,
+        assert_projection_declensions_are_stated,
+    };
     pub use crate::registry::block_on;
     // The probe is `happenstance-core`'s, not this crate's, and it is here for
     // the same reason as everything else: `require_read_through!` named it bare,

@@ -376,6 +376,6 @@ output, and the failing input was in the sample all along.
 
 **Evidence.** `crates/happenstance-testkit/tests/properties.rs:55 (must not share a subroutine)` ·
 `crates/happenstance-testkit/tests/properties.rs:62 (Which level is independently written)` ·
-`crates/happenstance-testkit/src/fixtures.rs:575 (pub fn any_tag)` ·
-`crates/happenstance-testkit/src/fixtures.rs:526 (pub use proptest)` ·
+`crates/happenstance-testkit/src/fixtures.rs:593 (pub fn any_tag())` ·
+`crates/happenstance-testkit/src/fixtures.rs:544 (pub use proptest)` ·
 [SPECIFICATION CF-21](../../spec/SPECIFICATION.md)

@@ -265,6 +265,63 @@ not the same as what a user needed to be told.
   that returned `Nothing` after submitting an empty batch would satisfy the
   headline and change nothing.
 
+- **BREAKING in practice (`happenstance-testkit`): every mounted suite emits
+  `every_declined_capability_is_stated_by_this_fixture`, and a fixture that
+  inherits a declension now fails it.** CF-18 requires a declined capability to
+  be reported with the fixture's *stated* reason, and until now nothing outside
+  this repository could observe that: a skipped rule is a test that **passes**,
+  libtest discards a passing test's stdout, and exactly one CI in the world
+  passes `--show-output`. The machine-checked half was a meta-test in this
+  crate's own `tests/`, which never runs in an adapter's CI.
+
+  **What it asserts is not what the brief proposed.** *"Fail if a capability is
+  declined without a stated reason"* describes a state that cannot be
+  constructed — `Capability::declined` refuses an empty reason and `SUPPORTED`
+  *is* the absence of one — so a check written that way would pass on every
+  fixture that will ever exist. The real gap is **declension by inheritance**:
+  five capabilities default to a declension whose words are the testkit's, so a
+  fixture that says nothing prints this crate's prose in an adapter's CI log as
+  though it were that adapter's account of its own store.
+
+  Those five default reasons are now named public constants —
+  `UNSTATED_MID_BATCH_FAULT`, `UNSTATED_READ_FAULT`,
+  `UNSTATED_PROJECTION_SECOND_HANDLE`, `UNSTATED_RESET_REFUSAL`,
+  `UNSTATED_COMMIT_FAULT` — so an author can read exactly what their silence
+  says. The trait defaults are unchanged in wording; they now point at the
+  constants instead of repeating them.
+
+  **It runs on `wasm32` as well**, which the costing expected to have to give
+  up. The check is emitted by the *suite macro* rather than by the emitter,
+  because CF-23 makes the emitter the caller's and a third-party emitter would
+  drop it silently — but a plain `#[test]` is neither run nor listed by
+  `wasm-bindgen-test-runner`. A `cfg_attr` pair solves it: a false predicate is
+  stripped before name resolution, so `::wasm_bindgen_test` is never resolved on
+  a native build and no native adapter gains a dependency, while a `wasm32`
+  build gets `#[wasm_bindgen_test]` and the adapter already has that crate
+  because `__emit_wasm` names it.
+
+  **Two in-tree fixtures failed it on the commit that added it**, which is the
+  evidence it can fail at all. `MemoryFixture` — the reference implementation,
+  the one an adapter author copies — inherited `MID_BATCH_FAULT`, three lines
+  below its own comment arguing that *"a capability nobody mentions is a
+  capability nobody thinks about"*. `PostgresFixture` inherited `READ_FAULT`
+  while being the one adapter for which the inherited sentence is **false**:
+  `PgReadStream` `FETCH`es a server-side cursor per chunk, so there is a real
+  fetch between two pages and a real place to inject a fault. Its declension now
+  says so, names the injection (`pg_terminate_backend` on the reader's own
+  backend, or closing the cursor beneath it) and says that building it is phase
+  10's remainder. Four testkit-internal fixtures were silent too and now state
+  their own reasons.
+
+  It does **not** judge whether a stated reason is good — `"n/a"` passes.
+  Nothing mechanical separates a considered account from a plausible one, and a
+  check that tried would be a style gate wearing a conformance rule's clothes.
+
+  Migration: if your fixture declines `MID_BATCH_FAULT`, `READ_FAULT`,
+  `RESET_REFUSAL`, `COMMIT_FAULT`, or a `ProjectionFixture`'s `SECOND_HANDLE`
+  by saying nothing, write the constant with your store's own reason. The
+  failure message says which capabilities and why.
+
 ## [0.2.0] — 2026-09-06
 
 The first stable release, and the first to carry all five crates. What the

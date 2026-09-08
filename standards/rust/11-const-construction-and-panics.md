@@ -118,8 +118,8 @@ a blank where the account of the trade belongs.
 
 **Evidence.** `crates/happenstance-core/src/event.rs:85 (never read | **never**)` ·
 `crates/happenstance-core/src/event.rs:89 (evaluated lazily)` ·
-`crates/happenstance-testkit/src/contract.rs:1023 (Where it does *not* fire)` ·
-`crates/happenstance-testkit/src/contract.rs:1030 (pub const fn declined)`
+`crates/happenstance-testkit/src/contract.rs:999 (Where it does *not* fire)` ·
+`crates/happenstance-testkit/src/contract.rs:1006 (pub const fn declined)`
 
 ## RS-11-3. Write a `const fn` body with `match` and `while`, never `?`, `.map()` or an iterator adaptor.
 

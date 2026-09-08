@@ -65,6 +65,16 @@ impl Fixture for FaultyFixture {
     // instrument CF-26 asks for — proof the rule can *pass* — with
     // `SwallowedReadFaultStore` in `tests/mutation_coverage/mutants.rs` proving
     // it can fail.
+    // `FaultyStore` fails a whole call, never part of one, and the two
+    // capabilities differ on exactly that. `READ_FAULT` above is supported
+    // because a read is a *stream*: the wrapper can hand back an `Err` item
+    // after some rows, which is a fault part way through by construction.
+    // `append` is one call with one answer, so a wrapper outside it can refuse
+    // the batch and cannot make one row of it land.
+    const MID_BATCH_FAULT: Capability = Capability::declined(
+        "FaultyStore wraps a store from outside and fails whole calls; append          is one call with one answer, so this fixture can refuse a batch and          cannot make it fail between two of its rows",
+    );
+
     const READ_FAULT: Capability = Capability::SUPPORTED;
 
     async fn connect(&self) -> Self::Store {

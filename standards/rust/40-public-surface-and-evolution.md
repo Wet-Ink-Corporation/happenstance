@@ -63,7 +63,7 @@ request against its own base SHA and the break is inside the diff only if
 somebody bothered to look at the job's output.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:303 (async fn head)` ·
-`.github/workflows/ci.yml:579 (baseline-rev)` ·
+`.github/workflows/ci.yml:588 (baseline-rev)` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
 [cargo-semver-checks 0.50](https://github.com/obi1kenobi/cargo-semver-checks) —
@@ -301,8 +301,8 @@ the trade would leave no line in the CI log at all, and the reviewer approving
 the pull request would see a green build and thirty-four fewer rules than they
 thought they had.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1030 (pub const fn declined)` ·
-`crates/happenstance-testkit/src/contract.rs:1023 (Where it does *not* fire)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1006 (pub const fn declined)` ·
+`crates/happenstance-testkit/src/contract.rs:999 (Where it does *not* fire)` ·
 `crates/happenstance-testkit/src/fixtures.rs:282 (const REOPEN)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(why a declined
 capability still emits a reported test)*

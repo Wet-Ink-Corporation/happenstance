@@ -148,3 +148,106 @@ fn saying_nothing_about_the_one_must_still_fails_the_rules() {
          tells an author it was written for them; got: {message}"
     );
 }
+
+/// The silence this file permits is now **reported**, on every default run.
+///
+/// This module's own documentation has said since it was written that a default
+/// reason is *"testkit prose printed in an adapter's CI log as though it were
+/// the adapter's own account of itself, and that cost is real"*. It was argued
+/// at length and enforced by nothing. CF-18's `Rejects:` paragraph asked for the
+/// enforcement in as many words — *"requiring a non-empty reason string
+/// alongside each `false` puts the trade in the log where a reviewer and a user
+/// of the adapter can both see it"* — and until `0.2.0` the only thing standing
+/// there was `Capability::declined`'s empty-string assertion, which no fixture
+/// can trip because no fixture writes an empty reason. It writes nothing at all.
+///
+/// [`Silent`] is therefore the wrong implementation
+/// `assert_projection_declensions_are_stated` exists to reject, and this is the
+/// test that says so. **It is what stops the check being decorative**: the
+/// emitted rule is green against all eleven fixtures in this workspace, so
+/// without a fixture that fails it there would be no evidence it can fail at
+/// all.
+///
+/// Note what it does not assert: that the reason is *good*. A fixture writing
+/// `"n/a"` passes, here and everywhere. Nothing mechanical distinguishes a
+/// considered account from a plausible one, and a check that tried would be a
+/// style gate wearing a conformance rule's clothes.
+#[test]
+fn a_fixture_that_says_nothing_is_rejected_by_the_emitted_check() {
+    let previous = panic::take_hook();
+    panic::set_hook(Box::new(|_| {}));
+    let outcome = panic::catch_unwind(|| {
+        happenstance_testkit::__private::assert_projection_declensions_are_stated(async || {
+            Silent::default()
+        });
+    });
+    panic::set_hook(previous);
+
+    let payload = outcome.expect_err(
+        "a fixture that declares no capability at all was accepted by \
+         `assert_declensions_are_stated`. Every reason it prints is this \
+         crate's prose, so the check has nothing left to reject and CF-18's \
+         reporting obligation is met by a sentence about a store nobody wrote \
+         it for",
+    );
+    let message = payload
+        .downcast_ref::<String>()
+        .map_or("", String::as_str)
+        .to_owned();
+
+    // All three, in one message. A fixture that inherited one declension has
+    // usually inherited the rest, and reporting them a build at a time turns one
+    // edit into three red runs.
+    for capability in ["SECOND_HANDLE", "RESET_REFUSAL", "COMMIT_FAULT"] {
+        assert!(
+            message.contains(capability),
+            "the refusal names no `{capability}`, so an author fixing it learns \
+             about one capability per run: {message}"
+        );
+    }
+}
+
+/// A fixture that names the constant it agrees with is accepted.
+///
+/// The positive control, and it is not ceremony: without it the test above
+/// passes against a check that rejects *every* fixture, which is a bar nobody
+/// can clear rather than a bar. It also pins the escape hatch the refusal
+/// message offers — *"if the inherited wording is exactly right, name the
+/// `UNSTATED_*` constant"* — as a lie, deliberately, because naming the constant
+/// is exactly what the check rejects.
+///
+/// So the hatch is a paraphrase, and this fixture takes it: it says the same
+/// thing in its own words, about its own store. That is the whole distinction
+/// the check draws, and the reason it can be drawn mechanically at all.
+#[test]
+fn a_fixture_that_states_its_own_reasons_is_accepted() {
+    #[derive(Debug, Default)]
+    struct Stated(MemoryProjectionFixture);
+
+    impl ProjectionFixture for Stated {
+        type Store = MemoryProjectionHandle;
+
+        const SECOND_HANDLE: happenstance_testkit::Capability =
+            happenstance_testkit::Capability::SUPPORTED;
+
+        const RESET_REFUSAL: happenstance_testkit::Capability =
+            happenstance_testkit::Capability::declined(
+                "this store holds no protection policy, so there is no projection \
+                 it could decline to reset",
+            );
+
+        const COMMIT_FAULT: happenstance_testkit::Capability =
+            happenstance_testkit::Capability::declined(
+                "this store applies the read model and the checkpoint under one \
+                 write lock, so it has no write that can be made to fail",
+            );
+
+        fn connect(&self) -> impl Future<Output = Self::Store> {
+            self.0.connect()
+        }
+    }
+
+    happenstance_testkit::__private::assert_projection_declensions_are_stated(async || {
+        Stated::default()
+    });
+}
