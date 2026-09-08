@@ -612,24 +612,54 @@ async fn a_commit_that_meets_an_open_write_transaction_is_refused_and_recovers()
         .expect("the store must be usable once the write slot is free again");
 }
 
-/// A second `Database` on one directory is refused, which is why the store owns
-/// an `Arc`.
+/// A second `Database` on one directory is refused **on Windows**, which is why
+/// the store owns an `Arc` — and is *not* refused on Linux, which is the fourth
+/// `lbug` platform difference this crate has had to write down.
 ///
 /// ADR-0025 §6's measurement, kept where a change in the engine would fail rather
-/// than merely make a paragraph wrong. The `Arc<Database>` in the store's field
-/// list is not a performance choice and this is what says so.
+/// than merely make a paragraph wrong. It was taken on Windows and stated without
+/// a platform, and the first CI run to reach it on Linux disagreed.
+///
+/// # What the split costs, stated rather than absorbed
+///
+/// The `Arc<Database>` in the store's field list was justified by this refusal:
+/// if one directory can only ever carry one `Database`, sharing it is forced
+/// rather than chosen, and `SECOND_HANDLE` is declined because the engine leaves
+/// no alternative. **On Linux the engine leaves an alternative.** So on that
+/// platform the `Arc` is a choice this crate is making and the decline is this
+/// crate's policy — the same shape, resting on a different thing.
+///
+/// That is the *"decision to re-take"* the old assertion message named, and it is
+/// **not** re-taken here: the Ladybug effort is frozen until `lbug` stabilises,
+/// and re-deciding a handle model against an engine that is moving is work with a
+/// short half-life. What is taken here is the smaller decision — the test asserts
+/// what is true on each platform and **fails if either changes**, so the day Linux
+/// starts refusing, or Windows stops, this comes back rather than staying quietly
+/// green on one runner of three.
 #[test]
 fn a_second_database_on_one_directory_is_refused() {
     let fixture = LadybugProjectionFixture::new();
 
     let second = LadybugProjectionStore::open_with_config(fixture.directory(), fixture_config());
 
-    assert!(
-        second.is_err(),
-        "a second Database on one directory must be refused by LadybugDB's file \
-         lock. If this ever starts succeeding, `SECOND_HANDLE` could be answered \
-         with a second database and the `Arc<Database>` in the store's fields \
-         stops being forced — which is a decision to re-take, not a test to \
-         delete"
-    );
+    if cfg!(windows) {
+        assert!(
+            second.is_err(),
+            "on Windows a second Database on one directory must be refused by \
+             LadybugDB's file lock. This is what forces the `Arc<Database>` in \
+             the store's fields and what `SECOND_HANDLE`'s decline rests on. If \
+             it starts succeeding here too, the handle model is resting on \
+             nothing — which is a decision to re-take, not a test to delete"
+        );
+    } else {
+        assert!(
+            second.is_ok(),
+            "on this platform LadybugDB was measured NOT to refuse a second \
+             Database on one directory, and the assertion is inverted to say so \
+             rather than skipped. If it starts being refused, the engine has \
+             gained a file lock it did not have and the platform split above can \
+             collapse back into one assertion — which is a change to make \
+             deliberately rather than to discover"
+        );
+    }
 }
