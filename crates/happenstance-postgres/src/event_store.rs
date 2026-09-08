@@ -610,10 +610,42 @@ impl SendEventStore for PostgresEventStore {
 /// boundary produce a `40001` for one of them rather than two winners. The retry
 /// is not a workaround for that: on the second attempt the loser *sees* the
 /// winner's committed row and returns `ConditionViolated`, which is the answer
-/// the caller was owed all along. Three attempts because the retry is only ever
-/// needed once in the two-writer case, and a bounded number covers a pile-up
-/// without turning a hot boundary into an unbounded spin.
-const SERIALISATION_ATTEMPTS: u32 = 3;
+/// the caller was owed all along.
+///
+/// **This was three, and three is measurably not enough.** The justification it
+/// carried — *"the retry is only ever needed once in the two-writer case"* — is
+/// true of the two-writer case and says nothing about the case that actually
+/// exhausts the budget. `happenstance-neon` re-derived the number against a live
+/// endpoint and wrote down why — `NeonEventStore::SERIALISATION_ATTEMPTS` carries
+/// the table, and it is deliberately named in prose rather than linked, because
+/// `happenstance-neon` is not a dependency of this crate and no adapter may
+/// depend on another:
+/// `k_disjoint_boundaries_admit_exactly_k_commits` runs twelve contenders over
+/// **four separate boundaries**, and the SSI predicate lock is *not* per
+/// boundary — with a small table the planner takes a sequential scan and the
+/// lock is relation-wide, so every contender conflicts with every other whatever
+/// boundary it is racing. A retry that finds no conflict on its own boundary goes
+/// straight back into the same fight, and the population drains one round at a
+/// time instead of all at once. Measured there, four runs per value: **three
+/// failed 2 of 4**, four and five were green 4 of 4, eight green 5 of 5.
+///
+/// **That cause belongs to Postgres and not to Neon** — Neon *is* Postgres over
+/// one-shot HTTP, and the predicate lock is the server's. This adapter kept three
+/// because nothing had re-measured it, and CI found it the first time the live
+/// suite ran on a pull request: two contenders exhausted the budget and surfaced
+/// `Failed("postgres rejected the work")` where the rule requires a commit or a
+/// `ConditionViolated`.
+///
+/// **The number is adopted rather than re-measured here, and that is stated
+/// rather than smoothed over.** Eight comes from Neon's table against a shared
+/// cause, corroborated by this adapter failing at three; it is not four runs per
+/// value against a live PostgreSQL server, which is the bar ADR-0024 sets for a
+/// choice like this. Re-measuring it here is owed and is cheap to do once the
+/// live job is green again. It costs nothing when it is not needed — a retry
+/// happens only after a `40001` — and when it is needed the whole budget is up to
+/// eight serial round trips, which on a pooled local connection is a fraction of
+/// the same budget's cost on Neon's transport.
+const SERIALISATION_ATTEMPTS: u32 = 8;
 
 /// Postgres's `serialization_failure`.
 const SERIALIZATION_FAILURE: &str = "40001";
