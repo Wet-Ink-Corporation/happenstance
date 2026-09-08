@@ -4982,6 +4982,25 @@ have been three.
 
 **Estimate.** 6 days.
 
+**Frozen 2026-09-08, after the phase completed.** The adapter is finished, its
+suite is green and its exit criteria are met; what is parked is **further
+effort**, on the owner's instruction, until `lbug` stabilises upstream. Its
+published release does not build reliably, and three defects were found against
+0.20.3 while writing this adapter — no `rerun-if-env-changed` for `OPENSSL_DIR`,
+a segfault after a refused `BEGIN TRANSACTION`, and the one that decides it: **it
+cannot build on docs.rs**, which is this project's bar for a published crate.
+
+The freeze costs one line: the `ladybug` CI job is `if: false` with the reason
+written at it, so it shows as *skipped* rather than vanishing. Nothing else needed
+to move, and that is the crate's isolation paying off — the workspace gate steps
+exclude it, `cargo xtask ci` compiles it without its driver as a mandatory step,
+and the conformance run is probed on an opt-in. A developer who wants it opts in;
+nobody else pays.
+
+**To unfreeze:** a `lbug` release that builds on docs.rs. The three defects are
+recorded in `experiments/ladybug-driver-probes/README.md` and at the CI job, and
+were deliberately **not** filed upstream.
+
 **Session log**
 
 - **2026-09-08 — the adapter is real, the suite is green, and the pre-registered

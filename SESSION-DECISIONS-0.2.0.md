@@ -585,6 +585,13 @@ This is the pre-registration doing its job. A verdict written after the run woul
 have recorded "`COMMIT_FAULT` supported, as predicted" and lost the fact that the
 prediction was right for a reason that does not exist.
 
+**Frozen at review.** The owner parked further Ladybug effort until `lbug`
+stabilises: its published release does not build reliably, and the docs.rs defect
+below blocks publication outright. The code and the ADR stand; the `ladybug` CI
+job is `if: false` with the reason written at it, and nothing else needed to
+change — which is the crate's isolation working as designed. The three upstream
+defects were recorded locally rather than filed.
+
 #### Four findings that are not in the ADR
 
 - **The driver segfaults.** A connection issuing a statement after its own `BEGIN
@@ -678,7 +685,15 @@ says which it means.
    clause owner's. Check it against the ES-11 escalation `HANDOVER.md` records as
    made in error and retracted — that one claimed something different and weaker.
 
-7. **The `.kb/_intake` briefs this session staged are owed an ingest.** Atoms are
+7. **Ladybug is frozen, and it is the one item here that is finished rather than
+   outstanding.** The adapter works and its suite is green; the effort is parked
+   until `lbug` stabilises upstream, because its published release does not build
+   reliably and it cannot build on docs.rs at all. The `ladybug` CI job is
+   `if: false` with the reason at it. Unfreezing is deleting that line once a
+   `lbug` release renders. The three upstream defects were recorded locally and
+   deliberately not filed.
+
+8. **The `.kb/_intake` briefs this session staged are owed an ingest.** Atoms are
    authored by `/redkiln:kb-ingest`, never by hand, so they are staged rather than
    written.
 

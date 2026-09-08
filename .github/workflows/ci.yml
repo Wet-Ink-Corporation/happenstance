@@ -520,6 +520,41 @@ jobs:
   # the day this adapter is published is the day that trade is re-taken.
   ladybug:
     name: conformance against a real LadybugDB
+    # FROZEN 2026-09-08, and `if: false` rather than deleted for the reason the
+    # `backlog` job records: a check that quietly stops running is worth less
+    # than none, because the green tick keeps arriving. A deleted job leaves
+    # nothing to mark the hole; a disabled one shows as *skipped*.
+    #
+    # The adapter is finished and its suite is green — 42 of 42 against the real
+    # driver, locally, with the verdict on phase 6's freeze pre-registered and
+    # held. What is frozen is the EFFORT, not the code, and the reason is
+    # upstream: `lbug`'s published release does not build reliably, and three
+    # defects were found against 0.20.3 while writing this adapter.
+    #
+    #   1. `build.rs` emits no `cargo:rerun-if-env-changed` for `OPENSSL_DIR`, so
+    #      setting it after a failed link changes nothing until `cargo clean -p
+    #      lbug`. Cost one build to diagnose.
+    #   2. It CANNOT BUILD ON DOCS.RS. `build.rs` returns early under `DOCS_RS`
+    #      before emitting the `cargo:rustc-env` lines its own `lib.rs` requires
+    #      through `env!`, and an undefined `env!` is a compile error rather than
+    #      a fallback. This is why `happenstance-ladybug` is not in
+    #      `PUBLISHABLE`: rendering on docs.rs is this project's bar.
+    #   3. The driver SEGFAULTS — a connection issuing a statement after its own
+    #      refused `BEGIN TRANSACTION` dies with `STATUS_ACCESS_VIOLATION`. The
+    #      adapter cannot reach it and a test pins the refactor that would.
+    #
+    # This job had never run when it was frozen, so nothing is known about the
+    # Linux archive's size or whether the cache covers it. Turning it on would
+    # put an unmeasured 1.4 GB download and an upstream C++ toolchain on the
+    # critical path of a release that does not depend on it.
+    #
+    # TO UNFREEZE: a `lbug` release that builds on docs.rs, then delete the
+    # `if: false` below. Nothing else about this job needs to move, and the local
+    # story is unaffected either way — the workspace gate steps exclude this
+    # crate, `cargo xtask ci` compiles it without its driver as a mandatory step,
+    # and the conformance run is probed on `HAPPENSTANCE_LADYBUG_DRIVER`, so a
+    # developer who wants it opts in and nobody else pays.
+    if: false
     runs-on: ubuntu-latest
     env:
       # The opt-in `xtask ladybug-configured` probes for. It is set here and
