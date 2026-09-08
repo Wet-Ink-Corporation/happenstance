@@ -304,6 +304,46 @@ construction.
 
 ---
 
+### D-09 — Ladybug's four design questions, answered by running the driver
+
+Phase 11's protocol is ADRs before code. Writing ADR-0025 needed four facts the
+crate's own notes could not supply, because they were calibrated against `lbug`
+0.16.1 and three of the load-bearing ones are wrong about 0.20.3. Each was
+measured in a scratch crate outside the workspace
+(`experiments/ladybug-driver-probes/`).
+
+| Probe | Question | Answer |
+|---|---|---|
+| P0 | What is a second handle? | A second `Database` on one directory is **refused by a file lock**. So it is a second `Connection` over one shared `Arc<Database>` — which works, and B sees what A committed. |
+| P1 | `INT64` or `UINT64`? | `UINT64` round-trips `u64::MAX - 1` exactly. **No narrowing at all**, unlike both signed-`bigint` adapters. `PositionOutOfRange` is unreachable and goes. |
+| P2 | Read-your-own-writes inside a transaction? | **Yes.** PS-4's Cypher-level condition does not fire for this adapter — replay is one connection, one transaction, in order. |
+| P3 | Is there a real `COMMIT_FAULT` injection? | **Yes**, a `CREATE` against a pre-planted primary key. `MERGE` would not work: it matches rather than conflicts. |
+
+**And one answer nobody asked for, which changes a body.** On a statement error
+LadybugDB **aborts the whole transaction itself**: the read-model write made
+earlier in the same transaction was already gone before any rollback, and the
+subsequent `ROLLBACK` was **refused**. So `commit`'s error path must not issue
+one — doing so masks the first error with a second. It is also good news for
+PS-1, because atomicity comes from the engine rather than from this adapter
+remembering to ask.
+
+**The build story is the other half, and it contradicts the crate's own NOTE.**
+That note says `lbug` compiles LadybugDB's C++ from source via cmake.
+`build.rs` tries a **prebuilt download first** and it succeeded — cmake is not
+installed here and was never invoked. What arrives is a **1.44 GB static
+archive**, and the link then fails on OpenSSL, which no feature turns off. So
+phase 11's CI question is not "a multi-minute native build" but "a 1.44 GB link
+and an OpenSSL toolchain" — a different problem with a different answer, and the
+reason `lbug` ships behind an off-by-default feature: `cargo test --workspace`
+links, and `cargo check`/`clippy` do not.
+
+**A trap that cost a build.** Setting `OPENSSL_DIR` after a failed link changes
+nothing, because `lbug`'s `build.rs` emits no `cargo:rerun-if-env-changed` for it.
+The second attempt reuses the cached script output and fails identically.
+`cargo clean -p lbug` between attempts is what makes the variable take effect.
+
+---
+
 ## Left for the owner
 
 1. **A UAC dialog is open on the desktop.** `winget install
