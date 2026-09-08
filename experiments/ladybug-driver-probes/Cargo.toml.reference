@@ -1,0 +1,9 @@
+[package]
+name = "lbug-probe"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+lbug = "0.20.3"
+
+[workspace]
