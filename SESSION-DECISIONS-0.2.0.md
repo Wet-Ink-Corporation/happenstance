@@ -344,6 +344,91 @@ The second attempt reuses the cached script output and fails identically.
 
 ---
 
+### D-10 — `happenstance-neon`, and the clause it falsified
+
+Delegated as its own lane against the design panel's synthesis and its critique,
+with the live-endpoint measurements taken here handed over as settled fact. All 16
+`todo!()` bodies, two migrations of its own, a dev-only transport, four
+conformance mounts and a CI job. **105 of 105** event-store, concurrency and model
+tests and **19 of 19** projection tests executed against PostgreSQL 18.6 behind
+the Neon pooler, with three reported skips.
+
+**The headline result is that ES-11's falsifier fired**, on the adapter its own
+marker named as the thing that would fire it. Written up separately — D-06's
+table of deferred dispositions is unaffected, but the *provisional* ledger's
+residual-exposure row now records it, and phase 10b's first exit criterion is
+marked met-for-three-and-open-for-a-fourth rather than ticked. The specification
+was **not** amended: ES-11 and ES-12 reduce to ES-10 plus a ceiling, so widening
+either reaches further than it looks, and a clause amendment is an ADR's work.
+
+#### Decisions inside the lane where a reader could reasonably have chosen otherwise
+
+- **The conditional append is a two-statement batch, not the single CTE the crate
+  documented.** Measured, not preferred: the endpoint honours
+  `Neon-Batch-Isolation-Level` on a batch and **ignores it on a single
+  statement** — `current_setting('transaction_isolation')` answers `serializable`
+  for the first and `read committed` for the second. The documented CTE would have
+  run at READ COMMITTED, and two racers would both have probed empty and both
+  inserted. That is the exact lost update the crate's own `ProbeThenWriteStore`
+  exists to demonstrate, arriving through the door the CTE was meant to close.
+- **Isolation is schema-qualified identifiers, not a session `search_path`.**
+  Also measured: the proxy **discards** `options=-c search_path=…` from the
+  connection string — `SHOW search_path` still answers `"$user", public`. So every
+  statement the crate emits is qualified, and identifiers are **escaped at
+  emission** rather than validated at construction, because the config fields are
+  public and a validating setter is a guard a caller assigns past in silence.
+- **base64 rather than `\x` hex for `bytea`.** The brief's "33% versus 100%" is
+  only true of base64; hex is two characters per byte in both directions. Both
+  round-trip — verified against the live endpoint — and against a 64 MiB response
+  ceiling on the *read* path the difference is real.
+- **`SERIALISATION_ATTEMPTS = 8`, not the 3 `happenstance-postgres` uses.** The
+  postgres number is justified by a one-boundary measurement, and that is the
+  wrong measurement here: `k_disjoint_boundaries_admit_exactly_k_commits` takes a
+  relation-wide SSI predicate lock, so retries do not drain. Four runs per value:
+  3 failed **2 of 4**; 4 and 5 were green 4/4; 8 green 5/5. Eight is double the
+  smallest sufficient value, because a margin of one on a measurement that noisy
+  is not a margin.
+- **`recorded_at` is computed server-side.** `SystemTime::now()` panics on
+  `wasm32-unknown-unknown`, which is the one target this crate exists to compile
+  for.
+- **The fixture panics naming the environment when `NEON_CONNECTION` is absent**,
+  rather than returning early. The green-gate-without-the-secret property is
+  bought by `#[ignore]` and by nothing else; an early return is CF-18's
+  omitted-skip defect one layer out, and `Fixture::connect` has no `Result`
+  precisely so that "the endpoint is down" and "the adapter is wrong" cannot share
+  a channel.
+- **The `live-neon` CI job is kept strict and will therefore be red about 1 run in
+  40**, for the ES-11 race rather than for a regression. Tolerating a named set
+  was the alternative and it loses on this repository's own recorded evidence:
+  `live-postgres` says a gate that tolerates a named set is one commit away from
+  tolerating the wrong one, **and that it had already tolerated a set that should
+  never have been there.** Recorded as a cost with a half-life — a job that
+  reddens at random teaches people to re-run rather than read, which is the
+  green-tick defect from the other side — which is why the ADR is not
+  slow-burning.
+
+#### Four defects only a live endpoint found, each of which passed a smaller test first
+
+1. **`ORDER BY position` bound to the `position::text` output alias**, not the
+   column — Postgres resolves output names first there. The log came back sorted
+   as text: 1, 10, 100, …, 11, 110. **Correct under ten events**, which is why 102
+   of 105 rules passed; caught by the 128-event minimum-batch rule and by the
+   model family.
+2. **An empty `text[]` renders as `[""]`, not `[]`.** Every untagged event decoded
+   as one invalid tag; 19 rules red with `StoredTag(Empty)`.
+3. **`#[tokio::test]` drops its runtime per test**, so a captured `Handle` was dead
+   by the second test — 8 of 19 projection rules failed with
+   `JoinError::Cancelled`.
+4. **`--test-threads=1` is this adapter's visibility mechanism, not a flake
+   workaround.** `pg_snapshot_xmin` is held back by any open write transaction on
+   the branch, *including sibling rules of the same run*: 67 of 105 red in
+   parallel against 3 serially, on the same commit.
+
+The fourth is the one worth carrying: three of these four look like flakiness and
+none of them is.
+
+---
+
 ## Left for the owner
 
 1. **A UAC dialog is open on the desktop.** `winget install
@@ -378,6 +463,14 @@ The second attempt reuses the cached script output and fails identically.
    before going public. `pull_request` carries no filter, so every fork PR fires
    the full three-OS matrix.
 
-6. **The `.kb/_intake` briefs this session staged are owed an ingest.** Atoms are
+6. **ES-11 is owed an ADR, and it is the one item here with a deadline.** Its
+   falsifier fired on `happenstance-neon` exactly as its marker predicted, the
+   specification was deliberately not amended, and until the ADR lands the
+   `live-neon` CI job is knowingly red about 1 run in 40. Three ways out are
+   named in the staged brief; none was chosen here, because choosing is the
+   clause owner's. Check it against the ES-11 escalation `HANDOVER.md` records as
+   made in error and retracted — that one claimed something different and weaker.
+
+7. **The `.kb/_intake` briefs this session staged are owed an ingest.** Atoms are
    authored by `/redkiln:kb-ingest`, never by hand, so they are staged rather than
    written.
