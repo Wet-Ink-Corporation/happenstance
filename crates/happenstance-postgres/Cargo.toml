@@ -78,6 +78,23 @@ event-store = []
 # named the capability while doing none of the gating, and turning it off changed
 # nothing a consumer could observe.
 projection-store = ["happenstance-core/unstable-projection"]
+# `impl ProjectionProbe for PostgresProjectionStore`, and the probe table it
+# writes through. Off by default, because that table is the *suite's* read model
+# and has no business in an application's database.
+#
+# It forwards one flag on a dependency this crate already has and adds no edge to
+# the graph — the same economic argument that puts `ProjectionProbe` in
+# `happenstance-core` rather than in the testkit. The impl cannot go in
+# `tests/projection.rs`: that is a different crate, where neither the trait nor
+# the type is local and the orphan rule answers `error[E0117]`, so it lives in
+# `src/` under this feature and a crate cannot `cfg` on a dependency's feature.
+#
+# Deliberately **not** implying `projection-store`, for the reason
+# `happenstance-sqlite` gives: three features are eight combinations rather than
+# four, and `conformance` alone — with the port's own module configured out — is
+# one of them. The impl and the probe table are gated on both, so that
+# combination compiles to nothing rather than failing to compile.
+conformance = ["happenstance-core/conformance"]
 # The negative control, and off by default in the strongest sense: no consumer
 # can reach it, and the default build does not contain it.
 #
