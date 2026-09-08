@@ -62,7 +62,7 @@
 //! An `append` that probes for a condition violation and then writes, in two
 //! **round trips**, type-checks against
 //! [`EventStore`](happenstance_core::EventStore) perfectly.
-//! [`ProbeThenWriteStore`] is that implementation, written out in full so the
+//! `ProbeThenWriteStore` is that implementation, written out in full so the
 //! compiling call site can be pointed at. It is also silently wrong here: two
 //! round trips are two implicit transactions, with a network-latency-wide window
 //! between them and no snapshot spanning it. A conflicting append committed
@@ -89,22 +89,22 @@
 //! one-statement request carrying the same header.
 //!
 //! So the single CTE runs at `READ COMMITTED`, where two racers both find no
-//! conflict and both insert — the lost update [`ProbeThenWriteStore`] exists to
+//! conflict and both insert — the lost update `ProbeThenWriteStore` exists to
 //! name, arriving through the door left open while the other one was being
 //! closed. The append is therefore a **two-statement batch**: a probe that
 //! reports the conflicting position, and a guarded `INSERT … WHERE NOT EXISTS`,
 //! on one `SERIALIZABLE` snapshot in one round trip.
 //!
 //! Two statements in one request is safe; two round trips is not. That sentence
-//! is the whole of this adapter's append design, and
-//! [`event_store`] carries the measurement behind it.
+//! is the whole of this adapter's append design, and the `event_store` module
+//! carries the measurement behind it.
 //!
 //! # Which flavour, and which claim
 //!
-//! [`NeonEventStore`] implements the **bare**
-//! [`EventStore`](happenstance_core::EventStore), and [`NeonProjectionStore`] the
-//! bare [`ProjectionStore`](happenstance_core::ProjectionStore). The crate
-//! compiles for the host target and for `wasm32-unknown-unknown`, *implementing
+//! `NeonEventStore` implements the **bare**
+//! [`EventStore`](happenstance_core::EventStore), and `NeonProjectionStore` the
+//! bare `ProjectionStore`. The crate compiles for the host target and for
+//! `wasm32-unknown-unknown`, *implementing
 //! the bare flavour on each*. That is not the same claim as satisfying both
 //! flavours: the contract crate's implication table runs one way only, so nothing
 //! here satisfies `SendEventStore`, on either target, even where the transport

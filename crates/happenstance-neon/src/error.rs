@@ -174,9 +174,11 @@ pub enum NeonError<E> {
     ///
     /// `rollback` is the one method on the projection port whose error type is
     /// the *adapter's* rather than a dedicated enum, so the refusal
-    /// [`CommitError::ForeignBatch`](happenstance_core::CommitError::ForeignBatch)
-    /// and [`ResetError::ForeignBatch`](happenstance_core::ResetError::ForeignBatch)
-    /// spell has to be nameable here too. The batch is consumed either way; the
+    /// `CommitError::ForeignBatch` and `ResetError::ForeignBatch` spell has to be
+    /// nameable here too. Written as plain code spans rather than intra-doc
+    /// links: both live behind `unstable-projection`, and a link to a gated item
+    /// breaks the doc build for every feature set that does not enable it — which
+    /// is the default one. The batch is consumed either way; the
     /// refusal is how a caller learns it was holding the wrong one, on the call
     /// that was meant to be the cleanup.
     #[error("the batch was begun on a different store instance")]

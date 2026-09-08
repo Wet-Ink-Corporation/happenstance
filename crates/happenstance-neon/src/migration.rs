@@ -24,13 +24,13 @@
 //! It strips whole-line `--` comments and then splits on `;`. That is not a SQL
 //! parser and must not become one: it is correct exactly while no statement in
 //! `migrations/` contains a dollar-quoted body or a semicolon inside a literal,
-//! and [`tests`] asserts both. The moment one does, the honest move is a
+//! and this module's own tests assert both. The moment one does, the honest move is a
 //! statement-per-constant module rather than a smarter regex — a splitter that
 //! is *nearly* a parser is the shape that silently cuts a `plpgsql` body in half.
 //!
 //! The fixture's fault injections are `plpgsql`, and they are deliberately not
 //! in `migrations/` for that reason: they are built as separate
-//! [`SqlStatement`](crate::SqlStatement)s at the call site, where no splitting
+//! [`SqlStatement`]s at the call site, where no splitting
 //! happens.
 
 use crate::config::{NeonConfig, quote_ident};

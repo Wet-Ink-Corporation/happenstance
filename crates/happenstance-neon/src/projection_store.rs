@@ -148,7 +148,7 @@ impl NeonWriteBatch {
     /// back has to be said out loud, because the type looks usable and is not.
     /// A batch carries the identity of the store that began it, and
     /// [`ProjectionStore::begin`] is the only way to obtain that identity. So a
-    /// batch from here is stamped [`UNSTAMPED`], which every `commit`, `reset`
+    /// batch from here is stamped with a private sentinel, which every `commit`, `reset`
     /// and `rollback` rejects as [`CommitError::ForeignBatch`].
     ///
     /// The alternative was to stamp it with the *next* real identity, which
