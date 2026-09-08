@@ -4765,15 +4765,37 @@ skip list, which is the transport axis's far end stated honestly.
 
 - [ ] Every rule `happenstance-neon` cannot pass is either a reported capability
       skip or an amended clause — never a silent pass.
-- [ ] No `todo!()` on either path; `publish = false` removed. **Neither is true
-      of `happenstance-postgres` yet**, which is why this criterion is `10b`'s
-      and not `10a`'s: the event store is finished and the crate is not.
-- [ ] `PostgresFixture` arms `READ_FAULT` rather than declining it. Added
-      2026-09-07 by CF-18's new check, which found the fixture declining it in
-      the *testkit's* words on the one adapter whose read genuinely pages —
-      `PgReadStream` `FETCH`es a server-side cursor per chunk. Declining with a
-      stated reason is conformant and is what ships; arming it is this phase's,
-      and the injection is named in the fixture's own declension.
+
+- [~] No `todo!()` on either path; `publish = false` removed. **The Postgres half
+      is done**: `PostgresProjectionStore`'s five bodies are written, the crate
+      carries no `todo!()`, and `#![allow(clippy::todo)]` left with the last one —
+      which is the contract that allow was written under. Neon's half is open.
+
+      **`publish = false` stays, and the criterion is what gives.** Removing it
+      collides with a decision already taken and listed under *do not re-open*:
+      `0.2.0` ships **five crates** and this is not one of them. The collision is
+      hard rather than soft — `xtask/src/package.rs`'s `reconcile` holds
+      `PUBLISHABLE` against the manifests in both directions, so dropping the flag
+      without adding the crate reddens the gate and adding it makes a sixth
+      published crate. The criterion's *substance* — no stub survives — is met and
+      is checkable; what remains is a release-set flag, and a flag saying "do not
+      publish this" is not evidence of unreadiness when the release set is five by
+      decision. Recorded at `SESSION-DECISIONS-0.2.0.md`'s D-04.
+
+- [x] `PostgresFixture` arms `READ_FAULT` rather than declining it.
+      `arming_a_read_fault_makes_the_stream_yield_an_error` runs against it and
+      passes: the stream yields an `Err` **item** rather than ending, so this
+      adapter does not report a fetch failure as the end of the log.
+
+      **Neither injection the declension named survives contact**, and the reasons
+      are worth more than the injection. Arming happens *before* the read starts —
+      the trait requires it — so there is no reader backend to terminate and no
+      cursor to close; terminating an *idle* pooled backend is absorbed by `sqlx`
+      testing connections before handing them out, which is CF-39's named hazard
+      one step earlier and would have made the rule pass **vacuously**; and a
+      cursor is session-local. What is injected instead is a view whose `WHERE`
+      raises above a threshold, so the fault arrives while the `FETCH` is
+      producing rows.
 
 **Cases this makes writable.** E2E-01 against a store that can genuinely fail it.
 
@@ -4782,6 +4804,35 @@ skip list, which is the transport axis's far end stated honestly.
 an estimate nobody made.
 
 **Session log**
+
+- **2026-09-08 — the Postgres half of `10b` is done, and the batch type the
+  skeleton declared could not have been written.** `type Batch =
+  sqlx::Transaction<'static, Postgres>` type-checked against five `todo!()`s and
+  is unimplementable: `begin` is total, synchronous and infallible, every route to
+  a `sqlx` transaction is `async` and fallible with private fields, and
+  `probe_write` is synchronous and infallible too, so even given a live
+  transaction there is nowhere to issue a statement into it. `todo!()` has type
+  `!`, so nothing reported it. The batch is now an owned, `Send`, `'static`
+  stamped write set; PS-5's owned-batch evidence is untouched, because the type is
+  still owned and still `'static`.
+
+  **A result about PS-2 came out of it**, reported and deliberately not settled:
+  the clause names `rusqlite` or `sqlx` as the live-transaction axis end still to
+  be built, and **both are refuted, each by its own mechanism** — `rusqlite`'s
+  `Transaction<'_>` is `!Send` and costs the `SendProjectionStore` impl, and
+  `sqlx`'s cannot be produced by a total synchronous `begin`. The axis end is not
+  unbuilt; for those two drivers the port's own signatures forbid it. Thirteen
+  provisional clauses gate on PS-2 alone, so the choice of what to do about it is
+  the clause owner's. Staged at
+  `.kb/_intake/2026-09-08-ps-2-live-transaction-axis-is-forbidden-not-unbuilt.md`.
+
+  Verified rather than asserted: the whole gated suite green against a live
+  PostgreSQL 17.10 — **105 event-store, concurrency and model rules, 21
+  projection-target tests, 6 in the remaining targets, 0 failures**, with the
+  projection family's three skips each carrying a reason true of this store rather
+  than inherited. `PS-18`'s count is no longer unavailable as a result: this is
+  the first projection adapter over storage this workspace does not control to
+  clear the suite, and it **declines** `RESET_REFUSAL`.
 
 ---
 
