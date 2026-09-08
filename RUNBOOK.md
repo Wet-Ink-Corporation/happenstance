@@ -715,7 +715,7 @@ seventeen.
 | A fixture's fault-injection promise | CF-39 | a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep | 8 and 10. **No adapter has armed a fault yet** |
 | A fixture's stated capacity ceilings | CF-40 | a real adapter whose ceiling is **not a constant** — a Postgres row whose TOAST threshold moves with the rest of the row, or a KV store whose per-value cap moves with the key — for which a single `Option<usize>` cannot say where the boundary is, and the rule built on it would assert a number the store cannot honour | 9 and 10, **whichever states a varying ceiling first**. Phase 9 has landed and answered the *constant-ceiling* half — `CloudflareFixture` states all three as `Some(…)`, as `SqliteFixture` does — so it added a second constant-ceiling store and left the live half untouched. That half is **phase 10's**: Postgres is where a ceiling that moves with the row first appears |
 | Durability's rule shape; benchmarks are not conformance | CF-17, CF-34 | a store that loses an acknowledged write, and an adapter that scans where it should seek and passes every rule | 8 |
-| **The portfolio's residual exposure** — the clauses §1.3 names as carrying CF-25's risk in their own markers rather than in a preamble. **Four, not five**: ES-10 was lifted at phase 4 and `[FROZEN]` since, and carrying it here is what made this table's count disagree with the specification's | ES-11, ES-12, ES-35, ES-40 | the far-end **adapter** on each axis, and nothing short of it: transport (ES-11, ES-12) by a one-shot-HTTP store that self-paginates; durability (ES-35) by a store that can lose a write to a fault; completeness (ES-40) by a store holding a suffix. A **fixture** instrument does not falsify any of them — CF-26 says so in terms | 10 (ES-11, ES-12), 8 (ES-35), 14 (ES-40) |
+| **The portfolio's residual exposure** — the clauses §1.3 names as carrying CF-25's risk in their own markers rather than in a preamble. **Four, not five**: ES-10 was lifted at phase 4 and `[FROZEN]` since, and carrying it here is what made this table's count disagree with the specification's | ES-11, ES-12, ES-35, ES-40 | the far-end **adapter** on each axis, and nothing short of it: transport (ES-11, ES-12) by a one-shot-HTTP store; durability (ES-35) by a store that can lose a write to a fault; completeness (ES-40) by a store holding a suffix. A **fixture** instrument does not falsify any of them — CF-26 says so in terms. **ES-11's falsifier has now FIRED, on the adapter its own marker named** (2026-09-08): `happenstance-neon` runs the suite and `read_result_is_stable_under_concurrent_append` fails intermittently — 3 red in 20 over HTTP/1.1, 1 in 40 over a single HTTP/2 connection. Not for the reason the marker anticipated: the read does **not** self-paginate, so ES-12 holds by construction. It fails because a read and an append are two independent requests to a pooled proxy, so ES-11's own sufficiency condition for asynchronous drivers — *"a read spawned at its first poll and an append spawned afterwards land in the same queue in that order"* — is false where there is no shared queue. One-shot HTTP is a third shape and the clause has two. **Owed an ADR**, staged at `.kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md`, and not amended here: check it against the escalation `HANDOVER.md` records as made in error and retracted, which claimed something different and weaker | 10 (ES-11, ES-12), 8 (ES-35), 14 (ES-40) |
 
 Every group names a phase in the [status table](#status). **PS-2 is the single
 gate under thirteen of these rows**, which is why phase 6 is worth its six days
@@ -4763,8 +4763,27 @@ skip list, which is the transport axis's far end stated honestly.
 
 `10b`:
 
-- [ ] Every rule `happenstance-neon` cannot pass is either a reported capability
-      skip or an amended clause — never a silent pass.
+- [~] Every rule `happenstance-neon` cannot pass is either a reported capability
+      skip or an amended clause — never a silent pass. **Met for three rules and
+      open for a fourth, and the fourth is the phase's real result.**
+
+      The three are reported skips carrying reasons true of *this* store:
+      `refused_reset_changes_nothing` (`RESET_REFUSAL` declined — the store holds
+      no protection policy), and `batch_reads_reflect_pending_writes` with
+      `rebuild_is_chunk_size_invariant` (`READS_THROUGH_BATCH = false` — a
+      `NeonWriteBatch` has been sent to the endpoint exactly never, and
+      `probe_read_through` is synchronous while every answer costs a round trip).
+      All four `Fixture` capabilities are armed for real and all three ceilings
+      stated, so nothing in the event-store, concurrency or model families skips.
+
+      **The fourth is `read_result_is_stable_under_concurrent_append`, and it is
+      neither a skip nor an amended clause — deliberately.** ES-11's falsifier has
+      fired on the adapter its own marker named, and amending a clause that ES-12
+      reduces to is an ADR's work rather than an adapter lane's. The residual is
+      in the provisional ledger above and staged at
+      `.kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md`.
+      **Until that ADR lands, this adapter's honest conformance statement is 104
+      of 105 rules with one open clause question, not 105.**
 
 - [~] No `todo!()` on either path; `publish = false` removed. **The Postgres half
       is done**: `PostgresProjectionStore`'s five bodies are written, the crate
@@ -4796,6 +4815,40 @@ skip list, which is the transport axis's far end stated honestly.
       cursor is session-local. What is injected instead is a view whose `WHERE`
       raises above a threshold, so the fault arrives while the `FETCH` is
       producing rows.
+
+- **2026-09-08 — `happenstance-neon` is written, runs the suite against a live
+  endpoint, and falsified ES-11 doing it.** All 16 `todo!()` bodies, a schema
+  concept (the proxy **discards** `options=-c search_path=…`, measured, so
+  isolation is schema-qualified identifiers rather than a session setting), two
+  migrations of its own, a dev-only HTTP/2 transport adding **zero** new
+  `Cargo.lock` nodes, four conformance mounts and a `live-neon` CI job. 105 of
+  105 event-store, concurrency and model tests and 19 of 19 projection tests
+  executed against PostgreSQL 18.6 behind the Neon pooler, with three reported
+  skips.
+
+  **The conditional append is a two-statement batch, not the single CTE this
+  crate documented**, and that is a measurement rather than a preference: the
+  endpoint honours `Neon-Batch-Isolation-Level` on a batch and **ignores it on a
+  single statement**, so the documented CTE would have run at READ COMMITTED and
+  two racers would both have probed empty and both inserted.
+
+  Four defects only a live endpoint found, each of which passed a smaller test
+  first: `ORDER BY position` binding to the `position::text` output alias rather
+  than the column (correct under ten events, wrong at 128); an empty `text[]`
+  rendering as `[""]` so every untagged event decoded as one invalid tag;
+  `#[tokio::test]` dropping its runtime per test, which killed a captured
+  `Handle` by the second one; and `--test-threads=1` being this adapter's
+  **visibility mechanism** rather than a flake workaround — `pg_snapshot_xmin` is
+  held back by any open write transaction on the branch, including sibling rules,
+  which is 67 of 105 red in parallel against 3 serially on the same commit.
+
+  **And the result the phase existed to produce.** ES-11's marker said the clause
+  would be *"falsified by the first one-shot-HTTP adapter that cannot meet this in
+  one round trip — which is the outcome to expect."* It was, though not for the
+  reason given: the read does not self-paginate, so ES-12 holds by construction.
+  It fails because a read and an append are two independent requests to a pooled
+  proxy, and ES-11's sufficiency condition for asynchronous drivers assumes one
+  queue. Reported and not amended; the ADR is owed.
 
 **Cases this makes writable.** E2E-01 against a store that can genuinely fail it.
 
