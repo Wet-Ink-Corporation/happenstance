@@ -179,8 +179,36 @@ refuted, each by its own mechanism**: `rusqlite`'s `Transaction<'_>` is `!Send`
 and costs the `SendProjectionStore` impl; `sqlx`'s cannot be produced by a total
 synchronous `begin` at all. The axis end is not unbuilt — for the two drivers the
 clause names, the port's own signatures forbid it. Reported here and in the
-adapter's module documentation; **the specification was not amended**, because
-that belongs to PS-2's owner.
+adapter's module documentation; the specification was not amended by the lane,
+because that belongs to PS-2's owner.
+
+**Settled at review, and it went further than the finding did.** The owner
+directed an ADR, a re-evaluation of the gate, and a proposal on the probe
+signature. `references/adr/0060-ps-2s-axis-re-evaluated.md` is the record.
+
+Reading PS-2's own instruments turned up something sharper than "both named
+drivers are refuted": `crates/happenstance-core/tests/probe_live_transaction_shape.rs`
+already shows that a store whose batch genuinely **is** a live transaction can
+implement the port — and must declare `READS_THROUGH_BATCH = false`, which that
+file calls *"a false statement about this store"*, because `probe_read_through`
+is synchronous, infallible and takes `&Self::Batch` while a driver borrows its
+connection mutably to run I/O. **So the two ends of the axis are indistinguishable
+to the suite.** PS-2's bar is not merely unmet; as written it is *unobservable*,
+and would stay unobservable on the day somebody built the adapter.
+
+**The gate stays on at `0.2.0`, and its reason is replaced rather than repeated.**
+ADR-0036 gated the port because only one adapter had run the suite at one end;
+four now do, and one of PS-2's two named ends is occupied by `happenstance-neon`,
+so that reason has expired and the evidence is materially better than at phase 6.
+The gate stays because lifting `unstable-projection` would make a semver promise
+out of `begin`, `probe_write` and `probe_read_through` — **exactly the signatures
+the finding indicts** — which would be making a promise out of the defect. That
+reason is indifferent to a fifth adapter arriving; the old one was not.
+ADR-0036's decision is reaffirmed rather than superseded, and its stated reason is
+recorded as expired rather than rewritten.
+
+**Nothing about the release moves**, and the census is unchanged: 138 frozen, 46
+provisional, 12 deferred, 5 non-normative, verified after the amendment.
 
 Three sub-decisions inside A, each of which the obvious answer gets wrong:
 
