@@ -138,7 +138,7 @@ checkpoint until the runner has caught up, and `200` after.
 | [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ on crates.io at `0.2.0` — 116 rules across four families |
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ on crates.io at `0.2.0`; passes the suite against a real file |
 | [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ on crates.io at `0.2.0`; passes the suite on `wasm32` — read the note below |
-| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | 🔲 stub, design notes only |
+| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ both roles pass their suites against a live server; **not** in the `0.2.0` release set |
 | [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | 🔲 stub, design notes only |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | 🔲 stub, design notes only |
 | [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
@@ -148,9 +148,20 @@ that the adapter has run `happenstance-testkit` and cleared it, which is what
 this project means by an adapter existing at all. It is not a claim of production
 mileage: nothing here has run anywhere but a test.
 
-The four 🔲 rows are not placeholders in the empty sense: each carries the design
+The three 🔲 rows are not placeholders in the empty sense: each carries the design
 constraints and open decisions for its pass, so the next session starts from the
 real questions rather than rediscovering them.
+
+**`happenstance-postgres` is the row that changed and the one most easily
+misread.** It is no longer a stub: the event store clears 101 of 101 conformance
+rules against a live PostgreSQL 17.10 including the concurrency family at 64
+contenders — the first adapter here to clear that family against a store whose
+writers are *not* serialised — and the projection store clears the projection
+suite, 14 rules run and 3 reported as skips. It is nevertheless **not published**
+at `0.2.0`, and that is a release-set decision rather than a readiness one: five
+crates ship, decided at the release pass, and this is not one of them. A ✅ in
+this column means *passes the suite*; the crates.io claim is in the same cell
+only where it is true.
 
 `happenstance-cloudflare` is the row most easily misread, and it ships in
 `0.2.0` with the thinnest evidence of the five. Two things a reader should have

@@ -4944,6 +4944,19 @@ is the release.
       the goal paragraph already spells out with its members for.
 - [ ] Set `clippy::todo` to `deny` with no per-crate exemptions in any published
       crate. A clean build with it denied is the proof that no stub survives.
+- [ ] **Run `scripts/stranger-install-smoke.sh`** — DR-8, and the one check the
+      gate structurally cannot do. Every step of `cargo xtask ci` runs inside this
+      workspace, where the crates resolve by *path*: a path dependency ignores the
+      `include` list, ignores a file left out of the `.crate`, ignores a feature
+      that only unifies because a sibling turned it on, and ignores a `version`
+      requirement naming something the registry does not have. `cargo package
+      --list` is already a gate step and catches some of that; it cannot catch a
+      crate that packages correctly and then fails to *compile* for somebody who
+      has only the registry. The script is written and its Rust is validated
+      against the local crates, so it will not fail at the release for a typo —
+      what it has never done is resolve from crates.io, which is the whole
+      proposition and needs the release to exist. Its failure mode is a yank.
+
 - [ ] Tag; cut the GitHub release.
 - [ ] ADR-0004 loses `provisional`; the MSRV becomes a promise.
 - [ ] Repoint `cargo-semver-checks` to keep *both* baselines — the registry for
