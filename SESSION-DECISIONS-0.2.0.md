@@ -429,6 +429,90 @@ none of them is.
 
 ---
 
+### D-11 — phase 11, and the ADR that was wrong in the useful place
+
+Delegated as its own lane against ADR-0025, which was written first — from the
+probes in D-09 rather than from the crate's own notes. **The pre-registered
+verdict held**: the capability profile matched the prediction exactly on all four
+constants, and none of the four named "it did not hold" conditions fired. 42
+listed, 42 executed, 42 passed, 0 failed, against the real driver, with the suite
+mounted twice — once under an emitter that needs no runtime.
+
+The structural pass was written against the stand-in first and then compiled
+against the real driver **with zero API mismatches**. That is the whole argument
+for a skeleton, stated once as a result rather than as a hope.
+
+#### Where ADR-0025 was wrong, which is worth more than where it was right
+
+§8 predicted `COMMIT_FAULT = SUPPORTED` and gave a mechanism: a `CREATE` against a
+pre-planted primary key raises, where a `MERGE` would not. Both halves are true,
+and **together they are fatal** — nothing a fixture can reach makes this store
+issue a `CREATE`, because the checkpoint write is a `MERGE` and so is the probe
+write. §8's own observation, applied one step further than §8 applied it, rules
+out §8's own injection.
+
+The capability prediction survived; its stated reason did not. What landed
+instead recreates the probe table with a primary key the store's `MERGE` cannot
+satisfy — **with a named limitation the rule cannot see**: it faults the *first*
+batch statement, so unlike SQLite's checkpoint-side trigger it does not refute the
+specific wrong implementation the rule's message names. That is a property of the
+schema rather than of the adapter, and both near-misses are written into the
+fixture with their measured errors.
+
+This is the pre-registration doing its job. A verdict written after the run would
+have recorded "`COMMIT_FAULT` supported, as predicted" and lost the fact that the
+prediction was right for a reason that does not exist.
+
+#### Four findings that are not in the ADR
+
+- **The driver segfaults.** A connection issuing a statement after its own `BEGIN
+  TRANSACTION` was refused kills the process with `STATUS_ACCESS_VIOLATION`. The
+  adapter cannot reach it, and a test now pins the refactor that would reintroduce
+  it — "try the statements anyway".
+- **`BEGIN TRANSACTION` claims a single writer slot.** This is what made
+  `WriteTransactionInUse` constructible; it was one commit from being the
+  decorative variant ADR-0025 deleted `PositionOutOfRange` for.
+- **`UInt64` coerces silently to `STRING`**, so type-mismatch injections do not
+  raise.
+- **`SystemConfig::default()` reserves 4 GiB per database** — invisible for one,
+  decisive for forty in a test binary.
+
+#### One refinement to ADR-0025 §7
+
+The **regression** path must issue a `ROLLBACK`, because no statement failed there
+and the transaction is still open. §7's prohibition is about the *error* path
+specifically, where the engine has already aborted. Documented on `commit`.
+
+#### `publish = false` stays, and it is a third kind
+
+`DOCS_RS=1 cargo check -p happenstance-ladybug --features driver` fails with two
+`env!` errors: `lbug`'s build script returns early under `DOCS_RS` before emitting
+the `cargo:rustc-env` lines its own `lib.rs` requires, and an undefined `env!` is
+a compile error rather than a fallback. Rendering on docs.rs is phase 12's bar for
+a published crate, so this one **cannot** clear it — the block is upstream and not
+ours.
+
+That makes three meanings of one flag now live in this workspace:
+`happenstance-sync` is unfinished; `happenstance-postgres` and
+`happenstance-neon` are finished and out of the five-crate release set; this one
+is finished and unpublishable. The manifests are identical, so each crate root
+says which it means.
+
+#### Decisions inside the lane worth naming
+
+- **A mandatory no-driver step beside the probed one.** The workspace exclusions
+  take the crate's *default* configuration off the gate entirely; without a step
+  that compiles it, a `cfg` typo would be caught by nothing. One step more than
+  the brief asked for, and flagged rather than absorbed.
+- **`lbug`'s version in the member manifest, not `[workspace.dependencies]`** —
+  the lane did not own the root manifest, and `happenstance-neon` is the in-tree
+  precedent.
+- **No `tempfile`** — not in the workspace, and adding it needs the root manifest.
+  The repo's own `temp_dir()` + pid + ordinal + `Drop` pattern instead, with the
+  store dropped before the directory so the database closes first.
+
+---
+
 ## Left for the owner
 
 1. **A UAC dialog is open on the desktop.** `winget install
