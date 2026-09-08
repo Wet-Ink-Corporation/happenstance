@@ -12,7 +12,7 @@ briefs await ratification. Both were true when written.
 
 ---
 
-## State, as of `b0d9e67`
+## State, as of `2550eaf`
 
 | | |
 |---|---|
@@ -30,7 +30,12 @@ is one machine and one operating system. CI carries a three-OS matrix, `msrv`,
 and — the one that matters here — **`live-postgres`**, the job that runs the 101
 gated tests against a real server under Docker. Phase 10's entire Postgres half,
 the four demonstrations, the benchmark suite and the merged read path had never
-been through any of them. The push is `3c4c728..b0d9e67`.
+been through any of them. The push is `3c4c728..b0d9e67`, and it is green on all
+three gate platforms, `msrv` and `live-postgres`.
+
+Everything since has been pushed as it landed, so the gap does not reopen: read
+`git status -sb` before trusting the row above, because *ahead by N* is what this
+row was silently worth for three weeks.
 
 The general form, since it will recur: **a green `cargo xtask ci` is evidence
 about this machine.** Three jobs in `ci.yml` cannot run locally at all —
@@ -100,109 +105,72 @@ falsifier fired and is wrong — history, not guidance.
 
 ## Outstanding, in the order that unblocks the most
 
-### 1. The implementation queue from the seventeen ratifications
+### 1. The implementation queue — **discharged 2026-09-07**
 
-Ratifying is not landing. Six items, roughly by size:
+All six landed. Kept as a table rather than deleted, because three of them came
+back from execution meaning something other than what was ratified, and that is
+the part a future reader needs.
 
-1. **`cf-18` / candidate B3** — **costed on 2026-09-07, and the costing changed
-   the item.** Read the section below before touching it: B3 *as the brief words
-   it* is vacuous, because `Capability::declined` already refuses an empty
-   reason. The version that was taken asserts something different and larger.
-   Estimated **1–1.5 days**, not unbounded. The fallback (narrow CF-18 to option
-   A) was **not** taken and remains written down.
-2. **`empty-decision-outcome` / Option 3** — a second success shape on the command
-   path, `#[must_use]`, and every call site and doctest naming the existing one.
-3. **`tags-scope-agreement` / A + B** — a run-time refusal between
-   `command.rs:312` and `:318`, plus two doctest repairs. **The briefs' line
-   numbers are stale**: they were pinned before `835028f` added seven doc lines
-   to `commit_with`, so every `command.rs` citation in the brief corpus is `+7`
-   and `domain.rs`'s are roughly `+50`. Repoint by anchor, as always; the point
-   here is that the briefs are not a fixed frame of reference either.
-4. **`codec-foreign-tag-resolution` / A** — a defaulted method on `Codec`.
-   Option C (sealing) stays open and is the cheaper answer if no fourth codec
-   ever appears.
-5. **`stringified-throw-visibility` / B** — `pub(crate)`, and the crate root's
-   invitation withdrawn with it.
-6. **`op-read-non-exhaustive` / A** — the attribute, landing with the `to` field.
-   No constructor: D was considered and declined.
+| Brief | Commit | Landed as ratified? |
+|---|---|---|
+| `op-read-non-exhaustive` / A | `9000f35` | yes |
+| `stringified-throw-visibility` / B | `9225c00` | yes, plus a consequence the brief did not name |
+| `codec-foreign-tag-resolution` / A | `2d37fc4` | yes, **narrower** than the brief implied |
+| `empty-decision-outcome` / 3 + `tags-scope-agreement` / A + B | `0ae10ab` | yes, and they had to land together |
+| `cf-18` / B3 | `3df4b6e` | **no — the costing changed the assertion** |
 
-`query-partition-public-surface` (1A) and `read-page-budget` (A) ratify what is
-already landed and oblige nothing.
+`query-partition-public-surface` (1A) and `read-page-budget` (A) ratified what was
+already landed and obliged nothing.
 
-#### `cf-18` / B3, costed — read this before implementing item 1
+The reasoning for each is in its commit message, and the three that changed are
+written up for the KB in
+`.kb/_intake/2026-09-07-ratifications-discharged-and-what-execution-changed.md`.
+The three worth knowing without reading further:
 
-**The brief's wording describes a state that cannot be constructed.**
-`Capability` is `Capability(Option<&'static str>)`
-(`crates/happenstance-testkit/src/contract.rs:983`): `SUPPORTED` *is*
-`Self(None)`, so declining and carrying a reason are the same act, and
-`Capability::declined` already refuses an empty string at `contract.rs:1031`
-with an `assert!` that says why. A test asserting *"declined without a stated
-reason"* would pass on every fixture that will ever exist. **B3 as written is
-decorative**, which is the corollary `CLAUDE.md` warns about, arriving from the
-direction nobody watches.
+- **`cf-18` / B3's own wording was decorative.** *"Fails if a capability is
+  declined without a stated reason"* describes a state `Capability::declined`
+  already makes unconstructible, so a rule written to it would pass on every
+  fixture that will ever exist. What shipped rejects declension by
+  **inheritance** — the five capabilities that default to a declension in the
+  testkit's own words. CF-18's MUST is untouched and still `[FROZEN]`; the
+  fallback of narrowing it was **not** taken. The `wasm32` blind spot the costing
+  expected to accept was closed instead, by a `cfg_attr` pair: a false predicate
+  is stripped before name resolution, so no native adapter gains a
+  `wasm-bindgen-test` dependency.
 
-**The two real gaps are named by the trait's own documentation.**
-`contract.rs:1022-1028` says the `assert!` above is a `const fn` precondition
-and that for an *associated* const it is evaluated lazily at **codegen** — so
-`cargo build` and `cargo test` catch an empty reason and `cargo clippy` does
-not, and nothing forces a default run to read the const at all. The larger gap
-is **declension by inheritance**: `Fixture::MID_BATCH_FAULT`,
-`Fixture::READ_FAULT`, `ProjectionFixture::RESET_REFUSAL`,
-`ProjectionFixture::COMMIT_FAULT` and `ProjectionFixture::SECOND_HANDLE` all
-*default to a declension*, so a fixture that says nothing declines them and the
-`SKIP` line then prints **the testkit's prose as though it were the adapter's
-own account of its store**. That is precisely the misrepresentation CF-18's
-`Rejects:` paragraph exists to prevent, and two fixtures are in that state
-today: `MemoryFixture` inherits `MID_BATCH_FAULT` and `PostgresFixture`
-inherits `READ_FAULT`.
+- **It found real work in `happenstance-postgres`.** `PostgresFixture` inherited
+  `READ_FAULT`, whose default says the injection "has to come from the adapter and
+  this one has none to offer" — false about this store. `PgReadStream` `FETCH`es a
+  server-side cursor per chunk, so it is exactly the paged adapter the capability
+  was invented for. It now declines *by scope*, names the injection that would
+  work, and records that building it belongs to phase 10's remainder alongside
+  Neon. **That is an addition to phase 10's scope, made by evidence rather than
+  by preference.**
 
-**What was decided.** B3 in the **stated-not-inherited** form, emitted from the
-**suite macro body**, with the two inherited declensions restated in the same
-change. CF-18 stands as written and is not narrowed; ES-35's `[PROVISIONAL]`
-marker is undisturbed.
+- **`Codec::reads_tag` is narrower than the brief implied.** The orphan rule makes
+  the repair per-codec, so it serves *"my codec also reads the tag I used to
+  write"* and not *"I adopted `Json` and want my history back"* — which is the
+  migration `Codec`'s own page had been using as its cautionary story. Sealing the
+  trait stays open and is still the cheaper answer if no fourth codec appears.
 
-**Why it is cheap, which was the brief's own open question.** The brief asked
-whether `capability_skips_are_reported`'s assertion could be macro-emitted
-without dragging the mutation-coverage harness into an adapter's build. **It
-cannot, and it does not need to be** — those are two different assertions. That
-meta-test asserts over *rule outcomes*, which structurally needs the driving
-harness, `catch_unwind`, and an adversarial fixture: about 13,000 lines, all of
-it `tests/`-local. B3 asserts over *associated consts* and needs one `pub fn` in
-`src/contract.rs`, reached through a generic bound on `Fixture`. Nothing from
-`tests/mutation_coverage/` enters an adapter's build.
+Nine wrong implementations were built and run to prove the new tests are not
+decorative; each is caught by exactly one test, and no test catches another's
+defect. Every item passed `cargo xtask ci` (35 steps) before its commit.
 
-**Why this is the right bar rather than an invention.** Two adapter authors
-already hand-wrote it, independently and without a clause telling them to:
-`happenstance-postgres`'s `capability_constants_are_answered_not_defaulted`
-(`tests/postgres_conformance.rs:411`), whose own doc calls it *"the belt to
-`Capability::declined("")`'s suspender, which fires at codegen"*, and four tests
-in `happenstance-cloudflare`'s `tests/fixture_contract.rs`, including
-`mid_batch_fault_is_restated_not_inherited`. B3 is *"generalise a test two
-adapters already wrote, so the third gets it for free."*
-
-**The one thing it will not cover, and it must be written into the clause.**
-`memory_conformance_wasm.rs` and `durable_object_conformance.rs` invoke with
-`emit = __emit_wasm`, and a plain `#[test]` emitted into those modules is
-neither run nor listed by `wasm-bindgen-test-runner`. Emitting from the twelve
-*emitters* instead would cover wasm32 — and would break worse: CF-23 makes the
-emitter the **caller's**, so a third-party emitter would silently drop the
-check, which is the same incentive inversion CF-18 exists to close. The suite
-body is the right seam and the wasm32 blind spot is the price, stated rather
-than absorbed.
-
-**Do not let the new test be decorative either.** It must go red against a
-fixture that inherits a declension, and that wrong fixture belongs in the
-testkit's own `tests/`. It must also be observable in a **default**
-`cargo test -p happenstance-sqlite --test conformance`, with no `--show-output`
-— that is the whole point of the item, and the one thing a passing test cannot
-tell you about itself.
 
 ### 2. `.kb/_intake` is full and owed an ingest
 
-**Six staged documents** plus redkiln's own scaffolded `README.md`, plus the
+**Seven staged documents** plus redkiln's own scaffolded `README.md`, plus the
 49-brief directory. `/redkiln:kb-ingest` authors the atoms; they must not be
-hand-written. Three of the six are this pass's decisions, three came from the
-postgres lane (ADR-0024, ADR-0038, the poll-count calibration).
+hand-written. Three are this pass's decisions, three came from the postgres lane
+(ADR-0024, ADR-0038, the poll-count calibration), and the seventh
+(`2026-09-07-ratifications-discharged-…`) is the queue above with the three
+things execution changed about it.
+
+**Run the wave after the queue lands, not before**, which is now the case: the
+ratifications file records decisions, and three of them mean something different
+once executed. Atoms authored from the decisions alone would have been accurate
+about what was chosen and wrong about what exists.
 
 **The briefs are not in the default wave and that is correct.**
 `remediation-2026-09-04-briefs/` is a *subdirectory*, and the command's default
@@ -235,6 +203,13 @@ Whoever closes phase 10 should size it from the larger number.
 Neon also carries ES-11's and ES-12's real falsifier: a one-shot-HTTP store with
 no connection, no interactive transaction and no cursor. Those clauses stay
 `[PROVISIONAL]` until it exists.
+
+**Phase 10's remainder grew by one item on 2026-09-07**, and not by choice:
+CF-18's new check found that `PostgresFixture` was declining `READ_FAULT` in the
+testkit's words on the one adapter whose read genuinely pages. Arming it —
+`pg_terminate_backend` on the reader's own backend between two `FETCH`es, or
+closing the cursor beneath it — is now Postgres's owed work as well as Neon's.
+Neither gates publication.
 
 ### 4. Benchmarks — re-run on a quiet machine
 
