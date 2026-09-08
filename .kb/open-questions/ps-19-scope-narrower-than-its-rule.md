@@ -34,6 +34,8 @@ related:
   - kb-open-question-projection-batch-no-apply-001
   - kb-decision-0018
   - kb-decision-0030
+  - kb-open-question-probe-read-through-signature-001
+  - kb-open-question-projection-runner-chunk-observation-001
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/2026-08-13-adr-0018-reset.md

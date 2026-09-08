@@ -12,15 +12,31 @@ summary: >-
   string. Compares the explicit anchor spelling against the derived one with the cost of each,
   records four measured attempts that took the false-report rate from 118/316 to 2/262, and states
   the discriminator that made it work: a heuristic that cannot tell its own mistakes from the
-  corpus's must decline rather than guess.
+  corpus's must decline rather than guess. Nine further instances measured across the 2026-09-04
+  remediation wave carry the method to its conclusion — an anchor that matches many lines is
+  already broken and only a line number is hiding it — and record the repointing disciplines that
+  survived them: by anchor never by offset, exactly once, never to a line budget, and never
+  re-aimed on another lane's behalf.
 depends_on:
   - kb-playbook-verify-referent-report-coverage-001
+  - kb-decision-0045
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
   - kb-reference-phase-8-spec-reconciliation-001
+  - kb-reference-intake-citation-drift-census-001
   - kb-playbook-declared-page-need-001
   - kb-playbook-assert-execution-not-discovery-001
+  - kb-playbook-count-or-index-nobody-re-derives-001
   - kb-governance-what-may-refute-a-finding-001
+  - kb-open-question-exact-anchor-residue-001
+  - kb-open-question-docs-citation-anchor-contradiction-001
+  - kb-open-question-gate-step-first-check-hides-001
+  - kb-open-question-projection-runner-chunk-observation-001
+  - kb-open-question-rustdoc-citation-form-001
+  - kb-open-question-cf-36-unperformed-cross-reference-001
+  - kb-open-question-disjoint-boundaries-no-clause-001
+  - kb-open-question-es-6-unwritable-rule-001
+  - kb-open-question-read-page-budget-001
 source_paths:
   - .kb/_intake/lesson-anchoring-citations-in-a-long-lived-document.md
   - .kb/_intake/2026-09-03-pre-publication-review.md
@@ -33,7 +49,15 @@ source_paths:
   - standards/rust/README.md
   - references/evaluation/phase-4-5-reconciliation.md
   - references/evaluation/review-citation-drift.md
-last_reviewed: 2026-09-04
+  - .kb/_intake/2026-09-07-ratifications-discharged-and-what-execution-changed.md
+  - .kb/_intake/remediation-2026-09-04-briefs/citation-anchor-slack.md
+  - .kb/_intake/remediation-2026-09-04-briefs/a-gate-step-whose-first-check-hides-its-second.md
+  - .kb/_intake/remediation-2026-09-04-briefs/docs-citation-form-and-clause-content.md
+  - .kb/_intake/remediation-2026-09-04-briefs/projection-runner-chunk-and-observation.md
+  - .kb/_intake/remediation-2026-09-04-briefs/sqlite-lane-spec-citation-repoints.md
+  - .kb/_intake/remediation-2026-09-04-briefs/query-partition-public-surface.md
+  - .kb/_intake/remediation-2026-09-04-briefs/sole-evidence-pins-and-moved-file-citations.md
+last_reviewed: 2026-09-07
 ---
 
 # Anchoring citations in a document whose targets move under it
@@ -59,8 +83,9 @@ to the window width and fails when the item genuinely moves.
 
 **Explicit** — what `standards/rust/` does: the citation itself carries the anchor,
 `` `path:line (anchor)` ``, checked by `parse_citation`/`check_citations`
-(`xtask/src/lint_constitution.rs:690-735`) with `ANCHOR_SLACK = 10`. An unparseable citation is a
-hard failure. Its cost is real: every existing site would need editing to carry an anchor before
+(`xtask/src/lint_constitution.rs:690-735`). An unparseable citation is a hard failure. It carried a
+ten-line tolerance until 2026-09-04, when measuring that tolerance closed it to zero — the section
+below, and `kb-decision-0045`. Its cost is real: every existing site would need editing to carry an anchor before
 the check could be whole. Right when a corpus is being authored; an expensive retrofit onto one
 that already exists.
 
@@ -145,3 +170,74 @@ enforced over `standards/rust/` alone (`lint_constitution`'s `ATOM_DIR`); derive
 `references/evaluation/` — twenty-nine documents, dense in `file:line`, and the tree an auditor
 reads first — has neither. Both instances were found there, which is what an unchecked citation
 habit looks like from the outside.
+
+## Nine more instances, and the one sentence they all make (2026-09-04 → 2026-09-07)
+
+The remediation wave met this in nine places at once, and they collapse into a single sentence:
+**an anchor that matches many lines is already broken, and only a line number is hiding it.** That
+is P1 stated the other way round — a green that depends on a coincidence is not evidence about the
+thing the step is named for, and it is the same shape as the derivation discriminator above.
+
+**The measurement that forced it.** `ANCHOR_SLACK`'s rationale — *ordinary editing stays inside ten
+lines, a function moving does not* — is a prediction about a distribution, and nobody had taken the
+distribution. Taken over `standards/rust/`'s 323 citations, **101 (31%) resolved only because of the
+slack**, and the offsets did not decay with distance: a lobe of 17 at +4, another 17 at +9, and two
+at exactly +10, one inserted line from red. Three were green while pointing at a provably wrong
+construct — a closing brace, an `allow = [`, and the line above a field. A deliberately false line
+number planted in a scratch worktree left the step printing *"27 atoms, all consistent"*. And 25 of
+the 101 had an anchor occurring more than once in the target file, the extreme being `impl Defect
+for` at 66 occurrences in `mutants.rs`: for those the line number was the only thing pinning the
+citation, which is the tolerance's own argument running backwards.
+
+**The repair is sharpening, not repointing.** When the window closed, `lint-constitution` repointed
+fourteen of twenty-one moved citations by naming the line and *refused* seven; six of those seven
+were ambiguous before any of the work, because the two suite macros in `happenstance-testkit` carry
+byte-identical comments and anchors like `Listed first` matched both all along. The refusal is the
+feature. Sixteen anchors were sharpened rather than renumbered (`impl Defect for` →
+`impl Defect for InnerJoinTagStore`), and two that resist sharpening — `match never {}` appears
+identically twice in `error.rs` — are pinned by the exact line alone and are the residual class.
+
+**Four disciplines, each learned from a failure in this wave.**
+
+- **Repoint by anchor, never by offset.** Ten `spec/SPECIFICATION.md` citations into
+  `happenstance-sqlite` moved by different amounts, and two ranges moved by different amounts at
+  their two ends; a modal offset would have left the outliers wrong and green.
+- **Run a repointing script exactly once.** A script that derived each new line from `git diff -U0`
+  hunks and verified it by comparing the cited line's content re-shifted **eleven** citations on a
+  second run: the already-corrected number was compared against a line whose content happened to be
+  identical — `    }`, a blank line, a bare `///` — so the guard passed and the shift applied twice.
+  The repair had become a corruption, and re-reading the output caught it, not the check. Restore
+  from git and run once.
+- **Never write prose to a line budget.** One lane sized a passage so another file's citation would
+  stay inside `spec-trace`'s twelve, and it did: the citation was green and pointing at the wrong
+  line for a commit, until an unrelated change pushed it out and the checker finally spoke. Recorded
+  so nobody mistakes it for a practice.
+- **Never re-aim another lane's evidence.** Anchor repointing preserves what a citation pointed at
+  and cannot fix one already aimed wrongly. Move it faithfully and brief the rest: a citation into a
+  file another lane owns is a handoff, and a branch left red on `spec-trace` for one such row is the
+  honest outcome.
+
+**A citation the checker cannot anchor is unprotected, whatever a comment beside it claims.** Three
+`SPECIFICATION.md` sentences cite `run_projection` at a line **inside a doctest fence**, and
+`runner.rs` carried a comment saying `spec-trace` catches drift there. It does not: moving the call
+39 lines away left the checker reporting the identical `401 citations checked (80 anchored to their
+subject)` and exiting 0, because those three are not among the 80. The repair is to cite a line
+whose subject the prose already names. The same blindness has a third form — a bare `:NNN` citation
+is not recognised *at all*, because `parse_citation` requires a slash in the path.
+
+**Two tolerances, and that is now a stated difference rather than a silent one.** Zero is right for
+explicit anchors, where *the cited line contains the quoted text* is exactly the claim being made
+and so is satisfiable by construction. `spec_trace` keeps twelve because its anchor is derived from
+whatever identifier the prose reached for, while the range points at the *evidence* — the
+doc-comment bullets, with the signature just outside them. Repointing those onto their identifier
+buys matching numbers with a worse citation. Closing that window would redden 21 of 80 anchored
+citations, 20 of them inside `[FROZEN]` commentary; the count alone would settle it, and the reading
+is what does. Each constant's doc now carries the other's argument and cites it.
+
+What this section deliberately does not carry: the ratified rule itself, which is a commitment and
+lives in `kb-decision-0045`, and the three questions the landing left standing, which live in
+`kb-open-question-exact-anchor-residue-001`. The coverage gaps beyond `standards/rust/` — `docs/`
+pages, the `.kb/_intake/` staging tree, and the citation form now that the repository is public —
+are `kb-open-question-docs-citation-anchor-contradiction-001` and
+`kb-open-question-rustdoc-citation-form-001`, with the drift they had already accumulated measured
+in `kb-reference-intake-citation-drift-census-001`.

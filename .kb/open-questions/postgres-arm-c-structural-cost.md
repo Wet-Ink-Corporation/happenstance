@@ -2,7 +2,7 @@
 id: kb-open-question-postgres-arm-c-cost-001
 title: Whether a real Postgres adapter can express arm C cleanly
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   The mechanism by which a Postgres adapter buys position visibility is settled — xid8 plus
@@ -16,17 +16,42 @@ summary: >-
   plan for. Refuted by an adapter that cannot express arm C cleanly, or whose frontier staleness is
   unacceptable under load. Owned by phase 10 and by ADR-0024, which also owns the choice of
   happenstance-postgres's actual mechanism.
+  Resolved 2026-09-07 by ADR-0024 (kb-decision-0024), at phase 10, which built the adapter and
+  re-measured against it. Arm C is expressible cleanly: the trait signature is untouched, and the
+  steady-state cost is not resolvable by the measurement rather than absent - medians 0.985 / 1.131
+  / 1.026 at 1 / 8 / 32 clients against a spread of about plus or minus 20%, which establishes only
+  that nothing large enough to matter hides inside that band, and the rivals cost 16x and 30x.
+  Three structural costs were forced and none of them reached the port - a captured runtime Handle
+  on every operation because Handle::enter is !Send and would break SendEventStore, the cursor
+  carrying that handle so PoolConnection::drop can return its connection, and SERIALIZABLE plus a
+  bounded retry on the conditional path. Sub-question 3 is answered and documented rather than only
+  recorded: sub-millisecond unloaded, otherwise the remainder - not a fraction - of the longest open
+  write transaction anywhere on the cluster, 4799.3 ms against a five-second hold, and it sits on
+  happenstance-postgres's crate root where a consumer meets it before any method. B-tag stays
+  rejected on the invariant rather than on cost, so sub-question 4's branch never opened. Superseded
+  rather than withdrawn because two residuals moved to owners of their own -
+  kb-open-question-off-poll-visibility-defect-001 for what sub-question 2's pass turned out to be
+  worth, and kb-open-question-global-vs-boundary-visibility-001 for the premise this question
+  inherited.
 depends_on: []
 related:
   - kb-decision-0013
+  - kb-decision-0024
+  - kb-decision-0001
   - kb-reference-position-visibility-experiment-001
+  - kb-reference-position-visibility-adapter-remeasurement-001
+  - kb-open-question-off-poll-visibility-defect-001
+  - kb-open-question-global-vs-boundary-visibility-001
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
+  - .kb/_intake/2026-09-07-adr-0024-position-visibility-mechanism.md
   - references/adr/0013-position-assignment-and-visibility.md
+  - references/adr/0024-position-visibility-mechanism.md
   - experiments/position-visibility/
+  - experiments/position-visibility/results/adapter-remeasurement.md
   - crates/happenstance-postgres/src/lib.rs
   - RUNBOOK.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-07
 ---
 
 # Whether a real Postgres adapter can express arm C cleanly
@@ -94,3 +119,56 @@ choose the adapter's." So arm C's structural cost is unmeasured until someone ac
    ADR-0024 reconsider arm B-tag (per-boundary, cheaper) in light of how phase 6 has by then shaped
    the projection checkpoint — tying this question to the global-versus-per-boundary open question
    this same ADR raises?
+
+## Resolved 2026-09-07 — the adapter exists, and arm C cost nothing the machine can resolve
+
+Everything above is the state of knowledge on 2026-08-10 and is left exactly as written, per this
+layer's README. ADR-0024 (`kb-decision-0024`; long form at
+`references/adr/0024-position-visibility-mechanism.md`) now holds the answer, so this atom moves to
+`superseded` rather than `withdrawn` — the question was worth asking, and it is what the phase-10
+measurement was designed against.
+
+**Sub-question 1 — sqlx's pooling and transaction model.** No compromise reached the port: the
+`EventStore::append` signature is untouched. Three real costs were forced inside the adapter, and
+they are the answer to "at what structural cost" this atom asked for. Every operation captures a
+runtime `Handle`, because `Handle::enter` is `!Send` and taking it per-call would have broken the
+`SendEventStore` flavour ADR-0001 exists to preserve. The cursor carries that handle so
+`PoolConnection::drop` can return its connection to the pool. And the conditional path runs
+`SERIALIZABLE` with a bounded retry, because under `READ COMMITTED` two writers racing one boundary
+can both win, and taking a write lock instead is the move this crate exists not to make.
+
+**Sub-question 2 — does the rule still pass.** It does, **and the pass is not evidence.** The naive
+arm — the same adapter with the visibility predicate removed — passes
+`nothing_below_an_observed_position_appears_later` too, because this adapter advances off-poll. The
+mechanism is evidenced by direct observation instead: the probe, and the staleness table below. That
+the rule cannot discriminate here is a defect in the instrument rather than in the adapter, and it
+is now `kb-open-question-off-poll-visibility-defect-001`'s, which ADR-0024 owns.
+
+**Sub-question 3 — the bound the docs promise.** Sub-millisecond unloaded; otherwise the *remainder*
+of the longest open write transaction anywhere on the cluster, not a fraction of it. Nine samples
+per cell against the built adapter, with the unguarded arm as the control phase 2 never had
+(`experiments/position-visibility/results/adapter-remeasurement.md`): baseline 0.521 ms control and
+0.595 ms behind a five-second hold; arm C 0.593 ms control and **4799.3 ms** behind the same hold.
+Same server, same hold, same load — only the predicate differs, which is exactly what phase 2's
+arm-C-against-itself comparison could not show. The figure is on `happenstance-postgres`'s crate
+root (`crates/happenstance-postgres/src/lib.rs`), so a consumer meets it before any method, and this
+sub-question is closed in the documentation rather than only in a record.
+
+The steady-state half of the cost is *unresolved rather than free*, and the record says so instead
+of quoting a point estimate: medians 0.985 / 1.131 / 1.026 at 1 / 8 / 32 clients with a spread of
+about ±20%, against an effect phase 2 put at 0.99–1.03, on a machine whose baseline drifted
+1.01–1.88 within a single triple. It establishes only that no cost large enough to matter hides
+inside ±20% — which is enough, because arm A and arm B-const cost 16× and 30×.
+
+**Sub-question 4 — reconsider B-tag.** No, and its branch never opened. The condition this atom set
+was "if arm C proves structurally expensive"; it did not. B-tag stays rejected on the invariant —
+per-boundary where ES-10 is global — rather than on cost, which matters because B-tag is *cheaper*
+(0.935 at 64 writers) precisely by buying something weaker, so ranking the arms by throughput would
+have chosen it.
+
+**Two things this resolution does not carry.** ES-10's `[FROZEN]` prose still quotes phase 2's
+0.688 ms / 4010.719 ms, which the adapter re-measurement supersedes, and the clause is not edited —
+`spec/SPECIFICATION.md` is unedited by phase 10, and ADR-0024 adds no clause of its own. And the
+global framing this question inherited from ADR-0013 stays inherited rather than settled: a
+boundary-scoped projection checkpoint could make B-tag's weaker invariant sufficient, which is
+`kb-open-question-global-vs-boundary-visibility-001`'s.

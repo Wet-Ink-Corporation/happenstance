@@ -14,11 +14,14 @@ summary: >-
   other gate tool is either rustup-pinned or cargo installed from Cargo.lock. What is true today
   is that the harness proves the mapping and proves nothing about the platform: no isolate, no
   eviction, no hibernation, no I/O gate, no event loop re-entering the object mid-await, and none
-  of the platform's own storage ceilings. Two consequences are already observed rather than
+  of the platform's own storage ceilings. Three consequences are already observed rather than
   feared. ADR-0023 states the exclusion list in its own body rather than leaving it to be
-  discovered. And WF-11's memory-ceiling falsifier could not be made to fire at all — a Node
+  discovered. WF-11's memory-ceiling falsifier could not be made to fire at all — a Node
   isolate has no per-isolate memory cap, which is exactly the property the falsifier needs, so
-  the verdict is that the condition is not constructible on this runtime. What is not decided is
+  the verdict is that the condition is not constructible on this runtime. And ADR-0052's two
+  query-partition constants were adopted unchanged by happenstance-cloudflare because no
+  measurement locates the wall for SQL text inside a Durable Object isolate, so a narrower
+  width would be invented rather than measured. What is not decided is
   whether a workerd-class runner ever enters cargo xtask ci, what it would cost the gate's
   single-command property to admit one, and what stays unproven for as long as it does not.
   Forced by the next clause that needs a platform behaviour rather than a storage behaviour, and
@@ -28,16 +31,19 @@ related:
   - kb-decision-0010
   - kb-decision-0016
   - kb-decision-0023
+  - kb-decision-0052
   - kb-reference-wf-11-memory-ceiling-verdict-001
   - kb-open-question-human-readable-encoding-limits-001
+  - kb-open-question-cloudflare-feature-gate-001
 source_paths:
   - .kb/_intake/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md
   - .kb/_intake/wf-11-human-readable-encoding-measured-on-this-runtime.md
+  - .kb/_intake/remediation-2026-09-04-briefs/query-partition-public-surface.md
   - references/adr/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md
   - crates/happenstance-cloudflare/src/host.rs
   - crates/happenstance-cloudflare/tests/wf11_memory_ceiling.rs
   - xtask/src/proof.rs
-last_reviewed: 2026-08-20
+last_reviewed: 2026-09-07
 ---
 
 # The gate executes every Cloudflare rule on a shim, and nothing owns the runner it is not
@@ -63,7 +69,7 @@ carries is either `rustup`-pinned or `cargo install`ed from `Cargo.lock`.
 What the shim-based harness does not prove is stated in ADR-0023's own body rather than
 left to be discovered: no isolate, no eviction, no hibernation, no I/O gate, no event
 loop re-entering the object mid-`await`, and none of the platform's own storage
-ceilings. Two consequences of that gap are already observed, not merely predicted.
+ceilings. Three consequences of that gap are already observed, not merely predicted.
 First, ADR-0023 itself states the exclusion list as a scope note in its decision body.
 Second, WF-11's memory-ceiling falsifier was fired at directly and could not be made to
 land: the staircase asked the host for 2,047 pages and was granted every one, taking
@@ -73,6 +79,20 @@ cap. `kb-reference-wf-11-memory-ceiling-verdict-001` records the verdict: the co
 this falsifier needs is not constructible on the runtime that was supposed to supply
 it, and that is a second, independent consequence of the same absent runner rather than
 a new problem.
+
+Third, the absent runner is what stopped `happenstance-cloudflare` declaring *narrower*
+query widths than its SQLite sibling. `kb-decision-0052` froze two public partition
+constants on `SqliteEventStore` — an arm width and a bound-parameter budget — and
+`happenstance-cloudflare` publishes the same pair, on the argument that both are
+properties of the SQLite underneath a Durable Object's storage rather than of either
+adapter. Whether a Durable Object's isolate deserves smaller numbers is a real question
+with no answer available here, and for exactly WF-11's reason: the same run that granted
+2,047 pages locates no wall for SQL *text* either, so a smaller width would be invented
+rather than measured. What the lane did instead was bound the *merge* — residency is one
+page plus one chunk rather than `chunks × page` — which is free and needs no number. So
+the width question is parked against this atom rather than against ADR-0052, and it is a
+third instance of the same absence rather than a new one. It stops being free at
+`0.2.0`, when both numbers become promises on a published surface.
 
 ## What is not decided
 
@@ -103,3 +123,8 @@ cannot be discharged by this harness at all.
 3. Does WF-11's finding that the memory-ceiling condition is unreachable on this
    runtime change what `replication-identity-and-ingest` (HS-P0017) is obligated to
    assume about a forwarding peer's actual ceiling?
+4. Would a `workerd`-class runner locate a wall for SQL text inside a Durable Object
+   isolate — and if it does, do `happenstance-cloudflare`'s declared query widths move
+   below the sibling's, splitting a pair `kb-decision-0052` left identical? The window
+   closes at `0.2.0`, after which lowering either number is a break no signature change
+   announces.

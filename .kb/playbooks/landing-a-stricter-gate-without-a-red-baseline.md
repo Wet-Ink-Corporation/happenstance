@@ -11,8 +11,10 @@ summary: >-
   with a named exemption list that prints every entry on every green run, fails when an entry
   becomes discharged so the list can only shrink, and carries the owed decision as an argument
   rather than a name. Includes why the tool change and the corpus change had to be one commit,
-  why a list never carries a count beside it, and the corpus shape where a ratchet is the wrong
-  instrument.
+  why a list never carries a count beside it, the corpus shape where a ratchet is the wrong
+  instrument, and — from the second list this repository now runs — the stronger reconciliation
+  that also rejects an unrecorded new breach, and why thirteen entries carrying three arguments
+  is still a ratchet.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -23,13 +25,18 @@ related:
   - kb-reference-spec-trace-has-suite-001
   - kb-reference-phase-8-spec-reconciliation-001
   - kb-playbook-declared-page-need-001
+  - kb-open-question-cf-36-unperformed-cross-reference-001
+  - kb-reference-spec-trace-unresolved-declarations-001
+  - kb-playbook-count-or-index-nobody-re-derives-001
+  - kb-open-question-gate-step-first-check-hides-001
 source_paths:
   - .kb/_intake/lesson-landing-a-stricter-gate-without-a-red-baseline.md
+  - .kb/_intake/remediation-2026-09-04-briefs/cf-36-thirteen-recorded-breaches.md
   - xtask/src/spec_trace.rs
   - spec/SPECIFICATION.md
   - RUNBOOK.md
   - references/evaluation/phase-4-5-reconciliation.md
-last_reviewed: 2026-09-02
+last_reviewed: 2026-09-07
 ---
 
 # Landing a stricter gate check when the corpus cannot pass it yet
@@ -70,7 +77,12 @@ decision.
    gate rather than episodically to whoever remembers the list exists.
 3. **An entry that becomes discharged is itself a failure.** If a rule is both claimed by a clause
    and still listed as pending, the check fails and says so. Without this half, a stale exemption
-   is free and the list only grows; with it, the list can move in exactly one direction.
+   is free and the list only grows; with it, the list can move in exactly one direction. The
+   second list this repository now runs — `CF36_UNDISCHARGED`, the clauses that name a conformance
+   rule and cite no contract-level case — reconciles in *three* directions rather than one: a
+   discharged entry fails, an entry whose subject the document has stopped declaring fails, and a
+   **new breach that is not recorded** fails. Only that third arm stops the list being usable to
+   quiet a fresh problem, and it is the arm a one-directional check silently lacks.
 4. **Each entry carries its evidence and its owed decision, not just a name.** What the rule
    enforces, which clause looks like it should claim it, why claiming it there would be false, and
    what an ADR would have to do. A name-only entry is a mute suppression; an argued one is a work
@@ -108,6 +120,26 @@ deadline instead. The test: can you write, for each entry, the sentence "this is
 is waiting on `<named decision>`" — and mean it? If not, it is a defect and the list is an
 allowlist.
 
-The two exemption entries this mechanism holds today are each an owed decision recorded as its
-own open question in this same intake wave; the mechanism lives here, the decisions live there,
-and neither absorbs the other.
+## The grain of the argument is the question, not the entry
+
+That test survives a list longer than single digits when the entries are one question asked many
+times. `CF36_UNDISCHARGED` landed with thirteen entries carrying **three** arguments: nine name
+rules that would live in a testkit crate which does not exist yet, and pose one question — whether
+a rule named for a *named but unbuilt* suite is a rule the clause forbids — nine times; two look
+like a `Cases:` line citing the wrong case and need no decision at all; two wait on the projection
+runner, which is named as their trigger. Grouping is legitimate exactly when answering one entry
+answers its group. So the length of the list is not the test; the number of distinct sentences
+you have to write is, and thirteen entries with three sentences is still a ratchet where thirteen
+entries with thirteen unwritten ones would be an allowlist.
+
+Grouping does not buy the decision: which repair each group takes is still owed, at
+`kb-open-question-cf-36-unperformed-cross-reference-001`. The alternative refused there is option
+A in a new coat — leave the check unimplemented rather than land it holding thirteen breaches, on
+the grounds that a check with a list is a check with a skip list. It fails the same way A does:
+unimplemented, a *fourteenth* breach is exactly as invisible as the thirteen were, and nobody
+would have the list at all.
+
+The exemption entries the first list holds are likewise each an owed decision recorded as its own
+open question; the mechanism lives here, the decisions live there, and neither absorbs the other.
+Both lists are counted at their call site rather than beside themselves, per
+`kb-playbook-count-or-index-nobody-re-derives-001`.

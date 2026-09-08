@@ -42,6 +42,15 @@ summary: >-
   consumer relies on, without moving the number or superseding either atom. Both `kb-decision-0004`
   and `kb-decision-0029` stay `accepted` and byte-identical — this map's rows for both now carry a
   second "amended by" annotation rather than a flip, the same shape ADR-0029 used against ADR-0004.
+  The 2026-09-07 wave (`2026-09-07-intake`) added twenty-three decision atoms in one ingest:
+  ADR-0024 (phase 10, the reserved position-visibility-mechanism number, finally filled), ADR-0038
+  (phase 10, `async-trait` exempted through `testcontainers`/`tonic`), ADR-0040 (phase 10, the
+  same-day F2-5 hold and its discharge), and twenty phase-12 pre-publication ratifications
+  (ADR-0039, ADR-0041 through ADR-0059) drawn from the `remediation-2026-09-04-briefs` queue and
+  ratified 2026-09-06. None supersedes an existing row — every one of the twenty-three carries
+  `supersedes: null` — so this wave adds rows only; see each section below for what each decision
+  amends from outside without a status flip, the same shape ADR-0029, ADR-0031 and ADR-0035 already
+  used against ADR-0004, ADR-0007 and ADR-0001.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -56,7 +65,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-08-20-intake-phase-9
   - .kb/_governance/integration-waves/2026-09-02-intake
   - .kb/_governance/integration-waves/2026-09-04-intake
-last_reviewed: 2026-09-04
+  - .kb/_governance/integration-waves/2026-09-07-intake
+last_reviewed: 2026-09-07
 ---
 
 # Decision map
@@ -286,6 +296,107 @@ separate partial supersessions.
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
 | ADR-0037 | [`kb-decision-0037`](../decisions/0037-msrv-becomes-a-promise-at-0-2-0.md) | The MSRV becomes a promise at 0.2.0, and the number does not move | accepted | 12 | amends `kb-decision-0004`, `kb-decision-0029` |
+
+## 2026-09-07 intake: phase 10 (ADR-0024, ADR-0038, ADR-0040)
+
+Three decision atoms, one wave (`2026-09-07-intake`), phase 10, `.kb/decisions/`. ADR-0024 fills
+the number RUNBOOK.md had reserved for it and settles how `happenstance-postgres` buys position
+visibility — `xid8` plus `pg_snapshot_xmin` rather than a serialised sequence table — `depends_on`
+`kb-decision-0013`, the global visibility invariant it implements without reopening. ADR-0038
+exempts `testcontainers` and `tonic` from `deny.toml`'s `async-trait` ban by name, amending
+`kb-decision-0001`'s exemption set from outside for the second time (ADR-0035 was the first,
+for `worker`); neither `kb-decision-0001` nor `kb-decision-0035` is flipped, the same treatment
+their own rows already carry. ADR-0040 records that `0.2.0` waited for phase 10 on a stale
+`RUNBOOK.md` status row, that the hold's mutation-coverage half was measured false the same day,
+and that the real residual — no real-medium adapter — closed hours later when `happenstance-postgres`
+became real. None of the three supersedes any row on this map.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0024 | [`kb-decision-0024`](../decisions/0024-position-visibility-mechanism.md) | happenstance-postgres buys position visibility with xid8 and pg_snapshot_xmin | accepted | 10 | — |
+| ADR-0038 | [`kb-decision-0038`](../decisions/0038-async-trait-through-testcontainers.md) | async-trait is exempted where it is reached through testcontainers or tonic | accepted | 10 | — |
+| ADR-0040 | [`kb-decision-0040`](../decisions/0040-f2-5-holds-the-release-for-phase-10.md) | 0.2.0 waited for phase 10, and the hold was lifted the same day | accepted | 10 | — |
+
+## 2026-09-07 intake: pre-publication ratifications, ports and testkit half (ADR-0039, ADR-0042, ADR-0043, ADR-0048, ADR-0050–ADR-0056, ADR-0058)
+
+Twelve decision atoms, one wave (`2026-09-07-intake`), phase 12, `.kb/decisions/`, drawn from the
+`remediation-2026-09-04-briefs` queue and ratified 2026-09-06. Grouped here because each settles a
+question about `happenstance-core`'s ports, the conformance suite, or an adapter, rather than the
+typed layer or publication process — see the two sections below for those. ADR-0039 freezes ES-42
+(`read`'s return carries no `+Unpin` bound) at the deadline its own `[PROVISIONAL]` marker named.
+ADR-0042 retracts the fixture contract's growing-required-item hazard: every future capability
+lands defaulted, and honesty moves to a clause-level MUST per capability rather than a trait-level
+one, `depends_on` `kb-decision-0034`. ADR-0043 mints a refusal channel for `Event::metadata` with a
+guaranteed minimum of zero, amending `kb-decision-0015` from outside rather than widening it.
+ADR-0048 marks `Op::Read` `#[non_exhaustive]` in the same release that already spent the breaking
+change adding its `to` field, and adds no constructor. ADR-0050 narrows `StringifiedThrow` to
+`pub(crate)`. ADR-0051 discharges CF-18 by declension-by-inheritance rather than the literal,
+unconstructible rule the ratified costing described. ADR-0052 keeps the query-partition width
+constants public pending a `workerd`-class measurement. ADR-0053 bounds a read page in both rows
+and bytes, `depends_on` `kb-decision-0011`. ADR-0054 pins `after_opt`'s behaviour across every
+guard with two unit tests and a corrected doc block, `depends_on` `kb-decision-0012`. ADR-0055
+keeps `append`'s borrowed batch at `0.2.0`, restating ES-17's falsifier rather than reallocating the
+signature. ADR-0056 repairs WF-10's `Rule:` line with two `decode_rejects` tests and an exhaustive
+`Serialize` destructuring, a repair rather than an amendment per
+[`kb-playbook-repair-frozen-clause-001`](../playbooks/repairing-a-frozen-clause-without-amending-it.md).
+ADR-0058 keeps `happenstance-sqlite`'s write path inline and documents why, `depends_on`
+`kb-decision-0022`. None of the twelve supersedes any row on this map.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0039 | [`kb-decision-0039`](../decisions/0039-es-42-frozen-without-an-unpin-bound.md) | ES-42 freezes without a Unpin bound, at the deadline the marker named | accepted | 12 | — |
+| ADR-0042 | [`kb-decision-0042`](../decisions/0042-every-fixture-capability-lands-defaulted.md) | Every future fixture capability lands defaulted, and honesty moves to a clause | accepted | 12 | — |
+| ADR-0043 | [`kb-decision-0043`](../decisions/0043-event-metadata-gets-a-refusal-channel-with-no-floor.md) | Event::metadata gets a refusal channel and no guaranteed capacity | accepted | 12 | — |
+| ADR-0048 | [`kb-decision-0048`](../decisions/0048-op-read-is-non-exhaustive.md) | Op::Read is non-exhaustive, in the release that already spent the break | accepted | 12 | — |
+| ADR-0050 | [`kb-decision-0050`](../decisions/0050-stringified-throw-is-crate-private.md) | StringifiedThrow is crate-private, and narrowing it made the compiler look | accepted | 12 | — |
+| ADR-0051 | [`kb-decision-0051`](../decisions/0051-declension-by-inheritance-discharges-cf-18.md) | Declension-by-inheritance discharges CF-18 | accepted | 12 | — |
+| ADR-0052 | [`kb-decision-0052`](../decisions/0052-the-query-partition-constants-stay-public.md) | The query-partition constants stay public | accepted | 12 | — |
+| ADR-0053 | [`kb-decision-0053`](../decisions/0053-a-read-page-is-bounded-in-rows-and-in-bytes.md) | A read page is bounded in rows and in bytes | accepted | 12 | — |
+| ADR-0054 | [`kb-decision-0054`](../decisions/0054-after-opt-applies-to-every-guard-and-says-so.md) | after_opt applies to every guard and says so | accepted | 12 | — |
+| ADR-0055 | [`kb-decision-0055`](../decisions/0055-append-keeps-its-borrowed-batch-at-0-2-0.md) | append keeps its borrowed batch at 0.2.0 | accepted | 12 | — |
+| ADR-0056 | [`kb-decision-0056`](../decisions/0056-wf-10s-rule-line-is-repaired-not-amended.md) | WF-10's Rule line is repaired, not amended | accepted | 12 | — |
+| ADR-0058 | [`kb-decision-0058`](../decisions/0058-the-sqlite-write-path-stays-inline-and-documents-it.md) | The sqlite write path stays inline and documents it | accepted | 12 | — |
+
+## 2026-09-07 intake: pre-publication ratifications, typed-layer half (ADR-0046, ADR-0047, ADR-0049, ADR-0059)
+
+Four decision atoms, the same wave, phase 12, settling `happenstance` (the typed layer) rather than
+the port. ADR-0046 gives `commit` a nothing-to-do outcome distinct from a refused one, `depends_on`
+`kb-decision-0012`, `kb-decision-0030` and `kb-decision-0031`. ADR-0047 refuses an under-tagged
+model at commit rather than admitting it silently, `depends_on` `kb-decision-0020` and landing in
+the same commit as ADR-0046. ADR-0049 gives a codec a declared, narrower-than-it-sounds
+`reads_tag` obligation, `depends_on` `kb-decision-0032`. ADR-0059 has the domain-event guard check
+positional agreement between a fold and its query, `depends_on` `kb-decision-0020` and
+`kb-decision-0032`. None supersedes any row on this map; see
+[`domain-map.md`](domain-map.md#the-typed-layer-decision-models-codecs-and-payload-evolution) for
+where these four sit beside ADR-0020, ADR-0021, ADR-0031, ADR-0032 and ADR-0033.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0046 | [`kb-decision-0046`](../decisions/0046-commit-reports-a-nothing-to-do-outcome.md) | commit reports a nothing-to-do outcome rather than an error | accepted | 12 | — |
+| ADR-0047 | [`kb-decision-0047`](../decisions/0047-tags-and-scope-must-agree-at-commit.md) | An under-tagged model is refused at commit, not silently admitted | accepted | 12 | — |
+| ADR-0049 | [`kb-decision-0049`](../decisions/0049-a-codec-declares-the-tags-it-reads.md) | A codec declares the tags it reads, and that is narrower than it sounds | accepted | 12 | — |
+| ADR-0059 | [`kb-decision-0059`](../decisions/0059-the-domain-event-guard-checks-positional-agreement.md) | The domain-event guard checks positional agreement between a fold and its query | accepted | 12 | — |
+
+## 2026-09-07 intake: pre-publication ratifications, spec-governance and publication halves (ADR-0041, ADR-0044, ADR-0045, ADR-0057)
+
+Four decision atoms, the same wave. ADR-0045 requires a citation anchor to match its line exactly
+or have the lint refuse to guess, phase 12, joining
+[`domain-map.md`](domain-map.md#specification-governance--conformance)'s conformance domain
+alongside the anchoring-citations playbook it `related`s. ADR-0041, ADR-0044 and ADR-0057 open this
+map's first "Publication and release readiness" decisions: ADR-0041 records the repository going
+public and the vulnerability channel that does not depend on it; ADR-0044 requires a published
+crate to re-export any crate whose type appears in one of its own public signatures; ADR-0057 drops
+`happenstance-testkit`'s resolvable dev-dependency version key from every publishable crate's
+manifest. None supersedes any row on this map. See
+[`domain-map.md`](domain-map.md#publication-and-release-readiness) for the new domain these three
+open.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0041 | [`kb-decision-0041`](../decisions/0041-the-repository-is-public-and-security-has-an-email-channel.md) | The repository is public, and the vulnerability channel does not depend on it | accepted | 12 | — |
+| ADR-0044 | [`kb-decision-0044`](../decisions/0044-a-published-crate-re-exports-its-drivers.md) | A published crate re-exports any crate whose type appears in one of its public signatures | accepted | 12 | — |
+| ADR-0045 | [`kb-decision-0045`](../decisions/0045-a-citation-anchor-matches-exactly-or-the-lint-refuses.md) | A citation anchor matches its line exactly, or the lint refuses to guess | accepted | 12 | — |
+| ADR-0057 | [`kb-decision-0057`](../decisions/0057-the-testkit-version-key-is-dropped.md) | The testkit dev-dependency version key is dropped from every publishable manifest | accepted | 12 | — |
 
 ## Adding a row
 

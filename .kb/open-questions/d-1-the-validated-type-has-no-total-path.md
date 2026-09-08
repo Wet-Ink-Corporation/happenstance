@@ -25,6 +25,9 @@ related:
   - kb-decision-0020
   - kb-decision-0015
   - kb-decision-0033
+  - kb-decision-0059
+  - kb-open-question-event-type-positional-mapping-001
+  - kb-open-question-scope-coverage-helper-projection-gap-001
 source_paths:
   - .kb/_intake/contract-defect-log-phase-7.md
   - .kb/_intake/happenstance-macros-verdict.md

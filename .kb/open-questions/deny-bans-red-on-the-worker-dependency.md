@@ -39,6 +39,7 @@ related:
   - kb-decision-0029
   - kb-decision-0023
   - kb-decision-0035
+  - kb-open-question-cloudflare-feature-gate-001
 source_paths:
   - .kb/_intake/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md
   - references/adr/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md

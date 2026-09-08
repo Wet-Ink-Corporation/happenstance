@@ -30,6 +30,7 @@ related:
   - kb-playbook-cold-future-hand-polling-001
   - kb-reference-busy-timeout-margin-001
   - kb-open-question-testkit-contention-tolerance-001
+  - kb-reference-one-connection-latency-001
 source_paths:
   - .kb/_intake/2026-09-03-pre-publication-review.md
   - references/evaluation/review-pre-publication-2026-09-03.md

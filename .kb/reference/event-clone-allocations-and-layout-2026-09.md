@@ -30,6 +30,7 @@ related:
   - kb-decision-0015
   - kb-reference-wire-format-measurements-001
   - kb-open-question-es-17-two-adapter-measurement-001
+  - kb-decision-0055
 source_paths:
   - .kb/_intake/2026-09-03-pre-publication-review.md
   - references/evaluation/review-pre-publication-2026-09-03.md
