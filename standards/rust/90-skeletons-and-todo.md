@@ -288,8 +288,15 @@ accept the first real one silently. The same shape one level down is an
 attribute then hides the *next* dead variant, and nobody learns that until a
 reviewer reads the enum.
 
+The crate-level half of the Evidence line moved for the same reason and on the
+same day. It cited `happenstance-ladybug`'s `#![allow(clippy::todo)]`, whose
+comment named phase 11 as the phase that would remove it; phase 11 landed the
+driver, and the allow went with the last `todo!()`. A citation that survives the
+line it points at would be the defect this rule is about, so it moves to
+`happenstance-sync`, which is still a skeleton and still names its own removal.
+
 **Evidence.** `./Cargo.toml:236 (the allow protected nothing)` ·
-`crates/happenstance-ladybug/src/lib.rs:98 (Phase 11 removes both the bodies)` ·
+`crates/happenstance-sync/src/lib.rs:138 (removes both the bodies and this line)` ·
 `crates/happenstance-testkit/tests/projection_mutation_coverage.rs:177 (red the day a row uses it)`
 
 ---

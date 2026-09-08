@@ -144,7 +144,7 @@ use happenstance_core::{
     SequencePosition,
 };
 
-use crate::stand_in::{self, Connection, Database, SystemConfig, Value};
+use lbug::{Connection, Database, SystemConfig, Value};
 
 /// The node table this adapter's checkpoints live in.
 ///
@@ -307,7 +307,8 @@ impl GraphWriteSet {
     /// RS-70-5). The interpolated spelling does not compile:
     ///
     /// ```compile_fail,E0308
-    /// use happenstance_ladybug::{GraphWriteSet, Value};
+    /// use happenstance_ladybug::GraphWriteSet;
+    /// use happenstance_ladybug::lbug::Value;
     ///
     /// fn queue(writes: &mut GraphWriteSet, label: &str) {
     ///     writes.push(
@@ -390,7 +391,7 @@ impl GraphWriteSet {
 pub enum LadybugProjectionStoreError {
     /// The driver rejected a statement, or the C++ side threw.
     #[error("the LadybugDB driver failed")]
-    Driver(#[from] stand_in::Error),
+    Driver(#[from] lbug::Error),
 
     /// `COMMIT` itself failed, after every statement in the write set had been
     /// accepted.
@@ -400,7 +401,7 @@ pub enum LadybugProjectionStoreError {
     /// the only correct response is to rebuild the batch and retry rather than
     /// to fix a statement.
     #[error("committing the write set failed")]
-    Commit(#[source] stand_in::Error),
+    Commit(#[source] lbug::Error),
 
     /// A checkpoint node was stored but holds a value that is not a position.
     ///
@@ -495,7 +496,7 @@ pub enum LadybugProjectionStoreError {
 const WRITE_CONFLICT_NEEDLE: &str = "write transaction";
 
 /// The driver's error, narrowed where this adapter recognises it.
-fn classify(error: stand_in::Error) -> LadybugProjectionStoreError {
+fn classify(error: lbug::Error) -> LadybugProjectionStoreError {
     if error
         .to_string()
         .to_ascii_lowercase()
@@ -574,10 +575,26 @@ impl LadybugProjectionStore {
     /// any process already holds the lock on it**, the measured behaviour §6
     /// rests on — or if the schema cannot be applied.
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, LadybugProjectionStoreError> {
-        let database = Database::new(
-            &path.as_ref().display().to_string(),
-            SystemConfig::default(),
-        )?;
+        Self::open_with_config(path, SystemConfig::default())
+    }
+
+    /// [`open`](Self::open), with the engine configured by the caller.
+    ///
+    /// `SystemConfig` is LadybugDB's, not this adapter's, and the two settings a
+    /// caller most often has an opinion about are the ones this adapter has no
+    /// business choosing: `buffer_pool_size` and `max_db_size`. The default
+    /// `max_db_size` is `u32::MAX` — 4 GiB of reserved address space **per open
+    /// database** — which is invisible to an application that opens one and very
+    /// visible to a test binary that opens forty.
+    ///
+    /// # Errors
+    ///
+    /// As [`open`](Self::open).
+    pub fn open_with_config(
+        path: impl AsRef<std::path::Path>,
+        config: SystemConfig,
+    ) -> Result<Self, LadybugProjectionStoreError> {
+        let database = Database::new(path, config)?;
         let store = Self::new(Arc::new(database));
         store.apply_schema()?;
         Ok(store)

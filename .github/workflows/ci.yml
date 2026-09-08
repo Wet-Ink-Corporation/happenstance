@@ -502,6 +502,151 @@ jobs:
           fi
           echo "no conformance failures"
 
+  # The LadybugDB projection conformance run. `live-postgres`'s third sibling,
+  # with the structural difference that decides its whole shape: it needs neither
+  # a daemon nor a credential — it needs a **1.44 GB static archive and an
+  # OpenSSL toolchain**, and it is that cost, not an unavailability, that keeps it
+  # off the gate (ADR-0025 §9).
+  #
+  # So this job is where `happenstance-ladybug`'s driver is compiled at all. The
+  # gate's own step for it is probed on `HAPPENSTANCE_LADYBUG_DRIVER` and prints
+  # `skipped:` everywhere else, which means a green gate says nothing about this
+  # adapter and this job is the only thing that does.
+  #
+  # `ubuntu-latest` only, and deliberately not the gate's three-platform matrix.
+  # The driver's link needs OpenSSL, which is preinstalled here and is a
+  # user-space vcpkg build on a Windows runner — five and a half minutes of it,
+  # measured. One platform that runs is worth more than three that are skipped;
+  # the day this adapter is published is the day that trade is re-taken.
+  ladybug:
+    name: conformance against a real LadybugDB
+    runs-on: ubuntu-latest
+    env:
+      # The opt-in `xtask ladybug-configured` probes for. It is set here and
+      # nowhere else, which is the whole of what "not on the gate" means.
+      HAPPENSTANCE_LADYBUG_DRIVER: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # No install step for the driver. `lbug`'s `build.rs` tries a prebuilt
+      # download first and only falls back to a cmake source build, so cmake is
+      # not needed — measured, and it is what the crate's own note used to get
+      # wrong. `libssl-dev` is preinstalled on this image and `pkg-config` finds
+      # it, so `OPENSSL_DIR` is a Windows concern rather than a runner one.
+
+      # Every rule is present in the binary before any of them runs.
+      #
+      # Not a formality, and `live-postgres` learned it the expensive way: the
+      # whole target is behind `#![cfg(feature = "conformance")]`, so one wrong
+      # flag turns the run below into `running 0 tests` and `cargo test` exits 0
+      # on that. The list is captured so the count assertion after the run can be
+      # made against it rather than against a number typed here, which would
+      # drift the first time a rule was added.
+      - name: Every gated test is present in the binary
+        run: |
+          cargo test -p happenstance-ladybug --all-features \
+            --test projection -- --list | tee gated.txt
+          count=$(grep -c ': test$' gated.txt)
+          echo "gated tests: $count"
+          # 17 projection rules, mounted TWICE — once under the blocking emitter
+          # and once under tokio, which is ADR-0025 §3's falsifier for
+          # runtime-agnosticism and the reason a count here is worth having at
+          # all: losing one mount is exactly the defect this number can see and
+          # a green suite cannot. Plus CF-18's
+          # `every_declined_capability_is_stated_by_this_fixture`, which
+          # `projection_store_conformance!` emits once per mount and which is not
+          # a rule, plus this crate's own 5 = 41.
+          #
+          # A floor rather than an equality, for `live-postgres`'s stated reason:
+          # an equality fails on the commit that *adds* a rule, which trains
+          # whoever adds one to edit this number without reading what it is for.
+          # The floor only fires when a whole mount stops being emitted.
+          if [ "$count" -lt 40 ]; then
+            echo "::error::only $count gated tests are present; a mount is missing"
+            exit 1
+          fi
+
+      # The run itself.
+      #
+      # `--show-output` because a declined capability's reason is printed only
+      # under it, and a trade nobody can read is a trade nobody recorded (CF-18).
+      # This fixture declines two of the four capabilities, so six such lines are
+      # expected across the two mounts.
+      #
+      # No `--test-threads=1`. The Postgres job needs it because its fixture
+      # sizes a connection pool per instance and a parallel run exhausts the
+      # server; this one opens an embedded database per fixture instance with an
+      # explicit 64 MiB `max_db_size` and a 16 MiB buffer pool, which is what
+      # makes the default parallel harness affordable. Measured both ways.
+      - name: The conformance suite against a real LadybugDB
+        run: |
+          cargo test -p happenstance-ladybug --all-features \
+            --test projection -- --show-output | tee run.txt
+
+      # The vacuity guard. The same flag that keeps the default gate green with
+      # no driver keeps a misconfigured job green with no tests, and the two are
+      # indistinguishable in a check mark.
+      - name: The run executed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' run.txt; then
+            echo "::error::no test result line; the suite did not run at all"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated.txt)
+          result=$(grep -E '^test result:' run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; executed $((passed + failed)) (passed $passed, failed $failed), ignored $ignored"
+
+          # `passed > 0` is NOT a sufficient guard, for the reason
+          # `live-postgres` writes out: a partial selection still passes it. What
+          # has to be asserted is that nothing was left ignored and that the
+          # executed count matches what `--list` found.
+          if [ "$ignored" -ne 0 ]; then
+            echo "::error::$ignored gated tests did not execute; the run is not the gated run"
+            exit 1
+          fi
+          if [ "$((passed + failed))" -ne "$expected" ]; then
+            echo "::error::executed $((passed + failed)) of $expected gated tests"
+            exit 1
+          fi
+
+      # Both mounts ran, which is the artefact rather than a formality.
+      #
+      # ADR-0025 §3 makes runtime-agnosticism falsifiable by mounting the suite
+      # twice — once under an emitter that needs no runtime at all. A store that
+      # reached for `spawn_blocking` panics under the first. The count check
+      # above would notice a mount that vanished; this notices one that was
+      # renamed, which is the same defect wearing a hat that still adds up.
+      - name: Both emitters mounted the suite
+        if: always()
+        run: |
+          for mount in blocking with_tokio; do
+            if ! grep -q "^test ${mount}::" run.txt; then
+              echo "::error::the ${mount} mount emitted no tests; ADR-0025 §3's falsifier is not running"
+              exit 1
+            fi
+          done
+          echo "both mounts ran"
+
+      # The suite must be green, and the failure list is empty on purpose.
+      - name: Every gated test passed
+        if: always()
+        run: |
+          failures=$(sed -n '/^failures:$/,/^test result:/p' run.txt \
+            | grep -oE '[a-z_0-9:]+::[a-z_0-9]+' | sort -u)
+          if [ -n "$failures" ]; then
+            echo "::error::conformance failures:"
+            echo "$failures"
+            exit 1
+          fi
+          echo "no conformance failures"
+
   # The live-Neon conformance run. `live-postgres`'s sibling, with one structural
   # difference that shapes the whole job: it needs a **credential**, not a daemon.
   #

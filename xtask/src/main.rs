@@ -159,6 +159,16 @@ const REQUIRED: &[Step] = &[
             "clippy",
             "--locked",
             "--workspace",
+            // ADR-0025 §9. `happenstance-ladybug`'s driver arrives as a
+            // **1.44 GB static archive** and needs an OpenSSL toolchain that no
+            // feature turns off, so `--all-features` here would turn both on --
+            // on every machine and all three CI platforms. The dependency is
+            // off by default and this exclusion is what stops `--all-features`
+            // from being the thing that turns it on. The crate's own coverage
+            // is two steps of its own: the mandatory no-driver compile, and the
+            // probed conformance run in OPTIONAL.
+            "--exclude",
+            "happenstance-ladybug",
             "--all-targets",
             "--all-features",
             "--",
@@ -186,6 +196,16 @@ const REQUIRED: &[Step] = &[
             "test",
             "--locked",
             "--workspace",
+            // ADR-0025 §9. `happenstance-ladybug`'s driver arrives as a
+            // **1.44 GB static archive** and needs an OpenSSL toolchain that no
+            // feature turns off, so `--all-features` here would turn both on --
+            // on every machine and all three CI platforms. The dependency is
+            // off by default and this exclusion is what stops `--all-features`
+            // from being the thing that turns it on. The crate's own coverage
+            // is two steps of its own: the mandatory no-driver compile, and the
+            // probed conformance run in OPTIONAL.
+            "--exclude",
+            "happenstance-ladybug",
             "--all-features",
             "--",
             "--show-output",
@@ -487,6 +507,42 @@ const REQUIRED: &[Step] = &[
         probe: Some(&[proof::WASM_RUNNER, "--version"]),
     },
     Step {
+        // The other half of the four exclusions above, and it costs a second.
+        //
+        // Excluding `happenstance-ladybug` from every `--workspace
+        // --all-features` step is what keeps the driver off the gate, and it
+        // takes the crate's *default* configuration off the gate with it --
+        // which is a hole, because that configuration is real. Without `driver`
+        // this crate is its module documentation and a set of `cfg`-ed-out
+        // targets, and a `cfg` typo there compiles nowhere and is caught by
+        // nothing. This step is the crate as a consumer who did not ask for
+        // LadybugDB gets it.
+        //
+        // `--all-targets` rather than a bare check, because `tests/` is where
+        // the `#![cfg(feature = "driver")]` gates actually are: a target that
+        // failed to configure out would be found here and by nothing else.
+        //
+        // Mandatory rather than probed, and that is the point of it: it needs no
+        // driver, no OpenSSL and no opt-in, so there is no machine on which it
+        // can be skipped. The probed step below is the one that can, and a
+        // crate whose only check is skippable is unchecked on every machine that
+        // has not opted in.
+        name: "happenstance-ladybug without its driver",
+        program: "cargo",
+        args: &[
+            "clippy",
+            "--locked",
+            "-p",
+            "happenstance-ladybug",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
         // `RUSTDOCFLAGS` rather than the ambient `RUSTFLAGS: -D warnings` that
         // `ci.yml` sets, because rustdoc does not read `RUSTFLAGS` — so until
         // this line existed the gate denied every rustc lint and no rustdoc one.
@@ -498,6 +554,16 @@ const REQUIRED: &[Step] = &[
             "doc",
             "--locked",
             "--workspace",
+            // ADR-0025 §9. `happenstance-ladybug`'s driver arrives as a
+            // **1.44 GB static archive** and needs an OpenSSL toolchain that no
+            // feature turns off, so `--all-features` here would turn both on --
+            // on every machine and all three CI platforms. The dependency is
+            // off by default and this exclusion is what stops `--all-features`
+            // from being the thing that turns it on. The crate's own coverage
+            // is two steps of its own: the mandatory no-driver compile, and the
+            // probed conformance run in OPTIONAL.
+            "--exclude",
+            "happenstance-ladybug",
             "--all-features",
             "--no-deps",
             "--document-private-items",
@@ -908,6 +974,16 @@ const OPTIONAL: &[Step] = &[
             "hack",
             "check",
             "--workspace",
+            // ADR-0025 §9. `happenstance-ladybug`'s driver arrives as a
+            // **1.44 GB static archive** and needs an OpenSSL toolchain that no
+            // feature turns off, so `--all-features` here would turn both on --
+            // on every machine and all three CI platforms. The dependency is
+            // off by default and this exclusion is what stops `--all-features`
+            // from being the thing that turns it on. The crate's own coverage
+            // is two steps of its own: the mandatory no-driver compile, and the
+            // probed conformance run in OPTIONAL.
+            "--exclude",
+            "happenstance-ladybug",
             "--feature-powerset",
             "--no-dev-deps",
         ],
@@ -1041,7 +1117,88 @@ const OPTIONAL: &[Step] = &[
         env: &[("RUSTDOCFLAGS", "--cfg docsrs -D warnings")],
         probe: Some(&["cargo", "+nightly", "--version"]),
     },
+    Step {
+        // The LadybugDB projection conformance run: 17 rules over two emitters,
+        // plus this crate's own five, against a real graph on disk.
+        //
+        // PROBED -- and the probe asks a different question from every other
+        // probe in this list, which is the one way it departs from `cargo
+        // deny`'s shape. Those ask *is the tool installed*, because installing
+        // one is free. This asks *did somebody ask for this*, because the driver
+        // is a 1.44 GB static archive plus an OpenSSL link and building it is
+        // not (ADR-0025 §9). `xtask ladybug-configured` answers that and nothing
+        // else, so an unconfigured machine gets one `skipped:` line naming the
+        // command that answered rather than a twenty-minute surprise.
+        //
+        // Everything else is `cargo deny`'s shape exactly, including the part
+        // that matters: a probe that fails is a skip, and a step that *runs* and
+        // finds a problem is a failure. `.github/workflows/ci.yml`'s `ladybug`
+        // job sets the variable, so the run is real there -- with the vacuity
+        // guards `live-postgres` established, because the same flag that keeps a
+        // developer's gate green with no driver keeps a misconfigured job green
+        // with no tests, and the two are indistinguishable in a check mark.
+        //
+        // `--show-output` for the reason the workspace test step carries it: a
+        // declined capability prints one `SKIP <rule>: ...` line naming the
+        // fixture's stated reason, and libtest suppresses a passing test's
+        // stdout without it (CF-18). This fixture declines two of the four, so
+        // there are six such lines across the two mounts.
+        name: "LadybugDB projection conformance",
+        program: "cargo",
+        args: &[
+            "test",
+            "--locked",
+            "-p",
+            "happenstance-ladybug",
+            "--all-features",
+            "--",
+            "--show-output",
+        ],
+        env: &[],
+        probe: Some(&[
+            "cargo",
+            "run",
+            "--locked",
+            "--quiet",
+            "-p",
+            "xtask",
+            "--",
+            "ladybug-configured",
+        ]),
+    },
 ];
+
+/// The environment variable that opts a machine in to building the LadybugDB
+/// driver.
+///
+/// Named on this crate rather than on `lbug` deliberately. `OPENSSL_DIR` is the
+/// variable the *link* needs, and gating on that would ambush anyone who has it
+/// set for an unrelated reason with a 1.44 GB download; this one can only have
+/// been set on purpose.
+const LADYBUG_OPT_IN: &str = "HAPPENSTANCE_LADYBUG_DRIVER";
+
+/// The probe behind the `LadybugDB projection conformance` step.
+///
+/// Exits 0 when [`LADYBUG_OPT_IN`] is set to something non-empty and 1
+/// otherwise. It is a whole subcommand rather than an inline environment read
+/// because [`Step::probe`] is a *command line*: the skip message names the
+/// command that answered, and this way that name says what was actually asked.
+///
+/// It prints the remedy on the failing path rather than only the fact, because
+/// the fact alone sends a reader to this file to find out what to set.
+fn ladybug_configured() -> Result<()> {
+    match std::env::var(LADYBUG_OPT_IN) {
+        Ok(value) if !value.trim().is_empty() => Ok(()),
+        _ => bail!(
+            "{LADYBUG_OPT_IN} is not set. Set it to 1 to build the LadybugDB \
+             driver and run its conformance suite. On Windows the link also \
+             needs OPENSSL_DIR pointing at a directory holding libssl.lib and \
+             libcrypto.lib -- and note that lbug's build script emits no \
+             `cargo:rerun-if-env-changed` for it, so a value set after a failed \
+             build takes effect only after `cargo clean -p lbug`"
+        ),
+    }
+}
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
@@ -1085,6 +1242,7 @@ fn main() -> ExitCode {
             }
         },
         Some("package-check") => package::run(),
+        Some("ladybug-configured") => ladybug_configured(),
         Some("proof-artefact") => proof::run(),
         Some("wasm-conformance") => proof::wasm_run(),
         Some("wasm-conformance-enumeration") => proof::wasm_enumeration(),

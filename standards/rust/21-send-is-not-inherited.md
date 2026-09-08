@@ -88,9 +88,9 @@ tests pass; the projection layer has silently stopped being storage-agnostic, no
 conformance rule covers it because conformance is about adapters, and the
 regression appears in review as a shorter signature.
 
-**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:96 (S::Batch: Send)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:87 (stops compiling)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:78 (cannot be used here)` ·
+**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:102 (S::Batch: Send)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:93 (stops compiling)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:84 (cannot be used here)` ·
 [SPECIFICATION PS-36](../../spec/SPECIFICATION.md) *(`[FROZEN]`: the `Send`
 flavour transitively requires `Batch: Send`, and why no gate can pin it)* ·
 [SPECIFICATION ES-5](../../spec/SPECIFICATION.md) *(why the bound cannot be
