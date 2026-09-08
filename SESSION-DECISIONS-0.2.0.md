@@ -558,3 +558,75 @@ says which it means.
 7. **The `.kb/_intake` briefs this session staged are owed an ingest.** Atoms are
    authored by `/redkiln:kb-ingest`, never by hand, so they are staged rather than
    written.
+
+---
+
+## Sign-off
+
+**`0.2.0` is ready to publish**, with two exit criteria that cannot be met before
+the release exists named rather than ticked, and one open clause question that
+does not block it.
+
+### What was done
+
+| Phase | Before | After |
+|---|---|---|
+| **10b** — Postgres projections, Neon | in progress | **done** — both adapters real, both clearing their suites against live servers |
+| **11** — Ladybug | not started | **done** — the pre-registered verdict held on every item |
+| **12** — Publish `0.2.0` | not started | **in progress**, and everything that can be done before the release is |
+
+`cargo xtask ci`: **38 steps, exit 0**, green both with the LadybugDB driver
+enabled and without it.
+
+### The three findings worth more than the code
+
+1. **The baseline was red on `main` and had been since the KB intake wave.** A
+   citation stale on arrival, promoted out of `.kb/_intake` — which the citation
+   scan excludes — into `.kb/decisions`, which it checks. **The ingest is the
+   moment invisible drift becomes a red gate, and it is the moment nobody is
+   reading line numbers.**
+2. **A `[FROZEN]` clause's exemplar was uninhabitable.** `PostgresProjectionStore`
+   declared `type Batch = sqlx::Transaction<'static, Postgres>` — a real driver
+   type, cited in the constitution as what a good skeleton looks like — and it
+   cannot be implemented, because `begin` is total, synchronous and infallible.
+   Five `todo!()` bodies type-checked against it for a phase. **PS-2's
+   live-transaction axis end is therefore forbidden by the port for both drivers
+   the clause names, not merely unbuilt.**
+3. **ES-11's falsifier fired**, on the adapter its own marker named as the thing
+   that would fire it — and not for the predicted reason. The read does not
+   self-paginate; it fails because a read and an append are two independent
+   requests to a pooled proxy, and the clause's sufficiency condition for
+   asynchronous drivers assumes one queue.
+
+None of the three was settled here. All three are reported, staged for the
+knowledge base, and owed an ADR — because amending a frozen or load-bearing
+clause is an ADR's work and not an adapter lane's.
+
+### What "ready to publish" means, precisely
+
+**Discharged:** both auditable exit criteria, and one of them is now a *gate step*
+rather than a pass somebody did — 46 provisional and 12 deferred clauses held
+against the generated §7.2 on every run, in both directions, proven to reject
+wrong ledgers. `package-check` green on all five crates. `happenstance-core`'s
+dry-run verified by compiling from its own tarball. The `docs.rs` check extended
+from three of five publishable crates to all five. `clippy::todo` verified rather
+than assumed. The stranger-install smoke written and its Rust validated. The
+benchmark blind spot decided. The registry baseline written and one line from
+working.
+
+**Not discharged, and neither can be before the release:** *crates live, docs.rs
+green*, and *`cargo-semver-checks` against a real published baseline*. The registry
+has to carry `0.2.0` first.
+
+**Deliberately not done:** the `0.2.0` milestone row is absent and phase 12 reads
+`in progress`. The status lint walks a milestone row's dependency closure and
+requires every phase in it to read `done`; adding it now costs either a red gate
+or a lie about an unpublished release.
+
+### The one thing that would change a reader's mind
+
+Every claim above rests on **one machine**. Three CI jobs cannot run here at all —
+`msrv` needs a second toolchain, `semver` needs a pull request, and the three-OS
+matrix needs the other two operating systems — and this lane has not been pushed.
+`HANDOVER.md` records what that gap was worth last time: 53 commits, three weeks,
+a row saying `Gate | exit 0` the whole time, and it was true.
