@@ -249,6 +249,32 @@ core → testkit → happenstance → sqlite → cloudflare — because both ada
 dev-depend on the testkit at the workspace version. There is **no release
 workflow**; publishing is manual with the owner's token.
 
+**One tripwire that has to be resolved before the release rather than during
+it, and it carries a decision.** `xtask`'s `runbook_status_matches_the_registry`
+holds the status table against the changelog on two axes, and axis 1 is: *a
+released version vouches for every phase it waited on.* It finds the milestone
+row whose name equals a dated `## [x]` heading and requires every phase in that
+row's dependency closure to read `done`.
+
+`CHANGELOG.md` already carries a dated `## [0.2.0]`, and the table has **no
+`0.2.0` milestone row** — so the version is silently skipped and the axis is
+currently held up by `0.2.0-alpha.1` alone. Add the row phase 12 obviously wants
+and the lint fails: its closure reaches phase 10, which reads `in progress` and
+which the 2026-09-07 decision says should stay that way, because Neon and now
+Postgres's read fault are both unbuilt.
+
+Three ways out, and the first is the trap. **Leaving the row out** keeps the
+gate green and is exactly the omission the lint's own bail message warns
+against — *"name the release in the milestone row, or delete this axis
+deliberately rather than by omission"* — so the release would ship with the axis
+holding nothing. **Marking phase 10 `done`** is a lie about two unbuilt things.
+**Splitting the row** — `10a` Postgres `done`, `10b` Neon `in progress`, with the
+`0.2.0` milestone depending on `7, 8, 10a` — is honest, parses (the lint matches
+dependency entries as strings against the `#` column), and says structurally what
+the phase 12 preamble currently says only in prose. It also costs an edit to the
+critical-path diagram. **That is the repository owner's call**, and it is worth
+taking before the release rather than under it.
+
 Two items in that list are still owed and easy to forget: repointing
 `cargo-semver-checks` to keep the registry baseline *as well as* `baseline-rev`
 (the comment in `ci.yml` already explains why it waits until `0.2.0` exists), and
