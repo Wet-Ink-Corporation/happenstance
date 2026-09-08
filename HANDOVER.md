@@ -296,6 +296,27 @@ dependency, completing a write-then-read cycle against the published crates.
 remediation were false. Launch `cargo xtask ci` detached, write `$LASTEXITCODE` to
 a sentinel file, and read the sentinel.
 
+**`redkiln doctor`'s telemetry integrity error is real and its diagnosis is
+not.** It reports that
+`.redkiln/telemetry/events/ryan-britton@happenstance@runs.jsonl` has an event
+that does not hash to its own `id`, concludes *"the line was EDITED after it was
+written — the one thing an append-only log must never show"*, and tells you to
+recover the partition from git history.
+
+Do not. The file has **one** line, introduced by **one** commit (`9f05da2`), and
+`git diff HEAD --quiet` passes on it: git has no record of an edit, and
+recovering from history would restore identical bytes. The mismatch is upstream
+of the file — the digest was computed differently from the way it is now
+verified, which is what a repository that has moved off the redkiln version it
+pins should expect, and is the same cause as the four process-pack and six
+template advisories.
+
+Worth knowing for two reasons beyond this one file. `doctor` states a cause it
+cannot distinguish from version skew, which is a discount to apply to its other
+diagnoses. And it flags one partition out of the sixteen in that directory
+because the other fifteen belong to other worktrees — so read its silence about
+them as *not checked here*, never as *verified*.
+
 **`cargo hack --no-dev-deps` rewrites all 13 manifests in place** and restores
 them on exit. Kill it mid-run — a timeout does this — and the tree is left
 stripped of `[dev-dependencies]`. `git checkout -- .` before believing anything
