@@ -11,8 +11,9 @@
 //! adapter in this portfolio has cleared it against a store whose writers are
 //! **not** serialised, which is the whole reason this crate is in the tree.
 //!
-//! The projection store beside this one is still a skeleton, which is what the
-//! crate's remaining `#![allow(clippy::todo)]` is for.
+//! The projection store beside this one is implemented too, and the crate carries
+//! no `#![allow(clippy::todo)]` any more — it left with the last stub, which is
+//! the contract it was written under.
 //!
 //! # The schema
 //!

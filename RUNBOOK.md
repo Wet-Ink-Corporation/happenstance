@@ -5064,8 +5064,15 @@ is the release.
       `HANDOVER.md` both say five — `happenstance-cloudflare` joined `PUBLISHABLE`
       at phase 9 and this line did not move, which is the same silent-count defect
       the goal paragraph already spells out with its members for.
-- [ ] Set `clippy::todo` to `deny` with no per-crate exemptions in any published
+- [x] Set `clippy::todo` to `deny` with no per-crate exemptions in any published
       crate. A clean build with it denied is the proof that no stub survives.
+      Denied workspace-wide already; **verified rather than assumed** — no
+      `todo!()` and no `#![allow(clippy::todo)]` in any of the five. The two
+      exemptions that remain are `happenstance-ladybug`'s and
+      `happenstance-sync`'s, and both crates are `publish = false`, so no
+      published artefact carries one. `happenstance-postgres`'s and
+      `happenstance-neon`'s left with their last stub at phase 10b, which is the
+      contract those allows were written under.
 - [ ] **Run `scripts/stranger-install-smoke.sh`** — DR-8, and the one check the
       gate structurally cannot do. Every step of `cargo xtask ci` runs inside this
       workspace, where the crates resolve by *path*: a path dependency ignores the
