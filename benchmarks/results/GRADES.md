@@ -387,26 +387,32 @@ written under. What *is* comparable is a ratio taken inside one run, and those
 are given below beside their Windows counterparts so the shapes can be checked
 against each other.
 
-### The instrument changed, and that is not free
+### One instrument was mis-sized, and the tables below predate the fix
 
-`run.sh` **cannot complete on this host.** It aborts at CONTROL 2, because
-`instruments_work`'s `the_paired_sampler_sees_a_difference_it_was_given` fails:
-handed two arms with a known difference, the paired sampler returns both at an
-identical 4,679 ns median and labels both `TIMER-DOMINATED`. The clocksource is
-`hpet` at a measured 1,390 ns per read, and
-[`../../ops/host/README.md`](../../ops/host/README.md) records why `tsc` is
-unavailable on this part and cannot be made available. **The abort is correct
-behaviour**; a harness that published paired ratios from a sampler in that state
-would be the worse outcome.
+`run.sh` **would not complete on this host** when these figures were taken. It
+aborted at CONTROL 2, and the reading at the time was that the paired sampler
+could not see a difference it was handed under a 1,390 ns `hpet` clock.
 
-So the ratios below come from **criterion arms run sequentially**, not from the
-interleaved paired runner. `README.md`'s rule — absolutes from criterion, ratios
-from the paired runner — exists because sequential arms drifted 2.7–3.0× on the
-old host. [`../flakiness/FLAKINESS.md`](../flakiness/FLAKINESS.md) is the
-measurement that says the substitution is sound here: of 3,321 arm pairs across
-three runs, **zero** moved more than 2.7× and the worst moved 1.485×. The
-substitution is stated rather than hidden, and it is why §1's numbers below do
-not match §1's above.
+**That was wrong.** The ratio assertion in that control was passing at 6.44×.
+What failed was `is_above_the_timer()` — a self-check on the control's own arm
+sizes, hard-coded for a host whose timer pair costs 56 ns against this one's
+2,924 ns. `benchmarks/README.md` carries the correction in full. The control now
+calibrates its arms to the measured timer; both hosts pass, and **`run.sh`
+completes here**.
+
+So the ratios in this section come from **criterion arms run sequentially**, not
+because the paired runner was unavailable, but because these tables were produced
+before it was available. [`../flakiness/FLAKINESS.md`](../flakiness/FLAKINESS.md)
+is the measurement that licenses the substitution — of 3,321 arm pairs across
+three runs, zero moved more than 2.7× and the worst moved 1.485×, so sequential
+drift, the paired runner's whole justification, is absent here.
+
+**The paired runner's own answer is now available and it agrees.**
+`happenstance-sqlite ÷ raw/same-schema` reads **1.68×** on this host against
+§1's **1.7×** on Windows — same instrument, second machine, two significant
+figures. What `hpet` actually costs is one arm: at a 29 µs floor the `memory`
+append at 5.8 µs is timer-dominated and reported as such, and the other six clear
+it.
 
 ### What the abstraction costs, from criterion
 

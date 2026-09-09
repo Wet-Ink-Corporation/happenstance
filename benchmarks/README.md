@@ -152,39 +152,55 @@ the toolchain and SQLite rows above already have.
 | Quiet | The sole purpose of the machine. `apt-daily`, `unattended-upgrades`, `man-db`, `fstrim` and `motd-news` **masked** — not merely disabled, because `apt-get install` re-enables a disabled timer — no cron, sleep and lid handling masked, and one container running, an idle tunnel |
 | Command | `ops/host/bench.sh [--fast]` — preflight, then `taskset` to one thread per physical core, then this `run.sh`. **See the limitation below: `run.sh` cannot complete here.** |
 
-#### `run.sh` does not finish on Host B, and the reason is a control doing its job
+#### `run.sh` did not finish on Host B, and the reason was a control mis-sized
 
-`run.sh` is `set -euo pipefail` and CONTROL 2 fails, so the run aborts before it
-reaches the criterion sweeps. The failing test is
-`tests/instruments_work.rs`'s `the_paired_sampler_sees_a_difference_it_was_given`:
-handed two arms with a known difference between them, the paired sampler reports
-both at an identical 4,679 ns median and labels both `TIMER-DOMINATED`. It cannot
-see a difference it was given.
+**Resolved. Kept here because the wrong diagnosis is the instructive part.**
 
-That is the `hpet` clocksource, at a measured 1,390 ns per read against 19 ns on
-`tsc` — and `ops/host/README.md` records why `tsc` is not available on this part
-and cannot be made available. **The abort is correct behaviour.** A harness that
-completed and published paired ratios from a sampler in that state would be the
-worse outcome by far.
+`run.sh` is `set -euo pipefail`, and it aborted at CONTROL 2 on
+`tests/instruments_work.rs`'s `the_paired_sampler_sees_a_difference_it_was_given`.
+The first reading of that was that the paired sampler could not see a difference
+it was handed, and that the `hpet` clock had made the instrument unusable here.
+**That was wrong.** The failure data says so plainly:
 
-What still works here, and what does not:
+```
+timer overhead 2924ns/sample
+light   median= 6635ns   TIMER-DOMINATED
+heavy   median=42751ns
+```
 
-| | on Host B | why |
-| --- | --- | --- |
-| CONTROL 1, `conformance_first` | ✅ | no clock |
-| `controls_fire` | ✅ | no clock |
-| `instruments_work` | ❌ 1 of 9 | the paired sampler, above |
-| `allocations` | ✅ | reads no clock at all |
-| the seven criterion sweeps | ✅ | criterion batches iterations and amortises the clock |
-| `overhead` — the paired ratios | ❌ | same cause as `instruments_work` |
+The assertion that matters — the ratio — **passed**, at 6.44× against a required
+2–40×. The sampler saw the difference perfectly well. What failed was
+`is_above_the_timer()`, a self-check on *the control's own arms*, and its message
+had already diagnosed itself:
 
-So a Host B run is `run.sh` **minus the paired runner**, and every figure it
-produces is a criterion absolute or an exact allocation count. The ratios in
-`results/GRADES.md` §1 have no Host B equivalent taken by the same instrument;
-deriving them from criterion arms instead is a **substitution of instrument**,
-and `results/flakiness/FLAKINESS.md` is the measurement that says the
-substitution is sound *on a quiet host* — sequential criterion drift, which is
-the paired runner's whole justification, is absent here.
+> both arms were sized to clear the timer overhead by 10x. If they no longer do,
+> the host's clock got slower or the arms got faster, and **the iteration counts
+> in this control need revisiting** — a control that is itself timer-dominated
+> proves nothing about the sampler
+
+`spin(20_000)` was written when the timer pair cost **56 ns**. On this host it
+costs **2,924 ns** — 52× more — which puts the floor at 29 µs and the light arm
+at 6.6 µs under it. Host A's constant, asserted on Host B.
+
+The fix is the revision the assertion asked for, done once rather than per host:
+the control now **calibrates** its arms against the measured timer. One throwaway
+run prices a spin iteration, and the light arm is sized to twice the floor. Both
+hosts pass, at arms three orders of magnitude apart — 1,200 ns of light arm on
+Host A, 58,111 ns on Host B, ratios 7.6× and 7.9×.
+
+`is_above_the_timer()` stays a guard that can **fire**, which is the whole
+difficulty: arms sized to satisfy an assertion turn it into decoration, and this
+repository rejects a check no implementation can fail. So the calibration is
+capped, and a host that would need more than the cap to clear its own clock fails
+with that as the finding — the clock is too coarse for the paired runner at any
+arm size, and criterion is the instrument for it.
+
+**What was actually lost to `hpet`, once the control was fixed: one arm.** At a
+29 µs floor the `memory` append (5.8 µs) is timer-dominated and is reported as
+such; the other six paired arms sit between 51 µs and 5.5 ms and clear it. The
+headline ratio reproduces across hosts from the same instrument —
+`happenstance-sqlite ÷ raw/same-schema` is **1.68×** here against **1.7×** on
+Host A.
 
 ## The history detects a regression, and that was checked
 

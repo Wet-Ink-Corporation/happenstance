@@ -37,15 +37,21 @@ Regime A was produced by `systemctl stop happenstance-bench-tuning`, which
 restores the governor from the snapshot the unit took before its first change —
 so A is the machine as found, not an approximation of it.
 
-`criterion` rather than the paired runner, and that is not a free choice: on this
-host the paired runner does not work at all. Its own control,
-`the_paired_sampler_sees_a_difference_it_was_given`, **fails** — both arms come
-back at an identical 4,679 ns median, both labelled `TIMER-DOMINATED`, because
-the clocksource is `hpet` at a measured 1,390 ns per read. Criterion is unharmed
-because it batches iterations and amortises the clock; it resolves 82 ns here
-with a ±0.3% confidence interval. [`ops/host/README.md`](../../../ops/host/README.md)
-has the whole clocksource story. Losing one instrument is not a reason to answer
-the question with none.
+`criterion` rather than the paired runner, and the reason given here at the time
+was wrong. It said the paired runner "does not work at all" on this host, because
+`the_paired_sampler_sees_a_difference_it_was_given` was failing. The ratio
+assertion in that control was in fact **passing**, at 6.44×; what failed was
+`is_above_the_timer()`, a self-check on the control's own arm sizes, which were
+hard-coded for a host whose timer costs 56 ns against this one's 2,924 ns. The
+control has since been calibrated against the measured timer and both hosts pass.
+`benchmarks/README.md` carries the whole correction.
+
+So criterion here is a choice rather than a necessity. It remains the right one
+for *this* measurement: the question is between-run dispersion of many arms, and
+criterion's batching makes even the 1.4 µs arms reproduce to 1.003×, where the
+paired runner's 29 µs floor on this host would put a third of them under it.
+Nothing below depends on the wrong reason; the runs were criterion runs either
+way.
 
 ## The result
 
@@ -136,9 +142,12 @@ noise in this suite is the SQLite arms doing real I/O, not the clock.
 
 **Keep `hpet`. The clocksource does not need fixing.** Criterion works at every
 scale this suite reaches, from 1.43 µs to 5 ms, and reproduces ratios to well
-inside the 20% resolution `README.md` already claims for itself. The one thing
-`hpet` costs is the paired runner, and the paired runner's own justification is
-measured absent here.
+inside the 20% resolution `README.md` already claims for itself. And the paired
+runner works too, once its control was sized for this host's clock: `run.sh`
+completes, and the headline ratio reproduces at **1.68×** against Host A's 1.7×.
+
+What `hpet` costs is one arm. At a 29 µs floor the `memory` append at 5.8 µs is
+timer-dominated and reported as such; the other six clear it.
 
 Two things that follow, and neither is silent:
 
@@ -146,7 +155,7 @@ Two things that follow, and neither is silent:
   §1's ratios, from the paired runner to criterion. That is a documented
   substitution, not a free one.
 * The paired runner still earns its keep on a *busy* host, which is what it was
-  built for. Nothing here retires it; it says it is not needed on this machine.
+  built for. Nothing here retires it, and it runs here.
 
 ## What this does not show
 

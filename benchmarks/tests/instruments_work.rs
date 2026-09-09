@@ -207,6 +207,13 @@ fn the_processor_clock_tells_working_from_waiting() {
 ///
 /// Wide bounds — anything from 2× to 40× passes — because the point is that the
 /// instrument *responds*, not that a spin loop scales linearly.
+/// What the calibration arm spins, before anything is known about the clock.
+/// Large enough to be priced against a coarse timer, small enough to be cheap.
+const CALIBRATION_SPINS: u64 = 20_000;
+
+/// The ceiling on a calibrated arm. See the assertion that reads it.
+const MAX_CALIBRATED_SPINS: u64 = 40_000_000;
+
 #[test]
 fn the_paired_sampler_sees_a_difference_it_was_given() {
     // `black_box` on the *input*, not only on the result. With a literal
@@ -224,11 +231,56 @@ fn the_paired_sampler_sees_a_difference_it_was_given() {
         let _ = std::hint::black_box(accumulator);
     }
 
+    // The iteration counts are CALIBRATED to this host's clock, not written
+    // down for the reference host's.
+    //
+    // They used to be `spin(20_000)` and `spin(160_000)`, chosen when the timer
+    // pair cost 56ns/sample. On a host whose clocksource is `hpet` it costs
+    // 2,924ns — 52x more — and the light arm landed at 6,635ns against a floor
+    // of `TIMER_HEADROOM * 2,924` = 29,240ns. The control then failed its own
+    // `is_above_the_timer` guard while the assertion that matters, the ratio,
+    // passed at 6.44x: the sampler saw the difference it was given, and the
+    // control could not certify that it had. That is the assertion's own
+    // diagnosis, in its own words — "the iteration counts in this control need
+    // revisiting" — so this is that revision, done once instead of per host.
+    //
+    // One throwaway run measures the timer and prices a single spin iteration;
+    // the arms follow from both.
+    let calibration = {
+        let mut probe = [Operation::new("probe", || spin(CALIBRATION_SPINS))];
+        paired::run(48, 8, &mut probe)
+    };
+    let timer = calibration.timer_overhead_nanos;
+    let probe_median = calibration.arms[0].median_nanos;
+    let per_spin = (probe_median.saturating_sub(timer) as f64) / CALIBRATION_SPINS as f64;
+    assert!(
+        per_spin > 0.0,
+        "the calibration arm cost no more than the timer that measured it, so a          spin iteration cannot be priced. timer={timer}ns probe={probe_median}ns"
+    );
+
+    // Twice the floor the guard below asserts, so the margin is real rather
+    // than marginal.
+    let light_target = (timer * paired::TIMER_HEADROOM * 2) as f64;
+    let light_spins = (light_target / per_spin).ceil() as u64;
+
+    // The cap is what keeps `is_above_the_timer` a guard that can still FIRE. A
+    // control whose arms are sized to satisfy its own assertion has turned that
+    // assertion into decoration, and this repository rejects a check no
+    // implementation can fail. So: calibrate, but refuse to calibrate without
+    // limit. A host needing more than this to clear its own clock has a clock
+    // the paired runner should not be used on at all, and that is the finding.
+    assert!(
+        light_spins <= MAX_CALIBRATED_SPINS,
+        "clearing {}x this host's timer overhead ({timer}ns/sample) would need          {light_spins} spin iterations per sample, over the {MAX_CALIBRATED_SPINS}          cap. The clock is too coarse for the paired runner at any arm size; use          criterion, which amortises the clock across a batch.",
+        paired::TIMER_HEADROOM
+    );
+
     let mut operations = [
-        Operation::new("light", || spin(20_000)),
-        Operation::new("heavy", || spin(160_000)),
+        Operation::new("light", move || spin(light_spins)),
+        Operation::new("heavy", move || spin(light_spins * 8)),
     ];
     let report = paired::run(400, paired::DEFAULT_WARMUP_ROUNDS, &mut operations);
+    println!("timer={timer}ns/sample  per_spin={per_spin:.3}ns  light={light_spins} spins");
     println!("{report}");
 
     let ratio = report
