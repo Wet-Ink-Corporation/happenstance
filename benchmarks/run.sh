@@ -53,26 +53,38 @@ fi
 
 mkdir -p results/raw results/history
 
+# Every `tee` below writes to a fixed filename, so N repetitions of this script
+# overwrite each other and only the last survives. That is right for one run, and
+# wrong for the one question a single run cannot answer: how far the numbers move
+# BETWEEN runs. That is the 40% in README.md's "What none of this shows", and it
+# has never had an instrument behind it -- the evidence for it was overwritten by
+# the next run that produced it.
+#
+# `RESULTS_SUFFIX=03 ./run.sh --fast` writes `raw/overhead-03.log` rather than
+# `raw/overhead.log`, so ten runs leave ten files to compare. Unset, every
+# filename below is exactly what it was.
+sfx="${RESULTS_SUFFIX:+-$RESULTS_SUFFIX}"
+
 echo "==> conditions: the toolchain every figure below was produced by"
 {
   rustc --version --verbose
   echo
   cargo --version
-} 2>&1 | tee results/raw/conditions.txt
+} 2>&1 | tee results/raw/conditions${sfx}.txt
 
 echo
 echo "==> CONTROL 1: conformance first. Both timed arms pass the full suite"
 echo "    before any figure taken through them is kept — a wrong arm is always"
 echo "    the fastest, and this is what stops that reading as a finding."
 cargo test --release --test conformance_first -- --test-threads=1 2>&1 \
-  | tee results/raw/conformance.txt
+  | tee results/raw/conformance${sfx}.txt
 
 echo
 echo "==> CONTROL 2: the instruments measure, and the controls fire"
 cargo test --release --test instruments_work -- --test-threads=1 --nocapture 2>&1 \
-  | tee results/raw/instruments.txt
+  | tee results/raw/instruments${sfx}.txt
 cargo test --release --test controls_fire -- --test-threads=1 --nocapture 2>&1 \
-  | tee results/raw/controls.txt
+  | tee results/raw/controls${sfx}.txt
 
 echo
 echo "==> the headline: what happenstance costs above raw SQL on the same file."
@@ -85,12 +97,12 @@ echo "    drifted 2.7-3.0x (RUNBOOK.md:1628-1634)."
 # produces a `.csv` with `Compiling happenstance-benchmarks v0.0.0` as its
 # first row, which no reader and no spreadsheet can parse. The process
 # substitution keeps the report on the terminal while it runs.
-cargo run --release --bin overhead   2> >(tee results/raw/overhead.log >&2)   | tee results/raw/overhead.csv
+cargo run --release --bin overhead   2> >(tee results/raw/overhead${sfx}.log >&2)   | tee results/raw/overhead${sfx}.csv
 
 echo
 echo "==> allocations: the reproducible half. These counts were identical to the"
 echo "    digit across four runs on a host whose wall-clock medians moved 40%."
-cargo run --release --bin allocations   2> >(tee results/raw/allocations.log >&2)   | tee results/raw/allocations.csv
+cargo run --release --bin allocations   2> >(tee results/raw/allocations${sfx}.log >&2)   | tee results/raw/allocations${sfx}.csv
 
 if [[ "$fast" == "1" ]]; then
   echo
@@ -118,7 +130,7 @@ do
   echo
   echo "--- $bench ---"
   cargo bench --bench "$bench" -- --save-baseline latest 2>&1 \
-    | tee "results/raw/$bench.txt"
+    | tee "results/raw/$bench${sfx}.txt"
 done
 
 echo
@@ -126,7 +138,7 @@ echo "==> the history entry: one committed JSON per run, named for the date and"
 echo "    the commit it was taken at. CF-34's own model is that benchmarks are"
 echo "    compared against that adapter's own history, and this is the file that"
 echo "    makes that possible."
-cargo run --release --bin collect   2> >(tee results/raw/collect.log >&2)   | tee results/raw/collect.csv
+cargo run --release --bin collect   2> >(tee results/raw/collect${sfx}.log >&2)   | tee results/raw/collect${sfx}.csv
 
 echo
 echo "Raw output is under results/raw/, and one entry was added to"
