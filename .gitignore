@@ -80,3 +80,7 @@ target
 # the measurement can run inside the server over its unix socket. A second target
 # triple's artefacts, and no more committable than `target/` itself.
 experiments/position-visibility/adapter/target-linux/
+
+# Python bytecode from the ops helper scripts.
+__pycache__/
+*.pyc

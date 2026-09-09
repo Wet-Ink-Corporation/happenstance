@@ -109,6 +109,16 @@ from your own host if you re-run it; the toolchain and SQLite rows are printed
 at the top of `results/raw/conditions.txt` and read back off the live process by
 `src/report.rs`, so they are checkable rather than transcribed.
 
+**There are two hosts now, and both tables stay.** Host A produced every figure
+currently under `results/`. Host B is the dedicated measurement machine
+(`ops/host/`), provisioned because the 40% between-run movement in
+[What none of this shows](#what-none-of-this-shows) is a property of a busy
+laptop rather than of this library. Deleting Host A's table while Host A's
+numbers are still in `results/` would leave a conditions table that does not
+describe its own results, which is worse than carrying two.
+
+### Host A — Windows 11 laptop (every figure in `results/` through 2026-09-08)
+
 | | |
 | --- | --- |
 | Machine | 13th Gen Intel Core i9-13905H, 14 cores / 20 logical, 31.7 GiB RAM |
@@ -122,6 +132,25 @@ at the top of `results/raw/conditions.txt` and read back off the live process by
 | Statement cache | **None, on either side.** The workspace pins `rusqlite` with `default-features = false`, which drops its `cache` feature, so `prepare_cached` does not exist in this graph and both the adapter and the floor re-prepare |
 | Timer floor | Measured per run and printed with it — around 50 ns per sample for the `Instant::now()` pair that brackets each one. Any arm within 10× of it is labelled `TIMER-DOMINATED` |
 | Command | `./run.sh` (about 35–45 minutes), or `./run.sh --fast` (about four) |
+
+### Host B — `britton-ai`, the dedicated measurement host
+
+Provisioned and tuned by [`ops/host/`](../ops/host/README.md); every row below is
+declared in `ops/host/host.env` and asserted by `ops/host/preflight.sh` before a
+run starts, so these are checkable rather than transcribed — the same property
+the toolchain and SQLite rows above already have.
+
+| | |
+| --- | --- |
+| Machine | Lenovo Legion 5 15ACH6 — a **laptop**. AMD Ryzen 7 5800H, 8 cores / 16 logical, 15 GiB RAM. Slower and smaller than Host A, which is the right trade: every figure here is a ratio between arms of one run, and a repeatable clock beats a fast one |
+| OS | Ubuntu 24.04.4 LTS, kernel 6.8.0-134 |
+| Filesystem | ext4 on LVM on NVMe. Database files under `std::env::temp_dir()` = `/tmp`, asserted **not** to be a tmpfs — a tmpfs would make the SQLite arms measure RAM and report it in a table headed by a filesystem |
+| Toolchain | `rustc 1.97.1`, `x86_64-unknown-linux-gnu` (`results/raw/conditions.txt`) |
+| CPU regime | `performance` governor **and** `energy_performance_preference` on all 16 CPUs, applied by `happenstance-bench-tuning.service` so it survives a reboot and `systemctl is-active` is a question the preflight can ask. Frequency **uncapped** and SMT **on**, both deliberately left at their as-found settings until the flakiness is measured |
+| Clocksource | **`hpet`**, and that is a finding rather than a default. The kernel marks this part's TSC unstable at boot, and `tsc_adjust` — the MSR Linux would use to correct per-CPU offsets — is absent, so no kernel parameter can fix it. `clock_gettime` therefore costs a measured **1,390 ns** against 19 ns on tsc. `ops/host/probes/tsc-migrate.c` is the instrument that settled it; [`ops/host/README.md`](../ops/host/README.md) carries the numbers and the two wrong answers that came first |
+| Timer floor | ~1,390 ns, about **28× Host A's**. At `paired.rs`'s `TIMER_HEADROOM` of 10, arms below roughly 14 µs are `TIMER-DOMINATED`. Of the seven arms in `results/raw/overhead.log` exactly one is — `memory`, at a 5.8 µs median. The other six sit between 143 µs and 5.5 ms, where 1.4 µs is under 1%; the criterion targets batch iterations and amortise it; the allocation counts read no clock at all |
+| Quiet | The sole purpose of the machine. `apt-daily`, `unattended-upgrades`, `man-db`, `fstrim` and `motd-news` **masked** — not merely disabled, because `apt-get install` re-enables a disabled timer — no cron, sleep and lid handling masked, and one container running, an idle tunnel |
+| Command | `ops/host/bench.sh [--fast]` — preflight, then `taskset` to one thread per physical core, then this `run.sh` unmodified |
 
 ## The history detects a regression, and that was checked
 
