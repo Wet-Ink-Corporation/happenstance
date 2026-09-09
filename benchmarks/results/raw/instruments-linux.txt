@@ -1,0 +1,58 @@
+    Finished `release` profile [optimized] target(s) in 0.06s
+     Running tests/instruments_work.rs (target/release/deps/instruments_work-9dfee21aeefbb7f4)
+
+running 9 tests
+test a_nested_region_is_refused - should panic ... 
+thread 'a_nested_region_is_refused' (158272) panicked at src/counting.rs:282:5:
+measurement regions do not nest: the peak is one pair of statics, so          an inner region would reset the outer one's high-water mark and the          outer would then report the inner's peak as its own
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ok
+test a_paired_run_with_no_arms_is_refused - should panic ... 
+thread 'a_paired_run_with_no_arms_is_refused' (158273) panicked at src/paired.rs:390:5:
+a paired run needs at least one arm; with none it would report an empty table that reads like a measurement
+ok
+test the_allocator_counts_a_known_allocation ... ok
+test the_paired_sampler_reports_no_difference_where_there_is_none ... paired run: 400 recorded rounds, timer overhead 2888ns/sample
+  left                         n=400     median=        4331ns p95=        4819ns p99=        4891ns max=       10063ns              drift=1.000 TIMER-DOMINATED
+  right                        n=400     median=        4331ns p95=        4819ns p99=        4819ns max=        9991ns              drift=1.000 TIMER-DOMINATED
+  NOTE: an arm marked TIMER-DOMINATED has a median below 10x the timer overhead, so most of what it reports is the clock. Measure that scale with criterion, which amortises the clock across a batch of iterations instead of paying for it per operation.
+
+ok
+test the_paired_sampler_sees_a_difference_it_was_given ... paired run: 400 recorded rounds, timer overhead 2924ns/sample
+  light                        n=400     median=        6635ns p95=        7055ns p99=        7127ns max=       12855ns              drift=0.989 TIMER-DOMINATED
+  heavy                        n=400     median=       42751ns p95=       43455ns p99=       49247ns max=       51071ns              drift=0.978
+  NOTE: an arm marked TIMER-DOMINATED has a median below 10x the timer overhead, so most of what it reports is the clock. Measure that scale with criterion, which amortises the clock across a batch of iterations instead of paying for it per operation.
+
+
+thread 'the_paired_sampler_sees_a_difference_it_was_given' (158276) panicked at tests/instruments_work.rs:244:5:
+both arms were sized to clear the timer overhead by 10x. If they no longer do, the host's clock got slower or the arms got faster, and the iteration counts in this control need revisiting — a control that is itself timer-dominated proves nothing about the sampler:
+paired run: 400 recorded rounds, timer overhead 2924ns/sample
+  light                        n=400     median=        6635ns p95=        7055ns p99=        7127ns max=       12855ns              drift=0.989 TIMER-DOMINATED
+  heavy                        n=400     median=       42751ns p95=       43455ns p99=       49247ns max=       51071ns              drift=0.978
+  NOTE: an arm marked TIMER-DOMINATED has a median below 10x the timer overhead, so most of what it reports is the clock. Measure that scale with criterion, which amortises the clock across a batch of iterations instead of paying for it per operation.
+
+FAILED
+test the_peak_sees_a_buffer_that_was_freed_before_the_region_closed ... ok
+test the_processor_clock_tells_working_from_waiting ... busy: elapsed=0.256s processor=0.013s ratio=0.05
+waiting: elapsed=0.256s processor=0.000s ratio=0.00
+
+thread 'the_processor_clock_tells_working_from_waiting' (158278) panicked at tests/instruments_work.rs:191:5:
+a spin loop must show the processor busy for most of its span; got elapsed=0.256s processor=0.013s ratio=0.05
+FAILED
+test the_timer_domination_guard_fires_on_an_arm_that_does_nothing ... paired run: 400 recorded rounds, timer overhead 3118ns/sample
+  empty                        n=400     median=        1467ns p95=        1956ns p99=        1956ns max=       73983ns              drift=1.000 TIMER-DOMINATED
+  NOTE: an arm marked TIMER-DOMINATED has a median below 10x the timer overhead, so most of what it reports is the clock. Measure that scale with criterion, which amortises the clock across a batch of iterations instead of paying for it per operation.
+
+ok
+test the_two_allocation_regimes_are_separated_by_an_order_of_magnitude ... regime separation at 64 tags: owned=66 heap ops, interned=1 heap ops
+ok
+
+failures:
+
+failures:
+    the_paired_sampler_sees_a_difference_it_was_given
+    the_processor_clock_tells_working_from_waiting
+
+test result: FAILED. 7 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+error: test failed, to rerun pass `--test instruments_work`

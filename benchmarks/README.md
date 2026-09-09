@@ -150,7 +150,41 @@ the toolchain and SQLite rows above already have.
 | Clocksource | **`hpet`**, and that is a finding rather than a default. The kernel marks this part's TSC unstable at boot, and `tsc_adjust` — the MSR Linux would use to correct per-CPU offsets — is absent, so no kernel parameter can fix it. `clock_gettime` therefore costs a measured **1,390 ns** against 19 ns on tsc. `ops/host/probes/tsc-migrate.c` is the instrument that settled it; [`ops/host/README.md`](../ops/host/README.md) carries the numbers and the two wrong answers that came first |
 | Timer floor | ~1,390 ns, about **28× Host A's**. At `paired.rs`'s `TIMER_HEADROOM` of 10, arms below roughly 14 µs are `TIMER-DOMINATED`. Of the seven arms in `results/raw/overhead.log` exactly one is — `memory`, at a 5.8 µs median. The other six sit between 143 µs and 5.5 ms, where 1.4 µs is under 1%; the criterion targets batch iterations and amortise it; the allocation counts read no clock at all |
 | Quiet | The sole purpose of the machine. `apt-daily`, `unattended-upgrades`, `man-db`, `fstrim` and `motd-news` **masked** — not merely disabled, because `apt-get install` re-enables a disabled timer — no cron, sleep and lid handling masked, and one container running, an idle tunnel |
-| Command | `ops/host/bench.sh [--fast]` — preflight, then `taskset` to one thread per physical core, then this `run.sh` unmodified |
+| Command | `ops/host/bench.sh [--fast]` — preflight, then `taskset` to one thread per physical core, then this `run.sh`. **See the limitation below: `run.sh` cannot complete here.** |
+
+#### `run.sh` does not finish on Host B, and the reason is a control doing its job
+
+`run.sh` is `set -euo pipefail` and CONTROL 2 fails, so the run aborts before it
+reaches the criterion sweeps. The failing test is
+`tests/instruments_work.rs`'s `the_paired_sampler_sees_a_difference_it_was_given`:
+handed two arms with a known difference between them, the paired sampler reports
+both at an identical 4,679 ns median and labels both `TIMER-DOMINATED`. It cannot
+see a difference it was given.
+
+That is the `hpet` clocksource, at a measured 1,390 ns per read against 19 ns on
+`tsc` — and `ops/host/README.md` records why `tsc` is not available on this part
+and cannot be made available. **The abort is correct behaviour.** A harness that
+completed and published paired ratios from a sampler in that state would be the
+worse outcome by far.
+
+What still works here, and what does not:
+
+| | on Host B | why |
+| --- | --- | --- |
+| CONTROL 1, `conformance_first` | ✅ | no clock |
+| `controls_fire` | ✅ | no clock |
+| `instruments_work` | ❌ 1 of 9 | the paired sampler, above |
+| `allocations` | ✅ | reads no clock at all |
+| the seven criterion sweeps | ✅ | criterion batches iterations and amortises the clock |
+| `overhead` — the paired ratios | ❌ | same cause as `instruments_work` |
+
+So a Host B run is `run.sh` **minus the paired runner**, and every figure it
+produces is a criterion absolute or an exact allocation count. The ratios in
+`results/GRADES.md` §1 have no Host B equivalent taken by the same instrument;
+deriving them from criterion arms instead is a **substitution of instrument**,
+and `results/flakiness/FLAKINESS.md` is the measurement that says the
+substitution is sound *on a quiet host* — sequential criterion drift, which is
+the paired runner's whole justification, is absent here.
 
 ## The history detects a regression, and that was checked
 

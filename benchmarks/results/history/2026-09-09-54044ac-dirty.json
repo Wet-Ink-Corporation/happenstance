@@ -1,0 +1,7897 @@
+{
+  "conditions": {
+    "commit": "54044ac-dirty",
+    "date": "2026-09-09",
+    "toolchain": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "target": "x86_64-unknown-linux-gnu",
+    "profile": "release",
+    "logical_cpus": 16,
+    "sqlite_version": "3.53.2"
+  },
+  "rows": [
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "0",
+      "metric": "median",
+      "value": 3597.531919158785,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 3595.5215245072386,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 3599.40387682919,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 3601.2175794826744,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "3",
+      "metric": "median",
+      "value": 8004.20952767675,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 7999.181560592851,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 8009.317792338709,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 8018.254791902703,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "64",
+      "metric": "median",
+      "value": 20620.67254199121,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 20601.039769754057,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 20643.710917700413,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_interned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 20640.43805314314,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "0",
+      "metric": "median",
+      "value": 12887.83815094864,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 12873.709307992203,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 12901.020933014352,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 12914.605070643847,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "3",
+      "metric": "median",
+      "value": 64565.29638941103,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 64519.74716592237,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 64660.87634408602,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 64693.71308861745,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "64",
+      "metric": "median",
+      "value": 849812.0607565012,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 848963.2638888889,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 850307.4039473685,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "build_owned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 850245.5924774293,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "0",
+      "metric": "median",
+      "value": 1703.5172069103392,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 1700.961555266887,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 1709.300876008518,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 1709.163505622323,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "3",
+      "metric": "median",
+      "value": 5169.070971867008,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 5155.717046238786,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 5203.723395445135,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 5216.60238597547,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "64",
+      "metric": "median",
+      "value": 18610.73538961039,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 18478.0515625,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 18825.475,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_interned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 18886.37478478038,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "0",
+      "metric": "median",
+      "value": 5987.205848240001,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 5928.315088757397,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 6028.473266317016,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 6079.375328898866,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "3",
+      "metric": "median",
+      "value": 23313.39765625,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 23171.203285066986,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 23437.895238903984,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 23413.72767291576,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "64",
+      "metric": "median",
+      "value": 260854.94979647215,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 253335.25448717948,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 262491.84705882357,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-construction",
+      "arm": "clone_owned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 251036.51291360808,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "1",
+      "metric": "median",
+      "value": 1425.248475936648,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 1421.2740407591214,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 1435.8421691683031,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "1",
+      "metric": "mean",
+      "value": 1428.4247319910207,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "128",
+      "metric": "median",
+      "value": 15299.67435694946,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 15256.887439177524,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 15344.454506188758,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "128",
+      "metric": "mean",
+      "value": 25986.00774532616,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "32",
+      "metric": "median",
+      "value": 4962.57486631016,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "32",
+      "metric": "median-ci-lower",
+      "value": 4948.1497716102,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "32",
+      "metric": "median-ci-upper",
+      "value": 4974.590310266407,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "32",
+      "metric": "mean",
+      "value": 6169.213594276686,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "8",
+      "metric": "median",
+      "value": 2140.3032193791946,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 1834.5104865771816,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 2366.704467881112,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_interned",
+      "shape": "8",
+      "metric": "mean",
+      "value": 2100.113005989514,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "1",
+      "metric": "median",
+      "value": 1510.702159592244,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 1508.2570826582005,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 1514.1645334743523,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "1",
+      "metric": "mean",
+      "value": 1751.9104180786155,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "128",
+      "metric": "median",
+      "value": 24895.16084332334,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 14674.368706293706,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 27069.999921328672,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "128",
+      "metric": "mean",
+      "value": 20975.790743809976,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "32",
+      "metric": "median",
+      "value": 5978.881992717643,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "32",
+      "metric": "median-ci-lower",
+      "value": 4711.395113327586,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "32",
+      "metric": "median-ci-upper",
+      "value": 7941.845265023145,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "32",
+      "metric": "mean",
+      "value": 6265.601750002127,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "8",
+      "metric": "median",
+      "value": 2306.73977583137,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 2283.483001157717,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 2360.5872445659247,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "memory_owned",
+      "shape": "8",
+      "metric": "mean",
+      "value": 2507.4353259744303,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "1",
+      "metric": "median",
+      "value": 49066.21768292683,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 48539.47159773772,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 49339.67623228804,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "1",
+      "metric": "mean",
+      "value": 48932.34751964881,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "128",
+      "metric": "median",
+      "value": 973871.2111111112,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 949042.023239918,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 988932.181818182,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "128",
+      "metric": "mean",
+      "value": 942529.3605179092,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "32",
+      "metric": "median",
+      "value": 305230.5517075517,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "32",
+      "metric": "median-ci-lower",
+      "value": 298445.54217171716,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "32",
+      "metric": "median-ci-upper",
+      "value": 308154.908008658,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "32",
+      "metric": "mean",
+      "value": 293525.01767115906,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "8",
+      "metric": "median",
+      "value": 121839.74960233296,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 119773.42084059231,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 123195.28826745164,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_interned",
+      "shape": "8",
+      "metric": "mean",
+      "value": 118796.5946913346,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "1",
+      "metric": "median",
+      "value": 49506.51948051948,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 49139.368787563566,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 50094.37889860948,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "1",
+      "metric": "mean",
+      "value": 48894.681789070375,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "128",
+      "metric": "median",
+      "value": 977067.4915584415,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 962165.3530434782,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 993200.0952380951,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "128",
+      "metric": "mean",
+      "value": 954596.2431510749,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "32",
+      "metric": "median",
+      "value": 300855.12171717174,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "32",
+      "metric": "median-ci-lower",
+      "value": 295097.80578512396,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "32",
+      "metric": "median-ci-upper",
+      "value": 302906.3428030303,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "32",
+      "metric": "mean",
+      "value": 291177.97278962936,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "8",
+      "metric": "median",
+      "value": 119752.53701423095,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 117662.59593253968,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 121074.47277276297,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_hand-rolled_owned",
+      "shape": "8",
+      "metric": "mean",
+      "value": 117088.98135048304,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "1",
+      "metric": "median",
+      "value": 101618.47692486084,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 99852.08779995514,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 102475.2233053936,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "1",
+      "metric": "mean",
+      "value": 99588.7230727582,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "128",
+      "metric": "median",
+      "value": 1613334.1277777776,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 1574869.08511396,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 1627055.1864630468,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "128",
+      "metric": "mean",
+      "value": 1543157.516336668,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "32",
+      "metric": "median",
+      "value": 542567.6597222222,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "32",
+      "metric": "median-ci-lower",
+      "value": 537987.9877645503,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "32",
+      "metric": "median-ci-upper",
+      "value": 548978.1766774892,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "32",
+      "metric": "mean",
+      "value": 533570.967218508,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "8",
+      "metric": "median",
+      "value": 235460.12276785716,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 228365.34547000617,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 238229.35719439288,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "8",
+      "metric": "mean",
+      "value": 228892.067675422,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "1",
+      "metric": "median",
+      "value": 103440.43752913752,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 102112.960932858,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 105004.7880892256,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "1",
+      "metric": "mean",
+      "value": 103808.72795634628,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "128",
+      "metric": "median",
+      "value": 1593832.2097069598,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 1572984.9174603175,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 1614429.899234694,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "128",
+      "metric": "mean",
+      "value": 1546844.7674342606,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "32",
+      "metric": "median",
+      "value": 544735.1337962963,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "32",
+      "metric": "median-ci-lower",
+      "value": 531404.6577932099,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "32",
+      "metric": "median-ci-upper",
+      "value": 557044.8407909141,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "32",
+      "metric": "mean",
+      "value": 534095.8619729589,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "8",
+      "metric": "median",
+      "value": 240037.73170731709,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 235772.6500908953,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 241502.00197689343,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "8",
+      "metric": "mean",
+      "value": 234037.58412509933,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "1",
+      "metric": "median",
+      "value": 144031.00864389233,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 141876.30418060202,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 145539.85712560388,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "1",
+      "metric": "mean",
+      "value": 139149.52942568238,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "128",
+      "metric": "median",
+      "value": 2259242.0116666667,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 2225044.1642857143,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 2276842.6637426903,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "128",
+      "metric": "mean",
+      "value": 2189072.382235018,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "32",
+      "metric": "median",
+      "value": 756519.7708333333,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "32",
+      "metric": "median-ci-lower",
+      "value": 740217.5601503759,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "32",
+      "metric": "median-ci-upper",
+      "value": 763924.269325502,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "32",
+      "metric": "mean",
+      "value": 724342.4130789177,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "8",
+      "metric": "median",
+      "value": 303198.8677922078,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 300233.36024720897,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 308449.1094516595,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_interned",
+      "shape": "8",
+      "metric": "mean",
+      "value": 295452.9567240495,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "1",
+      "metric": "median",
+      "value": 141891.78796703296,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 139469.54310515872,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 144445.57193877554,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "1",
+      "metric": "mean",
+      "value": 140735.59376195137,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "128",
+      "metric": "median",
+      "value": 2243445.636805556,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 2221082.3055023924,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 2270180.4266666668,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "128",
+      "metric": "mean",
+      "value": 2175399.8521714043,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "32",
+      "metric": "median",
+      "value": 744894.9993006992,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "32",
+      "metric": "median-ci-lower",
+      "value": 735017.2828402367,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "32",
+      "metric": "median-ci-upper",
+      "value": 759209.4993589744,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "32",
+      "metric": "mean",
+      "value": 720920.9644473062,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "8",
+      "metric": "median",
+      "value": 301720.47365785256,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 298206.43191964284,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 304565.43563988095,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_batch-size",
+      "arm": "sqlite_owned",
+      "shape": "8",
+      "metric": "mean",
+      "value": 294725.0750378103,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_connect",
+      "arm": "memory",
+      "shape": "",
+      "metric": "median",
+      "value": 2.9138907260081988,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_connect",
+      "arm": "memory",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 2.88395547180722,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_connect",
+      "arm": "memory",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 2.9469841905502263,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_connect",
+      "arm": "memory",
+      "shape": "",
+      "metric": "mean",
+      "value": 2.9261337681091293,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_connect",
+      "arm": "sqlite_first-open",
+      "shape": "",
+      "metric": "median",
+      "value": 4388832.857575757,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_connect",
+      "arm": "sqlite_first-open",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 4341143.15922619,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_connect",
+      "arm": "sqlite_first-open",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 4434772.833448276,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_connect",
+      "arm": "sqlite_first-open",
+      "shape": "",
+      "metric": "mean",
+      "value": 4432427.986147378,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "1024",
+      "metric": "median",
+      "value": 1762.789291047709,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "1024",
+      "metric": "median-ci-lower",
+      "value": 1756.144186344191,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "1024",
+      "metric": "median-ci-upper",
+      "value": 1770.7654065752686,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "1024",
+      "metric": "mean",
+      "value": 2565.9474089383048,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "64",
+      "metric": "median",
+      "value": 1768.2615282614352,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 1760.3552878284454,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 1779.4814317768548,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 2568.9359229716338,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "65536",
+      "metric": "median",
+      "value": 1762.6875639146442,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 1755.0811432858063,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 1774.6944496781284,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_interned",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 2551.2327985198285,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "1024",
+      "metric": "median",
+      "value": 2315.638740834743,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "1024",
+      "metric": "median-ci-lower",
+      "value": 2277.476232777375,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "1024",
+      "metric": "median-ci-upper",
+      "value": 2373.914086294416,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "1024",
+      "metric": "mean",
+      "value": 5081.401729242832,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "64",
+      "metric": "median",
+      "value": 2313.250306268588,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 2281.6559837836876,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 2389.5823381883356,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 5117.550257864809,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "65536",
+      "metric": "median",
+      "value": 2319.1666243224936,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 2273.67047885211,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 2375.6561653116532,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "memory_owned",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 5110.073510813269,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "1024",
+      "metric": "median",
+      "value": 235536.37896825396,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "1024",
+      "metric": "median-ci-lower",
+      "value": 231715.5347619047,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "1024",
+      "metric": "median-ci-upper",
+      "value": 236784.90957303977,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "1024",
+      "metric": "mean",
+      "value": 232363.39030812992,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "64",
+      "metric": "median",
+      "value": 179340.66549354786,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 177547.0390946502,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 182361.7342633203,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 176853.24011000415,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "65536",
+      "metric": "median",
+      "value": 2319781.869230769,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 2272553.4343137257,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 2350928.1769230766,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_interned",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 3819973.3834586656,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "1024",
+      "metric": "median",
+      "value": 235722.88535868897,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "1024",
+      "metric": "median-ci-lower",
+      "value": 231235.9099470899,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "1024",
+      "metric": "median-ci-upper",
+      "value": 238009.27983821736,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "1024",
+      "metric": "mean",
+      "value": 229027.45718159416,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "64",
+      "metric": "median",
+      "value": 179570.86342592593,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 175982.3091563786,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 181854.2910130719,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 176261.15142021503,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "65536",
+      "metric": "median",
+      "value": 2359594.2726190477,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 2331272.744117647,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 2421298.9923076923,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "raw_same-schema_owned",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 2297336.489879416,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "1024",
+      "metric": "median",
+      "value": 298684.84475108224,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "1024",
+      "metric": "median-ci-lower",
+      "value": 293857.3063016529,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "1024",
+      "metric": "median-ci-upper",
+      "value": 303268.0256916996,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "1024",
+      "metric": "mean",
+      "value": 287034.9479734805,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "64",
+      "metric": "median",
+      "value": 254377.49358974356,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 249808.69864750633,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 259172.99928276852,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 250012.50124424233,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "65536",
+      "metric": "median",
+      "value": 3245316.1805555555,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 3155991.571805007,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 3284285.8434920637,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_interned",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 5100638.330842386,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "1024",
+      "metric": "median",
+      "value": 306824.52704797336,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "1024",
+      "metric": "median-ci-lower",
+      "value": 301442.9188311688,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "1024",
+      "metric": "median-ci-upper",
+      "value": 310906.5688811189,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "1024",
+      "metric": "mean",
+      "value": 297141.05917113886,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "64",
+      "metric": "median",
+      "value": 257813.1436234818,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 252642.83723513328,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 260109.37743135012,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 252331.915641321,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "65536",
+      "metric": "median",
+      "value": 3222936.2542087543,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 3170026.2585470085,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 3253575.0323166302,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_payload-size",
+      "arm": "sqlite_owned",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 3099326.9703665907,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "0",
+      "metric": "median",
+      "value": 1576.6498688334336,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 1575.293310892822,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 1578.9564340051377,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 1674.975461646751,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "3",
+      "metric": "median",
+      "value": 2379.8658546151446,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 1821.485585353275,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 2392.3486811071,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 2921.675867955522,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "64",
+      "metric": "median",
+      "value": 3683.273054720672,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 2981.068177210057,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 4926.9558992777975,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_interned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 4098.131208761046,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "0",
+      "metric": "median",
+      "value": 1777.0395074514304,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 1760.6591621338737,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 1799.5851773366048,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 2236.4355169184373,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "3",
+      "metric": "median",
+      "value": 2329.600631439016,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 2297.4894322033897,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 2383.349584963059,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 2517.630758466413,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "64",
+      "metric": "median",
+      "value": 10954.747141465416,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 10863.167024982582,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 12310.878916979806,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "memory_owned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 43773.693388757216,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "0",
+      "metric": "median",
+      "value": 150206.90643939393,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 147999.01212121214,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 151364.7119962746,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 146909.29756046878,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "3",
+      "metric": "median",
+      "value": 240641.1294642857,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 237169.85667903523,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 243056.1713633924,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 234808.8011990578,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "64",
+      "metric": "median",
+      "value": 1615253.3243055556,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 1317847.643939394,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 1808500.0480701756,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_interned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 1470795.289922998,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "0",
+      "metric": "median",
+      "value": 151988.19673690372,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 149089.52627248375,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 153248.74219810043,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 270430.01978662383,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "3",
+      "metric": "median",
+      "value": 251831.8719635627,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 248269.4037851038,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 255164.00860805865,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 245915.80216441795,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "64",
+      "metric": "median",
+      "value": 1982413.4205357144,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 1779814.181818182,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 2135762.961111111,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "raw_same-schema_owned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 1816811.5744547597,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "0",
+      "metric": "median",
+      "value": 193882.0632798574,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 190897.97747432307,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 195423.43282498184,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 188960.1430774524,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "3",
+      "metric": "median",
+      "value": 304893.4660894661,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 300885.4168881801,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 310400.0804970891,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 297034.3785401312,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "64",
+      "metric": "median",
+      "value": 2768782.569327731,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 2399688.2079545455,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 2969304.3564073225,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_interned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 2524310.839918654,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "0",
+      "metric": "median",
+      "value": 191046.1597633136,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 187662.18863866397,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 192561.84375,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "0",
+      "metric": "mean",
+      "value": 186076.5175446736,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "3",
+      "metric": "median",
+      "value": 299750.309775641,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "3",
+      "metric": "median-ci-lower",
+      "value": 279934.4642857143,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "3",
+      "metric": "median-ci-upper",
+      "value": 314790.92,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "3",
+      "metric": "mean",
+      "value": 444023.8359698403,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "64",
+      "metric": "median",
+      "value": 2536194.304861111,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 2106303.2287878785,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 2894002.6475044563,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "append_tag-count",
+      "arm": "sqlite_owned",
+      "shape": "64",
+      "metric": "mean",
+      "value": 2329370.2764038737,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median",
+      "value": 395.95845899038346,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 395.3410915423505,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 396.6322108979483,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "mean",
+      "value": 395.96194965204313,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median",
+      "value": 6273.386149026808,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 6253.741189035244,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 6309.46419932269,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "mean",
+      "value": 6377.722389646322,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median",
+      "value": 94059.40568963032,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 93956.4768740032,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 94465.53194280466,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 95838.5750350987,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median",
+      "value": 1499477.8534798534,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 1496525.9493670885,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 1514388.1717171716,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 1526842.069756658,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median",
+      "value": 161.00605964339235,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 160.7633078941897,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 161.50434470710445,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "0",
+      "metric": "mean",
+      "value": 162.17120260000675,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median",
+      "value": 2683.0771416741945,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 2681.057431402439,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 2686.202384823848,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "256",
+      "metric": "mean",
+      "value": 2686.488518739766,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median",
+      "value": 37792.26780059331,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 37778.707407407404,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 37811.65784832452,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 37835.48050275706,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median",
+      "value": 604831.3097069596,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 604465.9444114855,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 605110.254385965,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 605481.6184358526,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median",
+      "value": 30.96799749911297,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 30.890134570226316,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 31.060985356760117,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "mean",
+      "value": 31.014659335777736,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median",
+      "value": 346.2754603647843,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 346.09744753302937,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 346.6730883607113,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "mean",
+      "value": 346.9362560957551,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median",
+      "value": 4994.464135401635,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 4993.409395156383,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 4997.237676767677,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 5001.0489185435135,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median",
+      "value": 79229.7258064516,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 79201.64772727272,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 79250.23351648351,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_decode",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 79298.95050270614,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median",
+      "value": 140.7705147292491,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 140.45122827180003,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 140.97169920374202,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "mean",
+      "value": 140.78954655066488,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median",
+      "value": 2472.679385035991,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 2470.961675531915,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 2473.3283333333334,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "mean",
+      "value": 2474.813448277443,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median",
+      "value": 34463.23062397372,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 34454.9197492163,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 34488.6561302682,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 34518.593113289215,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median",
+      "value": 551862.2460297766,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 551703.4464285714,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 552320.7573529412,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 549045.2172420132,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median",
+      "value": 100.1779687394504,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 99.66697834576124,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 100.52813449463235,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "0",
+      "metric": "mean",
+      "value": 100.44386270634124,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median",
+      "value": 1081.450621625976,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 1080.2222338746922,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 1083.010712474645,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "256",
+      "metric": "mean",
+      "value": 1082.9061982366582,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median",
+      "value": 14888.095917471466,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 14875.855841758948,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 14900.817014925373,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 14900.066635828392,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median",
+      "value": 234153.30203533027,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 233998.31590909092,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 234295.21212121213,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 234369.24822758036,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median",
+      "value": 56.30281319781404,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 56.26165867670403,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 56.40333793686392,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "mean",
+      "value": 56.419015406654744,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median",
+      "value": 497.2825795295855,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 494.8093131917982,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 498.8280834165003,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "mean",
+      "value": 497.39302262751175,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median",
+      "value": 4986.446721400429,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 4981.06106005172,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 4992.736408503557,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 4999.676221890355,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median",
+      "value": 73474.4530812325,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 73394.06505102041,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 73628.21232876713,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_encode",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 73547.96940386928,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median",
+      "value": 551.2052243135627,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 550.1168649564675,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 551.9933259505352,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "0",
+      "metric": "mean",
+      "value": 551.3843292128373,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median",
+      "value": 8662.351924901186,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 8646.814209968186,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 8776.150094517958,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "256",
+      "metric": "mean",
+      "value": 8774.9340379479,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median",
+      "value": 128282.07581485214,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 128086.334375,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 128601.89527027028,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 130546.62836594142,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median",
+      "value": 2004535.1,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 2002073.76,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 2008278.64,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "cbor",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 2030212.4787999997,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median",
+      "value": 276.5266478958513,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 276.08290454884417,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 277.4079235721134,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "0",
+      "metric": "mean",
+      "value": 277.203388003474,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median",
+      "value": 3899.3233592115134,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 3883.3140209394455,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 3918.536290322581,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "256",
+      "metric": "mean",
+      "value": 3918.656317642243,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median",
+      "value": 52607.44881365741,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 52255.791531165305,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 52708.20556372549,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 52441.63759737997,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median",
+      "value": 827912.7693888033,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 827397.3666666667,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 828303.3984375,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "json",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 828674.8683829104,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median",
+      "value": 84.46081199045376,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 84.33028563376696,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 84.55689080512491,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "0",
+      "metric": "mean",
+      "value": 84.55545018238705,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median",
+      "value": 807.0568317099567,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 806.7623465612461,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 807.7691824418519,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "256",
+      "metric": "mean",
+      "value": 807.8009690251974,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median",
+      "value": 9903.548711764706,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median-ci-lower",
+      "value": 9897.881254315304,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "median-ci-upper",
+      "value": 9909.132916666667,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "4096",
+      "metric": "mean",
+      "value": 9916.0220117549,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median",
+      "value": 154622.84285714285,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median-ci-lower",
+      "value": 154412.4199134199,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "median-ci-upper",
+      "value": 154720.67857142858,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "codec_round-trip",
+      "arm": "postcard",
+      "shape": "65536",
+      "metric": "mean",
+      "value": 154752.8176043572,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "0",
+      "metric": "median",
+      "value": 3932.11985231808,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 3928.2234686609686,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 3934.65084832249,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "0",
+      "metric": "mean",
+      "value": 3931.286903767183,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "10",
+      "metric": "median",
+      "value": 16091.840247099952,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "10",
+      "metric": "median-ci-lower",
+      "value": 16072.070077864291,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "10",
+      "metric": "median-ci-upper",
+      "value": 16117.433926585094,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "10",
+      "metric": "mean",
+      "value": 16096.526907564845,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "100",
+      "metric": "median",
+      "value": 122049.07857142856,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "100",
+      "metric": "median-ci-lower",
+      "value": 121952.3138888889,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "100",
+      "metric": "median-ci-upper",
+      "value": 122142.35555555556,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "100",
+      "metric": "mean",
+      "value": 122077.02719576722,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "1000",
+      "metric": "median",
+      "value": 1168284.3138888888,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 1167254.785,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 1170203.697222222,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "memory",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 1168643.7755079367,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "0",
+      "metric": "median",
+      "value": 1685140.875,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "0",
+      "metric": "median-ci-lower",
+      "value": 1656558.125,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "0",
+      "metric": "median-ci-upper",
+      "value": 1772187.337797619,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "0",
+      "metric": "mean",
+      "value": 1715148.694503968,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "10",
+      "metric": "median",
+      "value": 1650853.2569444445,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "10",
+      "metric": "median-ci-lower",
+      "value": 1587588.875,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "10",
+      "metric": "median-ci-upper",
+      "value": 1723516.171875,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "10",
+      "metric": "mean",
+      "value": 1663013.7554960318,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "100",
+      "metric": "median",
+      "value": 1911980.4791666667,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "100",
+      "metric": "median-ci-lower",
+      "value": 1854891.125,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "100",
+      "metric": "median-ci-upper",
+      "value": 2017960.21875,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "100",
+      "metric": "mean",
+      "value": 1938777.7657738095,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "1000",
+      "metric": "median",
+      "value": 3964163.961111111,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 3915148.7214285713,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 4081784.2666666666,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_boundary-size",
+      "arm": "sqlite",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 3989723.122174603,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "cbor",
+      "shape": "",
+      "metric": "median",
+      "value": 225620.44031531533,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "cbor",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 225356.26463963964,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "cbor",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 225821.75540540545,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "cbor",
+      "shape": "",
+      "metric": "mean",
+      "value": 225469.7373399292,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "json",
+      "shape": "",
+      "metric": "median",
+      "value": 120733.2231168831,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "json",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 119968.00363636365,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "json",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 121959.7538181818,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "json",
+      "shape": "",
+      "metric": "mean",
+      "value": 121122.30473246754,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "postcard",
+      "shape": "",
+      "metric": "median",
+      "value": 42466.37303675857,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "postcard",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 42402.93969924812,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "postcard",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 42539.90125313283,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_codec-choice",
+      "arm": "postcard",
+      "shape": "",
+      "metric": "mean",
+      "value": 42466.37139252895,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_retry",
+      "arm": "loses-once-then-wins",
+      "shape": "",
+      "metric": "median",
+      "value": 244044.01780125196,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_retry",
+      "arm": "loses-once-then-wins",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 243858.18829644535,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_retry",
+      "arm": "loses-once-then-wins",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 244566.37957746477,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_retry",
+      "arm": "loses-once-then-wins",
+      "shape": "",
+      "metric": "mean",
+      "value": 244171.96653644083,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_retry",
+      "arm": "uncontended-control",
+      "shape": "",
+      "metric": "median",
+      "value": 121802.94409975669,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_retry",
+      "arm": "uncontended-control",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 121703.46167883211,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_retry",
+      "arm": "uncontended-control",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 122024.59448499596,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "command_retry",
+      "arm": "uncontended-control",
+      "shape": "",
+      "metric": "mean",
+      "value": 121866.81335216084,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "1",
+      "metric": "median",
+      "value": 4063.8540825453615,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 4058.6135688729873,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 4066.541480322004,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "1",
+      "metric": "mean",
+      "value": 4063.0916356553657,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "64",
+      "metric": "median",
+      "value": 7540.314546208039,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 7536.542447161211,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 7542.512022378782,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "64",
+      "metric": "mean",
+      "value": 7539.782668044785,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median",
+      "value": 4344.203977963889,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 4342.748568854446,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 4346.646178960964,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "mean",
+      "value": 4344.622537338111,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "1",
+      "metric": "median",
+      "value": 9264010.1375,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 9035521.683333334,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 9739014.515,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "1",
+      "metric": "mean",
+      "value": 9388254.077039683,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "64",
+      "metric": "median",
+      "value": 17467125.354166668,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 17354791.128472224,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 17772594.916666664,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "64",
+      "metric": "mean",
+      "value": 17575214.03263889,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median",
+      "value": 10269429.76111111,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 10187227.138888888,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 10720569.222222222,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_contention",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "mean",
+      "value": 10383356.386261024,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-all",
+      "shape": "1000",
+      "metric": "median",
+      "value": 16.57624477308211,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-all",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 16.516508958083865,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-all",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 16.73609890896239,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-all",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 16.630766986113628,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-all",
+      "shape": "10000",
+      "metric": "median",
+      "value": 16.653928236535602,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-all",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 16.614153276612797,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-all",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 16.745107863526815,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-all",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 16.68534020027199,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-one",
+      "shape": "1000",
+      "metric": "median",
+      "value": 13.818630261004158,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-one",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 13.80191077200867,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-one",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 13.840953646602994,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-one",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 13.844408169473956,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-one",
+      "shape": "10000",
+      "metric": "median",
+      "value": 13.952874987299122,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-one",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 13.938630638541458,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-one",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 13.970988337827803,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_selects-one",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 13.955721879257036,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_two-tag-intersection",
+      "shape": "1000",
+      "metric": "median",
+      "value": 16.06882677944755,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_two-tag-intersection",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 16.019127509580283,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_two-tag-intersection",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 16.141661871792643,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_two-tag-intersection",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 16.107342132728323,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_two-tag-intersection",
+      "shape": "10000",
+      "metric": "median",
+      "value": 16.168542960528832,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_two-tag-intersection",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 16.141585928579985,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_two-tag-intersection",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 16.259420259119548,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "memory_guard_two-tag-intersection",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 16.212719882377055,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-all",
+      "shape": "1000",
+      "metric": "median",
+      "value": 19809.270429815017,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-all",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 19775.97656873413,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-all",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 19827.177475516863,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-all",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 19803.16986994145,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-all",
+      "shape": "10000",
+      "metric": "median",
+      "value": 19785.208198866116,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-all",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 19763.941552187815,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-all",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 19806.29978194505,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-all",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 19784.713995130103,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-one",
+      "shape": "1000",
+      "metric": "median",
+      "value": 19615.182835700452,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-one",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 19546.278327714415,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-one",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 19700.81649451259,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-one",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 19619.55730282551,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-one",
+      "shape": "10000",
+      "metric": "median",
+      "value": 19960.956314335926,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-one",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 19937.605792935952,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-one",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 19985.783684827184,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_selects-one",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 19963.628862579157,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_two-tag-intersection",
+      "shape": "1000",
+      "metric": "median",
+      "value": 32959.227795874045,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_two-tag-intersection",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 32933.84525676599,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_two-tag-intersection",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 33116.47134326043,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_two-tag-intersection",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 33040.763782264505,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_two-tag-intersection",
+      "shape": "10000",
+      "metric": "median",
+      "value": 33265.98481793744,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_two-tag-intersection",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 33204.11966438579,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_two-tag-intersection",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 33310.89296187683,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "conditional_guard-shape",
+      "arm": "sqlite_guard_two-tag-intersection",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 33259.26942559233,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "1",
+      "metric": "median",
+      "value": 10750496.762786595,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 10679317.0,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 10831268.675925924,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "1",
+      "metric": "mean",
+      "value": 10791239.468853615,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "100",
+      "metric": "median",
+      "value": 9842374.025,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "100",
+      "metric": "median-ci-lower",
+      "value": 9819114.9875,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "100",
+      "metric": "median-ci-upper",
+      "value": 9858271.127777778,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "100",
+      "metric": "mean",
+      "value": 9843152.138626983,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "5000",
+      "metric": "median",
+      "value": 9574682.632142857,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "5000",
+      "metric": "median-ci-lower",
+      "value": 9558817.95,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "5000",
+      "metric": "median-ci-upper",
+      "value": 9598680.51875,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "memory-events_memory-models",
+      "shape": "5000",
+      "metric": "mean",
+      "value": 9576394.304900791,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "1",
+      "metric": "median",
+      "value": 565049166.0,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 560542417.5,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 572242504.0,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "1",
+      "metric": "mean",
+      "value": 565999315.0,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "100",
+      "metric": "median",
+      "value": 58527247.75,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "100",
+      "metric": "median-ci-lower",
+      "value": 58386333.82142857,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "100",
+      "metric": "median-ci-upper",
+      "value": 58660668.40625,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "100",
+      "metric": "mean",
+      "value": 58557060.66220238,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "5000",
+      "metric": "median",
+      "value": 51351200.80833334,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "5000",
+      "metric": "median-ci-lower",
+      "value": 51286672.722222224,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "5000",
+      "metric": "median-ci-upper",
+      "value": 51485113.5,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_catch-up",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "5000",
+      "metric": "mean",
+      "value": 51378146.1844246,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_idle-poll",
+      "arm": "memory-events_memory-models",
+      "shape": "",
+      "metric": "median",
+      "value": 75406.15431255338,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_idle-poll",
+      "arm": "memory-events_memory-models",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 75246.25112676725,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_idle-poll",
+      "arm": "memory-events_memory-models",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 75469.43210930828,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_idle-poll",
+      "arm": "memory-events_memory-models",
+      "shape": "",
+      "metric": "mean",
+      "value": 75648.57655398994,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_idle-poll",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "",
+      "metric": "median",
+      "value": 557008.3884920635,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_idle-poll",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 552759.336875,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_idle-poll",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 562957.5483333333,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "projection_idle-poll",
+      "arm": "sqlite-events_sqlite-models",
+      "shape": "",
+      "metric": "mean",
+      "value": 557289.3404345239,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "1",
+      "metric": "median",
+      "value": 21030.005055446836,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 21021.24079924939,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 21053.846590909092,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "1",
+      "metric": "mean",
+      "value": 21059.059571756603,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "64",
+      "metric": "median",
+      "value": 1194109.9472208056,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 1193190.1170212766,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 1195200.2222222222,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "64",
+      "metric": "mean",
+      "value": 1194803.042182356,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "8",
+      "metric": "median",
+      "value": 134816.62871485943,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 134761.92404438346,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 134874.97244469868,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "at-the-item-floor",
+      "shape": "8",
+      "metric": "mean",
+      "value": 134985.98536467593,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "mixed-selectivity",
+      "shape": "",
+      "metric": "median",
+      "value": 263.85170270529704,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "mixed-selectivity",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 263.46431797759817,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "mixed-selectivity",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 264.84631022527753,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "mixed-selectivity",
+      "shape": "",
+      "metric": "mean",
+      "value": 264.1369201264723,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "128",
+      "metric": "median",
+      "value": 20988.864322216108,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 20958.711666666662,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 21021.534722222223,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "128",
+      "metric": "mean",
+      "value": 20999.68183120965,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "400",
+      "metric": "median",
+      "value": 67395.03510335917,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "400",
+      "metric": "median-ci-lower",
+      "value": 67314.90167115023,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "400",
+      "metric": "median-ci-upper",
+      "value": 67453.73416666666,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "400",
+      "metric": "mean",
+      "value": 67467.90617254433,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "401",
+      "metric": "median",
+      "value": 67037.76063218391,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "401",
+      "metric": "median-ci-lower",
+      "value": 66983.20169491525,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "401",
+      "metric": "median-ci-upper",
+      "value": 67088.23681776132,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "401",
+      "metric": "mean",
+      "value": 67096.14040621305,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "8",
+      "metric": "median",
+      "value": 925.3778593996116,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 924.8288928183132,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 926.202946402692,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "one-tag-per-item",
+      "shape": "8",
+      "metric": "mean",
+      "value": 926.7809337396612,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "query-all",
+      "shape": "",
+      "metric": "median",
+      "value": 6.392122671243199,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "query-all",
+      "shape": "",
+      "metric": "median-ci-lower",
+      "value": 6.388067018332622,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "query-all",
+      "shape": "",
+      "metric": "median-ci-upper",
+      "value": 6.398973586393732,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_construction",
+      "arm": "query-all",
+      "shape": "",
+      "metric": "mean",
+      "value": 6.464027188267079,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "128",
+      "metric": "median",
+      "value": 880694.0877403846,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 878993.4745879121,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 885902.7986111111,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "128",
+      "metric": "mean",
+      "value": 882462.5544474969,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "400",
+      "metric": "median",
+      "value": 2835700.6582491584,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "400",
+      "metric": "median-ci-lower",
+      "value": 2834299.3314393936,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "400",
+      "metric": "median-ci-upper",
+      "value": 2837967.111111111,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "400",
+      "metric": "mean",
+      "value": 2836065.6452392978,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "401",
+      "metric": "median",
+      "value": 2798610.420202021,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "401",
+      "metric": "median-ci-lower",
+      "value": 2795186.507575758,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "401",
+      "metric": "median-ci-upper",
+      "value": 2823995.294612794,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "401",
+      "metric": "mean",
+      "value": 2807859.153796296,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median",
+      "value": 54849.59498781231,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 54792.736517367455,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 54923.91416819013,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "mean",
+      "value": 54905.11892470232,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "128",
+      "metric": "median",
+      "value": 1696474.311728395,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "128",
+      "metric": "median-ci-lower",
+      "value": 1686220.0157407406,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "128",
+      "metric": "median-ci-upper",
+      "value": 1702791.6759259258,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "128",
+      "metric": "mean",
+      "value": 1694243.558020282,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "400",
+      "metric": "median",
+      "value": 5493266.30882353,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "400",
+      "metric": "median-ci-lower",
+      "value": 5474070.823529412,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "400",
+      "metric": "median-ci-upper",
+      "value": 5521107.529411765,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "400",
+      "metric": "mean",
+      "value": 5496326.907098506,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "401",
+      "metric": "median",
+      "value": 5507426.387254902,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "401",
+      "metric": "median-ci-lower",
+      "value": 5484285.492647059,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "401",
+      "metric": "median-ci-upper",
+      "value": 5539944.896218488,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "401",
+      "metric": "mean",
+      "value": 5512675.739390757,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median",
+      "value": 188457.4229388036,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 185740.85020661156,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 189820.1603305785,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_item-count",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "mean",
+      "value": 188921.34702061195,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "1",
+      "metric": "median",
+      "value": 896001.7102941177,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 895216.4863834423,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 897038.6088235294,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "1",
+      "metric": "mean",
+      "value": 896069.6504046064,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "64",
+      "metric": "median",
+      "value": 902491.5477447744,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 902299.4488448844,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 902980.795379538,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "64",
+      "metric": "mean",
+      "value": 902701.9824332076,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median",
+      "value": 939352.9420553936,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 938832.3979591836,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 939508.7397959183,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "memory",
+      "shape": "8",
+      "metric": "mean",
+      "value": 939248.594315274,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "1",
+      "metric": "median",
+      "value": 1678894.1838624338,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "1",
+      "metric": "median-ci-lower",
+      "value": 1673670.7777777778,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "1",
+      "metric": "median-ci-upper",
+      "value": 1685099.291409465,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "1",
+      "metric": "mean",
+      "value": 1680478.671844503,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "64",
+      "metric": "median",
+      "value": 2459127901.0,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "64",
+      "metric": "median-ci-lower",
+      "value": 2330184597.0,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "64",
+      "metric": "median-ci-upper",
+      "value": 2556987685.0,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "64",
+      "metric": "mean",
+      "value": 2445362088.4,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median",
+      "value": 19482569.462857146,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median-ci-lower",
+      "value": 19449218.675,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "median-ci-upper",
+      "value": 19531102.883333333,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "query_tags-per-item",
+      "arm": "sqlite",
+      "shape": "8",
+      "metric": "mean",
+      "value": 19487920.67040476,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_backwards-limit-1",
+      "shape": "1000",
+      "metric": "median",
+      "value": 130.42494235276376,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_backwards-limit-1",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 130.3336059626483,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_backwards-limit-1",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 130.8774900504725,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_backwards-limit-1",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 130.58394175755626,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_backwards-limit-1",
+      "shape": "10000",
+      "metric": "median",
+      "value": 135.63671231403157,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_backwards-limit-1",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 135.4794110430833,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_backwards-limit-1",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 135.81605894814845,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_backwards-limit-1",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 135.68071079088756,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_head",
+      "shape": "1000",
+      "metric": "median",
+      "value": 6.042894441794679,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_head",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 5.98469922959961,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_head",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 6.1172088599250785,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_head",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 6.048856682826055,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_head",
+      "shape": "10000",
+      "metric": "median",
+      "value": 6.133717191387778,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_head",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 6.072571641855262,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_head",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 6.1537175678647635,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_head",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 6.117696165077183,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-1",
+      "shape": "1000",
+      "metric": "median",
+      "value": 131.24986473025834,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-1",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 131.11829278413413,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-1",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 131.4248887293925,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-1",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 131.2782952329639,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-1",
+      "shape": "10000",
+      "metric": "median",
+      "value": 134.85250600163823,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-1",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 133.52920483669482,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-1",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 135.15323164759633,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-1",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 134.42800416076813,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-none",
+      "shape": "1000",
+      "metric": "median",
+      "value": 208192.9133747178,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-none",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 207268.7523379555,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-none",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 209473.144751693,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-none",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 208360.2848870436,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-none",
+      "shape": "10000",
+      "metric": "median",
+      "value": 3197528.0257252324,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-none",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 3191322.1379310344,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-none",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 3202300.91954023,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "memory_limit-none",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 3197173.484426656,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "raw_same-schema_head",
+      "shape": "1000",
+      "metric": "median",
+      "value": 4574.82406172225,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "raw_same-schema_head",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 4567.298263370389,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "raw_same-schema_head",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 4580.8061058569765,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "raw_same-schema_head",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 4573.300132230361,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "raw_same-schema_head",
+      "shape": "10000",
+      "metric": "median",
+      "value": 4782.074126165547,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "raw_same-schema_head",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 4769.273475022139,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "raw_same-schema_head",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 4791.016376256707,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "raw_same-schema_head",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 4779.93592274876,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_backwards-limit-1",
+      "shape": "1000",
+      "metric": "median",
+      "value": 78668.85180219146,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_backwards-limit-1",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 77241.08737024221,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_backwards-limit-1",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 79088.73250672818,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_backwards-limit-1",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 78413.5320071607,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_backwards-limit-1",
+      "shape": "10000",
+      "metric": "median",
+      "value": 468124.81018854247,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_backwards-limit-1",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 465296.1192893401,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_backwards-limit-1",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 471499.2081218274,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_backwards-limit-1",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 467613.1885873418,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_head",
+      "shape": "1000",
+      "metric": "median",
+      "value": 4549.899927018321,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_head",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 4537.717580475583,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_head",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 4559.1732434064825,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_head",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 4553.159706633223,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_head",
+      "shape": "10000",
+      "metric": "median",
+      "value": 4724.569156057485,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_head",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 4722.4570386796695,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_head",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 4728.055584373667,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_head",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 4728.6182229764345,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-1",
+      "shape": "1000",
+      "metric": "median",
+      "value": 78756.75586956521,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-1",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 78335.10710144928,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-1",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 78865.3990531401,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-1",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 78643.159876363,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-1",
+      "shape": "10000",
+      "metric": "median",
+      "value": 469459.1347150259,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-1",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 464528.3590673575,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-1",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 471423.58199481864,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-1",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 468212.1925845052,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-none",
+      "shape": "1000",
+      "metric": "median",
+      "value": 862318.7099056604,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-none",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 859040.6634433962,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-none",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 863940.3396226416,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-none",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 861470.6761803683,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-none",
+      "shape": "10000",
+      "metric": "median",
+      "value": 9955944.925,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-none",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 9925965.061904762,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-none",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 9990325.166666668,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_cheap-reads",
+      "arm": "sqlite_limit-none",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 9957119.841825394,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-all",
+      "shape": "1000",
+      "metric": "median",
+      "value": 209293.29622792936,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-all",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 208614.14200998752,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-all",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 209568.61348314607,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-all",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 209202.46048466204,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-all",
+      "shape": "10000",
+      "metric": "median",
+      "value": 4029858.469021739,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-all",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 4016291.2065217393,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-all",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 4038272.9782608696,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-all",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 4027081.107089372,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-one",
+      "shape": "1000",
+      "metric": "median",
+      "value": 5605.7684127082175,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-one",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 5596.20512556537,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-one",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 5615.146863611094,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-one",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 5606.591846518849,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-one",
+      "shape": "10000",
+      "metric": "median",
+      "value": 99967.58081317204,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-one",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 99903.686827957,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-one",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 100052.69671658988,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_matches-one",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 100094.53963301652,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_mixed-selectivity",
+      "shape": "1000",
+      "metric": "median",
+      "value": 227074.99127668308,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_mixed-selectivity",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 226855.8699507389,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_mixed-selectivity",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 227361.80711548985,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_mixed-selectivity",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 227043.26150461333,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_mixed-selectivity",
+      "shape": "10000",
+      "metric": "median",
+      "value": 3292340.0267857146,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_mixed-selectivity",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 3287480.76984127,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_mixed-selectivity",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 3301072.5803571427,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "memory_mixed-selectivity",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 3293748.6393140587,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-all",
+      "shape": "1000",
+      "metric": "median",
+      "value": 1102333.557164634,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-all",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 1094250.1676829266,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-all",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 1107866.2282229965,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-all",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 1101574.9131508905,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-all",
+      "shape": "10000",
+      "metric": "median",
+      "value": 12332054.909722224,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-all",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 12285800.336309524,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-all",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 12377470.75,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-all",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 12331363.096081348,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-one",
+      "shape": "1000",
+      "metric": "median",
+      "value": 98871.60909466936,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-one",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 98746.88735070576,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-one",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 99260.97459283388,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-one",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 99081.22205418542,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-one",
+      "shape": "10000",
+      "metric": "median",
+      "value": 498262.06602914387,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-one",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 496448.4440866511,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-one",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 500436.01857923495,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_matches-one",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 498089.3257025761,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_mixed-selectivity",
+      "shape": "1000",
+      "metric": "median",
+      "value": 1186295.388218924,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_mixed-selectivity",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 1178912.001082251,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_mixed-selectivity",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 1189195.4371392496,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_mixed-selectivity",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 1184390.736240466,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_mixed-selectivity",
+      "shape": "10000",
+      "metric": "median",
+      "value": 13093420.917857142,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_mixed-selectivity",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 13034728.88095238,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_mixed-selectivity",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 13114971.857142856,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_filtered",
+      "arm": "sqlite_mixed-selectivity",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 13080362.8315873,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "2048",
+      "metric": "median",
+      "value": 1765002.435897436,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "2048",
+      "metric": "median-ci-lower",
+      "value": 1762196.777930403,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "2048",
+      "metric": "median-ci-upper",
+      "value": 1771657.733974359,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "2048",
+      "metric": "mean",
+      "value": 1766786.696499542,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "256",
+      "metric": "median",
+      "value": 238416.7494736842,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "256",
+      "metric": "median-ci-lower",
+      "value": 237425.45756578943,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "256",
+      "metric": "median-ci-upper",
+      "value": 239741.41556390977,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "256",
+      "metric": "mean",
+      "value": 238579.8557231621,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "8192",
+      "metric": "median",
+      "value": 8023475.472222222,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "8192",
+      "metric": "median-ci-lower",
+      "value": 8012045.233333333,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "8192",
+      "metric": "median-ci-upper",
+      "value": 8045748.933333334,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_page-hops",
+      "arm": "sqlite",
+      "shape": "8192",
+      "metric": "mean",
+      "value": 8033423.706944445,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "memory",
+      "shape": "1000",
+      "metric": "median",
+      "value": 175368.1392208413,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "memory",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 175062.8152144223,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "memory",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 175695.5449330784,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "memory",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 175390.92503300557,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "memory",
+      "shape": "10000",
+      "metric": "median",
+      "value": 4007620.407246377,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "memory",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 4004796.73636991,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "memory",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 4012262.891304348,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "memory",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 4008890.9787957207,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "raw_same-schema",
+      "shape": "1000",
+      "metric": "median",
+      "value": 148579.45270491805,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "raw_same-schema",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 147438.7573770492,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "raw_same-schema",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 149800.48418715846,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "raw_same-schema",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 148670.03979254488,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "raw_same-schema",
+      "shape": "10000",
+      "metric": "median",
+      "value": 2339178.5846153847,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "raw_same-schema",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 2337428.5370370373,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "raw_same-schema",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 2339923.597435897,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "raw_same-schema",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 2340272.142712658,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "sqlite",
+      "shape": "1000",
+      "metric": "median",
+      "value": 847021.5833333333,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "sqlite",
+      "shape": "1000",
+      "metric": "median-ci-lower",
+      "value": 844462.2800925926,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "sqlite",
+      "shape": "1000",
+      "metric": "median-ci-upper",
+      "value": 848161.4362139918,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "sqlite",
+      "shape": "1000",
+      "metric": "mean",
+      "value": 846299.588446502,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "sqlite",
+      "shape": "10000",
+      "metric": "median",
+      "value": 9941857.45,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "sqlite",
+      "shape": "10000",
+      "metric": "median-ci-lower",
+      "value": 9894383.342857145,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "sqlite",
+      "shape": "10000",
+      "metric": "median-ci-upper",
+      "value": 9980713.27,
+      "unit": "ns",
+      "representative": true
+    },
+    {
+      "group": "replay_unfiltered",
+      "arm": "sqlite",
+      "shape": "10000",
+      "metric": "mean",
+      "value": 9931949.491043651,
+      "unit": "ns",
+      "representative": true
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+   Compiling happenstance-benchmarks v0.0.0 (/home/ryan/src/happenstance/benchmarks)
+    Finished `bench` profile [optimized] target(s) in 2.19s
+     Running benches/projection_runner.rs (target/release/deps/projection_runner-526806f76e2febc4)
+Gnuplot not found, using plotters backend
+Benchmarking projection/catch-up/memory-events/memory-models/1
+Benchmarking projection/catch-up/memory-events/memory-models/1: Warming up for 3.0000 s
+Benchmarking projection/catch-up/memory-events/memory-models/1: Collecting 10 samples in estimated 5.2785 s (495 iterations)
+Benchmarking projection/catch-up/memory-events/memory-models/1: Analyzing
+projection/catch-up/memory-events/memory-models/1
+                        time:   [10.751 ms 10.892 ms 11.065 ms]
+                        thrpt:  [903.73 Kelem/s 918.09 Kelem/s 930.12 Kelem/s]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/1
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/1: Warming up for 3.0000 s
+
+Warning: Unable to complete 10 samples in 5.0s. You may wish to increase target time to 5.8s.
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/1: Collecting 10 samples in estimated 5.7936 s (10 iterations)
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/1: Analyzing
+projection/catch-up/sqlite-events/sqlite-models/1
+                        time:   [561.97 ms 566.00 ms 570.09 ms]
+                        thrpt:  [17.541 Kelem/s 17.668 Kelem/s 17.794 Kelem/s]
+Benchmarking projection/catch-up/memory-events/memory-models/100
+Benchmarking projection/catch-up/memory-events/memory-models/100: Warming up for 3.0000 s
+Benchmarking projection/catch-up/memory-events/memory-models/100: Collecting 10 samples in estimated 5.4116 s (550 iterations)
+Benchmarking projection/catch-up/memory-events/memory-models/100: Analyzing
+projection/catch-up/memory-events/memory-models/100
+                        time:   [9.8219 ms 9.8657 ms 9.9052 ms]
+                        thrpt:  [1.0096 Melem/s 1.0136 Melem/s 1.0181 Melem/s]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/100
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/100: Warming up for 3.0000 s
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/100: Collecting 10 samples in estimated 7.6548 s (110 iterations)
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/100: Analyzing
+projection/catch-up/sqlite-events/sqlite-models/100
+                        time:   [58.407 ms 58.540 ms 58.645 ms]
+                        thrpt:  [170.52 Kelem/s 170.82 Kelem/s 171.21 Kelem/s]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking projection/catch-up/memory-events/memory-models/5000
+Benchmarking projection/catch-up/memory-events/memory-models/5000: Warming up for 3.0000 s
+Benchmarking projection/catch-up/memory-events/memory-models/5000: Collecting 10 samples in estimated 5.2871 s (550 iterations)
+Benchmarking projection/catch-up/memory-events/memory-models/5000: Analyzing
+projection/catch-up/memory-events/memory-models/5000
+                        time:   [9.5767 ms 9.5898 ms 9.5970 ms]
+                        thrpt:  [1.0420 Melem/s 1.0428 Melem/s 1.0442 Melem/s]
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/5000
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/5000: Warming up for 3.0000 s
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/5000: Collecting 10 samples in estimated 6.6731 s (110 iterations)
+Benchmarking projection/catch-up/sqlite-events/sqlite-models/5000: Analyzing
+projection/catch-up/sqlite-events/sqlite-models/5000
+                        time:   [51.301 ms 51.347 ms 51.412 ms]
+                        thrpt:  [194.51 Kelem/s 194.75 Kelem/s 194.93 Kelem/s]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+Benchmarking projection/idle-poll/memory-events/memory-models
+Benchmarking projection/idle-poll/memory-events/memory-models: Warming up for 3.0000 s
+Benchmarking projection/idle-poll/memory-events/memory-models: Collecting 10 samples in estimated 5.0039 s (64k iterations)
+Benchmarking projection/idle-poll/memory-events/memory-models: Analyzing
+projection/idle-poll/memory-events/memory-models
+                        time:   [75.305 µs 76.208 µs 77.459 µs]
+Found 3 outliers among 10 measurements (30.00%)
+  1 (10.00%) low severe
+  1 (10.00%) low mild
+  1 (10.00%) high severe
+Benchmarking projection/idle-poll/sqlite-events/sqlite-models
+Benchmarking projection/idle-poll/sqlite-events/sqlite-models: Warming up for 3.0000 s
+Benchmarking projection/idle-poll/sqlite-events/sqlite-models: Collecting 10 samples in estimated 5.0337 s (6600 iterations)
+Benchmarking projection/idle-poll/sqlite-events/sqlite-models: Analyzing
+projection/idle-poll/sqlite-events/sqlite-models
+                        time:   [554.70 µs 558.16 µs 562.86 µs]
+

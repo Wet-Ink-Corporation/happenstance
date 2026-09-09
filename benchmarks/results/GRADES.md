@@ -1,13 +1,34 @@
 # What to expect
 
-**One run, one machine, 2026-09-06**, at commit `b3c8d84` with an uncommitted
-`benchmarks/results/` tree. Conditions:
+**Sections 0 to 7 are one run, one machine, 2026-09-06**, at commit `b3c8d84`
+with an uncommitted `benchmarks/results/` tree. Conditions:
 [`../README.md#conditions`](../README.md#conditions). Raw output:
 [`raw/`](raw/). Every figure below is written by hand from it, and nothing is
 carried across runs.
 
 **Read these as orders of magnitude and as ratios between arms of one run.**
 Nothing here should be quoted to a third significant figure.
+
+> ### Four figures on this page are false at HEAD
+>
+> Two later runs exist — `6c7a7a8` on the same Windows host (2026-09-08) and
+> `54044ac` on the Linux measurement host (2026-09-09, `raw/*-linux.*`) — and
+> comparing all three shows that the **code moved under this page**, not just
+> the machine. Where the Linux run agrees with `6c7a7a8` against `b3c8d84`, the
+> figure below is the outlier, and a quiet host is the tiebreak.
+>
+> | figure | `b3c8d84` (below) | `6c7a7a8` | Linux `54044ac` | |
+> | --- | ---: | ---: | ---: | --- |
+> | `memory` `limit(1)` @ 10k | 2.853 ms | 291 ns | **135 ns** | §3 is wrong |
+> | `memory` `backwards().limit(1)` @ 10k | 3.629 ms | 277 ns | **136 ns** | §3 is wrong |
+> | `sqlite` `limit(1)` @ 10k | 93.8 µs | 539 µs | **469 µs** | 5× slower than §3 says |
+> | `sqlite` idle poll | 184 µs | 682 µs | **557 µs** | 3× slower than §6 says |
+>
+> The allocation counts settle the first two beyond argument: §3 records
+> `limit(1)` costing **50,014 heap operations**, and the Linux run measures
+> **7**. `MemoryEventStore` now honours `limit`. §3 and §6 carry corrections in
+> place; the rest of the page has not been re-derived and its absolutes are the
+> 2026-09-06 host's.
 
 ## What changed since the 2026-09-05 run, and how to read the difference
 
@@ -141,51 +162,56 @@ is measured"*, and the case for measuring it is now much weaker than it was.
 
 ---
 
-## 3. Two places the documentation is wrong
+## 3. The read path, and one finding this page has outlived
 
-### `MemoryEventStore` does not honour `limit`; `SqliteEventStore` does
+### ~~`MemoryEventStore` does not honour `limit`~~ — it does now
 
-`limit(1)` against `limit(None)` over `Query::all`, at 10,000 events:
+**This finding is retired, and the thing it argued for was fixed.** What stood
+here said `limit(1)` at 10,000 events cost 87% of `limit(None)` in memory, from
+2.85 ms against 3.28 ms, and that `memory.rs`'s `read` materialised the whole
+matched set before `limit` truncated it. That was true at `b3c8d84`. It is not
+true at HEAD, and the allocation counts — the column this page tells you to
+prefer — say so without needing a clock:
 
-| Store | `limit(1)` | `limit(None)` | Ratio |
-| --- | --- | --- | --- |
-| memory | 2.85 ms | 3.28 ms | **0.87×** |
-| sqlite | 93.8 µs | 19.0 ms | 0.0049× |
+| `memory`, `limit(1)` @ 10,000 events | heap operations |
+| --- | ---: |
+| at `b3c8d84`, as §3 recorded it | 50,014 |
+| Linux run at `54044ac` (`raw/allocations-linux.csv`) | **7** |
 
-Asking for one event out of ten thousand costs **87%** of asking for all of them
-in memory, and **0.5%** on SQLite. The memory ratio moved from 0.72× to 0.87×
-and the conclusion does not depend on which: both say `limit` is not a
-reduction there. The SQLite ratio moved because its denominator — the full
-replay — got 2.2× cheaper, not because `limit(1)` got worse. The allocation counts
-([`raw/allocations.csv`](raw/allocations.csv)) are exact and say it more
-plainly:
+Fifty thousand heap operations to seven. The timings agree: 2.853 ms →
+291 ns on the same Windows host at `6c7a7a8`, → **135 ns** on Linux.
 
-| Read | heap operations | peak live bytes |
-| --- | --- | --- |
-| `limit(None)` | 50,026 | 5,897,482 |
-| `limit(1)` | **50,014** | **3,538,186** |
-| `head()` | **0** | **0** |
+**The current read path**, Linux host `54044ac`, at 10,000 events
+(`raw/collect-linux.csv`, criterion):
 
-`crates/happenstance-core/src/memory.rs:30-31` prices a snapshot as *"bumps
-refcounts rather than copying data"*, and `read` materialises the whole matched
-set — cloning every event — before `limit` truncates it (`:296-336`). The store
-documents itself as not built for scale and nobody is entitled to be surprised
-that it is slow. What these figures say is narrower: its snapshot is priced as
-*cheap* and its `limit` as a *reduction*, and neither is true.
+| Store | `head()` | `limit(1)` | `backwards().limit(1)` | `limit(None)` |
+| --- | ---: | ---: | ---: | ---: |
+| memory | 6.1 ns | 135 ns | 136 ns | 3.198 ms |
+| sqlite | 4.72 µs | 469 µs | 468 µs | 9.956 ms |
 
-### ES-30's `head()` earns its keep, by one to five orders of magnitude
+`limit(1)` in memory is now **0.004%** of `limit(None)`, against the 87% this
+section was built on. It is a reduction, which is what it always documented
+itself as being.
 
-`head()` against the composed `backwards().limit(1)`, at 10,000 events:
+**`SqliteEventStore` went the other way and nobody has explained it.**
+`limit(1)` at 10,000 events was 93.8 µs at `b3c8d84` and is 469 µs on Linux — a
+**5× regression**, reproduced on the intervening Windows run at 539 µs, so it is
+not one host's noise. It is still 4.7% of the unlimited read and the shape of
+the finding survives; the level does not. Nothing in this suite explains it and
+it is left visible rather than smoothed.
 
-| Store | `head()` | `backwards().limit(1)` | Ratio | 2026-09-05 |
-| --- | --- | --- | ---: | ---: |
-| memory | **12.8 ns**, zero allocations | 3.63 ms | ~283,000× | ~209,000× |
-| sqlite | **5.2 µs** | 66.2 µs | 12.8× | 16× |
+### ES-30's `head()` still earns its keep, by less than it used to
 
-`spec/SPECIFICATION.md:4006` makes `head` a required method on exactly this
-argument. It is now a measured decision rather than a plausible one.
+| Store | `head()` | `backwards().limit(1)` | Ratio | at `b3c8d84` |
+| --- | ---: | ---: | ---: | ---: |
+| memory | **6.1 ns** | 136 ns | **22×** | ~283,000× |
+| sqlite | **4.72 µs** | 468 µs | **99×** | 12.8× |
 
----
+The memory ratio collapsed by four orders of magnitude for the same reason the
+row above it did — `backwards().limit(1)` stopped materialising the log — and
+the SQLite ratio grew by 8×. `spec/SPECIFICATION.md:4006` makes `head` a
+required method on this argument, and 22× and 99× still carry it. **The
+"one to five orders of magnitude" in the old heading does not.**
 
 ## 4. The DCB guard, and the shape that used not to scale
 
@@ -293,6 +319,16 @@ this"*) is now a stronger claim than when it was written, not a weaker one.
 memory, **184 µs** on SQLite, against **5.68 ms** on the previous run. **A 31×
 improvement, and the largest single change on this page.**
 
+> **The 184 µs is stale.** The same arm reads 682 µs at `6c7a7a8` on this host
+> and **557 µs** on Linux at `54044ac` — the two later runs agree with each
+> other and not with this one, so the figure below it is the outlier and the
+> real SQLite idle poll is around half a millisecond. The 31× improvement over
+> the run before is not in question; its endpoint is. Redo the operator
+> arithmetic that follows at 557 µs: polling once a second is about 0.06% of a
+> core rather than 0.02%, and once every 10 ms about **5.6%** rather than 1.8%.
+> Still two orders of magnitude better than the 57% it replaced, and no longer
+> the number quoted here.
+
 An idle poll reads from the checkpoint forward and finds nothing. It used to
 emit `WHERE position IN (SELECT position FROM event) AND position >= ?`, whose
 `IN`-driven search cannot take the range bound, so it re-walked the whole log to
@@ -336,6 +372,131 @@ ownership, on one harness — and this suite is not that. What it supplies is th
 numerator, and the warning that goes with it.
 
 ---
+
+## 8. The same suite on Linux
+
+`54044ac`, 2026-09-09, on the dedicated measurement host
+([`../../ops/host/README.md`](../../ops/host/README.md)) — 21 unrelated
+containers removed, governor and EPP pinned, scheduled maintenance masked. Raw
+output is `raw/*-linux.*`; the history entry is
+`history/2026-09-09-54044ac-dirty.json`.
+
+**Read this as a second host, never as a delta against the tables above.** The
+absolutes are not comparable across hosts, which is the rule this whole page is
+written under. What *is* comparable is a ratio taken inside one run, and those
+are given below beside their Windows counterparts so the shapes can be checked
+against each other.
+
+### The instrument changed, and that is not free
+
+`run.sh` **cannot complete on this host.** It aborts at CONTROL 2, because
+`instruments_work`'s `the_paired_sampler_sees_a_difference_it_was_given` fails:
+handed two arms with a known difference, the paired sampler returns both at an
+identical 4,679 ns median and labels both `TIMER-DOMINATED`. The clocksource is
+`hpet` at a measured 1,390 ns per read, and
+[`../../ops/host/README.md`](../../ops/host/README.md) records why `tsc` is
+unavailable on this part and cannot be made available. **The abort is correct
+behaviour**; a harness that published paired ratios from a sampler in that state
+would be the worse outcome.
+
+So the ratios below come from **criterion arms run sequentially**, not from the
+interleaved paired runner. `README.md`'s rule — absolutes from criterion, ratios
+from the paired runner — exists because sequential arms drifted 2.7–3.0× on the
+old host. [`../flakiness/FLAKINESS.md`](../flakiness/FLAKINESS.md) is the
+measurement that says the substitution is sound here: of 3,321 arm pairs across
+three runs, **zero** moved more than 2.7× and the worst moved 1.485×. The
+substitution is stated rather than hidden, and it is why §1's numbers below do
+not match §1's above.
+
+### What the abstraction costs, from criterion
+
+Owned regime, 8-event batch, against the same two floors as §1.
+
+| Ratio | Linux, criterion | Windows, paired runner (§1) |
+| --- | ---: | ---: |
+| sqlite ÷ raw SQL on its own schema | **1.26×** | 1.7× |
+| sqlite ÷ hand-rolled single-table log | **2.52×** | 3.9× |
+| sqlite ÷ memory, same append | **131×** | 120× |
+
+Both floor ratios come out *lower* here. That is the expected direction and not
+a speed-up: criterion measures each arm in its own warmed-up batch, where the
+paired runner pays per-operation timer cost on every sample, and the floors are
+the cheapest arms so they absorb proportionally more of it. The two instruments
+are not interchangeable and the table above is the reason to say so out loud.
+
+### Replay
+
+| Log | memory | sqlite | raw floor | sqlite ÷ floor | ÷ floor, Windows §2 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 175 µs | 847 µs | 149 µs | **5.70×** | 5.8× |
+| 10,000 | 4.01 ms | 9.94 ms | 2.34 ms | **4.25×** | 2.8× |
+
+The **shape** reproduces — overhead falls as the log grows, which is the
+correction §2 made — and the level does not. 4.25× against 2.8×.
+
+Per-event, either side of the 512-row page: **931 / 862 / 979 ns** at 256 /
+2,048 / 8,192 events. A 1.14× spread across a 32× range, matching the 1.16×
+§2 recorded. **Flat in page depth**, independently on a second machine — and at
+roughly a third of the Windows per-event cost, which is a host difference and
+not a claim about the code.
+
+### The DCB guard
+
+| Guard | 1,000 events | 10,000 events | Growth |
+| --- | ---: | ---: | --- |
+| single tag, selects one | 19.6 µs | 20.0 µs | **flat** |
+| single tag, selects all | 19.8 µs | 19.8 µs | **flat** |
+| two-tag intersection | 33.0 µs | 33.3 µs | **flat** |
+
+Two-tag is **1.67×** a single-tag guard and flat in log length, against §4's
+1.3× and flat. The correlated `EXISTS` rewrite holds on a second machine, which
+is the claim §4 actually makes. `MemoryEventStore` is flat at 14–17 ns.
+
+**Contention**, at *k* = 1, 8, 64 on SQLite: 9.26 ms, 10.27 ms, 17.47 ms.
+
+### The typed layer
+
+| Prior events | memory | sqlite |
+| --- | ---: | ---: |
+| 0 | 3.93 µs | 1.685 ms |
+| 10 | 16.1 µs | 1.651 ms |
+| 100 | 122 µs | 1.912 ms |
+| 1,000 | 1.168 ms | 3.964 ms |
+
+Linear at ~1.16 µs per prior event in memory, against §5's 1.4 µs. **Codec
+choice**: postcard 42.5 µs, json 121 µs, cbor 226 µs at a 100-event boundary —
+json 2.8× postcard, cbor 5.3×, against §5's 2.7× and 3.6×. **A lost attempt**:
+122 µs uncontended against 244 µs when it loses once — **2.0×**, against §5's
+1.9×.
+
+### The projection runner
+
+| Chunk | memory models | sqlite models |
+| --- | ---: | ---: |
+| 1 | 10.75 ms (930 K/s) | 565 ms (17.7 K/s) |
+| 100 | 9.84 ms (1,016 K/s) | 58.5 ms (171 K/s) |
+| 5,000 | 9.57 ms (1,044 K/s) | 51.4 ms (195 K/s) |
+
+Chunk size is worth **11.0×** on SQLite here and 1.12× in memory, against §6's
+17.3× and nothing. The gradient is the finding and it survives; its steepness
+does not transfer between hosts.
+
+**Idle poll**: 75.4 µs in memory, **557 µs** on SQLite — the figure that
+supersedes §6's 184 µs, and the one to do operator arithmetic with.
+
+### What did not change, because it cannot
+
+`raw/allocations.csv` and `raw/allocations-linux.csv` are **byte-identical over
+every data row** — `diff` returns nothing. Two operating systems, two target
+triples (`x86_64-pc-windows-msvc` and `x86_64-unknown-linux-gnu`), two commits,
+and not one counter differs. `Event::clone()` at the 64-tag floor is 66 heap
+operations owned and 1 interned on both.
+
+That is the strongest single result on this page, and it is not about speed. It
+is the control that makes every timing above legible: when two hosts whose
+wall-clock medians differ by 2–3× agree to the digit on the allocation counts,
+the counts are measuring the program and the timings are measuring the program
+*and the machine*. It is why §7 says to quote the counts.
 
 ## What none of this shows
 

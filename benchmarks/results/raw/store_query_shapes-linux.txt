@@ -1,0 +1,191 @@
+   Compiling happenstance-benchmarks v0.0.0 (/home/ryan/src/happenstance/benchmarks)
+    Finished `bench` profile [optimized] target(s) in 1.57s
+     Running benches/store_query_shapes.rs (target/release/deps/store_query_shapes-87bbad92f94aa78f)
+Gnuplot not found, using plotters backend
+Benchmarking query/item-count/memory/8
+Benchmarking query/item-count/memory/8: Warming up for 3.0000 s
+Benchmarking query/item-count/memory/8: Collecting 10 samples in estimated 5.0015 s (90k iterations)
+Benchmarking query/item-count/memory/8: Analyzing
+query/item-count/memory/8
+                        time:   [54.768 µs 54.805 µs 54.873 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Benchmarking query/item-count/sqlite/8
+Benchmarking query/item-count/sqlite/8: Warming up for 3.0000 s
+Benchmarking query/item-count/sqlite/8: Collecting 10 samples in estimated 5.0080 s (27k iterations)
+Benchmarking query/item-count/sqlite/8: Analyzing
+query/item-count/sqlite/8
+                        time:   [186.14 µs 187.78 µs 189.51 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking query/item-count/memory/128
+Benchmarking query/item-count/memory/128: Warming up for 3.0000 s
+Benchmarking query/item-count/memory/128: Collecting 10 samples in estimated 5.0310 s (5720 iterations)
+Benchmarking query/item-count/memory/128: Analyzing
+query/item-count/memory/128
+                        time:   [880.19 µs 885.99 µs 889.48 µs]
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
+Benchmarking query/item-count/sqlite/128
+Benchmarking query/item-count/sqlite/128: Warming up for 3.0000 s
+Benchmarking query/item-count/sqlite/128: Collecting 10 samples in estimated 5.0475 s (2970 iterations)
+Benchmarking query/item-count/sqlite/128: Analyzing
+query/item-count/sqlite/128
+                        time:   [1.6856 ms 1.6905 ms 1.6974 ms]
+Benchmarking query/item-count/memory/400
+Benchmarking query/item-count/memory/400: Warming up for 3.0000 s
+Benchmarking query/item-count/memory/400: Collecting 10 samples in estimated 5.1078 s (1815 iterations)
+Benchmarking query/item-count/memory/400: Analyzing
+query/item-count/memory/400
+                        time:   [2.8343 ms 2.8352 ms 2.8366 ms]
+Benchmarking query/item-count/sqlite/400
+Benchmarking query/item-count/sqlite/400: Warming up for 3.0000 s
+Benchmarking query/item-count/sqlite/400: Collecting 10 samples in estimated 5.1441 s (935 iterations)
+Benchmarking query/item-count/sqlite/400: Analyzing
+query/item-count/sqlite/400
+                        time:   [5.4773 ms 5.4949 ms 5.5173 ms]
+Benchmarking query/item-count/memory/401
+Benchmarking query/item-count/memory/401: Warming up for 3.0000 s
+Benchmarking query/item-count/memory/401: Collecting 10 samples in estimated 5.0357 s (1815 iterations)
+Benchmarking query/item-count/memory/401: Analyzing
+query/item-count/memory/401
+                        time:   [2.7962 ms 2.8220 ms 2.8404 ms]
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high severe
+Benchmarking query/item-count/sqlite/401
+Benchmarking query/item-count/sqlite/401: Warming up for 3.0000 s
+Benchmarking query/item-count/sqlite/401: Collecting 10 samples in estimated 5.1675 s (935 iterations)
+Benchmarking query/item-count/sqlite/401: Analyzing
+query/item-count/sqlite/401
+                        time:   [5.5044 ms 5.5329 ms 5.5535 ms]
+
+query/tags-per-item: 128 items x 1 tags = 128 tags, ~384 bound parameters against SQLite's 32,766
+Benchmarking query/tags-per-item/memory/1
+Benchmarking query/tags-per-item/memory/1: Warming up for 3.0000 s
+Benchmarking query/tags-per-item/memory/1: Collecting 10 samples in estimated 5.0317 s (5610 iterations)
+Benchmarking query/tags-per-item/memory/1: Analyzing
+query/tags-per-item/memory/1
+                        time:   [895.66 µs 896.33 µs 896.83 µs]
+Benchmarking query/tags-per-item/sqlite/1
+Benchmarking query/tags-per-item/sqlite/1: Warming up for 3.0000 s
+Benchmarking query/tags-per-item/sqlite/1: Collecting 10 samples in estimated 5.0548 s (2970 iterations)
+Benchmarking query/tags-per-item/sqlite/1: Analyzing
+query/tags-per-item/sqlite/1
+                        time:   [1.6782 ms 1.6828 ms 1.6867 ms]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+query/tags-per-item: 128 items x 8 tags = 1024 tags, ~3072 bound parameters against SQLite's 32,766
+Benchmarking query/tags-per-item/memory/8
+Benchmarking query/tags-per-item/memory/8: Warming up for 3.0000 s
+Benchmarking query/tags-per-item/memory/8: Collecting 10 samples in estimated 5.0415 s (5390 iterations)
+Benchmarking query/tags-per-item/memory/8: Analyzing
+query/tags-per-item/memory/8
+                        time:   [939.00 µs 939.27 µs 939.48 µs]
+Benchmarking query/tags-per-item/sqlite/8
+Benchmarking query/tags-per-item/sqlite/8: Warming up for 3.0000 s
+Benchmarking query/tags-per-item/sqlite/8: Collecting 10 samples in estimated 5.3502 s (275 iterations)
+Benchmarking query/tags-per-item/sqlite/8: Analyzing
+query/tags-per-item/sqlite/8
+                        time:   [19.465 ms 19.494 ms 19.525 ms]
+query/tags-per-item: 128 items x 64 tags = 8192 tags, ~24576 bound parameters against SQLite's 32,766
+Benchmarking query/tags-per-item/memory/64
+Benchmarking query/tags-per-item/memory/64: Warming up for 3.0000 s
+Benchmarking query/tags-per-item/memory/64: Collecting 10 samples in estimated 5.0113 s (5555 iterations)
+Benchmarking query/tags-per-item/memory/64: Analyzing
+query/tags-per-item/memory/64
+                        time:   [902.45 µs 902.58 µs 902.79 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking query/tags-per-item/sqlite/64
+Benchmarking query/tags-per-item/sqlite/64: Warming up for 3.0000 s
+
+Warning: Unable to complete 10 samples in 5.0s. You may wish to increase target time to 23.8s.
+Benchmarking query/tags-per-item/sqlite/64: Collecting 10 samples in estimated 23.756 s (10 iterations)
+Benchmarking query/tags-per-item/sqlite/64: Analyzing
+query/tags-per-item/sqlite/64
+                        time:   [2.3769 s 2.4454 s 2.5119 s]
+
+Benchmarking query/construction/one-tag-per-item/8
+Benchmarking query/construction/one-tag-per-item/8: Warming up for 3.0000 s
+Benchmarking query/construction/one-tag-per-item/8: Collecting 100 samples in estimated 5.0034 s (5.5M iterations)
+Benchmarking query/construction/one-tag-per-item/8: Analyzing
+query/construction/one-tag-per-item/8
+                        time:   [925.57 ns 926.22 ns 926.88 ns]
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+Benchmarking query/construction/one-tag-per-item/128
+Benchmarking query/construction/one-tag-per-item/128: Warming up for 3.0000 s
+Benchmarking query/construction/one-tag-per-item/128: Collecting 100 samples in estimated 5.0319 s (242k iterations)
+Benchmarking query/construction/one-tag-per-item/128: Analyzing
+query/construction/one-tag-per-item/128
+                        time:   [20.985 µs 21.003 µs 21.021 µs]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+Benchmarking query/construction/one-tag-per-item/400
+Benchmarking query/construction/one-tag-per-item/400: Warming up for 3.0000 s
+Benchmarking query/construction/one-tag-per-item/400: Collecting 100 samples in estimated 5.0943 s (76k iterations)
+Benchmarking query/construction/one-tag-per-item/400: Analyzing
+query/construction/one-tag-per-item/400
+                        time:   [67.364 µs 67.432 µs 67.504 µs]
+Found 6 outliers among 100 measurements (6.00%)
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+Benchmarking query/construction/one-tag-per-item/401
+Benchmarking query/construction/one-tag-per-item/401: Warming up for 3.0000 s
+Benchmarking query/construction/one-tag-per-item/401: Collecting 100 samples in estimated 5.0690 s (76k iterations)
+Benchmarking query/construction/one-tag-per-item/401: Analyzing
+query/construction/one-tag-per-item/401
+                        time:   [67.037 µs 67.090 µs 67.144 µs]
+Found 8 outliers among 100 measurements (8.00%)
+  1 (1.00%) low mild
+  4 (4.00%) high mild
+  3 (3.00%) high severe
+Benchmarking query/construction/at-the-item-floor/1
+Benchmarking query/construction/at-the-item-floor/1: Warming up for 3.0000 s
+Benchmarking query/construction/at-the-item-floor/1: Collecting 100 samples in estimated 5.0061 s (242k iterations)
+Benchmarking query/construction/at-the-item-floor/1: Analyzing
+query/construction/at-the-item-floor/1
+                        time:   [21.010 µs 21.029 µs 21.050 µs]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+Benchmarking query/construction/at-the-item-floor/8
+Benchmarking query/construction/at-the-item-floor/8: Warming up for 3.0000 s
+Benchmarking query/construction/at-the-item-floor/8: Collecting 100 samples in estimated 5.4552 s (40k iterations)
+Benchmarking query/construction/at-the-item-floor/8: Analyzing
+query/construction/at-the-item-floor/8
+                        time:   [134.85 µs 134.92 µs 135.00 µs]
+Found 8 outliers among 100 measurements (8.00%)
+  5 (5.00%) high mild
+  3 (3.00%) high severe
+Benchmarking query/construction/at-the-item-floor/64
+Benchmarking query/construction/at-the-item-floor/64: Warming up for 3.0000 s
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 5.9s, enable flat sampling, or reduce sample count to 60.
+Benchmarking query/construction/at-the-item-floor/64: Collecting 100 samples in estimated 5.8660 s (5050 iterations)
+Benchmarking query/construction/at-the-item-floor/64: Analyzing
+query/construction/at-the-item-floor/64
+                        time:   [1.1951 ms 1.1958 ms 1.1964 ms]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+Benchmarking query/construction/query-all
+Benchmarking query/construction/query-all: Warming up for 3.0000 s
+Benchmarking query/construction/query-all: Collecting 100 samples in estimated 5.0000 s (783M iterations)
+Benchmarking query/construction/query-all: Analyzing
+query/construction/query-all
+                        time:   [6.4512 ns 6.4824 ns 6.5124 ns]
+Benchmarking query/construction/mixed-selectivity
+Benchmarking query/construction/mixed-selectivity: Warming up for 3.0000 s
+Benchmarking query/construction/mixed-selectivity: Collecting 100 samples in estimated 5.0003 s (20M iterations)
+Benchmarking query/construction/mixed-selectivity: Analyzing
+query/construction/mixed-selectivity
+                        time:   [264.00 ns 264.61 ns 265.27 ns]
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) low severe
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+
