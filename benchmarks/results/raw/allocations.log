@@ -1,8 +1,9 @@
-   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\.claude\worktrees\benchmarks\benchmarks)
-    Finished `release` profile [optimized] target(s) in 3.54s
+    Blocking waiting for file lock on package cache
+   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\benchmarks)
+    Finished `release` profile [optimized] target(s) in 4.40s
      Running `target\release\allocations.exe`
-commit:    b3c8d84-dirty
-date:      2026-09-06
+commit:    6c7a7a8-dirty
+date:      2026-09-08
 toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
 target:    x86_64-pc-windows-msvc
 profile:   release
@@ -63,7 +64,7 @@ sqlite:    3.53.2
 [read/memory] limit-none returned 10000 events
 [read/memory] limit-none owned/256B/3tags/10000-events: allocs=50002 reallocs=24 heap_ops=50026 bytes=5897482 deallocs=1 peak=5897482 retained=3538186
 [read/memory] limit-1 returned 1 events
-[read/memory] limit-1 owned/256B/3tags/10000-events: allocs=50002 reallocs=12 heap_ops=50014 bytes=3538762 deallocs=49996 peak=3538186 retained=691
+[read/memory] limit-1 owned/256B/3tags/10000-events: allocs=7 reallocs=0 heap_ops=7 bytes=1267 deallocs=1 peak=1267 retained=691
 [read/memory] backwards-limit-1 returned 1 events
-[read/memory] backwards-limit-1 owned/256B/3tags/10000-events: allocs=50002 reallocs=12 heap_ops=50014 bytes=3538762 deallocs=49996 peak=3538186 retained=694
+[read/memory] backwards-limit-1 owned/256B/3tags/10000-events: allocs=7 reallocs=0 heap_ops=7 bytes=1270 deallocs=1 peak=1270 retained=694
 [read/memory] head owned/256B/3tags/10000-events: allocs=0 reallocs=0 heap_ops=0 bytes=0 deallocs=0 peak=0 retained=0

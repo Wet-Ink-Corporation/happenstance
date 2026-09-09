@@ -1,38 +1,43 @@
-    Finished `release` profile [optimized] target(s) in 0.10s
-     Running tests\instruments_work.rs (target\release\deps\instruments_work-7df647501b695789.exe)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `release` profile [optimized] target(s) in 22.34s
+     Running tests\instruments_work.rs (target\release\deps\instruments_work-625ebd3284c13369.exe)
 
 running 9 tests
 test a_nested_region_is_refused - should panic ... 
-thread 'a_nested_region_is_refused' (68476) panicked at src\counting.rs:282:5:
+thread 'a_nested_region_is_refused' (119652) panicked at src\counting.rs:282:5:
 measurement regions do not nest: the peak is one pair of statics, so          an inner region would reset the outer one's high-water mark and the          outer would then report the inner's peak as its own
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ok
 test a_paired_run_with_no_arms_is_refused - should panic ... 
-thread 'a_paired_run_with_no_arms_is_refused' (22304) panicked at src\paired.rs:390:5:
+thread 'a_paired_run_with_no_arms_is_refused' (128768) panicked at src\paired.rs:390:5:
 a paired run needs at least one arm; with none it would report an empty table that reads like a measurement
 ok
 test the_allocator_counts_a_known_allocation ... ok
-test the_paired_sampler_reports_no_difference_where_there_is_none ... paired run: 400 recorded rounds, timer overhead 46ns/sample
-  left                         n=400     median=        2601ns p95=        2701ns p99=        2801ns max=        2901ns              drift=1.000
-  right                        n=400     median=        2601ns p95=        2701ns p99=        2801ns max=       13103ns              drift=1.000
+test the_paired_sampler_reports_no_difference_where_there_is_none ... paired run: 400 recorded rounds, timer overhead 56ns/sample
+  left                         n=400     median=        5903ns p95=        6003ns p99=       11807ns max=      411647ns              drift=0.559
+  right                        n=400     median=        5903ns p95=        6003ns p99=        6203ns max=       29007ns              drift=0.559
+  NOTE: at least one arm's drift is outside ±15%. The ratios between arms still hold — that is what interleaving buys — but no absolute from this run should be quoted.
 
 ok
-test the_paired_sampler_sees_a_difference_it_was_given ... paired run: 400 recorded rounds, timer overhead 54ns/sample
-  light                        n=400     median=        4303ns p95=        9103ns p99=       19711ns max=       49407ns              drift=1.073
-  heavy                        n=400     median=       34111ns p95=       72703ns p99=      124607ns max=      260095ns              drift=1.076
+test the_paired_sampler_sees_a_difference_it_was_given ... paired run: 400 recorded rounds, timer overhead 56ns/sample
+  light                        n=400     median=        5303ns p95=        6503ns p99=       23407ns max=      111551ns              drift=1.000
+  heavy                        n=400     median=       42207ns p95=       88319ns p99=      186751ns max=     1539071ns              drift=1.002
 
 ok
 test the_peak_sees_a_buffer_that_was_freed_before_the_region_closed ... ok
-test the_processor_clock_tells_working_from_waiting ... busy: elapsed=0.256s processor=0.203s ratio=0.79
-waiting: elapsed=0.256s processor=0.000s ratio=0.00
+test the_processor_clock_tells_working_from_waiting ... busy: elapsed=0.256s processor=0.266s ratio=1.04
+waiting: elapsed=0.261s processor=0.000s ratio=0.00
 ok
-test the_timer_domination_guard_fires_on_an_arm_that_does_nothing ... paired run: 400 recorded rounds, timer overhead 48ns/sample
-  empty                        n=400     median=           0ns p95=         100ns p99=         100ns max=         100ns              drift=1.000 TIMER-DOMINATED
+test the_timer_domination_guard_fires_on_an_arm_that_does_nothing ... paired run: 400 recorded rounds, timer overhead 58ns/sample
+  empty                        n=400     median=           0ns p95=         100ns p99=         100ns max=         300ns              drift=1.000 TIMER-DOMINATED
   NOTE: an arm marked TIMER-DOMINATED has a median below 10x the timer overhead, so most of what it reports is the clock. Measure that scale with criterion, which amortises the clock across a batch of iterations instead of paying for it per operation.
 
 ok
 test the_two_allocation_regimes_are_separated_by_an_order_of_magnitude ... regime separation at 64 tags: owned=66 heap ops, interned=1 heap ops
 ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
 

@@ -1,37 +1,40 @@
-    Finished `release` profile [optimized] target(s) in 0.21s
-     Running tests\controls_fire.rs (target\release\deps\controls_fire-3f930c90919ef7a4.exe)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `release` profile [optimized] target(s) in 0.62s
+     Running tests\controls_fire.rs (target\release\deps\controls_fire-b179fb018623983a.exe)
 
 running 10 tests
 test a_distinct_corpus_is_refused_in_the_interned_regime - should panic ... 
-thread 'a_distinct_corpus_is_refused_in_the_interned_regime' (77528) panicked at src\corpus.rs:342:9:
+thread 'a_distinct_corpus_is_refused_in_the_interned_regime' (114948) panicked at src\corpus.rs:342:9:
 a distinct-tag corpus is impossible in the interned regime: Tag::from_static takes a &'static str, so every event would carry the same tags and every selectivity figure would be measuring a filter that matches the whole log. That is the trap, not a limitation — see the module documentation
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ok
 test both_floors_write_what_they_claim_and_read_it_back ... ok
 test distinct_and_uniform_corpora_differ_in_the_way_the_selectivity_axis_needs ... ok
 test the_executor_delta_is_declared_rather_than_smeared_across_every_row ... executor delta, declared rather than assumed:
-paired run: 200 recorded rounds, timer overhead 60ns/sample
-  append via testkit block_on  n=200     median=        1700ns p95=       10703ns p99=       45727ns max=      263423ns              drift=0.608
-  append via tokio current_thread n=200     median=        1900ns p95=        7003ns p99=       38719ns max=       63231ns              drift=0.625
+paired run: 200 recorded rounds, timer overhead 62ns/sample
+  append via testkit block_on  n=200     median=        1800ns p95=       10207ns p99=       28511ns max=       47327ns              drift=0.722
+  append via tokio current_thread n=200     median=        1900ns p95=        5003ns p99=       20911ns max=       50207ns              drift=0.700
   NOTE: at least one arm's drift is outside ±15%. The ratios between arms still hold — that is what interleaving buys — but no absolute from this run should be quoted.
 
-tokio / park loop = 1.118x
+tokio / park loop = 1.056x
 ok
 test the_floor_is_configured_exactly_as_the_adapter_is ... ok
 test the_floor_refuses_an_empty_batch - should panic ... 
-thread 'the_floor_refuses_an_empty_batch' (104972) panicked at src\fixtures\raw.rs:218:9:
+thread 'the_floor_refuses_an_empty_batch' (92268) panicked at src\fixtures\raw.rs:218:9:
 an empty batch is refused by the contract before the condition is evaluated, so a floor that accepted one would be measuring nothing and reporting it as throughput
 ok
 test the_interned_regime_refuses_a_payload_larger_than_its_buffer - should panic ... 
-thread 'the_interned_regime_refuses_a_payload_larger_than_its_buffer' (104780) panicked at src\corpus.rs:242:13:
+thread 'the_interned_regime_refuses_a_payload_larger_than_its_buffer' (125256) panicked at src\corpus.rs:242:13:
 the interned regime slices one 65536-byte static buffer, so it cannot produce a 65537-byte payload; use Regime::Owned, which is the regime a caller is in anyway
 ok
 test the_interned_regime_refuses_more_tags_than_it_holds - should panic ... 
-thread 'the_interned_regime_refuses_more_tags_than_it_holds' (34304) panicked at src\corpus.rs:249:13:
+thread 'the_interned_regime_refuses_more_tags_than_it_holds' (128052) panicked at src\corpus.rs:249:13:
 the interned regime holds 64 compile-time tags, so it cannot produce 65 of them; use Regime::Owned
 ok
 test the_mixed_selectivity_query_selects_a_proper_subset ... ok
 test the_same_schema_floor_has_the_adapters_tables_and_the_hand_rolled_one_does_not ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
 
