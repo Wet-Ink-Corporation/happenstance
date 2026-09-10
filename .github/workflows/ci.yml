@@ -1122,7 +1122,6 @@ jobs:
       # against the last thing a consumer can actually install, and is silent
       # about which pull request introduced them.
       - name: semver against the published baseline
-        if: false # ← delete this line when `0.2.0` is on crates.io
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
           package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare, happenstance-postgres, happenstance-neon

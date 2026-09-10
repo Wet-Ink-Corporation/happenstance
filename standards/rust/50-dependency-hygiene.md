@@ -125,7 +125,7 @@ mentions.
 
 **Evidence.** `Cargo.toml:91 (ffi-sqlite-wasm-rs)` ·
 `Cargo.toml:102 (RUSTSEC-2023-0089)` ·
-`.github/workflows/ci.yml:1151 (cargo deny check advisories)` ·
+`.github/workflows/ci.yml:1150 (cargo deny check advisories)` ·
 [RUSTSEC-2023-0089](https://rustsec.org/advisories/RUSTSEC-2023-0089.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-4. A licence rejection is a dependency choice, and the offender is rarely the crate you expect.
