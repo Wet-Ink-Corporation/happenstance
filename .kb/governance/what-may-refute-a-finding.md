@@ -26,7 +26,26 @@ summary: >-
   construction. A fourth follows from two 2026-09 episodes: a refutation is itself a finding and
   is held to the same standard of evidence, so an empirical counter-claim owes a measurement
   rather than a quotation, and the strongest label a brief can attach to a reason - decisive -
-  carries the highest burden rather than exempting it.
+  carries the highest burden rather than exempting it. A fifth comes from a 2026-09 episode in
+  which the thing needing checking was a retracted predecessor rather than the finding itself.
+  HANDOVER.md records an ES-11 escalation made in error and retracted (2e0a0ae) on the claim
+  that no asynchronous driver can conform, refuted by happenstance-postgres conforming through a
+  runtime handoff at the first poll, and it records that a commit message asserting the falsifier
+  had fired is wrong and is history rather than guidance. A later, narrower claim - that a driver
+  with no shared ordering primitive between its operations cannot conform - had to be checked
+  against that one before it could be accepted, and what separates them is a measurement rather
+  than an argument: happenstance-neon already does the thing that refuted the old claim, spawning
+  at call time and stating the clause's own sufficiency sentence back at it, and it records that
+  the Postgres-shaped Handle::try_current() capture is what it shipped first and why that shape
+  fails there. The remedy that killed the predecessor is applied and the failure survives it, so
+  the claim is the residual after the old fix rather than the old claim restated
+  (kb-decision-0061). Two things generalise. A retracted claim does not poison its own
+  neighbourhood: the way to show a narrower successor is not the same claim is to apply the
+  earlier refutation's remedy and demonstrate the failure survives, which is a measurement
+  obligation and not a rhetorical one. And a claim in a neighbourhood where something was already
+  retracted owes secondary checks a first claim does not - here, that the failure is always in one
+  direction, and that the defect the clause is mostly about is structurally unreachable in this
+  shape.
 depends_on: []
 related:
   - kb-governance-referent-not-reasoning-001
@@ -36,6 +55,8 @@ related:
   - kb-decision-0022
   - kb-decision-0040
   - kb-decision-0059
+  - kb-decision-0060
+  - kb-decision-0061
   - kb-reference-mutation-coverage-arm-two-001
   - kb-open-question-cf-5-per-rule-or-branch-001
   - kb-open-question-adr-0022-falsifiers-fired-001
@@ -44,10 +65,13 @@ source_paths:
   - .kb/_intake/f2-5-holds-the-release-for-phase-10.md
   - .kb/_intake/remediation-2026-09-04-briefs/domain-event-guard-and-decode.md
   - .kb/_intake/remediation-2026-09-04-briefs/es-22-arm-two-is-reached-the-finding-is-wrong.md
+  - .kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md
+  - .kb/_intake/2026-09-08-adr-0061-es-11s-sufficiency-condition-assumed-a-queue.md
   - references/evaluation/review-pre-publication-2026-09-03.md
   - standards/rust/README.md
   - standards/rust/01-standard-of-evidence.md
-last_reviewed: 2026-09-07
+  - HANDOVER.md
+last_reviewed: 2026-09-09
 ---
 
 # What may refute a finding, and how an accepted decision's currency is computed
@@ -141,6 +165,46 @@ its own words: F2-5's untouched half became the hold above, and the leftover que
 whether a conformant control is owed per rule or per *branch* went to
 [`kb-open-question-cf-5-per-rule-or-branch-001`](../open-questions/cf-5-conformant-control-per-rule-or-per-branch.md)
 instead of dying with the half that was wrong.
+
+## A fifth consequence: a retracted claim does not poison its own neighbourhood
+
+The fourth consequence checks a finding against the evidence. The ES-11 pair supplies the case
+where what needed checking was the **predecessor**: something in the same neighbourhood had
+already been claimed, escalated and withdrawn, and the question was whether a new claim there was
+the old one wearing different words.
+
+`HANDOVER.md` records an ES-11 escalation *made in error and retracted* (`2e0a0ae`), on the claim
+that **no asynchronous driver can conform**; `happenstance-postgres` conforming through a runtime
+handoff at the first poll refuted it. It records something else worth naming separately: commit
+`0341467`'s message, asserting the falsifier had fired, is **wrong and is history, not guidance**.
+A commit message is dated evidence exactly as `references/evaluation/*` is, and the first
+consequence above applies to it unchanged — with the sharper edge that nothing supersedes a commit
+message, so the correction has to live somewhere a reader will reach first.
+
+The later claim is narrower — **a driver with no shared ordering primitive between its operations
+cannot conform** — and the discriminator was a measurement rather than an argument.
+`happenstance-neon` already does the thing that refuted the old claim: its conformance transport
+spawns at call time, states the clause's own sufficiency sentence back at it, and records that the
+Postgres-shaped `Handle::try_current()` capture is what it shipped first and why that shape fails
+there. **The remedy that killed the predecessor is applied and the failure survives it**, which is
+what makes this the residual after the old fix rather than the old claim restated
+([`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md)).
+
+Two things generalise. **The way to show a narrower successor is not the same claim is to apply
+the earlier refutation's remedy and demonstrate the failure survives it** — a measurement
+obligation, not a rhetorical one, and the same demand the fourth consequence makes of a refutation,
+now made of a claim standing where one was already withdrawn. **And such a claim owes secondary
+checks a first claim does not.** Two were run here: the failure is always in one direction (the
+read sees the *later* append, never an earlier state), and the paging defect ES-11 is mostly about
+is structurally unreachable in this shape, because one read is one statement. Each is cheap, and
+either coming out the other way would have meant a bug rather than a clause defect — which is the
+shape the first escalation took.
+
+The companion decision in the same pass shows the discipline from the other side:
+[`kb-decision-0060`](../decisions/0060-ps-2s-axis-re-evaluated.md) reaffirms a gate whose *reason*
+had expired, and refutes each driver PS-2 names by an independent mechanism rather than by one
+argument covering both. A claim about an axis is checked against the tree at the axis, one
+mechanism at a time.
 
 ## The one exemption, and why it needs none of this
 

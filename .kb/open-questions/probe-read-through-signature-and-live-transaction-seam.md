@@ -27,20 +27,46 @@ summary: >-
   the monoculture PS-2 exists to prevent. Recommended fix (not yet
   decided, and not this lane's to make): move probe_read_through to
   &mut Self::Batch, hand-desugared impl Future<Output =
-  Result<Option<u64>, Self::Error>>, no Send bound, before phase 10 —
-  changing five in-tree implementors across three crates and one example,
-  all behind the conformance/unstable-projection semver exemption ADR-0036
-  already grants. The corollary question is whether PS-2's live-transaction
-  bar can be judged met by an adapter that declares the capability false to
-  compile against the current shape.
+  Result<Option<u64>, Self::Error>>, no Send bound — changing five in-tree
+  implementors across three crates and one example, all behind the
+  conformance/unstable-projection semver exemption ADR-0036 already grants.
+  The corollary question is whether PS-2's live-transaction bar can be
+  judged met by an adapter that declares the capability false to compile
+  against the current shape. Phase 10b and ADR-0060 replace this atom's
+  attributed cause without touching its gap. The absence at PS-2's
+  live-transaction end is not scarcity and is no longer only a probe
+  defect: ProjectionStore::begin is total, synchronous and infallible,
+  sqlx's only constructor is async and fallible with private fields so no
+  total synchronous expression of Transaction<'static, Postgres> exists,
+  and rusqlite's Transaction<'_> is !Send and costs the SendProjectionStore
+  impl — two independent mechanisms, which is why finding one did not
+  predict the other. The honest scope is therefore the whole probe seam
+  rather than one method: probe_write and probe_delete_all are synchronous
+  and infallible too, so even handed a live transaction there is no seam
+  for an async driver's adapter to issue a statement into, and the
+  recommended &mut/async/Result move on probe_read_through is not
+  sufficient alone. And the consequence for PS-2's bar is sharper than a
+  coverage hole: a conformant live-transaction adapter must declare
+  READS_THROUGH_BATCH = false and therefore reports the same capability
+  profile as a buffering one, so the suite cannot distinguish the two ends
+  of the axis the clause asks for adapters at. ADR-0060 (kb-decision-0060)
+  keeps the port's gate on exactly this ground and declines the signature
+  change, stating it is PS-2's owner's call rather than an adapter lane's —
+  so this question stays open, with a wider scope than when it was written.
 depends_on: []
 related:
   - kb-decision-0036
+  - kb-decision-0060
+  - kb-decision-0017
+  - kb-open-question-provisional-falsifiers-001
   - kb-open-question-projection-batch-no-apply-001
   - kb-open-question-ps-19-scope-narrower-001
+  - kb-decision-0025
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/probe-read-through-and-the-live-transaction-end.md
-last_reviewed: 2026-09-07
+  - .kb/_intake/2026-09-08-ps-2-live-transaction-axis-is-forbidden-not-unbuilt.md
+  - .kb/_intake/2026-09-08-adr-0060-ps-2s-axis-re-evaluated.md
+last_reviewed: 2026-09-09
 ---
 
 # probe_read_through's signature cannot be implemented correctly by a live transaction
@@ -57,6 +83,24 @@ attributing the gap to `SqliteProjectionStore`'s `Batch` being an *owned*
 write set under `kb-decision-0017` — statements pushed and replayed at
 commit, sitting at the buffered end rather than the live-transaction end.
 That reads the absence as scarcity: nobody has built the adapter yet.
+
+**Scarcity is not even a contributing cause.** Writing
+`PostgresProjectionStore`'s bodies at phase 10b produced a compiled
+refutation for each of the two drivers PS-2 names, by *independent*
+mechanisms — which is why finding one did not predict the other.
+`ProjectionStore::begin` is total, synchronous and infallible; `sqlx`'s
+only transaction constructor is `async` and fallible and `Transaction`'s
+fields are private, so no total synchronous expression of
+`Transaction<'static, Postgres>` exists, and `Pool::try_acquire` leaves
+`BEGIN` a round trip regardless. `rusqlite`'s `Transaction<'_>` is `!Send`,
+which costs the `SendProjectionStore` impl outright — the reason
+`happenstance-sqlite` chose a buffered batch, and it says so in its own
+module documentation. No compiler said any of this for a whole phase,
+because `happenstance-postgres` declared `type Batch =
+sqlx::Transaction<'static, Postgres>` with five `todo!()` bodies and it
+type-checked: `todo!()` has type `!`, `!` coerces to everything, and a
+real-but-uninhabitable type is indistinguishable from a real one to a
+skeleton.
 
 `crates/happenstance-core/src/projection.rs` declares:
 
@@ -93,56 +137,79 @@ in-process stores, and the reported-skip mechanism that would normally
 flag this hides it, because the fixture's stated reason is accepted at
 face value.
 
-There is already drift toward the wrong resolution: the Postgres
-projection store's own story spec proposes a `Vec`-of-statements batch and
-lists "makes `READS_THROUGH_BATCH = true` reachable by consulting the
-buffer before the table" among its reasons — putting the second adapter at
-the buffered end beside SQLite, the exact monoculture PS-2's `Rejects:`
-paragraph names.
+## The scope is the probe seam, not one method
+
+`probe_write` and `probe_delete_all` are synchronous and infallible too.
+So even a store *handed* a live transaction has no point at which an async
+driver's adapter could issue a statement into it, and the `&mut` / `async`
+/ `Result` move on `probe_read_through` alone does not open the axis end.
+An atom recommending a one-method fix that does not work would be worse
+than one recommending nothing, so the recommendation below is restated at
+seam grain.
+
+The consequence for PS-2's own bar is sharper than a coverage hole. A
+store whose batch genuinely *is* a live transaction can implement the port
+today — it must simply declare `READS_THROUGH_BATCH = false`. It then
+reports **the same capability profile as a buffering adapter**, so the
+conformance suite cannot tell the two ends of the axis apart. The clause
+asks for adapters at opposite ends of something the instrument does not
+measure.
 
 ## The question
 
-Does `probe_read_through`'s signature move to `&mut Self::Batch`,
+Does the probe seam move — `probe_read_through` to `&mut Self::Batch`,
 hand-desugared `impl Future<Output = Result<Option<u64>, Self::Error>>`,
-no `Send` bound — before the live-transaction adapter is written — or does
-that adapter get built against today's shape and PS-2's part 2 get judged
-on a capability the adapter had to declare false to compile?
+no `Send` bound, and `probe_write` / `probe_delete_all` with it — or does
+PS-2 get reworded to say the axis end is unreachable for `rusqlite` and
+`sqlx` and to name what a live-transaction adapter would have to be
+instead (a synchronous driver whose transaction type is `Send`, a much
+narrower population than "a real database"), or does the falsifier get
+recorded as unfalsifiable in its stated terms?
 
-A third option is narrower: split `READS_THROUGH_BATCH` into "can" and
+A fourth option is narrower: split `READS_THROUGH_BATCH` into "can" and
 "can be asked synchronously," which removes the lie without removing the
-coverage hole.
+coverage hole — and, on the finding above, without making the ends
+distinguishable either.
+
+**ADR-0060 answered the part that was its to answer and left this open.**
+It keeps the port's `unstable-projection` gate on exactly this ground —
+freezing `begin`, `probe_write` and `probe_read_through` as they stand
+would make a semver promise out of the signatures that forbid the second
+shape — and it *declines* the signature change, because it is breaking to
+a trait testkit consumers implement and because it is PS-2's owner's call
+rather than an adapter lane's to make in passing.
 
 ## Why this is not a routine signature tweak
 
 The change is breaking to a public trait of a published crate
-(`happenstance-core`), touches five implementors across three crates and
-one example, and PS-2 is `[FROZEN]` — but the trait sits behind
-`conformance`/`unstable-projection`, which ADR-0036 already documents as
-carrying no semver promise, so the break is exempt and cheap regardless of
-timing. The counter-argument recorded against moving now: the port is
-`[PROVISIONAL]` and the exemption does not expire, so amending a signature
-against a hypothetical adapter risks the same freezing-against-instruments
-error PS-2's own `Rejects:` paragraph forbids, one level up — write the
-real adapter first and let it tell you what the seam needs. The answer
-offered to that: the falsifying properties (`&` vs `&mut`, sync vs
-`async`) are properties of every driver in the candidate set and are
-compiler-checked here rather than reasoned about, and the adapter written
-against today's shape has a standing incentive to buffer rather than hold
-a live transaction, because buffering is the only way to declare the
-capability truthfully.
+(`happenstance-core`) and touches five implementors across three crates
+and one example, but the trait sits behind
+`conformance`/`unstable-projection`, which ADR-0036 documents as carrying
+no semver promise, so the break is exempt and cheap regardless of timing.
+The counter-argument originally recorded against moving early — write the
+real adapter first and let it tell you what the seam needs — has now been
+run: four adapters have passed the projection suite (a file, a pooled
+server, a one-shot HTTP proxy, an embedded graph database), and what they
+told the seam is the finding above.
+`experiments/live-handle-projection-batch/` holds the compiled
+counter-example on the borrowed-handle question and is where a measurement
+for a moved seam belongs.
 
 ## Cost of delay
 
-Bounded by whichever comes first of the Postgres projection store being
-written (phase 10) or the port being frozen (phase 6) — and those are in
-the wrong order for leaving the signature as-is, because the freeze bar is
-evaluated against the adapter set that exists at freeze time.
+Lower than it was, and differently shaped. The original deadline was
+whichever came first of the Postgres projection store being written (phase
+10) or the port being frozen (phase 6); phase 10b has happened and the
+port did not freeze. ADR-0060's gate does not expire, so nothing forces a
+date — the standing cost is that every adapter built meanwhile has an
+incentive to buffer, because buffering is the only way to declare the
+capability truthfully, which is the monoculture PS-2 exists to prevent.
 
 ## What this does not settle
 
 Whether PS-2's part 2 is met by any particular adapter — that verdict
-belongs to the clause's owner. Whether `spec/SPECIFICATION.md` needs an
-amendment (it does not, on this reading; PS-2's text is not in question,
-only whether an adapter can satisfy the instrument that checks it).
-`READS_THROUGH_BATCH`'s own shape, and what the Postgres adapter's `Batch`
-should be.
+belongs to the clause's owner, and ADR-0060 explicitly leaves it there.
+Whether `spec/SPECIFICATION.md` needs an amendment beyond ADR-0060's
+amendment to PS-2's `Rule` (the MUST, the maturity marker and the `Cases`
+are untouched). `READS_THROUGH_BATCH`'s own shape, and what a
+live-transaction adapter's `Batch` should be if one is ever admissible.

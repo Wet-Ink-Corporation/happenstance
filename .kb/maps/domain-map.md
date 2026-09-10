@@ -71,7 +71,23 @@ summary: >-
   ADR-0024 and ADR-0043 respectively, and `kb-open-question-query-plan-parameter-chunking-001` by
   ADR-0052/ADR-0053 together with the shipped-SQL reference atom); see
   [`open-questions-index.md`](open-questions-index.md) for the full list rather than repeating it
-  here.
+  here. The 2026-09-09 wave (`2026-09-09-intake`) added three decisions to the ports domain —
+  ADR-0025 (phase 11, the Ladybug graph-projection adapter: a checkpoint node, raw Cypher, a
+  blocking driver), ADR-0060 (phase 11, PS-2's batch-shape bar re-evaluated against four adapters
+  and kept on a replaced reason) and ADR-0061 (phase 10, ES-11's asynchronous-driver sufficiency
+  condition narrowed after `happenstance-neon` falsified it) — plus one new reference atom (the
+  four Ladybug driver probes ADR-0025 could not be written without) and one new open question
+  (whether any one-shot-HTTP shape, not only `happenstance-neon`, can satisfy ES-11). It also filed
+  a second new open question, on `.gitignore`'s `*-output.txt` rule eating the one experiment whose
+  README cites its raw output by name, to "Specification governance & conformance". No new domain
+  opened. Four existing atoms were amended in place rather than superseded —
+  `kb-governance-referent-not-reasoning-001` and `kb-governance-what-may-refute-a-finding-001` each
+  gained a new worked instance from this wave's two re-evaluations, `kb-playbook-repair-frozen-clause-001`
+  gained the hardest edge of its own mechanical test (a correction that leaves a `MUST` untouched
+  and is still an amendment), and `kb-playbook-count-or-index-nobody-re-derives-001` gained a third
+  defect shape, a status claim a fired falsifier made false with no number in it — none of the
+  four bullets these atoms already carry below was rewritten, since each one-line orientation still
+  holds.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -88,7 +104,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-02-intake
   - .kb/_governance/integration-waves/2026-09-04-intake
   - .kb/_governance/integration-waves/2026-09-07-intake
-last_reviewed: 2026-09-07
+  - .kb/_governance/integration-waves/2026-09-09-intake
+last_reviewed: 2026-09-09
 ---
 
 # Domain map
@@ -222,7 +239,12 @@ crude regex found roughly sixteen rules sharing the same sole-evidence hazard CF
 police, most unpinned),
 `kb-open-question-references-adr-correction-policy-001` (added 2026-09-07 — CLAUDE.md never states
 whether `references/adr/`'s full-length records may be corrected in place; grounded in a live
-falsified figure at `references/adr/0012-append-shape-and-preconditions.md:172-174`).
+falsified figure at `references/adr/0012-append-shape-and-preconditions.md:172-174`),
+`kb-open-question-experiment-raw-output-ignored-001` (added 2026-09-09 — a wave-discovered gap
+rather than one sourced from either staged intake file: `.gitignore:69`'s `*-output.txt` pattern,
+written at the pre-publication sweep to catch stray transcripts carrying an absolute path, also
+eats `experiments/ladybug-driver-probes/results/probe-output.txt`, the one raw output a README
+cites by name and no other tracked experiment result happens to be named to collide with).
 
 ## Contract ports, conformance, and the ADR corpus (2026-08-10 ADR import)
 
@@ -261,6 +283,23 @@ discharge), and twelve phase-12 pre-publication ratifications settling the port 
 (ADR-0039, ADR-0042, ADR-0043, ADR-0048, ADR-0050, ADR-0051, ADR-0052, ADR-0053, ADR-0054,
 ADR-0055, ADR-0056, ADR-0058). None supersedes a row on this map. The full decision list, including
 status and supersession, is [`decision-map.md`](decision-map.md) rather than repeated here.
+
+The 2026-09-09 wave added an eleventh, twelfth and thirteenth: `.kb/decisions/0025`,
+`.kb/decisions/0060` and `.kb/decisions/0061`. ADR-0025 settles what a projection adapter over a
+graph engine with no transaction handle type must do to satisfy PS-1 — a `__hs_checkpoint` node
+written as the last statement before `COMMIT`, raw parameterised Cypher rather than a typed
+builder, blocking-only behind an off-by-default feature — and is the fifth owned-buffered-batch
+implementer rather than PS-2's second shape, `depends_on` `kb-decision-0017` (the owned-`Batch`
+shape) and `kb-decision-0030` (the checkpoint progress obligation its node discharges). ADR-0060
+re-evaluates PS-2's `[FROZEN]` bar against the real adapter population a second time and keeps the
+`unstable-projection` gate on a reason `kb-decision-0036` did not have — `begin`, `probe_write` and
+`probe_read_through` are synchronous and infallible for both drivers PS-2 names, so a genuinely
+live-transaction batch must declare a false capability and the suite cannot tell it apart from a
+buffering one — `depends_on` `kb-decision-0036`, the decision it reaffirms without editing or
+superseding. ADR-0061 narrows ES-11's asynchronous-driver sufficiency condition after
+`happenstance-neon` failed the concurrent-append rule it names, a repair to the specification rather
+than to any decision atom, `depends_on` `kb-decision-0011`. None of the three supersedes a row on
+this map.
 
 **Reference**
 
@@ -307,6 +346,13 @@ status and supersession, is [`decision-map.md`](decision-map.md) rather than rep
   against the shipped adapter rather than the phase-8 prototype: the chain-vs-aggregate loss
   widens, a most-selective-tag-first assumption in §8 measures backwards, and a fourth,
   boundary-bound arm beats the chain outright in most cells. Added 2026-09-07.
+- [`ladybug-driver-probes-2026-09.md`](../reference/ladybug-driver-probes-2026-09.md)
+  (`kb-reference-ladybug-driver-probes-001`) — the four driver probes ADR-0025 could not be written
+  without: a second `Database::new` on one directory is refused while two `Connection`s over one
+  `Arc<Database>` both succeed and observe each other's writes, and `UINT64` round-trips
+  `u64::MAX - 1` exactly. Run out of the workspace and out of the gate; the cited raw output is not
+  in the tree (`.gitignore:69`'s `*-output.txt`), so the figures are the source README's own
+  transcription. Added 2026-09-09.
 - [`event-clone-allocations-and-layout-2026-09.md`](../reference/event-clone-allocations-and-layout-2026-09.md)
   (`kb-reference-event-clone-allocations-001`) — the t+2 allocation cost of `Tags::from_pairs`
   versus `Tag::from_static`, the `Bytes::clone` first-clone allocation, and the corrected 24-byte
@@ -511,7 +557,12 @@ adapter data point against ES-11's `[PROVISIONAL]` marker),
 "refused"),
 `kb-open-question-scope-coverage-helper-projection-gap-001` (added 2026-09-07 — the additive,
 enum-total `assert_scope_covered` test helper, and the identical unchecked tags/scope pair on the
-projection port ADR-0047's fix does not reach).
+projection port ADR-0047's fix does not reach),
+`kb-open-question-one-shot-http-es-11-001` (added 2026-09-09 — ADR-0061 narrowed ES-11's
+asynchronous-driver sufficiency condition and recorded that `happenstance-neon` does not satisfy it;
+open is whether any one-shot-HTTP shape can, since the transport offers exactly one ordering
+primitive and nothing else in a pooled-proxy path orders one backend's snapshot against another's
+commit).
 
 ## The typed layer: decision models, codecs, and payload evolution
 

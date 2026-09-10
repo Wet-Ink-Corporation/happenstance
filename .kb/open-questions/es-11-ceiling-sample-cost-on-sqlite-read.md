@@ -18,16 +18,32 @@ summary: >-
   connection dedicated to ceiling reads, since WAL means a writer does not block a reader and the
   serialization is the adapter's own choice) and declines to pick between them because neither has
   been measured and the second is entangled with an unrelated, higher-priority, breaking-change
-  question about whether the store gains a Clone/connect() capability. It asks instead that this be
+  question about whether the store gains a Clone/connect() capability. It asked instead that this be
   recorded as a second, native-adapter data point bearing on ES-11's own [PROVISIONAL] marker, whose
-  stated falsifier condition names a one-shot-HTTP transport rather than a native adapter under lock
-  contention.
+  stated falsifier condition named a one-shot-HTTP transport rather than a native adapter under lock
+  contention. That third sub-question is now answered, and the atom stays open. happenstance-neon
+  reported at phase 10b and kb-decision-0061 is that review; both halves are decided — the marker
+  moves, rewritten to record a fired falsifier rather than predict one, and it stays [PROVISIONAL],
+  because what is now open is not whether a one-shot-HTTP shape fails but whether a conformant one
+  exists at all (kb-open-question-one-shot-http-es-11-001). ES-11's asynchronous-driver sufficiency
+  condition was narrowed in the same change to require ordering against a later append by something
+  the store itself honours, which this adapter's ceiling sample satisfies and a one-shot HTTP
+  transport cannot. Two things follow for the SQLite half. The clause text this atom quotes has moved
+  under the quotation — ES-11's Rejects: bullet ended "It is conformant today", written 2026-08-06
+  and untouched through two phases, and was repaired in ADR-0061's change. And sub-questions 1 and 2
+  are untouched: ADR-0061 decides nothing about happenstance-sqlite, neither candidate remedy has
+  been measured, and the 635ms stall is exactly where it was, so this atom is not resolved.
 depends_on: []
 related:
   - kb-decision-0011
+  - kb-decision-0061
+  - kb-open-question-one-shot-http-es-11-001
+  - kb-decision-0058
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/sqlite-blocking-seam.md
-last_reviewed: 2026-09-07
+  - .kb/_intake/2026-09-08-adr-0061-es-11s-sufficiency-condition-assumed-a-queue.md
+  - .kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md
+last_reviewed: 2026-09-09
 ---
 
 # ES-11's ceiling-first sample costs SqliteEventStore::read 635ms under contention, and nothing has measured a remedy
@@ -67,6 +83,17 @@ reader's `SELECT`; the stall exists because this adapter serializes the
 ceiling sample behind the same process mutex the writer holds, which is a
 choice the adapter makes rather than a property SQLite imposes.
 
+The clause this atom argues around has since moved under it.
+`kb-decision-0061` narrowed ES-11's asynchronous-driver sufficiency condition
+— a read must now be spawned at its first poll *and* ordered against a later
+append by something the *store* honours — and this adapter meets the narrowed
+form for precisely the reason the stall exists: the pre-spawn sample takes the
+same process mutex the writer takes, so the ordering is one the store honours.
+The same change repaired ES-11's `Rejects:` bullet, which ended *"It is
+conformant today"* — written 2026-08-06 and untouched through the two phases
+in which the adapter that falsified it was built and shipped. Read the current
+clause text, not the wording this atom preserves.
+
 ## What is not decided
 
 Whether either of two named candidate remedies is worth building, and if so
@@ -81,19 +108,21 @@ origin (a path or connection factory) it does not have today — the same
 missing field a separate, higher-priority, 0.2.0-dated question about
 `Clone`/`connect()` semantics needs, so deciding this in isolation risks
 settling that question's premise as a side effect. Neither remedy has been
-measured; only the problem has.
+measured; only the problem has, and `kb-decision-0061` changed none of that —
+it decides nothing about `happenstance-sqlite`, and the 635ms is where it was.
 
 ## What forces it
 
-Nothing forces a remedy today — ES-11 is `[PROVISIONAL]` and CF-34 puts
+Nothing forces a remedy today — ES-11 keeps `[PROVISIONAL]` and CF-34 puts
 performance outside the conformance bar by construction, so no gate step can
 see this stall and none will start seeing it without a deliberate decision to
-add one. The measurement is offered as evidence for the next scheduled review
-of ES-11's own maturity marker, whose stated falsifier condition currently
-names a one-shot-HTTP transport (unable to sample within one round trip) —
-a different failure shape from a native adapter finding the same obligation
-expensive under lock contention. This adapter's finding is a second, native
-data point for that review, not an independent trigger.
+add one. What has changed is the review this measurement was being held for:
+it has happened. `happenstance-neon` — the one-shot-HTTP adapter the marker
+named — reported at phase 10b, `kb-decision-0061` weighed both findings, and
+the SQLite stall did not become a clause problem there. It stayed a cost this
+adapter pays to satisfy a clause it does satisfy. So there is no longer a
+scheduled marker review to hold this for, and whatever forces a remedy next
+will be an operating complaint about read latency rather than a maturity pass.
 
 ## Ordered sub-questions
 
@@ -104,6 +133,15 @@ data point for that review, not an independent trigger.
    rewrite risk reintroducing the concurrency failure the two named tests
    were written to catch, and does the fix need new coverage beyond those two
    before it can be trusted?
-3. Should this finding change ES-11's `[PROVISIONAL]` marker or its stated
+3. ~~Should this finding change ES-11's `[PROVISIONAL]` marker or its stated
    falsifier condition, or does it simply sit as supporting evidence until a
-   HTTP-transport adapter also reports against it?
+   HTTP-transport adapter also reports against it?~~ **Answered by
+   `kb-decision-0061`, in both halves.** The HTTP-transport adapter reported.
+   The marker changed — rewritten to record the falsifier that fired rather
+   than predict one — and the falsifier condition changed with it, narrowing
+   to require store-honoured ordering. The marker stays `[PROVISIONAL]`,
+   because what it now holds open is a different question and belongs to
+   `kb-open-question-one-shot-http-es-11-001`: whether any conformant
+   one-shot-HTTP shape exists at all. Sub-questions 1 and 2 survive that
+   answer untouched, which is why this atom stays open rather than resolving
+   on a one-in-three.
