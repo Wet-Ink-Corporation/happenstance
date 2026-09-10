@@ -7,7 +7,7 @@
 //! state which of its two outcomes it has; this is ours.
 //!
 //! `append` awaits one `SqlTransport::round_trip` per attempt. This crate owns
-//! no HTTP client — [`NullTransport`] is the only implementation in `src/` —
+//! no HTTP client — [`crate::NullTransport`] is the only one in `src/` —
 //! so what dropping the future does to a request already in flight is a
 //! property of whatever transport a caller supplied, and not something this
 //! adapter can promise anything about. The endpoint may well execute the batch

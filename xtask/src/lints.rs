@@ -918,6 +918,80 @@ fn prose_of(path: &str, body: &str) -> String {
     }
 }
 
+/// An accepted semver break does not outlive the reason it was free.
+///
+/// # The shape this exists to prevent
+///
+/// `crates/happenstance-core/Cargo.toml` carries a
+/// `cargo-semver-checks` lint set to `allow`, accepting one deliberate break:
+/// `RecordedAt` stopped deriving `PartialOrd` and `Ord`, which it carried
+/// directly beneath its own rustdoc forbidding exactly that operation.
+///
+/// The break is free for one reason and it is a fact about the registry rather
+/// than about the code — no crate here has a compatible published version, so
+/// nobody can be pinned to the surface being removed. That reason **expires**
+/// the moment `0.2.0` reaches crates.io.
+///
+/// An `allow` with a comment saying "remove this later" is the failure this
+/// repository names in four other places: the green tick keeps arriving over a
+/// shrinking set of guarantees, and nobody re-reads the comment. So the reminder
+/// is a check, and it is anchored to a fact already in the tree rather than to a
+/// date or an intention.
+///
+/// # The anchor
+///
+/// The registry-baseline step in `ci.yml` is `if: false` for the same reason the
+/// exemption is free: there is nothing published to diff against. Enabling that
+/// step and keeping the exemption are contradictory states — the first says a
+/// consumer can now be pinned, the second says none can. This fails when both
+/// are true.
+///
+/// # What it does not verify
+///
+/// That the exemption is *justified*, only that it has not outlived its stated
+/// trigger. It also says nothing about a second `allow` added elsewhere: it reads
+/// one manifest and one workflow, which are the two files this one acceptance
+/// lives in.
+///
+/// # Errors
+///
+/// Returns an error if either file cannot be read, or if the registry baseline is
+/// enabled while the exemption survives.
+fn no_accepted_semver_break_outlives_its_reason() -> Result<()> {
+    const MANIFEST: &str = "crates/happenstance-core/Cargo.toml";
+    const WORKFLOW: &str = ".github/workflows/ci.yml";
+    const EXEMPTION: &str = "derive_trait_impl_removed = \"allow\"";
+    const DISABLED: &str = "if: false # ← delete this line when `0.2.0` is on crates.io";
+
+    let root = workspace_root()?;
+    let manifest =
+        fs::read_to_string(root.join(MANIFEST)).with_context(|| format!("reading {MANIFEST}"))?;
+    let workflow =
+        fs::read_to_string(root.join(WORKFLOW)).with_context(|| format!("reading {WORKFLOW}"))?;
+
+    let exempted = manifest.contains(EXEMPTION);
+    let registry_baseline_off = workflow.contains(DISABLED);
+
+    if !exempted {
+        println!("  the `0.2.0` semver exemption is gone");
+        return Ok(());
+    }
+    if registry_baseline_off {
+        println!("  the `0.2.0` semver exemption stands, and its trigger has not fired");
+        return Ok(());
+    }
+
+    bail!(
+        "{MANIFEST} still exempts `derive_trait_impl_removed` while {WORKFLOW}'s \
+         registry-baseline step is enabled. Those two states contradict each other: \
+         the step turns on when `0.2.0` reaches crates.io, and that is exactly when \
+         a consumer CAN be pinned to the surface the exemption forgives.\n\n\
+         Delete the `[package.metadata.cargo-semver-checks.lints]` block. If the \
+         break it covers is still real against the published baseline, it is no \
+         longer free and needs a version decision rather than an exemption."
+    )
+}
+
 /// No rendered surface teaches `EVENT_TYPES[` as the way to name an event type.
 ///
 /// ADR-0059's third action. The first two rewrote every doctest and both worked
@@ -1516,6 +1590,9 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // ADR-0059's third action, bundled here for the same reason as the three
     // above: a document (and an example) held to the tree.
     no_rendered_surface_indexes_event_types()?;
+
+    // The `0.2.0` semver exemption, and the trigger that retires it.
+    no_accepted_semver_break_outlives_its_reason()?;
 
     let root = workspace_root()?;
     let counts = true_rule_counts(&root)?;

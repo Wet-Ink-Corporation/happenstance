@@ -115,3 +115,31 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
+
+# ACCEPTED BREAK, `0.2.0` ONLY — and the acceptance has a retirement trigger,
+# because an `allow` nobody removes is how a gate ends up green over a shrinking
+# set of guarantees.
+#
+# `RecordedAt` stopped deriving `PartialOrd` and `Ord`. It carried them sixteen
+# lines below its own rustdoc heading, *"This is not an ordering key … Nothing may
+# derive an order from it"* — an affordance for exactly the operation VT-9 spends
+# four paragraphs discouraging. Nothing in the workspace ever ordered one.
+#
+# `cargo-semver-checks` is right that removing a derive is breaking, and it is
+# free here for one reason only: measured at the release pass, `max_stable_version`
+# is `0.0.0` for all seven crates and nothing is yanked, so no consumer can be
+# pinned to the surface being removed. The rev baseline compares two *unpublished*
+# states at the same version, and its verdict — technically correct — is about a
+# break with no possible victim.
+#
+# **The trigger:** this entry MUST be deleted in the same change that enables the
+# registry-baseline step in `.github/workflows/ci.yml` (currently `if: false`,
+# because nothing is published at a compatible version to diff against). That step
+# turns on exactly when `0.2.0` reaches the registry, which is the moment a
+# consumer *can* be pinned and this exemption stops being free.
+#
+# `no_accepted_semver_break_outlives_its_reason` in `xtask/src/lints.rs` fails the
+# gate if the step is enabled while this entry survives. The reminder is a check
+# rather than a comment, for the reason this repository gives everywhere else.
+[package.metadata.cargo-semver-checks.lints]
+derive_trait_impl_removed = "allow"

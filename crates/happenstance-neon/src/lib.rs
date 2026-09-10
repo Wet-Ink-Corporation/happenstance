@@ -163,9 +163,10 @@ pub mod projection_store;
 ///
 /// `serde_json` because it is in the public surface three times over, and once
 /// as a **field**: [`SqlStatement::params`] is a `Vec<serde_json::Value>`, which
-/// a caller holds by construction rather than by calling anything, and
-/// [`SqlStatement::body`] returns `Result<Vec<u8>, serde_json::Error>`. A caller
-/// that cannot name the type cannot build a statement at all.
+/// a caller holds by construction rather than by calling anything;
+/// [`SqlStatement::with_params`] takes one; and [`SqlRequest::body`] returns
+/// `Result<Vec<u8>, serde_json::Error>`. A caller that cannot name the type
+/// cannot build a statement at all.
 ///
 /// Both dependencies are unconditional in this crate's manifest, so neither
 /// needs a `cfg`.
