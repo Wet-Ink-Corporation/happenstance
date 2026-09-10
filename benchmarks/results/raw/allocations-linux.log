@@ -1,8 +1,7 @@
-   Compiling happenstance-benchmarks v0.0.0 (/home/ryan/src/happenstance/benchmarks)
-    Finished `release` profile [optimized] target(s) in 0.73s
+    Finished `release` profile [optimized] target(s) in 0.05s
      Running `target/release/allocations`
 commit:    54044ac-dirty
-date:      2026-09-09
+date:      2026-09-10
 toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
 target:    x86_64-unknown-linux-gnu
 profile:   release

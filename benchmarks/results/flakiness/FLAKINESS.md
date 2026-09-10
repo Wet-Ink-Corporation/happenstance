@@ -143,10 +143,12 @@ noise in this suite is the SQLite arms doing real I/O, not the clock.
 **Keep `hpet`. The clocksource does not need fixing.** Criterion works at every
 scale this suite reaches, from 1.43 µs to 5 ms, and reproduces ratios to well
 inside the 20% resolution `README.md` already claims for itself. And the paired
-runner works too, once its control was sized for this host's clock: `run.sh`
-completes, and the headline ratio reproduces at **1.68×** against Host A's 1.7×.
+runner works too, once three host assumptions were taken out of the harness
+(`benchmarks/README.md` lists them): a full `run.sh` completes here, and its
+headline ratios reproduce against Host A at **1.66× / 4.05× / 5.53×** where Host
+A read 1.7× / 3.9× / 6.2×.
 
-What `hpet` costs is one arm. At a 29 µs floor the `memory` append at 5.8 µs is
+What `hpet` costs is one arm. At a 29 µs floor the `memory` append at 5,727 ns is
 timer-dominated and reported as such; the other six clear it.
 
 Two things that follow, and neither is silent:

@@ -1,12 +1,11 @@
-   Compiling happenstance-benchmarks v0.0.0 (/home/ryan/src/happenstance/benchmarks)
-    Finished `release` profile [optimized] target(s) in 0.43s
+    Finished `release` profile [optimized] target(s) in 0.05s
      Running `target/release/collect`
 commit:    54044ac-dirty
-date:      2026-09-09
+date:      2026-09-10
 toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
 target:    x86_64-unknown-linux-gnu
 profile:   release
 cpus:      16
 sqlite:    3.53.2
 
-wrote 876 rows from 219 benchmarks to results/history/2026-09-09-54044ac-dirty.json
+wrote 880 rows from 220 benchmarks to results/history/2026-09-10-54044ac-dirty.json

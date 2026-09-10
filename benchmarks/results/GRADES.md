@@ -387,48 +387,52 @@ written under. What *is* comparable is a ratio taken inside one run, and those
 are given below beside their Windows counterparts so the shapes can be checked
 against each other.
 
-### One instrument was mis-sized, and the tables below predate the fix
+### The instrument, and what it took to get it running here
 
-`run.sh` **would not complete on this host** when these figures were taken. It
-aborted at CONTROL 2, and the reading at the time was that the paired sampler
-could not see a difference it was handed under a 1,390 ns `hpet` clock.
+`run.sh` **now completes on this host**, and getting it there took three separate
+fixes, none of them to the library. All three were host assumptions baked into
+the harness by the machine it was written on.
 
-**That was wrong.** The ratio assertion in that control was passing at 6.44×.
-What failed was `is_above_the_timer()` — a self-check on the control's own arm
-sizes, hard-coded for a host whose timer pair costs 56 ns against this one's
-2,924 ns. `benchmarks/README.md` carries the correction in full. The control now
-calibrates its arms to the measured timer; both hosts pass, and **`run.sh`
-completes here**.
+1. **`the_paired_sampler_sees_a_difference_it_was_given` was mis-sized.**
+   `spin(20_000)` was chosen when the timer pair cost 56 ns; here it costs
+   2,924 ns. The ratio assertion was passing at 6.44× — the sampler saw the
+   difference perfectly well — while `is_above_the_timer()`, a self-check on the
+   control's own arms, failed. It now calibrates to the measured timer.
+2. **`the_processor_clock_tells_working_from_waiting` failed 1 run in 5.** With
+   the TSC marked unstable, `sched_clock` runs on a per-CPU fallback and a task
+   that migrates mid-region has its runtime mis-accounted: a busy 256 ms read as
+   0 ms. Measured 2/10 unpinned, 4/10 on four CPUs, **0/10 on one**. The control
+   pins itself for its span.
+3. **`ulimit -n` was Ubuntu's 1024.** The SQLite arms create a database per
+   iteration, and SQLite reports EMFILE as `CannotOpen` — a disk error for an fd
+   problem. `/tmp` had 861 GB free at the time.
 
-So the ratios in this section come from **criterion arms run sequentially**, not
-because the paired runner was unavailable, but because these tables were produced
-before it was available. [`../flakiness/FLAKINESS.md`](../flakiness/FLAKINESS.md)
-is the measurement that licenses the substitution — of 3,321 arm pairs across
-three runs, zero moved more than 2.7× and the worst moved 1.485×, so sequential
-drift, the paired runner's whole justification, is absent here.
+None of that was visible from Host A, and none of it is visible from CI, whose
+runners set the fd limit high and whose clock is in the vDSO.
 
-**The paired runner's own answer is now available and it agrees.**
-`happenstance-sqlite ÷ raw/same-schema` reads **1.68×** on this host against
-§1's **1.7×** on Windows — same instrument, second machine, two significant
-figures. What `hpet` actually costs is one arm: at a 29 µs floor the `memory`
-append at 5.8 µs is timer-dominated and reported as such, and the other six clear
-it.
+### What the abstraction costs — the paired runner, on a second machine
 
-### What the abstraction costs, from criterion
+The table below is now the **paired runner's** own answer, not a criterion
+substitution. Same instrument as §1, different machine.
 
-Owned regime, 8-event batch, against the same two floors as §1.
-
-| Ratio | Linux, criterion | Windows, paired runner (§1) |
+| Ratio | Host B, paired | Host A, paired (§1) |
 | --- | ---: | ---: |
-| sqlite ÷ raw SQL on its own schema | **1.26×** | 1.7× |
-| sqlite ÷ hand-rolled single-table log | **2.52×** | 3.9× |
-| sqlite ÷ memory, same append | **131×** | 120× |
+| append: sqlite ÷ raw SQL on its own schema | **1.66×** | 1.7× |
+| append: sqlite ÷ hand-rolled single-table log | **4.05×** | 3.9× |
+| replay: sqlite ÷ raw SQL on its own schema | **5.53×** | 6.2× |
+| append: sqlite ÷ memory | **32.1×** | 120× |
 
-Both floor ratios come out *lower* here. That is the expected direction and not
-a speed-up: criterion measures each arm in its own warmed-up batch, where the
-paired runner pays per-operation timer cost on every sample, and the floors are
-the cheapest arms so they absorb proportionally more of it. The two instruments
-are not interchangeable and the table above is the reason to say so out loud.
+Three of the four reproduce inside 10%, from a run on different hardware under a
+different OS with a 52× slower clock. **That is the strongest evidence on this
+page that §1 measures the library and not the machine** — and it is the check
+`README.md` has been asking for since it wrote "one machine, one run per cell".
+
+The fourth does not, and the reason is stated rather than smoothed: the
+cross-adapter ratio divides by the `memory` arm, whose 5,727 ns median sits under
+this host's 29 µs timer floor and is reported `TIMER-DOMINATED`. **That is the
+one arm `hpet` costs**, it is the numerator of the one row that disagrees, and it
+is why the row is quoted with its caveat instead of as a finding about durability
+getting cheaper.
 
 ### Replay
 

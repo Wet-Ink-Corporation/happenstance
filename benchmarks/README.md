@@ -152,55 +152,50 @@ the toolchain and SQLite rows above already have.
 | Quiet | The sole purpose of the machine. `apt-daily`, `unattended-upgrades`, `man-db`, `fstrim` and `motd-news` **masked** — not merely disabled, because `apt-get install` re-enables a disabled timer — no cron, sleep and lid handling masked, and one container running, an idle tunnel |
 | Command | `ops/host/bench.sh [--fast]` — preflight, then `taskset` to one thread per physical core, then this `run.sh`. **See the limitation below: `run.sh` cannot complete here.** |
 
-#### `run.sh` did not finish on Host B, and the reason was a control mis-sized
+#### Three host assumptions `run.sh` carried, and what they cost to find
 
-**Resolved. Kept here because the wrong diagnosis is the instructive part.**
+**`run.sh` completes on Host B.** It did not at first, and the three things in
+the way are worth keeping, because not one of them was a defect in the library
+and not one was visible from Host A or from CI.
 
-`run.sh` is `set -euo pipefail`, and it aborted at CONTROL 2 on
-`tests/instruments_work.rs`'s `the_paired_sampler_sees_a_difference_it_was_given`.
-The first reading of that was that the paired sampler could not see a difference
-it was handed, and that the `hpet` clock had made the instrument unusable here.
-**That was wrong.** The failure data says so plainly:
+**1. A control sized for another host's clock.**
+`the_paired_sampler_sees_a_difference_it_was_given` hard-codes `spin(20_000)`,
+chosen when the timer pair cost **56 ns**. Here it costs **2,924 ns** — 52× more
+— which puts the floor at 29 µs and the light arm at 6.6 µs under it. The
+assertion that matters, the ratio, was **passing at 6.44×**; what failed was
+`is_above_the_timer()`, a self-check on the control's own arms, whose message had
+already diagnosed itself: *"the iteration counts in this control need
+revisiting"*. It now calibrates against the measured timer, capped so the guard
+can still fire.
 
-```
-timer overhead 2924ns/sample
-light   median= 6635ns   TIMER-DOMINATED
-heavy   median=42751ns
-```
+**2. A control defeated by CPU migration.**
+`the_processor_clock_tells_working_from_waiting` read a busy 256 ms region as
+`processor=0.000s` about one run in five. With the TSC marked unstable
+`sched_clock` runs on a per-CPU fallback, and a task that migrates mid-region
+comes back mis-accounted:
 
-The assertion that matters — the ratio — **passed**, at 6.44× against a required
-2–40×. The sampler saw the difference perfectly well. What failed was
-`is_above_the_timer()`, a self-check on *the control's own arms*, and its message
-had already diagnosed itself:
+| affinity | failures per 10 runs |
+| --- | ---: |
+| unpinned | 2 |
+| four CPUs — the `bench.sh` mask | 4 |
+| **one CPU** | **0** |
 
-> both arms were sized to clear the timer overhead by 10x. If they no longer do,
-> the host's clock got slower or the arms got faster, and **the iteration counts
-> in this control need revisiting** — a control that is itself timer-dominated
-> proves nothing about the sampler
+The control now pins itself for its span and prints which CPU it took. A bounded
+retry was tried first and rejected: standalone it cleared the flake, but inside a
+full `run.sh` the mis-accounting persisted across all three attempts (0.12, 0.00,
+0.00). It can persist, not merely flicker.
 
-`spin(20_000)` was written when the timer pair cost **56 ns**. On this host it
-costs **2,924 ns** — 52× more — which puts the floor at 29 µs and the light arm
-at 6.6 µs under it. Host A's constant, asserted on Host B.
+**3. `ulimit -n` at Ubuntu's 1024.** The SQLite arms create a database per
+criterion iteration, and SQLite reports EMFILE as `CannotOpen` — *"unable to open
+database file"*, a disk error for a file-descriptor problem, on a `/tmp` with
+861 GB free. `ops/host/00-system.sh` now sets 65536.
 
-The fix is the revision the assertion asked for, done once rather than per host:
-the control now **calibrates** its arms against the measured timer. One throwaway
-run prices a spin iteration, and the light arm is sized to twice the floor. Both
-hosts pass, at arms three orders of magnitude apart — 1,200 ns of light arm on
-Host A, 58,111 ns on Host B, ratios 7.6× and 7.9×.
-
-`is_above_the_timer()` stays a guard that can **fire**, which is the whole
-difficulty: arms sized to satisfy an assertion turn it into decoration, and this
-repository rejects a check no implementation can fail. So the calibration is
-capped, and a host that would need more than the cap to clear its own clock fails
-with that as the finding — the clock is too coarse for the paired runner at any
-arm size, and criterion is the instrument for it.
-
-**What was actually lost to `hpet`, once the control was fixed: one arm.** At a
-29 µs floor the `memory` append (5.8 µs) is timer-dominated and is reported as
-such; the other six paired arms sit between 51 µs and 5.5 ms and clear it. The
-headline ratio reproduces across hosts from the same instrument —
-`happenstance-sqlite ÷ raw/same-schema` is **1.68×** here against **1.7×** on
-Host A.
+**What `hpet` actually costs, once all three were fixed: one arm.** At a 29 µs
+floor the `memory` append at 5,727 ns is timer-dominated and reported as such;
+the other six paired arms sit between 51 µs and 1.7 ms. And the headline
+reproduces across hosts from the same instrument — `happenstance-sqlite ÷
+raw/same-schema` is **1.66×** here against **1.7×** on Host A, with the
+hand-rolled floor at **4.05×** against 3.9× and replay at **5.53×** against 6.2×.
 
 ## The history detects a regression, and that was checked
 

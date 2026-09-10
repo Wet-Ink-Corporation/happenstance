@@ -1,5 +1,5 @@
-    Finished `release` profile [optimized] target(s) in 0.06s
-     Running tests/conformance_first.rs (target/release/deps/conformance_first-1c09f22f3048f26f)
+    Finished `release` profile [optimized] target(s) in 0.08s
+     Running tests/conformance_first.rs (target/release/deps/conformance_first-cbdecaa1d42696b4)
 
 running 188 tests
 test memory_arm_is_conformant::a_live_read_stream_does_not_block_an_append ... ok
@@ -191,5 +191,5 @@ test sqlite_arm_is_conformant::two_fixture_instances_observe_none_of_each_others
 test sqlite_arm_is_conformant::two_handles_observe_each_others_appends ... ok
 test sqlite_arm_is_conformant::untagged_events_match_query_all ... ok
 
-test result: ok. 188 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.80s
+test result: ok. 188 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
 
