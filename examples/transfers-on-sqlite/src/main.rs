@@ -278,18 +278,18 @@ enum Ledger {
     },
 }
 
+const ACCOUNT_OPENED: EventType = EventType::from_static("AccountOpened");
+const DEPOSITED: EventType = EventType::from_static("Deposited");
+const WITHDRAWN: EventType = EventType::from_static("Withdrawn");
+
 impl DomainEvent for Ledger {
-    const EVENT_TYPES: &'static [EventType] = &[
-        EventType::from_static("AccountOpened"),
-        EventType::from_static("Deposited"),
-        EventType::from_static("Withdrawn"),
-    ];
+    const EVENT_TYPES: &'static [EventType] = &[ACCOUNT_OPENED, DEPOSITED, WITHDRAWN];
 
     fn event_type(&self) -> EventType {
         match self {
-            Self::AccountOpened { .. } => Self::EVENT_TYPES[0].clone(),
-            Self::Deposited { .. } => Self::EVENT_TYPES[1].clone(),
-            Self::Withdrawn { .. } => Self::EVENT_TYPES[2].clone(),
+            Self::AccountOpened { .. } => ACCOUNT_OPENED,
+            Self::Deposited { .. } => DEPOSITED,
+            Self::Withdrawn { .. } => WITHDRAWN,
         }
     }
 

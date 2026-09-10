@@ -918,6 +918,125 @@ fn prose_of(path: &str, body: &str) -> String {
     }
 }
 
+/// No rendered surface teaches `EVENT_TYPES[` as the way to name an event type.
+///
+/// ADR-0059's third action. The first two rewrote every doctest and both worked
+/// examples to the named-const pattern; this is what stops the next one arriving.
+///
+/// # What the pattern costs, and why a lint rather than a review note
+///
+/// `Self::EVENT_TYPES[0].clone()` couples a match arm to a **position** in a
+/// separate list. Reorder the list — which looks like a cosmetic edit, and which
+/// no compiler, test or conformance rule has an opinion about — and every arm
+/// silently relabels its event. The log then carries the wrong `EventType` for
+/// events that decoded perfectly, and the first symptom is a boundary that stops
+/// nominating events it should.
+///
+/// It is a *documentation* defect before it is a code one, because the rendered
+/// surface is where a consumer copies from. `happenstance` `0.2.0-alpha.1` had
+/// this pattern in the crate root's first program, so it is the shape the tree
+/// taught.
+///
+/// # Scope, and the two exclusions
+///
+/// `///` and `//!` lines anywhere in `crates/`, plus **every** line under
+/// `examples/*/src/`. Doc comments because they render; example sources because
+/// the whole point of an example is that it is read and copied.
+///
+/// `examples/*/tests/` is excluded: a `trybuild` fixture or a contention harness
+/// is not a surface anybody copies a domain model out of, and four of them use
+/// the subscript deliberately to keep a fixture close to what it is a fixture
+/// *for*. `crates/*/tests/` is excluded for the same reason.
+///
+/// # What this does not verify
+///
+/// Only the literal `EVENT_TYPES[`. A file that indexes the list through an
+/// intermediate binding passes, and so does one that hard-codes the string a
+/// second time — which is the *other* defect ADR-0059 names and which this does
+/// not catch. It is a check on one taught shape, not on the property that shape
+/// protects.
+///
+/// # Errors
+///
+/// Returns an error if a source file cannot be read, or if any rendered surface
+/// still subscripts `EVENT_TYPES`.
+fn no_rendered_surface_indexes_event_types() -> Result<()> {
+    /// A subscript with a **literal** index, which is the defect.
+    ///
+    /// `EVENT_TYPES[i]` with a variable is not: that spelling appears in prose
+    /// stating the precondition `assert_domain_event` now enforces — the two
+    /// sequences must agree at every index — and a check that could not tell a
+    /// rule from an instance of breaking it would make the rule unwritable.
+    const NEEDLE: &str = "EVENT_TYPES[";
+
+    let root = workspace_root()?;
+    let mut problems = Vec::new();
+    let mut scanned = 0usize;
+
+    for (dir, doc_lines_only) in [("crates", true), ("examples", false)] {
+        let base = root.join(dir);
+        if !base.is_dir() {
+            continue;
+        }
+        for path in rust_files(&base)? {
+            let relative = path
+                .strip_prefix(&root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            // `tests/` is where the deliberate uses live — see the scope note.
+            if relative.contains("/target/") || relative.contains("/tests/") {
+                continue;
+            }
+            if !doc_lines_only && !relative.contains("/src/") {
+                continue;
+            }
+            scanned += 1;
+            let body = fs::read_to_string(&path).with_context(|| format!("reading {relative}"))?;
+            for (index, line) in body.lines().enumerate() {
+                let literal_index = line.match_indices(NEEDLE).any(|(at, _)| {
+                    line[at + NEEDLE.len()..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_digit())
+                });
+                if !literal_index {
+                    continue;
+                }
+                let trimmed = line.trim_start();
+                let rendered = trimmed.starts_with("///") || trimmed.starts_with("//!");
+                if doc_lines_only && !rendered {
+                    continue;
+                }
+                problems.push(format!(
+                    "{relative}:{} — subscripts `EVENT_TYPES` on a surface a reader \
+                     copies from: {}",
+                    index + 1,
+                    trimmed.trim()
+                ));
+            }
+        }
+    }
+
+    if scanned == 0 {
+        bail!("scanned no sources for the `EVENT_TYPES[` pattern; the walk is broken");
+    }
+    if problems.is_empty() {
+        println!("  {scanned} rendered source(s) name their event types");
+        return Ok(());
+    }
+    for problem in &problems {
+        println!("  {problem}");
+    }
+    bail!(
+        "{} rendered surface(s) subscript `EVENT_TYPES` (ADR-0059). Declare each \
+         name once as a `const EventType` and return it by name: a match arm bound \
+         to a POSITION in a separate list relabels its event the moment that list \
+         is reordered, which nothing else in this repository can see.",
+        problems.len()
+    )
+}
+
 /// Every stated count of *published crates* matches the set that ships.
 ///
 /// # The defect this exists for, and why the existing check could not see it
@@ -1393,6 +1512,10 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // both, and for the nine documents that went stale while `reconcile` stayed
     // green.
     stated_crate_counts()?;
+
+    // ADR-0059's third action, bundled here for the same reason as the three
+    // above: a document (and an example) held to the tree.
+    no_rendered_surface_indexes_event_types()?;
 
     let root = workspace_root()?;
     let counts = true_rule_counts(&root)?;

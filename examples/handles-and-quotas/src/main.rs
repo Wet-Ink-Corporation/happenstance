@@ -384,18 +384,18 @@ enum Registry {
     },
 }
 
+const HANDLE_CLAIMED: EventType = EventType::from_static("HandleClaimed");
+const HANDLE_RELEASED: EventType = EventType::from_static("HandleReleased");
+const PLAN_CHANGED: EventType = EventType::from_static("PlanChanged");
+
 impl DomainEvent for Registry {
-    const EVENT_TYPES: &'static [EventType] = &[
-        EventType::from_static("HandleClaimed"),
-        EventType::from_static("HandleReleased"),
-        EventType::from_static("PlanChanged"),
-    ];
+    const EVENT_TYPES: &'static [EventType] = &[HANDLE_CLAIMED, HANDLE_RELEASED, PLAN_CHANGED];
 
     fn event_type(&self) -> EventType {
         match self {
-            Self::HandleClaimed { .. } => Self::EVENT_TYPES[0].clone(),
-            Self::HandleReleased { .. } => Self::EVENT_TYPES[1].clone(),
-            Self::PlanChanged { .. } => Self::EVENT_TYPES[2].clone(),
+            Self::HandleClaimed { .. } => HANDLE_CLAIMED,
+            Self::HandleReleased { .. } => HANDLE_RELEASED,
+            Self::PlanChanged { .. } => PLAN_CHANGED,
         }
     }
 

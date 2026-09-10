@@ -200,18 +200,18 @@ pub enum Ticketing {
     },
 }
 
+const SHOW_OPENED: EventType = EventType::from_static("ShowOpened");
+const SEAT_RESERVED: EventType = EventType::from_static("SeatReserved");
+const SEAT_RELEASED: EventType = EventType::from_static("SeatReleased");
+
 impl DomainEvent for Ticketing {
-    const EVENT_TYPES: &'static [EventType] = &[
-        EventType::from_static("ShowOpened"),
-        EventType::from_static("SeatReserved"),
-        EventType::from_static("SeatReleased"),
-    ];
+    const EVENT_TYPES: &'static [EventType] = &[SHOW_OPENED, SEAT_RESERVED, SEAT_RELEASED];
 
     fn event_type(&self) -> EventType {
         match self {
-            Self::ShowOpened { .. } => Self::EVENT_TYPES[0].clone(),
-            Self::SeatReserved { .. } => Self::EVENT_TYPES[1].clone(),
-            Self::SeatReleased { .. } => Self::EVENT_TYPES[2].clone(),
+            Self::ShowOpened { .. } => SHOW_OPENED,
+            Self::SeatReserved { .. } => SEAT_RESERVED,
+            Self::SeatReleased { .. } => SEAT_RELEASED,
         }
     }
 

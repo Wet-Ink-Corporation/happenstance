@@ -25,11 +25,28 @@ not the same as what a user needed to be told.
   exactly.
 - **`ProjectionStore` ships behind an off-by-default `unstable-projection`
   feature** — declared on `happenstance-core`, and forwarded by `happenstance`
-  for the typed runner built over it — and is exempt from semver until two
-  adapters at opposite ends of the batch-shape axis have passed its conformance
-  suite. See [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
+  for the typed runner built over it — and is exempt from semver. Four adapters
+  clear its suite; what keeps it gated is that PS-2 asks for two at *opposite
+  ends* of the batch-shape axis and the far end is unreachable through the port's
+  own signatures, so the freeze waits on a replacement axis rather than on
+  another adapter. See [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
-## [Unreleased]
+## [0.2.0] — 2026-09-10
+
+The first stable release, and the first to carry all seven crates. What the
+number promises is narrower than the word *stable* usually implies, and the
+two halves are worth separating: the `EventStore` clauses marked `[FROZEN]`
+in [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
+here, and `ProjectionStore` is not — it ships behind an off-by-default
+`unstable-projection` feature with a written semver exemption. Four adapters
+clear its suite; the freeze waits on a replacement for PS-2's axis, whose far
+end the port's own signatures make unreachable.
+
+`happenstance-sqlite` and `happenstance-cloudflare` join the published set.
+Both previously held a `0.0.0` placeholder, which is not a predecessor: there
+is no upgrade path from it because there was never anything under it.
+
+`0.2.0-alpha.1` is yanked, so the resolvable set is one version.
 
 ### Added
 
@@ -146,353 +163,6 @@ not the same as what a user needed to be told.
   named hazard arriving one step earlier; and a cursor is session-local. What is
   injected instead is a view whose `WHERE` raises above a threshold, so the fault
   arrives while the `FETCH` is producing rows.
-
-### Changed
-
-- **A conditional append against `happenstance-postgres` that loses a
-  serialisation fight is now retried with backoff rather than with a bare
-  budget.** A conditional append runs `SERIALIZABLE`, so two whose predicates
-  overlap are adjudicated at commit and one is aborted with `40001`. The adapter
-  re-runs the loser up to `SERIALISATION_ATTEMPTS` times, and until this release
-  it re-ran them immediately — a budget with no spacing, which is a count of
-  attempts rather than a mechanism for resolving contention, because every
-  contender retries in lockstep. The wait is now exponential, capped at 64 ms,
-  and **fully jittered**: uniform in `[0, ceiling]` rather than `ceiling ± a
-  bit`, which is the arm that actually decorrelates a herd.
-
-  What a caller budgets for: up to eight serial round trips and roughly a
-  quarter second of waiting, paid **only** by a writer already losing a
-  serialisation fight. An uncontended append pays nothing.
-
-  Recorded here because nothing else recorded it. The mechanism landed three
-  hours before the `0.2.0` certification review was written, and a search for
-  `backoff` or `jitter` across this file, `SESSION-DECISIONS-0.2.0.md`,
-  `HANDOVER.md` and the review itself returned **zero hits in all four** — a
-  user-visible latency change with no entry in any ledger.
-
-- **The `docs.rs configuration (nightly)` gate step covers all seven
-  publishable crates**, and covered three until now.
-  cfg nobody sets except docs.rs, which builds *after* publication — so its whole
-  argument is that the failure is unfixable afterwards, and it was not covering
-  two of the artifacts it would be unfixable for. `happenstance-cloudflare` gets
-  its own step, because its manifest sets `default-target =
-  "wasm32-unknown-unknown"` and docs.rs renders it for that target and no other.
-
-- **`cargo xtask lints` holds `RUNBOOK.md`'s clause ledgers against
-  `spec/SPECIFICATION.md` §7.2.** The provisional and deferred ledgers must name
-  exactly the clauses marked that way, in both directions, with every provisional
-  group naming an owning phase. Phase 12's exit criteria audit those tables
-  against `spec-trace` rather than against prose; this is what makes that a check
-  rather than a pass somebody did, on a ledger that has been wrong in both
-  directions twice without anything noticing.
-
-- **`nothing_below_an_observed_position_appears_later`'s schedule** (ES-10,
-  CF-13). The rule's name, its assertions and the clause it checks are all
-  unchanged; what changed is how it drives the two writers. It used to poll them
-  `A, B, B, A` — two polls each — and that made its discriminating power depend
-  on something no fixture can express: how many polls the adapter's `append`
-  needs. ADR-0013 recorded the gap when it lifted ES-10 to `[FROZEN]`, and
-  `spec/SPECIFICATION.md` names the instrument that would settle it and assigns
-  it to phase 10.
-
-  **The instrument was built and it fired.** `PollPaddedPositionStore` is
-  `PreCommitPositionStore` — positions allocated outside the transaction, which
-  is what Postgres does by default — with its `append` padded by one extra
-  `Pending`. Identical defect, one more poll. Under the old schedule it **passed**
-  the rule.
-
-  The padding is measured rather than chosen, which is what ADR-0013 waited for:
-  *"an author choosing n is the reference-store failure mode with one more step —
-  so the calibration waits for an adapter with real I/O."*
-  `happenstance-postgres`'s `append` measures at **3 polls** against a live
-  PostgreSQL 17.10 (`crates/happenstance-postgres/tests/poll_shape.rs`), the
-  unpadded mutant needs 2, so the padding is 1 — and 3 is the number the
-  specification names when it says a store needing three polls slips the window.
-
-  The new schedule polls the slow writer **once**, to take its number, then
-  drives the fast writer **to completion** rather than counting polls at it. That
-  asks for the thing the rule needs — the fast writer has committed — instead of
-  a proxy that happened to imply it on adapters suspending exactly once. Every
-  in-tree adapter still passes; `PreCommitPositionStore` and
-  `PollPaddedPositionStore` both now fail it.
-
-  ES-10 is untouched and still `[FROZEN]`, as the clause pre-authorises: where a
-  rule cannot detect a defect the clause forbids, the rule is what gives.
-
-  **A second limitation is now recorded and is not fixed by this.** An adapter
-  whose `append` hands its work to a runtime advances *off-poll*, so no
-  poll-based schedule controls when its transaction commits. The same
-  `poll_shape.rs` measurement shows it: 3 polls at a one-millisecond cadence,
-  25,096 in a tight loop. `happenstance-postgres` is that shape, and a
-  deliberately naive arm of it — the shipped store with the visibility predicate
-  removed — passes this rule even after the change, while a hand-built probe in
-  that crate catches it in one line. That is a different limitation from the poll
-  count, it belongs to ADR-0024, and it is written down rather than absorbed.
-
-- **BREAKING (`happenstance-testkit`, `proptest` feature): `Op::Read` carries
-  `#[non_exhaustive]`, so it can be matched downstream but not built.** This
-  settles the question the `to` entry below left open in terms — *"whether the
-  variant should also carry `#[non_exhaustive]` … is deliberately not settled
-  here; it belongs with the crate's public surface at first publish"*. This is
-  that publish, and the answer is yes.
-
-  The evidence is the entry below rather than a preference. `Op::Read` mirrors
-  `ReadOptions` option-for-option; `ReadOptions` is `#[non_exhaustive]` and grew
-  `to` at phase 4 without breaking anyone, while this variant grew the same
-  field and broke every downstream construction and struct pattern. `limit`'s
-  own documentation already names the next widening (VT-28), so the hole was
-  left open with the next break visible through it.
-
-  **The attribute is on the variant, not on `Op`, and that distinction is the
-  reason it is defensible.** `standards/rust/13-sealing-and-exhaustiveness.md`'s
-  RS-13-5 forbids `#[non_exhaustive]` on an enum designed not to grow, because
-  it costs every downstream `match` a `_ =>` arm forever and permanently stops
-  the compiler reporting a variant somebody forgot. `Op` is exactly such an
-  enum — its own documentation argues a fourth variant out of existence — and it
-  carries no attribute, so a downstream `match` over the three stays exhaustive
-  and still breaks the day a fourth arrives. Variant-level costs a `..` in one
-  arm and buys field additivity.
-
-  What breaks: a downstream `Op::Read { … }` construction is now
-  `error[E0639]`, and a downstream struct pattern must carry `..`. Neither
-  affects matching or field access. There is **no** constructor to replace the
-  struct expression, deliberately: nobody has been shown to build an `Op` by
-  hand, and the generator is the only thing that ever has. If that turns out to
-  be wrong the constructor is additive and can arrive at any minor.
-
-  The seal is compiled rather than asserted, and it had to be compiled
-  *downstream* — `#[non_exhaustive]` is inert inside the crate that defines it,
-  so no test in `happenstance-testkit` can fail this. It lives in
-  `happenstance-sqlite`, the first crate downstream of the testkit that mounts
-  the model family, as a `compile_fail` doctest paired with a twin that must
-  compile — the same pairing `happenstance-testkit` already uses for
-  `happenstance_core`'s `Query::Items`, and for the same measured reason: a bare
-  `compile_fail` passes when the snippet fails to compile for *any* reason. The
-  block was additionally compiled as an ordinary test to confirm `E0639` is the
-  only error it produces.
-
-- **BREAKING (`happenstance-cloudflare`): `StringifiedThrow` is `pub(crate)`,
-  and the crate root's invitation to reach for it is withdrawn with it.** Both
-  of the type's roles are satisfied by a private type — it is the recorded
-  alternative to `JsThrow`, and it is `the_probe_is_not_vacuous`'s positive
-  control, the `Send` type without which the whole `!Send` probe module would
-  also pass if the probe were simply broken. Nothing in the workspace ever
-  consumed it as a caller would, so the evidence for a public audience does not
-  exist rather than being outweighed. The crate holds a `0.0.0` placeholder on
-  the registry, which is not a predecessor because nothing was ever under it, so
-  this is the one release at which withdrawing the name costs nobody anything.
-
-  **Four rendered doctests went with the `pub` and are not replaced in kind.**
-  Two proved the struct literal unbuildable downstream and two that the field
-  could not be assigned on a value already held. Both facts survive and both are
-  subsumed: a caller who cannot name the type cannot reach either seal. What
-  replaces them is one pair proving the *new* seal — naming the type through its
-  module path is `error[E0603]`, and a twin naming `JsThrow` on the same path
-  must compile. The re-export half needs no test, because a `pub use` of a
-  `pub(crate)` item is `error[E0365]`: the compiler will not let the two edits
-  drift apart.
-
-  **The consequence the brief did not name, recorded rather than suppressed.**
-  Withdrawing the `pub` made the type dead code outside a test build, and
-  `-D warnings` said so at once. Its two remaining users are not even in the
-  same configuration: the host `cfg(test)` build reaches the *type* (the `Send`
-  probe names it) and none of its methods, while the methods are called only by
-  `js.rs`'s own `#[cfg(all(test, target_arch = "wasm32"))]` tests. So the two
-  `allow`s are gated differently — `not(test)` on the type,
-  `not(all(test, target_arch = "wasm32"))` on the impl — each staying live in
-  the configuration that can actually perform the check. `#[cfg(test)]` on the
-  type would have been tidier and is the wrong answer: it would make ES-6's
-  recorded alternative absent from the artefact the crate ships, leaving one arm
-  of the fork in the binary and one in the test profile.
-
-  **`StringifiedThrow::message` and `StringifiedThrow::new` are removed, and
-  finding them is an argument for the change rather than a cost of it.** Both
-  were `pub` methods on a `pub` type, which is a configuration in which
-  `dead_code` can never fire — an exported item always has a hypothetical
-  caller. Narrowing the type made the compiler look, and neither had a real one
-  in any crate, any test or either target. `message` was the read half of the
-  field seal and its justification was written in terms of a caller, which is
-  precisely who this change withdrew; `new` was `from_throw`'s operation one
-  input earlier and nothing ever reached for it. `Display` reads the field
-  rather than the accessor, so the type still renders its text and the ES-6
-  comparison is undamaged. Keeping them behind the `allow` would have made that
-  attribute say "the users are in another configuration" about two items that
-  had users in none.
-
-- **`Codec` gains `reads_tag`, a defaulted method by which a codec declares
-  which tags it can decode.** Additive — no implementor breaks, and a codec that
-  says nothing behaves exactly as before. It settles what `Codec`'s own page
-  recorded as an open question: until now a tag written by a codec outside this
-  crate was a dead end, because `decode_event` resolved a foreign tag through a
-  fixed chain naming three concrete types and no build could grow a fourth.
-
-  **The shape of the repair is narrower than a registry, and the documentation
-  says so rather than implying otherwise.** The orphan rule means nobody outside
-  `happenstance` can override the method for `Json`, `Postcard` or `Cbor`. So
-  the migration this serves is *"my codec also reads the tag I used to write"* —
-  a rename, or one codec that knows several encodings. The migration it does
-  **not** serve is *"I switched to `Json` and expect my history back"*: that
-  build still gets `CodecError::UnknownTag`, and should, because nothing in it
-  knows how those bytes were written. A registry would have answered both and
-  costs global mutable state, an initialisation order, and a log that reads
-  differently depending on what has been registered yet. Sealing the trait
-  stays open and is the cheaper answer if no fourth codec ever appears.
-
-  **A wrong override cannot lock a codec out of its own log.** `decode_event`
-  checks `tag == C::TAG` before consulting the method, so `reads_tag` can only
-  widen. The obvious mistake — writing `tag == "myapp"` and dropping the
-  `|| tag == Self::TAG` — would otherwise produce a codec that reads its
-  predecessor's events and not its own, which is a defect that surfaces on the
-  *second* deployment rather than the one that introduced it.
-
-  Two tests hold this, and each rejects a different wrong implementation,
-  verified by building both: `a_codec_that_claims_a_foreign_tag_reads_it` goes
-  red when the method is added to the trait and never consulted on the decode
-  path — a version that compiles, documents a seam and satisfies every prose
-  check — and `an_override_that_forgets_its_own_tag_still_reads_what_it_wrote`
-  goes red when `reads_tag` is consulted *instead of* the own-tag check rather
-  than after it. Neither fails against the other's defect.
-
-  `a_codec_of_your_own_writes_a_tag_no_other_codec_can_read` **survives this
-  change**, and its own documentation previously said it would not — it claimed
-  to fail "under every option on the table", which was true of a registry and
-  false of a per-codec method. Corrected in place rather than deleted, because
-  the reason it survives is exactly the thing a reader needs to understand about
-  what landed.
-
-- **BREAKING (`happenstance`): `commit` and `commit_with` return
-  `CommandOutcome`, which has two success shapes.** A decision that produces no
-  events is `CommandOutcome::Nothing` and is a **success**. Until now an empty
-  `Vec` from the closure reached `EventStore::append`, which refuses an empty
-  batch (ES-20), so the commonest shape of an idempotent command — *"already
-  done, nothing to add"* — came back as `CommandError::Append` carrying
-  `AppendError::NoEvents`. A caller had to know that one variant of one store
-  error meant *your decision was fine* and every other meant *your store is
-  not*.
-
-  An enum rather than an `Option` or a field, because it puts the choice at
-  compile time on every call site, which is where the bug it catches lives:
-  forgetting to `push` into the decided `Vec` has no local symptom, and the
-  command returns `Ok` with the events simply absent. It carries no
-  `#[non_exhaustive]`, deliberately — RS-13-5's argument, since a command either
-  appended or it did not.
-
-  Migration: `let done = commit(…).await?;` followed by `done.attempts` becomes
-  `done.committed().expect(…)` or, better, a `match` that names the second arm.
-  ES-20 is untouched: the store still refuses an empty batch, and what changed
-  is that a *decision* no longer routes through it.
-
-- **BREAKING (`happenstance`): a decided event that does not match the boundary
-  it was decided on is refused, as `CommandError::OutsideBoundary`.** Nothing is
-  appended; the check runs after the closure returns and before the single
-  irreversible act, and reuses `Query::matches` rather than inventing a second
-  vocabulary for *"is this event in this boundary"*.
-
-  **The lost update this forbids.** The append condition guards the query the
-  decision was read on. An event that does not match that query is not in the
-  set the condition protects, so the next command over the same boundary reads a
-  log without it, decides as though it never happened, and its own condition is
-  satisfied. Both commands return `Ok` and the invariant they shared is gone,
-  with nothing failing anywhere.
-
-  The shape is ordinary rather than exotic — an event type whose `tags()`
-  returns `Tags::empty()` inside a model with a real scope produces it on the
-  first append — and **two of this crate's own rendered doctests taught exactly
-  that spelling**. Both are repaired: `DecisionModel`'s example now carries the
-  course tag its boundary is scoped by, and the tuple-boundary example in
-  `composition` carries both members' tags, which is what makes a composite
-  boundary mean anything.
-
-  What it does not catch, stated on the variant rather than left to be
-  discovered: `Query::Items` matches on **any** item, so on a composite boundary
-  an event matching one member satisfies the check even if it belongs to
-  another's scope. That is the union grain of the derived query rather than a
-  gap in the check, and closing it means asking which *member* an event belongs
-  to — which a boundary does not currently say.
-
-  Each of the two changes above is held by a test verified against its own wrong
-  implementation: deleting the early return fails
-  `a_decision_that_emits_nothing_is_a_success` and nothing else, and deleting the
-  scope check fails
-  `an_event_outside_its_boundary_is_refused_and_nothing_is_appended` and nothing
-  else. The first also asserts that **nothing was appended**, because a repair
-  that returned `Nothing` after submitting an empty batch would satisfy the
-  headline and change nothing.
-
-- **BREAKING in practice (`happenstance-testkit`): every mounted suite emits
-  `every_declined_capability_is_stated_by_this_fixture`, and a fixture that
-  inherits a declension now fails it.** CF-18 requires a declined capability to
-  be reported with the fixture's *stated* reason, and until now nothing outside
-  this repository could observe that: a skipped rule is a test that **passes**,
-  libtest discards a passing test's stdout, and exactly one CI in the world
-  passes `--show-output`. The machine-checked half was a meta-test in this
-  crate's own `tests/`, which never runs in an adapter's CI.
-
-  **What it asserts is not what the brief proposed.** *"Fail if a capability is
-  declined without a stated reason"* describes a state that cannot be
-  constructed — `Capability::declined` refuses an empty reason and `SUPPORTED`
-  *is* the absence of one — so a check written that way would pass on every
-  fixture that will ever exist. The real gap is **declension by inheritance**:
-  five capabilities default to a declension whose words are the testkit's, so a
-  fixture that says nothing prints this crate's prose in an adapter's CI log as
-  though it were that adapter's account of its own store.
-
-  Those five default reasons are now named public constants —
-  `UNSTATED_MID_BATCH_FAULT`, `UNSTATED_READ_FAULT`,
-  `UNSTATED_PROJECTION_SECOND_HANDLE`, `UNSTATED_RESET_REFUSAL`,
-  `UNSTATED_COMMIT_FAULT` — so an author can read exactly what their silence
-  says. The trait defaults are unchanged in wording; they now point at the
-  constants instead of repeating them.
-
-  **It runs on `wasm32` as well**, which the costing expected to have to give
-  up. The check is emitted by the *suite macro* rather than by the emitter,
-  because CF-23 makes the emitter the caller's and a third-party emitter would
-  drop it silently — but a plain `#[test]` is neither run nor listed by
-  `wasm-bindgen-test-runner`. A `cfg_attr` pair solves it: a false predicate is
-  stripped before name resolution, so `::wasm_bindgen_test` is never resolved on
-  a native build and no native adapter gains a dependency, while a `wasm32`
-  build gets `#[wasm_bindgen_test]` and the adapter already has that crate
-  because `__emit_wasm` names it.
-
-  **Two in-tree fixtures failed it on the commit that added it**, which is the
-  evidence it can fail at all. `MemoryFixture` — the reference implementation,
-  the one an adapter author copies — inherited `MID_BATCH_FAULT`, three lines
-  below its own comment arguing that *"a capability nobody mentions is a
-  capability nobody thinks about"*. `PostgresFixture` inherited `READ_FAULT`
-  while being the one adapter for which the inherited sentence is **false**:
-  `PgReadStream` `FETCH`es a server-side cursor per chunk, so there is a real
-  fetch between two pages and a real place to inject a fault. Its declension now
-  says so, names the injection (`pg_terminate_backend` on the reader's own
-  backend, or closing the cursor beneath it) and says that building it is phase
-  10's remainder. Four testkit-internal fixtures were silent too and now state
-  their own reasons.
-
-  It does **not** judge whether a stated reason is good — `"n/a"` passes.
-  Nothing mechanical separates a considered account from a plausible one, and a
-  check that tried would be a style gate wearing a conformance rule's clothes.
-
-  Migration: if your fixture declines `MID_BATCH_FAULT`, `READ_FAULT`,
-  `RESET_REFUSAL`, `COMMIT_FAULT`, or a `ProjectionFixture`'s `SECOND_HANDLE`
-  by saying nothing, write the constant with your store's own reason. The
-  failure message says which capabilities and why.
-
-## [0.2.0] — 2026-09-06
-
-The first stable release, and the first to carry all seven crates. What the
-number promises is narrower than the word *stable* usually implies, and the
-two halves are worth separating: the `EventStore` clauses marked `[FROZEN]`
-in [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
-here, and `ProjectionStore` is not — it ships behind an off-by-default
-`unstable-projection` feature with a written semver exemption until two
-adapters at opposite ends of the batch-shape axis have passed its suite.
-
-`happenstance-sqlite` and `happenstance-cloudflare` join the published set.
-Both previously held a `0.0.0` placeholder, which is not a predecessor: there
-is no upgrade path from it because there was never anything under it.
-
-`0.2.0-alpha.1` is yanked, so the resolvable set is one version.
-
-### Added
 
 - **A conformance rule for the one pair of read options the suite never put on
   the same read — breaking in practice, so pin `happenstance-testkit` exactly
@@ -1115,6 +785,333 @@ is no upgrade path from it because there was never anything under it.
   turns a test red rather than passing unnoticed.
 
 ### Changed
+
+- **A conditional append against `happenstance-postgres` that loses a
+  serialisation fight is now retried with backoff rather than with a bare
+  budget.** A conditional append runs `SERIALIZABLE`, so two whose predicates
+  overlap are adjudicated at commit and one is aborted with `40001`. The adapter
+  re-runs the loser up to `SERIALISATION_ATTEMPTS` times, and until this release
+  it re-ran them immediately — a budget with no spacing, which is a count of
+  attempts rather than a mechanism for resolving contention, because every
+  contender retries in lockstep. The wait is now exponential, capped at 64 ms,
+  and **fully jittered**: uniform in `[0, ceiling]` rather than `ceiling ± a
+  bit`, which is the arm that actually decorrelates a herd.
+
+  What a caller budgets for: up to eight serial round trips and roughly a
+  quarter second of waiting, paid **only** by a writer already losing a
+  serialisation fight. An uncontended append pays nothing.
+
+  Recorded here because nothing else recorded it. The mechanism landed three
+  hours before the `0.2.0` certification review was written, and a search for
+  `backoff` or `jitter` across this file, `SESSION-DECISIONS-0.2.0.md`,
+  `HANDOVER.md` and the review itself returned **zero hits in all four** — a
+  user-visible latency change with no entry in any ledger.
+
+- **The `docs.rs configuration (nightly)` gate step covers all seven
+  publishable crates**, and covered three until now.
+  cfg nobody sets except docs.rs, which builds *after* publication — so its whole
+  argument is that the failure is unfixable afterwards, and it was not covering
+  two of the artifacts it would be unfixable for. `happenstance-cloudflare` gets
+  its own step, because its manifest sets `default-target =
+  "wasm32-unknown-unknown"` and docs.rs renders it for that target and no other.
+
+- **`cargo xtask lints` holds `RUNBOOK.md`'s clause ledgers against
+  `spec/SPECIFICATION.md` §7.2.** The provisional and deferred ledgers must name
+  exactly the clauses marked that way, in both directions, with every provisional
+  group naming an owning phase. Phase 12's exit criteria audit those tables
+  against `spec-trace` rather than against prose; this is what makes that a check
+  rather than a pass somebody did, on a ledger that has been wrong in both
+  directions twice without anything noticing.
+
+- **`nothing_below_an_observed_position_appears_later`'s schedule** (ES-10,
+  CF-13). The rule's name, its assertions and the clause it checks are all
+  unchanged; what changed is how it drives the two writers. It used to poll them
+  `A, B, B, A` — two polls each — and that made its discriminating power depend
+  on something no fixture can express: how many polls the adapter's `append`
+  needs. ADR-0013 recorded the gap when it lifted ES-10 to `[FROZEN]`, and
+  `spec/SPECIFICATION.md` names the instrument that would settle it and assigns
+  it to phase 10.
+
+  **The instrument was built and it fired.** `PollPaddedPositionStore` is
+  `PreCommitPositionStore` — positions allocated outside the transaction, which
+  is what Postgres does by default — with its `append` padded by one extra
+  `Pending`. Identical defect, one more poll. Under the old schedule it **passed**
+  the rule.
+
+  The padding is measured rather than chosen, which is what ADR-0013 waited for:
+  *"an author choosing n is the reference-store failure mode with one more step —
+  so the calibration waits for an adapter with real I/O."*
+  `happenstance-postgres`'s `append` measures at **3 polls** against a live
+  PostgreSQL 17.10 (`crates/happenstance-postgres/tests/poll_shape.rs`), the
+  unpadded mutant needs 2, so the padding is 1 — and 3 is the number the
+  specification names when it says a store needing three polls slips the window.
+
+  The new schedule polls the slow writer **once**, to take its number, then
+  drives the fast writer **to completion** rather than counting polls at it. That
+  asks for the thing the rule needs — the fast writer has committed — instead of
+  a proxy that happened to imply it on adapters suspending exactly once. Every
+  in-tree adapter still passes; `PreCommitPositionStore` and
+  `PollPaddedPositionStore` both now fail it.
+
+  ES-10 is untouched and still `[FROZEN]`, as the clause pre-authorises: where a
+  rule cannot detect a defect the clause forbids, the rule is what gives.
+
+  **A second limitation is now recorded and is not fixed by this.** An adapter
+  whose `append` hands its work to a runtime advances *off-poll*, so no
+  poll-based schedule controls when its transaction commits. The same
+  `poll_shape.rs` measurement shows it: 3 polls at a one-millisecond cadence,
+  25,096 in a tight loop. `happenstance-postgres` is that shape, and a
+  deliberately naive arm of it — the shipped store with the visibility predicate
+  removed — passes this rule even after the change, while a hand-built probe in
+  that crate catches it in one line. That is a different limitation from the poll
+  count, it belongs to ADR-0024, and it is written down rather than absorbed.
+
+- **BREAKING (`happenstance-testkit`, `proptest` feature): `Op::Read` carries
+  `#[non_exhaustive]`, so it can be matched downstream but not built.** This
+  settles the question the `to` entry below left open in terms — *"whether the
+  variant should also carry `#[non_exhaustive]` … is deliberately not settled
+  here; it belongs with the crate's public surface at first publish"*. This is
+  that publish, and the answer is yes.
+
+  The evidence is the entry below rather than a preference. `Op::Read` mirrors
+  `ReadOptions` option-for-option; `ReadOptions` is `#[non_exhaustive]` and grew
+  `to` at phase 4 without breaking anyone, while this variant grew the same
+  field and broke every downstream construction and struct pattern. `limit`'s
+  own documentation already names the next widening (VT-28), so the hole was
+  left open with the next break visible through it.
+
+  **The attribute is on the variant, not on `Op`, and that distinction is the
+  reason it is defensible.** `standards/rust/13-sealing-and-exhaustiveness.md`'s
+  RS-13-5 forbids `#[non_exhaustive]` on an enum designed not to grow, because
+  it costs every downstream `match` a `_ =>` arm forever and permanently stops
+  the compiler reporting a variant somebody forgot. `Op` is exactly such an
+  enum — its own documentation argues a fourth variant out of existence — and it
+  carries no attribute, so a downstream `match` over the three stays exhaustive
+  and still breaks the day a fourth arrives. Variant-level costs a `..` in one
+  arm and buys field additivity.
+
+  What breaks: a downstream `Op::Read { … }` construction is now
+  `error[E0639]`, and a downstream struct pattern must carry `..`. Neither
+  affects matching or field access. There is **no** constructor to replace the
+  struct expression, deliberately: nobody has been shown to build an `Op` by
+  hand, and the generator is the only thing that ever has. If that turns out to
+  be wrong the constructor is additive and can arrive at any minor.
+
+  The seal is compiled rather than asserted, and it had to be compiled
+  *downstream* — `#[non_exhaustive]` is inert inside the crate that defines it,
+  so no test in `happenstance-testkit` can fail this. It lives in
+  `happenstance-sqlite`, the first crate downstream of the testkit that mounts
+  the model family, as a `compile_fail` doctest paired with a twin that must
+  compile — the same pairing `happenstance-testkit` already uses for
+  `happenstance_core`'s `Query::Items`, and for the same measured reason: a bare
+  `compile_fail` passes when the snippet fails to compile for *any* reason. The
+  block was additionally compiled as an ordinary test to confirm `E0639` is the
+  only error it produces.
+
+- **BREAKING (`happenstance-cloudflare`): `StringifiedThrow` is `pub(crate)`,
+  and the crate root's invitation to reach for it is withdrawn with it.** Both
+  of the type's roles are satisfied by a private type — it is the recorded
+  alternative to `JsThrow`, and it is `the_probe_is_not_vacuous`'s positive
+  control, the `Send` type without which the whole `!Send` probe module would
+  also pass if the probe were simply broken. Nothing in the workspace ever
+  consumed it as a caller would, so the evidence for a public audience does not
+  exist rather than being outweighed. The crate holds a `0.0.0` placeholder on
+  the registry, which is not a predecessor because nothing was ever under it, so
+  this is the one release at which withdrawing the name costs nobody anything.
+
+  **Four rendered doctests went with the `pub` and are not replaced in kind.**
+  Two proved the struct literal unbuildable downstream and two that the field
+  could not be assigned on a value already held. Both facts survive and both are
+  subsumed: a caller who cannot name the type cannot reach either seal. What
+  replaces them is one pair proving the *new* seal — naming the type through its
+  module path is `error[E0603]`, and a twin naming `JsThrow` on the same path
+  must compile. The re-export half needs no test, because a `pub use` of a
+  `pub(crate)` item is `error[E0365]`: the compiler will not let the two edits
+  drift apart.
+
+  **The consequence the brief did not name, recorded rather than suppressed.**
+  Withdrawing the `pub` made the type dead code outside a test build, and
+  `-D warnings` said so at once. Its two remaining users are not even in the
+  same configuration: the host `cfg(test)` build reaches the *type* (the `Send`
+  probe names it) and none of its methods, while the methods are called only by
+  `js.rs`'s own `#[cfg(all(test, target_arch = "wasm32"))]` tests. So the two
+  `allow`s are gated differently — `not(test)` on the type,
+  `not(all(test, target_arch = "wasm32"))` on the impl — each staying live in
+  the configuration that can actually perform the check. `#[cfg(test)]` on the
+  type would have been tidier and is the wrong answer: it would make ES-6's
+  recorded alternative absent from the artefact the crate ships, leaving one arm
+  of the fork in the binary and one in the test profile.
+
+  **`StringifiedThrow::message` and `StringifiedThrow::new` are removed, and
+  finding them is an argument for the change rather than a cost of it.** Both
+  were `pub` methods on a `pub` type, which is a configuration in which
+  `dead_code` can never fire — an exported item always has a hypothetical
+  caller. Narrowing the type made the compiler look, and neither had a real one
+  in any crate, any test or either target. `message` was the read half of the
+  field seal and its justification was written in terms of a caller, which is
+  precisely who this change withdrew; `new` was `from_throw`'s operation one
+  input earlier and nothing ever reached for it. `Display` reads the field
+  rather than the accessor, so the type still renders its text and the ES-6
+  comparison is undamaged. Keeping them behind the `allow` would have made that
+  attribute say "the users are in another configuration" about two items that
+  had users in none.
+
+- **`Codec` gains `reads_tag`, a defaulted method by which a codec declares
+  which tags it can decode.** Additive — no implementor breaks, and a codec that
+  says nothing behaves exactly as before. It settles what `Codec`'s own page
+  recorded as an open question: until now a tag written by a codec outside this
+  crate was a dead end, because `decode_event` resolved a foreign tag through a
+  fixed chain naming three concrete types and no build could grow a fourth.
+
+  **The shape of the repair is narrower than a registry, and the documentation
+  says so rather than implying otherwise.** The orphan rule means nobody outside
+  `happenstance` can override the method for `Json`, `Postcard` or `Cbor`. So
+  the migration this serves is *"my codec also reads the tag I used to write"* —
+  a rename, or one codec that knows several encodings. The migration it does
+  **not** serve is *"I switched to `Json` and expect my history back"*: that
+  build still gets `CodecError::UnknownTag`, and should, because nothing in it
+  knows how those bytes were written. A registry would have answered both and
+  costs global mutable state, an initialisation order, and a log that reads
+  differently depending on what has been registered yet. Sealing the trait
+  stays open and is the cheaper answer if no fourth codec ever appears.
+
+  **A wrong override cannot lock a codec out of its own log.** `decode_event`
+  checks `tag == C::TAG` before consulting the method, so `reads_tag` can only
+  widen. The obvious mistake — writing `tag == "myapp"` and dropping the
+  `|| tag == Self::TAG` — would otherwise produce a codec that reads its
+  predecessor's events and not its own, which is a defect that surfaces on the
+  *second* deployment rather than the one that introduced it.
+
+  Two tests hold this, and each rejects a different wrong implementation,
+  verified by building both: `a_codec_that_claims_a_foreign_tag_reads_it` goes
+  red when the method is added to the trait and never consulted on the decode
+  path — a version that compiles, documents a seam and satisfies every prose
+  check — and `an_override_that_forgets_its_own_tag_still_reads_what_it_wrote`
+  goes red when `reads_tag` is consulted *instead of* the own-tag check rather
+  than after it. Neither fails against the other's defect.
+
+  `a_codec_of_your_own_writes_a_tag_no_other_codec_can_read` **survives this
+  change**, and its own documentation previously said it would not — it claimed
+  to fail "under every option on the table", which was true of a registry and
+  false of a per-codec method. Corrected in place rather than deleted, because
+  the reason it survives is exactly the thing a reader needs to understand about
+  what landed.
+
+- **BREAKING (`happenstance`): `commit` and `commit_with` return
+  `CommandOutcome`, which has two success shapes.** A decision that produces no
+  events is `CommandOutcome::Nothing` and is a **success**. Until now an empty
+  `Vec` from the closure reached `EventStore::append`, which refuses an empty
+  batch (ES-20), so the commonest shape of an idempotent command — *"already
+  done, nothing to add"* — came back as `CommandError::Append` carrying
+  `AppendError::NoEvents`. A caller had to know that one variant of one store
+  error meant *your decision was fine* and every other meant *your store is
+  not*.
+
+  An enum rather than an `Option` or a field, because it puts the choice at
+  compile time on every call site, which is where the bug it catches lives:
+  forgetting to `push` into the decided `Vec` has no local symptom, and the
+  command returns `Ok` with the events simply absent. It carries no
+  `#[non_exhaustive]`, deliberately — RS-13-5's argument, since a command either
+  appended or it did not.
+
+  Migration: `let done = commit(…).await?;` followed by `done.attempts` becomes
+  `done.committed().expect(…)` or, better, a `match` that names the second arm.
+  ES-20 is untouched: the store still refuses an empty batch, and what changed
+  is that a *decision* no longer routes through it.
+
+- **BREAKING (`happenstance`): a decided event that does not match the boundary
+  it was decided on is refused, as `CommandError::OutsideBoundary`.** Nothing is
+  appended; the check runs after the closure returns and before the single
+  irreversible act, and reuses `Query::matches` rather than inventing a second
+  vocabulary for *"is this event in this boundary"*.
+
+  **The lost update this forbids.** The append condition guards the query the
+  decision was read on. An event that does not match that query is not in the
+  set the condition protects, so the next command over the same boundary reads a
+  log without it, decides as though it never happened, and its own condition is
+  satisfied. Both commands return `Ok` and the invariant they shared is gone,
+  with nothing failing anywhere.
+
+  The shape is ordinary rather than exotic — an event type whose `tags()`
+  returns `Tags::empty()` inside a model with a real scope produces it on the
+  first append — and **two of this crate's own rendered doctests taught exactly
+  that spelling**. Both are repaired: `DecisionModel`'s example now carries the
+  course tag its boundary is scoped by, and the tuple-boundary example in
+  `composition` carries both members' tags, which is what makes a composite
+  boundary mean anything.
+
+  What it does not catch, stated on the variant rather than left to be
+  discovered: `Query::Items` matches on **any** item, so on a composite boundary
+  an event matching one member satisfies the check even if it belongs to
+  another's scope. That is the union grain of the derived query rather than a
+  gap in the check, and closing it means asking which *member* an event belongs
+  to — which a boundary does not currently say.
+
+  Each of the two changes above is held by a test verified against its own wrong
+  implementation: deleting the early return fails
+  `a_decision_that_emits_nothing_is_a_success` and nothing else, and deleting the
+  scope check fails
+  `an_event_outside_its_boundary_is_refused_and_nothing_is_appended` and nothing
+  else. The first also asserts that **nothing was appended**, because a repair
+  that returned `Nothing` after submitting an empty batch would satisfy the
+  headline and change nothing.
+
+- **BREAKING in practice (`happenstance-testkit`): every mounted suite emits
+  `every_declined_capability_is_stated_by_this_fixture`, and a fixture that
+  inherits a declension now fails it.** CF-18 requires a declined capability to
+  be reported with the fixture's *stated* reason, and until now nothing outside
+  this repository could observe that: a skipped rule is a test that **passes**,
+  libtest discards a passing test's stdout, and exactly one CI in the world
+  passes `--show-output`. The machine-checked half was a meta-test in this
+  crate's own `tests/`, which never runs in an adapter's CI.
+
+  **What it asserts is not what the brief proposed.** *"Fail if a capability is
+  declined without a stated reason"* describes a state that cannot be
+  constructed — `Capability::declined` refuses an empty reason and `SUPPORTED`
+  *is* the absence of one — so a check written that way would pass on every
+  fixture that will ever exist. The real gap is **declension by inheritance**:
+  five capabilities default to a declension whose words are the testkit's, so a
+  fixture that says nothing prints this crate's prose in an adapter's CI log as
+  though it were that adapter's account of its own store.
+
+  Those five default reasons are now named public constants —
+  `UNSTATED_MID_BATCH_FAULT`, `UNSTATED_READ_FAULT`,
+  `UNSTATED_PROJECTION_SECOND_HANDLE`, `UNSTATED_RESET_REFUSAL`,
+  `UNSTATED_COMMIT_FAULT` — so an author can read exactly what their silence
+  says. The trait defaults are unchanged in wording; they now point at the
+  constants instead of repeating them.
+
+  **It runs on `wasm32` as well**, which the costing expected to have to give
+  up. The check is emitted by the *suite macro* rather than by the emitter,
+  because CF-23 makes the emitter the caller's and a third-party emitter would
+  drop it silently — but a plain `#[test]` is neither run nor listed by
+  `wasm-bindgen-test-runner`. A `cfg_attr` pair solves it: a false predicate is
+  stripped before name resolution, so `::wasm_bindgen_test` is never resolved on
+  a native build and no native adapter gains a dependency, while a `wasm32`
+  build gets `#[wasm_bindgen_test]` and the adapter already has that crate
+  because `__emit_wasm` names it.
+
+  **Two in-tree fixtures failed it on the commit that added it**, which is the
+  evidence it can fail at all. `MemoryFixture` — the reference implementation,
+  the one an adapter author copies — inherited `MID_BATCH_FAULT`, three lines
+  below its own comment arguing that *"a capability nobody mentions is a
+  capability nobody thinks about"*. `PostgresFixture` inherited `READ_FAULT`
+  while being the one adapter for which the inherited sentence is **false**:
+  `PgReadStream` `FETCH`es a server-side cursor per chunk, so there is a real
+  fetch between two pages and a real place to inject a fault. Its declension now
+  says so, names the injection (`pg_terminate_backend` on the reader's own
+  backend, or closing the cursor beneath it) and says that building it is phase
+  10's remainder. Four testkit-internal fixtures were silent too and now state
+  their own reasons.
+
+  It does **not** judge whether a stated reason is good — `"n/a"` passes.
+  Nothing mechanical separates a considered account from a plausible one, and a
+  check that tried would be a style gate wearing a conformance rule's clothes.
+
+  Migration: if your fixture declines `MID_BATCH_FAULT`, `READ_FAULT`,
+  `RESET_REFUSAL`, `COMMIT_FAULT`, or a `ProjectionFixture`'s `SECOND_HANDLE`
+  by saying nothing, write the constant with your store's own reason. The
+  failure message says which capabilities and why.
 
 - **The crate's front page now names every emitter it ships, says they are
   `#[doc(hidden)]`, and says what that costs.** CF-23 `[FROZEN]` makes the

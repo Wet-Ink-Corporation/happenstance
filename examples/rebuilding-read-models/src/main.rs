@@ -547,20 +547,32 @@ enum Fulfilment {
     },
 }
 
+/// The four names this log carries, declared once and returned by name.
+///
+/// `Handover` below re-declares one of them: it is a *narrower* view of the same
+/// log, and sharing the constant is what stops the two lists drifting apart.
+const STOCK_RECEIVED: EventType = EventType::from_static("StockReceived");
+/// See [`STOCK_RECEIVED`].
+const ORDER_PLACED: EventType = EventType::from_static("OrderPlaced");
+/// See [`STOCK_RECEIVED`].
+const ORDER_DISPATCHED: EventType = EventType::from_static("OrderDispatched");
+/// See [`STOCK_RECEIVED`].
+const ORDER_CANCELLED: EventType = EventType::from_static("OrderCancelled");
+
 impl DomainEvent for Fulfilment {
     const EVENT_TYPES: &'static [EventType] = &[
-        EventType::from_static("StockReceived"),
-        EventType::from_static("OrderPlaced"),
-        EventType::from_static("OrderDispatched"),
-        EventType::from_static("OrderCancelled"),
+        STOCK_RECEIVED,
+        ORDER_PLACED,
+        ORDER_DISPATCHED,
+        ORDER_CANCELLED,
     ];
 
     fn event_type(&self) -> EventType {
         match self {
-            Self::StockReceived { .. } => Self::EVENT_TYPES[0].clone(),
-            Self::OrderPlaced { .. } => Self::EVENT_TYPES[1].clone(),
-            Self::OrderDispatched { .. } => Self::EVENT_TYPES[2].clone(),
-            Self::OrderCancelled { .. } => Self::EVENT_TYPES[3].clone(),
+            Self::StockReceived { .. } => STOCK_RECEIVED,
+            Self::OrderPlaced { .. } => ORDER_PLACED,
+            Self::OrderDispatched { .. } => ORDER_DISPATCHED,
+            Self::OrderCancelled { .. } => ORDER_CANCELLED,
         }
     }
 
@@ -611,11 +623,11 @@ enum Handover {
 }
 
 impl DomainEvent for Handover {
-    const EVENT_TYPES: &'static [EventType] = &[EventType::from_static("OrderDispatched")];
+    const EVENT_TYPES: &'static [EventType] = &[ORDER_DISPATCHED];
 
     fn event_type(&self) -> EventType {
         match self {
-            Self::OrderDispatched { .. } => Self::EVENT_TYPES[0].clone(),
+            Self::OrderDispatched { .. } => ORDER_DISPATCHED,
         }
     }
 
