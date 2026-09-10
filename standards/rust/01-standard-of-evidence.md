@@ -125,7 +125,7 @@ demonstrate. The gate is green, the atom looks proved, and the constraint it
 documents has been unchecked since phase 0.
 
 **Evidence.** `xtask/src/constitution.rs:22 (cfg(doctest))` ·
-`spec/SPECIFICATION.md:6152 (rustdoc on stable 1.97.1)` ·
+`spec/SPECIFICATION.md:6177 (rustdoc on stable 1.97.1)` ·
 [rustdoc unstable features](https://doc.rust-lang.org/rustdoc/unstable-features.html#error-numbers-for-compile_fail-doctests)
 *(checked 2026-08-09, rustc 1.97.1)*
 

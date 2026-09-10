@@ -228,8 +228,8 @@ and the day a `Failed` variant lands those emitters build unchanged and report
 nothing for it — the failure is swallowed by the arm the attribute forced them to
 write, and the adapter's CI is green on a suite that found a defect.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1133 (Deliberately exhaustive)` ·
-`crates/happenstance-core/src/limits.rs:53 (non_exhaustive)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1190 (Deliberately exhaustive)` ·
+`crates/happenstance-core/src/limits.rs:102 (non_exhaustive)` ·
 [SPECIFICATION VT-25](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) ·
 [cargo SemVer: enum variants](https://doc.rust-lang.org/cargo/reference/semver.html) *(checked 2026-08-09, rustc 1.97.1)*

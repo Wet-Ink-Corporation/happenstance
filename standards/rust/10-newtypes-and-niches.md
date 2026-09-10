@@ -259,5 +259,5 @@ after which deduplication stops working in one direction and nothing raises an
 error.
 
 **Evidence.** `crates/happenstance-core/src/identity.rs:34 (has a byte order and an array does not)` ·
-`crates/happenstance-core/src/identity.rs:379 (store_id_orders_lexicographically_over_its_bytes)` ·
+`crates/happenstance-core/src/identity.rs:392 (store_id_orders_lexicographically_over_its_bytes)` ·
 [SPECIFICATION VT-6](../../spec/SPECIFICATION.md)

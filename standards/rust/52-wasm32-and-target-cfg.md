@@ -52,7 +52,7 @@ four green wasm32 steps as "it runs on Workers" ships an adapter that aborts the
 module on its first recorded timestamp, found by a user in a Worker — where
 `println!` writes nowhere, so nothing says why.
 
-**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:420 (The host build is a convenience rather than evidence)` ·
+**Evidence.** `crates/happenstance-cloudflare/src/lib.rs:429 (The host build is a convenience rather than evidence)` ·
 `crates/happenstance-core/src/identity.rs:154 (an adapter that has a clock)` ·
 `xtask/src/main.rs:263 (name: "wasm32 build of the contract crate")` ·
 [rustc — wasm32-unknown-unknown](https://doc.rust-lang.org/nightly/rustc/platform-support/wasm32-unknown-unknown.html) *(checked 2026-08-09, rustc 1.97.1)*
@@ -106,7 +106,7 @@ asked for.
 
 **Evidence.** `crates/happenstance-testkit/Cargo.toml:115 (optional = true)` ·
 `crates/happenstance-testkit/src/fixtures.rs:525 (feature is not target-scoped)` ·
-`xtask/src/main.rs:1013 (feature is not target-scoped)`
+`xtask/src/main.rs:1024 (feature is not target-scoped)`
 
 ## RS-52-3. A `cfg` covers the probe *and* its caller, or the probe is dead code on the other target.
 
@@ -156,7 +156,7 @@ message about an unused function that says nothing about targets. The author
 reproduces none of it locally, because `cargo test` never builds for wasm32.
 
 **Evidence.** `crates/happenstance-cloudflare/tests/support/mod.rs:142 (is denied under)` ·
-`crates/happenstance-cloudflare/src/lib.rs:601 (mod not_send_probe)` ·
+`crates/happenstance-cloudflare/src/lib.rs:610 (mod not_send_probe)` ·
 `xtask/src/main.rs:336 (name: "wasm32 build of the Cloudflare adapter")`
 
 ## RS-52-4. The per-test attribute is the caller's, because `#[test]` cannot run on wasm32.
@@ -216,6 +216,6 @@ would then be held hostage by a version bump of the crate whose only job is to
 grade them, and the failure would read as a missing dependency in their crate.
 
 **Evidence.** `crates/happenstance-testkit/src/registry.rs:95 (captured as raw token trees)` ·
-`crates/happenstance-testkit/src/registry.rs:282 (macro_rules! __emit_wasm {)` ·
+`crates/happenstance-testkit/src/registry.rs:284 (macro_rules! __emit_wasm {)` ·
 `.github/workflows/ci.yml:156 (Install the wasm32 conformance runner)` ·
 [SPECIFICATION CF-23](../../spec/SPECIFICATION.md)

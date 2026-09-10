@@ -264,8 +264,8 @@ splitting the type, and the author who instead deletes the bare impl passes the
 gate on the host and deletes the `wasm32` build that the single source file
 existed to serve.
 
-**Evidence.** `crates/happenstance-neon/src/event_store.rs:29 (conflicting implementations of trait EventStore)` ·
-`crates/happenstance-neon/src/event_store.rs:19 (compiles *for both targets)` ·
+**Evidence.** `crates/happenstance-neon/src/event_store.rs:49 (conflicting implementations of trait EventStore)` ·
+`crates/happenstance-neon/src/event_store.rs:39 (compiles *for both targets)` ·
 [SPECIFICATION ES-7](../../spec/SPECIFICATION.md) *(the blanket impl a
 direct impl must not collide with)* ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md) ·
@@ -325,7 +325,7 @@ If the port itself genuinely must be erased, `dynosaur` generates the wrapper;
 its 0.3 spelling is `#[dynosaur::dynosaur(DynStore = dyn(box) EventStore)]`, and
 it is not a dependency of this workspace.
 
-**Evidence.** `crates/happenstance-neon/src/event_store.rs:1030 (Pin<Box<dyn Future)` ·
+**Evidence.** `crates/happenstance-neon/src/event_store.rs:1058 (Pin<Box<dyn Future)` ·
 [SPECIFICATION ES-42](../../spec/SPECIFICATION.md) *(the hand-written
 `Pin<Box<dyn Stream + 'a>>` wrapper, and why it needs no `Unpin` bound)* ·
 [ADR-0001](../../.kb/decisions/0001-async-port-flavours.md) ·
