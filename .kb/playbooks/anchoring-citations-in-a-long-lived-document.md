@@ -37,6 +37,7 @@ related:
   - kb-open-question-disjoint-boundaries-no-clause-001
   - kb-open-question-es-6-unwritable-rule-001
   - kb-open-question-read-page-budget-001
+  - kb-open-question-experiment-raw-output-ignored-001
 source_paths:
   - .kb/_intake/lesson-anchoring-citations-in-a-long-lived-document.md
   - .kb/_intake/2026-09-03-pre-publication-review.md
@@ -57,7 +58,7 @@ source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/sqlite-lane-spec-citation-repoints.md
   - .kb/_intake/remediation-2026-09-04-briefs/query-partition-public-surface.md
   - .kb/_intake/remediation-2026-09-04-briefs/sole-evidence-pins-and-moved-file-citations.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-09
 ---
 
 # Anchoring citations in a document whose targets move under it

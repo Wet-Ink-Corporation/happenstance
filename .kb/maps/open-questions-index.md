@@ -73,7 +73,20 @@ summary: >-
   kb-open-question-global-vs-boundary-visibility-001, plus two retitled without changing scope:
   kb-open-question-model-family-rule-no-clause-001 (the stale "seven clauses" count dropped) and
   kb-open-question-cf-36-unperformed-cross-reference-001 (the cross-reference it named absent now
-  exists; the question moved to what the new check still leaves open).
+  exists; the question moved to what the new check still leaves open). The 2026-09-09 wave
+  (`2026-09-09-intake`) added two new questions — kb-open-question-one-shot-http-es-11-001 (ADR-0061
+  narrowed ES-11's asynchronous-driver sufficiency condition and recorded that `happenstance-neon`
+  does not satisfy it; open is whether any one-shot-HTTP shape can) and
+  kb-open-question-experiment-raw-output-ignored-001 (`.gitignore`'s `*-output.txt` pattern eats the
+  one experiment result a README cites by name, a wave-discovered gap rather than one sourced from
+  either staged intake file) — and amended four existing questions in place without a status flip:
+  kb-open-question-probe-read-through-signature-001 (widened from one method to the whole probe seam,
+  and ties the sharpened PS-2 bar to ADR-0060's gate), kb-open-question-provisional-falsifiers-001
+  (two more markers whose falsifiers never could fire, PS-4 and PS-2, joining ES-7 and VT-9's
+  already-fired pair), kb-open-question-es-11-sqlite-ceiling-sample-cost-001 (its third sub-question
+  answered by ADR-0061; sub-questions 1 and 2 stay open) and
+  kb-open-question-reset-refusal-declension-001 (the window it named has closed — four adapters now
+  run the projection suite and all four decline the capability — without answering the question).
 depends_on: []
 related:
   - kb-map-domain-001
@@ -89,7 +102,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-02-intake
   - .kb/_governance/integration-waves/2026-09-04-intake
   - .kb/_governance/integration-waves/2026-09-07-intake
-last_reviewed: 2026-09-07
+  - .kb/_governance/integration-waves/2026-09-09-intake
+last_reviewed: 2026-09-09
 ---
 
 # Open-questions index
@@ -170,6 +184,14 @@ what the question is, not its evidence. The last two were added by the
   (`kb-decision-0001`, `kb-decision-0008`); VT-9 is one of ADR-0014's four
   provisional parts (`kb-decision-0014`), owned by phase 9's Workers
   skeleton. Moving either marker is still an ADR's act, not this atom's.
+  Amended 2026-09-09: two further markers join them, and they sharpen the observation rather than
+  repeat it, because these falsifiers never could fire rather than having already fired harmlessly.
+  PS-4's Rust-level limb is foreclosed by the port for every batch shape, since `Projection::apply`
+  is synchronous and a traversal is I/O; PS-2 is the same defect one level over and wider, since that
+  clause is `[FROZEN]` — what cannot be met is its bar rather than a falsifier, and thirteen
+  `[PROVISIONAL]` clauses wait on it alone. ADR-0060 (`kb-decision-0060`) keeps the port's gate on
+  that ground without rewording PS-2's `MUST` or moving a marker. A falsifier can be decoration a
+  priori, not only in retrospect, and `spec-trace` detects neither shape.
 - **Open** — [`nothing-owns-the-post-phase-reconciliation.md`](../open-questions/nothing-owns-the-post-phase-reconciliation.md)
   (`kb-open-question-post-phase-reconciliation-001`) — no phase carries an
   item obliging anyone to read the specification back against the tree a
@@ -239,6 +261,15 @@ what the question is, not its evidence. The last two were added by the
   whether that longer record may be corrected in place. Grounded in a live falsified figure at
   `references/adr/0012-append-shape-and-preconditions.md:172-174`, superseded by ADR-0015's change
   and the measured allocation cost. Added 2026-09-07.
+- **Open** — [`experiment-raw-output-eaten-by-the-ignore-rule.md`](../open-questions/experiment-raw-output-eaten-by-the-ignore-rule.md)
+  (`kb-open-question-experiment-raw-output-ignored-001`) — `experiments/ladybug-driver-probes/README.md`
+  states that `results/probe-output.txt` is its output, verbatim, but no `results/` directory exists
+  in the tree; `.gitignore:69`'s `*-output.txt` pattern, written at the pre-publication sweep to
+  catch stray transcripts carrying an absolute path, is the cause, invisible on inspection since 321
+  files are tracked under other `experiments/**/results/` paths and none happens to collide with the
+  suffix. Discovered by this wave itself rather than sourced from either staged intake file. Three
+  remedies of different cost are named and none is chosen: rename the file, carve a tracked
+  exception, or treat the README's inline transcription as the evidence of record. Added 2026-09-09.
 
 ## Contract ports, conformance, and the ADR corpus (2026-08-10 ADR import)
 
@@ -559,7 +590,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-probe-read-through-signature-001`) — whether `ProjectionProbe::probe_read_through`
   moves to `&mut Self::Batch` / async / fallible before phase 10, or the live-transaction adapter is
   built against today's shape and PS-2 part 2 is judged on a declared-false capability; corroborates
-  ADR-0036's part-2-unmet finding with a second causal reading. Added 2026-09-07.
+  ADR-0036's part-2-unmet finding with a second causal reading. Added 2026-09-07. Amended 2026-09-09:
+  the honest scope is the whole probe seam, not one method — `probe_write` and `probe_delete_all` are
+  synchronous and infallible too, so the recommended `&mut`/async/`Result` move on
+  `probe_read_through` is not sufficient alone — and ADR-0060 (`kb-decision-0060`) keeps the port's
+  gate on exactly this ground, declining the signature change as PS-2's owner's call rather than an
+  adapter lane's; the question stays open, wider than when it was written.
 - **Open** — [`projection-batch-sql-seam-statement-type.md`](../open-questions/projection-batch-sql-seam-statement-type.md)
   (`kb-open-question-projection-batch-sql-statement-type-001`) — whether `SqliteBatch::push`'s
   landed `&'static str` narrowing is the seam's final shape or a minted `Statement` newtype follows
@@ -572,7 +608,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-reset-refusal-declension-001`) — `RESET_REFUSAL` has no CF-39-shaped clause
   after ADR-0042 retracted the trait-level honesty requirement, so a fixture can declare it and
   override `protect_from_reset` with an empty body, passing `refused_reset_changes_nothing`
-  vacuously. Added 2026-09-07.
+  vacuously. Added 2026-09-07. Amended 2026-09-09: the window this atom originally named has closed
+  without answering it — four storage adapters (`happenstance-sqlite`, `happenstance-postgres`,
+  `happenstance-neon`, `happenstance-ladybug`, the last new at ADR-0025) now invoke
+  `projection_store_conformance!`, and all four decline `RESET_REFUSAL`, so the population is still
+  empty and the family still has no named wrong implementation; the cost of leaving it open no longer
+  has a first-adapter deadline behind it.
 - **Open** — [`testkit-projection-module-unstable-projection-exemption-scope.md`](../open-questions/testkit-projection-module-unstable-projection-exemption-scope.md)
   (`kb-open-question-projection-module-exemption-scope-001`) — ADR-0036's unstable-projection
   exemption text names only `happenstance-core` and `happenstance`; `happenstance-testkit`'s
@@ -587,7 +628,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-es-11-sqlite-ceiling-sample-cost-001`) — `SqliteEventStore::read`'s first poll
   stalls 635ms (39.3x the idle floor) under contention because ES-11 forces `sample_ceiling` to take
   the connection mutex synchronously before the `spawn_blocking` hop; a second native-adapter data
-  point against ES-11's `[PROVISIONAL]` marker. Added 2026-09-07.
+  point against ES-11's `[PROVISIONAL]` marker. Added 2026-09-07. Amended 2026-09-09: its third
+  sub-question — whether this counts as native-adapter evidence bearing on ES-11 — is now answered by
+  ADR-0061 (`kb-decision-0061`), which narrows the asynchronous-driver sufficiency condition and
+  keeps ES-11 `[PROVISIONAL]`, moving what stays open to
+  `kb-open-question-one-shot-http-es-11-001`; happenstance-sqlite meets the narrowed condition for
+  exactly the reason the stall exists (the pre-spawn sample takes the process mutex the writer
+  takes). Sub-questions 1 and 2 are untouched — neither candidate remedy is measured and the 635ms
+  figure stands — so this atom stays open.
 - **Open** — [`then-empty-emission-idiom-and-the-nothing-to-do-channel.md`](../open-questions/then-empty-emission-idiom-and-the-nothing-to-do-channel.md)
   (`kb-open-question-then-empty-emission-idiom-001`) — how `then(&[])` reads once `commit`'s outcome
   is two-armed (three of five in-tree call sites would break), and whether `decide` can express
@@ -596,6 +644,15 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-scope-coverage-helper-projection-gap-001`) — the additive, enum-total
   `assert_scope_covered` test helper ADR-0047 endorses but sequences after this, and the identical
   unchecked tags/scope pair on the projection port ADR-0047's fix does not reach. Added 2026-09-07.
+- **Open** — [`one-shot-http-conformance-to-es-11.md`](../open-questions/one-shot-http-conformance-to-es-11.md)
+  (`kb-open-question-one-shot-http-es-11-001`) — ADR-0061 narrowed ES-11's asynchronous-driver
+  sufficiency condition to require ordering against a later append by something the store itself
+  honours, and recorded that `happenstance-neon` does not satisfy it. Open is not whether this
+  adapter can be fixed but whether any one-shot-HTTP shape can meet the obligation at all: the
+  transport offers exactly one ordering primitive (HTTP/2 over one multiplexed connection, which
+  narrows the race without closing it) and nothing else in a pooled-proxy path orders one backend's
+  snapshot against another's commit. Nothing forces an answer today, because `NEON_CONNECTION` is
+  not a repository secret and the live-neon job is gated on it. Added 2026-09-09.
 
 ## The typed layer: decision models, codecs, and payload evolution
 
