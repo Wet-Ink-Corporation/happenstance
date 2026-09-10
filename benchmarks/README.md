@@ -109,15 +109,21 @@ from your own host if you re-run it; the toolchain and SQLite rows are printed
 at the top of `results/raw/conditions.txt` and read back off the live process by
 `src/report.rs`, so they are checkable rather than transcribed.
 
-**There are two hosts now, and both tables stay.** Host A produced every figure
-currently under `results/`. Host B is the dedicated measurement machine
+**There are two hosts, and Host B is now the primary one.** Every figure in
+`results/GRADES.md` §§1–7 comes from Host B, the dedicated measurement machine
 (`ops/host/`), provisioned because the 40% between-run movement in
-[What none of this shows](#what-none-of-this-shows) is a property of a busy
-laptop rather than of this library. Deleting Host A's table while Host A's
-numbers are still in `results/` would leave a conditions table that does not
-describe its own results, which is worse than carrying two.
+[What none of this shows](#what-none-of-this-shows) turned out to be a property
+of a busy laptop rather than of this library.
 
-### Host A — Windows 11 laptop (every figure in `results/` through 2026-09-08)
+Host A's table stays, and not out of sentiment. `GRADES.md` §8 is the Host A
+record, and it does two jobs nothing else can: it is the other half of the
+cross-host check — same instrument, different hardware, different OS, a 52×
+slower clock, three of four ratios inside 10% — and it is the trace by which four
+figures were caught going false as the code moved. Its raw output is still under
+`results/raw/` without the `-linux` suffix, so a conditions table that stopped
+describing it would be a table that does not describe its own results.
+
+### Host A — Windows 11 laptop (`results/GRADES.md` §8, and everything through 2026-09-08)
 
 | | |
 | --- | --- |
@@ -133,7 +139,7 @@ describe its own results, which is worse than carrying two.
 | Timer floor | Measured per run and printed with it — around 50 ns per sample for the `Instant::now()` pair that brackets each one. Any arm within 10× of it is labelled `TIMER-DOMINATED` |
 | Command | `./run.sh` (about 35–45 minutes), or `./run.sh --fast` (about four) |
 
-### Host B — `britton-ai`, the dedicated measurement host
+### Host B — `britton-ai`, the dedicated measurement host (`GRADES.md` §§1–7)
 
 Provisioned and tuned by [`ops/host/`](../ops/host/README.md); every row below is
 declared in `ops/host/host.env` and asserted by `ops/host/preflight.sh` before a
