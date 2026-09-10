@@ -149,8 +149,29 @@ not the same as what a user needed to be told.
 
 ### Changed
 
-- **The `docs.rs configuration (nightly)` gate step covers all five publishable
-  crates**, and covered three until now. The step exists because `docsrs` is a
+- **A conditional append against `happenstance-postgres` that loses a
+  serialisation fight is now retried with backoff rather than with a bare
+  budget.** A conditional append runs `SERIALIZABLE`, so two whose predicates
+  overlap are adjudicated at commit and one is aborted with `40001`. The adapter
+  re-runs the loser up to `SERIALISATION_ATTEMPTS` times, and until this release
+  it re-ran them immediately — a budget with no spacing, which is a count of
+  attempts rather than a mechanism for resolving contention, because every
+  contender retries in lockstep. The wait is now exponential, capped at 64 ms,
+  and **fully jittered**: uniform in `[0, ceiling]` rather than `ceiling ± a
+  bit`, which is the arm that actually decorrelates a herd.
+
+  What a caller budgets for: up to eight serial round trips and roughly a
+  quarter second of waiting, paid **only** by a writer already losing a
+  serialisation fight. An uncontended append pays nothing.
+
+  Recorded here because nothing else recorded it. The mechanism landed three
+  hours before the `0.2.0` certification review was written, and a search for
+  `backoff` or `jitter` across this file, `SESSION-DECISIONS-0.2.0.md`,
+  `HANDOVER.md` and the review itself returned **zero hits in all four** — a
+  user-visible latency change with no entry in any ledger.
+
+- **The `docs.rs configuration (nightly)` gate step covers all seven
+  publishable crates**, and covered three until now.
   cfg nobody sets except docs.rs, which builds *after* publication — so its whole
   argument is that the failure is unfixable afterwards, and it was not covering
   two of the artifacts it would be unfixable for. `happenstance-cloudflare` gets
@@ -164,8 +185,6 @@ not the same as what a user needed to be told.
   against `spec-trace` rather than against prose; this is what makes that a check
   rather than a pass somebody did, on a ledger that has been wrong in both
   directions twice without anything noticing.
-
-### Changed
 
 - **`nothing_below_an_observed_position_appears_later`'s schedule** (ES-10,
   CF-13). The rule's name, its assertions and the clause it checks are all
@@ -459,7 +478,7 @@ not the same as what a user needed to be told.
 
 ## [0.2.0] — 2026-09-06
 
-The first stable release, and the first to carry all five crates. What the
+The first stable release, and the first to carry all seven crates. What the
 number promises is narrower than the word *stable* usually implies, and the
 two halves are worth separating: the `EventStore` clauses marked `[FROZEN]`
 in [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
