@@ -324,16 +324,29 @@ enum Legacy {
     },
 }
 
+/// The four names this log has ever carried, declared once.
+///
+/// Two of them mean the same *reading* at different schema versions, and that is
+/// the whole point of this example — so they are named rather than indexed.
+/// Indexing the declaration list gave two subscripts that differ by one
+/// character and mean "what is written now" and "what may still be read";
+/// `TEMPERATURE_REPORTED_V2` and `TEMPERATURE_REPORTED` cannot be confused by a
+/// reader, or reordered into a lie by an editor.
+const DEVICE_REGISTERED: EventType = EventType::from_static("DeviceRegistered");
+/// See [`DEVICE_REGISTERED`].
+const FIRMWARE_UPGRADED: EventType = EventType::from_static("FirmwareUpgraded");
+/// The **v1** reading. Read-only: nothing writes this name any more.
+const TEMPERATURE_REPORTED: EventType = EventType::from_static("TemperatureReported");
+/// The **v2** reading, and what a reading written now carries.
+const TEMPERATURE_REPORTED_V2: EventType = EventType::from_static("TemperatureReportedV2");
+
 impl DomainEvent for Legacy {
-    const EVENT_TYPES: &'static [EventType] = &[
-        EventType::from_static("DeviceRegistered"),
-        EventType::from_static("TemperatureReported"),
-    ];
+    const EVENT_TYPES: &'static [EventType] = &[DEVICE_REGISTERED, TEMPERATURE_REPORTED];
 
     fn event_type(&self) -> EventType {
         match self {
-            Self::DeviceRegistered { .. } => Self::EVENT_TYPES[0].clone(),
-            Self::TemperatureReported { .. } => Self::EVENT_TYPES[1].clone(),
+            Self::DeviceRegistered { .. } => DEVICE_REGISTERED,
+            Self::TemperatureReported { .. } => TEMPERATURE_REPORTED,
         }
     }
 
@@ -401,19 +414,21 @@ impl DomainEvent for Telemetry {
     /// before the upgrade — silently, and with no test, lint or conformance
     /// rule that has an opinion. The list is where a log's past is kept alive.
     const EVENT_TYPES: &'static [EventType] = &[
-        EventType::from_static("DeviceRegistered"),
-        EventType::from_static("FirmwareUpgraded"),
-        EventType::from_static("TemperatureReported"),
-        EventType::from_static("TemperatureReportedV2"),
+        DEVICE_REGISTERED,
+        FIRMWARE_UPGRADED,
+        TEMPERATURE_REPORTED,
+        TEMPERATURE_REPORTED_V2,
     ];
 
     fn event_type(&self) -> EventType {
         match self {
-            Self::DeviceRegistered { .. } => Self::EVENT_TYPES[0].clone(),
-            Self::FirmwareUpgraded { .. } => Self::EVENT_TYPES[1].clone(),
-            // Index 3, never index 2. A reading written now is a v2 reading;
-            // the v1 name above is read-only.
-            Self::TemperatureReported { .. } => Self::EVENT_TYPES[3].clone(),
+            Self::DeviceRegistered { .. } => DEVICE_REGISTERED,
+            Self::FirmwareUpgraded { .. } => FIRMWARE_UPGRADED,
+            // The v2 name, never the v1 one. A reading written now is a v2
+            // reading; the v1 name is read-only. This used to be a subscript
+            // into the list above, carried by a comment saying "index 3, never
+            // index 2" — the comment a named constant makes unnecessary.
+            Self::TemperatureReported { .. } => TEMPERATURE_REPORTED_V2,
         }
     }
 
@@ -443,10 +458,9 @@ impl DomainEvent for Telemetry {
         event_type: &EventType,
         data: &Bytes,
     ) -> Result<Self, CodecError> {
-        // `Self::EVENT_TYPES[2]` and not the literal `"TemperatureReported"`:
-        // the list above is where the name is declared, and a second spelling
-        // here would be a second place to get it wrong.
-        if *event_type == Self::EVENT_TYPES[2] {
+        // The named v1 constant, not the literal `"TemperatureReported"`: one
+        // declaration, so there is no second spelling to get wrong.
+        if *event_type == TEMPERATURE_REPORTED {
             return Ok(upcast(codec.decode::<Legacy>(data)?));
         }
 

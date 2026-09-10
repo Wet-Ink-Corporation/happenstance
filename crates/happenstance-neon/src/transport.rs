@@ -258,6 +258,22 @@ pub trait SqlTransport {
     /// # Errors
     ///
     /// Returns [`Self::Error`] only when no HTTP response was obtained.
+    /// # Cancellation, and what this adapter does NOT assume
+    ///
+    /// This adapter makes **no assumption that dropping the returned future
+    /// cancels the request**. `NeonEventStore::append` awaits this method, so
+    /// ES-23's answer for the store is inherited from whatever an implementor
+    /// does here.
+    ///
+    /// An implementor **MUST NOT** present its transport as cancellation-safe
+    /// unless it can guarantee the endpoint never observes an abandoned
+    /// request. That is a guarantee about a remote system rather than about a
+    /// `Future`, and dropping a client future is not it: a request already
+    /// written to a socket has been sent.
+    ///
+    /// Stated as this adapter's expectation of a transport rather than as a
+    /// measured fact — nothing here has measured what any particular endpoint
+    /// does with a request whose response nobody reads.
     fn round_trip(
         &self,
         request: SqlRequest,

@@ -1,0 +1,30 @@
+    Finished `release` profile [optimized] target(s) in 0.05s
+     Running `target/release/overhead`
+commit:    54044ac-dirty
+date:      2026-09-10
+toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
+target:    x86_64-unknown-linux-gnu
+profile:   release
+cpus:      16
+sqlite:    3.53.2
+
+[overhead/append] paired run: 200 recorded rounds, timer overhead 3004ns/sample
+  raw/same-schema              n=200     median=      123647ns p95=      163071ns p99=     6156287ns max=     6873087ns              drift=0.971
+  raw/hand-rolled              n=200     median=       50655ns p95=       75263ns p99=      117375ns max=     6897663ns              drift=0.942
+  happenstance-sqlite          n=200     median=      205183ns p95=      387839ns p99=     5599231ns max=     7806975ns              drift=0.986
+
+[overhead/append] raw/same-schema / raw/hand-rolled = 2.44x
+[overhead/append] raw/hand-rolled / raw/same-schema = 0.41x
+[overhead/append] happenstance-sqlite / raw/same-schema = 1.66x
+[overhead/append] happenstance-sqlite / raw/hand-rolled = 4.05x
+[overhead/replay] paired run: 200 recorded rounds, timer overhead 2936ns/sample
+  raw/same-schema              n=200     median=      303103ns p95=      375807ns p99=      387327ns max=      391935ns              drift=0.969
+  happenstance-sqlite          n=200     median=     1677311ns p95=     1768447ns p99=     1997823ns max=     2492415ns              drift=0.997
+
+[overhead/replay] happenstance-sqlite / raw/same-schema = 5.53x
+[cross-adapter/append] paired run: 200 recorded rounds, timer overhead 2924ns/sample
+  memory                       n=200     median=        5727ns p95=        6707ns p99=        9015ns max=       13271ns              drift=1.000 TIMER-DOMINATED
+  sqlite                       n=200     median=      183807ns p95=      360191ns p99=     5660671ns max=     7254015ns              drift=1.013
+  NOTE: an arm marked TIMER-DOMINATED has a median below 10x the timer overhead, so most of what it reports is the clock. Measure that scale with criterion, which amortises the clock across a batch of iterations instead of paying for it per operation.
+
+[cross-adapter/append] sqlite / memory = 32.09x

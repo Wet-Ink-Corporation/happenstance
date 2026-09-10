@@ -89,7 +89,7 @@ clippy, not cargo's manifest warnings, so every step of the gate stays green.
 The real fix is a workspace edit that changes what all eight crates resolve.
 
 **Evidence.** `Cargo.toml:50 (Cargo forbids a member from)` ·
-`crates/happenstance-core/Cargo.toml:37 (default = ["std", "memory"])` ·
+`crates/happenstance-core/Cargo.toml:48 (default = ["std", "memory"])` ·
 [Cargo Book — inheriting a dependency from a workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html#the-dependencies-table) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-3. `default-features = false` on an external crate is a claim about what its default pulls in — measure it.
@@ -125,7 +125,7 @@ mentions.
 
 **Evidence.** `Cargo.toml:91 (ffi-sqlite-wasm-rs)` ·
 `Cargo.toml:102 (RUSTSEC-2023-0089)` ·
-`.github/workflows/ci.yml:1029 (cargo deny check advisories)` ·
+`.github/workflows/ci.yml:1151 (cargo deny check advisories)` ·
 [RUSTSEC-2023-0089](https://rustsec.org/advisories/RUSTSEC-2023-0089.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-4. A licence rejection is a dependency choice, and the offender is rarely the crate you expect.
@@ -229,6 +229,6 @@ reasoning for the state you are leaving is what a reviewer checks the change
 against.
 
 **Evidence.** `crates/happenstance-cloudflare/Cargo.toml:44 (was deliberately absent)` ·
-`crates/happenstance-cloudflare/src/lib.rs:593 (exists to run four assertions)` ·
+`crates/happenstance-cloudflare/src/lib.rs:602 (exists to run four assertions)` ·
 `crates/happenstance-cloudflare/src/sql_storage.rs:5 (Four properties are load-bearing)` ·
 `xtask/Cargo.toml:17 (Deliberately absent)`

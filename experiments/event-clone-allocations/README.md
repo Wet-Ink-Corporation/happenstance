@@ -11,8 +11,19 @@ to any workspace manifest — `Cargo.lock` at the repository root is untouched.
 
 ## Why it exists
 
-Four places in this repository state the cost of cloning an `Event` as **two**
-heap allocations:
+Four places in this repository stated the cost of cloning an `Event` as **two**
+heap allocations. The sentences are quoted below **as they stood when this study
+was run**, and are deliberately not rewritten here: a record of what was measured
+against is worthless once it is edited to match the outcome.
+
+**Two of the four are now corrected**, both in `happenstance-core`, at the `0.2.0`
+release pass — `event.rs` and `memory.rs` now state `t + 2` and name the current
+field types. The `spec/SPECIFICATION.md` row and the `references/adr/` row are
+**not** corrected: the ADR record is blocked on the open question about whether
+`references/adr/` may be corrected in place, and the specification row is queued
+behind it. ADR-0055's own body asserts all four were corrected, which was true of
+none of them when it was written and is true of two of them now; an accepted atom
+is immutable, so that sentence is repaired by a superseding atom rather than here.
 
 | site | the sentence |
 | --- | --- |

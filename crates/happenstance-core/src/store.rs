@@ -1158,31 +1158,6 @@ help: disambiguate the method for candidate #2
         }
     }
 
-    /// The workspace lockfile, so a positional claim can be tied to a version.
-    const LOCKFILE: &str = include_str!("../../../Cargo.lock");
-
-    /// The `trait-variant` release whose expansion was actually read.
-    ///
-    /// Bumping this constant is not a chore. It is the signal to re-open
-    /// `variant.rs` and confirm the copying below still happens, because nothing
-    /// else in this repository can see it.
-    const TRAIT_VARIANT_VERIFIED: &str = "0.1.3";
-
-    /// The version `Cargo.lock` resolves `trait-variant` to.
-    ///
-    /// Parsed rather than pinned in the manifest: `trait-variant = "0.1.3"` is a
-    /// caret requirement, so `0.1.4` would resolve without the manifest changing.
-    /// The lockfile is what the gate builds against (`--locked`), so it is the
-    /// only place the *resolved* version can be read.
-    fn resolved_trait_variant() -> &'static str {
-        LOCKFILE
-            .split("name = \"trait-variant\"")
-            .nth(1)
-            .and_then(|rest| rest.split("version = \"").nth(1))
-            .and_then(|rest| rest.split('"').next())
-            .expect("the workspace lockfile resolves the derivation's crate")
-    }
-
     /// The attributes sit where `trait_variant` copies them onto the derived flavour.
     ///
     /// Two attributes, not the three the design projected, and the reason is
@@ -1223,17 +1198,12 @@ help: disambiguate the method for candidate #2
             "the attributes must sit on the trait the derivation copies from, or the \
              `Send` flavour carries no search key at all"
         );
-        assert_eq!(
-            resolved_trait_variant(),
-            TRAIT_VARIANT_VERIFIED,
-            "the two attributes above reach `SendEventStore` only because \
-             trait-variant {TRAIT_VARIANT_VERIFIED} rebuilds the derived trait with \
-             `..tr.clone()` (`trait-variant-{TRAIT_VARIANT_VERIFIED}/src/variant.rs:115-123`), \
-             copying the base trait's attributes onto it. The position asserted above \
-             cannot see that, so the version stands in for it: read the new \
-             `variant.rs`, confirm the attributes are still copied, then move this \
-             constant"
-        );
+        // The other half of this proof — that `trait-variant` is still the
+        // version whose `variant.rs` was actually read, without which the
+        // position asserted above is a silent proxy — lives in
+        // `tests/trait_variant_pin.rs`. It has to: it reads the workspace
+        // `Cargo.lock`, and an `include_str!` from a file under `src/` reaches
+        // outside this package, which ships. Both still run in the workspace.
     }
 }
 

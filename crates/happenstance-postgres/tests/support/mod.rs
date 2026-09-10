@@ -428,6 +428,32 @@ impl Fixture for PostgresFixture {
     /// "restart" could mean, and the trait says so.
     const REOPEN: Capability = Capability::SUPPORTED;
 
+    /// **Declined**, and this is the one capability this adapter exists to be
+    /// unable to offer.
+    ///
+    /// The crate root says it in its own words: *"Read-your-own-writes does not
+    /// hold, and is not claimed."* ES-10 is bought with `xid8` +
+    /// `pg_snapshot_xmin`, so a row becomes visible when its writing
+    /// transaction id falls below the frontier beneath which nothing can still
+    /// be in flight — and that frontier belongs to the **server**, not to this
+    /// store. An unrelated open transaction in an unrelated database holds it
+    /// back, measured at 0.688 ms unloaded and 4010.719 ms behind a five-second
+    /// write elsewhere.
+    ///
+    /// Measured consequence, which is why this override exists: the model
+    /// family passes on a quiet machine and fails on a loaded one, on the
+    /// **same** deterministic op sequence. All 256 cases pass against a local
+    /// container; the same commit fails on a CI runner at op 0 of case 1 with
+    /// *"the log holds 0 event(s); 3 were accepted"*. That is a flake, and
+    /// `[FROZEN]` CF-33 names a flaky conformance rule as worse than none.
+    const READ_YOUR_OWN_WRITES: Capability = Capability::declined(
+        "reads and `head` admit only rows whose `xact_id` is below \
+         `pg_snapshot_xmin(pg_current_snapshot())`, so an append this caller \
+         was just told succeeded is not visible to it until every transaction \
+         open anywhere on the server when it committed has ended. `append` \
+         returning `Ok(P)` is a durability promise, not a visibility one.",
+    );
+
     /// Supported, and armed for real.
     ///
     /// It was declined while `append` was `todo!()` — a fault armed against a

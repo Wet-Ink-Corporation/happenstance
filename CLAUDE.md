@@ -36,12 +36,12 @@ crates/happenstance-ladybug/     graph projection store only. real and conforman
                                  phase 11, on the real driver. publish = false, and here
                                  that means CANNOT: `lbug` does not render on docs.rs.
 crates/happenstance-postgres/    the store that does not serialise its writers. both roles
-                                 real and conformant at phase 10b. publish = false, by the
-                                 five-crate release decision rather than by unreadiness.
+                                 real and conformant at phase 10b. published from `0.2.0`,
+                                 by the release-set decision recorded at `e597c34`.
 crates/happenstance-neon/        Postgres over one-shot HTTP: no connection, no interactive
                                  transaction, no cursor. real and conformant at phase 10b
                                  against a live endpoint — and the adapter that falsified
-                                 ES-11. host + wasm32. publish = false.
+                                 ES-11. host + wasm32. published from `0.2.0`.
 crates/happenstance-sync/        🔩 skeleton. the replication port + peers + a runner.
 examples/course-subscriptions/   the canonical DCB worked example. in memory.
 examples/transfers-on-sqlite/    the same library on a real database — the typed layer's
@@ -104,11 +104,11 @@ A skeleton exists to be disagreed with by a type checker — it is an *instrumen
 first and a target second, and it is not an adapter until it has run the
 conformance suite. **Four have stopped being skeletons**: `happenstance-sqlite`
 at phase 8, `happenstance-cloudflare` at phase 9, and `happenstance-postgres` and
-`happenstance-neon` at phase 10b. The first two are published; the second two are
-**not**, and that is the five-crate release decision rather than a judgement about
-readiness — a `publish = false` saying "not in this release" and one saying "not
-finished" look identical in a manifest, so each of those two says which in its own
-crate root.
+`happenstance-neon` at phase 10b. **All four are in the release set**, the last two
+by the decision recorded at `e597c34`, which re-opened a set the owner had settled
+at five. What that episode left behind is a habit worth keeping: a `publish = false`
+saying "not in this release" and one saying "not finished" look identical in a
+manifest, so a crate that carries the key says which in its own crate root.
 
 `happenstance-postgres` was the **half case** and is no longer one. Its event
 store ran 101 of 101 against a live PostgreSQL 17.10 including the concurrency
@@ -123,14 +123,20 @@ own root rather than this paragraph for which side of the line it is on — a co
 in a file that loads on every task is a count nobody re-reads, which this file
 already says one section down and has now been wrong about twice.
 
-**Three kinds of `publish = false` now live in this workspace and they are not the
-same fact.** `happenstance-sync` is unfinished. `happenstance-postgres` and
-`happenstance-neon` are finished and out of the five-crate release set.
-`happenstance-ladybug` is finished and **cannot** be published: `lbug`'s build
-script returns early under `DOCS_RS` before emitting the `cargo:rustc-env` lines
-its own `lib.rs` requires, so an undefined `env!` makes the docs.rs build a
-compile error — and rendering on docs.rs is phase 12's bar for a published crate.
-The manifests look identical; each crate root says which it means.
+**Two kinds of `publish = false` live in this workspace and they are not the same
+fact.** `happenstance-sync` is unfinished. `happenstance-ladybug` is finished and
+**cannot** be published: `lbug`'s build script returns early under `DOCS_RS` before
+emitting the `cargo:rustc-env` lines its own `lib.rs` requires, so an undefined
+`env!` makes the docs.rs build a compile error — and rendering on docs.rs is phase
+12's bar for a published crate. The manifests look identical; each crate root says
+which it means.
+
+There was a **third** kind until `e597c34` — finished, and held out of this release
+— and it had two members, `happenstance-postgres` and `happenstance-neon`. That
+category is now empty, and it is recorded here rather than deleted because the two
+crate roots argued from it for a while after it stopped being true. `grep -n
+'^publish' crates/*/Cargo.toml` is the answer that cannot go stale, and it returns
+exactly two lines.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.
@@ -198,10 +204,30 @@ redkiln version it pins, so the pinned CLI reports drift against a process the
 repository no longer runs. It is `if: false` rather than deleted, so it shows as
 *skipped* rather than vanishing: the job's own argument is that a check which
 quietly stops running is worth less than none, because the green tick keeps
-arriving. **While it is off, nothing enforces `.kb` frontmatter validation, the
-immutability of accepted decision atoms, hand-edited item frontmatter, or the
-six-template assertion above** — all four merge green. The restore path and the
-full cost are written at the job in `.github/workflows/ci.yml`.
+arriving. **While it is off, nothing enforces `.kb` frontmatter validation,
+hand-edited item frontmatter, or the six-template assertion above** — all three
+merge green. The restore path and the full cost are written at the job in
+`.github/workflows/ci.yml`.
+
+**Accepted-atom immutability was in that list and has been removed from it,
+because restoring the job would not restore it.** The check compares the working
+tree against the file as `HEAD` has it — verified by editing an accepted atom's
+body and watching `redkiln validate --kb` report *"accepted decision
+'kb-decision-0042' was edited in place"* on the uncommitted change. It follows
+that the check passes the moment that edit is committed, and a CI checkout's
+working tree **is** `HEAD`, so this half has never been able to fire there and
+would not fire if the job were switched on tomorrow. It is a real check with a
+real subject — a local edit, before it is committed — and the honest statement of
+its reach is *pre-commit*, not *pre-merge*. What would enforce it in CI is a
+different instrument: a diff of every `status: accepted` atom body against the
+merge base, which nothing in this repository has yet.
+
+Related, and it is why this correction matters rather than being pedantry: the
+`0.2.0` certification review named this job as the check that would have caught
+three ADRs the specification cites while none had an atom. It would not have.
+`redkiln validate --kb` exits 0 at `HEAD` today, because it validates the atoms
+that **exist**; three records in `references/adr/` with no atom are invisible to
+it. Nothing here — enabled or disabled — resolves the status of a cited ADR.
 
 **`doctor` also reports four `process-pack` advisories, and they are not the six.**
 `initiative.yaml`, `project.yaml`, `project-lite.yaml` and `story.yaml` under
@@ -272,15 +298,20 @@ code around it.
    Let-chains stabilised in 1.88 and are now available.
 
    The instruction that replaced it is the same instruction, one level up:
-   **weigh the floor, and from `0.2.0` it is also a promise.** The old text here
-   said *"nothing is published, so no downstream consumer is pinned to anything"*,
-   and that was ADR-0004's whole reason for carrying a **provisional** marker.
-   `0.2.0` is what the marker named as its own end: five crates are on crates.io,
-   consumers are pinned, and raising the floor is now a breaking change that
-   needs a decision record rather than a commit message. Raising it at phase 2
-   was a deliberate trade recorded in an ADR, which is what the old text asked
-   for; what stays forbidden is moving it in silence, and the bar for moving it
-   at all is higher than it was.
+   **weigh the floor, because `0.2.0` is where it becomes a promise.** The old
+   text here said *"nothing is published, so no downstream consumer is pinned to
+   anything"*, and that was ADR-0004's whole reason for carrying a **provisional**
+   marker. `0.2.0` is what the marker named as its own end — and the tense matters,
+   because it has not happened yet. Measured against the registry: every one of the
+   seven carries `0.0.0`, three of them additionally carry `0.2.0-alpha.1`, nothing
+   is yanked, and `max_stable_version` reads `0.0.0` everywhere. So **no consumer is
+   pinned to anything today**, `0.2.0` is a first real release for all seven, and no
+   crate has a compatible published predecessor — which is also why the registry
+   semver baseline cannot run until the tag lands. From that tag, raising the floor
+   is a breaking change that needs a decision record rather than a commit message.
+   Raising it at phase 2 was a deliberate trade recorded in an ADR, which is what
+   the old text asked for; what stays forbidden is moving it in silence, and the bar
+   for moving it at all is about to be higher than it was.
 
    Two things follow that are easy to miss. The MSRV now **equals**
    `rust-toolchain.toml`'s pin, so the `msrv` CI job proves nothing until the two

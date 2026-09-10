@@ -212,12 +212,32 @@ impl PgCursor {
 /// `a_concurrent_reader_never_sees_a_partial_batch` panicked here on its first
 /// run even after every other rule in the family had gone green.
 ///
-/// Moving the transaction onto the captured runtime lets its own `Drop` run
+/// Moving the transaction onto the recorded runtime lets its own `Drop` run
 /// where `sqlx` expects to be. The rollback is explicit rather than implicit
-/// because a read holds a `REPEATABLE READ READ ONLY` transaction open, and
-/// leaving it to an implicit drop makes the moment it ends depend on when the
-/// spawned task happens to be scheduled — which is exactly the kind of open
-/// transaction the frontier mechanism is most sensitive to.
+/// because a read holds a `REPEATABLE READ READ ONLY` transaction open, and an
+/// implicit drop inside the spawned body would end it at a moment even less
+/// determined than this one.
+///
+/// # What this does not buy, stated because the first version of this comment
+/// claimed it
+///
+/// It said the explicit rollback existed so that the moment the transaction ends
+/// does not "depend on when the spawned task happens to be scheduled". **It
+/// still does.** `Drop` cannot await, so the rollback is spawned, and the
+/// transaction stays open until the executor gets to it. Rust has no async
+/// `Drop`; `block_on` here panics inside a runtime and `block_in_place` needs a
+/// multi-thread flavour this crate cannot require of a caller. So the honest
+/// statement is: **a dropped read stream closes its transaction promptly but not
+/// synchronously**, and a caller who needs it closed before the next append is
+/// observed must drop the stream and yield before relying on the frontier having
+/// moved.
+///
+/// That matters more here than it would elsewhere, because
+/// `pg_snapshot_xmin(pg_current_snapshot())` is a **server-wide** frontier: an
+/// open transaction anywhere on the server holds back visibility for every
+/// reader of it, including this store's own. A long-lived read on this adapter
+/// therefore delays visibility for other readers for as long as it is held — not
+/// a defect, a cost, and one no other adapter in this workspace charges.
 impl Drop for PgCursor {
     fn drop(&mut self) {
         let Some(tx) = self.tx.take() else {
@@ -228,6 +248,18 @@ impl Drop for PgCursor {
             // so is reporting it — `Drop` has no channel. Forgetting the
             // transaction leaks the pooled connection, which is strictly better
             // than the panic-inside-panic a naive drop would produce here.
+            //
+            // **Unreachable in practice since the cursor began recording the
+            // runtime it was opened on**, and that is the point of the change
+            // rather than a hope about it: `open_cursor` runs inside
+            // `handle.spawn(...)`, so `Handle::try_current()` there is always
+            // `Some` and `self.runtime` is therefore always `Some`. The arm
+            // stays because `Drop` must be total and a future refactor could
+            // construct a cursor somewhere else — but reaching it now means the
+            // invariant above has been broken, and the cost is not a lost
+            // connection. It is a `REPEATABLE READ` transaction left open on the
+            // server, holding `pg_snapshot_xmin` back for every reader until the
+            // process exits.
             std::mem::forget(tx);
             return;
         };
@@ -423,9 +455,29 @@ impl Stream for PgReadStream {
 /// One future rather than three states, because all three are one round trip's
 /// worth of latency apart and splitting them would buy nothing but arms.
 async fn open_cursor(plan: CursorPlan) -> Opened {
-    // Captured before `plan` is consumed, so the cursor can return its
-    // connection on the same runtime that opened it.
-    let runtime = plan.runtime.clone();
+    // The runtime this body is EXECUTING on, preferred over the one the store
+    // captured, and the order is the whole point.
+    //
+    // This function only ever runs inside `handle.spawn(...)` at the `Unstarted`
+    // arm above, so `Handle::try_current()` here is always `Some` and is always
+    // the runtime that will still be there when the cursor is dropped. The
+    // store's own handle is `Handle::try_current().ok()` sampled in
+    // `PostgresEventStore::new`, which is `None` whenever the store was built
+    // outside a runtime — and a store built outside one is ordinary, not exotic.
+    //
+    // Recording the store's handle alone was a defect with a specific victim.
+    // The poll site computes `plan.runtime.or_else(Handle::try_current)` and
+    // spawns on the result, so the spawn succeeds on the caller's runtime while
+    // the cursor records `None`. `Drop` then falls back to `Handle::try_current`
+    // a second time — on whatever thread the drop happens on, which for the
+    // concurrency family is a raw OS thread with no runtime at all — finds
+    // nothing, and reaches `mem::forget`. That leaks the pooled connection AND
+    // leaves a `REPEATABLE READ` transaction open, which holds back
+    // `pg_snapshot_xmin` for every reader of the server until the process ends.
+    // It is the one failure this adapter can inflict on its own visibility
+    // mechanism, and it arrived through the handle being sampled in the one
+    // place that could be wrong about it.
+    let runtime = Handle::try_current().ok().or_else(|| plan.runtime.clone());
     // `begin_with` rather than `begin`, because the isolation level is not
     // decoration: ES-11 requires the whole read to see one state of the store,
     // and REPEATABLE READ is how the server is asked for it.

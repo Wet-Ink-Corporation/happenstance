@@ -20,7 +20,7 @@
 //! Cloudflare Durable Object adapter for happenstance — the workspace's `!Send`
 //! instrument.
 //!
-//! # Status: bound, implemented, packaged — and not yet released
+//! # Status: bound, implemented, packaged — and released at `0.2.0`
 //!
 //! This crate depends on [`worker`] and talks to a real Durable Object's
 //! `SqlStorage`. [`js`] and [`sql_storage`] are bindings rather than models:
@@ -72,14 +72,21 @@
 //! leaving it a fact about one working tree. `reconcile` fails in both
 //! directions, so the manifest flag and the list cannot drift apart.
 //!
-//! **Not released.** No version has been chosen, nothing has been published at a
-//! real version, this crate's API is not frozen, and nothing here promises a
-//! minimum supported Rust version. The crates.io *name* is held by the `0.0.0`
-//! placeholder `cargo xtask reserve` generates — a standalone crate sharing
-//! nothing with this workspace but its metadata — for the reason
-//! `xtask/src/reserve.rs` gives: publishing the real crate at a real version
-//! would make this API semver-binding before the phases that freeze it
-//! deliberately, against evidence.
+//! **Released at `0.2.0`, and that changes what this page owes a reader.** Two
+//! commitments arrive with the version and neither is optional now: the
+//! `EventStore` clauses marked `[FROZEN]` in the specification are
+//! **semver-binding** here as everywhere, and this crate carries the workspace's
+//! **MSRV of 1.97.1**, which ADR-0029 made a promise at exactly this release.
+//! What is still *not* frozen is `ProjectionStore`, which this crate does not
+//! implement at all.
+//!
+//! Until this release the crates.io name was held by the `0.0.0` placeholder
+//! `cargo xtask reserve` generates — a standalone crate sharing nothing with this
+//! workspace but its metadata — for the reason `xtask/src/reserve.rs` gives:
+//! publishing the real crate at a real version would have made this API
+//! semver-binding before the phases that freeze it did so deliberately, against
+//! evidence. Those phases have run. The placeholder has done its job and the real
+//! crate is what `0.2.0` puts on the registry.
 //!
 //! # Conformance: what has run, where, and what is deliberately not asked to
 //!
@@ -228,9 +235,11 @@
 //!
 //! # What this crate is for
 //!
-//! It is the only adapter in the workspace that implements the **bare**
-//! [`EventStore`](happenstance_core::EventStore) rather than the derived
-//! `SendEventStore`, and the only one whose `Error` is genuinely `!Send`. That
+//! It implements the **bare** [`EventStore`](happenstance_core::EventStore)
+//! rather than the derived `SendEventStore` — `happenstance-neon` does too, and
+//! for its own reason — and it is the only one whose `Error` is genuinely
+//! `!Send`. That second conjunct is the load-bearing one, and it is what the
+//! ES-6 verdict below actually rests on. That
 //! makes it the sole instrument for ES-6 — "whether `Error` gains `Send +
 //! Sync`" — which the specification settles precisely because the two other
 //! in-tree confirmations are free by construction: `MemoryStoreError` is
@@ -527,10 +536,10 @@ pub use sql_storage::{SqlCursor, SqlError, SqlRow, SqlStorage, SqlValue};
 /// alternative to [`JsThrow`], and `the_probe_is_not_vacuous`'s positive
 /// control — are satisfied by a private type, and nothing in the workspace ever
 /// consumed it as a caller would. The evidence for a public audience does not
-/// exist rather than being outweighed: this crate holds a `0.0.0` placeholder
-/// on the registry, which is not a predecessor because nothing was ever under
-/// it, so this is the one release at which withdrawing a name costs nobody
-/// anything. After it the same change is a major version.
+/// exist rather than being outweighed: this crate held only a `0.0.0`
+/// placeholder on the registry, which is not a predecessor because nothing was
+/// ever under it, so `0.2.0` was the one release at which withdrawing a name
+/// cost nobody anything. After it the same change is a major version.
 ///
 /// **Rejects:** restoring `pub struct StringifiedThrow`. The first block then
 /// compiles and the test fails with *"Test compiled successfully, but it's

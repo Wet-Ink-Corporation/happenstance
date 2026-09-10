@@ -1,7 +1,10 @@
-    Finished `release` profile [optimized] target(s) in 0.30s
-     Running tests\conformance_first.rs (target\release\deps\conformance_first-a65effd272d1a177.exe)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\benchmarks)
+    Finished `release` profile [optimized] target(s) in 2.75s
+     Running tests\conformance_first.rs (target\release\deps\conformance_first-4e3aac14c6ab49ef.exe)
 
-running 178 tests
+running 188 tests
 test memory_arm_is_conformant::a_live_read_stream_does_not_block_an_append ... ok
 test memory_arm_is_conformant::acknowledged_writes_survive_a_reopen ... ok
 test memory_arm_is_conformant::append_is_atomic ... ok
@@ -17,6 +20,7 @@ test memory_arm_is_conformant::append_stamps_a_recorded_time ... ok
 test memory_arm_is_conformant::append_stamps_identity_and_time ... ok
 test memory_arm_is_conformant::appending_equal_events_yields_two_events ... ok
 test memory_arm_is_conformant::arming_a_mid_batch_fault_makes_the_append_fail ... ok
+test memory_arm_is_conformant::arming_a_read_fault_makes_the_stream_yield_an_error ... ok
 test memory_arm_is_conformant::batch_is_not_evaluated_against_its_own_condition ... ok
 test memory_arm_is_conformant::batch_positions_follow_slice_order ... ok
 test memory_arm_is_conformant::condition_after_beyond_head_admits_the_append ... ok
@@ -39,6 +43,7 @@ test memory_arm_is_conformant::duplicate_items_do_not_duplicate_events ... ok
 test memory_arm_is_conformant::empty_batch_is_refused_before_the_condition_is_evaluated ... ok
 test memory_arm_is_conformant::event_id_is_not_matchable_by_query ... ok
 test memory_arm_is_conformant::event_ids_are_unique_within_a_store ... ok
+test memory_arm_is_conformant::every_declined_capability_is_stated_by_this_fixture ... ok
 test memory_arm_is_conformant::head_advances_across_two_handles ... ok
 test memory_arm_is_conformant::head_is_the_highest_visible_position ... ok
 test memory_arm_is_conformant::head_of_an_empty_store_is_none ... ok
@@ -66,12 +71,15 @@ test memory_arm_is_conformant::read_backwards_reverses_order ... ok
 test memory_arm_is_conformant::read_defaults_to_ascending_order ... ok
 test memory_arm_is_conformant::read_from_a_gap_position ... ok
 test memory_arm_is_conformant::read_from_and_to_bound_a_closed_window ... ok
+test memory_arm_is_conformant::read_from_composes_with_limit ... ok
 test memory_arm_is_conformant::read_from_composes_with_multi_item_query ... ok
 test memory_arm_is_conformant::read_from_is_inclusive ... ok
 test memory_arm_is_conformant::read_limit_applies_after_filtering ... ok
 test memory_arm_is_conformant::read_limit_truncates ... ok
 test memory_arm_is_conformant::read_limit_zero_yields_nothing ... ok
 test memory_arm_is_conformant::read_result_is_stable_under_concurrent_append ... ok
+test memory_arm_is_conformant::read_to_composes_with_limit ... ok
+test memory_arm_is_conformant::read_to_composes_with_multi_item_query ... ok
 test memory_arm_is_conformant::read_to_is_inclusive ... ok
 test memory_arm_is_conformant::read_to_under_backwards_bounds_the_older_end ... ok
 test memory_arm_is_conformant::reading_an_empty_store_yields_nothing ... ok
@@ -106,6 +114,7 @@ test sqlite_arm_is_conformant::append_stamps_a_recorded_time ... ok
 test sqlite_arm_is_conformant::append_stamps_identity_and_time ... ok
 test sqlite_arm_is_conformant::appending_equal_events_yields_two_events ... ok
 test sqlite_arm_is_conformant::arming_a_mid_batch_fault_makes_the_append_fail ... ok
+test sqlite_arm_is_conformant::arming_a_read_fault_makes_the_stream_yield_an_error ... ok
 test sqlite_arm_is_conformant::batch_is_not_evaluated_against_its_own_condition ... ok
 test sqlite_arm_is_conformant::batch_positions_follow_slice_order ... ok
 test sqlite_arm_is_conformant::condition_after_beyond_head_admits_the_append ... ok
@@ -128,6 +137,7 @@ test sqlite_arm_is_conformant::duplicate_items_do_not_duplicate_events ... ok
 test sqlite_arm_is_conformant::empty_batch_is_refused_before_the_condition_is_evaluated ... ok
 test sqlite_arm_is_conformant::event_id_is_not_matchable_by_query ... ok
 test sqlite_arm_is_conformant::event_ids_are_unique_within_a_store ... ok
+test sqlite_arm_is_conformant::every_declined_capability_is_stated_by_this_fixture ... ok
 test sqlite_arm_is_conformant::head_advances_across_two_handles ... ok
 test sqlite_arm_is_conformant::head_is_the_highest_visible_position ... ok
 test sqlite_arm_is_conformant::head_of_an_empty_store_is_none ... ok
@@ -155,12 +165,15 @@ test sqlite_arm_is_conformant::read_backwards_reverses_order ... ok
 test sqlite_arm_is_conformant::read_defaults_to_ascending_order ... ok
 test sqlite_arm_is_conformant::read_from_a_gap_position ... ok
 test sqlite_arm_is_conformant::read_from_and_to_bound_a_closed_window ... ok
+test sqlite_arm_is_conformant::read_from_composes_with_limit ... ok
 test sqlite_arm_is_conformant::read_from_composes_with_multi_item_query ... ok
 test sqlite_arm_is_conformant::read_from_is_inclusive ... ok
 test sqlite_arm_is_conformant::read_limit_applies_after_filtering ... ok
 test sqlite_arm_is_conformant::read_limit_truncates ... ok
 test sqlite_arm_is_conformant::read_limit_zero_yields_nothing ... ok
 test sqlite_arm_is_conformant::read_result_is_stable_under_concurrent_append ... ok
+test sqlite_arm_is_conformant::read_to_composes_with_limit ... ok
+test sqlite_arm_is_conformant::read_to_composes_with_multi_item_query ... ok
 test sqlite_arm_is_conformant::read_to_is_inclusive ... ok
 test sqlite_arm_is_conformant::read_to_under_backwards_bounds_the_older_end ... ok
 test sqlite_arm_is_conformant::reading_an_empty_store_yields_nothing ... ok
@@ -181,5 +194,5 @@ test sqlite_arm_is_conformant::two_fixture_instances_observe_none_of_each_others
 test sqlite_arm_is_conformant::two_handles_observe_each_others_appends ... ok
 test sqlite_arm_is_conformant::untagged_events_match_query_all ... ok
 
-test result: ok. 178 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+test result: ok. 188 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.10s
 

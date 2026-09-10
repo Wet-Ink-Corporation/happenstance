@@ -27,8 +27,8 @@ use crate::store::SendEventStore;
 /// It is **not** built for scale. [`read`](crate::EventStore::read) snapshots
 /// the matching events under the lock and streams from that snapshot, so a read
 /// never holds the lock across a poll — correct, and deliberately simple.
-/// Cloning is cheap regardless: payloads are [`Bytes`](bytes::Bytes), so a
-/// snapshot bumps refcounts rather than copying data.
+/// Snapshot cost: payloads are [`Bytes`](bytes::Bytes), so a snapshot bumps
+/// refcounts rather than copying data — but each event still costs `t + 2`.
 ///
 /// Positions are dense and start at 1. The specification permits gaps, so
 /// nothing may depend on that.

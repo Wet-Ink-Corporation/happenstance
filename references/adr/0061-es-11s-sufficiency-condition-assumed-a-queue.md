@@ -58,13 +58,21 @@ sample for the answer to drift against.
 
 ## What actually fails, and the numbers
 
-Measured against the live endpoint, `--test-threads=1`, twenty runs per
-configuration (`crates/happenstance-neon/tests/support/transport.rs:54-64`):
+Run repeatedly against the live endpoint at `--test-threads=1`, both transport
+configurations redden **intermittently**, and HTTP/2 over a single connection
+(`pool_max_idle_per_host(1)`) reddens markedly less often than HTTP/1.1 over a
+default connection pool.
 
-| transport | red runs |
-|---|---|
-| HTTP/1.1, default connection pool | **3 of 20** |
-| HTTP/2, `pool_max_idle_per_host(1)` | **1 of 40** |
+**This record deliberately quotes no rate, and the reason is a defect in its own
+first draft.** That draft carried a table of red-runs-per-twenty and cited
+`crates/happenstance-neon/tests/support/transport.rs` as the source — but that
+file is a doc comment restating the same table, so the citation resolved to the
+claim rather than to evidence. No raw log of the counting session was committed,
+and `experiments/` holds a study for every other measurement this project relies
+on. The finding does not depend on the rate: the *direction* is what falsifies
+ES-11's sufficiency condition, and the direction is invariant. A citable
+frequency needs the sweep run again, under `experiments/`, with its output
+committed.
 
 The adapter ships the second, and HTTP/2 there is not a performance choice: a
 single multiplexed connection is the only ordering primitive the transport offers,

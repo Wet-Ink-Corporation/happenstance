@@ -109,6 +109,22 @@ from your own host if you re-run it; the toolchain and SQLite rows are printed
 at the top of `results/raw/conditions.txt` and read back off the live process by
 `src/report.rs`, so they are checkable rather than transcribed.
 
+**There are two hosts, and Host B is now the primary one.** Every figure in
+`results/GRADES.md` §§1–7 comes from Host B, the dedicated measurement machine
+(`ops/host/`), provisioned because the 40% between-run movement in
+[What none of this shows](#what-none-of-this-shows) turned out to be a property
+of a busy laptop rather than of this library.
+
+Host A's table stays, and not out of sentiment. `GRADES.md` §8 is the Host A
+record, and it does two jobs nothing else can: it is the other half of the
+cross-host check — same instrument, different hardware, different OS, a 52×
+slower clock, three of four ratios inside 10% — and it is the trace by which four
+figures were caught going false as the code moved. Its raw output is still under
+`results/raw/` without the `-linux` suffix, so a conditions table that stopped
+describing it would be a table that does not describe its own results.
+
+### Host A — Windows 11 laptop (`results/GRADES.md` §8, and everything through 2026-09-08)
+
 | | |
 | --- | --- |
 | Machine | 13th Gen Intel Core i9-13905H, 14 cores / 20 logical, 31.7 GiB RAM |
@@ -122,6 +138,70 @@ at the top of `results/raw/conditions.txt` and read back off the live process by
 | Statement cache | **None, on either side.** The workspace pins `rusqlite` with `default-features = false`, which drops its `cache` feature, so `prepare_cached` does not exist in this graph and both the adapter and the floor re-prepare |
 | Timer floor | Measured per run and printed with it — around 50 ns per sample for the `Instant::now()` pair that brackets each one. Any arm within 10× of it is labelled `TIMER-DOMINATED` |
 | Command | `./run.sh` (about 35–45 minutes), or `./run.sh --fast` (about four) |
+
+### Host B — `britton-ai`, the dedicated measurement host (`GRADES.md` §§1–7)
+
+Provisioned and tuned by [`ops/host/`](../ops/host/README.md); every row below is
+declared in `ops/host/host.env` and asserted by `ops/host/preflight.sh` before a
+run starts, so these are checkable rather than transcribed — the same property
+the toolchain and SQLite rows above already have.
+
+| | |
+| --- | --- |
+| Machine | Lenovo Legion 5 15ACH6 — a **laptop**. AMD Ryzen 7 5800H, 8 cores / 16 logical, 15 GiB RAM. Slower and smaller than Host A, which is the right trade: every figure here is a ratio between arms of one run, and a repeatable clock beats a fast one |
+| OS | Ubuntu 24.04.4 LTS, kernel 6.8.0-134 |
+| Filesystem | ext4 on LVM on NVMe. Database files under `std::env::temp_dir()` = `/tmp`, asserted **not** to be a tmpfs — a tmpfs would make the SQLite arms measure RAM and report it in a table headed by a filesystem |
+| Toolchain | `rustc 1.97.1`, `x86_64-unknown-linux-gnu` (`results/raw/conditions.txt`) |
+| CPU regime | `performance` governor **and** `energy_performance_preference` on all 16 CPUs, applied by `happenstance-bench-tuning.service` so it survives a reboot and `systemctl is-active` is a question the preflight can ask. Frequency **uncapped** and SMT **on**, both deliberately left at their as-found settings until the flakiness is measured |
+| Clocksource | **`hpet`**, and that is a finding rather than a default. The kernel marks this part's TSC unstable at boot, and `tsc_adjust` — the MSR Linux would use to correct per-CPU offsets — is absent, so no kernel parameter can fix it. `clock_gettime` therefore costs a measured **1,390 ns** against 19 ns on tsc. `ops/host/probes/tsc-migrate.c` is the instrument that settled it; [`ops/host/README.md`](../ops/host/README.md) carries the numbers and the two wrong answers that came first |
+| Timer floor | ~1,390 ns, about **28× Host A's**. At `paired.rs`'s `TIMER_HEADROOM` of 10, arms below roughly 14 µs are `TIMER-DOMINATED`. Of the seven arms in `results/raw/overhead.log` exactly one is — `memory`, at a 5.8 µs median. The other six sit between 143 µs and 5.5 ms, where 1.4 µs is under 1%; the criterion targets batch iterations and amortise it; the allocation counts read no clock at all |
+| Quiet | The sole purpose of the machine. `apt-daily`, `unattended-upgrades`, `man-db`, `fstrim` and `motd-news` **masked** — not merely disabled, because `apt-get install` re-enables a disabled timer — no cron, sleep and lid handling masked, and one container running, an idle tunnel |
+| Command | `ops/host/bench.sh [--fast]` — preflight, then `taskset` to one thread per physical core, then this `run.sh`. **See the limitation below: `run.sh` cannot complete here.** |
+
+#### Three host assumptions `run.sh` carried, and what they cost to find
+
+**`run.sh` completes on Host B.** It did not at first, and the three things in
+the way are worth keeping, because not one of them was a defect in the library
+and not one was visible from Host A or from CI.
+
+**1. A control sized for another host's clock.**
+`the_paired_sampler_sees_a_difference_it_was_given` hard-codes `spin(20_000)`,
+chosen when the timer pair cost **56 ns**. Here it costs **2,924 ns** — 52× more
+— which puts the floor at 29 µs and the light arm at 6.6 µs under it. The
+assertion that matters, the ratio, was **passing at 6.44×**; what failed was
+`is_above_the_timer()`, a self-check on the control's own arms, whose message had
+already diagnosed itself: *"the iteration counts in this control need
+revisiting"*. It now calibrates against the measured timer, capped so the guard
+can still fire.
+
+**2. A control defeated by CPU migration.**
+`the_processor_clock_tells_working_from_waiting` read a busy 256 ms region as
+`processor=0.000s` about one run in five. With the TSC marked unstable
+`sched_clock` runs on a per-CPU fallback, and a task that migrates mid-region
+comes back mis-accounted:
+
+| affinity | failures per 10 runs |
+| --- | ---: |
+| unpinned | 2 |
+| four CPUs — the `bench.sh` mask | 4 |
+| **one CPU** | **0** |
+
+The control now pins itself for its span and prints which CPU it took. A bounded
+retry was tried first and rejected: standalone it cleared the flake, but inside a
+full `run.sh` the mis-accounting persisted across all three attempts (0.12, 0.00,
+0.00). It can persist, not merely flicker.
+
+**3. `ulimit -n` at Ubuntu's 1024.** The SQLite arms create a database per
+criterion iteration, and SQLite reports EMFILE as `CannotOpen` — *"unable to open
+database file"*, a disk error for a file-descriptor problem, on a `/tmp` with
+861 GB free. `ops/host/00-system.sh` now sets 65536.
+
+**What `hpet` actually costs, once all three were fixed: one arm.** At a 29 µs
+floor the `memory` append at 5,727 ns is timer-dominated and reported as such;
+the other six paired arms sit between 51 µs and 1.7 ms. And the headline
+reproduces across hosts from the same instrument — `happenstance-sqlite ÷
+raw/same-schema` is **1.66×** here against **1.7×** on Host A, with the
+hand-rolled floor at **4.05×** against 3.9× and replay at **5.53×** against 6.2×.
 
 ## The history detects a regression, and that was checked
 

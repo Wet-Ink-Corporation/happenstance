@@ -1,0 +1,68 @@
+    Finished `release` profile [optimized] target(s) in 0.05s
+     Running `target/release/allocations`
+commit:    54044ac-dirty
+date:      2026-09-10
+toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
+target:    x86_64-unknown-linux-gnu
+profile:   release
+cpus:      16
+sqlite:    3.53.2
+
+[clone/event-first] owned owned/1024B/0tags: allocs=2 reallocs=0 heap_ops=2 bytes=41 deallocs=0 peak=41 retained=41
+[clone/event-steady-state] owned owned/1024B/0tags: allocs=1 reallocs=0 heap_ops=1 bytes=17 deallocs=0 peak=17 retained=17
+[clone/event-first] owned owned/1024B/1tags: allocs=4 reallocs=0 heap_ops=4 bytes=74 deallocs=0 peak=74 retained=74
+[clone/event-steady-state] owned owned/1024B/1tags: allocs=3 reallocs=0 heap_ops=3 bytes=50 deallocs=0 peak=50 retained=50
+[clone/event-first] owned owned/1024B/8tags: allocs=11 reallocs=0 heap_ops=11 bytes=305 deallocs=0 peak=305 retained=305
+[clone/event-steady-state] owned owned/1024B/8tags: allocs=10 reallocs=0 heap_ops=10 bytes=281 deallocs=0 peak=281 retained=281
+[clone/event-first] owned owned/1024B/64tags: allocs=67 reallocs=0 heap_ops=67 bytes=2153 deallocs=0 peak=2153 retained=2153
+[clone/event-steady-state] owned owned/1024B/64tags: allocs=66 reallocs=0 heap_ops=66 bytes=2129 deallocs=0 peak=2129 retained=2129
+[clone/event-first] interned interned/1024B/0tags: allocs=0 reallocs=0 heap_ops=0 bytes=0 deallocs=0 peak=0 retained=0
+[clone/event-steady-state] interned interned/1024B/0tags: allocs=0 reallocs=0 heap_ops=0 bytes=0 deallocs=0 peak=0 retained=0
+[clone/event-first] interned interned/1024B/1tags: allocs=1 reallocs=0 heap_ops=1 bytes=24 deallocs=0 peak=24 retained=24
+[clone/event-steady-state] interned interned/1024B/1tags: allocs=1 reallocs=0 heap_ops=1 bytes=24 deallocs=0 peak=24 retained=24
+[clone/event-first] interned interned/1024B/8tags: allocs=1 reallocs=0 heap_ops=1 bytes=192 deallocs=0 peak=192 retained=192
+[clone/event-steady-state] interned interned/1024B/8tags: allocs=1 reallocs=0 heap_ops=1 bytes=192 deallocs=0 peak=192 retained=192
+[clone/event-first] interned interned/1024B/64tags: allocs=1 reallocs=0 heap_ops=1 bytes=1536 deallocs=0 peak=1536 retained=1536
+[clone/event-steady-state] interned interned/1024B/64tags: allocs=1 reallocs=0 heap_ops=1 bytes=1536 deallocs=0 peak=1536 retained=1536
+[batch/build] owned owned/1024B/3tags/batch-128: allocs=1153 reallocs=384 heap_ops=1537 bytes=162304 deallocs=384 peak=159240 retained=159232
+[batch/clone] owned owned/1024B/3tags/batch-128: allocs=769 reallocs=0 heap_ops=769 bytes=31232 deallocs=0 peak=31232 retained=31232
+[batch/build] owned owned/1024B/64tags/batch-128: allocs=16769 reallocs=8192 heap_ops=24961 bytes=482432 deallocs=8192 peak=416904 retained=416896
+[batch/clone] owned owned/1024B/64tags/batch-128: allocs=8577 reallocs=0 heap_ops=8577 bytes=288896 deallocs=0 peak=288896 retained=288896
+[batch/build] interned interned/1024B/3tags/batch-128: allocs=129 reallocs=0 heap_ops=129 bytes=22528 deallocs=0 peak=22528 retained=22528
+[batch/clone] interned interned/1024B/3tags/batch-128: allocs=129 reallocs=0 heap_ops=129 bytes=22528 deallocs=0 peak=22528 retained=22528
+[batch/build] interned interned/1024B/64tags/batch-128: allocs=129 reallocs=0 heap_ops=129 bytes=209920 deallocs=0 peak=209920 retained=209920
+[batch/clone] interned interned/1024B/64tags/batch-128: allocs=129 reallocs=0 heap_ops=129 bytes=209920 deallocs=0 peak=209920 retained=209920
+[codec/encode] json owned/0B -> 60B
+[codec/encode] json owned/0B: allocs=2 reallocs=0 heap_ops=2 bytes=152 deallocs=0 peak=152 retained=152
+[codec/decode] json owned/0B: allocs=1 reallocs=0 heap_ops=1 bytes=2 deallocs=0 peak=2 retained=2
+[codec/encode] cbor owned/0B -> 43B
+[codec/encode] cbor owned/0B: allocs=2 reallocs=3 heap_ops=5 bytes=88 deallocs=0 peak=88 retained=88
+[codec/decode] cbor owned/0B: allocs=1 reallocs=0 heap_ops=1 bytes=8 deallocs=0 peak=8 retained=8
+[codec/encode] postcard owned/0B -> 6B
+[codec/encode] postcard owned/0B: allocs=2 reallocs=0 heap_ops=2 bytes=32 deallocs=0 peak=32 retained=32
+[codec/decode] postcard owned/0B: allocs=1 reallocs=0 heap_ops=1 bytes=2 deallocs=0 peak=2 retained=2
+[codec/encode] json owned/256B -> 827B
+[codec/encode] json owned/256B: allocs=2 reallocs=3 heap_ops=5 bytes=1048 deallocs=0 peak=1048 retained=1048
+[codec/decode] json owned/256B: allocs=2 reallocs=5 heap_ops=7 bytes=258 deallocs=0 peak=258 retained=258
+[codec/encode] cbor owned/256B -> 557B
+[codec/encode] cbor owned/256B: allocs=2 reallocs=7 heap_ops=9 bytes=1048 deallocs=0 peak=1048 retained=1048
+[codec/decode] cbor owned/256B: allocs=2 reallocs=0 heap_ops=2 bytes=264 deallocs=0 peak=264 retained=264
+[codec/encode] postcard owned/256B -> 263B
+[codec/encode] postcard owned/256B: allocs=2 reallocs=6 heap_ops=8 bytes=536 deallocs=0 peak=536 retained=536
+[codec/decode] postcard owned/256B: allocs=2 reallocs=0 heap_ops=2 bytes=258 deallocs=0 peak=258 retained=258
+[codec/encode] json owned/4096B -> 12347B
+[codec/encode] json owned/4096B: allocs=2 reallocs=7 heap_ops=9 bytes=16408 deallocs=0 peak=16408 retained=16408
+[codec/decode] json owned/4096B: allocs=2 reallocs=9 heap_ops=11 bytes=4098 deallocs=0 peak=4098 retained=4098
+[codec/encode] cbor owned/4096B -> 8237B
+[codec/encode] cbor owned/4096B: allocs=2 reallocs=11 heap_ops=13 bytes=16408 deallocs=0 peak=16408 retained=16408
+[codec/decode] cbor owned/4096B: allocs=2 reallocs=0 heap_ops=2 bytes=4104 deallocs=0 peak=4104 retained=4104
+[codec/encode] postcard owned/4096B -> 4103B
+[codec/encode] postcard owned/4096B: allocs=2 reallocs=10 heap_ops=12 bytes=8216 deallocs=0 peak=8216 retained=8216
+[codec/decode] postcard owned/4096B: allocs=2 reallocs=0 heap_ops=2 bytes=4098 deallocs=0 peak=4098 retained=4098
+[read/memory] limit-none returned 10000 events
+[read/memory] limit-none owned/256B/3tags/10000-events: allocs=50002 reallocs=24 heap_ops=50026 bytes=5897482 deallocs=1 peak=5897482 retained=3538186
+[read/memory] limit-1 returned 1 events
+[read/memory] limit-1 owned/256B/3tags/10000-events: allocs=7 reallocs=0 heap_ops=7 bytes=1267 deallocs=1 peak=1267 retained=691
+[read/memory] backwards-limit-1 returned 1 events
+[read/memory] backwards-limit-1 owned/256B/3tags/10000-events: allocs=7 reallocs=0 heap_ops=7 bytes=1270 deallocs=1 peak=1270 retained=694
+[read/memory] head owned/256B/3tags/10000-events: allocs=0 reallocs=0 heap_ops=0 bytes=0 deallocs=0 peak=0 retained=0

@@ -84,7 +84,7 @@ adapter's own `shapes.rs` assertions.
 
 **Evidence.** `Cargo.toml:213 (unsafe_code = "forbid")` ·
 `crates/happenstance-sqlite/tests/shapes.rs:23 (needs no pin projection)` ·
-`crates/happenstance-testkit/src/registry.rs:305 (std::task::Wake)` ·
+`crates/happenstance-testkit/src/registry.rs:307 (std::task::Wake)` ·
 `crates/happenstance-cloudflare/src/js.rs:33 (The escape hatch is an)` ·
 [SPECIFICATION ES-42](../../spec/SPECIFICATION.md#es-42--reads-return-type-carries-no-unpin-bound)
 

@@ -1,5 +1,5 @@
-# commit:    b3c8d84-dirty
-# date:      2026-09-06
+# commit:    6c7a7a8-dirty
+# date:      2026-09-08
 # toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
 # target:    x86_64-pc-windows-msvc
 # profile:   release
@@ -230,16 +230,16 @@ read/memory,limit-none,owned/256B/3tags/10000-events,allocs,50002,ops,true
 read/memory,limit-none,owned/256B/3tags/10000-events,reallocs,24,ops,true
 read/memory,limit-none,owned/256B/3tags/10000-events,bytes-requested,5897482,bytes,true
 read/memory,limit-none,owned/256B/3tags/10000-events,peak-live,5897482,bytes,true
-read/memory,limit-1,owned/256B/3tags/10000-events,heap-ops,50014,ops,true
-read/memory,limit-1,owned/256B/3tags/10000-events,allocs,50002,ops,true
-read/memory,limit-1,owned/256B/3tags/10000-events,reallocs,12,ops,true
-read/memory,limit-1,owned/256B/3tags/10000-events,bytes-requested,3538762,bytes,true
-read/memory,limit-1,owned/256B/3tags/10000-events,peak-live,3538186,bytes,true
-read/memory,backwards-limit-1,owned/256B/3tags/10000-events,heap-ops,50014,ops,true
-read/memory,backwards-limit-1,owned/256B/3tags/10000-events,allocs,50002,ops,true
-read/memory,backwards-limit-1,owned/256B/3tags/10000-events,reallocs,12,ops,true
-read/memory,backwards-limit-1,owned/256B/3tags/10000-events,bytes-requested,3538762,bytes,true
-read/memory,backwards-limit-1,owned/256B/3tags/10000-events,peak-live,3538186,bytes,true
+read/memory,limit-1,owned/256B/3tags/10000-events,heap-ops,7,ops,true
+read/memory,limit-1,owned/256B/3tags/10000-events,allocs,7,ops,true
+read/memory,limit-1,owned/256B/3tags/10000-events,reallocs,0,ops,true
+read/memory,limit-1,owned/256B/3tags/10000-events,bytes-requested,1267,bytes,true
+read/memory,limit-1,owned/256B/3tags/10000-events,peak-live,1267,bytes,true
+read/memory,backwards-limit-1,owned/256B/3tags/10000-events,heap-ops,7,ops,true
+read/memory,backwards-limit-1,owned/256B/3tags/10000-events,allocs,7,ops,true
+read/memory,backwards-limit-1,owned/256B/3tags/10000-events,reallocs,0,ops,true
+read/memory,backwards-limit-1,owned/256B/3tags/10000-events,bytes-requested,1270,bytes,true
+read/memory,backwards-limit-1,owned/256B/3tags/10000-events,peak-live,1270,bytes,true
 read/memory,head,owned/256B/3tags/10000-events,heap-ops,0,ops,true
 read/memory,head,owned/256B/3tags/10000-events,allocs,0,ops,true
 read/memory,head,owned/256B/3tags/10000-events,reallocs,0,ops,true

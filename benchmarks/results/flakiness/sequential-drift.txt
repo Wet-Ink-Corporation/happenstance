@@ -1,0 +1,20 @@
+
+3 runs, 82 arms matched by name
+
+per-arm spread (max/min of the run medians)
+  median 1.0430x   p90 1.0826x   worst 1.3557x
+  worst five:
+    1.3557x       1.72 us  append_tag-count/memory_owned/0
+    1.1134x     139.72 us  append_tag-count/raw_same-schema_interned/0
+    1.1037x     234.91 us  append_payload-size/raw_same-schema_owned/1024
+    1.1012x       2.16 us  append_batch-size/memory_interned/8
+    1.0882x    2003.89 us  append_tag-count/raw_same-schema_owned/64
+
+ratio spread over every arm pair -- what a ratio table depends on
+  3321 pairs
+  median 1.0592x   p90 1.1055x   p99 1.3953x   worst 1.4846x
+
+  pairs whose ratio moved more than 2.7x (the recorded sequential drift): 0 of 3321
+  -> no pair anywhere in this run drifted like the discarded pass did.
+
+Nothing here is a threshold and nothing here gates anything. CF-34.

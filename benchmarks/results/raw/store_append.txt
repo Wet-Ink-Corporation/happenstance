@@ -1,1022 +1,1067 @@
-   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\.claude\worktrees\benchmarks\benchmarks)
-    Finished `bench` profile [optimized] target(s) in 3.75s
-     Running benches\store_append.rs (target\release\deps\store_append-5b4459c36d151950.exe)
+   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\benchmarks)
+    Finished `bench` profile [optimized] target(s) in 11.70s
+     Running benches\store_append.rs (target\release\deps\store_append-23d5dad8c96f95fa.exe)
 Gnuplot not found, using plotters backend
 Benchmarking append/batch-size/memory/owned/1
 Benchmarking append/batch-size/memory/owned/1: Warming up for 3.0000 s
-Benchmarking append/batch-size/memory/owned/1: Collecting 30 samples in estimated 5.0001 s (7.5M iterations)
+Benchmarking append/batch-size/memory/owned/1: Collecting 30 samples in estimated 5.0001 s (3.9M iterations)
 Benchmarking append/batch-size/memory/owned/1: Analyzing
 append/batch-size/memory/owned/1
-                        time:   [457.75 ns 520.09 ns 574.46 ns]
-                        thrpt:  [1.7408 Melem/s 1.9227 Melem/s 2.1846 Melem/s]
+                        time:   [723.13 ns 885.82 ns 1.0542 µs]
+                        thrpt:  [948.61 Kelem/s 1.1289 Melem/s 1.3829 Melem/s]
                  change:
-                        time:   [+44.955% +59.245% +73.508%] (p = 0.00 < 0.05)
-                        thrpt:  [−42.366% −37.204% −31.013%]
+                        time:   [+105.88% +137.38% +173.73%] (p = 0.00 < 0.05)
+                        thrpt:  [−63.468% −57.873% −51.429%]
                         Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
 Benchmarking append/batch-size/sqlite/owned/1
 Benchmarking append/batch-size/sqlite/owned/1: Warming up for 3.0000 s
-Benchmarking append/batch-size/sqlite/owned/1: Collecting 30 samples in estimated 5.0310 s (15k iterations)
+Benchmarking append/batch-size/sqlite/owned/1: Collecting 30 samples in estimated 5.2032 s (6975 iterations)
 Benchmarking append/batch-size/sqlite/owned/1: Analyzing
 append/batch-size/sqlite/owned/1
-                        time:   [191.28 µs 209.84 µs 225.59 µs]
-                        thrpt:  [4.4328 Kelem/s 4.7655 Kelem/s 5.2280 Kelem/s]
+                        time:   [577.27 µs 720.26 µs 886.63 µs]
+                        thrpt:  [1.1279 Kelem/s 1.3884 Kelem/s 1.7323 Kelem/s]
                  change:
-                        time:   [+11.410% +24.487% +37.835%] (p = 0.00 < 0.05)
-                        thrpt:  [−27.449% −19.670% −10.241%]
+                        time:   [+132.12% +186.33% +254.62%] (p = 0.00 < 0.05)
+                        thrpt:  [−71.801% −65.076% −56.919%]
                         Performance has regressed.
+Found 2 outliers among 30 measurements (6.67%)
+  2 (6.67%) high mild
 Benchmarking append/batch-size/raw/same-schema/owned/1
 Benchmarking append/batch-size/raw/same-schema/owned/1: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/same-schema/owned/1: Collecting 30 samples in estimated 5.0444 s (31k iterations)
+Benchmarking append/batch-size/raw/same-schema/owned/1: Collecting 30 samples in estimated 5.0184 s (18k iterations)
 Benchmarking append/batch-size/raw/same-schema/owned/1: Analyzing
 append/batch-size/raw/same-schema/owned/1
-                        time:   [190.66 µs 201.58 µs 210.69 µs]
-                        thrpt:  [4.7463 Kelem/s 4.9609 Kelem/s 5.2448 Kelem/s]
+                        time:   [281.04 µs 335.80 µs 397.68 µs]
+                        thrpt:  [2.5146 Kelem/s 2.9780 Kelem/s 3.5582 Kelem/s]
                  change:
-                        time:   [+34.213% +42.812% +52.810%] (p = 0.00 < 0.05)
-                        thrpt:  [−34.559% −29.978% −25.491%]
+                        time:   [+83.688% +119.26% +162.11%] (p = 0.00 < 0.05)
+                        thrpt:  [−61.848% −54.393% −45.560%]
                         Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
 Benchmarking append/batch-size/raw/hand-rolled/owned/1
 Benchmarking append/batch-size/raw/hand-rolled/owned/1: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/hand-rolled/owned/1: Collecting 30 samples in estimated 5.0383 s (44k iterations)
+Benchmarking append/batch-size/raw/hand-rolled/owned/1: Collecting 30 samples in estimated 5.0177 s (22k iterations)
 Benchmarking append/batch-size/raw/hand-rolled/owned/1: Analyzing
 append/batch-size/raw/hand-rolled/owned/1
-                        time:   [76.870 µs 82.287 µs 88.705 µs]
-                        thrpt:  [11.273 Kelem/s 12.153 Kelem/s 13.009 Kelem/s]
+                        time:   [162.96 µs 223.34 µs 286.32 µs]
+                        thrpt:  [3.4926 Kelem/s 4.4776 Kelem/s 6.1365 Kelem/s]
                  change:
-                        time:   [−12.771% −2.9165% +6.6460%] (p = 0.58 > 0.05)
-                        thrpt:  [−6.2318% +3.0041% +14.641%]
-                        No change in performance detected.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
-Benchmarking append/batch-size/memory/owned/8
-Benchmarking append/batch-size/memory/owned/8: Warming up for 3.0000 s
-Benchmarking append/batch-size/memory/owned/8: Collecting 30 samples in estimated 5.0009 s (1.7M iterations)
-Benchmarking append/batch-size/memory/owned/8: Analyzing
-append/batch-size/memory/owned/8
-                        time:   [1.8097 µs 1.9409 µs 2.0950 µs]
-                        thrpt:  [3.8187 Melem/s 4.1219 Melem/s 4.4206 Melem/s]
-                 change:
-                        time:   [−5.2393% +2.2863% +10.863%] (p = 0.58 > 0.05)
-                        thrpt:  [−9.7982% −2.2352% +5.5289%]
-                        No change in performance detected.
-Benchmarking append/batch-size/sqlite/owned/8
-Benchmarking append/batch-size/sqlite/owned/8: Warming up for 3.0000 s
-Benchmarking append/batch-size/sqlite/owned/8: Collecting 30 samples in estimated 5.1999 s (9765 iterations)
-Benchmarking append/batch-size/sqlite/owned/8: Analyzing
-append/batch-size/sqlite/owned/8
-                        time:   [490.93 µs 539.72 µs 589.89 µs]
-                        thrpt:  [13.562 Kelem/s 14.822 Kelem/s 16.296 Kelem/s]
-                 change:
-                        time:   [+7.6787% +18.871% +30.325%] (p = 0.00 < 0.05)
-                        thrpt:  [−23.269% −15.875% −7.1311%]
-                        Performance has regressed.
-Benchmarking append/batch-size/raw/same-schema/owned/8
-Benchmarking append/batch-size/raw/same-schema/owned/8: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/same-schema/owned/8: Collecting 30 samples in estimated 5.1016 s (12k iterations)
-Benchmarking append/batch-size/raw/same-schema/owned/8: Analyzing
-append/batch-size/raw/same-schema/owned/8
-                        time:   [378.15 µs 470.06 µs 598.97 µs]
-                        thrpt:  [13.356 Kelem/s 17.019 Kelem/s 21.155 Kelem/s]
-                 change:
-                        time:   [−14.023% +0.9194% +16.716%] (p = 0.91 > 0.05)
-                        thrpt:  [−14.322% −0.9110% +16.310%]
-                        No change in performance detected.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high severe
-Benchmarking append/batch-size/raw/hand-rolled/owned/8
-Benchmarking append/batch-size/raw/hand-rolled/owned/8: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/hand-rolled/owned/8: Collecting 30 samples in estimated 5.0704 s (20k iterations)
-Benchmarking append/batch-size/raw/hand-rolled/owned/8: Analyzing
-append/batch-size/raw/hand-rolled/owned/8
-                        time:   [198.05 µs 207.44 µs 216.23 µs]
-                        thrpt:  [36.998 Kelem/s 38.566 Kelem/s 40.394 Kelem/s]
-                 change:
-                        time:   [+6.7656% +18.084% +28.430%] (p = 0.00 < 0.05)
-                        thrpt:  [−22.137% −15.315% −6.3369%]
-                        Performance has regressed.
-Found 2 outliers among 30 measurements (6.67%)
-  2 (6.67%) low mild
-Benchmarking append/batch-size/memory/owned/32
-Benchmarking append/batch-size/memory/owned/32: Warming up for 3.0000 s
-Benchmarking append/batch-size/memory/owned/32: Collecting 30 samples in estimated 5.0012 s (360k iterations)
-Benchmarking append/batch-size/memory/owned/32: Analyzing
-append/batch-size/memory/owned/32
-                        time:   [6.8338 µs 7.2889 µs 7.7729 µs]
-                        thrpt:  [4.1169 Melem/s 4.3903 Melem/s 4.6826 Melem/s]
-                 change:
-                        time:   [−40.212% −35.644% −30.563%] (p = 0.00 < 0.05)
-                        thrpt:  [+44.016% +55.386% +67.258%]
-                        Performance has improved.
-Benchmarking append/batch-size/sqlite/owned/32
-Benchmarking append/batch-size/sqlite/owned/32: Warming up for 3.0000 s
-Benchmarking append/batch-size/sqlite/owned/32: Collecting 30 samples in estimated 5.6535 s (2790 iterations)
-Benchmarking append/batch-size/sqlite/owned/32: Analyzing
-append/batch-size/sqlite/owned/32
-                        time:   [1.4043 ms 1.5034 ms 1.6329 ms]
-                        thrpt:  [19.597 Kelem/s 21.285 Kelem/s 22.787 Kelem/s]
-                 change:
-                        time:   [+15.947% +28.816% +42.476%] (p = 0.00 < 0.05)
-                        thrpt:  [−29.813% −22.370% −13.754%]
-                        Performance has regressed.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
-Benchmarking append/batch-size/raw/same-schema/owned/32
-Benchmarking append/batch-size/raw/same-schema/owned/32: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/same-schema/owned/32: Collecting 30 samples in estimated 5.0559 s (6045 iterations)
-Benchmarking append/batch-size/raw/same-schema/owned/32: Analyzing
-append/batch-size/raw/same-schema/owned/32
-                        time:   [573.70 µs 624.64 µs 704.71 µs]
-                        thrpt:  [45.409 Kelem/s 51.229 Kelem/s 55.778 Kelem/s]
-                 change:
-                        time:   [−15.229% −7.6255% +1.4563%] (p = 0.09 > 0.05)
-                        thrpt:  [−1.4354% +8.2550% +17.965%]
-                        No change in performance detected.
-Found 2 outliers among 30 measurements (6.67%)
-  2 (6.67%) high mild
-Benchmarking append/batch-size/raw/hand-rolled/owned/32
-Benchmarking append/batch-size/raw/hand-rolled/owned/32: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/hand-rolled/owned/32: Collecting 30 samples in estimated 5.0548 s (9300 iterations)
-Benchmarking append/batch-size/raw/hand-rolled/owned/32: Analyzing
-append/batch-size/raw/hand-rolled/owned/32
-                        time:   [399.97 µs 415.35 µs 434.54 µs]
-                        thrpt:  [73.641 Kelem/s 77.044 Kelem/s 80.007 Kelem/s]
-                 change:
-                        time:   [−24.850% −16.640% −7.0238%] (p = 0.00 < 0.05)
-                        thrpt:  [+7.5544% +19.962% +33.067%]
-                        Performance has improved.
-Found 5 outliers among 30 measurements (16.67%)
-  2 (6.67%) low severe
-  1 (3.33%) low mild
-  2 (6.67%) high mild
-Benchmarking append/batch-size/memory/owned/128
-Benchmarking append/batch-size/memory/owned/128: Warming up for 3.0000 s
-Benchmarking append/batch-size/memory/owned/128: Collecting 30 samples in estimated 5.0006 s (62k iterations)
-Benchmarking append/batch-size/memory/owned/128: Analyzing
-append/batch-size/memory/owned/128
-                        time:   [40.710 µs 46.595 µs 52.029 µs]
-                        thrpt:  [2.4602 Melem/s 2.7470 Melem/s 3.1442 Melem/s]
-                 change:
-                        time:   [+25.653% +41.226% +59.769%] (p = 0.00 < 0.05)
-                        thrpt:  [−37.410% −29.192% −20.416%]
-                        Performance has regressed.
-Benchmarking append/batch-size/sqlite/owned/128
-Benchmarking append/batch-size/sqlite/owned/128: Warming up for 3.0000 s
-Benchmarking append/batch-size/sqlite/owned/128: Collecting 30 samples in estimated 6.8017 s (930 iterations)
-Benchmarking append/batch-size/sqlite/owned/128: Analyzing
-append/batch-size/sqlite/owned/128
-                        time:   [6.0950 ms 6.9074 ms 7.5275 ms]
-                        thrpt:  [17.004 Kelem/s 18.531 Kelem/s 21.001 Kelem/s]
-                 change:
-                        time:   [+25.739% +41.543% +59.529%] (p = 0.00 < 0.05)
-                        thrpt:  [−37.315% −29.350% −20.470%]
-                        Performance has regressed.
-Benchmarking append/batch-size/raw/same-schema/owned/128
-Benchmarking append/batch-size/raw/same-schema/owned/128: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/same-schema/owned/128: Collecting 30 samples in estimated 5.8129 s (1395 iterations)
-Benchmarking append/batch-size/raw/same-schema/owned/128: Analyzing
-append/batch-size/raw/same-schema/owned/128
-                        time:   [2.8490 ms 3.1070 ms 3.3925 ms]
-                        thrpt:  [37.731 Kelem/s 41.197 Kelem/s 44.928 Kelem/s]
-                 change:
-                        time:   [+5.7917% +20.565% +35.671%] (p = 0.01 < 0.05)
-                        thrpt:  [−26.292% −17.057% −5.4746%]
-                        Performance has regressed.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
-Benchmarking append/batch-size/raw/hand-rolled/owned/128
-Benchmarking append/batch-size/raw/hand-rolled/owned/128: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/hand-rolled/owned/128: Collecting 30 samples in estimated 5.8515 s (2790 iterations)
-Benchmarking append/batch-size/raw/hand-rolled/owned/128: Analyzing
-append/batch-size/raw/hand-rolled/owned/128
-                        time:   [2.2332 ms 2.7216 ms 3.3197 ms]
-                        thrpt:  [38.558 Kelem/s 47.031 Kelem/s 57.317 Kelem/s]
-                 change:
-                        time:   [+14.156% +40.731% +74.411%] (p = 0.01 < 0.05)
-                        thrpt:  [−42.664% −28.942% −12.400%]
-                        Performance has regressed.
-Found 4 outliers among 30 measurements (13.33%)
-  4 (13.33%) high severe
-Benchmarking append/batch-size/memory/interned/1
-Benchmarking append/batch-size/memory/interned/1: Warming up for 3.0000 s
-Benchmarking append/batch-size/memory/interned/1: Collecting 30 samples in estimated 5.0001 s (21M iterations)
-Benchmarking append/batch-size/memory/interned/1: Analyzing
-append/batch-size/memory/interned/1
-                        time:   [153.08 ns 160.35 ns 167.33 ns]
-                        thrpt:  [5.9761 Melem/s 6.2362 Melem/s 6.5326 Melem/s]
-                 change:
-                        time:   [−8.6268% −2.7481% +3.8923%] (p = 0.41 > 0.05)
-                        thrpt:  [−3.7464% +2.8257% +9.4413%]
-                        No change in performance detected.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high severe
-Benchmarking append/batch-size/sqlite/interned/1
-Benchmarking append/batch-size/sqlite/interned/1: Warming up for 3.0000 s
-Benchmarking append/batch-size/sqlite/interned/1: Collecting 30 samples in estimated 5.0590 s (23k iterations)
-Benchmarking append/batch-size/sqlite/interned/1: Analyzing
-append/batch-size/sqlite/interned/1
-                        time:   [270.27 µs 292.29 µs 307.77 µs]
-                        thrpt:  [3.2491 Kelem/s 3.4213 Kelem/s 3.7000 Kelem/s]
-                 change:
-                        time:   [−12.416% +0.5136% +12.903%] (p = 0.94 > 0.05)
-                        thrpt:  [−11.428% −0.5110% +14.177%]
-                        No change in performance detected.
-Benchmarking append/batch-size/raw/same-schema/interned/1
-Benchmarking append/batch-size/raw/same-schema/interned/1: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/same-schema/interned/1: Collecting 30 samples in estimated 5.0296 s (23k iterations)
-Benchmarking append/batch-size/raw/same-schema/interned/1: Analyzing
-append/batch-size/raw/same-schema/interned/1
-                        time:   [152.13 µs 160.66 µs 169.43 µs]
-                        thrpt:  [5.9023 Kelem/s 6.2244 Kelem/s 6.5735 Kelem/s]
-                 change:
-                        time:   [−16.277% −10.080% −2.9123%] (p = 0.01 < 0.05)
-                        thrpt:  [+2.9996% +11.210% +19.441%]
-                        Performance has improved.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
-Benchmarking append/batch-size/raw/hand-rolled/interned/1
-Benchmarking append/batch-size/raw/hand-rolled/interned/1: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/hand-rolled/interned/1: Collecting 30 samples in estimated 5.0180 s (50k iterations)
-Benchmarking append/batch-size/raw/hand-rolled/interned/1: Analyzing
-append/batch-size/raw/hand-rolled/interned/1
-                        time:   [82.405 µs 89.604 µs 95.113 µs]
-                        thrpt:  [10.514 Kelem/s 11.160 Kelem/s 12.135 Kelem/s]
-                 change:
-                        time:   [+13.278% +23.824% +35.384%] (p = 0.00 < 0.05)
-                        thrpt:  [−26.136% −19.240% −11.721%]
-                        Performance has regressed.
-Benchmarking append/batch-size/memory/interned/8
-Benchmarking append/batch-size/memory/interned/8: Warming up for 3.0000 s
-Benchmarking append/batch-size/memory/interned/8: Collecting 30 samples in estimated 5.0007 s (1.8M iterations)
-Benchmarking append/batch-size/memory/interned/8: Analyzing
-append/batch-size/memory/interned/8
-                        time:   [1.3372 µs 1.4517 µs 1.5607 µs]
-                        thrpt:  [5.1260 Melem/s 5.5106 Melem/s 5.9829 Melem/s]
-                 change:
-                        time:   [+36.761% +48.481% +62.815%] (p = 0.00 < 0.05)
-                        thrpt:  [−38.581% −32.651% −26.880%]
-                        Performance has regressed.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
-Benchmarking append/batch-size/sqlite/interned/8
-Benchmarking append/batch-size/sqlite/interned/8: Warming up for 3.0000 s
-Benchmarking append/batch-size/sqlite/interned/8: Collecting 30 samples in estimated 5.3832 s (6045 iterations)
-Benchmarking append/batch-size/sqlite/interned/8: Analyzing
-append/batch-size/sqlite/interned/8
-                        time:   [595.37 µs 645.50 µs 697.39 µs]
-                        thrpt:  [11.471 Kelem/s 12.394 Kelem/s 13.437 Kelem/s]
-                 change:
-                        time:   [+14.919% +27.529% +39.391%] (p = 0.00 < 0.05)
-                        thrpt:  [−28.259% −21.586% −12.982%]
-                        Performance has regressed.
-Benchmarking append/batch-size/raw/same-schema/interned/8
-Benchmarking append/batch-size/raw/same-schema/interned/8: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/same-schema/interned/8: Collecting 30 samples in estimated 5.0962 s (7905 iterations)
-Benchmarking append/batch-size/raw/same-schema/interned/8: Analyzing
-append/batch-size/raw/same-schema/interned/8
-                        time:   [464.54 µs 488.63 µs 516.26 µs]
-                        thrpt:  [15.496 Kelem/s 16.372 Kelem/s 17.221 Kelem/s]
-                 change:
-                        time:   [+23.492% +30.450% +37.634%] (p = 0.00 < 0.05)
-                        thrpt:  [−27.344% −23.342% −19.023%]
-                        Performance has regressed.
-Benchmarking append/batch-size/raw/hand-rolled/interned/8
-Benchmarking append/batch-size/raw/hand-rolled/interned/8: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/hand-rolled/interned/8: Collecting 30 samples in estimated 5.0021 s (20k iterations)
-Benchmarking append/batch-size/raw/hand-rolled/interned/8: Analyzing
-append/batch-size/raw/hand-rolled/interned/8
-                        time:   [177.22 µs 189.72 µs 202.25 µs]
-                        thrpt:  [39.556 Kelem/s 42.167 Kelem/s 45.142 Kelem/s]
-                 change:
-                        time:   [−17.844% −11.458% −4.7813%] (p = 0.00 < 0.05)
-                        thrpt:  [+5.0214% +12.941% +21.719%]
-                        Performance has improved.
-Found 3 outliers among 30 measurements (10.00%)
-  1 (3.33%) low mild
-  2 (6.67%) high mild
-Benchmarking append/batch-size/memory/interned/32
-Benchmarking append/batch-size/memory/interned/32: Warming up for 3.0000 s
-Benchmarking append/batch-size/memory/interned/32: Collecting 30 samples in estimated 5.0022 s (650k iterations)
-Benchmarking append/batch-size/memory/interned/32: Analyzing
-append/batch-size/memory/interned/32
-                        time:   [4.7417 µs 5.0480 µs 5.3881 µs]
-                        thrpt:  [5.9390 Melem/s 6.3391 Melem/s 6.7486 Melem/s]
-                 change:
-                        time:   [+24.365% +36.673% +50.981%] (p = 0.00 < 0.05)
-                        thrpt:  [−33.767% −26.833% −19.592%]
-                        Performance has regressed.
-Benchmarking append/batch-size/sqlite/interned/32
-Benchmarking append/batch-size/sqlite/interned/32: Warming up for 3.0000 s
-Benchmarking append/batch-size/sqlite/interned/32: Collecting 30 samples in estimated 5.4796 s (3720 iterations)
-Benchmarking append/batch-size/sqlite/interned/32: Analyzing
-append/batch-size/sqlite/interned/32
-                        time:   [1.5239 ms 1.7933 ms 2.0399 ms]
-                        thrpt:  [15.687 Kelem/s 17.844 Kelem/s 20.998 Kelem/s]
-                 change:
-                        time:   [−15.696% −1.4643% +14.172%] (p = 0.84 > 0.05)
-                        thrpt:  [−12.413% +1.4861% +18.618%]
-                        No change in performance detected.
-Found 4 outliers among 30 measurements (13.33%)
-  2 (6.67%) low mild
-  1 (3.33%) high mild
-  1 (3.33%) high severe
-Benchmarking append/batch-size/raw/same-schema/interned/32
-Benchmarking append/batch-size/raw/same-schema/interned/32: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/same-schema/interned/32: Collecting 30 samples in estimated 5.1981 s (3720 iterations)
-Benchmarking append/batch-size/raw/same-schema/interned/32: Analyzing
-append/batch-size/raw/same-schema/interned/32
-                        time:   [1.1292 ms 1.1995 ms 1.2624 ms]
-                        thrpt:  [25.348 Kelem/s 26.677 Kelem/s 28.338 Kelem/s]
-                 change:
-                        time:   [+23.962% +32.439% +41.831%] (p = 0.00 < 0.05)
-                        thrpt:  [−29.494% −24.494% −19.330%]
-                        Performance has regressed.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) low mild
-Benchmarking append/batch-size/raw/hand-rolled/interned/32
-Benchmarking append/batch-size/raw/hand-rolled/interned/32: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/hand-rolled/interned/32: Collecting 30 samples in estimated 5.0904 s (7905 iterations)
-Benchmarking append/batch-size/raw/hand-rolled/interned/32: Analyzing
-append/batch-size/raw/hand-rolled/interned/32
-                        time:   [473.25 µs 533.04 µs 599.51 µs]
-                        thrpt:  [53.377 Kelem/s 60.033 Kelem/s 67.618 Kelem/s]
-                 change:
-                        time:   [−8.5744% +0.8464% +10.497%] (p = 0.87 > 0.05)
-                        thrpt:  [−9.5002% −0.8392% +9.3785%]
-                        No change in performance detected.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
-Benchmarking append/batch-size/memory/interned/128
-Benchmarking append/batch-size/memory/interned/128: Warming up for 3.0000 s
-Benchmarking append/batch-size/memory/interned/128: Collecting 30 samples in estimated 5.0041 s (139k iterations)
-Benchmarking append/batch-size/memory/interned/128: Analyzing
-append/batch-size/memory/interned/128
-                        time:   [15.719 µs 17.505 µs 19.604 µs]
-                        thrpt:  [6.5294 Melem/s 7.3123 Melem/s 8.1428 Melem/s]
-                 change:
-                        time:   [+29.484% +48.703% +66.795%] (p = 0.00 < 0.05)
-                        thrpt:  [−40.046% −32.752% −22.770%]
-                        Performance has regressed.
-Benchmarking append/batch-size/sqlite/interned/128
-Benchmarking append/batch-size/sqlite/interned/128: Warming up for 3.0000 s
-Benchmarking append/batch-size/sqlite/interned/128: Collecting 30 samples in estimated 6.6146 s (1395 iterations)
-Benchmarking append/batch-size/sqlite/interned/128: Analyzing
-append/batch-size/sqlite/interned/128
-                        time:   [5.8872 ms 6.8825 ms 7.7035 ms]
-                        thrpt:  [16.616 Kelem/s 18.598 Kelem/s 21.742 Kelem/s]
-                 change:
-                        time:   [+9.9815% +33.886% +58.501%] (p = 0.01 < 0.05)
-                        thrpt:  [−36.909% −25.310% −9.0756%]
-                        Performance has regressed.
-Benchmarking append/batch-size/raw/same-schema/interned/128
-Benchmarking append/batch-size/raw/same-schema/interned/128: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/same-schema/interned/128: Collecting 30 samples in estimated 6.1293 s (1395 iterations)
-Benchmarking append/batch-size/raw/same-schema/interned/128: Analyzing
-append/batch-size/raw/same-schema/interned/128
-                        time:   [2.7336 ms 3.0256 ms 3.3230 ms]
-                        thrpt:  [38.519 Kelem/s 42.306 Kelem/s 46.824 Kelem/s]
-                 change:
-                        time:   [+19.678% +29.920% +40.096%] (p = 0.00 < 0.05)
-                        thrpt:  [−28.620% −23.030% −16.443%]
-                        Performance has regressed.
-Benchmarking append/batch-size/raw/hand-rolled/interned/128
-Benchmarking append/batch-size/raw/hand-rolled/interned/128: Warming up for 3.0000 s
-Benchmarking append/batch-size/raw/hand-rolled/interned/128: Collecting 30 samples in estimated 5.7973 s (2790 iterations)
-Benchmarking append/batch-size/raw/hand-rolled/interned/128: Analyzing
-append/batch-size/raw/hand-rolled/interned/128
-                        time:   [1.8635 ms 2.0721 ms 2.2300 ms]
-                        thrpt:  [57.399 Kelem/s 61.775 Kelem/s 68.687 Kelem/s]
-                 change:
-                        time:   [+10.565% +25.285% +40.842%] (p = 0.00 < 0.05)
-                        thrpt:  [−28.999% −20.182% −9.5556%]
-                        Performance has regressed.
-
-Benchmarking append/payload-size/memory/owned/64
-Benchmarking append/payload-size/memory/owned/64: Warming up for 3.0000 s
-Benchmarking append/payload-size/memory/owned/64: Collecting 30 samples in estimated 5.0015 s (1.2M iterations)
-Benchmarking append/payload-size/memory/owned/64: Analyzing
-append/payload-size/memory/owned/64
-                        time:   [1.8779 µs 2.0955 µs 2.3465 µs]
-                        thrpt:  [208.09 MiB/s 233.02 MiB/s 260.01 MiB/s]
-                 change:
-                        time:   [+4.4211% +13.354% +23.082%] (p = 0.00 < 0.05)
-                        thrpt:  [−18.753% −11.781% −4.2340%]
+                        time:   [+67.653% +105.76% +144.55%] (p = 0.00 < 0.05)
+                        thrpt:  [−59.109% −51.399% −40.353%]
                         Performance has regressed.
 Found 3 outliers among 30 measurements (10.00%)
   3 (10.00%) high mild
-Benchmarking append/payload-size/sqlite/owned/64
-Benchmarking append/payload-size/sqlite/owned/64: Warming up for 3.0000 s
-Benchmarking append/payload-size/sqlite/owned/64: Collecting 30 samples in estimated 5.0320 s (12k iterations)
-Benchmarking append/payload-size/sqlite/owned/64: Analyzing
-append/payload-size/sqlite/owned/64
-                        time:   [341.47 µs 348.07 µs 355.55 µs]
-                        thrpt:  [1.3733 MiB/s 1.4028 MiB/s 1.4299 MiB/s]
+Benchmarking append/batch-size/memory/owned/8
+Benchmarking append/batch-size/memory/owned/8: Warming up for 3.0000 s
+Benchmarking append/batch-size/memory/owned/8: Collecting 30 samples in estimated 5.0052 s (437k iterations)
+Benchmarking append/batch-size/memory/owned/8: Analyzing
+append/batch-size/memory/owned/8
+                        time:   [5.0210 µs 5.5332 µs 6.1626 µs]
+                        thrpt:  [1.2981 Melem/s 1.4458 Melem/s 1.5933 Melem/s]
                  change:
-                        time:   [−19.577% −13.831% −7.2770%] (p = 0.00 < 0.05)
-                        thrpt:  [+7.8481% +16.051% +24.343%]
-                        Performance has improved.
-Found 4 outliers among 30 measurements (13.33%)
-  3 (10.00%) low mild
+                        time:   [+165.24% +201.59% +247.12%] (p = 0.00 < 0.05)
+                        thrpt:  [−71.191% −66.843% −62.298%]
+                        Performance has regressed.
+Found 2 outliers among 30 measurements (6.67%)
+  2 (6.67%) high mild
+Benchmarking append/batch-size/sqlite/owned/8
+Benchmarking append/batch-size/sqlite/owned/8: Warming up for 3.0000 s
+Benchmarking append/batch-size/sqlite/owned/8: Collecting 30 samples in estimated 5.6343 s (1860 iterations)
+Benchmarking append/batch-size/sqlite/owned/8: Analyzing
+append/batch-size/sqlite/owned/8
+                        time:   [1.6166 ms 2.0580 ms 2.6526 ms]
+                        thrpt:  [3.0160 Kelem/s 3.8872 Kelem/s 4.9487 Kelem/s]
+                 change:
+                        time:   [+119.54% +227.15% +352.03%] (p = 0.00 < 0.05)
+                        thrpt:  [−77.878% −69.433% −54.449%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high severe
+Benchmarking append/batch-size/raw/same-schema/owned/8
+Benchmarking append/batch-size/raw/same-schema/owned/8: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/same-schema/owned/8: Collecting 30 samples in estimated 5.4881 s (2790 iterations)
+Benchmarking append/batch-size/raw/same-schema/owned/8: Analyzing
+append/batch-size/raw/same-schema/owned/8
+                        time:   [1.1375 ms 1.4123 ms 1.6902 ms]
+                        thrpt:  [4.7332 Kelem/s 5.6643 Kelem/s 7.0328 Kelem/s]
+                 change:
+                        time:   [+217.64% +300.96% +394.26%] (p = 0.00 < 0.05)
+                        thrpt:  [−79.768% −75.060% −68.517%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
   1 (3.33%) high mild
-Benchmarking append/payload-size/raw/same-schema/owned/64
-Benchmarking append/payload-size/raw/same-schema/owned/64: Warming up for 3.0000 s
-Benchmarking append/payload-size/raw/same-schema/owned/64: Collecting 30 samples in estimated 5.1340 s (14k iterations)
-Benchmarking append/payload-size/raw/same-schema/owned/64: Analyzing
-append/payload-size/raw/same-schema/owned/64
-                        time:   [239.51 µs 251.64 µs 272.20 µs]
-                        thrpt:  [1.7938 MiB/s 1.9404 MiB/s 2.0387 MiB/s]
+Benchmarking append/batch-size/raw/hand-rolled/owned/8
+Benchmarking append/batch-size/raw/hand-rolled/owned/8: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/hand-rolled/owned/8: Collecting 30 samples in estimated 5.0161 s (5580 iterations)
+Benchmarking append/batch-size/raw/hand-rolled/owned/8: Analyzing
+append/batch-size/raw/hand-rolled/owned/8
+                        time:   [730.77 µs 885.95 µs 1.0403 ms]
+                        thrpt:  [7.6904 Kelem/s 9.0299 Kelem/s 10.947 Kelem/s]
                  change:
-                        time:   [−10.000% −2.2877% +6.3307%] (p = 0.59 > 0.05)
-                        thrpt:  [−5.9538% +2.3413% +11.111%]
+                        time:   [+264.05% +374.77% +499.33%] (p = 0.00 < 0.05)
+                        thrpt:  [−83.315% −78.937% −72.531%]
+                        Performance has regressed.
+Benchmarking append/batch-size/memory/owned/32
+Benchmarking append/batch-size/memory/owned/32: Warming up for 3.0000 s
+Benchmarking append/batch-size/memory/owned/32: Collecting 30 samples in estimated 5.0052 s (157k iterations)
+Benchmarking append/batch-size/memory/owned/32: Analyzing
+append/batch-size/memory/owned/32
+                        time:   [24.046 µs 29.788 µs 34.688 µs]
+                        thrpt:  [922.51 Kelem/s 1.0742 Melem/s 1.3308 Melem/s]
+                 change:
+                        time:   [+271.65% +322.78% +383.79%] (p = 0.00 < 0.05)
+                        thrpt:  [−79.330% −76.347% −73.093%]
+                        Performance has regressed.
+Benchmarking append/batch-size/sqlite/owned/32
+Benchmarking append/batch-size/sqlite/owned/32: Warming up for 3.0000 s
+
+Warning: Unable to complete 30 samples in 5.0s. You may wish to increase target time to 5.7s, enable flat sampling, or reduce sample count to 10.
+Benchmarking append/batch-size/sqlite/owned/32: Collecting 30 samples in estimated 5.6911 s (465 iterations)
+Benchmarking append/batch-size/sqlite/owned/32: Analyzing
+append/batch-size/sqlite/owned/32
+                        time:   [2.5992 ms 4.1189 ms 5.8346 ms]
+                        thrpt:  [5.4845 Kelem/s 7.7691 Kelem/s 12.312 Kelem/s]
+                 change:
+                        time:   [+21.303% +77.040% +134.05%] (p = 0.01 < 0.05)
+                        thrpt:  [−57.273% −43.516% −17.562%]
+                        Performance has regressed.
+Found 4 outliers among 30 measurements (13.33%)
+  3 (10.00%) high mild
+  1 (3.33%) high severe
+Benchmarking append/batch-size/raw/same-schema/owned/32
+Benchmarking append/batch-size/raw/same-schema/owned/32: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/same-schema/owned/32: Collecting 30 samples in estimated 5.6419 s (2325 iterations)
+Benchmarking append/batch-size/raw/same-schema/owned/32: Analyzing
+append/batch-size/raw/same-schema/owned/32
+                        time:   [1.9193 ms 2.3632 ms 2.9309 ms]
+                        thrpt:  [10.918 Kelem/s 13.541 Kelem/s 16.673 Kelem/s]
+                 change:
+                        time:   [+117.56% +156.90% +200.70%] (p = 0.00 < 0.05)
+                        thrpt:  [−66.744% −61.074% −54.036%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
+Benchmarking append/batch-size/raw/hand-rolled/owned/32
+Benchmarking append/batch-size/raw/hand-rolled/owned/32: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/hand-rolled/owned/32: Collecting 30 samples in estimated 5.0800 s (4185 iterations)
+Benchmarking append/batch-size/raw/hand-rolled/owned/32: Analyzing
+append/batch-size/raw/hand-rolled/owned/32
+                        time:   [828.14 µs 892.82 µs 972.99 µs]
+                        thrpt:  [32.888 Kelem/s 35.842 Kelem/s 38.641 Kelem/s]
+                 change:
+                        time:   [+71.952% +97.794% +123.79%] (p = 0.00 < 0.05)
+                        thrpt:  [−55.315% −49.442% −41.844%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
+Benchmarking append/batch-size/memory/owned/128
+Benchmarking append/batch-size/memory/owned/128: Warming up for 3.0000 s
+Benchmarking append/batch-size/memory/owned/128: Collecting 30 samples in estimated 5.0037 s (50k iterations)
+Benchmarking append/batch-size/memory/owned/128: Analyzing
+append/batch-size/memory/owned/128
+                        time:   [70.033 µs 77.651 µs 84.713 µs]
+                        thrpt:  [1.5110 Melem/s 1.6484 Melem/s 1.8277 Melem/s]
+                 change:
+                        time:   [+124.86% +148.90% +176.02%] (p = 0.00 < 0.05)
+                        thrpt:  [−63.770% −59.824% −55.528%]
+                        Performance has regressed.
+Benchmarking append/batch-size/sqlite/owned/128
+Benchmarking append/batch-size/sqlite/owned/128: Warming up for 3.0000 s
+
+Warning: Unable to complete 30 samples in 5.0s. You may wish to increase target time to 7.3s, enable flat sampling, or reduce sample count to 10.
+Benchmarking append/batch-size/sqlite/owned/128: Collecting 30 samples in estimated 7.2698 s (465 iterations)
+Benchmarking append/batch-size/sqlite/owned/128: Analyzing
+append/batch-size/sqlite/owned/128
+                        time:   [8.0156 ms 9.4372 ms 11.047 ms]
+                        thrpt:  [11.586 Kelem/s 13.563 Kelem/s 15.969 Kelem/s]
+                 change:
+                        time:   [+94.373% +129.28% +168.85%] (p = 0.00 < 0.05)
+                        thrpt:  [−62.804% −56.384% −48.553%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high severe
+Benchmarking append/batch-size/raw/same-schema/owned/128
+Benchmarking append/batch-size/raw/same-schema/owned/128: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/same-schema/owned/128: Collecting 30 samples in estimated 7.4688 s (930 iterations)
+Benchmarking append/batch-size/raw/same-schema/owned/128: Analyzing
+append/batch-size/raw/same-schema/owned/128
+                        time:   [5.4401 ms 6.4590 ms 7.7994 ms]
+                        thrpt:  [16.411 Kelem/s 19.817 Kelem/s 23.529 Kelem/s]
+                 change:
+                        time:   [+106.52% +148.26% +198.06%] (p = 0.00 < 0.05)
+                        thrpt:  [−66.450% −59.720% −51.579%]
+                        Performance has regressed.
+Found 2 outliers among 30 measurements (6.67%)
+  1 (3.33%) high mild
+  1 (3.33%) high severe
+Benchmarking append/batch-size/raw/hand-rolled/owned/128
+Benchmarking append/batch-size/raw/hand-rolled/owned/128: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/hand-rolled/owned/128: Collecting 30 samples in estimated 5.5070 s (1395 iterations)
+Benchmarking append/batch-size/raw/hand-rolled/owned/128: Analyzing
+append/batch-size/raw/hand-rolled/owned/128
+                        time:   [2.8719 ms 3.2864 ms 3.6383 ms]
+                        thrpt:  [35.181 Kelem/s 38.949 Kelem/s 44.569 Kelem/s]
+                 change:
+                        time:   [+87.901% +114.99% +144.83%] (p = 0.00 < 0.05)
+                        thrpt:  [−59.155% −53.487% −46.780%]
+                        Performance has regressed.
+Benchmarking append/batch-size/memory/interned/1
+Benchmarking append/batch-size/memory/interned/1: Warming up for 3.0000 s
+Benchmarking append/batch-size/memory/interned/1: Collecting 30 samples in estimated 5.0001 s (9.5M iterations)
+Benchmarking append/batch-size/memory/interned/1: Analyzing
+append/batch-size/memory/interned/1
+                        time:   [379.93 ns 423.83 ns 470.41 ns]
+                        thrpt:  [2.1258 Melem/s 2.3594 Melem/s 2.6320 Melem/s]
+                 change:
+                        time:   [+148.14% +178.91% +212.83%] (p = 0.00 < 0.05)
+                        thrpt:  [−68.034% −64.147% −59.700%]
+                        Performance has regressed.
+Benchmarking append/batch-size/sqlite/interned/1
+Benchmarking append/batch-size/sqlite/interned/1: Warming up for 3.0000 s
+Benchmarking append/batch-size/sqlite/interned/1: Collecting 30 samples in estimated 5.1482 s (12k iterations)
+Benchmarking append/batch-size/sqlite/interned/1: Analyzing
+append/batch-size/sqlite/interned/1
+                        time:   [396.91 µs 431.29 µs 471.40 µs]
+                        thrpt:  [2.1213 Kelem/s 2.3186 Kelem/s 2.5195 Kelem/s]
+                 change:
+                        time:   [+75.704% +102.58% +127.73%] (p = 0.00 < 0.05)
+                        thrpt:  [−56.089% −50.636% −43.086%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high severe
+Benchmarking append/batch-size/raw/same-schema/interned/1
+Benchmarking append/batch-size/raw/same-schema/interned/1: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/same-schema/interned/1: Collecting 30 samples in estimated 5.1714 s (13k iterations)
+Benchmarking append/batch-size/raw/same-schema/interned/1: Analyzing
+append/batch-size/raw/same-schema/interned/1
+                        time:   [246.18 µs 261.22 µs 281.42 µs]
+                        thrpt:  [3.5534 Kelem/s 3.8281 Kelem/s 4.0621 Kelem/s]
+                 change:
+                        time:   [+102.08% +146.21% +215.05%] (p = 0.00 < 0.05)
+                        thrpt:  [−68.259% −59.384% −50.514%]
+                        Performance has regressed.
+Found 3 outliers among 30 measurements (10.00%)
+  1 (3.33%) high mild
+  2 (6.67%) high severe
+Benchmarking append/batch-size/raw/hand-rolled/interned/1
+Benchmarking append/batch-size/raw/hand-rolled/interned/1: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/hand-rolled/interned/1: Collecting 30 samples in estimated 5.0559 s (32k iterations)
+Benchmarking append/batch-size/raw/hand-rolled/interned/1: Analyzing
+append/batch-size/raw/hand-rolled/interned/1
+                        time:   [124.08 µs 130.58 µs 139.03 µs]
+                        thrpt:  [7.1925 Kelem/s 7.6580 Kelem/s 8.0590 Kelem/s]
+                 change:
+                        time:   [+87.585% +120.56% +167.52%] (p = 0.00 < 0.05)
+                        thrpt:  [−62.620% −54.662% −46.691%]
+                        Performance has regressed.
+Found 5 outliers among 30 measurements (16.67%)
+  2 (6.67%) low mild
+  1 (3.33%) high mild
+  2 (6.67%) high severe
+Benchmarking append/batch-size/memory/interned/8
+Benchmarking append/batch-size/memory/interned/8: Warming up for 3.0000 s
+Benchmarking append/batch-size/memory/interned/8: Collecting 30 samples in estimated 5.0010 s (1.7M iterations)
+Benchmarking append/batch-size/memory/interned/8: Analyzing
+append/batch-size/memory/interned/8
+                        time:   [2.5773 µs 3.0851 µs 3.6402 µs]
+                        thrpt:  [2.1977 Melem/s 2.5931 Melem/s 3.1041 Melem/s]
+                 change:
+                        time:   [+139.56% +191.74% +250.26%] (p = 0.00 < 0.05)
+                        thrpt:  [−71.450% −65.723% −58.257%]
+                        Performance has regressed.
+Found 2 outliers among 30 measurements (6.67%)
+  2 (6.67%) high mild
+Benchmarking append/batch-size/sqlite/interned/8
+Benchmarking append/batch-size/sqlite/interned/8: Warming up for 3.0000 s
+Benchmarking append/batch-size/sqlite/interned/8: Collecting 30 samples in estimated 5.0137 s (4650 iterations)
+Benchmarking append/batch-size/sqlite/interned/8: Analyzing
+append/batch-size/sqlite/interned/8
+                        time:   [776.37 µs 935.11 µs 1.0937 ms]
+                        thrpt:  [7.3146 Kelem/s 8.5551 Kelem/s 10.304 Kelem/s]
+                 change:
+                        time:   [+19.098% +46.381% +82.605%] (p = 0.00 < 0.05)
+                        thrpt:  [−45.237% −31.685% −16.036%]
+                        Performance has regressed.
+Found 2 outliers among 30 measurements (6.67%)
+  2 (6.67%) high mild
+Benchmarking append/batch-size/raw/same-schema/interned/8
+Benchmarking append/batch-size/raw/same-schema/interned/8: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/same-schema/interned/8: Collecting 30 samples in estimated 5.5264 s (3255 iterations)
+Benchmarking append/batch-size/raw/same-schema/interned/8: Analyzing
+append/batch-size/raw/same-schema/interned/8
+                        time:   [700.58 µs 842.55 µs 1.0139 ms]
+                        thrpt:  [7.8901 Kelem/s 9.4950 Kelem/s 11.419 Kelem/s]
+                 change:
+                        time:   [+98.337% +133.58% +172.84%] (p = 0.00 < 0.05)
+                        thrpt:  [−63.348% −57.189% −49.581%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
+Benchmarking append/batch-size/raw/hand-rolled/interned/8
+Benchmarking append/batch-size/raw/hand-rolled/interned/8: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/hand-rolled/interned/8: Collecting 30 samples in estimated 5.1116 s (15k iterations)
+Benchmarking append/batch-size/raw/hand-rolled/interned/8: Analyzing
+append/batch-size/raw/hand-rolled/interned/8
+                        time:   [279.73 µs 293.21 µs 310.55 µs]
+                        thrpt:  [25.761 Kelem/s 27.285 Kelem/s 28.599 Kelem/s]
+                 change:
+                        time:   [−28.504% −15.915% −1.0395%] (p = 0.06 > 0.05)
+                        thrpt:  [+1.0505% +18.927% +39.868%]
                         No change in performance detected.
 Found 1 outliers among 30 measurements (3.33%)
   1 (3.33%) high mild
+Benchmarking append/batch-size/memory/interned/32
+Benchmarking append/batch-size/memory/interned/32: Warming up for 3.0000 s
+Benchmarking append/batch-size/memory/interned/32: Collecting 30 samples in estimated 5.0039 s (538k iterations)
+Benchmarking append/batch-size/memory/interned/32: Analyzing
+append/batch-size/memory/interned/32
+                        time:   [5.9831 µs 6.9511 µs 7.8988 µs]
+                        thrpt:  [4.0513 Melem/s 4.6036 Melem/s 5.3484 Melem/s]
+                 change:
+                        time:   [−5.1282% +4.6441% +15.871%] (p = 0.41 > 0.05)
+                        thrpt:  [−13.697% −4.4380% +5.4054%]
+                        No change in performance detected.
+Benchmarking append/batch-size/sqlite/interned/32
+Benchmarking append/batch-size/sqlite/interned/32: Warming up for 3.0000 s
+Benchmarking append/batch-size/sqlite/interned/32: Collecting 30 samples in estimated 5.6837 s (1395 iterations)
+Benchmarking append/batch-size/sqlite/interned/32: Analyzing
+append/batch-size/sqlite/interned/32
+                        time:   [2.7618 ms 3.2144 ms 3.6803 ms]
+                        thrpt:  [8.6950 Kelem/s 9.9552 Kelem/s 11.586 Kelem/s]
+                 change:
+                        time:   [−40.024% −19.055% +6.9230%] (p = 0.19 > 0.05)
+                        thrpt:  [−6.4748% +23.541% +66.733%]
+                        No change in performance detected.
+Found 2 outliers among 30 measurements (6.67%)
+  2 (6.67%) high mild
+Benchmarking append/batch-size/raw/same-schema/interned/32
+Benchmarking append/batch-size/raw/same-schema/interned/32: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/same-schema/interned/32: Collecting 30 samples in estimated 5.4284 s (2325 iterations)
+Benchmarking append/batch-size/raw/same-schema/interned/32: Analyzing
+append/batch-size/raw/same-schema/interned/32
+                        time:   [1.3163 ms 1.4037 ms 1.5017 ms]
+                        thrpt:  [21.310 Kelem/s 22.798 Kelem/s 24.310 Kelem/s]
+                 change:
+                        time:   [−41.623% −14.337% +17.975%] (p = 0.58 > 0.05)
+                        thrpt:  [−15.237% +16.736% +71.302%]
+                        No change in performance detected.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
+Benchmarking append/batch-size/raw/hand-rolled/interned/32
+Benchmarking append/batch-size/raw/hand-rolled/interned/32: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/hand-rolled/interned/32: Collecting 30 samples in estimated 5.0355 s (4185 iterations)
+Benchmarking append/batch-size/raw/hand-rolled/interned/32: Analyzing
+append/batch-size/raw/hand-rolled/interned/32
+                        time:   [679.28 µs 712.71 µs 759.64 µs]
+                        thrpt:  [42.125 Kelem/s 44.899 Kelem/s 47.109 Kelem/s]
+                 change:
+                        time:   [−32.799% −18.788% −1.3274%] (p = 0.05 > 0.05)
+                        thrpt:  [+1.3453% +23.134% +48.808%]
+                        No change in performance detected.
+Found 8 outliers among 30 measurements (26.67%)
+  5 (16.67%) low mild
+  1 (3.33%) high mild
+  2 (6.67%) high severe
+Benchmarking append/batch-size/memory/interned/128
+Benchmarking append/batch-size/memory/interned/128: Warming up for 3.0000 s
+Benchmarking append/batch-size/memory/interned/128: Collecting 30 samples in estimated 5.0139 s (146k iterations)
+Benchmarking append/batch-size/memory/interned/128: Analyzing
+append/batch-size/memory/interned/128
+                        time:   [19.153 µs 20.018 µs 20.980 µs]
+                        thrpt:  [6.1009 Melem/s 6.3942 Melem/s 6.6831 Melem/s]
+                 change:
+                        time:   [−19.856% −15.265% −10.564%] (p = 0.00 < 0.05)
+                        thrpt:  [+11.811% +18.015% +24.775%]
+                        Performance has improved.
+Benchmarking append/batch-size/sqlite/interned/128
+Benchmarking append/batch-size/sqlite/interned/128: Warming up for 3.0000 s
+Benchmarking append/batch-size/sqlite/interned/128: Collecting 30 samples in estimated 6.2838 s (930 iterations)
+Benchmarking append/batch-size/sqlite/interned/128: Analyzing
+append/batch-size/sqlite/interned/128
+                        time:   [6.6115 ms 7.1453 ms 7.5622 ms]
+                        thrpt:  [16.926 Kelem/s 17.914 Kelem/s 19.360 Kelem/s]
+                 change:
+                        time:   [−42.200% −30.704% −17.900%] (p = 0.00 < 0.05)
+                        thrpt:  [+21.803% +44.308% +73.010%]
+                        Performance has improved.
+Benchmarking append/batch-size/raw/same-schema/interned/128
+Benchmarking append/batch-size/raw/same-schema/interned/128: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/same-schema/interned/128: Collecting 30 samples in estimated 6.0763 s (1395 iterations)
+Benchmarking append/batch-size/raw/same-schema/interned/128: Analyzing
+append/batch-size/raw/same-schema/interned/128
+                        time:   [3.8408 ms 4.0500 ms 4.2024 ms]
+                        thrpt:  [30.459 Kelem/s 31.605 Kelem/s 33.327 Kelem/s]
+                 change:
+                        time:   [−28.791% −17.413% −5.8388%] (p = 0.01 < 0.05)
+                        thrpt:  [+6.2009% +21.084% +40.431%]
+                        Performance has improved.
+Benchmarking append/batch-size/raw/hand-rolled/interned/128
+Benchmarking append/batch-size/raw/hand-rolled/interned/128: Warming up for 3.0000 s
+Benchmarking append/batch-size/raw/hand-rolled/interned/128: Collecting 30 samples in estimated 5.6284 s (1860 iterations)
+Benchmarking append/batch-size/raw/hand-rolled/interned/128: Analyzing
+append/batch-size/raw/hand-rolled/interned/128
+                        time:   [2.1374 ms 2.2740 ms 2.4287 ms]
+                        thrpt:  [52.703 Kelem/s 56.289 Kelem/s 59.886 Kelem/s]
+                 change:
+                        time:   [−42.048% −20.725% +4.4088%] (p = 0.22 > 0.05)
+                        thrpt:  [−4.2226% +26.142% +72.556%]
+                        No change in performance detected.
+Found 5 outliers among 30 measurements (16.67%)
+  3 (10.00%) low mild
+  2 (6.67%) high mild
+
+Benchmarking append/payload-size/memory/owned/64
+Benchmarking append/payload-size/memory/owned/64: Warming up for 3.0000 s
+Benchmarking append/payload-size/memory/owned/64: Collecting 30 samples in estimated 5.0000 s (936k iterations)
+Benchmarking append/payload-size/memory/owned/64: Analyzing
+append/payload-size/memory/owned/64
+                        time:   [2.4008 µs 2.5413 µs 2.6698 µs]
+                        thrpt:  [182.89 MiB/s 192.14 MiB/s 203.38 MiB/s]
+                 change:
+                        time:   [−26.366% −20.794% −14.700%] (p = 0.00 < 0.05)
+                        thrpt:  [+17.234% +26.253% +35.807%]
+                        Performance has improved.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
+Benchmarking append/payload-size/sqlite/owned/64
+Benchmarking append/payload-size/sqlite/owned/64: Warming up for 3.0000 s
+Benchmarking append/payload-size/sqlite/owned/64: Collecting 30 samples in estimated 5.2496 s (3720 iterations)
+Benchmarking append/payload-size/sqlite/owned/64: Analyzing
+append/payload-size/sqlite/owned/64
+                        time:   [1.0150 ms 1.1784 ms 1.3679 ms]
+                        thrpt:  [365.52 KiB/s 424.29 KiB/s 492.60 KiB/s]
+                 change:
+                        time:   [−11.183% +24.056% +63.145%] (p = 0.18 > 0.05)
+                        thrpt:  [−38.705% −19.391% +12.592%]
+                        No change in performance detected.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
+Benchmarking append/payload-size/raw/same-schema/owned/64
+Benchmarking append/payload-size/raw/same-schema/owned/64: Warming up for 3.0000 s
+Benchmarking append/payload-size/raw/same-schema/owned/64: Collecting 30 samples in estimated 5.2223 s (6045 iterations)
+Benchmarking append/payload-size/raw/same-schema/owned/64: Analyzing
+append/payload-size/raw/same-schema/owned/64
+                        time:   [443.02 µs 468.15 µs 501.75 µs]
+                        thrpt:  [996.51 KiB/s 1.0430 MiB/s 1.1022 MiB/s]
+                 change:
+                        time:   [−3.8340% +10.839% +28.175%] (p = 0.17 > 0.05)
+                        thrpt:  [−21.981% −9.7788% +3.9869%]
+                        No change in performance detected.
+Found 3 outliers among 30 measurements (10.00%)
+  3 (10.00%) high mild
 Benchmarking append/payload-size/memory/owned/1024
 Benchmarking append/payload-size/memory/owned/1024: Warming up for 3.0000 s
-Benchmarking append/payload-size/memory/owned/1024: Collecting 30 samples in estimated 5.0019 s (1.1M iterations)
+Benchmarking append/payload-size/memory/owned/1024: Collecting 30 samples in estimated 5.0020 s (862k iterations)
 Benchmarking append/payload-size/memory/owned/1024: Analyzing
 append/payload-size/memory/owned/1024
-                        time:   [2.6080 µs 2.8418 µs 3.0951 µs]
-                        thrpt:  [2.4650 GiB/s 2.6847 GiB/s 2.9254 GiB/s]
+                        time:   [2.7205 µs 2.8338 µs 2.9402 µs]
+                        thrpt:  [2.5948 GiB/s 2.6923 GiB/s 2.8044 GiB/s]
                  change:
-                        time:   [+41.789% +55.580% +71.025%] (p = 0.00 < 0.05)
-                        thrpt:  [−41.529% −35.724% −29.473%]
-                        Performance has regressed.
+                        time:   [−22.655% −16.893% −10.515%] (p = 0.00 < 0.05)
+                        thrpt:  [+11.750% +20.327% +29.291%]
+                        Performance has improved.
 Benchmarking append/payload-size/sqlite/owned/1024
 Benchmarking append/payload-size/sqlite/owned/1024: Warming up for 3.0000 s
-Benchmarking append/payload-size/sqlite/owned/1024: Collecting 30 samples in estimated 5.2365 s (8835 iterations)
+Benchmarking append/payload-size/sqlite/owned/1024: Collecting 30 samples in estimated 5.3310 s (6510 iterations)
 Benchmarking append/payload-size/sqlite/owned/1024: Analyzing
 append/payload-size/sqlite/owned/1024
-                        time:   [402.48 µs 492.76 µs 563.74 µs]
-                        thrpt:  [13.858 MiB/s 15.855 MiB/s 19.411 MiB/s]
+                        time:   [713.71 µs 744.22 µs 775.45 µs]
+                        thrpt:  [10.075 MiB/s 10.498 MiB/s 10.946 MiB/s]
                  change:
-                        time:   [−10.659% +2.3746% +16.025%] (p = 0.73 > 0.05)
-                        thrpt:  [−13.811% −2.3195% +11.931%]
+                        time:   [−15.697% −5.1860% +7.7236%] (p = 0.42 > 0.05)
+                        thrpt:  [−7.1698% +5.4697% +18.619%]
                         No change in performance detected.
+Found 4 outliers among 30 measurements (13.33%)
+  2 (6.67%) low mild
+  2 (6.67%) high mild
 Benchmarking append/payload-size/raw/same-schema/owned/1024
 Benchmarking append/payload-size/raw/same-schema/owned/1024: Warming up for 3.0000 s
-Benchmarking append/payload-size/raw/same-schema/owned/1024: Collecting 30 samples in estimated 5.0887 s (8370 iterations)
+Benchmarking append/payload-size/raw/same-schema/owned/1024: Collecting 30 samples in estimated 5.1006 s (6510 iterations)
 Benchmarking append/payload-size/raw/same-schema/owned/1024: Analyzing
 append/payload-size/raw/same-schema/owned/1024
-                        time:   [433.38 µs 481.66 µs 532.53 µs]
-                        thrpt:  [14.670 MiB/s 16.220 MiB/s 18.027 MiB/s]
+                        time:   [882.01 µs 1.0544 ms 1.2131 ms]
+                        thrpt:  [6.4401 MiB/s 7.4096 MiB/s 8.8576 MiB/s]
                  change:
-                        time:   [+38.719% +53.663% +69.324%] (p = 0.00 < 0.05)
-                        thrpt:  [−40.942% −34.923% −27.912%]
-                        Performance has regressed.
+                        time:   [−20.080% +9.4126% +46.019%] (p = 0.61 > 0.05)
+                        thrpt:  [−31.516% −8.6028% +25.125%]
+                        No change in performance detected.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
 Benchmarking append/payload-size/memory/owned/65536
 Benchmarking append/payload-size/memory/owned/65536: Warming up for 3.0000 s
-Benchmarking append/payload-size/memory/owned/65536: Collecting 30 samples in estimated 5.0026 s (767k iterations)
+Benchmarking append/payload-size/memory/owned/65536: Collecting 30 samples in estimated 5.0023 s (527k iterations)
 Benchmarking append/payload-size/memory/owned/65536: Analyzing
 append/payload-size/memory/owned/65536
-                        time:   [2.6515 µs 2.9739 µs 3.3005 µs]
-                        thrpt:  [147.94 GiB/s 164.19 GiB/s 184.15 GiB/s]
+                        time:   [5.2963 µs 5.8022 µs 6.5511 µs]
+                        thrpt:  [74.534 GiB/s 84.154 GiB/s 92.193 GiB/s]
                  change:
-                        time:   [+68.226% +81.535% +94.143%] (p = 0.00 < 0.05)
-                        thrpt:  [−48.492% −44.914% −40.556%]
+                        time:   [+66.270% +88.306% +115.08%] (p = 0.00 < 0.05)
+                        thrpt:  [−53.505% −46.895% −39.857%]
                         Performance has regressed.
-Found 4 outliers among 30 measurements (13.33%)
-  2 (6.67%) low severe
-  1 (3.33%) low mild
+Found 3 outliers among 30 measurements (10.00%)
   1 (3.33%) high mild
+  2 (6.67%) high severe
 Benchmarking append/payload-size/sqlite/owned/65536
 Benchmarking append/payload-size/sqlite/owned/65536: Warming up for 3.0000 s
-Benchmarking append/payload-size/sqlite/owned/65536: Collecting 30 samples in estimated 9.0773 s (930 iterations)
+
+Warning: Unable to complete 30 samples in 5.0s. You may wish to increase target time to 8.9s, enable flat sampling, or reduce sample count to 10.
+Benchmarking append/payload-size/sqlite/owned/65536: Collecting 30 samples in estimated 8.8716 s (465 iterations)
 Benchmarking append/payload-size/sqlite/owned/65536: Analyzing
 append/payload-size/sqlite/owned/65536
-                        time:   [6.3863 ms 7.1575 ms 8.0333 ms]
-                        thrpt:  [62.241 MiB/s 69.857 MiB/s 78.292 MiB/s]
+                        time:   [9.8747 ms 10.385 ms 11.141 ms]
+                        thrpt:  [44.881 MiB/s 48.148 MiB/s 50.634 MiB/s]
                  change:
-                        time:   [+11.678% +25.838% +41.984%] (p = 0.00 < 0.05)
-                        thrpt:  [−29.570% −20.533% −10.457%]
-                        Performance has regressed.
+                        time:   [−6.1369% +9.2803% +25.266%] (p = 0.28 > 0.05)
+                        thrpt:  [−20.170% −8.4922% +6.5381%]
+                        No change in performance detected.
 Found 1 outliers among 30 measurements (3.33%)
   1 (3.33%) high mild
 Benchmarking append/payload-size/raw/same-schema/owned/65536
 Benchmarking append/payload-size/raw/same-schema/owned/65536: Warming up for 3.0000 s
-Benchmarking append/payload-size/raw/same-schema/owned/65536: Collecting 30 samples in estimated 5.9379 s (930 iterations)
+Benchmarking append/payload-size/raw/same-schema/owned/65536: Collecting 30 samples in estimated 6.1152 s (930 iterations)
 Benchmarking append/payload-size/raw/same-schema/owned/65536: Analyzing
 append/payload-size/raw/same-schema/owned/65536
-                        time:   [4.6629 ms 4.9514 ms 5.2387 ms]
-                        thrpt:  [95.444 MiB/s 100.98 MiB/s 107.23 MiB/s]
+                        time:   [5.8687 ms 6.4126 ms 7.0930 ms]
+                        thrpt:  [70.492 MiB/s 77.971 MiB/s 85.197 MiB/s]
                  change:
-                        time:   [+52.628% +74.502% +102.11%] (p = 0.00 < 0.05)
-                        thrpt:  [−50.521% −42.694% −34.481%]
+                        time:   [+5.2673% +25.248% +55.753%] (p = 0.03 < 0.05)
+                        thrpt:  [−35.796% −20.158% −5.0038%]
                         Performance has regressed.
-Found 1 outliers among 30 measurements (3.33%)
+Found 3 outliers among 30 measurements (10.00%)
+  2 (6.67%) high mild
   1 (3.33%) high severe
 Benchmarking append/payload-size/memory/interned/64
 Benchmarking append/payload-size/memory/interned/64: Warming up for 3.0000 s
-Benchmarking append/payload-size/memory/interned/64: Collecting 30 samples in estimated 5.0004 s (3.2M iterations)
+Benchmarking append/payload-size/memory/interned/64: Collecting 30 samples in estimated 5.0004 s (2.3M iterations)
 Benchmarking append/payload-size/memory/interned/64: Analyzing
 append/payload-size/memory/interned/64
-                        time:   [839.94 ns 878.01 ns 916.05 ns]
-                        thrpt:  [533.03 MiB/s 556.12 MiB/s 581.33 MiB/s]
+                        time:   [1.1933 µs 1.2575 µs 1.3265 µs]
+                        thrpt:  [368.10 MiB/s 388.28 MiB/s 409.19 MiB/s]
                  change:
-                        time:   [−3.1008% +4.5327% +13.496%] (p = 0.29 > 0.05)
-                        thrpt:  [−11.891% −4.3362% +3.2000%]
-                        No change in performance detected.
-Found 2 outliers among 30 measurements (6.67%)
-  1 (3.33%) high mild
-  1 (3.33%) high severe
+                        time:   [−33.634% −27.230% −20.261%] (p = 0.00 < 0.05)
+                        thrpt:  [+25.408% +37.419% +50.680%]
+                        Performance has improved.
 Benchmarking append/payload-size/sqlite/interned/64
 Benchmarking append/payload-size/sqlite/interned/64: Warming up for 3.0000 s
-Benchmarking append/payload-size/sqlite/interned/64: Collecting 30 samples in estimated 5.0784 s (11k iterations)
+Benchmarking append/payload-size/sqlite/interned/64: Collecting 30 samples in estimated 5.0567 s (7905 iterations)
 Benchmarking append/payload-size/sqlite/interned/64: Analyzing
 append/payload-size/sqlite/interned/64
-                        time:   [376.34 µs 429.32 µs 474.08 µs]
-                        thrpt:  [1.0299 MiB/s 1.1373 MiB/s 1.2974 MiB/s]
+                        time:   [500.14 µs 528.84 µs 553.64 µs]
+                        thrpt:  [903.12 KiB/s 945.47 KiB/s 999.73 KiB/s]
                  change:
-                        time:   [−17.363% −8.6953% +1.5859%] (p = 0.09 > 0.05)
-                        thrpt:  [−1.5612% +9.5233% +21.011%]
-                        No change in performance detected.
-Found 7 outliers among 30 measurements (23.33%)
-  2 (6.67%) low mild
-  4 (13.33%) high mild
-  1 (3.33%) high severe
+                        time:   [−33.926% −26.868% −19.022%] (p = 0.00 < 0.05)
+                        thrpt:  [+23.491% +36.739% +51.345%]
+                        Performance has improved.
 Benchmarking append/payload-size/raw/same-schema/interned/64
 Benchmarking append/payload-size/raw/same-schema/interned/64: Warming up for 3.0000 s
-Benchmarking append/payload-size/raw/same-schema/interned/64: Collecting 30 samples in estimated 5.1124 s (13k iterations)
+Benchmarking append/payload-size/raw/same-schema/interned/64: Collecting 30 samples in estimated 5.0693 s (12k iterations)
 Benchmarking append/payload-size/raw/same-schema/interned/64: Analyzing
 append/payload-size/raw/same-schema/interned/64
-                        time:   [318.78 µs 353.06 µs 386.17 µs]
-                        thrpt:  [1.2644 MiB/s 1.3830 MiB/s 1.5317 MiB/s]
+                        time:   [446.58 µs 482.70 µs 523.92 µs]
+                        thrpt:  [954.34 KiB/s 1.0116 MiB/s 1.0934 MiB/s]
                  change:
-                        time:   [+10.354% +19.789% +29.588%] (p = 0.00 < 0.05)
-                        thrpt:  [−22.833% −16.520% −9.3827%]
-                        Performance has regressed.
+                        time:   [−32.099% −12.668% +6.5427%] (p = 0.36 > 0.05)
+                        thrpt:  [−6.1410% +14.505% +47.274%]
+                        No change in performance detected.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
 Benchmarking append/payload-size/memory/interned/1024
 Benchmarking append/payload-size/memory/interned/1024: Warming up for 3.0000 s
-Benchmarking append/payload-size/memory/interned/1024: Collecting 30 samples in estimated 5.0001 s (3.0M iterations)
+Benchmarking append/payload-size/memory/interned/1024: Collecting 30 samples in estimated 5.0007 s (2.4M iterations)
 Benchmarking append/payload-size/memory/interned/1024: Analyzing
 append/payload-size/memory/interned/1024
-                        time:   [1.1164 µs 1.1947 µs 1.2793 µs]
-                        thrpt:  [5.9639 GiB/s 6.3858 GiB/s 6.8339 GiB/s]
+                        time:   [1.0717 µs 1.1777 µs 1.2764 µs]
+                        thrpt:  [5.9771 GiB/s 6.4784 GiB/s 7.1188 GiB/s]
                  change:
-                        time:   [+22.919% +34.303% +46.483%] (p = 0.00 < 0.05)
-                        thrpt:  [−31.733% −25.542% −18.646%]
-                        Performance has regressed.
-Benchmarking append/payload-size/sqlite/interned/1024
-Benchmarking append/payload-size/sqlite/interned/1024: Warming up for 3.0000 s
-Benchmarking append/payload-size/sqlite/interned/1024: Collecting 30 samples in estimated 5.0034 s (9765 iterations)
-Benchmarking append/payload-size/sqlite/interned/1024: Analyzing
-append/payload-size/sqlite/interned/1024
-                        time:   [542.58 µs 597.77 µs 669.00 µs]
-                        thrpt:  [11.678 MiB/s 13.069 MiB/s 14.399 MiB/s]
-                 change:
-                        time:   [+6.7696% +25.049% +53.221%] (p = 0.01 < 0.05)
-                        thrpt:  [−34.735% −20.031% −6.3404%]
-                        Performance has regressed.
-Found 4 outliers among 30 measurements (13.33%)
-  2 (6.67%) low mild
-  1 (3.33%) high mild
-  1 (3.33%) high severe
-Benchmarking append/payload-size/raw/same-schema/interned/1024
-Benchmarking append/payload-size/raw/same-schema/interned/1024: Warming up for 3.0000 s
-Benchmarking append/payload-size/raw/same-schema/interned/1024: Collecting 30 samples in estimated 5.1380 s (17k iterations)
-Benchmarking append/payload-size/raw/same-schema/interned/1024: Analyzing
-append/payload-size/raw/same-schema/interned/1024
-                        time:   [238.82 µs 245.81 µs 253.38 µs]
-                        thrpt:  [30.833 MiB/s 31.782 MiB/s 32.713 MiB/s]
-                 change:
-                        time:   [−38.022% −35.138% −32.015%] (p = 0.00 < 0.05)
-                        thrpt:  [+47.092% +54.172% +61.347%]
+                        time:   [−24.602% −16.842% −8.7876%] (p = 0.00 < 0.05)
+                        thrpt:  [+9.6343% +20.252% +32.630%]
                         Performance has improved.
-Benchmarking append/payload-size/memory/interned/65536
-Benchmarking append/payload-size/memory/interned/65536: Warming up for 3.0000 s
-Benchmarking append/payload-size/memory/interned/65536: Collecting 30 samples in estimated 5.0003 s (2.5M iterations)
-Benchmarking append/payload-size/memory/interned/65536: Analyzing
-append/payload-size/memory/interned/65536
-                        time:   [1.3059 µs 1.4518 µs 1.6193 µs]
-                        thrpt:  [301.53 GiB/s 336.33 GiB/s 373.91 GiB/s]
-                 change:
-                        time:   [+67.446% +92.863% +122.74%] (p = 0.00 < 0.05)
-                        thrpt:  [−55.106% −48.150% −40.279%]
-                        Performance has regressed.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high severe
-Benchmarking append/payload-size/sqlite/interned/65536
-Benchmarking append/payload-size/sqlite/interned/65536: Warming up for 3.0000 s
-Benchmarking append/payload-size/sqlite/interned/65536: Collecting 30 samples in estimated 8.4352 s (930 iterations)
-Benchmarking append/payload-size/sqlite/interned/65536: Analyzing
-append/payload-size/sqlite/interned/65536
-                        time:   [8.1189 ms 9.2303 ms 10.492 ms]
-                        thrpt:  [47.654 MiB/s 54.169 MiB/s 61.585 MiB/s]
-                 change:
-                        time:   [+29.373% +45.688% +65.562%] (p = 0.00 < 0.05)
-                        thrpt:  [−39.600% −31.360% −22.704%]
-                        Performance has regressed.
 Found 2 outliers among 30 measurements (6.67%)
   2 (6.67%) high mild
-Benchmarking append/payload-size/raw/same-schema/interned/65536
-Benchmarking append/payload-size/raw/same-schema/interned/65536: Warming up for 3.0000 s
-Benchmarking append/payload-size/raw/same-schema/interned/65536: Collecting 30 samples in estimated 5.5965 s (930 iterations)
-Benchmarking append/payload-size/raw/same-schema/interned/65536: Analyzing
-append/payload-size/raw/same-schema/interned/65536
-                        time:   [3.8329 ms 4.0842 ms 4.3564 ms]
-                        thrpt:  [114.77 MiB/s 122.42 MiB/s 130.45 MiB/s]
+Benchmarking append/payload-size/sqlite/interned/1024
+Benchmarking append/payload-size/sqlite/interned/1024: Warming up for 3.0000 s
+Benchmarking append/payload-size/sqlite/interned/1024: Collecting 30 samples in estimated 5.0471 s (7905 iterations)
+Benchmarking append/payload-size/sqlite/interned/1024: Analyzing
+append/payload-size/sqlite/interned/1024
+                        time:   [655.88 µs 687.35 µs 716.89 µs]
+                        thrpt:  [10.898 MiB/s 11.366 MiB/s 11.911 MiB/s]
                  change:
-                        time:   [+19.451% +31.656% +44.952%] (p = 0.00 < 0.05)
-                        thrpt:  [−31.011% −24.045% −16.284%]
-                        Performance has regressed.
+                        time:   [−35.333% −24.316% −12.189%] (p = 0.00 < 0.05)
+                        thrpt:  [+13.881% +32.127% +54.637%]
+                        Performance has improved.
+Found 3 outliers among 30 measurements (10.00%)
+  3 (10.00%) low mild
+Benchmarking append/payload-size/raw/same-schema/interned/1024
+Benchmarking append/payload-size/raw/same-schema/interned/1024: Warming up for 3.0000 s
+Benchmarking append/payload-size/raw/same-schema/interned/1024: Collecting 30 samples in estimated 5.0297 s (9300 iterations)
+Benchmarking append/payload-size/raw/same-schema/interned/1024: Analyzing
+append/payload-size/raw/same-schema/interned/1024
+                        time:   [473.88 µs 497.38 µs 520.38 µs]
+                        thrpt:  [15.013 MiB/s 15.707 MiB/s 16.486 MiB/s]
+                 change:
+                        time:   [−41.123% −31.968% −21.804%] (p = 0.00 < 0.05)
+                        thrpt:  [+27.884% +46.990% +69.845%]
+                        Performance has improved.
 Found 1 outliers among 30 measurements (3.33%)
   1 (3.33%) low mild
+Benchmarking append/payload-size/memory/interned/65536
+Benchmarking append/payload-size/memory/interned/65536: Warming up for 3.0000 s
+Benchmarking append/payload-size/memory/interned/65536: Collecting 30 samples in estimated 5.0001 s (3.3M iterations)
+Benchmarking append/payload-size/memory/interned/65536: Analyzing
+append/payload-size/memory/interned/65536
+                        time:   [969.11 ns 1.0521 µs 1.1438 µs]
+                        thrpt:  [426.91 GiB/s 464.11 GiB/s 503.84 GiB/s]
+                 change:
+                        time:   [−40.451% −34.795% −29.156%] (p = 0.00 < 0.05)
+                        thrpt:  [+41.156% +53.362% +67.929%]
+                        Performance has improved.
+Benchmarking append/payload-size/sqlite/interned/65536
+Benchmarking append/payload-size/sqlite/interned/65536: Warming up for 3.0000 s
+Benchmarking append/payload-size/sqlite/interned/65536: Collecting 30 samples in estimated 7.8000 s (930 iterations)
+Benchmarking append/payload-size/sqlite/interned/65536: Analyzing
+append/payload-size/sqlite/interned/65536
+                        time:   [6.7489 ms 7.1114 ms 7.5862 ms]
+                        thrpt:  [65.909 MiB/s 70.309 MiB/s 74.086 MiB/s]
+                 change:
+                        time:   [−31.544% −21.448% −9.8742%] (p = 0.00 < 0.05)
+                        thrpt:  [+10.956% +27.305% +46.079%]
+                        Performance has improved.
+Benchmarking append/payload-size/raw/same-schema/interned/65536
+Benchmarking append/payload-size/raw/same-schema/interned/65536: Warming up for 3.0000 s
+Benchmarking append/payload-size/raw/same-schema/interned/65536: Collecting 30 samples in estimated 7.1542 s (1395 iterations)
+Benchmarking append/payload-size/raw/same-schema/interned/65536: Analyzing
+append/payload-size/raw/same-schema/interned/65536
+                        time:   [4.0934 ms 4.4276 ms 4.7657 ms]
+                        thrpt:  [104.92 MiB/s 112.93 MiB/s 122.15 MiB/s]
+                 change:
+                        time:   [−46.304% −35.044% −23.826%] (p = 0.00 < 0.05)
+                        thrpt:  [+31.279% +53.951% +86.233%]
+                        Performance has improved.
+Found 3 outliers among 30 measurements (10.00%)
+  1 (3.33%) low mild
+  2 (6.67%) high mild
 
 Benchmarking append/tag-count/memory/owned/0
 Benchmarking append/tag-count/memory/owned/0: Warming up for 3.0000 s
-Benchmarking append/tag-count/memory/owned/0: Collecting 30 samples in estimated 5.0004 s (3.9M iterations)
+Benchmarking append/tag-count/memory/owned/0: Collecting 30 samples in estimated 5.0003 s (3.5M iterations)
 Benchmarking append/tag-count/memory/owned/0: Analyzing
 append/tag-count/memory/owned/0
-                        time:   [950.50 ns 1.0197 µs 1.0879 µs]
-                        thrpt:  [7.3535 Melem/s 7.8451 Melem/s 8.4166 Melem/s]
+                        time:   [1.0211 µs 1.1103 µs 1.1990 µs]
+                        thrpt:  [6.6723 Melem/s 7.2055 Melem/s 7.8346 Melem/s]
                  change:
-                        time:   [+8.6529% +17.057% +25.736%] (p = 0.00 < 0.05)
-                        thrpt:  [−20.468% −14.571% −7.9638%]
-                        Performance has regressed.
+                        time:   [−28.685% −22.042% −14.660%] (p = 0.00 < 0.05)
+                        thrpt:  [+17.178% +28.274% +40.224%]
+                        Performance has improved.
 Benchmarking append/tag-count/sqlite/owned/0
 Benchmarking append/tag-count/sqlite/owned/0: Warming up for 3.0000 s
-Benchmarking append/tag-count/sqlite/owned/0: Collecting 30 samples in estimated 5.0607 s (14k iterations)
+Benchmarking append/tag-count/sqlite/owned/0: Collecting 30 samples in estimated 5.0785 s (13k iterations)
 Benchmarking append/tag-count/sqlite/owned/0: Analyzing
 append/tag-count/sqlite/owned/0
-                        time:   [342.34 µs 376.96 µs 417.38 µs]
-                        thrpt:  [19.167 Kelem/s 21.222 Kelem/s 23.369 Kelem/s]
+                        time:   [266.28 µs 284.38 µs 302.74 µs]
+                        thrpt:  [26.426 Kelem/s 28.131 Kelem/s 30.044 Kelem/s]
                  change:
-                        time:   [+40.636% +52.336% +66.292%] (p = 0.00 < 0.05)
-                        thrpt:  [−39.865% −34.356% −28.894%]
-                        Performance has regressed.
+                        time:   [−67.033% −51.773% −34.219%] (p = 0.01 < 0.05)
+                        thrpt:  [+52.019% +107.35% +203.33%]
+                        Performance has improved.
+Found 3 outliers among 30 measurements (10.00%)
+  1 (3.33%) low severe
+  1 (3.33%) low mild
+  1 (3.33%) high mild
 Benchmarking append/tag-count/raw/same-schema/owned/0
 Benchmarking append/tag-count/raw/same-schema/owned/0: Warming up for 3.0000 s
-Benchmarking append/tag-count/raw/same-schema/owned/0: Collecting 30 samples in estimated 5.0040 s (20k iterations)
+Benchmarking append/tag-count/raw/same-schema/owned/0: Collecting 30 samples in estimated 5.0999 s (22k iterations)
 Benchmarking append/tag-count/raw/same-schema/owned/0: Analyzing
 append/tag-count/raw/same-schema/owned/0
-                        time:   [158.47 µs 166.07 µs 174.15 µs]
-                        thrpt:  [45.936 Kelem/s 48.173 Kelem/s 50.483 Kelem/s]
+                        time:   [194.10 µs 202.47 µs 210.95 µs]
+                        thrpt:  [37.924 Kelem/s 39.513 Kelem/s 41.217 Kelem/s]
                  change:
-                        time:   [−22.886% −16.049% −8.7966%] (p = 0.00 < 0.05)
-                        thrpt:  [+9.6451% +19.117% +29.678%]
+                        time:   [−57.982% −51.678% −44.829%] (p = 0.00 < 0.05)
+                        thrpt:  [+81.255% +106.94% +137.99%]
                         Performance has improved.
 Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
+  1 (3.33%) low mild
 Benchmarking append/tag-count/memory/owned/3
 Benchmarking append/tag-count/memory/owned/3: Warming up for 3.0000 s
-Benchmarking append/tag-count/memory/owned/3: Collecting 30 samples in estimated 5.0010 s (1.8M iterations)
+Benchmarking append/tag-count/memory/owned/3: Collecting 30 samples in estimated 5.0009 s (1.2M iterations)
 Benchmarking append/tag-count/memory/owned/3: Analyzing
 append/tag-count/memory/owned/3
-                        time:   [1.6951 µs 1.7592 µs 1.8489 µs]
-                        thrpt:  [4.3269 Melem/s 4.5475 Melem/s 4.7195 Melem/s]
+                        time:   [2.1864 µs 2.3883 µs 2.5750 µs]
+                        thrpt:  [3.1068 Melem/s 3.3497 Melem/s 3.6590 Melem/s]
                  change:
-                        time:   [−4.5081% +1.6770% +8.4574%] (p = 0.63 > 0.05)
-                        thrpt:  [−7.7979% −1.6494% +4.7210%]
-                        No change in performance detected.
+                        time:   [−36.402% −31.036% −25.441%] (p = 0.00 < 0.05)
+                        thrpt:  [+34.121% +45.004% +57.239%]
+                        Performance has improved.
 Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high severe
+  1 (3.33%) high mild
 Benchmarking append/tag-count/sqlite/owned/3
 Benchmarking append/tag-count/sqlite/owned/3: Warming up for 3.0000 s
-Benchmarking append/tag-count/sqlite/owned/3: Collecting 30 samples in estimated 5.1606 s (14k iterations)
+Benchmarking append/tag-count/sqlite/owned/3: Collecting 30 samples in estimated 5.0393 s (7905 iterations)
 Benchmarking append/tag-count/sqlite/owned/3: Analyzing
 append/tag-count/sqlite/owned/3
-                        time:   [318.37 µs 331.07 µs 343.83 µs]
-                        thrpt:  [23.267 Kelem/s 24.164 Kelem/s 25.128 Kelem/s]
+                        time:   [507.42 µs 551.41 µs 599.51 µs]
+                        thrpt:  [13.344 Kelem/s 14.508 Kelem/s 15.766 Kelem/s]
                  change:
-                        time:   [−31.919% −26.293% −20.030%] (p = 0.00 < 0.05)
-                        thrpt:  [+25.047% +35.673% +46.883%]
-                        Performance has improved.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
-Benchmarking append/tag-count/raw/same-schema/owned/3
-Benchmarking append/tag-count/raw/same-schema/owned/3: Warming up for 3.0000 s
-Benchmarking append/tag-count/raw/same-schema/owned/3: Collecting 30 samples in estimated 5.0396 s (20k iterations)
-Benchmarking append/tag-count/raw/same-schema/owned/3: Analyzing
-append/tag-count/raw/same-schema/owned/3
-                        time:   [269.69 µs 295.51 µs 316.35 µs]
-                        thrpt:  [25.288 Kelem/s 27.072 Kelem/s 29.664 Kelem/s]
-                 change:
-                        time:   [−28.825% −21.720% −13.804%] (p = 0.00 < 0.05)
-                        thrpt:  [+16.015% +27.747% +40.499%]
-                        Performance has improved.
-Benchmarking append/tag-count/memory/owned/64
-Benchmarking append/tag-count/memory/owned/64: Warming up for 3.0000 s
-Benchmarking append/tag-count/memory/owned/64: Collecting 30 samples in estimated 5.0094 s (169k iterations)
-Benchmarking append/tag-count/memory/owned/64: Analyzing
-append/tag-count/memory/owned/64
-                        time:   [16.097 µs 16.684 µs 17.255 µs]
-                        thrpt:  [463.64 Kelem/s 479.50 Kelem/s 496.99 Kelem/s]
-                 change:
-                        time:   [−15.598% −10.306% −4.4730%] (p = 0.00 < 0.05)
-                        thrpt:  [+4.6825% +11.490% +18.481%]
-                        Performance has improved.
-Benchmarking append/tag-count/sqlite/owned/64
-Benchmarking append/tag-count/sqlite/owned/64: Warming up for 3.0000 s
-Benchmarking append/tag-count/sqlite/owned/64: Collecting 30 samples in estimated 5.2186 s (930 iterations)
-Benchmarking append/tag-count/sqlite/owned/64: Analyzing
-append/tag-count/sqlite/owned/64
-                        time:   [3.5936 ms 3.8907 ms 4.1292 ms]
-                        thrpt:  [1.9374 Kelem/s 2.0562 Kelem/s 2.2262 Kelem/s]
-                 change:
-                        time:   [−37.287% −23.916% −9.2113%] (p = 0.01 < 0.05)
-                        thrpt:  [+10.146% +31.434% +59.458%]
-                        Performance has improved.
-Benchmarking append/tag-count/raw/same-schema/owned/64
-Benchmarking append/tag-count/raw/same-schema/owned/64: Warming up for 3.0000 s
-Benchmarking append/tag-count/raw/same-schema/owned/64: Collecting 30 samples in estimated 6.3667 s (1860 iterations)
-Benchmarking append/tag-count/raw/same-schema/owned/64: Analyzing
-append/tag-count/raw/same-schema/owned/64
-                        time:   [2.5656 ms 2.6960 ms 2.7954 ms]
-                        thrpt:  [2.8618 Kelem/s 2.9674 Kelem/s 3.1182 Kelem/s]
-                 change:
-                        time:   [−24.166% −12.454% +1.4221%] (p = 0.08 > 0.05)
-                        thrpt:  [−1.4022% +14.226% +31.867%]
-                        No change in performance detected.
-Benchmarking append/tag-count/memory/interned/0
-Benchmarking append/tag-count/memory/interned/0: Warming up for 3.0000 s
-Benchmarking append/tag-count/memory/interned/0: Collecting 30 samples in estimated 5.0001 s (7.0M iterations)
-Benchmarking append/tag-count/memory/interned/0: Analyzing
-append/tag-count/memory/interned/0
-                        time:   [524.70 ns 559.30 ns 605.43 ns]
-                        thrpt:  [13.214 Melem/s 14.304 Melem/s 15.247 Melem/s]
-                 change:
-                        time:   [−15.323% −8.8803% −1.4226%] (p = 0.02 < 0.05)
-                        thrpt:  [+1.4431% +9.7457% +18.096%]
-                        Performance has improved.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high mild
-Benchmarking append/tag-count/sqlite/interned/0
-Benchmarking append/tag-count/sqlite/interned/0: Warming up for 3.0000 s
-Benchmarking append/tag-count/sqlite/interned/0: Collecting 30 samples in estimated 5.0670 s (24k iterations)
-Benchmarking append/tag-count/sqlite/interned/0: Analyzing
-append/tag-count/sqlite/interned/0
-                        time:   [183.22 µs 191.36 µs 200.53 µs]
-                        thrpt:  [39.895 Kelem/s 41.806 Kelem/s 43.664 Kelem/s]
-                 change:
-                        time:   [−35.581% −30.334% −24.062%] (p = 0.00 < 0.05)
-                        thrpt:  [+31.686% +43.542% +55.233%]
-                        Performance has improved.
-Found 4 outliers among 30 measurements (13.33%)
-  1 (3.33%) low mild
-  3 (10.00%) high mild
-Benchmarking append/tag-count/raw/same-schema/interned/0
-Benchmarking append/tag-count/raw/same-schema/interned/0: Warming up for 3.0000 s
-Benchmarking append/tag-count/raw/same-schema/interned/0: Collecting 30 samples in estimated 5.0388 s (33k iterations)
-Benchmarking append/tag-count/raw/same-schema/interned/0: Analyzing
-append/tag-count/raw/same-schema/interned/0
-                        time:   [144.00 µs 155.98 µs 166.36 µs]
-                        thrpt:  [48.089 Kelem/s 51.289 Kelem/s 55.556 Kelem/s]
-                 change:
-                        time:   [−31.941% −25.945% −18.914%] (p = 0.00 < 0.05)
-                        thrpt:  [+23.326% +35.036% +46.932%]
+                        time:   [−36.664% −28.925% −20.168%] (p = 0.00 < 0.05)
+                        thrpt:  [+25.263% +40.696% +57.889%]
                         Performance has improved.
 Found 2 outliers among 30 measurements (6.67%)
   2 (6.67%) high mild
-Benchmarking append/tag-count/memory/interned/3
-Benchmarking append/tag-count/memory/interned/3: Warming up for 3.0000 s
-Benchmarking append/tag-count/memory/interned/3: Collecting 30 samples in estimated 5.0000 s (4.0M iterations)
-Benchmarking append/tag-count/memory/interned/3: Analyzing
-append/tag-count/memory/interned/3
-                        time:   [737.27 ns 776.09 ns 828.22 ns]
-                        thrpt:  [9.6592 Melem/s 10.308 Melem/s 10.851 Melem/s]
+Benchmarking append/tag-count/raw/same-schema/owned/3
+Benchmarking append/tag-count/raw/same-schema/owned/3: Warming up for 3.0000 s
+Benchmarking append/tag-count/raw/same-schema/owned/3: Collecting 30 samples in estimated 5.1163 s (11k iterations)
+Benchmarking append/tag-count/raw/same-schema/owned/3: Analyzing
+append/tag-count/raw/same-schema/owned/3
+                        time:   [367.56 µs 394.18 µs 421.27 µs]
+                        thrpt:  [18.990 Kelem/s 20.295 Kelem/s 21.765 Kelem/s]
                  change:
-                        time:   [−5.6687% +0.4240% +6.8726%] (p = 0.90 > 0.05)
-                        thrpt:  [−6.4306% −0.4222% +6.0093%]
-                        No change in performance detected.
-Benchmarking append/tag-count/sqlite/interned/3
-Benchmarking append/tag-count/sqlite/interned/3: Warming up for 3.0000 s
-Benchmarking append/tag-count/sqlite/interned/3: Collecting 30 samples in estimated 5.1229 s (11k iterations)
-Benchmarking append/tag-count/sqlite/interned/3: Analyzing
-append/tag-count/sqlite/interned/3
-                        time:   [392.14 µs 402.82 µs 413.58 µs]
-                        thrpt:  [19.343 Kelem/s 19.860 Kelem/s 20.401 Kelem/s]
-                 change:
-                        time:   [−16.783% −10.143% −3.5042%] (p = 0.01 < 0.05)
-                        thrpt:  [+3.6315% +11.288% +20.167%]
+                        time:   [−55.776% −43.165% −31.323%] (p = 0.00 < 0.05)
+                        thrpt:  [+45.608% +75.949% +126.12%]
                         Performance has improved.
 Found 2 outliers among 30 measurements (6.67%)
-  2 (6.67%) low severe
-Benchmarking append/tag-count/raw/same-schema/interned/3
-Benchmarking append/tag-count/raw/same-schema/interned/3: Warming up for 3.0000 s
-Benchmarking append/tag-count/raw/same-schema/interned/3: Collecting 30 samples in estimated 5.1231 s (15k iterations)
-Benchmarking append/tag-count/raw/same-schema/interned/3: Analyzing
-append/tag-count/raw/same-schema/interned/3
-                        time:   [296.63 µs 303.95 µs 311.33 µs]
-                        thrpt:  [25.696 Kelem/s 26.320 Kelem/s 26.970 Kelem/s]
+  1 (3.33%) low mild
+  1 (3.33%) high mild
+Benchmarking append/tag-count/memory/owned/64
+Benchmarking append/tag-count/memory/owned/64: Warming up for 3.0000 s
+Benchmarking append/tag-count/memory/owned/64: Collecting 30 samples in estimated 5.0251 s (73k iterations)
+Benchmarking append/tag-count/memory/owned/64: Analyzing
+append/tag-count/memory/owned/64
+                        time:   [38.223 µs 42.001 µs 46.532 µs]
+                        thrpt:  [171.92 Kelem/s 190.47 Kelem/s 209.30 Kelem/s]
                  change:
-                        time:   [−9.6328% −1.8850% +5.2416%] (p = 0.66 > 0.05)
-                        thrpt:  [−4.9805% +1.9212% +10.660%]
-                        No change in performance detected.
-Found 2 outliers among 30 measurements (6.67%)
-  2 (6.67%) low mild
-Benchmarking append/tag-count/memory/interned/64
-Benchmarking append/tag-count/memory/interned/64: Warming up for 3.0000 s
-Benchmarking append/tag-count/memory/interned/64: Collecting 30 samples in estimated 5.0028 s (751k iterations)
-Benchmarking append/tag-count/memory/interned/64: Analyzing
-append/tag-count/memory/interned/64
-                        time:   [2.8460 µs 3.2246 µs 3.6766 µs]
-                        thrpt:  [2.1759 Melem/s 2.4809 Melem/s 2.8110 Melem/s]
-                 change:
-                        time:   [−19.449% −8.1105% +5.2907%] (p = 0.21 > 0.05)
-                        thrpt:  [−5.0249% +8.8263% +24.144%]
-                        No change in performance detected.
+                        time:   [+86.787% +111.80% +140.40%] (p = 0.00 < 0.05)
+                        thrpt:  [−58.403% −52.785% −46.463%]
+                        Performance has regressed.
 Found 2 outliers among 30 measurements (6.67%)
   1 (3.33%) high mild
   1 (3.33%) high severe
+Benchmarking append/tag-count/sqlite/owned/64
+Benchmarking append/tag-count/sqlite/owned/64: Warming up for 3.0000 s
+
+Warning: Unable to complete 30 samples in 5.0s. You may wish to increase target time to 6.4s, enable flat sampling, or reduce sample count to 10.
+Benchmarking append/tag-count/sqlite/owned/64: Collecting 30 samples in estimated 6.4330 s (465 iterations)
+Benchmarking append/tag-count/sqlite/owned/64: Analyzing
+append/tag-count/sqlite/owned/64
+                        time:   [6.4603 ms 7.2277 ms 7.8036 ms]
+                        thrpt:  [1.0252 Kelem/s 1.1068 Kelem/s 1.2383 Kelem/s]
+                 change:
+                        time:   [+18.333% +44.335% +75.298%] (p = 0.00 < 0.05)
+                        thrpt:  [−42.954% −30.717% −15.493%]
+                        Performance has regressed.
+Benchmarking append/tag-count/raw/same-schema/owned/64
+Benchmarking append/tag-count/raw/same-schema/owned/64: Warming up for 3.0000 s
+Benchmarking append/tag-count/raw/same-schema/owned/64: Collecting 30 samples in estimated 8.1243 s (930 iterations)
+Benchmarking append/tag-count/raw/same-schema/owned/64: Analyzing
+append/tag-count/raw/same-schema/owned/64
+                        time:   [5.4727 ms 5.8001 ms 6.0861 ms]
+                        thrpt:  [1.3145 Kelem/s 1.3793 Kelem/s 1.4618 Kelem/s]
+                 change:
+                        time:   [+59.503% +89.202% +124.41%] (p = 0.00 < 0.05)
+                        thrpt:  [−55.439% −47.146% −37.305%]
+                        Performance has regressed.
+Benchmarking append/tag-count/memory/interned/0
+Benchmarking append/tag-count/memory/interned/0: Warming up for 3.0000 s
+Benchmarking append/tag-count/memory/interned/0: Collecting 30 samples in estimated 5.0004 s (2.5M iterations)
+Benchmarking append/tag-count/memory/interned/0: Analyzing
+append/tag-count/memory/interned/0
+                        time:   [1.6444 µs 1.7820 µs 1.9149 µs]
+                        thrpt:  [4.1777 Melem/s 4.4894 Melem/s 4.8649 Melem/s]
+                 change:
+                        time:   [+52.456% +75.479% +106.84%] (p = 0.00 < 0.05)
+                        thrpt:  [−51.654% −43.013% −34.407%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high severe
+Benchmarking append/tag-count/sqlite/interned/0
+Benchmarking append/tag-count/sqlite/interned/0: Warming up for 3.0000 s
+Benchmarking append/tag-count/sqlite/interned/0: Collecting 30 samples in estimated 5.1284 s (6510 iterations)
+Benchmarking append/tag-count/sqlite/interned/0: Analyzing
+append/tag-count/sqlite/interned/0
+                        time:   [688.83 µs 765.14 µs 877.17 µs]
+                        thrpt:  [9.1202 Kelem/s 10.456 Kelem/s 11.614 Kelem/s]
+                 change:
+                        time:   [+3.9753% +23.393% +44.407%] (p = 0.03 < 0.05)
+                        thrpt:  [−30.751% −18.958% −3.8233%]
+                        Performance has regressed.
+Found 2 outliers among 30 measurements (6.67%)
+  1 (3.33%) high mild
+  1 (3.33%) high severe
+Benchmarking append/tag-count/raw/same-schema/interned/0
+Benchmarking append/tag-count/raw/same-schema/interned/0: Warming up for 3.0000 s
+Benchmarking append/tag-count/raw/same-schema/interned/0: Collecting 30 samples in estimated 5.0617 s (8835 iterations)
+Benchmarking append/tag-count/raw/same-schema/interned/0: Analyzing
+append/tag-count/raw/same-schema/interned/0
+                        time:   [495.40 µs 555.04 µs 616.92 µs]
+                        thrpt:  [12.968 Kelem/s 14.413 Kelem/s 16.149 Kelem/s]
+                 change:
+                        time:   [+36.149% +66.679% +113.28%] (p = 0.00 < 0.05)
+                        thrpt:  [−53.114% −40.005% −26.551%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high severe
+Benchmarking append/tag-count/memory/interned/3
+Benchmarking append/tag-count/memory/interned/3: Warming up for 3.0000 s
+Benchmarking append/tag-count/memory/interned/3: Collecting 30 samples in estimated 5.0006 s (1.5M iterations)
+Benchmarking append/tag-count/memory/interned/3: Analyzing
+append/tag-count/memory/interned/3
+                        time:   [1.9866 µs 2.1901 µs 2.4847 µs]
+                        thrpt:  [3.2197 Melem/s 3.6528 Melem/s 4.0271 Melem/s]
+                 change:
+                        time:   [+28.432% +49.379% +71.581%] (p = 0.00 < 0.05)
+                        thrpt:  [−41.718% −33.056% −22.138%]
+                        Performance has regressed.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
+Benchmarking append/tag-count/sqlite/interned/3
+Benchmarking append/tag-count/sqlite/interned/3: Warming up for 3.0000 s
+Benchmarking append/tag-count/sqlite/interned/3: Collecting 30 samples in estimated 5.3662 s (6510 iterations)
+Benchmarking append/tag-count/sqlite/interned/3: Analyzing
+append/tag-count/sqlite/interned/3
+                        time:   [470.36 µs 490.52 µs 515.72 µs]
+                        thrpt:  [15.512 Kelem/s 16.309 Kelem/s 17.008 Kelem/s]
+                 change:
+                        time:   [−47.010% −40.004% −31.915%] (p = 0.00 < 0.05)
+                        thrpt:  [+46.874% +66.678% +88.713%]
+                        Performance has improved.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) high mild
+Benchmarking append/tag-count/raw/same-schema/interned/3
+Benchmarking append/tag-count/raw/same-schema/interned/3: Warming up for 3.0000 s
+Benchmarking append/tag-count/raw/same-schema/interned/3: Collecting 30 samples in estimated 5.1358 s (10k iterations)
+Benchmarking append/tag-count/raw/same-schema/interned/3: Analyzing
+append/tag-count/raw/same-schema/interned/3
+                        time:   [384.69 µs 403.46 µs 422.15 µs]
+                        thrpt:  [18.950 Kelem/s 19.828 Kelem/s 20.796 Kelem/s]
+                 change:
+                        time:   [−57.814% −48.819% −39.044%] (p = 0.00 < 0.05)
+                        thrpt:  [+64.054% +95.386% +137.04%]
+                        Performance has improved.
+Benchmarking append/tag-count/memory/interned/64
+Benchmarking append/tag-count/memory/interned/64: Warming up for 3.0000 s
+Benchmarking append/tag-count/memory/interned/64: Collecting 30 samples in estimated 5.0030 s (632k iterations)
+Benchmarking append/tag-count/memory/interned/64: Analyzing
+append/tag-count/memory/interned/64
+                        time:   [2.8825 µs 3.0675 µs 3.2335 µs]
+                        thrpt:  [2.4741 Melem/s 2.6080 Melem/s 2.7754 Melem/s]
+                 change:
+                        time:   [−38.128% −31.577% −24.342%] (p = 0.00 < 0.05)
+                        thrpt:  [+32.173% +46.150% +61.624%]
+                        Performance has improved.
+Found 1 outliers among 30 measurements (3.33%)
+  1 (3.33%) low mild
 Benchmarking append/tag-count/sqlite/interned/64
 Benchmarking append/tag-count/sqlite/interned/64: Warming up for 3.0000 s
-Benchmarking append/tag-count/sqlite/interned/64: Collecting 30 samples in estimated 5.1192 s (930 iterations)
+Benchmarking append/tag-count/sqlite/interned/64: Collecting 30 samples in estimated 6.4080 s (930 iterations)
 Benchmarking append/tag-count/sqlite/interned/64: Analyzing
 append/tag-count/sqlite/interned/64
-                        time:   [4.4855 ms 4.7345 ms 4.9272 ms]
-                        thrpt:  [1.6236 Kelem/s 1.6897 Kelem/s 1.7835 Kelem/s]
+                        time:   [4.4268 ms 4.7568 ms 5.0354 ms]
+                        thrpt:  [1.5888 Kelem/s 1.6818 Kelem/s 1.8072 Kelem/s]
                  change:
-                        time:   [−21.580% −3.5492% +15.891%] (p = 0.71 > 0.05)
-                        thrpt:  [−13.712% +3.6798% +27.519%]
-                        No change in performance detected.
+                        time:   [−56.409% −38.521% −16.944%] (p = 0.01 < 0.05)
+                        thrpt:  [+20.401% +62.658% +129.40%]
+                        Performance has improved.
 Benchmarking append/tag-count/raw/same-schema/interned/64
 Benchmarking append/tag-count/raw/same-schema/interned/64: Warming up for 3.0000 s
-Benchmarking append/tag-count/raw/same-schema/interned/64: Collecting 30 samples in estimated 5.0776 s (1395 iterations)
+Benchmarking append/tag-count/raw/same-schema/interned/64: Collecting 30 samples in estimated 6.8332 s (1395 iterations)
 Benchmarking append/tag-count/raw/same-schema/interned/64: Analyzing
 append/tag-count/raw/same-schema/interned/64
-                        time:   [2.2671 ms 2.5112 ms 2.7280 ms]
-                        thrpt:  [2.9326 Kelem/s 3.1858 Kelem/s 3.5287 Kelem/s]
+                        time:   [5.0603 ms 5.7192 ms 6.2384 ms]
+                        thrpt:  [1.2824 Kelem/s 1.3988 Kelem/s 1.5809 Kelem/s]
                  change:
-                        time:   [−37.752% −28.185% −17.521%] (p = 0.00 < 0.05)
-                        thrpt:  [+21.243% +39.247% +60.647%]
-                        Performance has improved.
+                        time:   [−8.6117% +13.830% +38.977%] (p = 0.25 > 0.05)
+                        thrpt:  [−28.046% −12.150% +9.4232%]
+                        No change in performance detected.
 
 Benchmarking append/batch-construction/build/owned/0
 Benchmarking append/batch-construction/build/owned/0: Warming up for 3.0000 s
-Benchmarking append/batch-construction/build/owned/0: Collecting 100 samples in estimated 5.0371 s (379k iterations)
+Benchmarking append/batch-construction/build/owned/0: Collecting 100 samples in estimated 5.0924 s (152k iterations)
 Benchmarking append/batch-construction/build/owned/0: Analyzing
 append/batch-construction/build/owned/0
-                        time:   [13.501 µs 13.775 µs 14.039 µs]
-                        thrpt:  [9.1172 Melem/s 9.2924 Melem/s 9.4806 Melem/s]
+                        time:   [38.390 µs 41.826 µs 46.139 µs]
+                        thrpt:  [2.7742 Melem/s 3.0603 Melem/s 3.3342 Melem/s]
                  change:
-                        time:   [−49.576% −46.588% −43.190%] (p = 0.00 < 0.05)
-                        thrpt:  [+76.024% +87.223% +98.318%]
-                        Performance has improved.
+                        time:   [+8.6242% +17.766% +28.305%] (p = 0.00 < 0.05)
+                        thrpt:  [−22.061% −15.086% −7.9395%]
+                        Performance has regressed.
+Found 4 outliers among 100 measurements (4.00%)
+  2 (2.00%) high mild
+  2 (2.00%) high severe
 Benchmarking append/batch-construction/clone/owned/0
 Benchmarking append/batch-construction/clone/owned/0: Warming up for 3.0000 s
-Benchmarking append/batch-construction/clone/owned/0: Collecting 100 samples in estimated 5.1026 s (86k iterations)
+Benchmarking append/batch-construction/clone/owned/0: Collecting 100 samples in estimated 5.1806 s (30k iterations)
 Benchmarking append/batch-construction/clone/owned/0: Analyzing
 append/batch-construction/clone/owned/0
-                        time:   [8.8231 µs 8.9998 µs 9.2040 µs]
-                        thrpt:  [13.907 Melem/s 14.222 Melem/s 14.507 Melem/s]
+                        time:   [30.173 µs 35.187 µs 41.826 µs]
+                        thrpt:  [3.0603 Melem/s 3.6377 Melem/s 4.2421 Melem/s]
                  change:
-                        time:   [−19.669% −16.015% −12.115%] (p = 0.00 < 0.05)
-                        thrpt:  [+13.785% +19.069% +24.485%]
-                        Performance has improved.
+                        time:   [+64.875% +98.477% +147.95%] (p = 0.00 < 0.05)
+                        thrpt:  [−59.668% −49.616% −39.348%]
+                        Performance has regressed.
+Found 10 outliers among 100 measurements (10.00%)
+  3 (3.00%) high mild
+  7 (7.00%) high severe
 Benchmarking append/batch-construction/build/owned/3
 Benchmarking append/batch-construction/build/owned/3: Warming up for 3.0000 s
-Benchmarking append/batch-construction/build/owned/3: Collecting 100 samples in estimated 5.3543 s (71k iterations)
+Benchmarking append/batch-construction/build/owned/3: Collecting 100 samples in estimated 5.6603 s (20k iterations)
 Benchmarking append/batch-construction/build/owned/3: Analyzing
 append/batch-construction/build/owned/3
-                        time:   [72.753 µs 74.049 µs 75.495 µs]
-                        thrpt:  [1.6955 Melem/s 1.7286 Melem/s 1.7594 Melem/s]
+                        time:   [250.97 µs 263.07 µs 276.41 µs]
+                        thrpt:  [463.07 Kelem/s 486.56 Kelem/s 510.02 Kelem/s]
                  change:
-                        time:   [−12.239% −9.1170% −6.1176%] (p = 0.00 < 0.05)
-                        thrpt:  [+6.5163% +10.032% +13.945%]
-                        Performance has improved.
-Found 1 outliers among 100 measurements (1.00%)
-  1 (1.00%) high severe
+                        time:   [+25.272% +33.368% +42.103%] (p = 0.00 < 0.05)
+                        thrpt:  [−29.629% −25.020% −20.173%]
+                        Performance has regressed.
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
 Benchmarking append/batch-construction/clone/owned/3
 Benchmarking append/batch-construction/clone/owned/3: Warming up for 3.0000 s
-Benchmarking append/batch-construction/clone/owned/3: Collecting 100 samples in estimated 5.1751 s (40k iterations)
+Benchmarking append/batch-construction/clone/owned/3: Collecting 100 samples in estimated 7.1859 s (15k iterations)
 Benchmarking append/batch-construction/clone/owned/3: Analyzing
 append/batch-construction/clone/owned/3
-                        time:   [24.357 µs 24.800 µs 25.290 µs]
-                        thrpt:  [5.0613 Melem/s 5.1613 Melem/s 5.2552 Melem/s]
+                        time:   [83.674 µs 93.968 µs 106.04 µs]
+                        thrpt:  [1.2071 Melem/s 1.3622 Melem/s 1.5298 Melem/s]
                  change:
-                        time:   [−10.238% −7.5517% −4.8119%] (p = 0.00 < 0.05)
-                        thrpt:  [+5.0552% +8.1686% +11.406%]
-                        Performance has improved.
-Found 1 outliers among 100 measurements (1.00%)
-  1 (1.00%) high mild
+                        time:   [+83.943% +107.08% +136.50%] (p = 0.00 < 0.05)
+                        thrpt:  [−57.716% −51.711% −45.635%]
+                        Performance has regressed.
+Found 7 outliers among 100 measurements (7.00%)
+  2 (2.00%) high mild
+  5 (5.00%) high severe
 Benchmarking append/batch-construction/build/owned/64
 Benchmarking append/batch-construction/build/owned/64: Warming up for 3.0000 s
-
-Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 5.8s, enable flat sampling, or reduce sample count to 60.
-Benchmarking append/batch-construction/build/owned/64: Collecting 100 samples in estimated 5.8084 s (5050 iterations)
+Benchmarking append/batch-construction/build/owned/64: Collecting 100 samples in estimated 5.0572 s (1100 iterations)
 Benchmarking append/batch-construction/build/owned/64: Analyzing
 append/batch-construction/build/owned/64
-                        time:   [1.1424 ms 1.1803 ms 1.2232 ms]
-                        thrpt:  [104.64 Kelem/s 108.44 Kelem/s 112.05 Kelem/s]
+                        time:   [3.9710 ms 4.1391 ms 4.3338 ms]
+                        thrpt:  [29.535 Kelem/s 30.925 Kelem/s 32.233 Kelem/s]
                  change:
-                        time:   [−16.983% −12.742% −8.0352%] (p = 0.00 < 0.05)
-                        thrpt:  [+8.7373% +14.602% +20.457%]
-                        Performance has improved.
-Found 9 outliers among 100 measurements (9.00%)
-  7 (7.00%) high mild
-  2 (2.00%) high severe
+                        time:   [+12.463% +19.631% +27.968%] (p = 0.00 < 0.05)
+                        thrpt:  [−21.855% −16.410% −11.082%]
+                        Performance has regressed.
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
 Benchmarking append/batch-construction/clone/owned/64
 Benchmarking append/batch-construction/clone/owned/64: Warming up for 3.0000 s
-
-Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 8.3s, enable flat sampling, or reduce sample count to 50.
-Benchmarking append/batch-construction/clone/owned/64: Collecting 100 samples in estimated 8.3436 s (5050 iterations)
+Benchmarking append/batch-construction/clone/owned/64: Collecting 100 samples in estimated 5.3604 s (1000 iterations)
 Benchmarking append/batch-construction/clone/owned/64: Analyzing
 append/batch-construction/clone/owned/64
-                        time:   [286.60 µs 293.80 µs 301.83 µs]
-                        thrpt:  [424.07 Kelem/s 435.67 Kelem/s 446.61 Kelem/s]
+                        time:   [1.0067 ms 1.1365 ms 1.2896 ms]
+                        thrpt:  [99.256 Kelem/s 112.62 Kelem/s 127.14 Kelem/s]
                  change:
-                        time:   [−20.668% −15.923% −10.969%] (p = 0.00 < 0.05)
-                        thrpt:  [+12.320% +18.939% +26.053%]
-                        Performance has improved.
+                        time:   [+61.559% +83.470% +110.33%] (p = 0.00 < 0.05)
+                        thrpt:  [−52.456% −45.495% −38.103%]
+                        Performance has regressed.
+Found 10 outliers among 100 measurements (10.00%)
+  3 (3.00%) high mild
+  7 (7.00%) high severe
 Benchmarking append/batch-construction/build/interned/0
 Benchmarking append/batch-construction/build/interned/0: Warming up for 3.0000 s
-Benchmarking append/batch-construction/build/interned/0: Collecting 100 samples in estimated 5.0105 s (1.8M iterations)
+Benchmarking append/batch-construction/build/interned/0: Collecting 100 samples in estimated 5.0003 s (793k iterations)
 Benchmarking append/batch-construction/build/interned/0: Analyzing
 append/batch-construction/build/interned/0
-                        time:   [3.1286 µs 3.2247 µs 3.3097 µs]
-                        thrpt:  [38.675 Melem/s 39.694 Melem/s 40.913 Melem/s]
+                        time:   [5.5390 µs 5.7465 µs 5.9710 µs]
+                        thrpt:  [21.437 Melem/s 22.274 Melem/s 23.109 Melem/s]
                  change:
-                        time:   [−18.978% −15.436% −11.613%] (p = 0.00 < 0.05)
-                        thrpt:  [+13.139% +18.253% +23.423%]
+                        time:   [−17.982% −12.454% −7.1231%] (p = 0.00 < 0.05)
+                        thrpt:  [+7.6694% +14.225% +21.924%]
                         Performance has improved.
 Benchmarking append/batch-construction/clone/interned/0
 Benchmarking append/batch-construction/clone/interned/0: Warming up for 3.0000 s
-Benchmarking append/batch-construction/clone/interned/0: Collecting 100 samples in estimated 5.0335 s (500k iterations)
+Benchmarking append/batch-construction/clone/interned/0: Collecting 100 samples in estimated 5.0087 s (374k iterations)
 Benchmarking append/batch-construction/clone/interned/0: Analyzing
 append/batch-construction/clone/interned/0
-                        time:   [2.2104 µs 2.2460 µs 2.2872 µs]
-                        thrpt:  [55.964 Melem/s 56.990 Melem/s 57.907 Melem/s]
+                        time:   [3.6878 µs 3.9493 µs 4.2444 µs]
+                        thrpt:  [30.158 Melem/s 32.411 Melem/s 34.709 Melem/s]
                  change:
-                        time:   [+26.004% +30.452% +35.428%] (p = 0.00 < 0.05)
-                        thrpt:  [−26.160% −23.343% −20.638%]
+                        time:   [+25.247% +34.816% +45.249%] (p = 0.00 < 0.05)
+                        thrpt:  [−31.153% −25.825% −20.158%]
                         Performance has regressed.
-Found 2 outliers among 100 measurements (2.00%)
-  2 (2.00%) high mild
+Found 7 outliers among 100 measurements (7.00%)
+  5 (5.00%) high mild
+  2 (2.00%) high severe
 Benchmarking append/batch-construction/build/interned/3
 Benchmarking append/batch-construction/build/interned/3: Warming up for 3.0000 s
-Benchmarking append/batch-construction/build/interned/3: Collecting 100 samples in estimated 5.0572 s (439k iterations)
+Benchmarking append/batch-construction/build/interned/3: Collecting 100 samples in estimated 5.1178 s (167k iterations)
 Benchmarking append/batch-construction/build/interned/3: Analyzing
 append/batch-construction/build/interned/3
-                        time:   [9.9622 µs 10.098 µs 10.250 µs]
-                        thrpt:  [12.488 Melem/s 12.676 Melem/s 12.849 Melem/s]
+                        time:   [19.009 µs 19.823 µs 20.665 µs]
+                        thrpt:  [6.1940 Melem/s 6.4571 Melem/s 6.7336 Melem/s]
                  change:
-                        time:   [+13.685% +17.983% +22.390%] (p = 0.00 < 0.05)
-                        thrpt:  [−18.294% −15.242% −12.038%]
+                        time:   [+10.056% +16.273% +22.540%] (p = 0.00 < 0.05)
+                        thrpt:  [−18.394% −13.995% −9.1371%]
                         Performance has regressed.
-Found 4 outliers among 100 measurements (4.00%)
-  4 (4.00%) high mild
+Found 8 outliers among 100 measurements (8.00%)
+  5 (5.00%) high mild
+  3 (3.00%) high severe
 Benchmarking append/batch-construction/clone/interned/3
 Benchmarking append/batch-construction/clone/interned/3: Warming up for 3.0000 s
-Benchmarking append/batch-construction/clone/interned/3: Collecting 100 samples in estimated 5.0906 s (202k iterations)
+Benchmarking append/batch-construction/clone/interned/3: Collecting 100 samples in estimated 5.0745 s (146k iterations)
 Benchmarking append/batch-construction/clone/interned/3: Analyzing
 append/batch-construction/clone/interned/3
-                        time:   [8.8005 µs 9.4191 µs 10.073 µs]
-                        thrpt:  [12.707 Melem/s 13.589 Melem/s 14.545 Melem/s]
+                        time:   [9.2970 µs 9.5957 µs 9.9037 µs]
+                        thrpt:  [12.924 Melem/s 13.339 Melem/s 13.768 Melem/s]
                  change:
-                        time:   [+27.700% +34.012% +40.986%] (p = 0.00 < 0.05)
-                        thrpt:  [−29.071% −25.380% −21.691%]
-                        Performance has regressed.
-Found 6 outliers among 100 measurements (6.00%)
-  1 (1.00%) high mild
-  5 (5.00%) high severe
+                        time:   [−37.483% −33.388% −28.876%] (p = 0.00 < 0.05)
+                        thrpt:  [+40.599% +50.122% +59.955%]
+                        Performance has improved.
 Benchmarking append/batch-construction/build/interned/64
 Benchmarking append/batch-construction/build/interned/64: Warming up for 3.0000 s
-Benchmarking append/batch-construction/build/interned/64: Collecting 100 samples in estimated 5.0476 s (298k iterations)
+Benchmarking append/batch-construction/build/interned/64: Collecting 100 samples in estimated 5.0290 s (141k iterations)
 Benchmarking append/batch-construction/build/interned/64: Analyzing
 append/batch-construction/build/interned/64
-                        time:   [16.342 µs 16.698 µs 17.059 µs]
-                        thrpt:  [7.5034 Melem/s 7.6654 Melem/s 7.8324 Melem/s]
+                        time:   [33.897 µs 34.948 µs 36.076 µs]
+                        thrpt:  [3.5480 Melem/s 3.6626 Melem/s 3.7762 Melem/s]
                  change:
-                        time:   [−12.425% −9.5496% −6.5445%] (p = 0.00 < 0.05)
-                        thrpt:  [+7.0028% +10.558% +14.188%]
-                        Performance has improved.
+                        time:   [+1.4806% +5.9008% +10.862%] (p = 0.01 < 0.05)
+                        thrpt:  [−9.7976% −5.5720% −1.4590%]
+                        Performance has regressed.
+Found 5 outliers among 100 measurements (5.00%)
+  3 (3.00%) low mild
+  2 (2.00%) high mild
 Benchmarking append/batch-construction/clone/interned/64
 Benchmarking append/batch-construction/clone/interned/64: Warming up for 3.0000 s
-Benchmarking append/batch-construction/clone/interned/64: Collecting 100 samples in estimated 5.3412 s (56k iterations)
+Benchmarking append/batch-construction/clone/interned/64: Collecting 100 samples in estimated 5.5904 s (45k iterations)
 Benchmarking append/batch-construction/clone/interned/64: Analyzing
 append/batch-construction/clone/interned/64
-                        time:   [25.365 µs 25.963 µs 26.557 µs]
-                        thrpt:  [4.8199 Melem/s 4.9301 Melem/s 5.0463 Melem/s]
+                        time:   [59.137 µs 62.679 µs 66.958 µs]
+                        thrpt:  [1.9116 Melem/s 2.0422 Melem/s 2.1645 Melem/s]
                  change:
-                        time:   [−9.9580% −2.5970% +5.3491%] (p = 0.50 > 0.05)
-                        thrpt:  [−5.0775% +2.6662% +11.059%]
+                        time:   [−7.2310% +6.3474% +20.302%] (p = 0.34 > 0.05)
+                        thrpt:  [−16.876% −5.9685% +7.7947%]
                         No change in performance detected.
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
 
 Benchmarking append/connect/memory
 Benchmarking append/connect/memory: Warming up for 3.0000 s
-Benchmarking append/connect/memory: Collecting 30 samples in estimated 5.0000 s (439M iterations)
+Benchmarking append/connect/memory: Collecting 30 samples in estimated 5.0000 s (191M iterations)
 Benchmarking append/connect/memory: Analyzing
-append/connect/memory   time:   [11.123 ns 11.528 ns 11.926 ns]
-                        change: [−1.7817% +1.2173% +4.2432%] (p = 0.42 > 0.05)
+append/connect/memory   time:   [17.673 ns 18.271 ns 19.140 ns]
+                        change: [−3.6234% +9.6661% +26.170%] (p = 0.21 > 0.05)
                         No change in performance detected.
+Found 2 outliers among 30 measurements (6.67%)
+  2 (6.67%) high mild
 Benchmarking append/connect/sqlite/first-open
 Benchmarking append/connect/sqlite/first-open: Warming up for 3.0000 s
-Benchmarking append/connect/sqlite/first-open: Collecting 30 samples in estimated 5.5592 s (930 iterations)
+Benchmarking append/connect/sqlite/first-open: Collecting 30 samples in estimated 5.2076 s (210 iterations)
 Benchmarking append/connect/sqlite/first-open: Analyzing
 append/connect/sqlite/first-open
-                        time:   [4.2104 ms 4.3913 ms 4.6249 ms]
-                        change: [−55.415% −49.320% −41.779%] (p = 0.00 < 0.05)
-                        Performance has improved.
-Found 1 outliers among 30 measurements (3.33%)
-  1 (3.33%) high severe
+                        time:   [14.273 ms 14.774 ms 15.308 ms]
+                        change: [+93.707% +104.83% +116.58%] (p = 0.00 < 0.05)
+                        Performance has regressed.
 Benchmarking append/connect/sqlite/subsequent-open
 Benchmarking append/connect/sqlite/subsequent-open: Warming up for 3.0000 s
-Benchmarking append/connect/sqlite/subsequent-open: Collecting 30 samples in estimated 5.3078 s (7440 iterations)
+Benchmarking append/connect/sqlite/subsequent-open: Collecting 30 samples in estimated 5.3803 s (3720 iterations)
 Benchmarking append/connect/sqlite/subsequent-open: Analyzing
 append/connect/sqlite/subsequent-open
-                        time:   [392.08 µs 405.99 µs 424.94 µs]
-                        change: [−32.738% −12.343% +12.962%] (p = 0.35 > 0.05)
+                        time:   [919.54 µs 983.11 µs 1.0522 ms]
+                        change: [−16.738% +15.734% +62.112%] (p = 0.42 > 0.05)
                         No change in performance detected.
 Found 3 outliers among 30 measurements (10.00%)
-  1 (3.33%) high mild
-  2 (6.67%) high severe
+  2 (6.67%) high mild
+  1 (3.33%) high severe
 

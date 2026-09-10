@@ -1832,17 +1832,55 @@ pub(crate) fn wasm_run() -> Result<()> {
             wasm.rules.len()
         );
 
-        let status = Command::new("cargo")
+        // `.output()` rather than `.status()`, for the host path's reason and
+        // with the same consequence: an exit status cannot tell `94 passed`
+        // from `0 passed; 94 ignored`, and neither can the `--list` assertion
+        // above it, because libtest prints an ignored test's name in a listing
+        // exactly as it prints a running one's. `unexecuted`'s own
+        // documentation was already written for both arms — it calls a run's
+        // stdout the one surface every libtest-shaped runner here prints in the
+        // same shape — and this arm was producing that surface and throwing it
+        // away. Until this line the 94 wasm32 conformance rules could be
+        // silenced one at a time with the gate still green.
+        let run = Command::new("cargo")
             .args(args)
             // `--nocapture` and not `--show-output`: the host flavour of this
             // flag is rejected by `wasm-bindgen-test-runner` outright.
             .args(["--", "--nocapture"])
             .envs(env)
-            .status()
+            .output()
             .with_context(|| format!("failed to launch `cargo test` for {label}"))?;
 
-        if !status.success() {
-            bail!("{label} failed with {status}");
+        let transcript = String::from_utf8_lossy(&run.stdout);
+        print!("{transcript}");
+        eprint!("{}", String::from_utf8_lossy(&run.stderr));
+
+        if !run.status.success() {
+            bail!("{label} failed with {}", run.status);
+        }
+
+        // Qualified with the row's `module`, because `rules` is documented as
+        // holding names "without the module prefix" while libtest prints every
+        // one under `mod_name::`. Matching whole names rather than stripping a
+        // prefix off the transcript keeps the comparison exact: two modules in
+        // one target could otherwise share a rule name and cover for each other.
+        let qualified: Vec<String> = wasm
+            .rules
+            .iter()
+            .map(|rule| format!("{}::{rule}", wasm.module))
+            .collect();
+        let borrowed: Vec<&str> = qualified.iter().map(String::as_str).collect();
+        let silent = unexecuted(&borrowed, &transcript);
+        if !silent.is_empty() {
+            bail!(
+                "{label} exited 0 without running {} of the rules the gate \
+                 names: {silent:?}\n\n\
+                 These are the clauses' own rule names. If one was silenced \
+                 deliberately, the clause in `SPECIFICATION.md` that cites it is \
+                 now checked by nothing on this target, and that is the change to \
+                 make first.",
+                silent.len()
+            );
         }
     }
 
@@ -1904,18 +1942,36 @@ fn wasm_unit_run(env: &[(&str, &str); 1]) -> Result<()> {
             unit.host
         );
 
-        let status = Command::new("cargo")
+        // `.output()`, for the reason the conformance loop above gives.
+        let run = Command::new("cargo")
             .args(&args)
             .args(["--", "--nocapture"])
             .envs(env.iter().copied())
-            .status()
+            .output()
             .with_context(|| format!("failed to launch `cargo test` for {label}"))?;
 
-        if !status.success() {
+        let transcript = String::from_utf8_lossy(&run.stdout);
+        print!("{transcript}");
+        eprint!("{}", String::from_utf8_lossy(&run.stderr));
+
+        if !run.status.success() {
             bail!(
-                "{label} failed with {status}\n\n\
+                "{label} failed with {}\n\n\
                  If every case failed at once, check the host before the code: {}",
+                run.status,
                 unit.host
+            );
+        }
+
+        let silent = unexecuted(unit.tests, &transcript);
+        if !silent.is_empty() {
+            bail!(
+                "{label} exited 0 without running {} of the tests the gate \
+                 names: {silent:?}\n\n\
+                 The target built and libtest was happy. An `#[ignore]` costs \
+                 nothing but a zero in the `passed` column, and this arm could \
+                 not see one until it began reading its own transcript.",
+                silent.len()
             );
         }
     }
@@ -2838,6 +2894,34 @@ mod tests {
     /// built: `memory_conformance_wasm`, `local_conformance` and
     /// `projection_conformance_wasm`. Adding a fourth harness without a row
     /// fails here rather than at review.
+    /// The transcript check qualifies each rule with its row's `module`, so the
+    /// row must not carry the prefix itself.
+    ///
+    /// `WasmTarget::rules` is documented as holding names *"without the module
+    /// prefix"*, and `wasm_run` relies on that to rebuild `mod_name::rule` and
+    /// match libtest's per-test line whole. A row that spelled one of its rules
+    /// pre-qualified would be silently double-prefixed, never match, and report
+    /// a rule as unexecuted that had in fact just passed — which is how a check
+    /// that guards against silence turns into a check nobody believes.
+    ///
+    /// It is a real hazard rather than a hypothetical: the unprefixed spelling
+    /// here is the *exception* in this file, and the two ceiling lists say so in
+    /// their own doc comments.
+    #[test]
+    fn no_wasm_row_prefixes_its_own_rule_names() {
+        for wasm in WASM_TARGETS {
+            for rule in wasm.rules {
+                assert!(
+                    !rule.contains("::"),
+                    "`{}`'s row spells `{rule}` with a module path. `rules` holds                      bare names and `wasm_run` adds `{}::` when it reads the                      run's transcript, so this one would be looked for as                      `{}::{rule}` and never found.",
+                    wasm.target,
+                    wasm.module,
+                    wasm.module,
+                );
+            }
+        }
+    }
+
     #[test]
     fn every_wasm32_capable_harness_has_a_row() {
         let unregistered = unregistered_wasm_harnesses().unwrap();

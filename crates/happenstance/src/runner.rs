@@ -368,10 +368,10 @@ where
 /// #[derive(serde::Serialize, serde::Deserialize)]
 /// enum Seat { Taken }
 ///
+/// const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
 /// impl DomainEvent for Seat {
-///     const EVENT_TYPES: &'static [EventType] =
-///         &[EventType::from_static("SeatTaken")];
-///     fn event_type(&self) -> EventType { Self::EVENT_TYPES[0].clone() }
+///     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN];
+///     fn event_type(&self) -> EventType { SEAT_TAKEN }
 ///     fn tags(&self) -> Tags { Tags::empty() }
 ///     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
 ///         c.encode(self)

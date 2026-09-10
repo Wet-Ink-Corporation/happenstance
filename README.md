@@ -14,10 +14,13 @@ it.
 
 > **Status: `0.2.0`, and worth being precise about what that number claims.** The
 > contract, the typed layer and a 116-rule conformance suite across four families
-> are real and tested, and **two adapters have run the suite** — SQLite against a
+> are real and tested, and **five adapters have run the suite** — SQLite against a
 > real file on disk, across the event-store, projection, concurrency and model
-> families, and a Cloudflare Durable Object on `wasm32`. All five crates are on
-> crates.io.
+> families; a Cloudflare Durable Object on `wasm32`; a live PostgreSQL 17.10,
+> including the concurrency family at 64 contenders; a live Neon endpoint over
+> one-shot HTTP; and LadybugDB for the projection role alone. **Seven crates are
+> in the `0.2.0` release set**, which is the set the manifests and
+> `xtask/src/package.rs`'s `PUBLISHABLE` agree on.
 >
 > What `0.2.0` promises: the `EventStore` clauses marked `[FROZEN]` in
 > [the specification](spec/SPECIFICATION.md) are semver-binding from here.
@@ -26,9 +29,8 @@ it.
 > opposite ends of the batch-shape axis have passed its suite.
 >
 > What it is not is production mileage — see the note under [status](#status),
-> which is narrower than the ticks suggest. Postgres, Neon, Ladybug and
-> replication come next, and the ambition is the whole list rather than the first
-> five.
+> which is narrower than the ticks suggest. Ladybug and replication come next, and
+> the ambition is the whole list rather than the seven that ship here.
 
 ---
 
@@ -131,15 +133,19 @@ checkpoint until the runner has caught up, and `200` after.
 
 ## Status
 
+A ✅ below means **in the `0.2.0` release set and passing its suite**. It does not
+say the version is on the registry: nothing is published at `0.2.0` until the
+publish sequence has actually been run, and this table is written before it.
+
 | Crate | Role | Status |
 |---|---|---|
-| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ on crates.io at `0.2.0` |
-| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ on crates.io at `0.2.0` |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ on crates.io at `0.2.0` — 116 rules across four families |
-| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ on crates.io at `0.2.0`; passes the suite against a real file |
-| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ on crates.io at `0.2.0`; passes the suite on `wasm32` — read the note below |
-| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ on crates.io at `0.2.0`; both roles pass their suites against a live server, and the only adapter clearing the concurrency family against a store that does not serialise its writers |
-| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ on crates.io at `0.2.0`; passes its suites against a live endpoint, with one open clause question its README names |
+| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ in the `0.2.0` release set |
+| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ in the `0.2.0` release set |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ in the `0.2.0` release set — 116 rules across four families |
+| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ in the `0.2.0` release set; passes the suite against a real file |
+| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ in the `0.2.0` release set; passes the suite on `wasm32` — read the note below |
+| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.2.0` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
+| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.2.0` release set; passes its suites against a live endpoint, with one open clause question its README names |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ✅ passes the projection suite against the real driver; **cannot** be published — `lbug` does not render on docs.rs |
 | [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
 
@@ -157,14 +163,17 @@ misread.** It is no longer a stub: the event store clears 101 of 101 conformance
 rules against a live PostgreSQL 17.10 including the concurrency family at 64
 contenders — the first adapter here to clear that family against a store whose
 writers are *not* serialised — and the projection store clears the projection
-suite, 14 rules run and 3 reported as skips. It is nevertheless **not published**
-at `0.2.0`, and that is a release-set decision rather than a readiness one: five
-crates ship, decided at the release pass, and this is not one of them. A ✅ in
-this column means *passes the suite*; the crates.io claim is in the same cell
-only where it is true.
+suite, 14 rules run and 3 reported as skips. **It ships in `0.2.0`**, together
+with `happenstance-neon`: the release set was five, decided, and the owner
+re-opened it on that evidence at `e597c34`. It is the *first* adapter here to
+clear the concurrency family against a store whose writers are not serialised,
+not the only one — `happenstance-neon` clears it too, over the same server
+through a different transport. A ✅ in this column means *in the release set and
+passing its suite*; nothing is in the `0.2.0` release set until the publish
+sequence in [`RUNBOOK.md`](RUNBOOK.md) has actually been run.
 
 `happenstance-cloudflare` is the row most easily misread, and it ships in
-`0.2.0` with the thinnest evidence of the five. Two things a reader should have
+`0.2.0` with the thinnest evidence of the seven. Two things a reader should have
 before weighing it. It passes the conformance suite under a `node:sqlite`-backed
 shim rather than under `workerd` itself — `.kb/open-questions/no-workerd-class-runner-in-the-gate.md`
 is the standing record of what that establishes and what it does not — and it is
@@ -268,6 +277,34 @@ nothing. So Postgres is here for what it *breaks* — it is the only target on t
 roadmap that can violate the position-visibility invariant, which is what makes
 that invariant testable rather than decorative. It is not a flagship, and if you
 want DCB on Postgres today, `disintegrate` below is the mature choice.
+
+## Performance
+
+**This README makes no performance claim, and that is deliberate.** The library
+is positioned on correctness, and an earlier version of that positioning opened
+with the words "fast, efficient" while nothing in the repository supported them —
+three of the fourteen reviews say so. The numbers came out on purpose.
+
+What exists instead is a measured record, kept where it can be checked:
+
+* [`benchmarks/results/GRADES.md`](benchmarks/results/GRADES.md) — what the
+  abstraction costs over raw SQL, throughput, the DCB guard, the typed layer,
+  the projection runner, and exact allocation counts. Every figure is written by
+  hand from `benchmarks/results/raw/`, which is committed beside it.
+* [`benchmarks/README.md`](benchmarks/README.md) — the conditions each figure was
+  taken under, and a **What none of this shows** section that is the first thing
+  to read if you are about to quote one.
+
+Two of its own rules are worth repeating here, because they are what make the
+rest usable. Read the figures as **orders of magnitude and as ratios between arms
+of one run**; nothing there should be quoted to a third significant figure. And
+prefer the allocation counts to the timings — they are reproducible to the digit
+where the wall clock is not.
+
+`benchmarks/` is not a workspace member, appears in no `cargo xtask ci` step, and
+contains no threshold on any budget. CF-34 forbids a benchmark result gating a
+merge: an adapter that is slow is conformant. To re-derive the whole record from
+a clean checkout, `cd benchmarks && ./run.sh`.
 
 ## Writing an adapter
 

@@ -63,7 +63,7 @@ request against its own base SHA and the break is inside the diff only if
 somebody bothered to look at the job's output.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:303 (async fn head)` ·
-`.github/workflows/ci.yml:939 (baseline-rev: ${{ github.event.pull_request.base.sha }})` ·
+`.github/workflows/ci.yml:1053 (baseline-rev: ${{ github.event.pull_request.base.sha }})` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
 [cargo-semver-checks 0.50](https://github.com/obi1kenobi/cargo-semver-checks) —
@@ -257,7 +257,7 @@ that is never compiled is decoration (F1-04, and
 `crates/happenstance-core/src/lib.rs:193 (pub use futures_core)` ·
 `crates/happenstance-sqlite/src/lib.rs:143 (pub use rusqlite)` ·
 `crates/happenstance-sqlite/src/lib.rs:185 (compile_fail,E0433)` ·
-`crates/happenstance-cloudflare/src/lib.rs:578 (pub use {happenstance_core, worker})` ·
+`crates/happenstance-cloudflare/src/lib.rs:587 (pub use {happenstance_core, worker})` ·
 `crates/happenstance-core/src/store.rs:178 (impl Stream<Item = Result<SequencedEvent, Self::Error>>)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)
 
@@ -301,8 +301,8 @@ the trade would leave no line in the CI log at all, and the reviewer approving
 the pull request would see a green build and thirty-four fewer rules than they
 thought they had.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1006 (pub const fn declined)` ·
-`crates/happenstance-testkit/src/contract.rs:999 (Where it does *not* fire)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1063 (pub const fn declined)` ·
+`crates/happenstance-testkit/src/contract.rs:1056 (Where it does *not* fire)` ·
 `crates/happenstance-testkit/src/fixtures.rs:282 (const REOPEN)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(why a declined
 capability still emits a reported test)*

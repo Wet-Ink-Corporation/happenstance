@@ -7,13 +7,26 @@ storage-agnostic event sourcing library built on the
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.2.0` release set.** 132 gated tests pass
-> against a live PostgreSQL 17.10 — the event store family, the concurrency
-> family at 64 contenders, the generated model family, and the projection
-> family. This is the **only adapter in the portfolio that clears the
-> concurrency family against a store whose writers are not serialised**, which
-> is the whole reason the crate exists. Only the registry can say whether the
+> **Status: conformant, and in the `0.2.0` release set.** **107 of 107** gated
+> tests in the event-store binary pass against a live PostgreSQL 17.10 — the 95
+> rules of the event-store family, the 5 of the concurrency family at 64
+> contenders, the generated model family, and this crate's own six. The
+> projection suite clears its own target beside it.
+>
+> Stated per target rather than as one total, because the total was wrong: this
+> line said 132 and the four targets list 133 between them. A composite nobody
+> can reproduce from a single command is a number that goes stale quietly, and
+> this one had. This was the **first adapter in the portfolio to clear the concurrency
+> family against a store whose writers are not serialised**, which is the whole
+> reason the crate exists; `happenstance-neon` reaches the same server through a
+> different transport and clears it too. Only the registry can say whether the
 > release has happened yet.
+>
+> **One of those gated tests is a stated declension rather than a run.** The
+> fixture declines `READ_YOUR_OWN_WRITES`, so the generated model family reports
+> a skip carrying its reason instead of executing. That family predicts whether a
+> conditional append will be refused from what a read showed it, and this store
+> keeps those two sets apart on purpose — see *What this store costs a caller*.
 
 ## Which crate do I want?
 

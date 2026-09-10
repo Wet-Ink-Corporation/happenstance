@@ -22,6 +22,8 @@
 //! `--test-threads=1`; a parallel run of this file will report counts that are
 //! too high and is not a finding about anything.
 
+mod support;
+
 use happenstance_benchmarks::corpus::{Corpus, FLOOR_TAGS_PER_EVENT, Regime, Shape};
 use happenstance_benchmarks::counting::{self, Counting};
 use happenstance_benchmarks::cpu;
@@ -169,16 +171,49 @@ fn the_two_allocation_regimes_are_separated_by_an_order_of_magnitude() {
 fn the_processor_clock_tells_working_from_waiting() {
     let span = cpu::RESOLVABLE_FLOOR + std::time::Duration::from_millis(100);
 
+    // Pinned to one CPU for the span, and the reason is a property of one host.
+    //
+    // On this repository's Linux measurement host the kernel has marked the TSC
+    // unstable, so `sched_clock` runs on a per-CPU fallback; a task that
+    // MIGRATES mid-region comes back with its runtime mis-accounted, and
+    // `CLOCK_PROCESS_CPUTIME_ID` reported this busy 256 ms as 0 ms in 2 runs of
+    // 10. Pinned to one CPU: 0 of 10. `support::PinnedToOneCpu` carries the full
+    // table and the reasoning, including why a bounded retry was tried and
+    // rejected.
+    //
+    // This does not make the assertion unfireable. A clock that genuinely could
+    // not tell working from waiting still reads idle on one CPU and still fails
+    // below; what pinning removes is a host property that could fake that.
+    let pin = support::PinnedToOneCpu::here();
+    println!("processor-clock control: {}", pin.describe());
+
     let ((), busy) = cpu::measure(|| {
         let deadline = std::time::Instant::now() + span;
         let mut turns = 0_u64;
-        while std::time::Instant::now() < deadline {
-            turns = turns.wrapping_add(1);
+        // The deadline is checked every 4,096 turns rather than every turn.
+        //
+        // Checked every turn, this loop spent its span CALLING THE CLOCK: on a
+        // host whose clocksource is `hpet` the clock is not in the vDSO, so a
+        // 256 ms "spin loop" was roughly 180,000 syscalls. A control named "the
+        // processor is busy" should be busy with arithmetic, not with syscalls,
+        // and that is the whole of why this shape changed.
+        //
+        // It did NOT fix the migration mis-accounting it was written for, and
+        // the note is kept so nobody credits it with that. The pin above is
+        // what addresses that.
+        loop {
+            for _ in 0..4_096 {
+                turns = turns.wrapping_add(1).wrapping_mul(2_654_435_761);
+            }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
         }
         let _ = std::hint::black_box(turns);
     });
 
     let ((), waiting) = cpu::measure(|| std::thread::sleep(span));
+    drop(pin);
 
     println!("busy: {busy}");
     println!("waiting: {waiting}");
@@ -207,6 +242,13 @@ fn the_processor_clock_tells_working_from_waiting() {
 ///
 /// Wide bounds — anything from 2× to 40× passes — because the point is that the
 /// instrument *responds*, not that a spin loop scales linearly.
+/// What the calibration arm spins, before anything is known about the clock.
+/// Large enough to be priced against a coarse timer, small enough to be cheap.
+const CALIBRATION_SPINS: u64 = 20_000;
+
+/// The ceiling on a calibrated arm. See the assertion that reads it.
+const MAX_CALIBRATED_SPINS: u64 = 40_000_000;
+
 #[test]
 fn the_paired_sampler_sees_a_difference_it_was_given() {
     // `black_box` on the *input*, not only on the result. With a literal
@@ -224,11 +266,56 @@ fn the_paired_sampler_sees_a_difference_it_was_given() {
         let _ = std::hint::black_box(accumulator);
     }
 
+    // The iteration counts are CALIBRATED to this host's clock, not written
+    // down for the reference host's.
+    //
+    // They used to be `spin(20_000)` and `spin(160_000)`, chosen when the timer
+    // pair cost 56ns/sample. On a host whose clocksource is `hpet` it costs
+    // 2,924ns — 52x more — and the light arm landed at 6,635ns against a floor
+    // of `TIMER_HEADROOM * 2,924` = 29,240ns. The control then failed its own
+    // `is_above_the_timer` guard while the assertion that matters, the ratio,
+    // passed at 6.44x: the sampler saw the difference it was given, and the
+    // control could not certify that it had. That is the assertion's own
+    // diagnosis, in its own words — "the iteration counts in this control need
+    // revisiting" — so this is that revision, done once instead of per host.
+    //
+    // One throwaway run measures the timer and prices a single spin iteration;
+    // the arms follow from both.
+    let calibration = {
+        let mut probe = [Operation::new("probe", || spin(CALIBRATION_SPINS))];
+        paired::run(48, 8, &mut probe)
+    };
+    let timer = calibration.timer_overhead_nanos;
+    let probe_median = calibration.arms[0].median_nanos;
+    let per_spin = (probe_median.saturating_sub(timer) as f64) / CALIBRATION_SPINS as f64;
+    assert!(
+        per_spin > 0.0,
+        "the calibration arm cost no more than the timer that measured it, so a          spin iteration cannot be priced. timer={timer}ns probe={probe_median}ns"
+    );
+
+    // Twice the floor the guard below asserts, so the margin is real rather
+    // than marginal.
+    let light_target = (timer * paired::TIMER_HEADROOM * 2) as f64;
+    let light_spins = (light_target / per_spin).ceil() as u64;
+
+    // The cap is what keeps `is_above_the_timer` a guard that can still FIRE. A
+    // control whose arms are sized to satisfy its own assertion has turned that
+    // assertion into decoration, and this repository rejects a check no
+    // implementation can fail. So: calibrate, but refuse to calibrate without
+    // limit. A host needing more than this to clear its own clock has a clock
+    // the paired runner should not be used on at all, and that is the finding.
+    assert!(
+        light_spins <= MAX_CALIBRATED_SPINS,
+        "clearing {}x this host's timer overhead ({timer}ns/sample) would need          {light_spins} spin iterations per sample, over the {MAX_CALIBRATED_SPINS}          cap. The clock is too coarse for the paired runner at any arm size; use          criterion, which amortises the clock across a batch.",
+        paired::TIMER_HEADROOM
+    );
+
     let mut operations = [
-        Operation::new("light", || spin(20_000)),
-        Operation::new("heavy", || spin(160_000)),
+        Operation::new("light", move || spin(light_spins)),
+        Operation::new("heavy", move || spin(light_spins * 8)),
     ];
     let report = paired::run(400, paired::DEFAULT_WARMUP_ROUNDS, &mut operations);
+    println!("timer={timer}ns/sample  per_spin={per_spin:.3}ns  light={light_spins} spins");
     println!("{report}");
 
     let ratio = report

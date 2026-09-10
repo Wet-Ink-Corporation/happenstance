@@ -16,20 +16,33 @@ summary: >-
   store that was never asked to protect anything. The trait's provided protect_from_reset panics,
   so a forgotten override aborts loudly; a written-but-empty one compiles, does nothing, and looks
   like honest code — NoopFaultFixture's exact shape one port over, and this family has no named
-  wrong implementation for it. The population that could be lying about RESET_REFUSAL today is
-  empty (no projection adapter has run the suite), which is why the cost of leaving this open is
-  low rather than zero, and why it should close before the first one does.
+  wrong implementation for it. The window this atom originally named has since closed and the
+  question has not. Its cost argument rested on no projection adapter having run the suite and on
+  the clause landing before the first one did; four storage adapters now invoke
+  projection_store_conformance! — happenstance-sqlite, happenstance-postgres, happenstance-neon
+  and happenstance-ladybug — so the first has arrived. That neither weakens the finding nor
+  answers it. All four decline RESET_REFUSAL, and a declining adapter cannot be lying about a
+  capability it never claimed, so the population is still empty and the family still has no named
+  wrong implementation. ADR-0025 pre-registered RESET_REFUSAL declined among four capability
+  predictions committed before any body was written, so they could not be fitted to the outcome,
+  and it held. What has changed is only the cost of leaving this open: the next adapter to declare
+  the capability supported will do so with nothing checking it, and there is no longer a
+  first-adapter deadline to act before.
 depends_on: []
 related:
   - kb-decision-0042
   - kb-decision-0034
   - kb-decision-0036
   - kb-decision-0012
+  - kb-decision-0025
+  - kb-reference-ladybug-driver-probes-001
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/projection-declension-obligations.md
+  - .kb/_intake/2026-09-08-adr-0025-ladybug-projection-adapter.md
   - crates/happenstance-testkit/src/contract.rs
+  - crates/happenstance-ladybug/tests/projection.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-09
 ---
 
 # RESET_REFUSAL can be declared and left un-mechanised, and nothing in the tree would notice
@@ -78,11 +91,35 @@ A smaller, separable question rides along: whether the default reason strings th
 describe what the testkit knows (the fixture did not answer) or attempt to speak in the fixture's
 own voice the way `Fixture::MID_BATCH_FAULT`'s default does. Neither reading has been argued through.
 
-## What forces it
+## What forces it, and why the deadline has already passed
 
-The first projection adapter to run the suite and declare `RESET_REFUSAL` supported. Today the only
-declarers are the testkit's own instruments, so the population that could be lying about the
-capability is empty; it stops being empty exactly when the port is meant to move toward frozen,
-which is the same moment the PS-clause maturity sweep is scheduled to run. The clause and its rule
-— plus a `NoopProtectFixture` registered in `tests/projection_mutation_coverage.rs` so the
-obligation has a named wrong implementation — should exist before that adapter lands, not after.
+What forces it is the first projection adapter to run the suite and declare `RESET_REFUSAL`
+supported. Half of that has now happened. Four storage adapters invoke
+`projection_store_conformance!` — `happenstance-sqlite`, `happenstance-postgres`,
+`happenstance-neon` and `happenstance-ladybug` — so the sentence this section used to carry, that
+the only declarers are the testkit's own instruments, is no longer true.
+
+The finding survives intact, because all four **decline** the capability. `happenstance-ladybug`'s
+decline is the most explicit of them and reads as the pattern: the store owns one node table,
+`__hs_checkpoint`, and the transaction that carries it, is never told which labels the read model
+uses, and so returns `Refused` on no path at all — with the cheap alternative that would have
+manufactured a `Ran` (a `__hs_protected` node table consulted by `reset`) named and rejected for
+putting a domain policy into an adapter designed to keep the domain out. A fixture that declines
+cannot be lying about a mechanism it never claimed, so the population that could be lying is still
+empty, and `refused_reset_changes_nothing` still has no adapter it could be wrong about.
+
+ADR-0025 (`kb-decision-0025`) is worth citing for *how* that came out rather than only that it did.
+Its verdict was **pre-registered** — four capability predictions committed before any body was
+written, so they could not be fitted to the outcome — and `RESET_REFUSAL` declined was one of the
+four. It held. That is evidence about the default rather than about one adapter: a store that owns
+only its checkpoint has no protection policy to expose, and declining is the honest answer rather
+than the lazy one.
+
+What has changed is this atom's own cost argument, and it has changed for the worse. The reason for
+tolerating an unminted clause was that it should close *before* the first adapter arrived; that
+deadline has passed without the clause. The PS-clause maturity sweep is now the only schedule hook
+left holding it, and it is no longer racing an adapter it can be timed against. The clause, its
+rule, and a `NoopProtectFixture` registered in `tests/projection_mutation_coverage.rs` so the
+obligation has a named wrong implementation are all still owed — and the next adapter to declare
+`RESET_REFUSAL` supported will do so with nothing checking it, with no advance warning of which
+adapter that will be.

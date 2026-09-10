@@ -1,7 +1,7 @@
 # happenstance-testkit
 
 The conformance suite for [happenstance](https://github.com/Wet-Ink-Corporation/happenstance)
-event store adapters. Ninety-three rules, each tracing to a MUST in the
+event store adapters. Ninety-five rules, each tracing to a MUST in the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/)
 and each shown to reject a named wrong implementation before it was trusted to
 pass.
@@ -15,17 +15,40 @@ pass.
 > stores fails *exactly* the rules its registry row claims — so a rule that
 > stopped discriminating is a red build rather than a green one.
 >
-> What is still early is everything around that. **`happenstance-sqlite` has
-> run this suite** — its own front page says so in those words, *an adapter,
-> and it has run the suite* (`crates/happenstance-sqlite/src/lib.rs:3`), and
-> `tests/conformance.rs` mounts it three times — but every other storage crate
-> is still a skeleton.
+> **Five adapters have run this suite**, and what each one ran differs, which is
+> the part a prospective adapter author needs. `happenstance-sqlite`'s own front
+> page still says it in the words this file has quoted since the first adapter
+> arrived — *an adapter, and it has run the suite*
+> (`crates/happenstance-sqlite/src/lib.rs`) — and four more can now say the same:
+>
+> - **`happenstance-sqlite`** — event store, projection, concurrency and model
+>   families, against a real file on disk.
+> - **`happenstance-cloudflare`** — the event-store family on
+>   `wasm32-unknown-unknown`, executed inside `cargo xtask ci` on every run.
+> - **`happenstance-postgres`** — event store and projection against a live
+>   PostgreSQL 17.10, including the concurrency family at 64 contenders, which is
+>   the first time that family was cleared against a store whose writers are not
+>   serialised.
+> - **`happenstance-neon`** — event store, concurrency and projection against a
+>   live Neon endpoint over one-shot HTTP, and it ships naming one rule it does
+>   not pass, with the reason on its own front page.
+> - **`happenstance-ladybug`** — the projection family only, against the real
+>   LadybugDB driver. It is `publish = false` and will stay so: `lbug` does not
+>   render on docs.rs, which is this project's bar for a published crate, so
+>   following that name to the registry finds nothing.
+>
 > The `ProjectionStore`
 > suite is now all seventeen rules the specification names, each with a wrong
 > store in this crate's `tests/` that fails it — but the port it checks is still
-> `[PROVISIONAL]` and ships behind an off-by-default feature, because both
-> fixtures that clear the suite are instruments this workspace wrote rather than
-> adapters over storage it does not control. Several axes of the instrument
+> `[PROVISIONAL]` and ships behind an off-by-default feature. The reason is no
+> longer that nothing real has cleared it: four adapters over storage this
+> workspace does not fully control now do. It is **structural**. PS-2 asks for two
+> adapters at opposite ends of the batch-shape axis, and all four sit at the same
+> end — an owned, buffered write set — because the other end, a batch holding a
+> live transaction, is unreachable through this port's signatures: `begin` is
+> total, synchronous and infallible, and no real driver hands out a transaction
+> that way. The freeze waits on a replacement axis rather than on another adapter.
+> Several axes of the instrument
 > portfolio also have no implementation at their far end — see
 > [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > §6.2 and §6.5, which name them rather than summarising them.

@@ -84,7 +84,7 @@ remove it.
 
 **Evidence.** `Cargo.toml:211 (Members opt in with)` · `Cargo.toml:214 (missing_docs)` ·
 `Cargo.toml:227 (missing_errors_doc)` ·
-`crates/happenstance-core/Cargo.toml:105 ([lints])` ·
+`crates/happenstance-core/Cargo.toml:116 ([lints])` ·
 `crates/happenstance-core/src/store.rs:258 (AppendError::NoEvents)` ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)
 
@@ -157,8 +157,8 @@ configuration so that the rule is checked where the consumer stands.
 **Evidence.** `crates/happenstance-core/src/lib.rs:108 (The name is deliberately not a link here)` ·
 `crates/happenstance-core/src/store.rs:106 (It is not linked because)` ·
 `crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
-`xtask/src/main.rs:897 (no default features)` ·
-`xtask/src/main.rs:926 (documentation (default features))` ·
+`xtask/src/main.rs:908 (no default features)` ·
+`xtask/src/main.rs:937 (documentation (default features))` ·
 `Cargo.toml:245 (broken_intra_doc_links)`
 
 ---

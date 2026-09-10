@@ -18,7 +18,20 @@ summary: >-
   not whether its condition has been met. Both markers now have named owners in the imported ADR
   corpus: ES-7's evidence is ADR-0001's lift condition, discharged by ADR-0008 and compiled in the
   port-traits findings, and VT-9 is one of ADR-0014's four provisional parts, owned by phase 9's
-  Workers skeleton.
+  Workers skeleton. Two further markers join them in 2026-09, and they sharpen the observation
+  rather than repeat it, because these falsifiers never could fire rather than having already
+  fired harmlessly. PS-4 is PROVISIONAL and its falsifier has two limbs; the Rust-level limb — an
+  adapter whose write handle must exist before a traversal the projection's own logic depends on
+  — is foreclosed by the port for every batch shape, because Projection::apply is synchronous and
+  a traversal is I/O, which is a fact about the port and equally true of the SQLite and Postgres
+  adapters. PS-2 is the same defect one level over and with a wider blast radius: that clause is
+  FROZEN, so what cannot be met is its bar rather than a falsifier, and the live-transaction end
+  of its batch-shape axis is forbidden by begin's total, synchronous, infallible signature for
+  both drivers the Rule names, while thirteen PROVISIONAL clauses wait on PS-2 alone. ADR-0060
+  keeps the port's gate on that ground without rewording PS-2's MUST or moving a marker. The
+  transferable observation therefore gets one clause sharper: a falsifier can be decoration a
+  priori and not only in retrospect, and spec-trace detects neither shape, because it checks that
+  a clause's citations resolve rather than whether its stated condition is reachable.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -32,17 +45,24 @@ related:
   - kb-reference-spec-trace-has-suite-001
   - kb-open-question-no-ps-rule-name-resolved-001
   - kb-open-question-cf-17-cf-14-markers-001
+  - kb-decision-0025
+  - kb-decision-0060
+  - kb-open-question-probe-read-through-signature-001
+  - kb-open-question-one-shot-http-es-11-001
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/0001-async-port-flavours.md
   - .kb/_intake/0008-one-derivation-for-both-ports.md
   - .kb/_intake/0014-event-identity-and-recorded-time.md
+  - .kb/_intake/2026-09-08-adr-0025-ladybug-projection-adapter.md
+  - .kb/_intake/2026-09-08-ps-2-live-transaction-axis-is-forbidden-not-unbuilt.md
+  - .kb/_intake/2026-09-08-adr-0060-ps-2s-axis-re-evaluated.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/tests/local_conformance.rs
   - crates/happenstance-core/src/memory.rs
   - references/adr/0001-async-port-flavours.md
   - references/adr/0014-event-identity-and-recorded-time.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-09
 ---
 
 # Two provisional markers whose falsifiers can no longer falsify
@@ -137,6 +157,40 @@ itself, the rule that would have made VT-9 discriminate for free: no rule may co
 times or compare one against a position. That is why presence and stability are all VT-9's two
 rules can assert, and it is a deliberate consequence rather than an oversight.
 
+## Two more, and these never *could* fire
+
+Phases 10b and 11 added two instances, and they are not repetitions of the two above. ES-7's and
+VT-9's conditions had already occurred harmlessly; these two name conditions that nothing the port
+admits can meet at all.
+
+**PS-4** (`spec/SPECIFICATION.md:5148-5157`) is `[PROVISIONAL]` and its falsifier has two limbs.
+The Cypher-level limb — graph mutations that cannot be expressed as a replayable statement list —
+did not fire against LadybugDB, which is an ordinary negative result: a transaction gives
+read-your-own-writes within itself, so a deferred write set answers it. The Rust-level limb — a
+write handle that must exist before a traversal the projection's own logic depends on — cannot
+fire against any adapter, because `Projection::apply` is synchronous and a traversal is I/O, so no
+batch shape can carry the dependency the limb describes. `kb-decision-0025` reports this, having
+been the phase that owned the clause, and states its scope precisely: it is a finding about the
+*port*, equally true of the SQLite and Postgres adapters, rather than something LadybugDB happened
+to demonstrate. Half of PS-4's falsifier is therefore unreachable by construction, and the half
+that remains is the one already discharged.
+
+**PS-2** is the same defect one level over, and it is the one with consequences. That clause is
+`[FROZEN]`, so what has become unmeetable is its *bar* rather than a falsifier — the shape is
+identical, the vocabulary is not. The bar wants two adapters at opposite ends of the batch-shape
+axis. The live-transaction end is refuted for both drivers the Rule names, by two different
+mechanisms: `sqlx`'s `Transaction` cannot be produced by a `begin` that is total, synchronous and
+infallible, and `rusqlite`'s `Transaction<'_>` is `!Send` and so costs the `SendProjectionStore`
+impl. `kb-decision-0060` records that the drivers are not the deeper problem — a store whose batch
+genuinely is a live transaction *can* implement the port, and must then declare
+`READS_THROUGH_BATCH = false`, so it reports the same capability profile as a buffering one and
+the suite cannot tell the two ends apart; that seam is
+`kb-open-question-probe-read-through-signature-001`. ADR-0060 keeps the port's gate on exactly
+that ground, without rewording PS-2's MUST or moving PS-3's marker, and proposes the probe
+signature change without making it. Thirteen `[PROVISIONAL]` clauses are gated on PS-2 alone, and
+a provisional group waiting on an adapter nobody can build waits forever — which is why this
+instance is the one that most needed writing down rather than leaving as a schedule slipping.
+
 ## The transferable observation
 
 Worth keeping independent of how these two are settled: **a falsifier that has already occurred
@@ -148,8 +202,23 @@ checking against. That is a reading task, not a mechanisable one, which is the s
 more generally: some obligations in this specification's maintenance can only be discharged by a
 human rereading a clause against the tree as it now stands.
 
+**And 2026-09 adds one clause to it: a falsifier can be decoration *a priori*, not only in
+retrospect.** ES-7 and VT-9 are markers whose condition was met without effect; PS-4's Rust-level
+limb and PS-2's live-transaction end are conditions the port's own signatures forbid being met.
+The second kind is worse in one specific way — waiting is a rational response to the first and
+never terminates for the second — and `spec-trace` misses both for the same reason: it checks that
+a clause's citations resolve, never whether the condition the clause states is reachable. Deciding
+reachability means reading a falsifier against a signature, which is the same human reading task,
+now owed at authoring time as well as at reconciliation time.
+
 ## Owner
 
 Unassigned as a *marker-editing* task. The evidence is owned: ES-7's by ADR-0001 and ADR-0008,
 VT-9's by ADR-0014. What no ADR owns is the act of restating either falsifier so that it would
 discriminate again, and phase 9 is where both first have the instrument to justify it.
+
+The 2026-09 pair are owned the same way and no further: PS-4's evidence by `kb-decision-0025` and
+PS-2's by `kb-decision-0060`, both of which deliberately stop short of touching a marker or a
+Rule. Restating PS-4's Rust-level limb so it could fire, and deciding between rewording PS-2's
+axis, moving the port's `begin`/probe seam, and recording the bar as unmeetable in its stated
+terms, is PS-2's owner's call and is unassigned.

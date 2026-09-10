@@ -11,7 +11,13 @@ summary: >-
   Gives the taxonomy of each, the safe form for an obligation that has been met — keep the MUST
   verbatim, name the discharge as a discharge, cite the code and the test that assert it — and the
   form for a gap, which is to record the defect inside the clause it is about and change nothing
-  normative. Closes with why discovery and decision were kept in separate passes.
+  normative. A 2026-09 case sharpens the test at its hardest edge, where every instinct says
+  repair and the answer is amendment: ADR-0061 corrected a sufficiency condition inside ES-11
+  without touching its MUST, its maturity marker, its Rule or its Cases, and without making
+  anything an adapter must do any harder — and it was still an amendment, because the correction
+  removed a route by which conformance could be claimed, so the set of implementations the clause
+  admits moved. Nothing gets harder is not the test. Closes with why discovery and decision were
+  kept in separate passes.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -34,17 +40,20 @@ related:
   - kb-open-question-no-ps-rule-name-resolved-001
   - kb-decision-0051
   - kb-decision-0056
+  - kb-decision-0061
+  - kb-open-question-one-shot-http-es-11-001
   - kb-open-question-cf-38-case-naming-no-clause-001
   - kb-open-question-dagger-convention-vs-maturity-markers-001
   - kb-open-question-es-18-byte-identical-conformance-001
 source_paths:
   - .kb/_intake/lesson-repairing-a-frozen-clause-without-amending-it.md
+  - .kb/_intake/2026-09-08-adr-0061-es-11s-sufficiency-condition-assumed-a-queue.md
   - spec/SPECIFICATION.md
   - CLAUDE.md
   - RUNBOOK.md
   - xtask/src/spec_trace.rs
   - references/evaluation/phase-4-5-reconciliation.md
-last_reviewed: 2026-08-13
+last_reviewed: 2026-09-09
 ---
 
 # Repairing a frozen clause without amending it
@@ -81,6 +90,31 @@ has shipped.
 **Gaps:** the MUST admits an implementation the named rule rejects; the MUST is silent about
 something a rule enforces; a maturity marker whose stated falsifier can no longer falsify
 anything.
+
+## The hardest edge: a narrowing is an amendment
+
+The test's hard cases are not the obvious widenings. They are corrections where every visible
+signal says *repair*. In 2026-09, ES-11's asynchronous-driver paragraph was found to state a
+sufficiency condition that is false as written for a driver with no shared ordering primitive
+between its operations: *a read spawned at its first poll and an append spawned afterwards land in
+the same queue in that order*. That is a fact about pooled drivers presented as a fact about
+asynchronous ones — spawning at the first poll orders the two operations at the *client*, and the
+clause needs the snapshot to precede the commit at the *store*. The correction
+(`kb-decision-0061`) requires them also to be ordered against a later append by something the
+store itself honours.
+
+Every signal pointed at repair. The MUST was untouched; the maturity marker was untouched; the
+`Rule` and the `Cases` were untouched; and nothing an adapter must do got any harder, because the
+correction only removed a route by which conformance could be *claimed*. It was still an
+amendment, and it was correctly taken as an ADR: an adapter that could previously have argued
+conformance from *spawned at the first poll* alone no longer can, so the set of implementations
+the clause admits moved even though no obligation did.
+
+**Keep the discrimination: "nothing gets harder" is not the test.** A narrowing changes the
+admitted set as surely as a widening does, and a correction that removes a route to a conformance
+claim is an amendment even when every adapter's obligations are byte-identical afterwards. That
+matters here rather than as a technicality, because ES-11 and ES-12 reduce to ES-10 plus a
+ceiling — a careless move in either direction reaches append-condition correctness.
 
 ## The safe form for a discharged MUST
 

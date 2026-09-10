@@ -185,18 +185,19 @@ enum Enrolment {
     },
 }
 
+const COURSE_DEFINED: EventType = EventType::from_static("CourseDefined");
+const STUDENT_SUBSCRIBED: EventType = EventType::from_static("StudentSubscribed");
+const STUDENT_UNSUBSCRIBED: EventType = EventType::from_static("StudentUnsubscribed");
+
 impl DomainEvent for Enrolment {
-    const EVENT_TYPES: &'static [EventType] = &[
-        EventType::from_static("CourseDefined"),
-        EventType::from_static("StudentSubscribed"),
-        EventType::from_static("StudentUnsubscribed"),
-    ];
+    const EVENT_TYPES: &'static [EventType] =
+        &[COURSE_DEFINED, STUDENT_SUBSCRIBED, STUDENT_UNSUBSCRIBED];
 
     fn event_type(&self) -> EventType {
         match self {
-            Self::CourseDefined { .. } => Self::EVENT_TYPES[0].clone(),
-            Self::StudentSubscribed { .. } => Self::EVENT_TYPES[1].clone(),
-            Self::StudentUnsubscribed { .. } => Self::EVENT_TYPES[2].clone(),
+            Self::CourseDefined { .. } => COURSE_DEFINED,
+            Self::StudentSubscribed { .. } => STUDENT_SUBSCRIBED,
+            Self::StudentUnsubscribed { .. } => STUDENT_UNSUBSCRIBED,
         }
     }
 

@@ -1,164 +1,167 @@
-    Finished `bench` profile [optimized] target(s) in 0.27s
-     Running benches\store_conditional.rs (target\release\deps\store_conditional-6f06d5c1931ba3b3.exe)
+   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\benchmarks)
+    Finished `bench` profile [optimized] target(s) in 2.91s
+     Running benches\store_conditional.rs (target\release\deps\store_conditional-aed7d864f875b191.exe)
 Gnuplot not found, using plotters backend
 Benchmarking conditional/guard-shape/memory/guard/selects-one/1000
 Benchmarking conditional/guard-shape/memory/guard/selects-one/1000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/memory/guard/selects-one/1000: Collecting 10 samples in estimated 5.0000 s (167M iterations)
+Benchmarking conditional/guard-shape/memory/guard/selects-one/1000: Collecting 10 samples in estimated 5.0000 s (240M iterations)
 Benchmarking conditional/guard-shape/memory/guard/selects-one/1000: Analyzing
 conditional/guard-shape/memory/guard/selects-one/1000
-                        time:   [28.604 ns 30.024 ns 31.140 ns]
-                        change: [+30.656% +38.814% +47.536%] (p = 0.00 < 0.05)
-                        Performance has regressed.
+                        time:   [20.727 ns 22.130 ns 23.672 ns]
+                        change: [−7.5583% −0.0457% +7.9141%] (p = 1.00 > 0.05)
+                        No change in performance detected.
 Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000
 Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000: Collecting 10 samples in estimated 5.0004 s (273k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000: Collecting 10 samples in estimated 5.0005 s (259k iterations)
 Benchmarking conditional/guard-shape/sqlite/guard/selects-one/1000: Analyzing
 conditional/guard-shape/sqlite/guard/selects-one/1000
-                        time:   [17.799 µs 20.666 µs 22.504 µs]
-                        change: [+63.469% +88.576% +117.70%] (p = 0.00 < 0.05)
-                        Performance has regressed.
+                        time:   [15.104 µs 16.375 µs 18.648 µs]
+                        change: [−53.887% −44.915% −33.265%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking conditional/guard-shape/memory/guard/selects-all/1000
 Benchmarking conditional/guard-shape/memory/guard/selects-all/1000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/memory/guard/selects-all/1000: Collecting 10 samples in estimated 5.0000 s (132M iterations)
+Benchmarking conditional/guard-shape/memory/guard/selects-all/1000: Collecting 10 samples in estimated 5.0000 s (248M iterations)
 Benchmarking conditional/guard-shape/memory/guard/selects-all/1000: Analyzing
 conditional/guard-shape/memory/guard/selects-all/1000
-                        time:   [31.153 ns 33.386 ns 36.007 ns]
-                        change: [+40.290% +56.000% +71.792%] (p = 0.00 < 0.05)
-                        Performance has regressed.
+                        time:   [19.229 ns 20.759 ns 22.254 ns]
+                        change: [−26.953% −21.195% −15.192%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000
 Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000: Collecting 10 samples in estimated 5.0005 s (263k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000: Collecting 10 samples in estimated 5.0006 s (254k iterations)
 Benchmarking conditional/guard-shape/sqlite/guard/selects-all/1000: Analyzing
 conditional/guard-shape/sqlite/guard/selects-all/1000
-                        time:   [20.569 µs 22.300 µs 23.366 µs]
-                        change: [+106.64% +136.19% +163.90%] (p = 0.00 < 0.05)
-                        Performance has regressed.
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) low mild
+                        time:   [13.878 µs 14.818 µs 16.820 µs]
+                        change: [−58.563% −51.756% −44.932%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000
 Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000: Collecting 10 samples in estimated 5.0000 s (147M iterations)
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000: Collecting 10 samples in estimated 5.0000 s (234M iterations)
 Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/1000: Analyzing
 conditional/guard-shape/memory/guard/two-tag-intersection/1000
-                        time:   [31.557 ns 32.910 ns 35.347 ns]
-                        change: [+33.235% +51.577% +72.965%] (p = 0.00 < 0.05)
-                        Performance has regressed.
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high severe
+                        time:   [19.182 ns 19.853 ns 20.628 ns]
+                        change: [−45.515% −42.357% −38.360%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 10 measurements (30.00%)
+  1 (10.00%) low mild
+  2 (20.00%) high mild
 Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000
 Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000: Collecting 10 samples in estimated 5.0020 s (127k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000: Collecting 10 samples in estimated 5.0007 s (202k iterations)
 Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/1000: Analyzing
 conditional/guard-shape/sqlite/guard/two-tag-intersection/1000
-                        time:   [37.688 µs 41.545 µs 43.669 µs]
-                        change: [−87.922% −86.079% −84.522%] (p = 0.00 < 0.05)
+                        time:   [23.730 µs 25.797 µs 28.883 µs]
+                        change: [−47.213% −41.112% −34.366%] (p = 0.00 < 0.05)
                         Performance has improved.
 Benchmarking conditional/guard-shape/memory/guard/selects-one/10000
 Benchmarking conditional/guard-shape/memory/guard/selects-one/10000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/memory/guard/selects-one/10000: Collecting 10 samples in estimated 5.0000 s (164M iterations)
+Benchmarking conditional/guard-shape/memory/guard/selects-one/10000: Collecting 10 samples in estimated 5.0000 s (269M iterations)
 Benchmarking conditional/guard-shape/memory/guard/selects-one/10000: Analyzing
 conditional/guard-shape/memory/guard/selects-one/10000
-                        time:   [27.998 ns 30.220 ns 31.790 ns]
-                        change: [−11.840% +1.8629% +20.958%] (p = 0.83 > 0.05)
-                        No change in performance detected.
+                        time:   [17.242 ns 17.645 ns 18.308 ns]
+                        change: [−28.067% −20.097% −13.119%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000
 Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000: Collecting 10 samples in estimated 5.0008 s (255k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000: Collecting 10 samples in estimated 5.0005 s (293k iterations)
 Benchmarking conditional/guard-shape/sqlite/guard/selects-one/10000: Analyzing
 conditional/guard-shape/sqlite/guard/selects-one/10000
-                        time:   [23.335 µs 29.061 µs 34.573 µs]
-                        change: [+83.620% +130.77% +181.72%] (p = 0.00 < 0.05)
-                        Performance has regressed.
+                        time:   [14.311 µs 15.503 µs 17.587 µs]
+                        change: [−36.253% −29.034% −20.779%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking conditional/guard-shape/memory/guard/selects-all/10000
 Benchmarking conditional/guard-shape/memory/guard/selects-all/10000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/memory/guard/selects-all/10000: Collecting 10 samples in estimated 5.0000 s (150M iterations)
+Benchmarking conditional/guard-shape/memory/guard/selects-all/10000: Collecting 10 samples in estimated 5.0000 s (237M iterations)
 Benchmarking conditional/guard-shape/memory/guard/selects-all/10000: Analyzing
 conditional/guard-shape/memory/guard/selects-all/10000
-                        time:   [30.925 ns 31.769 ns 33.328 ns]
-                        change: [+18.801% +33.959% +50.612%] (p = 0.00 < 0.05)
-                        Performance has regressed.
+                        time:   [19.509 ns 20.213 ns 21.359 ns]
+                        change: [−40.624% −37.199% −33.341%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000
 Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000: Collecting 10 samples in estimated 5.0003 s (239k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000: Collecting 10 samples in estimated 5.0006 s (302k iterations)
 Benchmarking conditional/guard-shape/sqlite/guard/selects-all/10000: Analyzing
 conditional/guard-shape/sqlite/guard/selects-all/10000
-                        time:   [20.057 µs 21.909 µs 24.184 µs]
-                        change: [+102.33% +118.13% +134.97%] (p = 0.00 < 0.05)
-                        Performance has regressed.
+                        time:   [15.242 µs 15.882 µs 16.415 µs]
+                        change: [−43.747% −39.152% −34.481%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000
 Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000: Collecting 10 samples in estimated 5.0000 s (157M iterations)
+Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000: Collecting 10 samples in estimated 5.0000 s (221M iterations)
 Benchmarking conditional/guard-shape/memory/guard/two-tag-intersection/10000: Analyzing
 conditional/guard-shape/memory/guard/two-tag-intersection/10000
-                        time:   [26.218 ns 27.628 ns 30.093 ns]
-                        change: [+18.647% +33.776% +49.611%] (p = 0.00 < 0.05)
-                        Performance has regressed.
+                        time:   [19.055 ns 20.063 ns 22.085 ns]
+                        change: [−43.116% −37.386% −31.487%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000
 Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000: Warming up for 3.0000 s
-Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000: Collecting 10 samples in estimated 5.0002 s (128k iterations)
+Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000: Collecting 10 samples in estimated 5.0007 s (204k iterations)
 Benchmarking conditional/guard-shape/sqlite/guard/two-tag-intersection/10000: Analyzing
 conditional/guard-shape/sqlite/guard/two-tag-intersection/10000
-                        time:   [20.769 µs 24.218 µs 32.700 µs]
-                        change: [−99.210% −98.916% −98.600%] (p = 0.00 < 0.05)
+                        time:   [24.000 µs 25.260 µs 26.182 µs]
+                        change: [−49.235% −43.535% −37.205%] (p = 0.00 < 0.05)
                         Performance has improved.
 
 mix k=1 memory: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1
 mix k=1 sqlite: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1
 Benchmarking conditional/contention/memory/1
 Benchmarking conditional/contention/memory/1: Warming up for 3.0000 s
-Benchmarking conditional/contention/memory/1: Collecting 10 samples in estimated 5.0001 s (3.2M iterations)
+Benchmarking conditional/contention/memory/1: Collecting 10 samples in estimated 5.0000 s (3.7M iterations)
 Benchmarking conditional/contention/memory/1: Analyzing
 conditional/contention/memory/1
-                        time:   [1.5107 µs 1.6123 µs 1.7321 µs]
-                        change: [−10.271% −1.2220% +8.5688%] (p = 0.81 > 0.05)
-                        No change in performance detected.
+                        time:   [1.3317 µs 1.5935 µs 2.0538 µs]
+                        change: [−44.321% −32.288% −13.694%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
+  1 (10.00%) high severe
 Benchmarking conditional/contention/sqlite/1
 Benchmarking conditional/contention/sqlite/1: Warming up for 3.0000 s
-Benchmarking conditional/contention/sqlite/1: Collecting 10 samples in estimated 5.2951 s (220 iterations)
+Benchmarking conditional/contention/sqlite/1: Collecting 10 samples in estimated 5.3739 s (165 iterations)
 Benchmarking conditional/contention/sqlite/1: Analyzing
 conditional/contention/sqlite/1
-                        time:   [21.872 ms 23.185 ms 24.523 ms]
-                        change: [−4.2932% +9.6909% +24.696%] (p = 0.20 > 0.05)
-                        No change in performance detected.
+                        time:   [28.959 ms 29.780 ms 31.123 ms]
+                        change: [+11.009% +20.057% +30.045%] (p = 0.00 < 0.05)
+                        Performance has regressed.
 mix k=8 memory: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=8 committed=1 rejected=7 refused=0 failed=0 events=1
 mix k=8 sqlite: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=8 committed=1 rejected=7 refused=0 failed=0 events=1
 Benchmarking conditional/contention/memory/8
 Benchmarking conditional/contention/memory/8: Warming up for 3.0000 s
-Benchmarking conditional/contention/memory/8: Collecting 10 samples in estimated 5.0000 s (2.4M iterations)
+Benchmarking conditional/contention/memory/8: Collecting 10 samples in estimated 5.0000 s (2.7M iterations)
 Benchmarking conditional/contention/memory/8: Analyzing
 conditional/contention/memory/8
-                        time:   [1.8165 µs 2.0326 µs 2.2940 µs]
-                        change: [−7.0952% +3.3551% +14.217%] (p = 0.57 > 0.05)
-                        No change in performance detected.
+                        time:   [1.7778 µs 1.9265 µs 2.1422 µs]
+                        change: [−57.148% −52.181% −46.315%] (p = 0.00 < 0.05)
+                        Performance has improved.
 Benchmarking conditional/contention/sqlite/8
 Benchmarking conditional/contention/sqlite/8: Warming up for 3.0000 s
-Benchmarking conditional/contention/sqlite/8: Collecting 10 samples in estimated 5.6579 s (165 iterations)
+Benchmarking conditional/contention/sqlite/8: Collecting 10 samples in estimated 6.0638 s (220 iterations)
 Benchmarking conditional/contention/sqlite/8: Analyzing
 conditional/contention/sqlite/8
-                        time:   [31.807 ms 32.967 ms 33.866 ms]
-                        change: [+21.509% +31.688% +42.900%] (p = 0.00 < 0.05)
-                        Performance has regressed.
-Found 2 outliers among 10 measurements (20.00%)
+                        time:   [23.394 ms 24.954 ms 26.935 ms]
+                        change: [−33.937% −26.767% −18.058%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
   1 (10.00%) high mild
-  1 (10.00%) high severe
 mix k=64 memory: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
 mix k=64 sqlite: seed attempts=1 committed=1 rejected=0 refused=0 failed=0 events=1; contend attempts=64 committed=1 rejected=63 refused=0 failed=0 events=1
 Benchmarking conditional/contention/memory/64
 Benchmarking conditional/contention/memory/64: Warming up for 3.0000 s
-Benchmarking conditional/contention/memory/64: Collecting 10 samples in estimated 5.0001 s (642k iterations)
+Benchmarking conditional/contention/memory/64: Collecting 10 samples in estimated 5.0001 s (769k iterations)
 Benchmarking conditional/contention/memory/64: Analyzing
 conditional/contention/memory/64
-                        time:   [5.9744 µs 6.7513 µs 7.2977 µs]
-                        change: [−8.9115% −0.5088% +8.6419%] (p = 0.91 > 0.05)
-                        No change in performance detected.
+                        time:   [5.8659 µs 6.1950 µs 6.7301 µs]
+                        change: [−59.703% −51.766% −41.031%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
 Benchmarking conditional/contention/sqlite/64
 Benchmarking conditional/contention/sqlite/64: Warming up for 3.0000 s
-Benchmarking conditional/contention/sqlite/64: Collecting 10 samples in estimated 7.5739 s (110 iterations)
+Benchmarking conditional/contention/sqlite/64: Collecting 10 samples in estimated 7.6321 s (110 iterations)
 Benchmarking conditional/contention/sqlite/64: Analyzing
 conditional/contention/sqlite/64
-                        time:   [58.816 ms 63.835 ms 69.136 ms]
-                        change: [−7.0754% +1.5298% +10.538%] (p = 0.74 > 0.05)
-                        No change in performance detected.
+                        time:   [65.065 ms 69.752 ms 76.794 ms]
+                        change: [−43.566% −37.164% −30.620%] (p = 0.00 < 0.05)
+                        Performance has improved.
 

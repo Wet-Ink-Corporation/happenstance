@@ -37,10 +37,19 @@
 //!
 //! # Running it
 //!
-//! Swept up by the live job's existing invocation with no workflow edit:
+//! **Not** swept up by the live job, and this header said it was until the
+//! `0.2.0` release pass. That job filters to `--test postgres_conformance`, and
+//! this file, `tests/projection.rs` and `tests/naive_arm_probe.rs` are three
+//! other targets the filter excludes. The projection target has since been given
+//! its own steps; this one and `naive_arm_probe` are still run by hand, because
+//! both need the `naive-arm` feature — the deliberately-broken store no consumer
+//! can reach — and turning that on in a job whose purpose is to certify the real
+//! adapter is a worse trade than running two commands at a release.
+//!
+//! Run it deliberately, naming the target:
 //!
 //! ```console
-//! cargo test -p happenstance-postgres --all-features -- --ignored --show-output
+//! cargo test -p happenstance-postgres --all-features --test rule_controls -- --ignored --show-output
 //! ```
 
 // The whole target is behind the feature, so a default build does not contain

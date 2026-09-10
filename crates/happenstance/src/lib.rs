@@ -33,10 +33,10 @@
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! enum Seat { Taken }
 //!
+//! const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
 //! impl DomainEvent for Seat {
-//!     const EVENT_TYPES: &'static [EventType] =
-//!         &[EventType::from_static("SeatTaken")];
-//!     fn event_type(&self) -> EventType { Self::EVENT_TYPES[0].clone() }
+//!     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN];
+//!     fn event_type(&self) -> EventType { SEAT_TAKEN }
 //!     fn tags(&self) -> Tags { Tags::empty() }
 //!     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
 //!         c.encode(self)
@@ -67,23 +67,20 @@
 //!
 //! # What arrives here, and what stays below
 //!
-//! The discriminator is **encoding**. [`happenstance_core`]
-//! deals in opaque bytes on purpose — that is what keeps adapters free of
-//! domain knowledge and lets replication forward events without deserialising
-//! them. Anything that knows how a payload is *shaped* belongs here, so that
-//! the contract crate never grows a `serde` dependency in its default feature
-//! set.
+//! The discriminator is **encoding**. [`happenstance_core`] deals in opaque
+//! bytes on purpose — that is what keeps adapters free of domain knowledge and
+//! lets replication forward events without deserialising them. Anything that
+//! knows how a payload is *shaped* belongs here, so the contract crate never
+//! grows a `serde` dependency in its default feature set.
 //!
 //! [ADR-0006](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0006-bare-name-to-the-typed-layer.md)
-//! is why the bare name is here rather than on the contract: an application
-//! programs against typed events and decision models, and the crate an
-//! application reaches for first should be the one it uses. `happenstance-core`
-//! is what *adapter* authors pin, and adapter authors are the ones who read
-//! version numbers carefully.
+//! is why the bare name is here: an application programs against typed events
+//! and decision models, so the crate it reaches for first should be the one it
+//! uses. `happenstance-core` is what *adapter* authors pin, and they are the
+//! ones who read version numbers carefully.
 //!
 //! Everything the contract crate exports is available here under the same
-//! paths, so nothing above has to be rewritten when the rest of the typed
-//! layer lands.
+//! paths.
 //!
 //! # The vocabulary
 //!
@@ -92,27 +89,25 @@
 //! it rather than after what it turns on.
 //!
 //! * [**`Codec`**](Codec) — payload encoding. `Json` is on by default;
-//!   `Postcard` and `Cbor` arrive with the features named below. Events carry
-//!   a codec tag, so one store can hold more than one encoding at a time,
-//!   which is what makes a payload migration possible.
+//!   `Postcard` and `Cbor` arrive with the features below. Events carry a codec
+//!   tag, so one store can hold more than one encoding at a time, which is what
+//!   makes a payload migration possible.
 //! * [**`DomainEvent`**](DomainEvent) — a Rust type's mapping to its
-//!   [`EventType`] and [`Tags`].
+//!   [`EventType`] and [`Tags`]. Its page carries the `decode` guard this
+//!   first program leaves out.
 //! * [**`DecisionModel`**](DecisionModel) — folds read events into decidable
-//!   state and produces the matching [`Query`], through [`Boundary`]. Its
-//!   item page carries the program above over two variants, where the fold
-//!   has more than one arm to be exhaustive over.
-//!   Composing several into one query — put them in a tuple, which is a
-//!   [`Boundary`] too — is the mechanism that makes a dynamic consistency
-//!   boundary *dynamic*.
+//!   state and produces the matching [`Query`], through [`Boundary`]. Its item
+//!   page carries the program above over two variants. Composing several into
+//!   one query — put them in a tuple, which is a [`Boundary`] too — is what
+//!   makes a dynamic consistency boundary *dynamic*.
 //! * [**The command loop**][command-loop] — read, decide, append, retry on
-//!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated).
-//!   Bounded by a [`Retry`] you pass in, re-deciding from a pristine model on
-//!   every attempt. Its own page carries the policy.
-//! * [**The typed projection runner**][projection-runner] — decoded events
-//!   into a read model, in chunks, with the rows and the checkpoint moving in
-//!   one commit. Behind `unstable-projection`, because the port beneath it is
-//!   not frozen; one call drives one projection, and it never buffers the
-//!   replay.
+//!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated),
+//!   bounded by a [`Retry`] you pass in and re-deciding from a pristine model
+//!   on every attempt. Its own page carries the policy.
+//! * [**The typed projection runner**][projection-runner] — decoded events into
+//!   a read model, in chunks, with the rows and the checkpoint moving in one
+//!   commit. Behind `unstable-projection` because the port beneath it is not
+//!   frozen; one call drives one projection, and it never buffers the replay.
 //!
 //! # Features
 //!
@@ -132,10 +127,10 @@
 //! # Testing without a database
 //!
 //! *Does the domain model work* and *pick a database* are two decisions, and
-//! only the first one is due now. [`happenstance::testing`][testing-module] is
-//! where the first is answered: `given(model).event(a)?.when(..).await?` folds
-//! your boundary over an in-memory store and hands back a `Decision` to assert
-//! on — no connection string, no fixture, one `await`.
+//! only the first is due now. [`happenstance::testing`][testing-module] answers
+//! it: `given(model).event(a)?.when(..).await?` folds your boundary over an
+//! in-memory store and hands back a `Decision` to assert on — no connection
+//! string, no fixture, one `await`.
 //!
 //! For a store that *misbehaves* on demand — an append refused without naming
 //! the conflict, positions that are not dense — add `happenstance-testkit` as a

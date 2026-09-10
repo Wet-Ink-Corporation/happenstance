@@ -1,0 +1,29 @@
+
+criterion between-run spread: 5 runs of A: powersave vs 5 of B: performance
+
+ arm                  A: powersave                B: performance
+   #      median  spread    rMAD      median  spread    rMAD    faster
+------------------------------------------------------------------------------------
+   1      100.7n  1.018x   0.40%      100.1n  1.023x   0.72%     1.01x
+   2      142.0n  1.023x   0.68%      142.9n  1.016x   0.47%     0.99x
+   3       57.0n  1.019x   0.44%       56.5n  1.030x   0.42%     1.01x
+   4      473.7n  1.050x   2.26%      482.5n  1.068x   1.87%     0.98x
+   5      161.4n  1.039x   0.89%      161.6n  1.030x   0.27%     1.00x
+   6      396.6n  1.010x   0.22%      394.9n  1.006x   0.18%     1.00x
+   7       31.0n  1.014x   0.35%       31.3n  1.023x   0.96%     0.99x
+   8      346.7n  1.006x   0.15%      344.9n  1.009x   0.14%     1.01x
+   9  1506900.0n  1.015x   0.20%  1506800.0n  1.014x   0.09%     1.00x
+  10      276.9n  1.035x   1.15%      277.3n  1.009x   0.31%     1.00x
+  11      564.5n  1.019x   0.56%      565.2n  1.025x   0.56%     1.00x
+  12       83.6n  1.109x   0.18%       83.6n  1.145x   0.66%     1.00x
+  13      810.0n  1.051x   0.41%      821.0n  1.017x   0.32%     0.99x
+  14  2025900.0n  1.031x   0.98%  2014200.0n  1.027x   0.78%     1.01x
+------------------------------------------------------------------------------------
+worst              1.109x                      1.145x
+
+spread = max/min of the run medians for that arm. The statistic
+         benchmarks/README.md's '40% between runs' is comparable to.
+rMAD   = median absolute deviation over the median; robust to one bad run.
+faster = A median / B median. Not the point of the table, but free.
+
+Nothing here is a threshold and nothing here gates anything. CF-34.

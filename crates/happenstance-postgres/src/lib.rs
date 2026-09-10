@@ -2,7 +2,7 @@
 //!
 //! # Status
 //!
-//! The **event store is implemented**, and run rather than asserted: 101 of 101
+//! The **event store is implemented**, and run rather than asserted: 107 of 107
 //! gated tests pass against a live PostgreSQL 17.10, including the concurrency
 //! family at `CONTENDERS = 64`. That is the first time an adapter in this
 //! workspace has cleared that family against a store whose writers are **not**
@@ -20,8 +20,17 @@
 //! [`projection_store`]'s module documentation, along with what it settles about
 //! PS-2's live-transaction axis.
 //!
-//! The crate stays `publish = false`. That is a **release-set** decision rather
-//! than a readiness one — `0.2.0` ships five crates, and this is not one of them.
+//! **The crate ships in `0.2.0`.** The release set was five, decided, and the
+//! owner re-opened it on this crate's evidence at `e597c34`; the manifest carries
+//! no `publish` key. This paragraph said the opposite until the release pass,
+//! which would have told a docs.rs reader that the crate they were reading was
+//! unpublished.
+//!
+//! **What a dropped `append` future does here is answered in
+//! [`event_store`]'s `# Cancellation` section**, which ES-23 obliges this
+//! adapter to carry. The short version, because a caller should not have to
+//! click to learn it: the future cannot be cancelled and the batch may already
+//! have committed.
 //!
 //! # Why this crate exists
 //!
@@ -48,9 +57,25 @@
 //! ES-10 is bought with `xid8` + `pg_snapshot_xmin`. Every row stamps the
 //! transaction that wrote it, and every read admits only rows beneath
 //! `pg_snapshot_xmin(pg_current_snapshot())` — the transaction id below which
-//! nothing can still be in flight. Writers are never serialised, which is the
-//! property this crate exists to have; the entire bill is paid on the read side.
-//! Three things follow, and the crate does not soften them.
+//! nothing can still be in flight. Writers are never serialised in the sense that
+//! matters: this store takes no lock that makes disjoint boundaries queue behind
+//! one another, which is the property it exists to have.
+//!
+//! **Most of the bill is paid on the read side, and there is a fourth item that
+//! is not.** The read-side costs are the three below. The write-side one is this:
+//! an *unconditional* append runs at the pool's default `READ COMMITTED` and pays
+//! nothing extra, but a *conditional* append runs `SERIALIZABLE`, so two
+//! conditional appends whose predicates overlap are adjudicated at commit and one
+//! is aborted with `40001`. This adapter re-runs the loser up to
+//! `SERIALISATION_ATTEMPTS` times with exponential, capped, fully-jittered
+//! backoff — so a writer already losing a serialisation fight can pay several
+//! round trips and a fraction of a second of waiting before it gets its answer.
+//! That is retry inside the adapter and is invisible to the caller as anything
+//! but latency. The constant's own doc block records that its value was adopted
+//! from the Neon lane rather than measured here, and that a re-measurement is
+//! owed.
+//!
+//! Three read-side things follow, and the crate does not soften them.
 //!
 //! **`head()` reports a visibility frontier, not `max(position)`, and the
 //! frontier trails the maximum.** A head is a promise that nothing at or below
@@ -134,10 +159,16 @@
 //! implementing the bare [`EventStore`](happenstance_core::EventStore), not a
 //! feature of this one.
 
+// `--cfg docsrs` is set by this crate's `[package.metadata.docs.rs]`, and it is
+// what makes the `doc(cfg(...))` badges below render a feature gate rather than
+// nothing. The manifest asserted that was happening while neither the feature
+// nor a single attribute existed, so every gated item rendered as ordinary API.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_no_source)]
 pub mod error;
 
 #[cfg(feature = "event-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "event-store")))]
 pub mod event_store;
 
 // Both roles' schemas live here, each item gated on its own feature. The module
@@ -152,11 +183,25 @@ pub mod migration;
 mod query_sql;
 
 #[cfg(feature = "projection-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "projection-store")))]
 pub mod projection_store;
 
 #[cfg(feature = "event-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "event-store")))]
 pub mod read_stream;
 
 /// Re-exported so callers can build a pool without pinning their own `sqlx`
 /// version against this crate's.
 pub use sqlx;
+
+/// Re-exported for ADR-0044's reason, and the trigger it named has arrived.
+///
+/// That decision states its own trigger as *"the moment `xtask/src/package.rs`'s
+/// `reconcile` check would otherwise let the crate onto the registry without
+/// it"*, and `0.2.0` is that moment. The contract is in this crate's public
+/// signatures rather than merely behind them: `impl SendEventStore for
+/// PostgresEventStore` names `Query`, `ReadOptions`, `SequencedEvent`, `Event`,
+/// `AppendCondition` and `AppendError`, so a caller cannot use the store without
+/// naming types it does not otherwise depend on. The dependency is
+/// unconditional, so this needs no `cfg`.
+pub use happenstance_core;

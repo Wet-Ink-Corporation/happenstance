@@ -426,6 +426,17 @@ const REQUIRED: &[Step] = &[
         // Its stated limit: it cannot say the rules *passed*, and it cannot see
         // an `#[ignore]` on a macro-generated test. Both need the runner, and
         // both are the step below's.
+        //
+        // **That delegation was false until the `0.2.0` release pass, and the
+        // correction is recorded rather than quietly applied.** The step below
+        // launched its runner with `.status()` and never read the transcript, so
+        // it could not tell `94 passed` from `0 passed; 94 ignored` either — an
+        // exit status carries neither number. This row therefore named a limit
+        // and handed it to a step that could not discharge it, which is a
+        // sharper version of the defect it was written to prevent: the sentence
+        // read as coverage. `wasm_run` and `wasm_unit_run` now take `.output()`
+        // and run each name through `unexecuted`, the way the host path always
+        // has, so the delegation above is true as written.
         name: "wasm32 conformance targets are non-vacuous",
         program: "cargo",
         args: &[

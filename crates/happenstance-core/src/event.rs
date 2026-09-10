@@ -406,11 +406,11 @@ impl Event {
     /// **Not a clone-avoidance route for adapters**, which is what this line
     /// used to claim. [`EventStore::append`](crate::EventStore::append) takes
     /// `&[Event]`, so no store implementation ever owns an `Event` and none can
-    /// reach this method at all; an owning adapter clones instead, and that
-    /// clone is cheap — the expensive fields are [`Bytes`], so it bumps a
-    /// refcount rather than copying the payload, leaving one `Box<str>` and one
-    /// boxed tag slice. This exists for the code that genuinely does own an
-    /// event: callers, and the wire encoders in the typed layer.
+    /// reach this method at all; an owning adapter clones instead. That clone
+    /// bumps the payload's refcount rather than copying it, then allocates once
+    /// for the `EventType`, once for the boxed tag slice and once per `Tag` —
+    /// `t + 2` heap operations, so 66 at VT-22's 64-tag floor, measured at
+    /// `experiments/event-clone-allocations`. It exists for code that owns one.
     ///
     /// Returns a struct rather than a tuple so that the *number* of an event's
     /// parts is not public API. Every `let (ty, data, tags, meta) = …` would

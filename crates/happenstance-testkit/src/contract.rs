@@ -242,6 +242,63 @@ pub trait Fixture {
     /// nothing catches is an override that is present, honest-looking and empty.
     const REOPEN: Capability;
 
+    /// Whether a read through this store **shows an append the same caller has
+    /// just been told succeeded**.
+    ///
+    /// Defaulted to [`SUPPORTED`](Capability::SUPPORTED), which is the opposite
+    /// polarity to every other capability on this trait, and deliberately so.
+    /// Read-your-own-writes is what almost every store offers for free — it
+    /// falls out of assigning positions under a lock held until commit — so a
+    /// fixture that says nothing must keep being *held* to it. Defaulting this
+    /// one to a declension would silently stop checking the property on every
+    /// adapter that never heard of the constant, which is the failure mode
+    /// ADR-0042's default-to-declined shape exists to prevent everywhere else.
+    /// The rule is that a capability lands **defaulted**, not that it lands
+    /// defaulted *off*.
+    ///
+    /// # What declining it means, and what it does not
+    ///
+    /// Declining says: *`append` returning `Ok(P)` does not promise that a read
+    /// or `head` issued immediately afterwards through this same handle contains
+    /// the event at `P`.* It does **not** say the append is in doubt, and it does
+    /// not excuse an adapter from ES-10 — position order still has to be
+    /// visibility order. It says only that visibility is a **predicate** rather
+    /// than an identity, so the frontier trails the highest assigned position.
+    ///
+    /// `happenstance-postgres` is the built case and the reason this constant
+    /// exists. It buys ES-10 with `xid8` + `pg_snapshot_xmin`: a row is visible
+    /// once its writing transaction's id is below the frontier beneath which
+    /// nothing can still be in flight. That frontier is a property of the
+    /// **server**, not of this store — an unrelated open transaction in an
+    /// unrelated database holds it back, measured by that crate at 0.688 ms
+    /// unloaded and 4010.719 ms behind a five-second write elsewhere.
+    ///
+    /// # Why this is a capability and not a bound the rules could weaken
+    ///
+    /// Two exits were considered and both are closed.
+    ///
+    /// **Waiting for the frontier is forbidden.** `[FROZEN]` CF-33 bans a
+    /// conformance rule from reading a clock, sleeping, or asserting on an
+    /// operation count, and its `Rejects:` names this exact pathology: a rule
+    /// that *"passes on the author's machine, fails on a loaded CI runner"*.
+    /// That is not a rule this suite is allowed to write, and the reason given
+    /// there is the right one — a flaky suite teaches adapter authors to re-run
+    /// until green, and that habit is what lets a real failure through.
+    ///
+    /// **Relaxing the equality to a prefix does not reach far enough.** The
+    /// [model family](crate::model) does not merely compare a read against what
+    /// it appended; it *predicts* whether the store will reject a conditional
+    /// append, from what a read showed it. ES-25 evaluates a condition over what
+    /// the store **holds**, while ES-10 and ES-11 govern what a read **shows** —
+    /// and a frontier store deliberately keeps those two sets apart, because
+    /// filtering a committed row out of a condition would admit an append the
+    /// consistency boundary forbids. So on such a store the model has no oracle
+    /// for the prediction, and no weakening of the comparison supplies one.
+    ///
+    /// The honest move is therefore to say the family does not apply, in the
+    /// fixture's own words, rather than to run it and hope the server is quiet.
+    const READ_YOUR_OWN_WRITES: Capability = Capability::SUPPORTED;
+
     /// Whether this fixture can make its store **fail part way through writing
     /// one batch**.
     ///

@@ -51,13 +51,18 @@
 //! to whichever backend it likes, and nothing in the protocol orders the
 //! snapshot one takes against the commit the other makes.
 //!
-//! It is not a theoretical gap. Measured, twenty runs of the two ES-11 rules per
-//! configuration, `--test-threads=1`, against the live endpoint:
+//! It is not a theoretical gap. Running the two ES-11 rules repeatedly against
+//! the live endpoint at `--test-threads=1` reddens both configurations
+//! intermittently, and HTTP/2 over one connection reddens **markedly less often**
+//! than HTTP/1.1 over a default pool — which is the whole reason the reference
+//! transport below is built the way it is.
 //!
-//! | transport | red runs |
-//! |---|---|
-//! | HTTP/1.1, default pool | **3 of 20** |
-//! | HTTP/2, one connection | **1 of 40** |
+//! **The counts those runs produced are not quoted, here or anywhere.** They were
+//! taken during phase 10b bring-up and no raw output survives; this tree's own
+//! discipline is that a measurement lives beside its log under `experiments/`,
+//! and the ES-11 figures were the one set that never did. Restoring a citable
+//! rate means running the sweep again and committing what it prints — which is
+//! worth doing, and is not worth asserting in the meantime.
 //!
 //! The failure is always the same and always in the direction that matters: the
 //! read's snapshot is taken *after* the append commits, so the drained stream

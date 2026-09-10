@@ -132,6 +132,25 @@ impl Fixture for NeonFixture {
     /// pass by making it vacuous.
     const REOPEN: Capability = Capability::SUPPORTED;
 
+    /// **Declined**, inherited from the mechanism rather than from the
+    /// transport.
+    ///
+    /// This adapter runs the same `xact_id < pg_snapshot_xmin(...)` predicate
+    /// as `happenstance-postgres`, because it is the same server reached through
+    /// a proxy, so the frontier behaves identically and for identical reasons.
+    /// It is worth separating from this crate's *other* visibility limitation:
+    /// ES-11 is about two independent HTTP requests having no ordering between
+    /// them, and is a property of the **transport**; this is about the frontier,
+    /// and would hold over a direct connection too.
+    const READ_YOUR_OWN_WRITES: Capability = Capability::declined(
+        "the endpoint is PostgreSQL, so reads carry the same \
+         `xact_id < pg_snapshot_xmin(pg_current_snapshot())` frontier the \
+         direct adapter uses: an append this caller was just told succeeded is \
+         not visible to it until every transaction open anywhere on the server \
+         when it committed has ended. Distinct from this crate's ES-11 \
+         limitation, which is about transport ordering, not visibility.",
+    );
+
     /// Supported, and armed for real.
     ///
     /// An `AFTER INSERT` trigger counts rows within the statement and raises on

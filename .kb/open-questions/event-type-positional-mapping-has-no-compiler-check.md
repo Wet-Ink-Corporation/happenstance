@@ -55,9 +55,27 @@ fn event_type(&self) -> EventType {
     }
 }
 ```
-— `examples/course-subscriptions/src/main.rs:195-201` and
-`examples/transfers-on-sqlite/src/main.rs:288-294`, three subscript
-expressions each, six in the tree total.
+The block above is quoted **as it stood when this question was written**, and is
+not updated to match the tree: a record of what was observed is worthless once it
+is edited to agree with the outcome.
+
+**The positional half of this question was answered at the `0.2.0` release pass,
+and the answer is ADR-0059's.** Every rendered surface now declares each name once
+as a `const EventType` and returns it by name —
+`examples/course-subscriptions/src/main.rs:196-202` and
+`examples/transfers-on-sqlite/src/main.rs:288-294` are the two this question
+named, and four more example crates went with them, along with every `///` and
+`//!` doctest in `crates/happenstance/`. `no_rendered_surface_indexes_event_types`
+in `xtask/src/lints.rs` is what keeps it answered; before it, the pattern's only
+guard was that somebody would notice.
+
+`assert_domain_event` additionally gained the positional-agreement precondition
+ADR-0059 named, so the pairing this question says nothing checks is now checked
+at the one place a consumer already calls.
+
+**What stays open is the second half**: ADR-0033's reopen condition, and whether
+a currency coarse enough to miss this defect should be re-denominated. Nothing
+below is retracted.
 
 Each arm pairs an enum variant with a hand-written index into
 `EVENT_TYPES`, and nothing checks that the pairing is correct or that it

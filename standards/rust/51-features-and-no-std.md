@@ -51,8 +51,8 @@ diagnostic surfaces in whichever crate happened to call one — none of which ha
 a feature line to blame. The gate's `--all-features` steps only ever see the
 "on" configuration, so the combination that fails is the one nothing runs.
 
-**Evidence.** `crates/happenstance-core/Cargo.toml:38 (serde?/std)` ·
-`spec/SPECIFICATION.md:376 (Cargo features are additive)` ·
+**Evidence.** `crates/happenstance-core/Cargo.toml:49 (serde?/std)` ·
+`spec/SPECIFICATION.md:379 (Cargo features are additive)` ·
 [Cargo Book — feature unification](https://doc.rust-lang.org/cargo/reference/features.html#feature-unification) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-51-2. Reach an optional dependency with `dep:` and `?/`; a bare `dep/feature` in a default feature enables the dependency.
@@ -88,8 +88,8 @@ passes, and the first symptom is a dependency in `cargo tree` that no manifest
 line requested. The consumer who finds it is a `no_std` peer whose build has
 newly acquired `serde/std`.
 
-**Evidence.** `crates/happenstance-core/Cargo.toml:24 (serde = { workspace = true, optional = true })` ·
-`crates/happenstance-core/Cargo.toml:51 (dep:base64)` ·
+**Evidence.** `crates/happenstance-core/Cargo.toml:35 (serde = { workspace = true, optional = true })` ·
+`crates/happenstance-core/Cargo.toml:62 (dep:base64)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md) ·
 [Cargo Book — optional dependencies](https://doc.rust-lang.org/cargo/reference/features.html#optional-dependencies) *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -123,8 +123,8 @@ in a downstream `no_std` replication peer's CI, on the day `bytes` ships a patch
 release — with no commit of this workspace's behind it and no manifest line
 anywhere that changed.
 
-**Evidence.** `crates/happenstance-core/Cargo.toml:41 (stated rather than inherited)` ·
-`xtask/src/main.rs:759 (names serde/alloc and base64/alloc)` ·
+**Evidence.** `crates/happenstance-core/Cargo.toml:52 (stated rather than inherited)` ·
+`xtask/src/main.rs:770 (names serde/alloc and base64/alloc)` ·
 `xtask/src/lints.rs:383 (fn core_alloc_features)` ·
 [ADR-0016](../../.kb/decisions/0016-the-wire-format.md)
 
@@ -230,7 +230,7 @@ event in a crate's life that cannot be undone: a yank removes the version from
 the resolver and leaves the page exactly as it is, so the first impression the
 crate makes is a build log, and the fix ships as the *next* version.
 
-**Evidence.** `crates/happenstance-core/Cargo.toml:101 (package.metadata.docs.rs)` ·
+**Evidence.** `crates/happenstance-core/Cargo.toml:112 (package.metadata.docs.rs)` ·
 `crates/happenstance-core/src/lib.rs:113 (feature(doc_cfg))` ·
-`xtask/src/main.rs:1047 (is a cfg nobody sets except docs.rs)` ·
+`xtask/src/main.rs:1058 (is a cfg nobody sets except docs.rs)` ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*

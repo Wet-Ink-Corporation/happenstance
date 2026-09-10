@@ -428,6 +428,24 @@ pub(crate) fn is_inert(path: &str) -> bool {
         // merge, and a `xtask` step that read this tree on every invocation is
         // one edit away from being one.
         "benchmarks/",
+        // The measurement host's provisioning: shell scripts, a systemd unit
+        // and the `host.env` that declares the conditions both of them read.
+        //
+        // Inert for a **third** reason, and the difference is worth having in
+        // writing. `spec/` reaches no package; `benchmarks/` is outside the
+        // workspace by construction. Neither applies here — `ops/` is not a
+        // member root and never will be, because no compiler in this repository
+        // reads a `.sh` or a `.service` at all. There is nothing for cargo to
+        // decline to reach.
+        //
+        // Also *not* half of a pair, and for a sharper reason than
+        // `benchmarks/`'s. A check that ran over this tree on every invocation
+        // would make the gate's own greenness depend on the state of one host —
+        // which is worse than the benchmark case rather than better, because a
+        // machine can be wrong in ways a file cannot. `ops/host/preflight.sh`
+        // asserts those conditions and is deliberately reachable from nothing
+        // that can turn a merge red.
+        "ops/",
         ".github/",
         ".bklg/",
         ".kb/",
@@ -952,6 +970,39 @@ mod tests {
             "benchmarks/src/corpus.rs",
             "benchmarks/benches/store_append.rs",
             "benchmarks/results/GRADES.md",
+        ] {
+            assert!(is_inert(path), "{path} should be inert");
+            let affected = affected_packages(&changed(&[path]), &members());
+            assert!(affected.is_empty(), "{path} should reach no package");
+        }
+    }
+
+    /// The measurement host's provisioning reaches no package either, and for a
+    /// reason neither of its neighbours gives.
+    ///
+    /// `spec/` reaches no package; `benchmarks/` is outside the workspace by
+    /// construction. `ops/` is neither: it holds shell scripts, a systemd unit
+    /// and an environment file, and **no compiler in this repository reads any
+    /// of those file types**. There is nothing for cargo to decline to reach,
+    /// which is why the prefix carries its own comment rather than sheltering
+    /// under the `benchmarks/` one — a prefix whose stated argument does not
+    /// cover what sits behind it is the defect this module already names twice.
+    ///
+    /// Dual assertion for the reason `the_benchmark_suite_selects_no_package`
+    /// gives: [`affected_packages`] alone passes while a prefix sits shadowed
+    /// behind an earlier arm, and cannot tell "inert" from "unreachable".
+    ///
+    /// The wrong implementation this rejects is the absent entry, whose symptom
+    /// is a **full-workspace gate run** for a one-line edit to a shell script
+    /// that no member compiles.
+    #[test]
+    fn the_host_provisioning_tree_selects_no_package() {
+        for path in [
+            "ops/host/preflight.sh",
+            "ops/host/cpu-tuning.sh",
+            "ops/host/host.env",
+            "ops/host/happenstance-bench-tuning.service",
+            "ops/host/README.md",
         ] {
             assert!(is_inert(path), "{path} should be inert");
             let affected = affected_packages(&changed(&[path]), &members());

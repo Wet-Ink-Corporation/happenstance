@@ -1,0 +1,18 @@
+[Unit]
+Description=happenstance measurement host: CPU regime from host.env
+Documentation=https://github.com/Wet-Ink-Corporation/happenstance/blob/main/ops/host/README.md
+After=multi-user.target
+
+[Service]
+Type=oneshot
+# RemainAfterExit is what makes `systemctl is-active` a meaningful question. A
+# plain oneshot goes inactive the moment it finishes, so `preflight.sh` could
+# only re-read /sys and infer that someone had applied the regime — which is
+# exactly the "assumed rather than read" state the preflight exists to reject.
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/happenstance-bench-host/cpu-tuning.sh --apply
+ExecStop=/usr/local/lib/happenstance-bench-host/cpu-tuning.sh --restore
+Environment=HOST_ENV=/usr/local/lib/happenstance-bench-host/host.env
+
+[Install]
+WantedBy=multi-user.target

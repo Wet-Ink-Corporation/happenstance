@@ -101,6 +101,19 @@ anyhow = "1"
 thiserror = "2"
 
 [dev-dependencies]
+# Thread affinity, for exactly one control and only on Linux.
+#
+# `tests/instruments_work.rs`'s processor-clock control has to pin itself to one
+# CPU for the span it measures. On the Linux measurement host the kernel has
+# marked the TSC unstable, so `sched_clock` runs on a per-CPU fallback and a task
+# that MIGRATES mid-region comes back with its runtime mis-accounted: a busy
+# 256 ms reads as ~0 ms of processor. Measured across ten runs: 2 failures
+# unpinned, 4 pinned to four CPUs, and 0 pinned to one. `libc` is what makes the
+# third row reachable, and there is no portable equivalent.
+#
+# A dev-dependency, so it reaches no benchmark binary and nothing a consumer
+# builds. Already in this graph transitively via `cpu-time`.
+libc = "0.2"
 # The timing engine. Chosen over `divan` on maintenance and over `iai-callgrind`
 # on platform:
 #

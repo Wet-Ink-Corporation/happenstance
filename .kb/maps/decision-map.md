@@ -50,7 +50,18 @@ summary: >-
   ratified 2026-09-06. None supersedes an existing row — every one of the twenty-three carries
   `supersedes: null` — so this wave adds rows only; see each section below for what each decision
   amends from outside without a status flip, the same shape ADR-0029, ADR-0031 and ADR-0035 already
-  used against ADR-0004, ADR-0007 and ADR-0001.
+  used against ADR-0004, ADR-0007 and ADR-0001. The 2026-09-09 wave (`2026-09-09-intake`) added
+  three more: ADR-0025 (phase 11, the reserved number RUNBOOK.md held for the Ladybug projection
+  adapter, finally filled — a checkpoint node in the graph, raw Cypher, a blocking driver), ADR-0060
+  (phase 11, re-evaluating PS-2's `[FROZEN]` batch-shape bar against four adapters instead of one and
+  keeping the gate on a replaced reason), and ADR-0061 (phase 10, ES-11's asynchronous-driver
+  sufficiency condition narrowed after `happenstance-neon` falsified it). None of the three
+  supersedes a row on this map — all three carry `supersedes: null` — and none is an amendment to an
+  existing atom's body either: ADR-0060 reaffirms `kb-decision-0036`'s verdict on a replaced reason
+  without editing or superseding it, the fourth instance of that shape this map records (after
+  `kb-decision-0004`/`kb-decision-0029`, `kb-decision-0006`/`kb-decision-0007`, and
+  `kb-decision-0007`/`kb-decision-0031`), and ADR-0061 repairs `spec/SPECIFICATION.md`'s ES-11 clause
+  itself under `kb-playbook-repair-frozen-clause-001`'s test rather than touching any decision atom.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -66,7 +77,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-02-intake
   - .kb/_governance/integration-waves/2026-09-04-intake
   - .kb/_governance/integration-waves/2026-09-07-intake
-last_reviewed: 2026-09-07
+  - .kb/_governance/integration-waves/2026-09-09-intake
+last_reviewed: 2026-09-09
 ---
 
 # Decision map
@@ -397,6 +409,41 @@ open.
 | ADR-0044 | [`kb-decision-0044`](../decisions/0044-a-published-crate-re-exports-its-drivers.md) | A published crate re-exports any crate whose type appears in one of its public signatures | accepted | 12 | — |
 | ADR-0045 | [`kb-decision-0045`](../decisions/0045-a-citation-anchor-matches-exactly-or-the-lint-refuses.md) | A citation anchor matches its line exactly, or the lint refuses to guess | accepted | 12 | — |
 | ADR-0057 | [`kb-decision-0057`](../decisions/0057-the-testkit-version-key-is-dropped.md) | The testkit dev-dependency version key is dropped from every publishable manifest | accepted | 12 | — |
+
+## 2026-09-09 intake: the Ladybug adapter and two re-evaluations (ADR-0025, ADR-0060, ADR-0061)
+
+Three decision atoms, one wave (`2026-09-09-intake`), spanning phase 10 and phase 11,
+`.kb/decisions/`. ADR-0025 is the fifth event-store-adjacent adapter and the first over a graph
+engine: `happenstance-ladybug`'s projection store keeps its checkpoint as a `__hs_checkpoint` node
+written as the last statement before `COMMIT`, writes through raw parameterised Cypher rather than a
+typed builder, and ships blocking-only behind an off-by-default feature because the driver is a 1.44
+GB prebuilt static archive with an OpenSSL toolchain dependency; it `depends_on` `kb-decision-0017`
+(the owned-`Batch` shape its checkpoint node relies on) and `kb-decision-0030` (the checkpoint's
+progress obligation, PS-1, that the node discharges). ADR-0060 re-evaluates PS-2's `[FROZEN]`
+batch-shape bar against the real adapter population for the second time — `kb-decision-0036` found
+one adapter at one end at `0.2.0`; by phase 11 four have run the projection suite, spanning a file, a
+pooled server, a one-shot HTTP proxy and an embedded graph database, and phase 11's own pre-registered
+re-open condition did not fire — and keeps the `unstable-projection` gate anyway, on a reason
+`kb-decision-0036` did not have: `begin`, `probe_write` and `probe_read_through` are synchronous and
+infallible for both drivers PS-2 names by independent mechanisms, so a store whose batch genuinely is
+a live transaction must declare `READS_THROUGH_BATCH = false`, a false statement about itself, and the
+suite cannot distinguish that store from a buffering one. It `depends_on` `kb-decision-0036` — the
+decision it reaffirms without editing or superseding, the fourth instance of that shape this map
+records. ADR-0061 is the falsifier ES-11's own `[PROVISIONAL]` marker named arriving: `happenstance-neon`,
+the first one-shot-HTTP event store, fails `read_result_is_stable_under_concurrent_append`
+intermittently because ES-11's asynchronous-driver sufficiency sentence was a fact about pooled
+drivers (ordering at the client) presented as a fact about async ones (ordering at the store); the
+sentence is narrowed to require ordering against a later append by something the store itself honours,
+a repair under `kb-playbook-repair-frozen-clause-001`'s test applied to the specification rather than
+to a decision atom, so no existing row on this map is touched. It `depends_on` `kb-decision-0011` (the
+read-is-one-sample-with-a-ceiling shape ES-11 qualifies). None of the three supersedes a row on this
+map.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0025 | [`kb-decision-0025`](../decisions/0025-the-ladybug-projection-adapter.md) | The Ladybug projection adapter — a checkpoint node, raw Cypher, and a blocking driver | accepted | 11 | — |
+| ADR-0060 | [`kb-decision-0060`](../decisions/0060-ps-2s-axis-re-evaluated.md) | The projection port keeps its gate, and the reason ADR-0036 gave has expired | accepted | 11 | — |
+| ADR-0061 | [`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md) | ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none | accepted | 10 | — |
 
 ## Adding a row
 

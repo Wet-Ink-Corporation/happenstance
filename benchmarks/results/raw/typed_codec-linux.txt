@@ -1,0 +1,332 @@
+   Compiling happenstance-benchmarks v0.0.0 (/home/ryan/src/happenstance/benchmarks)
+    Finished `bench` profile [optimized] target(s) in 1.11s
+     Running benches/typed_codec.rs (target/release/deps/typed_codec-886d83df98b840a4)
+Gnuplot not found, using plotters backend
+codec/encode payload=0B json -> 60B
+codec/encode payload=0B cbor -> 43B
+codec/encode payload=0B postcard -> 6B
+Benchmarking codec/encode/json/0
+Benchmarking codec/encode/json/0: Warming up for 3.0000 s
+Benchmarking codec/encode/json/0: Collecting 100 samples in estimated 5.0003 s (50M iterations)
+Benchmarking codec/encode/json/0: Analyzing
+codec/encode/json/0     time:   [100.40 ns 100.51 ns 100.62 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+Benchmarking codec/encode/cbor/0
+Benchmarking codec/encode/cbor/0: Warming up for 3.0000 s
+Benchmarking codec/encode/cbor/0: Collecting 100 samples in estimated 5.0001 s (35M iterations)
+Benchmarking codec/encode/cbor/0: Analyzing
+codec/encode/cbor/0     time:   [140.86 ns 141.02 ns 141.19 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+Benchmarking codec/encode/postcard/0
+Benchmarking codec/encode/postcard/0: Warming up for 3.0000 s
+Benchmarking codec/encode/postcard/0: Collecting 100 samples in estimated 5.0001 s (88M iterations)
+Benchmarking codec/encode/postcard/0: Analyzing
+codec/encode/postcard/0 time:   [57.636 ns 57.740 ns 57.836 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+codec/encode payload=256B json -> 827B
+codec/encode payload=256B cbor -> 557B
+codec/encode payload=256B postcard -> 263B
+Benchmarking codec/encode/json/256
+Benchmarking codec/encode/json/256: Warming up for 3.0000 s
+Benchmarking codec/encode/json/256: Collecting 100 samples in estimated 5.0007 s (4.4M iterations)
+Benchmarking codec/encode/json/256: Analyzing
+codec/encode/json/256   time:   [1.1530 µs 1.1536 µs 1.1543 µs]
+                        thrpt:  [211.50 MiB/s 211.63 MiB/s 211.75 MiB/s]
+Found 6 outliers among 100 measurements (6.00%)
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+Benchmarking codec/encode/cbor/256
+Benchmarking codec/encode/cbor/256: Warming up for 3.0000 s
+Benchmarking codec/encode/cbor/256: Collecting 100 samples in estimated 5.0018 s (2.0M iterations)
+Benchmarking codec/encode/cbor/256: Analyzing
+codec/encode/cbor/256   time:   [2.4167 µs 2.4199 µs 2.4235 µs]
+                        thrpt:  [100.74 MiB/s 100.89 MiB/s 101.02 MiB/s]
+Found 8 outliers among 100 measurements (8.00%)
+  6 (6.00%) low mild
+  2 (2.00%) high mild
+Benchmarking codec/encode/postcard/256
+Benchmarking codec/encode/postcard/256: Warming up for 3.0000 s
+Benchmarking codec/encode/postcard/256: Collecting 100 samples in estimated 5.0011 s (11M iterations)
+Benchmarking codec/encode/postcard/256: Analyzing
+codec/encode/postcard/256
+                        time:   [482.74 ns 483.73 ns 484.73 ns]
+                        thrpt:  [503.67 MiB/s 504.70 MiB/s 505.74 MiB/s]
+Found 4 outliers among 100 measurements (4.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+codec/encode payload=4096B json -> 12347B
+codec/encode payload=4096B cbor -> 8237B
+codec/encode payload=4096B postcard -> 4103B
+Benchmarking codec/encode/json/4096
+Benchmarking codec/encode/json/4096: Warming up for 3.0000 s
+Benchmarking codec/encode/json/4096: Collecting 100 samples in estimated 5.0762 s (318k iterations)
+Benchmarking codec/encode/json/4096: Analyzing
+codec/encode/json/4096  time:   [15.922 µs 15.938 µs 15.955 µs]
+                        thrpt:  [244.82 MiB/s 245.09 MiB/s 245.33 MiB/s]
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+Benchmarking codec/encode/cbor/4096
+Benchmarking codec/encode/cbor/4096: Warming up for 3.0000 s
+Benchmarking codec/encode/cbor/4096: Collecting 100 samples in estimated 5.0064 s (146k iterations)
+Benchmarking codec/encode/cbor/4096: Analyzing
+codec/encode/cbor/4096  time:   [34.192 µs 34.211 µs 34.231 µs]
+                        thrpt:  [114.12 MiB/s 114.18 MiB/s 114.24 MiB/s]
+Found 11 outliers among 100 measurements (11.00%)
+  2 (2.00%) low mild
+  6 (6.00%) high mild
+  3 (3.00%) high severe
+Benchmarking codec/encode/postcard/4096
+Benchmarking codec/encode/postcard/4096: Warming up for 3.0000 s
+Benchmarking codec/encode/postcard/4096: Collecting 100 samples in estimated 5.0013 s (1.0M iterations)
+Benchmarking codec/encode/postcard/4096: Analyzing
+codec/encode/postcard/4096
+                        time:   [4.9268 µs 4.9358 µs 4.9449 µs]
+                        thrpt:  [789.95 MiB/s 791.41 MiB/s 792.86 MiB/s]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+codec/encode payload=65536B json -> 196667B
+codec/encode payload=65536B cbor -> 131119B
+codec/encode payload=65536B postcard -> 65544B
+Benchmarking codec/encode/json/65536
+Benchmarking codec/encode/json/65536: Warming up for 3.0000 s
+Benchmarking codec/encode/json/65536: Collecting 100 samples in estimated 5.5405 s (25k iterations)
+Benchmarking codec/encode/json/65536: Analyzing
+codec/encode/json/65536 time:   [231.60 µs 231.74 µs 231.90 µs]
+                        thrpt:  [269.52 MiB/s 269.70 MiB/s 269.86 MiB/s]
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+Benchmarking codec/encode/cbor/65536
+Benchmarking codec/encode/cbor/65536: Warming up for 3.0000 s
+Benchmarking codec/encode/cbor/65536: Collecting 100 samples in estimated 5.3062 s (10k iterations)
+Benchmarking codec/encode/cbor/65536: Analyzing
+codec/encode/cbor/65536 time:   [539.54 µs 539.90 µs 540.29 µs]
+                        thrpt:  [115.68 MiB/s 115.76 MiB/s 115.84 MiB/s]
+Found 6 outliers among 100 measurements (6.00%)
+  2 (2.00%) high mild
+  4 (4.00%) high severe
+Benchmarking codec/encode/postcard/65536
+Benchmarking codec/encode/postcard/65536: Warming up for 3.0000 s
+Benchmarking codec/encode/postcard/65536: Collecting 100 samples in estimated 5.2404 s (71k iterations)
+Benchmarking codec/encode/postcard/65536: Analyzing
+codec/encode/postcard/65536
+                        time:   [73.088 µs 73.140 µs 73.197 µs]
+                        thrpt:  [853.86 MiB/s 854.53 MiB/s 855.13 MiB/s]
+Found 6 outliers among 100 measurements (6.00%)
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+
+Benchmarking codec/decode/json/0
+Benchmarking codec/decode/json/0: Warming up for 3.0000 s
+Benchmarking codec/decode/json/0: Collecting 100 samples in estimated 5.0001 s (30M iterations)
+Benchmarking codec/decode/json/0: Analyzing
+codec/decode/json/0     time:   [167.25 ns 167.74 ns 168.23 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+Benchmarking codec/decode/cbor/0
+Benchmarking codec/decode/cbor/0: Warming up for 3.0000 s
+Benchmarking codec/decode/cbor/0: Collecting 100 samples in estimated 5.0018 s (12M iterations)
+Benchmarking codec/decode/cbor/0: Analyzing
+codec/decode/cbor/0     time:   [409.17 ns 410.11 ns 410.98 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking codec/decode/postcard/0
+Benchmarking codec/decode/postcard/0: Warming up for 3.0000 s
+Benchmarking codec/decode/postcard/0: Collecting 100 samples in estimated 5.0002 s (162M iterations)
+Benchmarking codec/decode/postcard/0: Analyzing
+codec/decode/postcard/0 time:   [30.721 ns 30.858 ns 30.993 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+Benchmarking codec/decode/json/256
+Benchmarking codec/decode/json/256: Warming up for 3.0000 s
+Benchmarking codec/decode/json/256: Collecting 100 samples in estimated 5.0093 s (1.8M iterations)
+Benchmarking codec/decode/json/256: Analyzing
+codec/decode/json/256   time:   [2.7719 µs 2.7781 µs 2.7861 µs]
+                        thrpt:  [87.628 MiB/s 87.880 MiB/s 88.076 MiB/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+Benchmarking codec/decode/cbor/256
+Benchmarking codec/decode/cbor/256: Warming up for 3.0000 s
+Benchmarking codec/decode/cbor/256: Collecting 100 samples in estimated 5.0069 s (803k iterations)
+Benchmarking codec/decode/cbor/256: Analyzing
+codec/decode/cbor/256   time:   [6.3295 µs 6.3764 µs 6.4211 µs]
+                        thrpt:  [38.022 MiB/s 38.288 MiB/s 38.572 MiB/s]
+Benchmarking codec/decode/postcard/256
+Benchmarking codec/decode/postcard/256: Warming up for 3.0000 s
+Benchmarking codec/decode/postcard/256: Collecting 100 samples in estimated 5.0012 s (14M iterations)
+Benchmarking codec/decode/postcard/256: Analyzing
+codec/decode/postcard/256
+                        time:   [349.25 ns 349.56 ns 349.89 ns]
+                        thrpt:  [697.77 MiB/s 698.42 MiB/s 699.04 MiB/s]
+Found 6 outliers among 100 measurements (6.00%)
+  6 (6.00%) high mild
+Benchmarking codec/decode/json/4096
+Benchmarking codec/decode/json/4096: Warming up for 3.0000 s
+Benchmarking codec/decode/json/4096: Collecting 100 samples in estimated 5.1828 s (131k iterations)
+Benchmarking codec/decode/json/4096: Analyzing
+codec/decode/json/4096  time:   [39.408 µs 39.433 µs 39.462 µs]
+                        thrpt:  [98.988 MiB/s 99.060 MiB/s 99.123 MiB/s]
+Found 4 outliers among 100 measurements (4.00%)
+  2 (2.00%) high mild
+  2 (2.00%) high severe
+Benchmarking codec/decode/cbor/4096
+Benchmarking codec/decode/cbor/4096: Warming up for 3.0000 s
+Benchmarking codec/decode/cbor/4096: Collecting 100 samples in estimated 5.1920 s (56k iterations)
+Benchmarking codec/decode/cbor/4096: Analyzing
+codec/decode/cbor/4096  time:   [95.014 µs 95.801 µs 96.546 µs]
+                        thrpt:  [40.460 MiB/s 40.775 MiB/s 41.112 MiB/s]
+Benchmarking codec/decode/postcard/4096
+Benchmarking codec/decode/postcard/4096: Warming up for 3.0000 s
+Benchmarking codec/decode/postcard/4096: Collecting 100 samples in estimated 5.0097 s (990k iterations)
+Benchmarking codec/decode/postcard/4096: Analyzing
+codec/decode/postcard/4096
+                        time:   [5.0463 µs 5.0492 µs 5.0525 µs]
+                        thrpt:  [773.14 MiB/s 773.64 MiB/s 774.09 MiB/s]
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+Benchmarking codec/decode/json/65536
+Benchmarking codec/decode/json/65536: Warming up for 3.0000 s
+Benchmarking codec/decode/json/65536: Collecting 100 samples in estimated 6.3030 s (10k iterations)
+Benchmarking codec/decode/json/65536: Analyzing
+codec/decode/json/65536 time:   [623.42 µs 623.79 µs 624.18 µs]
+                        thrpt:  [100.13 MiB/s 100.19 MiB/s 100.25 MiB/s]
+Found 6 outliers among 100 measurements (6.00%)
+  6 (6.00%) high severe
+Benchmarking codec/decode/cbor/65536
+Benchmarking codec/decode/cbor/65536: Warming up for 3.0000 s
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 7.5s, enable flat sampling, or reduce sample count to 50.
+Benchmarking codec/decode/cbor/65536: Collecting 100 samples in estimated 7.5362 s (5050 iterations)
+Benchmarking codec/decode/cbor/65536: Analyzing
+codec/decode/cbor/65536 time:   [1.5137 ms 1.5253 ms 1.5362 ms]
+                        thrpt:  [40.684 MiB/s 40.975 MiB/s 41.290 MiB/s]
+Benchmarking codec/decode/postcard/65536
+Benchmarking codec/decode/postcard/65536: Warming up for 3.0000 s
+Benchmarking codec/decode/postcard/65536: Collecting 100 samples in estimated 5.2158 s (66k iterations)
+Benchmarking codec/decode/postcard/65536: Analyzing
+codec/decode/postcard/65536
+                        time:   [79.844 µs 79.895 µs 79.951 µs]
+                        thrpt:  [781.73 MiB/s 782.28 MiB/s 782.78 MiB/s]
+Found 7 outliers among 100 measurements (7.00%)
+  3 (3.00%) high mild
+  4 (4.00%) high severe
+
+Benchmarking codec/round-trip/json/0
+Benchmarking codec/round-trip/json/0: Warming up for 3.0000 s
+Benchmarking codec/round-trip/json/0: Collecting 100 samples in estimated 5.0002 s (18M iterations)
+Benchmarking codec/round-trip/json/0: Analyzing
+codec/round-trip/json/0 time:   [277.75 ns 278.62 ns 279.51 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking codec/round-trip/cbor/0
+Benchmarking codec/round-trip/cbor/0: Warming up for 3.0000 s
+Benchmarking codec/round-trip/cbor/0: Collecting 100 samples in estimated 5.0025 s (8.9M iterations)
+Benchmarking codec/round-trip/cbor/0: Analyzing
+codec/round-trip/cbor/0 time:   [558.79 ns 559.49 ns 560.22 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+Benchmarking codec/round-trip/postcard/0
+Benchmarking codec/round-trip/postcard/0: Warming up for 3.0000 s
+Benchmarking codec/round-trip/postcard/0: Collecting 100 samples in estimated 5.0004 s (60M iterations)
+Benchmarking codec/round-trip/postcard/0: Analyzing
+codec/round-trip/postcard/0
+                        time:   [83.678 ns 83.861 ns 84.036 ns]
+                        thrpt:  [0.0000   B/s 0.0000   B/s 0.0000   B/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+Benchmarking codec/round-trip/json/256
+Benchmarking codec/round-trip/json/256: Warming up for 3.0000 s
+Benchmarking codec/round-trip/json/256: Collecting 100 samples in estimated 5.0154 s (1.3M iterations)
+Benchmarking codec/round-trip/json/256: Analyzing
+codec/round-trip/json/256
+                        time:   [4.0199 µs 4.0223 µs 4.0249 µs]
+                        thrpt:  [60.658 MiB/s 60.696 MiB/s 60.733 MiB/s]
+Found 7 outliers among 100 measurements (7.00%)
+  5 (5.00%) high mild
+  2 (2.00%) high severe
+Benchmarking codec/round-trip/cbor/256
+Benchmarking codec/round-trip/cbor/256: Warming up for 3.0000 s
+Benchmarking codec/round-trip/cbor/256: Collecting 100 samples in estimated 5.0430 s (576k iterations)
+Benchmarking codec/round-trip/cbor/256: Analyzing
+codec/round-trip/cbor/256
+                        time:   [8.7999 µs 8.8384 µs 8.8805 µs]
+                        thrpt:  [27.492 MiB/s 27.623 MiB/s 27.744 MiB/s]
+Benchmarking codec/round-trip/postcard/256
+Benchmarking codec/round-trip/postcard/256: Warming up for 3.0000 s
+Benchmarking codec/round-trip/postcard/256: Collecting 100 samples in estimated 5.0024 s (6.2M iterations)
+Benchmarking codec/round-trip/postcard/256: Analyzing
+codec/round-trip/postcard/256
+                        time:   [811.46 ns 812.60 ns 813.76 ns]
+                        thrpt:  [300.01 MiB/s 300.45 MiB/s 300.87 MiB/s]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+Benchmarking codec/round-trip/json/4096
+Benchmarking codec/round-trip/json/4096: Warming up for 3.0000 s
+Benchmarking codec/round-trip/json/4096: Collecting 100 samples in estimated 5.2426 s (96k iterations)
+Benchmarking codec/round-trip/json/4096: Analyzing
+codec/round-trip/json/4096
+                        time:   [54.845 µs 54.876 µs 54.910 µs]
+                        thrpt:  [71.140 MiB/s 71.183 MiB/s 71.224 MiB/s]
+Found 9 outliers among 100 measurements (9.00%)
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+Benchmarking codec/round-trip/cbor/4096
+Benchmarking codec/round-trip/cbor/4096: Warming up for 3.0000 s
+Benchmarking codec/round-trip/cbor/4096: Collecting 100 samples in estimated 5.0929 s (40k iterations)
+Benchmarking codec/round-trip/cbor/4096: Analyzing
+codec/round-trip/cbor/4096
+                        time:   [129.40 µs 129.97 µs 130.60 µs]
+                        thrpt:  [29.910 MiB/s 30.055 MiB/s 30.187 MiB/s]
+Found 7 outliers among 100 measurements (7.00%)
+  6 (6.00%) high mild
+  1 (1.00%) high severe
+Benchmarking codec/round-trip/postcard/4096
+Benchmarking codec/round-trip/postcard/4096: Warming up for 3.0000 s
+Benchmarking codec/round-trip/postcard/4096: Collecting 100 samples in estimated 5.0140 s (500k iterations)
+Benchmarking codec/round-trip/postcard/4096: Analyzing
+codec/round-trip/postcard/4096
+                        time:   [10.022 µs 10.029 µs 10.036 µs]
+                        thrpt:  [389.24 MiB/s 389.51 MiB/s 389.77 MiB/s]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+Benchmarking codec/round-trip/json/65536
+Benchmarking codec/round-trip/json/65536: Warming up for 3.0000 s
+Benchmarking codec/round-trip/json/65536: Collecting 100 samples in estimated 8.5688 s (10k iterations)
+Benchmarking codec/round-trip/json/65536: Analyzing
+codec/round-trip/json/65536
+                        time:   [859.46 µs 859.89 µs 860.31 µs]
+                        thrpt:  [72.648 MiB/s 72.684 MiB/s 72.720 MiB/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) low mild
+Benchmarking codec/round-trip/cbor/65536
+Benchmarking codec/round-trip/cbor/65536: Warming up for 3.0000 s
+Benchmarking codec/round-trip/cbor/65536: Collecting 100 samples in estimated 5.1942 s (2600 iterations)
+Benchmarking codec/round-trip/cbor/65536: Analyzing
+codec/round-trip/cbor/65536
+                        time:   [2.0132 ms 2.0211 ms 2.0292 ms]
+                        thrpt:  [30.800 MiB/s 30.924 MiB/s 31.045 MiB/s]
+Benchmarking codec/round-trip/postcard/65536
+Benchmarking codec/round-trip/postcard/65536: Warming up for 3.0000 s
+Benchmarking codec/round-trip/postcard/65536: Collecting 100 samples in estimated 5.5041 s (35k iterations)
+Benchmarking codec/round-trip/postcard/65536: Analyzing
+codec/round-trip/postcard/65536
+                        time:   [155.33 µs 155.44 µs 155.58 µs]
+                        thrpt:  [401.72 MiB/s 402.08 MiB/s 402.38 MiB/s]
+Found 9 outliers among 100 measurements (9.00%)
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+

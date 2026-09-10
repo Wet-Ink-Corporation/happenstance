@@ -1,31 +1,30 @@
-   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\.claude\worktrees\benchmarks\benchmarks)
-    Finished `release` profile [optimized] target(s) in 4.82s
+   Compiling happenstance-benchmarks v0.0.0 (D:\repos\happenstance\benchmarks)
+    Finished `release` profile [optimized] target(s) in 3.01s
      Running `target\release\overhead.exe`
-commit:    b3c8d84-dirty
-date:      2026-09-06
+commit:    6c7a7a8-dirty
+date:      2026-09-08
 toolchain: rustc 1.97.1 (8bab26f4f 2026-07-14)
 target:    x86_64-pc-windows-msvc
 profile:   release
 cpus:      20
 sqlite:    3.53.2
 
-[overhead/append] paired run: 200 recorded rounds, timer overhead 56ns/sample
-  raw/same-schema              n=200     median=      325631ns p95=      698367ns p99=     8024063ns max=    11608063ns              drift=1.080
-  raw/hand-rolled              n=200     median=      142207ns p95=      323071ns p99=      939519ns max=     7426047ns              drift=1.096
-  happenstance-sqlite          n=200     median=      558079ns p95=     1941503ns p99=     8355839ns max=    12673023ns              drift=1.142
+[overhead/append] paired run: 200 recorded rounds, timer overhead 68ns/sample
+  raw/same-schema              n=200     median=      352255ns p95=      628735ns p99=     7139327ns max=     9928703ns              drift=1.015
+  raw/hand-rolled              n=200     median=      142719ns p95=      318207ns p99=      409343ns max=    10338303ns              drift=1.075
+  happenstance-sqlite          n=200     median=      629247ns p95=     2085887ns p99=     7938047ns max=    20496383ns              drift=1.121
 
-[overhead/append] raw/same-schema / raw/hand-rolled = 2.29x
-[overhead/append] raw/hand-rolled / raw/same-schema = 0.44x
-[overhead/append] happenstance-sqlite / raw/same-schema = 1.71x
-[overhead/append] happenstance-sqlite / raw/hand-rolled = 3.92x
-[overhead/replay] paired run: 200 recorded rounds, timer overhead 62ns/sample
-  raw/same-schema              n=200     median=      846335ns p95=     1096703ns p99=     1465343ns max=     6209535ns              drift=1.046
-  happenstance-sqlite          n=200     median=     5279743ns p95=     7413759ns p99=    17104895ns max=    21118975ns              drift=1.039
+[overhead/append] raw/same-schema / raw/hand-rolled = 2.47x
+[overhead/append] raw/hand-rolled / raw/same-schema = 0.41x
+[overhead/append] happenstance-sqlite / raw/same-schema = 1.79x
+[overhead/append] happenstance-sqlite / raw/hand-rolled = 4.41x
+[overhead/replay] paired run: 200 recorded rounds, timer overhead 70ns/sample
+  raw/same-schema              n=200     median=      848383ns p95=     1088511ns p99=     3088383ns max=     6193151ns              drift=1.031
+  happenstance-sqlite          n=200     median=     5513215ns p95=    16580607ns p99=    22020095ns max=    33783807ns              drift=1.021
 
-[overhead/replay] happenstance-sqlite / raw/same-schema = 6.24x
-[cross-adapter/append] paired run: 200 recorded rounds, timer overhead 70ns/sample
-  memory                       n=200     median=        3901ns p95=       17215ns p99=       42623ns max=       86911ns              drift=0.431
-  sqlite                       n=200     median=      466431ns p95=     1627135ns p99=     6967295ns max=    72810495ns              drift=0.689
-  NOTE: at least one arm's drift is outside ±15%. The ratios between arms still hold — that is what interleaving buys — but no absolute from this run should be quoted.
+[overhead/replay] happenstance-sqlite / raw/same-schema = 6.50x
+[cross-adapter/append] paired run: 200 recorded rounds, timer overhead 66ns/sample
+  memory                       n=200     median=        5803ns p95=       18111ns p99=       35231ns max=       77823ns              drift=0.932
+  sqlite                       n=200     median=      540159ns p95=     4124671ns p99=     9715711ns max=   145620991ns              drift=1.051
 
-[cross-adapter/append] sqlite / memory = 119.57x
+[cross-adapter/append] sqlite / memory = 93.08x

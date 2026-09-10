@@ -9,7 +9,21 @@ Everything here comes from one `./run.sh`. Nothing is carried across runs.
 | [`GRADES.md`](GRADES.md) | The reader-facing table: what to expect, in orders of magnitude | by hand, from `raw/` |
 | `<topic>.md` | Per-group tables with their caveats | by hand, from `raw/` |
 | `raw/*.txt`, `raw/*.csv` | Command output, tee'd verbatim | `run.sh` |
+| `raw/*-linux.*` | The same, from Host B — see below | `RESULTS_SUFFIX=linux ./run.sh` |
 | `history/<date>-<commit>.json` | One entry per complete run | `src/bin/collect.rs` |
+| [`flakiness/`](flakiness/) | How far the numbers move between runs, and what turned out not to cause it | `ops/host/*.py`, by hand |
+
+**The `-linux` suffix is a host, not a variant.** `run.sh` tees every artefact to
+a fixed filename, so N runs overwrite each other and only the last survives.
+`RESULTS_SUFFIX` (`../run.sh:66`) inserts a tag before the extension, which is
+what lets two hosts' output live side by side — and what made
+[`flakiness/`](flakiness/) possible at all, since measuring how far a figure
+moves between runs requires keeping more than one of them.
+
+Unsuffixed files are **Host A**, the Windows laptop that produced everything
+through 2026-09-08 and now backs `GRADES.md` §8. Suffixed files are **Host B**,
+the dedicated measurement host, which produces §§1–7. Do not compare an absolute
+across the two; `../README.md#conditions` describes both and says why.
 
 The tables are written **by hand** from `raw/`, because a table nobody read is a
 table nobody checked. That is `experiments/one-connection-latency/run.sh`'s rule
