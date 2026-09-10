@@ -17,10 +17,10 @@
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! enum Seat { Taken }
 //!
+//! const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
 //! impl DomainEvent for Seat {
-//!     const EVENT_TYPES: &'static [EventType] =
-//!         &[EventType::from_static("SeatTaken")];
-//!     fn event_type(&self) -> EventType { Self::EVENT_TYPES[0].clone() }
+//!     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN];
+//!     fn event_type(&self) -> EventType { SEAT_TAKEN }
 //!     fn tags(&self) -> Tags { Tags::empty() }
 //!     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
 //!         c.encode(self)
@@ -339,10 +339,24 @@ impl<E: DomainEvent + PartialEq + core::fmt::Debug> Decision<E> {
 /// lost was pretending a hand-written impl can enforce it — it cannot, and a
 /// test that runs is worth more than a claim that does not.
 ///
+/// # The two sequences must agree by INDEX, not merely as sets
+///
+/// `every_variant[i].event_type()` must equal `EVENT_TYPES[i]`. That is a real
+/// precondition rather than a convention, because the documentation throughout
+/// this crate teaches `EVENT_TYPES[i]` as the way to name an event type — which
+/// is correct only while index `i` means the same thing on both sides.
+///
+/// The check has no reflection over enum variants, so when it fires it cannot
+/// distinguish *the impl permuted its arms* from *the caller listed the variants
+/// in a different order*. It says so in the failure message rather than implying
+/// a precision it does not have. Pass the variants in declaration order.
+///
 /// # Panics
 ///
-/// Panics naming the offending value's event type, and the declaration it is
-/// missing from.
+/// Panics naming the offending value's event type and the declaration it is
+/// missing from; or, when both names are declared but sit at different indices,
+/// naming the index and both event types. Membership is checked first, so a
+/// value outside `EVENT_TYPES` is always reported as such.
 ///
 /// # Examples
 ///
@@ -351,33 +365,52 @@ impl<E: DomainEvent + PartialEq + core::fmt::Debug> Decision<E> {
 /// use happenstance::{Codec, CodecError, DomainEvent, EventType, Tags};
 /// use happenstance::bytes::Bytes;
 ///
+/// // Named once, used twice. Indexing `EVENT_TYPES` in a match
+/// // arm couples the arm to a POSITION in a separate list, so
+/// // reordering that list silently relabels the event. A named
+/// // const cannot be reordered into a lie.
+/// const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
+/// const SEAT_FREED: EventType = EventType::from_static("SeatFreed");
+///
 /// #[derive(serde::Serialize, serde::Deserialize)]
 /// enum Seat { Taken, Freed }
 ///
 /// impl DomainEvent for Seat {
-///     const EVENT_TYPES: &'static [EventType] = &[
-///         EventType::from_static("SeatTaken"),
-///         EventType::from_static("SeatFreed"),
-///     ];
+///     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN, SEAT_FREED];
 ///     fn event_type(&self) -> EventType {
 ///         match self {
-///             Self::Taken => Self::EVENT_TYPES[0].clone(),
-///             Self::Freed => Self::EVENT_TYPES[1].clone(),
+///             Self::Taken => SEAT_TAKEN,
+///             Self::Freed => SEAT_FREED,
 ///         }
 ///     }
 ///     fn tags(&self) -> Tags { Tags::empty() }
 ///     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
 ///         c.encode(self)
 ///     }
-///     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
-///         -> Result<Self, CodecError> { c.decode(d) }
+///     fn decode<C: Codec>(c: &C, t: &EventType, d: &Bytes)
+///         -> Result<Self, CodecError> {
+///         // The parameter is a guard, not decoration: without it a
+///         // payload written under another type decodes silently.
+///         if !Self::EVENT_TYPES.contains(t) {
+///             let event_type = t.clone();
+///             return Err(CodecError::UnknownEventType { event_type });
+///         }
+///         c.decode(d)
+///     }
 /// }
 ///
 /// assert_domain_event(&[Seat::Taken, Seat::Freed]);
 /// ```
 pub fn assert_domain_event<E: DomainEvent>(every_variant: &[E]) {
-    for value in every_variant {
+    for (index, value) in every_variant.iter().enumerate() {
         let carried = value.event_type();
+
+        // Membership first, and the order is load-bearing: a caller passing a
+        // value whose type is not declared at all must be told *that*, rather
+        // than a positional-disagreement message naming the right index for the
+        // wrong reason. `dsl_failure_message.rs` pins this by calling the guard
+        // with a value deliberately outside EVENT_TYPES and asserting on the
+        // message it gets back.
         assert!(
             E::EVENT_TYPES.contains(&carried),
             "`event_type()` returned `{}`, which EVENT_TYPES does not declare: \
@@ -390,6 +423,29 @@ pub fn assert_domain_event<E: DomainEvent>(every_variant: &[E]) {
                 .collect::<Vec<_>>()
                 .join(", "),
         );
+
+        // ADR-0059's positional-agreement precondition, taken at `0.2.0`
+        // because a published function's behaviour cannot change for free
+        // afterwards. Measured in-tree cost: zero — the guard has two real call
+        // sites and one doctest, all three positionally correct already.
+        if let Some(declared) = E::EVENT_TYPES.get(index) {
+            assert!(
+                &carried == declared,
+                "at index {index}, `event_type()` returned `{}` but EVENT_TYPES \
+                 declares `{}` there. Both names ARE declared, so this is an \
+                 ORDER disagreement rather than a drifted name.\n\n\
+                 This check cannot tell you which side moved: it sees two \
+                 sequences and has no reflection over the enum. Either the \
+                 impl's variants are permuted against EVENT_TYPES, or the slice \
+                 passed here lists them in a different order. Check the slice \
+                 first — it is the one written at the call site.\n\n\
+                 Order matters because the rendered documentation teaches \
+                 `EVENT_TYPES[i]` as the way to name an event type, and that is \
+                 correct only while index `i` means the same thing on both sides.",
+                carried.as_str(),
+                declared.as_str(),
+            );
+        }
     }
 }
 

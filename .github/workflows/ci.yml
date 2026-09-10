@@ -193,13 +193,39 @@ jobs:
     #
     # WHAT IS UNCHECKED WHILE THIS IS OFF, stated so it can be weighed:
     #   * a `.kb` atom whose frontmatter stops validating;
-    #   * an accepted decision atom edited instead of superseded — the immutability
-    #     rule `validate --kb` is the only enforcement of;
+    #   * an item whose `.kb` atom is malformed in a way `validate --kb` reads;
     #   * an item whose system frontmatter was hand-edited with the `PreToolUse`
     #     hook disabled;
     #   * a `.redkiln/templates/` customisation reverted by `adopt --templates`,
     #     and the assertion that the drift set is exactly the six documented files.
     # Every one of those merges green while this job is off. That is the cost.
+    #
+    # ══ ONE ITEM WAS REMOVED FROM THAT LIST AT THE `0.2.0` PASS ══
+    #
+    # It read "an accepted decision atom edited instead of superseded — the
+    # immutability rule `validate --kb` is the only enforcement of". Both halves
+    # were wrong, and in the same direction: they overstated what turning this
+    # job back on would buy.
+    #
+    # `validate --kb` compares an atom's body against the file as `HEAD` has it.
+    # Verified by editing an accepted atom and running it: it reports "accepted
+    # decision 'kb-decision-0042' was edited in place" on the UNCOMMITTED change.
+    # So it passes the moment that edit is committed — and a CI checkout's
+    # working tree *is* `HEAD`. This half has never been able to fire in this
+    # job, before or after it was switched off, and switching it on would not
+    # change that. The check is real and its reach is **pre-commit**.
+    #
+    # Enforcing it here needs a different instrument: a diff of every
+    # `status: accepted` atom body against the merge base. That does not exist,
+    # and naming it is worth more than a list entry that reads as coverage.
+    #
+    # The same correction settles a claim made about this job by the `0.2.0`
+    # certification review — that it was the check which would have caught three
+    # ADRs the specification cites as amending authority while none of the three
+    # had an atom. It would not have. `validate --kb` exits 0 at `HEAD` today; it
+    # validates the atoms that EXIST, and a record in `references/adr/` with no
+    # atom is invisible to it. Nothing in this repository, enabled or disabled,
+    # resolves the status of a cited ADR.
     #
     # TO RE-ENABLE: restore the `if:` expression preserved immediately below, and
     # raise `ref:` on the CLI checkout in the same commit — never separately, for
@@ -403,10 +429,14 @@ jobs:
           cargo test -p happenstance-postgres --all-features             --test postgres_conformance -- --ignored --list | tee gated.txt
           count=$(grep -c ': test$' gated.txt)
           echo "gated tests: $count"
-          # 89 event-store rules + 5 concurrency + 1 model + this crate's own 6
-          # + CF-18's `every_declined_capability_is_stated_by_this_fixture`,
-          # which `event_store_conformance!` emits once per mounted suite and
-          # which is not a rule = 102. A run that finds materially fewer has
+          # 95 event-store rules + 5 concurrency + 1 model + this crate's own 6
+          # = 107, measured. CF-18's
+          # `every_declined_capability_is_stated_by_this_fixture` is NOT in this
+          # total: it is emitted once per mounted suite and is not `#[ignore]`d,
+          # so it never appears in an `--ignored` listing. The arithmetic here
+          # said 89 and added that test anyway, and was wrong in both directions
+          # at once — it reached 102 where the binary lists 107. A run that
+          # finds materially fewer has
           # lost an INVOCATION rather than a test, which is how the first draft
           # of this job shipped with two families silently unmounted and a count
           # that looked right.
@@ -457,6 +487,59 @@ jobs:
         run: |
           if ! grep -qE '^test result:' run.txt; then
             echo "::error::no test result line; the suite did not run at all"
+            exit 1
+          fi
+
+      # THE PROJECTION SUITE, AND WHY IT IS A SECOND PAIR OF STEPS.
+      #
+      # The run above filters to `--test postgres_conformance`, which is the
+      # event-store target and nothing else. `tests/projection.rs`,
+      # `tests/rule_controls.rs` and `tests/naive_arm_probe.rs` are separate
+      # targets and that filter excludes all three — so until this section
+      # landed, the Postgres PROJECTION suite had never been observed by a
+      # second machine, while `rule_controls.rs` carried a header claiming it
+      # was "swept up by the live job's existing invocation with no workflow
+      # edit". It was not, and a claim inside a shipped `.crate` is the worst
+      # place for that to be wrong.
+      #
+      # Shaped as its own list/run/assert trio rather than by widening the
+      # filter above, on the live-Neon job's precedent: one target, one
+      # transcript, one count. A combined run would put two `test result:` lines
+      # in one file and the assertion reads the last.
+      - name: Every gated projection test is present in the binary
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test projection -- --ignored --list | tee gated-projection.txt
+
+      # `--test-threads=1` for the reason the event-store run gives: the pool
+      # arithmetic, not the frontier.
+      - name: The projection suite against a live Postgres
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test projection -- --ignored --show-output --test-threads=1 \
+            | tee projection-run.txt
+
+      - name: The projection run executed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' projection-run.txt; then
+            echo "::error::no test result line; the projection suite did not run at all"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-projection.txt)
+          result=$(grep -E '^test result:' projection-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; executed $((passed + failed)) (passed $passed, failed $failed), ignored $ignored"
+
+          if [ "$ignored" -ne 0 ]; then
+            echo "::error::$ignored gated projection tests did not execute"
+            exit 1
+          fi
+          if [ "$((passed + failed))" -ne "$expected" ]; then
+            echo "::error::executed $((passed + failed)) of $expected gated projection tests"
             exit 1
           fi
 
@@ -719,13 +802,26 @@ jobs:
 
       # Said out loud, because "skipped every step" and "ran and passed" are the
       # same green tick otherwise.
+      #
+      # A fork PR legitimately cannot see the secret, so there the notice is the
+      # whole of the honest answer. A **same-repository** run is different: the
+      # secret is either configured or it is not, and a green tick over zero
+      # executed steps is exactly the failure mode the comment above describes,
+      # arriving on the branch the release is cut from. So on a same-repo event
+      # an absent secret is an ERROR rather than a notice.
       - name: Whether there is an endpoint to run against
         run: |
-          if [ -z "$NEON_CONNECTION" ]; then
-            echo "::notice::NEON_CONNECTION is not set (fork PR, or the secret is \
-          absent). Every step below is skipped and this job proves NOTHING."
-          else
+          if [ -n "$NEON_CONNECTION" ]; then
             echo "NEON_CONNECTION is set; the gated suites will run."
+          elif [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            echo "::notice::NEON_CONNECTION is not visible to a fork PR. Every \
+          step below is skipped and this job proves NOTHING about the adapter."
+          else
+            echo "::error::NEON_CONNECTION is not set on a same-repository run, \
+          so every step below would be skipped and this job would report green \
+          having observed nothing. Configure the secret, or retire this job and \
+          say so - do not leave it reporting success over an empty run."
+            exit 1
           fi
 
       # Every rule is present in the binary before any of them runs.
@@ -745,9 +841,13 @@ jobs:
           events=$(grep -c ': test$' gated-events.txt)
           projection=$(grep -c ': test$' gated-projection.txt)
           echo "gated tests: $events event-store, $projection projection"
-          # 89 event-store rules + 5 concurrency + 1 model + CF-18's
-          # `every_declined_capability_is_stated_by_this_fixture` + this crate's
-          # own 9 = 105; and 17 projection rules + 2 of this crate's own = 19. A
+          # 95 event-store rules + 5 concurrency + 1 model + this crate's own,
+          # and 17 projection rules + this crate's own. Deliberately not summed:
+          # the previous form said 89 and counted CF-18's
+          # `every_declined_capability_is_stated_by_this_fixture` as gated, which
+          # it is not — it carries no `#[ignore]`, so it never appears in an
+          # `--ignored` listing. Two errors that partly cancelled. The floors
+          # below are the operative check and neither depends on the sum. A
           # run that finds materially fewer has lost an INVOCATION rather than a
           # test, which is how a suite ships with a family silently unmounted and
           # a count that looks right.
@@ -891,8 +991,19 @@ jobs:
       # facts that will diverge again — `rust-toolchain.toml` moves whenever a
       # contributor wants a newer compiler, and this one moves only by ADR. The
       # day they differ, this job starts proving something again.
+      #
+      # `--exclude happenstance-ladybug` for the reason the four xtask sites
+      # give (ADR-0025 §9): its driver arrives as a **1.44 GB static archive**
+      # and needs an OpenSSL toolchain that no feature turns off, so
+      # `--all-features` here would turn both on. The dependency is off by
+      # default and this exclusion is what stops `--all-features` from being the
+      # thing that turns it on. This was the only `--workspace --all-features`
+      # invocation in the workflow without it: the xtask gate steps carried the
+      # exclusion from the start, and the commit that froze the Ladybug job
+      # asserted that nothing else needed to change because "the workspace gate
+      # steps exclude this crate" — true of xtask, and false here.
       - name: Tests at the MSRV, dev-dependencies included
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --exclude happenstance-ladybug --all-features
 
   # Public API changes must be intentional. This fails a PR that breaks semver
   # without a version bump. The `pull_request` guard is load-bearing: it is what
@@ -921,9 +1032,12 @@ jobs:
           # was no compatible predecessor to diff against and the job reported
           # nothing while still going green.
           #
-          # **That reason expired at `0.2.0`.** All five crates now have a real
-          # published predecessor, so the registry baseline is available and is
-          # the one that matters for release safety. Adding it is the outstanding
+          # **That reason expires when `0.2.0` reaches the registry, and it has
+          # not yet.** Measured at the release pass: `max_stable_version` is
+          # `0.0.0` for all seven crates, three of them additionally carry
+          # `0.2.0-alpha.1`, and nothing is yanked — so no crate has a compatible
+          # published predecessor and the registry baseline is still unavailable.
+          # It is the one that matters for release safety. Adding it is the outstanding
           # half of phase 12's `cargo-semver-checks` work and is deliberately not
           # done in the same change as the release itself — the registry has to
           # carry `0.2.0` before a job can diff against it, and a job that fails
@@ -943,12 +1057,20 @@ jobs:
           # installs, and the moment the typed layer grows an API of its own it
           # stops being a duplicate. One extra rustdoc build is cheaper than
           # remembering to add the line later.
-          # Every crate the release publishes — all five of them. Both adapters
-          # were watched here *before* they shipped, on the argument the
-          # paragraph above already makes: one extra rustdoc build is cheaper
-          # than remembering to add the line later, and a public surface no
-          # instrument watches is the thing this job exists to prevent. That
-          # foresight is why this line needed no edit at the release.
+          # Five of the seven crates the release publishes. `happenstance-sqlite`
+          # and `happenstance-cloudflare` were watched here *before* they
+          # shipped, on the argument the paragraph above makes: one extra
+          # rustdoc build is cheaper than remembering to add the line later, and
+          # a public surface no instrument watches is the thing this job exists
+          # to prevent.
+          #
+          # **This comment said "all five of them" and claimed that foresight
+          # meant the line needed no edit at the release.** The release set moved
+          # to seven at `e597c34` and the sentence did not, which made it assert
+          # a coverage the line beneath it does not provide. The two absent names
+          # are absent *deliberately* and the block below gives the reason — but
+          # deliberate and complete are different claims, and only one of them
+          # was true.
           #
           # **Two names are deliberately absent, and only from this baseline.**
           # `happenstance-postgres` and `happenstance-neon` had no published

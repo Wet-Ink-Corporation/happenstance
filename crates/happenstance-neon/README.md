@@ -63,9 +63,16 @@ implements the **bare** `EventStore` flavour so that one source file serves both
 
 ## The one rule this adapter does not pass
 
-`read_result_is_stable_under_concurrent_append`, intermittently — measured at
-3 red in 20 over HTTP/1.1, and 1 in 40 over a single multiplexed HTTP/2
-connection, which is why the reference transport uses the latter.
+`read_result_is_stable_under_concurrent_append`, intermittently. It fails less
+often over a single multiplexed HTTP/2 connection than over HTTP/1.1 with a
+default pool, which is why the reference transport uses the former, and every
+observed failure was in the same direction: the read saw an event appended after
+it was issued.
+
+**No failure rate is quoted here.** Frequencies were counted during phase 10b
+bring-up and no raw log of that session was retained; every other measurement
+this project cites lives beside its own output under `experiments/`, and a ratio
+with nothing behind it does not belong on the page a reader trusts most.
 
 It is a **network race, not a bug we have not found yet.** A read and an append
 are two independent requests to a pooled proxy, and nothing orders one backend's
@@ -132,8 +139,19 @@ NEON_CONNECTION=postgresql://… cargo test -p happenstance-neon --all-features 
 
 `--test-threads=1` is this adapter's **visibility mechanism**, not a flake
 workaround: `pg_snapshot_xmin` is held back by any open write transaction on the
-branch, including sibling rules of the same run. In parallel, 67 of 105 fail; run
-serially on the same commit, 3 do.
+branch, including sibling rules of the same run. Run in parallel, most of the
+suite reddens; run serially, it does not.
+
+**The counts that used to sit here were a phase-10b bring-up measurement** taken
+before three other defects were fixed, and they had drifted out of agreement with
+the status line at the top of this page — it said one rule does not pass while
+this paragraph said three. The mechanism is the durable part and it is unchanged;
+the numbers were not re-measured after the fixes, so they are not restated.
+
+The same frontier is why the conformance fixture declines
+`READ_YOUR_OWN_WRITES`, which makes the generated model family report a stated
+skip rather than run. That is a property of the *server*, and distinct from the
+ES-11 limitation above, which is a property of the *transport*.
 
 ## Licence
 

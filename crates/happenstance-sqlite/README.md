@@ -85,9 +85,22 @@ have to edit at the next release.
 
 **Serialising, `Send`, native.** One `rusqlite::Connection` behind one `Mutex`,
 with no pool: writers queue by construction and positions are assigned under a
-lock. `rusqlite` is synchronous, so every statement runs on a blocking task, and
-the read stream defers its `spawn_blocking` until the first poll — which is what
-lets `read` return the stream at the top level rather than from inside a future.
+lock. `rusqlite` is synchronous, and what this crate does about that **differs by
+path** — the two halves are worth separating, because one of them is the reason a
+dropped `append` here is safe.
+
+The **read** path defers a `spawn_blocking` until the stream's first poll, which
+is what lets `read` return the stream at the top level rather than from inside a
+future. The **projection** store runs its work on a blocking task too, through
+`in_blocking_task`.
+
+`append`, `head` and `contains_event_id` do **neither**. They run inline under the
+connection mutex, on whatever thread polls them — there is no `.await` anywhere in
+the event store's module, which its own `# Cancellation` section states and a
+source-scanning test (`tests/cancellation_statement.rs`) enforces on every build.
+That absence is not an oversight: it is exactly what lets this adapter discharge
+`[FROZEN]` ES-23 by saying a dropped `append` future commits nothing, because a
+future with no suspension point has already run to completion when `poll` returns.
 
 It is deliberately *one* point in a portfolio rather than the reference. A port
 frozen against this shape alone would be frozen against SQLite wearing four hats,

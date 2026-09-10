@@ -8,12 +8,31 @@
 //! store and projection store both, including the concurrency family at
 //! `CONTENDERS = 64`.
 //!
-//! It is still `publish = false`, and that is not an oversight. `0.2.0` ships
-//! five crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
-//! `happenstance-sqlite` and `happenstance-cloudflare` — and this is not one of
-//! them. What packaging this crate owes beyond a green suite belongs to
-//! `deskeleton-and-package-readiness`, and the flag stays until that story
-//! removes it.
+//! **This crate ships in `0.2.0`.** The release set was five, decided, and the
+//! owner re-opened it on the evidence at `e597c34`; the manifest carries no
+//! `publish` key. This paragraph asserted the opposite until the release pass,
+//! which would have told a docs.rs reader that the crate they were reading was
+//! unpublished.
+//!
+//! It ships carrying **one conformance rule it does not pass**, and that is
+//! stated here rather than left to be found in CI:
+//! `read_result_is_stable_under_concurrent_append` reddens intermittently,
+//! because a read and an append are two independent HTTP requests with no
+//! ordering primitive the *store* honours between them. ES-11 is `[PROVISIONAL]`
+//! and its own marker named a one-shot-HTTP adapter as the thing that would
+//! falsify it; this is that adapter, and a provisional clause is precisely one a
+//! published crate may fail to satisfy. The README carries the account.
+//!
+//! It also **declines `READ_YOUR_OWN_WRITES`** in its conformance fixture, which
+//! is a different limitation with a different cause: the endpoint is PostgreSQL,
+//! so a read carries the same `xact_id < pg_snapshot_xmin(…)` visibility frontier
+//! `happenstance-postgres` documents, and that would hold over a direct
+//! connection too. ES-11 is about the transport; this is about the server.
+//!
+//! **What a dropped `append` future does here is answered in
+//! [`event_store`]'s `# Cancellation` section**, which ES-23 obliges this
+//! adapter to carry. The short version: it MAY already have committed, and this
+//! crate owns no client that could tell you.
 //!
 //! # It owns no HTTP client, and that is still true
 //!
@@ -110,6 +129,11 @@
 //! here satisfies `SendEventStore`, on either target, even where the transport
 //! happens to be `Send`.
 
+// `--cfg docsrs` is set by this crate's `[package.metadata.docs.rs]`, and it is
+// what makes the `doc(cfg(...))` badges below render a feature gate rather than
+// nothing. The manifest asserted that was happening while neither the feature
+// nor a single attribute existed, so every gated item rendered as ordinary API.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_no_source)]
 
 pub mod config;
@@ -119,13 +143,35 @@ pub mod transport;
 pub mod wire;
 
 #[cfg(feature = "event-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "event-store")))]
 pub mod event_store;
 
 #[cfg(feature = "event-store")]
 mod query_sql;
 
 #[cfg(feature = "projection-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "projection-store")))]
 pub mod projection_store;
+
+/// Re-exported for ADR-0044's reason. That decision excluded this crate
+/// expressly because it was then *"a `publish = false` skeleton whose bodies are
+/// `todo!()`"* — both halves of that predicate are now false.
+///
+/// `happenstance_core` because the contract is in this crate's public
+/// signatures: `impl EventStore for NeonEventStore` names `Query`,
+/// `ReadOptions`, `SequencedEvent`, `Event`, `AppendCondition` and `AppendError`.
+///
+/// `serde_json` because it is in the public surface three times over, and once
+/// as a **field**: [`SqlStatement::params`] is a `Vec<serde_json::Value>`, which
+/// a caller holds by construction rather than by calling anything, and
+/// [`SqlStatement::body`] returns `Result<Vec<u8>, serde_json::Error>`. A caller
+/// that cannot name the type cannot build a statement at all.
+///
+/// Both dependencies are unconditional in this crate's manifest, so neither
+/// needs a `cfg`.
+pub use happenstance_core;
+/// See [`happenstance_core`]'s note above.
+pub use serde_json;
 
 pub use config::NeonConfig;
 pub use error::{NeonError, NeonSqlError};
@@ -135,7 +181,9 @@ pub use transport::{
 };
 
 #[cfg(feature = "event-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "event-store")))]
 pub use event_store::{NeonEventStore, NeonReadStream, ProbeThenWriteStore};
 
 #[cfg(feature = "projection-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "projection-store")))]
 pub use projection_store::{NeonProjectionStore, NeonWriteBatch};

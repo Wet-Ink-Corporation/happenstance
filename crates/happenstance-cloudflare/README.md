@@ -16,7 +16,7 @@ boundary a DCB query describes fits inside an object rather than across a
 cluster.
 
 > **Status: released at `0.2.0`, and the release with the thinnest evidence of
-> the five.** Every [`EventStore`](https://docs.rs/happenstance-core) body is
+> the seven.** Every [`EventStore`](https://docs.rs/happenstance-core) body is
 > real — `migrate`, `append`, `head`, `contains_event_id` and `read` all execute
 > SQL against the object's storage — and the event-store conformance suite runs
 > against this adapter inside the repository's own gate, on

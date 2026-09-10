@@ -125,9 +125,10 @@ const PUBLISHABLE: &[&str] = &[
     // `happenstance-ladybug` is NOT here and is finished. `lbug` cannot render
     // on docs.rs — its build script returns early under `DOCS_RS` before
     // emitting the `cargo:rustc-env` lines its own `lib.rs` requires — and
-    // rendering is this project's bar for a published crate. That is a third
+    // rendering is this project's bar for a published crate. That is a second
     // meaning of `publish = false`, distinct from unfinished
-    // (`happenstance-sync`) and from out-of-this-release.
+    // (`happenstance-sync`). There was a third — finished, and held out of this
+    // release — and these two rows are what emptied it.
     //
     // Do not put a double-quoted phrase in a comment inside this array.
     // [`scan_publishable`] reads it by pulling quoted strings out of the block,

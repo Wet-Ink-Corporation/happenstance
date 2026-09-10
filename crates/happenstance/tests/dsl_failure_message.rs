@@ -161,6 +161,36 @@ impl DomainEvent for Drifted {
     }
 }
 
+/// Both names ARE declared; the two sequences disagree on their ORDER.
+///
+/// The defect ADR-0059's positional-agreement precondition exists to reject,
+/// and the reason it is a defect rather than a style: the rendered docs teach
+/// `EVENT_TYPES[i]` as the way to name an event type, which is correct only
+/// while index `i` means the same thing on both sides. Membership alone cannot
+/// see this — every value here is declared.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct Permuted;
+
+impl DomainEvent for Permuted {
+    const EVENT_TYPES: &'static [EventType] = &[DEPOSITED, WITHDRAWN];
+
+    fn event_type(&self) -> EventType {
+        WITHDRAWN
+    }
+
+    fn tags(&self) -> Tags {
+        scope()
+    }
+
+    fn encode<C: Codec>(&self, codec: &C) -> Result<Bytes, CodecError> {
+        codec.encode(self)
+    }
+
+    fn decode<C: Codec>(codec: &C, _t: &EventType, data: &Bytes) -> Result<Self, CodecError> {
+        codec.decode(data)
+    }
+}
+
 /// The caller's own refusal.
 #[derive(Debug)]
 struct Refused;
@@ -533,6 +563,30 @@ fn then_on_a_refused_decision_panics_naming_the_refusal() {
     assert!(
         message.contains("the account is closed"),
         "the refusal must be named, not categorised:\n{message}"
+    );
+}
+
+#[test]
+fn assert_domain_event_rejects_variants_permuted_against_event_types() {
+    // Index 0 carries `Withdrawn` while EVENT_TYPES declares `Deposited`
+    // there. Both names are declared, so the membership half passes and only
+    // ADR-0059's positional precondition can see it.
+    let message = caught(|| assert_domain_event(&[Permuted])).message;
+
+    assert!(
+        message.contains("index 0"),
+        "the disagreeing index must be named:
+{message}"
+    );
+    assert!(
+        message.contains("ORDER disagreement"),
+        "it must say this is an order problem, not a drifted name:
+{message}"
+    );
+    assert!(
+        message.contains("cannot tell you which side moved"),
+        "the diagnostic's own limit must be stated, per ADR-0059:
+{message}"
     );
 }
 

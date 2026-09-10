@@ -118,15 +118,14 @@ impl_boundary_for_tuple! {
     /// #[derive(serde::Serialize, serde::Deserialize)]
     /// enum Seat { Taken, Freed }
     ///
+    /// const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
+    /// const SEAT_FREED: EventType = EventType::from_static("SeatFreed");
     /// impl DomainEvent for Seat {
-    ///     const EVENT_TYPES: &'static [EventType] = &[
-    ///         EventType::from_static("SeatTaken"),
-    ///         EventType::from_static("SeatFreed"),
-    ///     ];
+    /// const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN, SEAT_FREED];
     ///     fn event_type(&self) -> EventType {
     ///         match self {
-    ///             Self::Taken => Self::EVENT_TYPES[0].clone(),
-    ///             Self::Freed => Self::EVENT_TYPES[1].clone(),
+    ///         Self::Taken => SEAT_TAKEN,
+    ///         Self::Freed => SEAT_FREED,
     ///         }
     ///     }
     ///     fn tags(&self) -> Tags { Tags::empty() }

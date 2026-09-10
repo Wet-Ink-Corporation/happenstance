@@ -13,6 +13,37 @@
 //! accepts, and MUST refuse beyond that with
 //! [`AppendError::ExceedsStoreLimit`](crate::AppendError::ExceedsStoreLimit)
 //! rather than by truncating.
+//!
+//! # What the floors cost together
+//!
+//! **VT-21, VT-22 and VT-24 are three SIMULTANEOUS obligations, not three
+//! independent ones.** A conformant store has to satisfy all of them at once, so
+//! the smallest append it must accept is their *product* — and that product is
+//! nowhere in the specification, because each clause states one factor.
+//!
+//! At the floors below, one append carries:
+//!
+//! | factor | arithmetic | bytes |
+//! | --- | --- | --- |
+//! | `data` | 128 × 65,536 | 8,388,608 |
+//! | tags | 128 × 64 × 255 | 2,088,960 |
+//! | event types | 128 × 255 | 32,640 |
+//! | `metadata` | unbounded | — |
+//!
+//! So **the composed floor has a stated lower bound of 10,510,208 bytes and no
+//! upper bound**, and `[FROZEN]` ES-18 makes the whole of it one atomic unit:
+//! every event of that append lands, or none does.
+//!
+//! That is worth knowing before choosing a backing store. It is larger than a
+//! `FoundationDB` transaction and past `DynamoDB`'s `TransactWriteItems` budget
+//! a store in either family cannot be conformant at these floors, and the place
+//! to discover that is here rather than in production.
+//!
+//! [`MIN_SUPPORTED_EVENTS_PER_BATCH`] already does this multiplication once, and
+//! the contrast between the two is the point: that one multiplies into *bound
+//! parameters*, an axis SQLite's driver forced somebody to compute. This one
+//! multiplies into *bytes*, an axis nothing forced — which is why it went
+//! uncomputed until the release that published these numbers.
 
 /// Smallest `data` payload every store must accept, in bytes.
 ///
@@ -49,6 +80,24 @@ pub const MIN_SUPPORTED_EVENTS_PER_BATCH: usize = 128;
 /// produce. `MIN_SUPPORTED_QUERY_ITEMS` is a floor on evaluation, and a store
 /// that will not evaluate a large query fails it through its own error rather
 /// than through this enum.
+///
+/// # The variant this enum does not have
+///
+/// Every variant here names **one factor**. None of them can express a refusal
+/// of the batch's *total size* — the product the module documentation works out
+/// above — and that is the refusal a store in the `FoundationDB` or `DynamoDB`
+/// family would need, because what those systems bound is the transaction
+/// rather than any one row in it.
+///
+/// Such a store cannot route the refusal elsewhere either: `[FROZEN]` VT-25
+/// forbids reporting a capacity refusal through
+/// [`AppendError::Store`](crate::AppendError::Store), which is the channel it
+/// would otherwise reach for.
+///
+/// This enum is `#[non_exhaustive]`, so a variant for it is additive at **any**
+/// time and is not owed to a release. Naming the gap is what is owed now: the
+/// decision it waits on is what floor such a variant would state, and no
+/// adapter in this workspace is in that family to inform the number.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum StoreLimit {
@@ -107,6 +156,31 @@ mod tests {
         assert_eq!(
             StoreLimit::EventsPerBatch.guaranteed_minimum(),
             MIN_SUPPORTED_EVENTS_PER_BATCH
+        );
+    }
+
+    /// The composed floor is the number the module documentation states.
+    ///
+    /// Held to a literal rather than recomputed from the constants, on the same
+    /// argument as its sibling below: the value of this test is that raising any
+    /// floor fails HERE, beside the prose that quotes the total, rather than at
+    /// an adapter that discovers it cannot hold one append.
+    #[test]
+    fn the_three_floors_compose_to_a_stated_number() {
+        let data = MIN_SUPPORTED_EVENTS_PER_BATCH * MIN_SUPPORTED_EVENT_DATA_LEN;
+        let tags =
+            MIN_SUPPORTED_EVENTS_PER_BATCH * MIN_SUPPORTED_TAGS_PER_EVENT * crate::MAX_TAG_LEN;
+        let types = MIN_SUPPORTED_EVENTS_PER_BATCH * crate::MAX_EVENT_TYPE_LEN;
+
+        assert_eq!(data, 8_388_608);
+        assert_eq!(tags, 2_088_960);
+        assert_eq!(types, 32_640);
+        assert_eq!(
+            data + tags + types,
+            10_510_208,
+            "the module documentation states this total, and ES-18 makes the \
+             whole of it one atomic unit. If this moved, a conformant store's \
+             smallest guaranteed append moved with it"
         );
     }
 

@@ -9,6 +9,9 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/happenstance-postgres"
+readme = "README.md"
 # Published from `0.2.0`. The five-crate release set was re-opened at the
 # release review and settled at seven: this crate clears 132 gated tests
 # against a live PostgreSQL 17.10, including the concurrency family at 64

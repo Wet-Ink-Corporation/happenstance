@@ -9,14 +9,9 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-# Still false, and it is a decision rather than an oversight. The suite is green
-# against a live endpoint, so the skeleton marker is gone from this crate — but
-# `0.2.0` ships five crates (`happenstance-core`, `happenstance`,
-# `happenstance-testkit`, `happenstance-sqlite`, `happenstance-cloudflare`) and
-# this is not one of them. `xtask/src/package.rs`'s `reconcile` holds that set
-# honest in both directions, so flipping this flag without also moving that set is
-# a red gate rather than a quiet publish. `deskeleton-and-package-readiness` owns
-# both halves.
+homepage.workspace = true
+documentation = "https://docs.rs/happenstance-neon"
+readme = "README.md"
 # Published from `0.2.0`, with one open clause question stated in the crate
 # root rather than hidden: ES-11's falsifier fired on this adapter, and the
 # clause is `[PROVISIONAL]` pending an ADR. The release set was re-opened at

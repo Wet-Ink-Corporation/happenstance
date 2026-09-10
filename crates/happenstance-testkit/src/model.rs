@@ -684,6 +684,19 @@ pub mod rules {
     /// consults it and this rule does not call it. An adapter running the suite
     /// gets no `.proptest-regressions` file appearing in its tree.
     pub async fn ops_agree_with_the_model<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
+        // `require!`'s expansion, written out. That macro is declared in
+        // `suite.rs`, and `mod model` precedes `mod suite` in `lib.rs`, so under
+        // textual macro scoping it is not in scope here. The shape, the skip and
+        // the reported reason are identical — see `Fixture::READ_YOUR_OWN_WRITES`
+        // for why a store may decline, and why CF-33 forbids the obvious
+        // alternative of waiting for the frontier to catch up.
+        if let Some(reason) = F::READ_YOUR_OWN_WRITES.reason() {
+            return RuleOutcome::Skipped {
+                capability: "READ_YOUR_OWN_WRITES",
+                reason,
+            };
+        }
+
         let strategy = proptest::collection::vec(any_op(), 1..=MAX_OPS);
         let config = Config::default();
         let cases = config.cases;

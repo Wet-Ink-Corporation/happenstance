@@ -40,10 +40,10 @@ use crate::domain::{DecisionModel, DomainEvent};
 /// #[derive(serde::Serialize, serde::Deserialize)]
 /// struct Ev;
 ///
+/// const EV: EventType = EventType::from_static("Ev");
 /// impl DomainEvent for Ev {
-///     const EVENT_TYPES: &'static [EventType] =
-///         &[EventType::from_static("Ev")];
-///     fn event_type(&self) -> EventType { Self::EVENT_TYPES[0].clone() }
+///     const EVENT_TYPES: &'static [EventType] = &[EV];
+///     fn event_type(&self) -> EventType { EV }
 ///     fn tags(&self) -> Tags { Tags::empty() }
 ///     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
 ///         c.encode(self)

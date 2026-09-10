@@ -725,7 +725,35 @@ impl LadybugProjectionStore {
         // Inside the transaction, not before it. A guard evaluated before `BEGIN`
         // lets two commits interleave between the read and the write and both
         // pass.
-        let recorded = recorded_position(&Self::read_checkpoint(&connection, id)?);
+        //
+        // Not a bare `?`, and the reason is a case ADR-0025 §7 does not reach.
+        // §7 measured that LadybugDB aborts the whole transaction ITSELF on a
+        // statement error, so the error path must not issue a `ROLLBACK` — a
+        // second error would mask the first. True, and it is about *statement*
+        // errors. `read_checkpoint` has three failure modes in which the query
+        // SUCCEEDED and the decode did not: `UnreadableRow`,
+        // `MalformedCheckpoint` and `MalformedAuthority`. No statement failed,
+        // so the engine has aborted nothing, and a bare `?` here returns with
+        // the transaction still open — holding a write transaction on the
+        // database for as long as the connection lives, which `:483`'s
+        // "another write transaction is already open on this database" is the
+        // cost of.
+        //
+        // The rollback is issued best-effort and its result deliberately
+        // discarded. That satisfies both halves at once: if the engine did
+        // abort — a statement error reaching here through the same `?` — the
+        // `ROLLBACK` is refused and the refusal is dropped, so the first error
+        // still reaches the caller, which is exactly what §7 is protecting. If
+        // it did not abort, the transaction is closed. Discarding is what makes
+        // the two cases safe to handle with one line.
+        let checkpoint = match Self::read_checkpoint(&connection, id) {
+            Ok(checkpoint) => checkpoint,
+            Err(error) => {
+                let _ = connection.query(ROLLBACK);
+                return Err(error);
+            }
+        };
+        let recorded = recorded_position(&checkpoint);
         if let Some(current) = recorded
             && position < current
         {

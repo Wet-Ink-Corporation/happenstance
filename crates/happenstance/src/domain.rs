@@ -37,8 +37,17 @@ use crate::codec::{Codec, CodecError};
 ///     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
 ///         c.encode(self)
 ///     }
-///     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
-///         -> Result<Self, CodecError> { c.decode(d) }
+///     fn decode<C: Codec>(c: &C, t: &EventType, d: &Bytes)
+///         -> Result<Self, CodecError> {
+///         // The event type is a GUARD, not decoration. Without it
+///         // a payload written under another type decodes silently
+///         // into this one: serde reads bytes, never the envelope.
+///         if !Self::EVENT_TYPES.contains(t) {
+///             let event_type = t.clone();
+///             return Err(CodecError::UnknownEventType { event_type });
+///         }
+///         c.decode(d)
+///     }
 /// }
 ///
 /// #[derive(Clone)]
@@ -177,15 +186,14 @@ pub trait DomainEvent: Sized {
 /// #[derive(serde::Serialize, serde::Deserialize)]
 /// enum Seat { Taken, Freed }
 ///
+/// const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
+/// const SEAT_FREED: EventType = EventType::from_static("SeatFreed");
 /// impl DomainEvent for Seat {
-///     const EVENT_TYPES: &'static [EventType] = &[
-///         EventType::from_static("SeatTaken"),
-///         EventType::from_static("SeatFreed"),
-///     ];
+/// const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN, SEAT_FREED];
 ///     fn event_type(&self) -> EventType {
 ///         match self {
-///             Self::Taken => Self::EVENT_TYPES[0].clone(),
-///             Self::Freed => Self::EVENT_TYPES[1].clone(),
+///         Self::Taken => SEAT_TAKEN,
+///         Self::Freed => SEAT_FREED,
 ///         }
 ///     }
 ///     // The event carries the tags its boundary is scoped by. One

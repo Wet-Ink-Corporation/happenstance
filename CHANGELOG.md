@@ -33,6 +33,50 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **Two conformance rules closing the append condition's multi-tag gap, 93 → 95**
+  (ES-27), with the wrong implementation they reject. One new mutant lands with
+  them.
+
+  **`condition_matches_on_every_tag_in_an_item`** rejects
+  `FirstTagOnlyConditionStore`: a store that keys its compare-and-swap on
+  `tags[0]` and ignores the rest, so a boundary the caller drew as *(course c1
+  AND student s1)* is enforced as *(course c1)* — strictly wider, so commands
+  that share no consistency boundary begin to conflict. That is the construction
+  a conditional-write KV store is pushed toward rather than a strawman: a
+  condition has to become a **key** there, and a key is one value.
+  **`condition_matching_every_tag_rejects_the_append`** is its liveness mirror,
+  so the admission the first rule requires is a verdict rather than an inability
+  to reject anything.
+
+  Nothing could see the defect before, because **no append condition anywhere in
+  the suite had ever carried two tags**. The read path had been held to the same
+  proposition since the beginning (`query_item_rejects_partial_tag_overlap`); the
+  condition path had not, and the two are answered by different machinery in any
+  store that does not hand both to one query engine. Every adapter in this
+  workspace passes for free, which is the finding rather than the reassurance.
+
+  **Adapter authors: this is a minor bump to `happenstance-testkit` that can turn
+  a passing adapter red**, which is the case the front page tells you to pin
+  exactly for. It lands before the first real publication precisely so that
+  nobody is pinned to a suite without it.
+
+- **`Fixture::READ_YOUR_OWN_WRITES`**, a defaulted capability constant. Declining
+  it makes the generated model family report a stated skip instead of running.
+
+  Defaulted to `SUPPORTED` — the opposite polarity to every other capability on
+  the trait, and deliberately: read-your-own-writes is what almost every store
+  offers for free, so a fixture that says nothing must keep being held to it.
+  Only a store whose reads carry a visibility frontier need decline, and both
+  `happenstance-postgres` and `happenstance-neon` now do, each in its own words.
+
+  It exists because the model family predicts whether a conditional append will
+  be **rejected** from what a read **showed** it, and on a frontier store those
+  are deliberately different sets — the condition asks what the store *holds*.
+  Waiting for the frontier is not available either: `[FROZEN]` CF-33 forbids a
+  conformance rule from reading a clock, and names this exact pathology in its
+  own `Rejects:` — a rule that passes on the author's machine and fails on a
+  loaded CI runner.
+
 - **`happenstance-postgres` and `happenstance-neon` join the published set**, at
   the `0.2.0` release review. Both previously held `0.0.0` placeholders, which are
   not predecessors: there is no upgrade path from one because there was never
@@ -40,10 +84,12 @@ not the same as what a user needed to be told.
 
   The release set was **five, decided**, and the owner re-opened it. What changed
   between the two decisions is that both crates stopped being skeletons:
-  `happenstance-postgres` clears 132 gated tests against a live PostgreSQL 17.10
-  including the concurrency family at 64 contenders — the only adapter here that
-  clears that family against a store which does not serialise its writers — and
-  `happenstance-neon` clears 124 against a live Neon endpoint.
+  `happenstance-postgres` clears 107 of 107 gated tests in its event-store binary
+  against a live PostgreSQL 17.10, including the concurrency family at 64
+  contenders — the first adapter here to clear that family against a store which
+  does not serialise its writers, and `happenstance-neon` is the second — and
+  clears the projection suite beside it. `happenstance-neon` clears its own
+  suites against a live Neon endpoint.
 
   `happenstance-neon` ships with **one conformance rule it does not pass**:
   `read_result_is_stable_under_concurrent_append` is a network race for a store

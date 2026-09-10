@@ -319,17 +319,27 @@ else, so its examples compile and its citations resolve.
 Keep the reasoning in the commit message. A diff shows what changed; the message
 should say what constraint made that the right change.
 
-Pull requests run an extra `cargo-semver-checks` job over all five publishable
-crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
+Pull requests run an extra `cargo-semver-checks` job over five of the seven
+publishable crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
 `happenstance-sqlite` and `happenstance-cloudflare` — with `--baseline-rev`
 pointed at the commit the branch started from. A breaking change is fine — an
 accidental one is not.
 
-The crates are named rather than counted, because the count was wrong here: this
-paragraph said *three* from the release that had three until the `0.2.0`
-closeout, through two phases that each added one. A number in a document nobody
-re-reads is a number that goes stale silently, and `xtask/src/package.rs`'s
-`PUBLISHABLE` is the list that is actually held against the manifests.
+**`happenstance-postgres` and `happenstance-neon` are absent deliberately, and
+only from this baseline.** Neither had a published version before `0.2.0`, so
+diffing their surface against the base commit compares two states no consumer
+could ever install, and every difference it finds is a break against nothing.
+They rejoin when the registry carries `0.2.0` — the same moment the registry
+baseline turns on, which is the one that watches them for the thing that matters.
+
+The crates are named rather than counted, because the count has now been wrong
+here **twice**. This paragraph said *three* from the release that had three,
+through two phases that each added one; it then said *five* through the release
+that made the set seven. A number in a document nobody re-reads is a number that
+goes stale silently, and `xtask/src/package.rs`'s `PUBLISHABLE` is the list
+actually held against the manifests. `stated_crate_counts` in
+`xtask/src/lints.rs` now reads this paragraph on every run, and it was written
+because of this sentence.
 
 Know what that job proves and what it does not. It proves *this pull request*
 does not break the API it branched from. It proves nothing about the last

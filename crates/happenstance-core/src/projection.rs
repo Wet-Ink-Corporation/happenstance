@@ -16,25 +16,35 @@
 //! §4's PS-2 requires the suite to be green against **two adapters at opposite
 //! ends of the batch-shape axis**, and its *Rejects* field names the alternative
 //! verbatim: the schedule that freezes this port against `MemoryProjectionStore`
-//! and one in-process transaction. Both shapes that clear the suite today —
-//! `MemoryProjectionStore`, which applies each write as it is made, and the
-//! testkit's buffering variant, which replays a buffered write set at commit —
-//! are instruments this workspace wrote. Two instruments at opposite ends of an
-//! axis are worth having and are not two adapters.
+//! and one in-process transaction. That schedule has been overtaken. **Four
+//! adapters over storage this workspace does not fully control now clear all
+//! seventeen rules** — `happenstance-sqlite`, `happenstance-postgres`,
+//! `happenstance-neon` and `happenstance-ladybug` — alongside the two
+//! testkit-side instruments. The bar did not move when they arrived, and the
+//! reason it did not is the point of the paragraph below.
 //!
 //! (The name is not a link, for the reason the crate root gives: it is behind
 //! `memory`, and `unstable-projection` without `memory` is a configuration this
 //! module renders in.)
 //!
-//! **What would clear it:** the same suite green against a projection adapter
-//! over storage this workspace does not control — Ladybug's graph store, Neon
-//! over one-shot HTTP, or a Durable Object — where the transaction API pushes
-//! back instead of agreeing.
+//! **Why more adapters do not clear it.** PS-2 names *two adapters at opposite
+//! ends of the batch-shape axis*, and every implementation there has ever been
+//! sits at one end: an **owned, buffered write set** replayed at commit. The far
+//! end — a batch holding a **live transaction** — is not merely unbuilt, it is
+//! **unreachable through this port's own signatures**. `begin` is total,
+//! synchronous and infallible, and every route to a real driver's transaction is
+//! `async` and fallible, so no driver whose transaction is acquired
+//! asynchronously can be that far end. A skeleton did not report this because
+//! `todo!()` has type `!` and coerces to anything; `happenstance-postgres`
+//! discovered it against `sqlx` and `happenstance-ladybug` preserved a compiling
+//! counter-example at `experiments/live-handle-projection-batch/`.
 //!
-//! **What is not decided here:** whether 0.1 ships with the gate still closed.
-//! That is `publication-and-positioning`'s call at phase 12 (`RUNBOOK.md:601`,
-//! *"6, decided at 12"*), and this module states the evidence rather than the
-//! verdict.
+//! So the freeze waits on a **replacement axis**, not on another adapter, and
+//! writing "what would clear it" as a list of adapters was the mistake this
+//! paragraph replaces. ADR-0060 re-evaluates the axis.
+//!
+//! **What is not decided here:** which axis replaces it. `0.2.0` ships with the
+//! gate still closed, and this module states the evidence rather than the verdict.
 //!
 //! Treat the shape as subject to change: a rule may be added, and a signature may
 //! move, without a major version, because the feature is what carries the

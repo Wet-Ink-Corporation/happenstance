@@ -192,6 +192,8 @@ macro_rules! for_each_event_store_rule {
             // --- Append conditions -----------------------------------------
             condition_without_after_rejects_any_match,
             condition_without_after_allows_non_match,
+            condition_matches_on_every_tag_in_an_item,
+            condition_matching_every_tag_rejects_the_append,
             condition_after_ignores_events_at_the_boundary,
             condition_after_rejects_events_beyond_the_boundary,
             condition_after_ignores_non_matching_events,

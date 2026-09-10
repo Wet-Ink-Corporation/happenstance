@@ -2,10 +2,21 @@
 //!
 //! # Status
 //!
-//! Implemented, and run rather than asserted: **101 of 101** gated tests pass
-//! against a live PostgreSQL 17.10 — the 89 rules of `event_store_conformance!`,
+//! Implemented, and run rather than asserted: **107 of 107** gated tests pass
+//! against a live PostgreSQL 17.10 — the 95 rules of `event_store_conformance!`,
 //! the 5 of `event_store_concurrency_conformance!` at `CONTENDERS = 64`, the
 //! model family, and this crate's own six.
+//!
+//! One of those 105 is a **stated declension rather than a run**, and it is named
+//! here rather than left to be discovered in a log: the fixture declines
+//! `READ_YOUR_OWN_WRITES`, so `ops_agree_with_the_model` reports a skip carrying
+//! the reason. The model family predicts whether a conditional append will be
+//! rejected from what a read showed it, and on this store those are deliberately
+//! different sets — see *What this store costs a caller* on the crate root. The
+//! counts above read 101 and 89 until the `0.2.0` pass. The family was 93 rules
+//! and had been since before this crate cleared it, so both numbers were
+//! arithmetic on a stale one; it is 95 now, because ES-27 gained the two rules
+//! that check a condition item's tags are AND-ed rather than keyed on the first.
 //!
 //! The concurrency family is the one that matters most: it is the first time an
 //! adapter in this portfolio has cleared it against a store whose writers are
@@ -14,6 +25,31 @@
 //! The projection store beside this one is implemented too, and the crate carries
 //! no `#![allow(clippy::todo)]` any more — it left with the last stub, which is
 //! the contract it was written under.
+//!
+//! # Cancellation
+//!
+//! **A dropped `append` future cannot be cancelled by this adapter, and the
+//! batch may already have committed.** ES-23 is `[FROZEN]` and obliges every
+//! adapter to say which of its two outcomes it has; this is ours, and it is the
+//! less comfortable one.
+//!
+//! The mechanism is `on_runtime`, which is `Handle::spawn(work).await`. Dropping
+//! the caller's future drops only the `JoinHandle`. Tokio **detaches** a spawned
+//! task rather than cancelling it, so the transaction underneath carries on: the
+//! `INSERT` runs, the `COMMIT` runs, and there is nobody left to tell. Nothing
+//! in this adapter observes the drop, so nothing can react to it.
+//!
+//! A caller **MUST NOT** read a dropped `append` future as evidence either way —
+//! not that it committed, and not that it did not. The resolution is ES-24's:
+//! reissue the identical batch. Event identity makes the reissue idempotent, so
+//! the second attempt either lands (the first did not commit) or is refused as a
+//! duplicate (it did), and both answers are true ones.
+//!
+//! This is precisely the shape ES-23's own `Rejects:` names, reached through
+//! `spawn` rather than `spawn_blocking`. It is **not** `happenstance-sqlite`'s
+//! answer and must not be described in its words: that adapter says there is
+//! nothing to drop, because its `append` has no suspension point at all. Ours
+//! has one, and what is on the other side of it keeps running.
 //!
 //! # The schema
 //!
@@ -304,6 +340,7 @@ impl PostgresEventStore {
     /// `tests/rule_controls.rs`, and recorded — it is not a second
     /// deliberately-broken fixture kept alive as a maintained instrument.
     #[cfg(feature = "naive-arm")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "naive-arm")))]
     pub fn new_naive(pool: PgPool) -> Self {
         Self {
             visibility: Visibility::Naive,

@@ -10,7 +10,7 @@ later `/redkiln:kb-ingest`, and the ones that bind code get a long-form record i
 `references/adr/`. Atoms are never hand-written.
 
 **Scope.** RUNBOOK phases 10b, 11 and 12, to the point of *ready to publish*.
-The release itself — `cargo publish` of the five crates, the `v0.2.0` tag, the
+The release itself — `cargo publish` of the seven crates, the `v0.2.0` tag, the
 GitHub release, the repository visibility flip and the yank of `0.2.0-alpha.1` —
 is deliberately not done here and is listed at the foot.
 
@@ -653,11 +653,24 @@ says which it means.
    git-ignored (`.gitignore:75`) and nothing in this session committed, logged or
    echoed it. Rotating it afterwards is your call, and worth taking.
 
-3. **The release itself, and the order is forced.** `cargo publish` for the five
-   crates as core → testkit → happenstance → sqlite → cloudflare, because both
-   adapters dev-depend on the testkit at the workspace version. Then the `v0.2.0`
-   tag, the GitHub release, yanking `0.2.0-alpha.1`, and flipping the repository
-   from `INTERNAL` to public.
+3. **The release itself, and the order is forced.** `cargo publish` for the
+   **seven** crates as core → testkit → happenstance → sqlite → cloudflare →
+   postgres → neon, because all four adapters dev-depend on the testkit at the
+   workspace version. Use `--locked` on every one so the resolve cannot drift
+   mid-sequence, and allow index propagation between steps.
+
+   **Flip the repository from `INTERNAL` to public immediately BEFORE the first
+   publish, not after the tag.** The `repository` URL is permanent crates.io
+   metadata and the only outbound link on the page; while the repo is private it
+   404s for an anonymous reader, and that window is avoidable at zero cost. Set
+   item 5's Actions setting first. Then the `v0.2.0` tag, the GitHub release, and
+   yanking `0.2.0-alpha.1`.
+
+   This item said **five** and named five crates until the `0.2.0` closeout, and
+   item 4 below had corrected it fourteen lines further down since the review —
+   so the document disagreed with itself and the half an operator would actually
+   type was the wrong one. That is why it is corrected here rather than only
+   there.
 
    Then, and only then, five things that cannot be done before the registry
    carries `0.2.0`: run `scripts/stranger-install-smoke.sh`; add the

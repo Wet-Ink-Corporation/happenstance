@@ -1,5 +1,25 @@
 //! The Neon-backed [`EventStore`], and the buffered thing it calls a stream.
 //!
+//! # Cancellation
+//!
+//! **A dropped `append` future MAY already have committed, and this adapter
+//! cannot tell you which.** ES-23 is `[FROZEN]` and obliges every adapter to
+//! state which of its two outcomes it has; this is ours.
+//!
+//! `append` awaits one `SqlTransport::round_trip` per attempt. This crate owns
+//! no HTTP client — [`NullTransport`] is the only implementation in `src/` —
+//! so what dropping the future does to a request already in flight is a
+//! property of whatever transport a caller supplied, and not something this
+//! adapter can promise anything about. The endpoint may well execute the batch
+//! and discard the response nobody is waiting for.
+//!
+//! The retry loop widens the window rather than narrowing it: a drop can land
+//! between attempts, after an earlier attempt has already reached the endpoint.
+//!
+//! A caller **MUST NOT** read a dropped future as evidence either way. ES-24
+//! is the resolution: reissue the identical batch, and let event identity make
+//! the reissue idempotent.
+//!
 //! # Why the bare flavour
 //!
 //! [`SendEventStore`](happenstance_core::SendEventStore) would require every
@@ -992,13 +1012,21 @@ fn as_i64(position: SequencePosition) -> i64 {
 /// of two independent requests to a proxy that hands each to whichever backend it
 /// likes. There is no session, no queue and no protocol ordering between them.
 ///
-/// This is measured rather than hedged: over the conformance transport,
-/// `read_result_is_stable_under_concurrent_append` fails 3 runs in 20 over
-/// HTTP/1.1 and 1 in 40 over a single HTTP/2 connection — always in the same
-/// direction, with the read seeing an event appended after it was issued. A
-/// caller that needs the two ordered must sequence them itself; this store has
-/// nothing it could do about it, and the transport's own documentation carries
-/// the numbers.
+/// This is observed rather than hedged: over the conformance transport,
+/// `read_result_is_stable_under_concurrent_append` fails **intermittently**, and
+/// it fails less often over a single multiplexed HTTP/2 connection than over
+/// HTTP/1.1 with a default pool — which is why the reference transport uses the
+/// former. Every observed failure was in the same direction, with the read
+/// seeing an event appended after it was issued.
+///
+/// **No rate is stated here, and the omission is deliberate.** Frequencies were
+/// counted during phase 10b bring-up, but no raw log of that session was
+/// retained, and every other measurement this project cites lives beside its own
+/// output under `experiments/`. Stating a ratio no committed artefact backs would
+/// make this page the one place that rule is broken, on the number carried
+/// furthest. What a caller needs is the direction and the fact of intermittency,
+/// and both are above. A caller that needs the two operations ordered must
+/// sequence them itself; this store has nothing it could do about it.
 ///
 /// ADR-0061 settled the clause question those numbers raised. ES-11's sufficiency
 /// condition for an asynchronous driver — *"a read spawned at its first poll and

@@ -4942,6 +4942,102 @@ pub mod rules {
         RuleOutcome::Ran
     }
 
+    /// An event carrying only SOME of a condition item's tags does not match it,
+    /// so the append stands.
+    ///
+    /// ES-27 with two tags, which no other rule in this suite has. The read side
+    /// checks the same proposition — `query_item_rejects_partial_tag_overlap`
+    /// asserts *"an event missing any of the item's tags must not match"* — and
+    /// the append-condition side did not, because every condition built anywhere
+    /// in this testkit carried exactly one tag pair.
+    ///
+    /// # What it rejects
+    ///
+    /// `FirstTagOnlyConditionStore`: a store that keys its compare-and-swap on
+    /// `tags[0]` and ignores the rest. That is not a strawman shape — it is the
+    /// natural construction for a conditional-write KV store, where the condition
+    /// has to become a **key** and a key is one value. Such a store rejects this
+    /// append because `course=c1` matches, and a consistency boundary the caller
+    /// drew as *(course c1 AND student s1)* is silently enforced as *(course c1)*:
+    /// strictly wider, so commands that share no boundary begin to conflict.
+    ///
+    /// Every adapter in this workspace passes for free, and that is the finding
+    /// rather than the reassurance: all five hand an arbitrary type/tag
+    /// expression to an engine that evaluates it, so the property is bought by a
+    /// shared storage shape rather than by anything the port required.
+    pub async fn condition_matches_on_every_tag_in_an_item<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Carries the first tag of the condition's item and not the second.
+        append_ok(&store, &[tagged_event("Enrolled", &[("course", "c1")])]).await;
+
+        let result = store
+            .append(
+                &[event("New")],
+                Some(&condition(query_tagged(&[
+                    ("course", "c1"),
+                    ("student", "s1"),
+                ]))),
+            )
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "a condition item's tags are AND-ed: the stored event carries \
+             `course=c1` but not `student=s1`, so it does not match the item and \
+             cannot violate the condition. Rejecting here enforces a WIDER \
+             boundary than the caller drew, which makes commands that share no \
+             boundary conflict. Got {result:?}"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// An event carrying ALL of a condition item's tags does match it, so the
+    /// append is refused.
+    ///
+    /// The liveness mirror of the rule above, and it is what makes that one a
+    /// verdict rather than an absence. Without it a store that never rejected
+    /// anything at all would pass the partial-overlap case for the wrong reason,
+    /// which is the shape CF-1 requires a rule to rule out.
+    pub async fn condition_matching_every_tag_rejects_the_append<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // Carries BOTH tags of the condition's item.
+        append_ok(
+            &store,
+            &[tagged_event(
+                "Enrolled",
+                &[("course", "c1"), ("student", "s1")],
+            )],
+        )
+        .await;
+
+        let result = store
+            .append(
+                &[event("New")],
+                Some(&condition(query_tagged(&[
+                    ("course", "c1"),
+                    ("student", "s1"),
+                ]))),
+            )
+            .await;
+
+        assert!(
+            matches!(result, Err(AppendError::ConditionViolated(_))),
+            "an event carrying every tag of the condition item matches it and \
+             must reject the append, got {result:?}"
+        );
+
+        RuleOutcome::Ran
+    }
+
     /// `after` is exclusive: an event exactly at the boundary was already seen
     /// by the caller and must not reject the append.
     pub async fn condition_after_ignores_events_at_the_boundary<F: Fixture>(

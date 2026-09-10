@@ -918,6 +918,189 @@ fn prose_of(path: &str, body: &str) -> String {
     }
 }
 
+/// Every stated count of *published crates* matches the set that ships.
+///
+/// # The defect this exists for, and why the existing check could not see it
+///
+/// `xtask/src/package.rs`'s `reconcile` holds `PUBLISHABLE` against what Cargo
+/// will actually publish, in both directions, and it is a real check. What it
+/// cannot see is prose. When `e597c34` moved the release set from five crates to
+/// seven, `reconcile` stayed green — correctly — while nine documents went on
+/// saying five, and two of those were crate roots. `cargo publish` would have
+/// frozen both on docs.rs, telling a reader that the crate they were reading was
+/// unpublished.
+///
+/// [`stated_rule_counts`] is the same shape aimed at conformance rules and it
+/// works. The lesson is that correcting an instance is not retiring a class, and
+/// a class has more than one axis.
+///
+/// # What it does not verify
+///
+/// Only a **cardinal qualifying `crate` or `crates`**, only in a paragraph that
+/// also mentions publication, only outside code fences, and only in the sixteen
+/// documents above. It says nothing about which crates are named, nothing about
+/// counts of adapters or examples or dependencies, and nothing about whether the
+/// surrounding sentence is otherwise true. A README claiming a crate passes a
+/// suite it has never run sails through, exactly as it does for rule counts.
+///
+/// One limit is worth naming because a test found it rather than a reviewer: a
+/// paragraph that mentions publication **and** counts every crate in the
+/// workspace — "nine crates in all, which nothing publishes" — is reported, and
+/// the count it names is not the published one. That is defensible rather than
+/// wrong: a paragraph doing both things at once is one worth looking at, and the
+/// repair is to say *which* crates. But it is a false positive to whoever meets
+/// it, so it is written down here rather than discovered.
+///
+/// Three exclusions keep it usable rather than merely strict: a cardinal whose
+/// noun is qualified by one of [`NOT_OUR_CRATES`] is counting somebody else's
+/// crates; a paragraph carrying one of [`HISTORICAL`] is a record of what a
+/// document used to say, which this repository writes deliberately and often;
+/// and `per` before the noun makes it a rate.
+///
+/// # Errors
+///
+/// Returns an error if a document cannot be read, if `PUBLISHABLE` cannot be
+/// parsed, or if any document states a published-crate count this workspace does
+/// not have.
+fn stated_crate_counts() -> Result<()> {
+    let root = workspace_root()?;
+    let published = publishable_from_package_rs(&root)?.len();
+
+    let mut problems = Vec::new();
+    for doc in CRATE_SET_BEARING_DOCS {
+        let body = fs::read_to_string(root.join(doc)).with_context(|| format!("reading {doc}"))?;
+        for (line, phrase, count) in crate_count_claims(&prose_of(doc, &body)) {
+            if count != published {
+                problems.push(format!(
+                    "{doc}:{line} — `{phrase}` states a published-crate count this \
+                     workspace does not have. `PUBLISHABLE` names {published}."
+                ));
+            }
+        }
+    }
+
+    if problems.is_empty() {
+        println!("  every stated published-crate count is {published}");
+        return Ok(());
+    }
+    for problem in &problems {
+        println!("  {problem}");
+    }
+    bail!(
+        "{} stale published-crate count(s). The release set is derived from \
+         `PUBLISHABLE`, which `reconcile` holds against the manifests, so the code \
+         is right and the sentence is wrong. Spell the members rather than the \
+         number where you can: a count is what goes stale.",
+        problems.len()
+    )
+}
+
+/// The sentence containing word `i`, lowercased and joined.
+///
+/// Bounded by the nearest word ending in `.`, `!` or `?` on either side. Crude,
+/// and deliberately so: the alternative is a sentence splitter, and one that
+/// mishandles `0.2.0` or `e.g.` would silence claims rather than report them.
+/// Erring toward a *wider* window makes this check skip more, never fire more —
+/// so its failure mode is a missed stale count, which the next reader still sees,
+/// rather than a false alarm, which gets the step switched off.
+fn sentence_around(words: &[String], i: usize) -> Option<String> {
+    let ends = |w: &String| w.ends_with('.') || w.ends_with('!') || w.ends_with('?');
+
+    let start = words[..i].iter().rposition(ends).map_or(0, |j| j + 1);
+    let end = words[i..]
+        .iter()
+        .position(ends)
+        .map_or(words.len(), |j| i + j + 1);
+
+    words.get(start..end).map(|s| s.join(" "))
+}
+
+/// Every `(line, phrase, count)` a document's prose claims about published crates.
+///
+/// The paragraph machinery is [`rule_count_claims`]', for the reason that one
+/// gives: a claim wraps, and reading single lines drops half of them.
+fn crate_count_claims(md: &str) -> Vec<(usize, String, usize)> {
+    let mut claims = Vec::new();
+    let mut fenced = false;
+    let mut paragraphs: Vec<Vec<(String, usize)>> = vec![Vec::new()];
+    for (n, raw) in md.lines().enumerate() {
+        let line = raw.trim().trim_start_matches('>').trim();
+        if raw.trim_start().starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced || line.is_empty() {
+            paragraphs.push(Vec::new());
+            continue;
+        }
+        if let Some(current) = paragraphs.last_mut() {
+            current.extend(line.split_whitespace().map(|w| (w.to_owned(), n + 1)));
+        }
+    }
+
+    for words in paragraphs {
+        let lowered: Vec<String> = words.iter().map(|(w, _)| w.to_ascii_lowercase()).collect();
+
+        let about_publication = lowered
+            .iter()
+            .any(|w| RELEASE_WORDS.iter().any(|r| w.contains(r)));
+        if !about_publication {
+            continue;
+        }
+        for (i, (word, line)) in words.iter().enumerate() {
+            let noun = bare(word).to_ascii_lowercase();
+            if noun != "crate" && noun != "crates" {
+                continue;
+            }
+            if i > 0 && bare(&words[i - 1].0).eq_ignore_ascii_case("per") {
+                continue;
+            }
+            if i > 0 {
+                let qualifier = bare(&words[i - 1].0).to_ascii_lowercase();
+                if NOT_OUR_CRATES.iter().any(|n| qualifier.contains(n)) {
+                    continue;
+                }
+            }
+            if let Some((next, _)) = words.get(i + 1) {
+                let following = bare(next).to_ascii_lowercase();
+                if CRATE_COMPOUNDS.iter().any(|n| following == *n) {
+                    continue;
+                }
+            }
+            // The historical escape is scoped to the SENTENCE, not the paragraph,
+            // and that distinction was found by trying to break this check rather
+            // than by reading it. A paragraph-wide test looks right and is far too
+            // coarse here: this repository's house style is to correct in place and
+            // leave the correction beside the correct text, so a single paragraph
+            // routinely carries a live claim AND a note about what it used to say.
+            // Excluding the paragraph excluded the live claim with it — verified by
+            // injecting "`0.2.0` publishes five crates" into a crate root whose next
+            // sentence contained "until the", and watching this step stay green.
+            if sentence_around(&lowered, i)
+                .is_some_and(|sentence| HISTORICAL.iter().any(|h| sentence.contains(h)))
+            {
+                continue;
+            }
+            for back in 1..=2usize {
+                let Some(candidate) = i.checked_sub(back).map(|j| bare(&words[j].0)) else {
+                    break;
+                };
+                if let Some(count) = cardinal(candidate) {
+                    let phrase = words[i - back..=i]
+                        .iter()
+                        .map(|(w, _)| bare(w))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    claims.push((*line, phrase, count));
+                    break;
+                }
+            }
+        }
+    }
+
+    claims
+}
+
 /// Every `<cardinal> rule(s)` claim in a document that is about the suite, as
 /// `(line, phrase, count)`.
 ///
@@ -1023,6 +1206,92 @@ fn true_rule_counts(root: &Path) -> Result<Vec<(usize, String)>> {
 /// what was true at a release, and a released entry saying *"sixteen rules"*
 /// was true then. Holding it to today's count would demand rewriting history to
 /// keep a check green, which is the opposite of what a changelog is for.
+/// The documents whose prose states how many crates this workspace publishes.
+///
+/// A different axis from [`COUNT_BEARING_DOCS`] and therefore a different array,
+/// which is the whole finding rather than an accident of layout. That one holds
+/// four documents and every entry it checks is a count of *conformance rules* —
+/// it was built after a README shipped "two rules of seventeen" for fifteen
+/// commits, and it works. The release set then moved from five crates to seven
+/// at `e597c34`, in the manifests and in `PUBLISHABLE`, whose `reconcile` is a
+/// genuine two-way check — and the tree stayed green while **nine** documents
+/// went on saying five, two of them crate roots that `cargo publish` would have
+/// made permanent on docs.rs.
+///
+/// So the repository built the right instrument for the right defect and then
+/// let the same defect recur one axis over. This array is that axis.
+///
+/// Every published crate's root and README is here, because those are the two
+/// surfaces publication freezes. `CHANGELOG.md` is deliberately absent: its
+/// scope sentence is already held by [`changelog_scope_matches_publishable`],
+/// and its dated entries are historical records that must keep saying what was
+/// true when they were written.
+const CRATE_SET_BEARING_DOCS: [&str; 16] = [
+    "README.md",
+    "CLAUDE.md",
+    "CONTRIBUTING.md",
+    "crates/happenstance/src/lib.rs",
+    "crates/happenstance/README.md",
+    "crates/happenstance-core/src/lib.rs",
+    "crates/happenstance-core/README.md",
+    "crates/happenstance-testkit/src/lib.rs",
+    "crates/happenstance-testkit/README.md",
+    "crates/happenstance-sqlite/src/lib.rs",
+    "crates/happenstance-sqlite/README.md",
+    "crates/happenstance-cloudflare/src/lib.rs",
+    "crates/happenstance-cloudflare/README.md",
+    "crates/happenstance-postgres/src/lib.rs",
+    "crates/happenstance-postgres/README.md",
+    "crates/happenstance-neon/src/lib.rs",
+];
+
+/// The words that make a paragraph one about the *release set*.
+///
+/// Deliberately about publication rather than about crates in general. A
+/// paragraph counting adapters, examples or dependencies is not making this
+/// claim, and a check that read those would be switched off the first week.
+const RELEASE_WORDS: [&str; 5] = ["publish", "published", "publishes", "crates.io", "registry"];
+
+/// Nouns that make a nearby cardinal a count of something other than our crates.
+///
+/// `README.md` says "five of the five **database** crates here declare no
+/// `rust-version`", which is a true claim about third-party driver crates and
+/// the exact false positive that would teach someone to delete this step.
+/// Nouns that make `crate` the *first half of a compound* rather than the thing
+/// being counted.
+///
+/// "the two **crate roots** argued from it" counts pages, not published crates,
+/// and `CLAUDE.md` says exactly that in the paragraph recording what the release
+/// set used to be. A check that read it would be reporting on its own prose
+/// about the defect it exists to catch, which is the fastest way to have a step
+/// switched off.
+const CRATE_COMPOUNDS: [&str; 8] = [
+    "root", "roots", "name", "names", "author", "authors", "version", "versions",
+];
+
+const NOT_OUR_CRATES: [&str; 6] = [
+    "database",
+    "driver",
+    "dependency",
+    "third-party",
+    "external",
+    "upstream",
+];
+
+/// Phrases that mark a paragraph as a record of what a document *used to* say.
+///
+/// This repository corrects in place and keeps the correction visible, so its
+/// prose is full of true sentences about false ones. A check that could not tell
+/// those apart would make the house style unwritable.
+const HISTORICAL: [&str; 6] = [
+    "used to",
+    "previously",
+    "until the",
+    "has since",
+    "no longer",
+    "stayed green",
+];
+
 const COUNT_BEARING_DOCS: [&str; 4] = [
     TESTKIT_README,
     "crates/happenstance-testkit/src/lib.rs",
@@ -1116,6 +1385,14 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // `spec-trace` rather than against prose, and this is the thing that makes
     // "against `spec-trace`" mean something on every run rather than once.
     runbook_clause_ledgers_match_the_specification()?;
+
+    // The fourth, bundled here for the same two reasons: a document held to the
+    // tree, and neither `main.rs`'s `REQUIRED` array nor `affected.rs`'s export
+    // scan is this change's to edit. It is the crate-set axis of the check three
+    // lines down — see `stated_crate_counts` for why one array could not serve
+    // both, and for the nine documents that went stale while `reconcile` stayed
+    // green.
+    stated_crate_counts()?;
 
     let root = workspace_root()?;
     let counts = true_rule_counts(&root)?;
@@ -2684,6 +2961,49 @@ unstable-projection = []
 
     /// Digits and words are the same claim, and a hyphenated compound is one
     /// number rather than two.
+    /// The claim reader finds a wrapped count and ignores the three near-misses.
+    ///
+    /// Every arm here is a real sentence from this repository or a near neighbour
+    /// of one, because a parser tested only on strings its author invented is
+    /// tested on the author's assumptions.
+    #[test]
+    fn crate_count_claims_reads_publication_paragraphs_only() {
+        let found = crate_count_claims(
+            "`0.2.0` publishes seven
+crates, and the set is derived.
+
+             Five of the five database crates here declare no `rust-version`,
+             which the registry never sees.
+
+             The two crate roots argued from it after it stopped being true,
+             which is why they were published wrong.
+",
+        );
+
+        assert_eq!(
+            found.len(),
+            1,
+            "expected exactly the publication claim, got {found:?}"
+        );
+        assert_eq!(found[0].2, 7, "the count must survive the line break");
+    }
+
+    /// A historical sentence is not a claim about today.
+    ///
+    /// This repository corrects in place and leaves the correction visible, so
+    /// its prose is full of true sentences about false ones. A check that read
+    /// those as live claims would make the house style unwritable — and the
+    /// paragraph it would fire on first is the one explaining this very defect.
+    #[test]
+    fn a_recorded_correction_is_not_read_as_a_live_claim() {
+        let found = crate_count_claims(
+            "This page previously said `0.2.0` publishes five crates, and the
+             release set had already moved to seven.
+",
+        );
+        assert!(found.is_empty(), "expected no live claim, got {found:?}");
+    }
+
     #[test]
     fn cardinals_are_read_in_both_spellings() {
         assert_eq!(cardinal("17"), Some(17));

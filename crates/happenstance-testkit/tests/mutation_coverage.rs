@@ -1182,6 +1182,7 @@ const REGISTRY: &[Declared] = &[
             "condition_without_after_rejects_any_match",
             "condition_after_rejects_events_beyond_the_boundary",
             "condition_matches_on_tags",
+            "condition_matching_every_tag_rejects_the_append",
             "condition_rejection_is_reported_as_condition_violated",
             "racing_conditional_appends_elect_one_winner",
             "interleaved_appends_on_one_handle_elect_one_winner",
@@ -1190,6 +1191,14 @@ const REGISTRY: &[Declared] = &[
              database reports `23505 unique_violation` and the adapter passes the \
              driver error straight through. Callers distinguish *retry* from \
              *something broke* on this alone.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
+        name: "FirstTagOnlyConditionStore",
+        kind: Kind::Mutant,
+        fails: &["condition_matches_on_every_tag_in_an_item"],
+        provenance: "the shape a conditional-write KV store reaches for by construction:              a condition has to become a KEY there, and a key is one value, so the              adapter keys on `tags[0]` and every other tag narrows nothing. The              boundary the caller drew is then enforced strictly WIDER than they drew              it, and a store that refuses too much looks correct until throughput              matters. ES-27 names the gap in its own text.",
         mode: FailureMode::Assertion,
         expect: &[],
     },
@@ -1238,7 +1247,10 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "TagBlindConditionStore",
         kind: Kind::Mutant,
-        fails: &["condition_with_an_unheld_tag_does_not_reject"],
+        fails: &[
+            "condition_matches_on_every_tag_in_an_item",
+            "condition_with_an_unheld_tag_does_not_reject",
+        ],
         provenance: "**the canonical DCB uniqueness shape, wrong in the direction that looks \
              safe.** The probe drops the tag join and matches on type alone. The join is the \
              expensive half and tags live in a second table in the planned SQLite schema \
@@ -1286,6 +1298,7 @@ const REGISTRY: &[Declared] = &[
         name: "AfterDefaultsToFirstStore",
         kind: Kind::Mutant,
         fails: &[
+            "condition_matching_every_tag_rejects_the_append",
             "two_handles_observe_each_others_appends",
             "append_is_atomic",
             "condition_without_after_rejects_any_match",
@@ -1310,6 +1323,7 @@ const REGISTRY: &[Declared] = &[
         name: "ExistenceProbeStore",
         kind: Kind::Mutant,
         fails: &[
+            "condition_matches_on_every_tag_in_an_item",
             "condition_without_after_allows_non_match",
             "condition_after_ignores_non_matching_events",
             "condition_with_an_unheld_tag_does_not_reject",
@@ -2448,6 +2462,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::EmptyBatchPanicsStore>,
             crate::mutants::MutantFixture<crate::mutants::DropsMetadataStore>,
             crate::mutants::MutantFixture<crate::mutants::ViolationAsStoreErrorStore>,
+            crate::mutants::MutantFixture<crate::mutants::FirstTagOnlyConditionStore>,
 
             crate::mutants::MutantFixture<crate::mutants::AfterDefaultsToFirstStore>,
             crate::mutants::MutantFixture<crate::mutants::ExistenceProbeStore>,
@@ -2797,6 +2812,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("EmptyBatchPanicsStore", ModelOutcome::Agreed),
     ("DropsMetadataStore", ModelOutcome::Rejected),
     ("ViolationAsStoreErrorStore", ModelOutcome::Rejected),
+    ("FirstTagOnlyConditionStore", ModelOutcome::Rejected),
     // The condition probe.
     ("AfterDefaultsToFirstStore", ModelOutcome::Rejected),
     ("ExistenceProbeStore", ModelOutcome::Rejected),

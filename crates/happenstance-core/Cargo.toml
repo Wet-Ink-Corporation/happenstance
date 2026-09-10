@@ -16,6 +16,17 @@ categories.workspace = true
 # poor thing to rely on for the first impression anyone gets of the crate.
 readme = "README.md"
 
+# Excluded because it `include_str!`s across the package boundary.
+#
+# `tests/trait_variant_pin.rs` reads the workspace `Cargo.lock` — a file that
+# exists in the workspace and not in the `.crate`. It lived in `src/store.rs`
+# until the `0.2.0` pass, where no `exclude` could reach it because the file is
+# the library; moving it here is what makes the exclusion possible at all.
+#
+# Nothing caught the original: `cargo package --list` never compiles, and the
+# verification build compiles the library, not its tests.
+exclude = ["tests/trait_variant_pin.rs"]
+
 [dependencies]
 bytes.workspace = true
 futures-core.workspace = true

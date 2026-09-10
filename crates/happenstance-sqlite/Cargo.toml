@@ -16,6 +16,23 @@ categories.workspace = true
 # front page, and a silent default is a poor thing for a first impression to
 # depend on. Same reasoning, same spelling, as `happenstance-core`.
 readme = "README.md"
+
+# Excluded because they `include_str!` across the package boundary.
+#
+# These targets reads `xtask/src/package.rs` — files that exist in the workspace and not in the
+# `.crate`. Nothing caught it: `cargo package --list` never compiles, and the
+# verification build compiles the LIBRARY, not the packaged test targets. The
+# tarball therefore built cleanly while carrying test files that cannot, and
+# the person who finds that is a distro packager or an auditor running
+# `cargo test` on an unpacked crate.
+#
+# The tests are kept and still run in the workspace, which is the only place
+# their subject exists. `tests/boundary_refusal.rs` states the rule being
+# obeyed here: "`include_str!` cannot cross the package boundary of a
+# published crate".
+exclude = [
+    "tests/front_page.rs",
+]
 # Publishable, as of the crate-set re-plan. `publication-and-positioning`'s
 # deployment brief had settled the release at three crates and named this one as
 # the alternative that lost; that decision is re-made in its *The crate-set

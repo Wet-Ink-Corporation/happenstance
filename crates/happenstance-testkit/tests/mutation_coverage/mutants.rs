@@ -1759,6 +1759,76 @@ impl Defect for ViolationAsStoreErrorStore {
     }
 }
 
+/// The condition is keyed on each item's **first tag** and the rest are ignored.
+///
+/// The shape a conditional-write KV store reaches for by construction rather
+/// than by carelessness. `DynamoDB` and `Cosmos` enforce a condition by making it a
+/// **key**, and a key is one value — so an adapter over that family has to
+/// choose one tag to key on, and `tags[0]` is the choice that writes itself.
+/// Every other tag then narrows nothing.
+///
+/// The consequence is not a rejected append. It is an **accepted** one, later:
+/// the boundary the caller drew as *(course c1 AND student s1)* is enforced as
+/// *(course c1)*, which is strictly wider, so two commands that share no
+/// consistency boundary begin to conflict — and the store still looks correct
+/// from the outside, because refusing too much is invisible until throughput
+/// matters. It is ES-27's own text that names the gap: *"which no existing rule
+/// checks"*.
+///
+/// # Why the whole suite passed it until `0.2.0`
+///
+/// Not because the rules were weak, but because none of them ever built a
+/// two-tag condition. Every `query_tagged` reaching an `AppendCondition` in this
+/// testkit carried exactly one pair, and the four boundaries of
+/// `k_disjoint_boundaries_admit_exactly_k_commits` are disjoint in the only tag
+/// they have — so keying on the first tag and keying on all of them are the same
+/// function over every input the suite offered. The read side had checked the
+/// proposition since the beginning
+/// (`query_item_rejects_partial_tag_overlap`); the append-condition side had
+/// not, and the two are answered by different machinery in any store that does
+/// not simply hand both to one query engine.
+pub(crate) struct FirstTagOnlyConditionStore;
+
+impl Defect for FirstTagOnlyConditionStore {
+    const NAME: &'static str = "FirstTagOnlyConditionStore";
+
+    fn violation(
+        events: &[SequencedEvent],
+        condition: &AppendCondition,
+    ) -> Option<SequencePosition> {
+        events
+            .iter()
+            .find(|existing| {
+                condition.guards().iter().any(|guard| {
+                    let beyond = guard.after.is_none_or(|after| existing.position > after);
+                    if !beyond {
+                        return false;
+                    }
+                    let Some(items) = guard.query.items() else {
+                        // `Query::all()` has no items and matches everything;
+                        // there is no first tag to key on and nothing to get
+                        // wrong.
+                        return true;
+                    };
+                    items.iter().any(|item| {
+                        let types_match = item.types().is_empty()
+                            || item.types().iter().any(|ty| ty == existing.event_type());
+                        // THE DEFECT: only the item's FIRST tag is consulted.
+                        // The correct predicate requires the event's tags to be
+                        // a superset of ALL of the item's.
+                        let tags_match = item
+                            .tags()
+                            .iter()
+                            .next()
+                            .is_none_or(|first| existing.tags().contains(first));
+                        types_match && tags_match
+                    })
+                })
+            })
+            .map(|existing| existing.position)
+    }
+}
+
 // =====================================================================
 // ES-19 — the batch written the wrong way round
 // =====================================================================

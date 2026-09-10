@@ -154,7 +154,20 @@ impl fmt::Display for EventId {
 /// and an adapter that has a clock can produce an integer from it. Signed rather
 /// than unsigned because times before 1970 are representable rather than
 /// wrapping, which costs nothing and removes a class of surprise.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// # It deliberately does not implement `PartialOrd` or `Ord`
+///
+/// The paragraph above is a rule, and until `0.2.0` this type carried a derive
+/// that handed a caller the exact operation the rule forbids — sixteen lines
+/// apart, with the affordance winning, because a derive is reachable and a
+/// sentence is not. Nothing in this workspace ever ordered one.
+///
+/// A reader who wants events in the order they happened wants
+/// [`SequencePosition`], and now gets told so by the compiler rather than by a
+/// doc comment. Removing a derive is a breaking change, so this was the last
+/// release at which it was free: nothing was published at a compatible version,
+/// and no consumer was pinned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RecordedAt(i64);
 
 impl RecordedAt {

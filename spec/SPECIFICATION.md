@@ -171,10 +171,12 @@ protect a `MAY`.
 
 Every clause carries exactly one marker, on its own line.
 
-**`[FROZEN]`** — settled. Changing it requires a new ADR, not an edit. Nothing is
-published today, so "binding" means binding on the next pass rather than on a
-downstream user; that is a statement about who pays, not about whether the clause
-holds.
+**`[FROZEN]`** — settled. Changing it requires a new ADR, not an edit. From
+`0.2.0`, "binding" means binding on a **downstream user**: the crates are on a
+registry and a consumer can be pinned to what a frozen clause says. Before that
+release it meant binding on the next pass, and the sentence in this position said
+so — it is corrected rather than deleted, because the change is in **who pays**
+for an amendment, not in whether the clause holds.
 
 **A marker binds the decision. Whether it also binds the *release* is a separate
 question, answered per port.** The two coincide in §3 and come apart in §4, and
@@ -189,7 +191,8 @@ the difference is deliberate rather than an inconsistency:
   the design — the next pass may not quietly redecide it — while the port's public
   surface stays movable. That is what lets §4 answer eighteen questions now
   instead of deferring them all to an adapter that does not exist.
-- `SyncPeer` is not published at 0.1 at all, so `SY` clauses bind only the design.
+- `SyncPeer` is not published at all — `happenstance-sync` is `publish = false`
+  and unfinished — so `SY` clauses bind only the design.
 
 The gate is always a clause, never a convention: PS-2 for `ProjectionStore`, CF-25
 for every port. A port whose gating clause is unsatisfied is not frozen no matter
@@ -2987,7 +2990,7 @@ fixed no later than the first poll of the returned stream. Events appended after
 that instant MUST NOT be yielded. No event that was visible at that instant and
 matches the query MAY be omitted.
 
-**[PROVISIONAL — axis: **transport**, and **its falsifier has fired**. `MemoryEventStore` snapshots under the lock at call time (`memory.rs:296-336`) and satisfies this for free. This marker predicted that the first one-shot-HTTP adapter would fail by self-paginating, and that the outcome was the one to expect. `happenstance-neon` is that adapter, arrived at phase 10b, and the prediction was **right about the outcome and wrong about the mechanism**: one read there is one statement buffered whole, so self-pagination is unreachable and the paging half of this clause holds by construction. It fails `read_result_is_stable_under_concurrent_append` intermittently — 3 red in 20 over HTTP/1.1, 1 in 40 over a single multiplexed HTTP/2 connection — because a read and an append are two independent requests with no ordering primitive the *store* honours between them. ADR-0061 records the finding, narrows the sufficiency condition below, and states that `happenstance-neon` does not satisfy this clause; it does not touch the MUST. The marker stays because what settles it is no longer whether this shape fails — it does — but whether a conformant one-shot-HTTP shape exists at all.]**
+**[PROVISIONAL — axis: **transport**, and **its falsifier has fired**. `MemoryEventStore` snapshots under the lock at call time (`memory.rs:296-336`) and satisfies this for free. This marker predicted that the first one-shot-HTTP adapter would fail by self-paginating, and that the outcome was the one to expect. `happenstance-neon` is that adapter, arrived at phase 10b, and the prediction was **right about the outcome and wrong about the mechanism**: one read there is one statement buffered whole, so self-pagination is unreachable and the paging half of this clause holds by construction. It fails `read_result_is_stable_under_concurrent_append` intermittently — less often over one multiplexed HTTP/2 connection than over HTTP/1.1, and always in the same direction — because a read and an append are two independent requests with no ordering primitive the *store* honours between them. ADR-0061 records the finding, narrows the sufficiency condition below, and states that `happenstance-neon` does not satisfy this clause; it does not touch the MUST. The marker stays because what settles it is no longer whether this shape fails — it does — but whether a conformant one-shot-HTTP shape exists at all.]**
 
 This settles D7 and E2E-02. Two conformant adapters have opposite semantics
 today: `MemoryEventStore` filters, orders and truncates under the read lock and
@@ -3043,8 +3046,8 @@ ordering primitive** between its operations buys only the first, and
 `happenstance-neon` is the built case: it issues each operation as an independent
 request to a pooled proxy that hands each to whichever backend it likes, it spawns
 at the first poll exactly as this paragraph prescribes, and it still fails the rule
-— measured at 3 red in 20 over HTTP/1.1 and 1 in 40 over a single multiplexed
-HTTP/2 connection.
+— intermittently, and less often over a single multiplexed HTTP/2 connection than
+over HTTP/1.1 with a default pool.
 
 So the sufficiency condition is **spawned at the first poll, *and* ordered against
 a later append by something the store itself honours**. That is a narrowing rather
@@ -3993,8 +3996,30 @@ across the query.
   semantics is pinned by
   `query_item_types_are_or`, `query_item_tags_are_and` and
   `query_item_combines_types_and_tags_with_and` — this
-  clause's content is that the *condition* path is evaluated by those same rules,
-  which no existing rule checks.
+  clause's content is that the *condition* path is evaluated by those same rules.
+  The AND-within-an-item half is pinned by
+  `condition_matches_on_every_tag_in_an_item`, an event carrying the first of two
+  tags and not the second, asserting the append is admitted; and by
+  `condition_matching_every_tag_rejects_the_append`, its liveness mirror.
+
+  **The sentence in this position used to end "which no existing rule checks",
+  and it was accurate for longer than anybody noticed.** The pair above varies *which* tag a
+  condition carries and never *how many*: every append condition built anywhere in
+  the suite carried exactly one tag pair, so the AND-within-an-item half of this
+  clause — the half a read has been held to since the beginning by
+  `query_item_rejects_partial_tag_overlap` — was unchecked on the condition path.
+  `condition_matches_on_every_tag_in_an_item` closes it, with an event carrying
+  the first of two tags and not the second, asserting the append is **admitted**;
+  and `condition_matching_every_tag_rejects_the_append` is its liveness mirror,
+  so the admission is a verdict rather than an inability to reject. What they
+  reject is `FirstTagOnlyConditionStore`: a store that keys a compare-and-swap on
+  `tags[0]`, which is not a strawman but the construction a conditional-write KV
+  store is pushed toward, because a condition has to become a key there and a key
+  is one value. Such a store enforces a boundary strictly **wider** than the
+  caller drew, so commands sharing no boundary begin to conflict — and every
+  adapter in this workspace passes for free, which is the finding rather than the
+  reassurance: all five hand the expression to an engine, so the property is
+  bought by a shared storage shape rather than by anything this port required.
 - **Cases:** E2E-55, E2E-03; PRESSURE-TEST §3.9.
 
 **`racing_conditional_appends_elect_one_winner` was retired here, and the
@@ -5628,7 +5653,7 @@ batch at a position the store's event log actually assigned, assert success and
 assert the checkpoint advanced.
 **Cases:** E2E-23.
 **Rejects:** an adapter that validates. That is a perfectly reasonable reading of
-"advances `id`'s checkpoint to `position`" (`projection.rs:167-179`), it would be
+"advances `id`'s checkpoint to `position`" (`projection.rs:177-189`), it would be
 equally conformant today, and it makes a narrow projection re-scan the same
 range forever on every restart —
 Norvant's `cold_chain_certificate_expiry` matches about 40 of 37,000 events a
