@@ -45,10 +45,17 @@ at the first poll orders the two operations **at the client**; the clause needs 
 snapshot to precede the commit **at the store**. A pooled driver gets both halves
 at once; a one-shot-HTTP driver gets only the first.
 
-Measured, twenty runs per configuration against the live endpoint: **3 red in 20**
-over HTTP/1.1, **1 in 40** over a single multiplexed HTTP/2 connection. HTTP/2 is
-the only ordering primitive the transport offers and it narrows the window without
-closing it.
+Run repeatedly against the live endpoint, both configurations redden
+**intermittently**, and HTTP/2 over a single multiplexed connection reddens
+markedly less often than HTTP/1.1 over a default pool. HTTP/2 is the only ordering
+primitive the transport offers and it narrows the window without closing it.
+
+**No rate is stated, and the atom minted from this brief must not add one.** The
+first draft carried red-runs-per-twenty figures whose only cited source was a doc
+comment restating the same figures, and no raw log was committed — unlike every
+study under `experiments/`. The finding rests on the *direction* of failure, which
+is invariant; a citable frequency needs the sweep run again with its output
+committed, and that is queued rather than done.
 
 ## The decision
 

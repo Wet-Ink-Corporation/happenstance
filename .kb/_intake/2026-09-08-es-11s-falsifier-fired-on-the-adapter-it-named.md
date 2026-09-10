@@ -41,12 +41,15 @@ fails because **a read and an append are two independent HTTPS requests to a
 pooled proxy**, and nothing orders one backend's snapshot against another
 backend's commit.
 
-Measured over the conformance transport, 20 runs per configuration:
+Over the conformance transport, both configurations redden **intermittently**, and
+HTTP/2 with `pool_max_idle_per_host(1)` reddens markedly less often than HTTP/1.1
+over a default connection pool.
 
-| transport | red runs |
-|---|---|
-| HTTP/1.1, default connection pool | **3 of 20** |
-| HTTP/2, `pool_max_idle_per_host(1)` | **1 of 40** |
+**No rate is stated, and the atom minted from this brief must not add one.** The
+counts taken during phase 10b bring-up were never backed by a committed log, and
+this project's discipline is that a measurement lives beside its raw output under
+`experiments/`. The direction of failure is what carries the finding, and it is
+invariant.
 
 The adapter ships the second because a single multiplexed connection is the only
 ordering primitive the transport offers. It reduces the race; it does not close

@@ -1,5 +1,23 @@
 # ADR-0004 loses `provisional` at publication, and it cannot be done before
 
+> **HELD OUT OF THE INGEST WAVE — do not pass this file to `/redkiln:kb-ingest`.**
+>
+> **This brief is already discharged**, by
+> [`.kb/decisions/0037-msrv-becomes-a-promise-at-0-2-0.md`](../decisions/0037-msrv-becomes-a-promise-at-0-2-0.md),
+> which is `status: accepted, phase: 12` and records the identical proposition —
+> and records it with the *correct* wiring, which this brief gets wrong. Atom 0037
+> makes it an **amendment lineage**: ADR-0004 and ADR-0029 stay accepted and
+> byte-identical and neither gets a `superseded_by` flip, on the precedent ADR-0029
+> itself set against ADR-0004. Step 3 of this brief instead asks the ingest to
+> author *"the superseding atom"*, and an adjudicator biased toward MERGE would aim
+> that at a body-frozen atom.
+>
+> Kept rather than deleted because its middle section — *it is not true yet,
+> nothing is on crates.io at `0.2.0`* — is correct, is still correct at the time of
+> writing, and is the fact `CLAUDE.md`'s MSRV constraint was corrected against
+> (measured: `max_stable_version` is `0.0.0` for all seven crates, nothing yanked).
+> Retire this file once the tag lands.
+
 **Date:** 2026-09-08
 **Kind:** scheduled amendment, staged rather than applied
 **Owner:** whoever runs the publish

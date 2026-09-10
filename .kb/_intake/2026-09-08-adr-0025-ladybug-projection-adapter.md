@@ -46,9 +46,22 @@ surface — and which half of PS-4's falsifier can actually fire against it?
 - **`Arc<Database>`, and a second handle is a second `Connection`** — forced by
   measurement: a second `Database::new` on one directory is refused by a file
   lock.
-- **`commit`'s error path issues no `ROLLBACK`** — the engine aborts the whole
-  transaction itself on a statement error, and a rollback afterwards is refused,
-  so issuing one masks the first error with a second.
+- **`commit`'s error path issues no `ROLLBACK` after a STATEMENT error** — the
+  engine aborts the whole transaction itself, and a rollback afterwards is
+  refused, so issuing one masks the first error with a second.
+
+  **The qualifier is load-bearing and the original wording lacked it.** §7's
+  probe measured statement errors, and the finding is true of them. It is not
+  true of a failure in which the statement *succeeded* and the decode did not:
+  `read_checkpoint` returns `UnreadableRow`, `MalformedCheckpoint` and
+  `MalformedAuthority` with the query already answered, so the engine has aborted
+  nothing and a bare `?` inside `commit_inner`'s transaction returned with that
+  transaction still open. Fixed at the `0.2.0` pass by rolling back
+  **best-effort** on that path and discarding the result — which closes the
+  transaction when it is open and, when the engine has already aborted, drops the
+  refusal so the first error still reaches the caller. The atom minted from this
+  brief should carry the distinction rather than §7's unqualified form, because
+  the unqualified form reads as licence to `?` out of an open transaction.
 - **`lbug` ships behind an off-by-default feature** — the driver is a 1.44 GB
   prebuilt static archive plus an unavoidable OpenSSL toolchain, and `cargo test
   --workspace` links.
@@ -65,12 +78,15 @@ write-behind shapes.
 because `Projection::apply` is synchronous and a traversal is I/O. That is a
 finding about the port and is equally true of the SQLite and Postgres adapters.
 
-**Ladybug is not one of PS-9/PS-11's data points**, and
-`crates/happenstance-ladybug/src/lib.rs` claims it is. PS-9's own falsifier names
+**Ladybug is not one of PS-9/PS-11's data points.** PS-9's own falsifier names
 *a second generic consumer* — library code `happenstance` itself ships that must
 write into an unknown adapter's batch — owned by a different phase. An adapter is
-evidence about a clause's **cost**, not the data point the clause waits on. The
-crate's claim wants correcting in the same pass.
+evidence about a clause's **cost**, not the data point the clause waits on.
+
+The crate root **has since been corrected** and the atom must be written in the
+past tense: `crates/happenstance-ladybug/src/lib.rs:151` now reads *"This crate is
+not one of PS-9's or PS-11's data points, which this paragraph used to claim."*
+Nothing is owed here — do not mint an atom asking for an edit that has landed.
 
 ## The pre-registered verdict
 
@@ -83,5 +99,10 @@ Its worth is bounded up front. Ladybug is the **fifth** owned-buffered-batch
 implementer rather than PS-2's second shape, and phase 10b established that PS-2's
 other end is not merely unbuilt but forbidden by the port for both drivers the
 clause names. What phase 11 fills is the **write-vocabulary** axis — Cypher rather
-than SQL, a graph rather than tables — and `RUNBOOK.md:4802`'s "Fills the
-batch-shape axis" is the sentence that needs correcting to say so.
+than SQL, a graph rather than tables.
+
+That sentence **has since been corrected too**, and its anchor has moved:
+`RUNBOOK.md:4917` now reads *"Fills the write-vocabulary axis"* and records that
+it had said *"fills the batch-shape axis"* and that this is not what it filled.
+The brief's original citation of `RUNBOOK.md:4802` is stale in both line and
+tense. Again: past tense, and nothing owed.
