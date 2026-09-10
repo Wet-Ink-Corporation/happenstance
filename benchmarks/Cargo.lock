@@ -349,6 +349,7 @@ dependencies = [
  "happenstance-sqlite",
  "happenstance-testkit",
  "hdrhistogram",
+ "libc",
  "rusqlite",
  "serde",
  "serde_json",

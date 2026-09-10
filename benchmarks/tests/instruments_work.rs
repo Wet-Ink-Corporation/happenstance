@@ -22,6 +22,8 @@
 //! `--test-threads=1`; a parallel run of this file will report counts that are
 //! too high and is not a finding about anything.
 
+mod support;
+
 use happenstance_benchmarks::corpus::{Corpus, FLOOR_TAGS_PER_EVENT, Regime, Shape};
 use happenstance_benchmarks::counting::{self, Counting};
 use happenstance_benchmarks::cpu;
@@ -169,16 +171,49 @@ fn the_two_allocation_regimes_are_separated_by_an_order_of_magnitude() {
 fn the_processor_clock_tells_working_from_waiting() {
     let span = cpu::RESOLVABLE_FLOOR + std::time::Duration::from_millis(100);
 
+    // Pinned to one CPU for the span, and the reason is a property of one host.
+    //
+    // On this repository's Linux measurement host the kernel has marked the TSC
+    // unstable, so `sched_clock` runs on a per-CPU fallback; a task that
+    // MIGRATES mid-region comes back with its runtime mis-accounted, and
+    // `CLOCK_PROCESS_CPUTIME_ID` reported this busy 256 ms as 0 ms in 2 runs of
+    // 10. Pinned to one CPU: 0 of 10. `support::PinnedToOneCpu` carries the full
+    // table and the reasoning, including why a bounded retry was tried and
+    // rejected.
+    //
+    // This does not make the assertion unfireable. A clock that genuinely could
+    // not tell working from waiting still reads idle on one CPU and still fails
+    // below; what pinning removes is a host property that could fake that.
+    let pin = support::PinnedToOneCpu::here();
+    println!("processor-clock control: {}", pin.describe());
+
     let ((), busy) = cpu::measure(|| {
         let deadline = std::time::Instant::now() + span;
         let mut turns = 0_u64;
-        while std::time::Instant::now() < deadline {
-            turns = turns.wrapping_add(1);
+        // The deadline is checked every 4,096 turns rather than every turn.
+        //
+        // Checked every turn, this loop spent its span CALLING THE CLOCK: on a
+        // host whose clocksource is `hpet` the clock is not in the vDSO, so a
+        // 256 ms "spin loop" was roughly 180,000 syscalls. A control named "the
+        // processor is busy" should be busy with arithmetic, not with syscalls,
+        // and that is the whole of why this shape changed.
+        //
+        // It did NOT fix the migration mis-accounting it was written for, and
+        // the note is kept so nobody credits it with that. The pin above is
+        // what addresses that.
+        loop {
+            for _ in 0..4_096 {
+                turns = turns.wrapping_add(1).wrapping_mul(2_654_435_761);
+            }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
         }
         let _ = std::hint::black_box(turns);
     });
 
     let ((), waiting) = cpu::measure(|| std::thread::sleep(span));
+    drop(pin);
 
     println!("busy: {busy}");
     println!("waiting: {waiting}");
