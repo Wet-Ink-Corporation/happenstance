@@ -119,6 +119,27 @@ CONF
     systemctl mask "$u" >/dev/null 2>&1 || true
   done
 
+  # --- open file descriptors -------------------------------------------------
+  # Ubuntu ships a 1024 soft limit. The SQLite arms create and delete a database
+  # per criterion iteration, and at 1024 the suite eventually fails with
+  #
+  #   Sqlite(SqliteFailure(CannotOpen, "unable to open database file: /tmp/..."))
+  #
+  # which reads as a broken measurement environment and IS one -- but the cause
+  # is EMFILE, not the disk. `/tmp` had 861G free and no leftover files when this
+  # first fired. GitHub's hosted runners set this far higher, which is why CI
+  # never met it and a fresh host does.
+  note "raising the open-file limit from Ubuntu's 1024"
+  cat > /etc/security/limits.d/99-happenstance-bench-host.conf <<'CONF'
+*  soft  nofile  65536
+*  hard  nofile  1048576
+CONF
+  mkdir -p /etc/systemd/system.conf.d
+  cat > /etc/systemd/system.conf.d/99-happenstance-bench-host.conf <<'CONF'
+[Manager]
+DefaultLimitNOFILE=65536:1048576
+CONF
+
   note "sysctl"
   cat > /etc/sysctl.d/99-happenstance-bench-host.conf <<'CONF'
 # Swapping mid-measurement turns a microsecond arm into a millisecond one. With
@@ -160,6 +181,8 @@ restore() {
   done
   rm -f /etc/systemd/logind.conf.d/99-happenstance-bench-host.conf
   rm -f /etc/sysctl.d/99-happenstance-bench-host.conf
+  rm -f /etc/security/limits.d/99-happenstance-bench-host.conf
+  rm -f /etc/systemd/system.conf.d/99-happenstance-bench-host.conf
   rm -f /etc/happenstance-bench-host
   systemctl restart systemd-logind
   note "packages left installed on purpose — an installed package is not a measured condition"
