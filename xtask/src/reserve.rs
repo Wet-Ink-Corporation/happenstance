@@ -74,13 +74,13 @@ const RESERVABLE: &[Reservable] = &[
     Reservable {
         name: "happenstance-core",
         description: "DCB-compliant event sourcing contract: the EventStore and ProjectionStore ports, their value types, and in-memory reference stores for both.",
-        blurb: "the contract: value types, the storage ports, and an in-memory reference event store",
+        blurb: "the contract: value types, the event store and projection store ports, and in-memory reference stores for both",
         phase: 0,
     },
     Reservable {
         name: "happenstance-testkit",
         description: "Conformance suites for happenstance event store and projection store adapters: the bar an adapter must clear to exist.",
-        blurb: "the conformance suite every event store adapter is measured against",
+        blurb: "the conformance suites every event store and projection store adapter is measured against",
         phase: 0,
     },
     Reservable {
@@ -104,7 +104,7 @@ const RESERVABLE: &[Reservable] = &[
     Reservable {
         name: "happenstance-neon",
         description: "Neon serverless PostgreSQL event store and projection store adapters for happenstance, over one-shot HTTP.",
-        blurb: "the Neon adapter, reaching PostgreSQL over one-shot HTTP with no interactive transaction",
+        blurb: "the Neon event store and projection store adapters, reaching PostgreSQL over one-shot HTTP with no interactive transaction",
         phase: 10,
     },
     Reservable {
