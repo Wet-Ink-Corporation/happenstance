@@ -404,13 +404,18 @@ unrelated crate wanted replication.
 | **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` can drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:354-420`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six now run against the suite** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063), and the `unstable-projection` feature survives on the contract crate only as an empty name so that `0.2.0` manifests resolve | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the four buffered stores do not occupy |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:120`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
-The asymmetry is the point. `EventStore` is frozen because it has evidence:
-eighty-nine rules — each one shown to reject a named wrong implementation — a
-reference implementation, six deployment scenarios walked line by line, and one
-pressure test whose contested claims were settled by compiling them. `ProjectionStore` is not frozen because it has none: no adapter
-has ever been written against it, and the suite that would freeze it cannot
-currently observe half of the invariant the port exists to defend
-(`PRESSURE-TEST.md:220-234`). `SyncPeer` is specified before it is built because
+The asymmetry is the point, and it has narrowed to one port. `EventStore` is
+frozen because it has evidence: eighty-nine rules — each one shown to reject a
+named wrong implementation — a reference implementation, six deployment
+scenarios walked line by line, and one pressure test whose contested claims were
+settled by compiling them. `ProjectionStore` was not, for a long time, and the
+reason moved twice: first *no adapter has ever been written against it, and the
+suite cannot observe half the invariant* (`PRESSURE-TEST.md:220-234`), then
+ADR-0060's finding that the port's own signatures foreclosed the far end of its
+axis. ADR-0062 moved the signatures, `LivePostgresProjectionStore` occupied that
+end, and ADR-0063 froze the port on the same kind of evidence — seventeen rules,
+a hostile store that fails one by name, and adapters at both ends of the axis
+the port was most likely to be wrong about. `SyncPeer` is specified before it is built because
 the alternative is worse — `RUNBOOK.md:438-439` records that deferring the
 sync port *"leaks `EventId` and a tail seam back into `EventStore`"*, and a leak
 into a frozen port is not a deferral, it is a decision taken by omission in the
@@ -4950,9 +4955,10 @@ pub trait ProjectionStore {
     /// transaction.
     type Batch;
 
-    /// Opens a write set. Neither `async` nor fallible: opening a buffer cannot
-    /// fail, and an adapter that needs a round trip takes it at `commit`.
-    fn begin(&self) -> Self::Batch;
+    /// Opens a write set. `async` and fallible since ADR-0062, so that a batch
+    /// that is a live transaction has somewhere to put its `BEGIN` and its
+    /// failure; a buffering adapter's future is ready at its first poll (PS-6).
+    async fn begin(&self) -> Result<Self::Batch, Self::Error>;
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error>;
 
@@ -5380,12 +5386,28 @@ pub trait ProjectionProbe: ProjectionStore {
     /// Whether this adapter offers any read path on an open batch. See PS-12.
     const READS_THROUGH_BATCH: bool;
 
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64);
-    fn probe_delete_all(&self, batch: &mut Self::Batch);
-    async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error>;
+    // Every batch-touching member is a future of a `Result` over `&mut Batch`
+    // since ADR-0062: a driver borrows its connection mutably to issue a
+    // statement, the statement yields, and it can fail. Spelled `impl Future`
+    // rather than `async fn` because this trait is not under `trait_variant`.
+    fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
+    fn probe_delete_all(
+        &self,
+        batch: &mut Self::Batch,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
+    fn probe_read(&self, key: &str) -> impl Future<Output = Result<Option<u64>, Self::Error>>;
 
     /// Only called when `READS_THROUGH_BATCH`; may be `unimplemented!()` otherwise.
-    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64>;
+    fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> impl Future<Output = Result<Option<u64>, Self::Error>>;
 }
 ```
 
