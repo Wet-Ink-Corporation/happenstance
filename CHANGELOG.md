@@ -32,6 +32,22 @@ not the same as what a user needed to be told.
   not yet proved at its far end. See
   [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
+## [0.3.1] — 2026-09-11
+
+A description-only release. crates.io shows a crate's manifest `description`
+verbatim and changes it only with a new version, and three of the seven still
+described the crate as it was before it had a projection role. No code moves;
+every crate is republished at the same number so the set stays in lockstep.
+
+### Changed
+
+- **`happenstance-core`, `happenstance-testkit` and `happenstance-neon` describe
+  their projection role.** The contract crate names `ProjectionStore` as one of
+  its two ports and `MemoryProjectionStore` as one of its two reference stores;
+  the testkit names the projection suite it has carried since phase 6; Neon
+  names the projection store it ships. `xtask reserve`'s placeholder table moves
+  with them, as its own test requires.
+
 ## [0.3.0] — 2026-09-11
 
 The projection port joins the promise. `0.2.0` froze `EventStore` and shipped

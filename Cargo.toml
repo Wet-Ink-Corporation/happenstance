@@ -21,7 +21,7 @@ members = ["crates/*", "examples/*", "xtask"]
 # it shipped behind an off-by-default `unstable-projection` feature with a
 # written exemption — and is from the next release, ADR-0063 having lifted the
 # gate once adapters at both ends of the batch-shape axis had passed its suite.
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
@@ -57,9 +57,9 @@ categories = ["database", "data-structures"]
 # intact and fails only on the *second* `cargo publish` — after
 # `happenstance-core` is live and unremovable. They moved off `0.2.0-alpha.1`
 # in the same commit as the version, which is the only order that is ever green.
-happenstance-core = { version = "0.3.0", path = "crates/happenstance-core", default-features = false }
-happenstance = { version = "0.3.0", path = "crates/happenstance", default-features = false }
-happenstance-testkit = { version = "0.3.0", path = "crates/happenstance-testkit" }
+happenstance-core = { version = "0.3.1", path = "crates/happenstance-core", default-features = false }
+happenstance = { version = "0.3.1", path = "crates/happenstance", default-features = false }
+happenstance-testkit = { version = "0.3.1", path = "crates/happenstance-testkit" }
 
 # --- external ---
 # WF-11's payload encoding, and pinned to `0.22` rather than to the newer `0.23`
