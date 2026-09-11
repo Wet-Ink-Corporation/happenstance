@@ -23,7 +23,7 @@
 # ## Running it
 #
 #   scripts/stranger-install-smoke.sh            # against the published version
-#   VERSION=0.3.0 scripts/stranger-install-smoke.sh
+#   VERSION=0.3.1 scripts/stranger-install-smoke.sh
 #
 # It needs network access and a writable temp directory. It creates nothing
 # inside this repository, which is the point: a scratch project that inherited
@@ -32,7 +32,7 @@
 
 set -euo pipefail
 
-VERSION="${VERSION:-0.3.0}"
+VERSION="${VERSION:-0.3.1}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
