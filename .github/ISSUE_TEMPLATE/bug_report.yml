@@ -29,8 +29,8 @@ body:
     attributes:
       label: Features enabled
       description: >-
-        The off-by-default ones matter most. `unstable-projection` is exempt from
-        semver and says so.
+        The off-by-default ones matter most. `happenstance`'s
+        `unstable-projection` (the typed runner) is exempt from semver and says so.
       placeholder: default + projection-store
     validations:
       required: true

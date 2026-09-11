@@ -243,13 +243,13 @@
 //!
 //! ```toml
 //! [dependencies]
-//! happenstance-core = { version = "0.2", features = ["unstable-projection"] }
+//! happenstance-core = "0.3"
 //!
 //! [features]
 //! conformance = ["happenstance-core/conformance"]
 //!
 //! [dev-dependencies]
-//! happenstance-testkit = "=0.2.0"
+//! happenstance-testkit = "=0.3.0"
 //! tokio = { version = "1", features = ["macros", "rt"] }
 //! ```
 //!
@@ -280,27 +280,29 @@
 //! needs one manifest and not two half-manifests on two pages, which is why the
 //! copy is here at all.
 //!
-//! `unstable-projection` is unconditional because your `impl ProjectionStore` is:
-//! every port type it names lives behind that feature, and an adapter cannot make
-//! its own port impl optional. `conformance` is forwarded from a feature of *your*
-//! crate instead, because the `impl ProjectionProbe` lives in `src/` under
+//! The dependency line names no feature, because your `impl ProjectionStore`
+//! needs none: the port and every type it names are unconditional on the
+//! contract crate since ADR-0063. (From `0.2.0` until then the line had to carry
+//! `unstable-projection`, and an adapter written against `0.2.0` that still
+//! does keeps compiling — the feature is retained there, empty, for exactly that
+//! reason.) `conformance` is forwarded from a feature of *your* crate instead,
+//! because the `impl ProjectionProbe` lives in `src/` under
 //! `#[cfg(feature = "conformance")]` and a crate cannot `cfg` on a dependency's
 //! feature.
 //!
-//! **An earlier version of this page said `conformance` "implies no other
-//! feature — not `std`, not `memory`", and told you to turn it on in
-//! `[dependencies]`.** The first half was two-thirds right and the missing third
-//! is the expensive one. `conformance` costs no crate and no graph edge, and it
-//! implies exactly one thing — `unstable-projection`, because `ProjectionProbe`
-//! is defined *inside* the module that feature gates. That is the port PS-3 holds
-//! **exempt from semver** until two adapters at opposite ends of the batch-shape
-//! axis have cleared its suite, and Cargo's feature unification is global and
-//! additive: a feature turned on anywhere in a graph is on for everybody in it.
-//! Turning it on in `[dependencies]` therefore hands that surface to every
-//! application downstream of your adapter, none of which asked for it.
-//! Forwarding it costs you one line and gives the choice back to whoever builds
-//! your adapter. `examples/outside-projection-adapter` in this repository writes
-//! exactly this manifest, and its own `tests/` fails if it stops.
+//! **`conformance` costs no crate, no graph edge, and implies no other feature —
+//! not `std`, not `memory`.** This page has said that sentence before and had
+//! it be false: while the port was gated, `conformance` implied
+//! `unstable-projection`, because `ProjectionProbe` is defined *inside* the
+//! module that feature closed, and Cargo's feature unification is global and
+//! additive — a feature turned on anywhere in a graph is on for everybody in
+//! it, so turning `conformance` on in `[dependencies]` handed an unfrozen port
+//! to every application downstream of your adapter. The sentence is true again
+//! because the gate is gone, and `xtask`'s `feature_cost_is_stated` holds it to
+//! the manifest in both directions. The reason to forward rather than turn on
+//! has not changed: it gives the choice back to whoever builds your adapter, and
+//! `examples/outside-projection-adapter` in this repository writes exactly this
+//! manifest, with its own `tests/` failing if it stops.
 //!
 //! **What the dev-dependency costs you is a bigger `happenstance-core` under
 //! `cargo test` than under `cargo build`, and it is not your build that finds

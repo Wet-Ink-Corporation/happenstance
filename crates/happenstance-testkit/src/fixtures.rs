@@ -360,8 +360,8 @@ impl SendProjectionStore for MemoryProjectionHandle {
 
     type Batch = <MemoryProjectionStore as SendProjectionStore>::Batch;
 
-    fn begin(&self) -> Self::Batch {
-        self.0.begin()
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        self.0.begin().await
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
@@ -401,20 +401,29 @@ impl ProjectionProbe for MemoryProjectionHandle {
     /// check at a glance, and the two are one line apart in the same workspace.
     const READS_THROUGH_BATCH: bool = true;
 
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
-        self.0.probe_write(batch, key, value);
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
+        self.0.probe_write(batch, key, value).await
     }
 
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
-        self.0.probe_delete_all(batch);
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
+        self.0.probe_delete_all(batch).await
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error> {
         self.0.probe_read(key).await
     }
 
-    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64> {
-        self.0.probe_read_through(batch, key)
+    async fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
+        self.0.probe_read_through(batch, key).await
     }
 }
 

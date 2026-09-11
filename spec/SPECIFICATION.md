@@ -184,13 +184,18 @@ the difference is deliberate rather than an inconsistency:
 
 - `EventStore` ships stable at `0.2.0`, so a `[FROZEN]` `ES` clause is semver-binding
   as well as decision-binding.
-- `ProjectionStore` does not. PS-2 forbids freezing the port until a hostile store
-  has been failed and two adapters at opposite ends of the batch-shape axis have
-  passed, and PS-3 ships it behind an off-by-default `unstable-projection` feature
-  with a documented semver exemption until then. So a `[FROZEN]` `PS` clause binds
-  the design — the next pass may not quietly redecide it — while the port's public
-  surface stays movable. That is what lets §4 answer eighteen questions now
-  instead of deferring them all to an adapter that does not exist.
+- `ProjectionStore` did not, from `0.2.0` until ADR-0063. PS-2 forbade freezing
+  the port until a hostile store had been failed and two adapters at opposite
+  ends of the batch-shape axis had passed, and PS-3 shipped it behind an
+  off-by-default `unstable-projection` feature with a documented semver
+  exemption until then — so a `[FROZEN]` `PS` clause bound the design while the
+  port's public surface stayed movable, which is what let §4 answer eighteen
+  questions before an adapter at the far end existed. Both parts of PS-2's bar
+  are now met (its `Rule` records how), ADR-0063 lifted the gate, and a
+  `[FROZEN]` `PS` clause is semver-binding exactly as an `ES` one is. What the
+  typed layer still holds behind `happenstance`'s own `unstable-projection` is
+  the *runner*, for a reason of its own — `Projection::apply` is synchronous —
+  and that is not this port's.
 - `SyncPeer` is not published at all — `happenstance-sync` is `publish = false`
   and unfinished — so `SY` clauses bind only the design.
 
@@ -219,11 +224,12 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 201 clause IDs, of which 196 are normative:
-**138 `[FROZEN]`**, **46 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **five
-`[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; and PS-32,
-PS-33 and PS-35, the three §4 clauses whose subject was this document's own work
-list and which left the clause space at the typed layer's phase exit, their IDs
+As assembled, this document carries 201 clause IDs, of which 194 are normative:
+**141 `[FROZEN]`**, **41 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+`[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
+and PS-35, the three §4 clauses whose subject was this document's own work list
+and which left the clause space at the typed layer's phase exit; and PS-3 and
+PS-34, retired by ADR-0063 when the port's gate came off — all with their IDs
 retained so that every citation still resolves). Section 7 breaks that out per
 clause.
 
@@ -246,11 +252,13 @@ file rather than an `Arc` clone. Each tick is partial in a way §6.5 states — 
 *reopen* half of durability and not the *fault* half, which is what ES-35 stays
 `[PROVISIONAL]` against; a second real connection and not a **pool**. The third
 tick is batch shape's, on `ProjectionStore` rather than on `EventStore`, and it
-is *one-sided*: `SqliteProjectionStore` passes
-`projection_store_conformance!` at the replay-at-commit far end, while the
-live-transaction near end holds nothing that has run anything **and cannot be
-observed to, even once built** (ADR-0060) — so PS-2, which wants the suite green
-at both ends, is not cleared by it. The remaining two —
+was *one-sided* until ADR-0062: four adapters passed
+`projection_store_conformance!` at the replay-at-commit end, while the
+live-transaction end held nothing that had run anything **and could not be
+observed to, even once built** (ADR-0060). ADR-0062 moved `begin` and the probe
+seam, and `LivePostgresProjectionStore` — a `sqlx` transaction as the batch —
+now passes at that end with `READS_THROUGH_BATCH = true` declared truthfully, so
+PS-2's bar is met as written. The remaining two —
 transport and completeness — have nothing at
 either end. So
 the qualification is not hypothetical, it is not discharged by asserting it, and
@@ -393,16 +401,21 @@ unrelated crate wanted replication.
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
 | **`EventStore`** | `crates/happenstance-core/src/store.rs:141-316` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it is the workspace's only adapter instrument to have *failed* a clause rather than passed one. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
-| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and five impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding cannot be discharged** — `begin` is total, synchronous and infallible and every route to a `sqlx` transaction is `async` and fallible — so it is now an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`). Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:354-420`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Four of the five now run against the suite** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, and `LadybugProjectionStore` since phase 11, each through `happenstance_testkit::projection_store_conformance!` against a real backing store. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Provisional**, behind an off-by-default `unstable-projection` feature (PS-3) | PS-2: a hostile store that commits the checkpoint and drops the read-model write must *fail* the suite, and two adapters at opposite ends of the batch-shape axis must pass it |
+| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` can drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:354-420`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six now run against the suite** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063), and the `unstable-projection` feature survives on the contract crate only as an empty name so that `0.2.0` manifests resolve | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the four buffered stores do not occupy |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:120`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
-The asymmetry is the point. `EventStore` is frozen because it has evidence:
-eighty-nine rules — each one shown to reject a named wrong implementation — a
-reference implementation, six deployment scenarios walked line by line, and one
-pressure test whose contested claims were settled by compiling them. `ProjectionStore` is not frozen because it has none: no adapter
-has ever been written against it, and the suite that would freeze it cannot
-currently observe half of the invariant the port exists to defend
-(`PRESSURE-TEST.md:220-234`). `SyncPeer` is specified before it is built because
+The asymmetry is the point, and it has narrowed to one port. `EventStore` is
+frozen because it has evidence: eighty-nine rules — each one shown to reject a
+named wrong implementation — a reference implementation, six deployment
+scenarios walked line by line, and one pressure test whose contested claims were
+settled by compiling them. `ProjectionStore` was not, for a long time, and the
+reason moved twice: first *no adapter has ever been written against it, and the
+suite cannot observe half the invariant* (`PRESSURE-TEST.md:220-234`), then
+ADR-0060's finding that the port's own signatures foreclosed the far end of its
+axis. ADR-0062 moved the signatures, `LivePostgresProjectionStore` occupied that
+end, and ADR-0063 froze the port on the same kind of evidence — seventeen rules,
+a hostile store that fails one by name, and adapters at both ends of the axis
+the port was most likely to be wrong about. `SyncPeer` is specified before it is built because
 the alternative is worse — `RUNBOOK.md:438-439` records that deferring the
 sync port *"leaks `EventId` and a tail seam back into `EventStore`"*, and a leak
 into a frozen port is not a deferral, it is a decision taken by omission in the
@@ -455,13 +468,15 @@ answer.
   `core::error::Error + 'static`, and the strength lives in a marker a downstream
   crate can declare for itself over a foreign trait, which is ordinary coherence
   (ADR-0009). What is left is naming and surface, and phase 4 owns it.
-- **The whole of `ProjectionStore`** until PS-2's bar is met. The batch shape, the
-  write seam, reset, read-your-writes and the failure policy are all specified —
-  and they are no longer specified against *zero* adapters: four pass the suite
-  since phase 11. What keeps the gate on is no longer the count. ADR-0060 records
-  the reason it replaced: the signatures a freeze would promise are the ones that
-  forbid the second batch shape from existing or from reporting itself, so
-  freezing now would make a promise out of the defect.
+- **The typed projection runner's `apply` shape.** `ProjectionStore` itself is
+  no longer on this list: ADR-0036 gated it on scarcity, ADR-0060 replaced that
+  with a finding about its own signatures, ADR-0062 moved the signatures and
+  `happenstance-postgres` built the far end, and ADR-0063 froze the port on
+  that evidence. What that pass found and left open is one layer up:
+  `Projection::apply` is synchronous, so an application can push into a
+  buffered batch and cannot issue a statement into a batch that is a live
+  transaction. The runner stays behind `happenstance`'s `unstable-projection`
+  until that shape is proved at its far end or deliberately kept.
 - **Retention, deletion and completeness** (ES-39, CF-27). A store that has been
   deleted from is currently indistinguishable from a young one at every value in
   §2, and four of the six scenarios reach that from unrelated doors.
@@ -4791,20 +4806,25 @@ definition, and `spawns_from_generic` (`:642-710`), which is what rejects the
 
 ## 4. The `ProjectionStore` port
 
-The port declares itself provisional in its own first paragraph —
-*"a port without a conformance suite is a guess"* (`crates/happenstance-core/src/projection.rs:3-11`).
-This section's job is not to remove that marker. It is to state precisely what
-would remove it, and to settle enough of the shape that an adapter can be built
-against something other than a guess.
+The port declares itself frozen in its own first paragraph — *"frozen, and how
+that was earned"* (`crates/happenstance-core/src/projection.rs:3-11`). It used
+to say *"a port without a conformance suite is a guess"*, and then *"behind
+`unstable-projection`, and this is why"*; each sentence was true when written,
+and the header keeps the account of how the gate came off rather than pretending
+it was never on. This section's job was to state precisely what would remove
+the marker and to settle enough of the shape that an adapter could be built
+against something other than a guess. Both happened. What it does now is hold
+the settled shape: every clause below is what an adapter is built against, and
+the only `unstable-projection` surface left is the typed runner one crate up.
 
-**So `[FROZEN]` means something narrower here than in §3, and §1.3 defines the
-difference.** A frozen `PS` clause binds the *decision*: the next pass may not
-redecide it without an ADR. It does not bind the *release*, because PS-2 forbids
-freezing the port until two adapters at opposite ends of the batch-shape axis have
-passed a suite that can fail, and PS-3 ships it behind `unstable-projection` until
-they have. Nineteen clauses below are frozen in that first sense. None of them
-commits the published surface of 0.1, and reading them as if they did would be
-reading a stronger claim than this section makes.
+**`[FROZEN]` meant something narrower here than in §3 from `0.2.0` until
+ADR-0063, and §1.3 records the difference.** A frozen `PS` clause bound the
+*decision* — the next pass could not redecide it without an ADR — and not the
+*release*, because PS-2 forbade freezing the port until two adapters at opposite
+ends of the batch-shape axis had passed a suite that can fail, and PS-3 shipped
+it behind `unstable-projection` until they had. They have (PS-2's `Rule`), the
+gate is lifted, and a `[FROZEN]` clause below now commits the published surface
+exactly as one in §3 does.
 
 Four facts frame everything below.
 
@@ -4825,16 +4845,20 @@ phase 8.** Three of the four have since been written and have run the suite —
 `LadybugProjectionStore` at phase 11 — leaving `LiveHandleProjectionStore`, which
 is an experiment rather than an adapter and is not going to run one.
 
-**What none of that buys is PS-2**, and the reason is now stronger than "nobody
-has got to it". The clause wants the suite green against two adapters at opposite
-ends of the batch-shape axis. All four are replay-at-commit shapes, beside
-`MemoryProjectionStore` and the testkit's buffering variant — six agreements at
-one end. And phase 10b established that the other end is **forbidden by the port**
-for both drivers PS-2 names: a `rusqlite::Transaction<'_>` is `!Send` and costs
-the `SendProjectionStore` impl, and a `sqlx` transaction cannot be produced by a
-`begin` that is total, synchronous and infallible. That is a finding against a
-`[FROZEN]` clause and is owed an ADR rather than an edit here. For the other four the *kind* of ignorance is still what it was: the
-signatures have been disagreed with by a type checker and nothing more.
+**What none of that bought was PS-2, until ADR-0062.** The clause wants the suite
+green against two adapters at opposite ends of the batch-shape axis, and all four
+were replay-at-commit shapes, beside `MemoryProjectionStore` and the testkit's
+buffering variant — six agreements at one end. Phase 10b established that the
+other end was **forbidden by the port** for both drivers PS-2 names: a
+`rusqlite::Transaction<'_>` is `!Send` and costs the `SendProjectionStore` impl,
+and a `sqlx` transaction could not be produced by a `begin` that was total,
+synchronous and infallible. ADR-0060 recorded that as a finding against a
+`[FROZEN]` clause and declined to act on it in an adapter lane; ADR-0062 acted on
+it, moving `begin` and the probe seam, and `happenstance-postgres` now carries
+`LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`),
+whose batch is a `sqlx` transaction and which passes all seventeen rules against
+a live server. The `rusqlite` refutation stands, because it is a property of that
+driver rather than of the port.
 
 **`error[E0195]` is real, reproduced twice, and explains nothing about the
 absence.** Spelling the impl with the concrete batch type — `async fn
@@ -4853,15 +4877,18 @@ over a type parameter is forced to `'static` by the GAT whether or not its
 batch borrows anything
 (`crates/happenstance-neon/src/projection_store.rs:140-152`).
 
-**The conformance suite cannot observe a read model.** `type Batch<'a>`
-(`projection.rs:97-99`) carries no trait bounds, so generic code holding a
-`P::Batch<'_>` can only hand it back to `commit` or `rollback`. The port exists
-to defend read-model write and checkpoint write in one transaction
-(`projection.rs:13-19`); a suite built on the port as written can test only the
-second conjunct. By CLAUDE.md's own corollary — *"a rule that no adapter can
-fail is decorative"* — such a suite is decorative in the exact place it matters,
-because it cannot reject an adapter that commits the checkpoint and silently
-drops the read-model write.
+**The conformance suite could not observe a read model until phase 6.** Under
+the phase-2 port, `type Batch<'a>` carried no trait bounds, so generic code
+holding a `P::Batch<'_>` could only hand it back to `commit` or `rollback`. The
+port exists to defend read-model write and checkpoint write in one transaction
+(`projection.rs:53-63`); a suite built on that port could test only the second
+conjunct, and by CLAUDE.md's own corollary — *"a rule that no adapter can fail
+is decorative"* — was decorative in the exact place it mattered. ADR-0017
+answered it with `ProjectionProbe` (`projection.rs:594-711`), the write seam
+PS-11 makes mandatory, and `commit_is_atomic_with_the_read_model` is the rule a
+store that commits the checkpoint and silently drops the read-model write now
+fails by name. What the probe's *own* signatures still cannot observe is PS-2's
+finding, one section down.
 
 **All six scenarios hit the same two walls.** `references/scenarios/README.md:1923-1927`
 records them as agreements 1 and 2 of nine: the port cannot reset, and `Batch`
@@ -4928,9 +4955,10 @@ pub trait ProjectionStore {
     /// transaction.
     type Batch;
 
-    /// Opens a write set. Neither `async` nor fallible: opening a buffer cannot
-    /// fail, and an adapter that needs a round trip takes it at `commit`.
-    fn begin(&self) -> Self::Batch;
+    /// Opens a write set. `async` and fallible since ADR-0062, so that a batch
+    /// that is a live transaction has somewhere to put its `BEGIN` and its
+    /// failure; a buffering adapter's future is ready at its first poll (PS-6).
+    async fn begin(&self) -> Result<Self::Batch, Self::Error>;
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error>;
 
@@ -5028,24 +5056,50 @@ transaction, no cursor — passes the suite against a live endpoint since phase 
 This Rule named Workers `SqlStorage` or Neon as candidates; Neon is the one that
 arrived.
 
-*The first end is unreachable as this Rule named it, and unobservable however it
-is built.* Both drivers it offered are refuted, by different mechanisms: `sqlx`'s
-`Transaction` cannot be produced by a `begin` that is total, synchronous and
-infallible (PS-6), and `rusqlite`'s `Transaction<'_>` is `!Send`, which costs the
-`SendProjectionStore` impl. **And the deeper problem is not the drivers.** A store
-whose batch genuinely is a live transaction can implement this port — see
-`crates/happenstance-core/tests/probe_live_transaction_shape.rs` — but it must
-declare `ProjectionProbe::READS_THROUGH_BATCH = false`, which that file's own
-comment calls *"a false statement about this store"*, because
-`probe_read_through` is synchronous, infallible and takes `&Self::Batch` while a
-driver borrows its connection mutably and the statement is I/O. So a conformant
-live-transaction adapter reports the **same capability profile** as a buffering
-one, and the suite has no way to tell the two ends apart.
+*The first end was unreachable as this Rule named it, and unobservable however it
+was built.* Both drivers it offered were refuted, by different mechanisms: `sqlx`'s
+`Transaction` could not be produced by a `begin` that was total, synchronous and
+infallible (PS-6 as it then read), and `rusqlite`'s `Transaction<'_>` is `!Send`,
+which costs the `SendProjectionStore` impl. **And the deeper problem was not the
+drivers.** A store whose batch genuinely is a live transaction could implement
+this port only by declaring `ProjectionProbe::READS_THROUGH_BATCH = false` — a
+false statement about itself — because `probe_read_through` was synchronous,
+infallible and took `&Self::Batch` while a driver borrows its connection mutably
+and the statement is I/O. So a conformant live-transaction adapter reported the
+**same capability profile** as a buffering one, and the suite had no way to tell
+the two ends apart. ADR-0060 §3 proposed the signature change that would allow
+the second half and deliberately did not make it — that was this clause's owner's
+call.
 
-What an adapter at the first end would therefore have to be: a store whose batch
-holds a live handle **and** whose probe seam can describe it. ADR-0060 §3 proposes
-the signature change that would allow the second half and deliberately does not
-make it — that is this clause's owner's call.
+**Amended by ADR-0062, which is the owner's call made. The MUST above is still
+unchanged, and it is now met.**
+
+`begin` is `async` and fallible (PS-6 rewritten to the discipline its old
+signature enforced), and `probe_write`, `probe_delete_all` and
+`probe_read_through` take `&mut Self::Batch` and return a future of a `Result`.
+`crates/happenstance-core/tests/probe_live_transaction_shape.rs` now runs the
+honest body — `READS_THROUGH_BATCH = true` on a batch that is a transaction —
+rather than recording why it could not. And the first end is **occupied**:
+`LivePostgresProjectionStore`
+(`crates/happenstance-postgres/src/live_projection_store.rs`) binds
+`type Batch` to a `sqlx::Transaction<'static, Postgres>`, declares the capability
+truthfully, and passes all seventeen rules against a live server with
+`batch_reads_reflect_pending_writes` and `rebuild_is_chunk_size_invariant`
+reported as **runs** — asserted on the `RuleOutcome` value in
+`crates/happenstance-postgres/tests/live_projection.rs` — where every adapter
+over a real database had reported them as skips. The `rusqlite` refutation
+stands, because it is a property of that driver.
+
+*What the two ends disagreed about, measured rather than argued:* nothing the
+port had to change for. The live shape needed an explicit `ROLLBACK` on the
+regression path where the buffered shape drops a `Vec`; PS-7 was met by the
+driver's rollback-on-drop rather than by the adapter; and a statement refused
+mid-batch poisons the transaction, which the seam's new `Result` is what
+reports. Each of those is the live end being *harder*, not the port being wrong.
+
+This clause's MUST is therefore satisfied. Lifting `unstable-projection` is a
+release decision — a semver promise on a published crate — and is owed its own
+record rather than being read off this one.
 **Cases:** E2E-17, E2E-24.
 **Rejects:** the schedule that freezes this port against `MemoryProjectionStore`
 and an in-process rusqlite transaction. Both serialise their writers, both hold
@@ -5055,8 +5109,12 @@ portfolio table already convicts for `EventStore`.
 
 **PS-3 — Until PS-2's bar is met the port SHOULD ship behind an off-by-default
 `unstable-projection` feature, with a documented exemption from semver.**
-`[PROVISIONAL — falsified the moment PS-2's bar is met before 0.1, which happens
-if a Workers or Neon projection adapter lands earlier than scheduled]`
+`[NON-NORMATIVE — discharged and then retired. The SHOULD was satisfied from
+phase 6 through the 0.2.0 release; PS-2's bar was met after 0.2.0 by ADR-0062,
+and ADR-0063 lifted the gate. The falsifier this clause carried — PS-2's bar met
+*before* 0.1 — can no longer fire in either direction. The ID is retained so that
+citations resolve; the feature name is retained on the contract crate, empty, so
+that 0.2.0 manifests resolve.]`
 **Rule:** `cargo hack --feature-powerset` in `cargo xtask ci`, which already
 runs; the exemption is a doc obligation, not an adapter obligation.
 **Cases:** none directly; it is what makes E2E-15 through E2E-25 safe to answer
@@ -5070,42 +5128,38 @@ What the projection suite showed when it was run against two batch shapes at
 once is recorded in `references/evaluation/projection-batch-shape-evidence.md:1`,
 which is evidence for this clause and deliberately not a verdict on it.
 
-**PS-3's SHOULD is discharged as of phase 6, and its marker does not move.** The
-feature exists: `unstable-projection` is declared in
-`crates/happenstance-core/Cargo.toml:68`, is absent from `default`, and gates
-`pub mod projection;` and its re-exports at
-`crates/happenstance-core/src/lib.rs:110`; the documented exemption is the
-module's own header (`crates/happenstance-core/src/projection.rs:3`) and the
-`[Unreleased]` entry in `CHANGELOG.md`. The gate is held by
-`the_projection_port_is_behind_an_off_by_default_feature` and
-`the_gate_is_mounted_on_the_module_and_its_re_exports` in `xtask/src/main.rs`, so
-the discharge is guarded rather than a claim about a moment in time. The
-`[PROVISIONAL]` marker stays exactly where it is: its falsifier is *PS-2's bar met
-before 0.1*, and that has not happened. A satisfied SHOULD is not a moved marker,
-and nothing here says the port ships behind the feature at 0.1 — that is phase
-12's decision (`RUNBOOK.md:601`).
+**PS-3's SHOULD was discharged at phase 6 and its marker did not move until
+the gate came off.** For the life of the gate, `unstable-projection` was declared
+on `crates/happenstance-core/Cargo.toml`, absent from `default`, and mounted on
+`pub mod projection;` and its re-exports in `crates/happenstance-core/src/lib.rs`,
+held there by two tests in `xtask/src/main.rs`. ADR-0063 inverted both: the port
+is mounted unconditionally, `the_port_is_mounted_unconditionally` refuses any
+`cfg` on it, and `the_retired_projection_feature_is_still_declared_and_empty`
+holds the feature name in the manifest as an empty no-op — because removing a
+feature is a breaking change and a `0.2.0` manifest names it. What the typed
+layer still gates behind its own `unstable-projection` is the runner, and that
+is PS-33's territory rather than this clause's.
 
 ---
 
 ### 4.1a What is actually open
 
-Seventeen `PS` clauses are `[PROVISIONAL]`, which reads as a section that could
-not make up its mind. It is not: **sixteen** of them are **six** questions, and
-the clauses within each stand or fall together. A reader deciding whether to build
-against this port needs the six, not the seventeen.
+The `PS` clauses still `[PROVISIONAL]` read as a section that could not make up
+its mind. They are not: they are **six** questions, and the clauses within each
+stand or fall together. A reader deciding whether to build against this port
+needs the six, not the clause count — which §7.2 carries so that it cannot drift
+here.
 
-The seventeenth is **PS-3**, and it is deliberately not a row below, because it is
-not an open question about the port's shape. Its falsifier names no design
-uncertainty at all — it fires the moment PS-2's bar is met before 0.1 — so what
-PS-3 waits on is the *schedule*, where the other sixteen wait on *answers*. It is
-resolved by PS-2 and by nothing of its own, which is the gate §7.1 means when it
-says PS-2 is the single one they all wait on. Giving it a row would put a seventh
-question in this table that this section has never asked, and the table is meant
-to be the questions.
+PS-3 used to be the one clause deliberately not in this table, because it waited
+on the *schedule* rather than on an answer; ADR-0063 retired it. Question 1
+below is what ADR-0063 mostly closed: PS-4, PS-5, PS-12 and PS-34 moved on the
+evidence of an adapter at each end of the batch-shape axis, and what remains of
+the row is PS-6, whose falsifier fired under ADR-0062 and which stays open
+against a narrower adapter than the one that fired it.
 
 | # | The question | Clauses | What answers it | Phase |
 |---|---|---|---|---|
-| 1 | Does any adapter need a live handle acquired **before** the first write? | PS-4, PS-5, PS-6, PS-12, PS-34 | The Ladybug skeleton. `lbug`'s graph writes are the named candidate: if they require a handle opened up front, the owned `Batch` is wrong, the GAT returns, and PS-34 becomes binding | 2, confirmed at 11 |
+| 1 | Does any adapter need a live handle acquired **before** the first write? | PS-6 (PS-4, PS-5, PS-12 and PS-34 closed by ADR-0063) | Answered from both ends: Ladybug's deferred write set at phase 11, and `LivePostgresProjectionStore` under ADR-0062, which *does* acquire a handle before the first write and needed no lifetime on `Batch` to do it. What is left is PS-6's narrower question — an adapter that must reserve something from its server *and* cannot afford the round trip `begin` now permits | 2, confirmed at 11, closed at 12 |
 | 2 | Does generic code need a **write vocabulary** on `Batch`? | PS-9, PS-11 | A second generic consumer — any library code happenstance itself ships that must write into an unknown adapter's batch. One consumer (the suite) is served by PS-11's probe; two is a bound | 6, evaluated at 7 |
 | 3 | What does a **rebuild** actually do? | PS-16, PS-22, PS-24, PS-25 | The first real rebuild, against a store whose read model is not a single table. In-place versus into-a-second-`ProjectionId`-and-swap is the fork | 6 |
 | 4 | Does anyone **call** these? | PS-18, PS-27, PS-30 | Counting callers at the typed layer's phase exit. This is ADR-0007's own falsifier pattern, and it is the one that most needs an owner, because "nobody ever needed it" is not something you can observe by waiting | 7 |
@@ -5149,12 +5203,12 @@ not to.
 back one with a live transaction; the port's obligation is PS-1, and PS-1 is
 satisfiable by opening the transaction inside `commit` around a buffered write
 set.**
-`[PROVISIONAL — falsified by an adapter that can satisfy PS-1 only with a handle
-acquired before the first write. LadybugDB is the named candidate: if `lbug`'s
-graph mutations cannot be expressed as a replayable statement list, or if its
-write handle must exist before a traversal that the projection's own logic
-depends on, the deferred write set is not universal. Owned by the Ladybug phase
-(RUNBOOK phase 4).]`
+`[FROZEN]` *(by ADR-0063. The falsifier was an adapter that could satisfy PS-1
+only with a handle acquired before the first write, LadybugDB the named
+candidate; Ladybug's deferred write set held at phase 11, and
+`LivePostgresProjectionStore` — an adapter that does acquire a handle first —
+satisfies PS-1 by the same `commit` and confirms the MAY rather than forcing a
+MUST.)*
 **Rule:** `commit_is_atomic_with_the_read_model` run against a buffering
 adapter; the rule is shape-blind by construction, which is the point.
 **Cases:** E2E-24.
@@ -5166,8 +5220,9 @@ correct.
 
 **PS-5 — `Batch` MUST NOT carry a lifetime parameter. It is `type Batch;`, an
 owned value.**
-`[PROVISIONAL — falsified together with PS-4; if a live handle turns out to be
-required, the GAT returns and PS-34 becomes binding]`
+`[FROZEN]` *(by ADR-0063, with PS-4. The live handle the falsifier feared arrived
+— `sqlx::Transaction<'static, Postgres>` as a batch — and needed no lifetime,
+which is the finding PS-5 was built on, now with an adapter standing on it.)*
 **Rule:** `MemoryProjectionStore` and one real adapter compiling without the
 `where Self: 'a` clause, which is a compile-time observation rather than a
 runtime rule. Stated here because it is what PS-34 is contingent on.
@@ -5180,19 +5235,28 @@ associated type there are no lifetime parameters on `commit` to mismatch, so
 blocked every adapter attempt disappears. And it removes the `where Self: 'a`
 bound from every impl for a lifetime the `Send` flavour cannot use.
 
-**PS-6 — `begin` MUST be neither `async` nor fallible.**
-`[PROVISIONAL — falsified by an adapter that must reserve something from the
-server before the first write, such as a batch identifier or an advisory lock
-that cannot be taken at commit. Owned by the Neon phase.]`
-**Rule:** the signature; no runtime rule. Enforced by the compiler on every
-implementer.
+**PS-6 — An adapter with nothing to reserve from its server MUST NOT spend a
+round trip in `begin`: a buffering adapter's `begin` MUST resolve at its first
+poll and MUST NOT fail.**
+`[PROVISIONAL — the falsifier this clause carried, *an adapter that must reserve
+something from the server before the first write*, FIRED at phase 10b on
+`sqlx`'s `BEGIN`, and ADR-0062 is the record. The clause used to read "`begin`
+MUST be neither `async` nor fallible", enforced by the signature; that signature
+forbade a batch that is a live transaction and the MUST was rewritten to the
+discipline it was protecting. Still provisional, against an adapter that must
+reserve something and cannot afford the round trip either — none is named.]`
+**Rule:** adapter-private, because the port no longer enforces it —
+`begin_makes_no_round_trip` in `crates/happenstance-neon/src/projection_store.rs:789`,
+which drives `begin` over a transport that fails every request and receives
+`Ok`; and `begin_resolves_at_its_first_poll_without_a_runtime` in
+`crates/happenstance-core/tests/projection_memory.rs:61`, which polls it once
+with a no-op waker and no executor.
 **Cases:** E2E-24.
 **Rejects:** a Neon adapter that spends a network round trip on `BEGIN` it does
-not need, because the trait told it `begin` was allowed to be expensive. The
-correction folded into E2E-24 is precise about this: Neon's problem is not that
-a batch cannot borrow the client — it can, trivially — but that `begin` being
-`async` and fallible implies a round trip that the one-shot HTTP transport
-cannot afford and does not require.
+not need, because the trait's `async` told it `begin` was allowed to be
+expensive. The signature cannot forbid this any more; the two tests above are
+what does, and an adapter with a transport that can count its requests owes
+the same test.
 
 **PS-7 — Dropping a `Batch` without `commit` or `reset` MUST roll back, and MUST
 leave the store usable for subsequent batches.**
@@ -5322,12 +5386,28 @@ pub trait ProjectionProbe: ProjectionStore {
     /// Whether this adapter offers any read path on an open batch. See PS-12.
     const READS_THROUGH_BATCH: bool;
 
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64);
-    fn probe_delete_all(&self, batch: &mut Self::Batch);
-    async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error>;
+    // Every batch-touching member is a future of a `Result` over `&mut Batch`
+    // since ADR-0062: a driver borrows its connection mutably to issue a
+    // statement, the statement yields, and it can fail. Spelled `impl Future`
+    // rather than `async fn` because this trait is not under `trait_variant`.
+    fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
+    fn probe_delete_all(
+        &self,
+        batch: &mut Self::Batch,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
+    fn probe_read(&self, key: &str) -> impl Future<Output = Result<Option<u64>, Self::Error>>;
 
     /// Only called when `READS_THROUGH_BATCH`; may be `unimplemented!()` otherwise.
-    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64>;
+    fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> impl Future<Output = Result<Option<u64>, Self::Error>>;
 }
 ```
 
@@ -5370,10 +5450,11 @@ made visible in the type system rather than in prose.
 **PS-12 — An adapter MUST either make reads issued through an open `Batch`
 reflect that batch's own pending writes, or expose no read path on the `Batch`
 at all. It MUST NOT expose a read path that answers from committed state.**
-`[PROVISIONAL — falsified by an adapter that can satisfy PS-1 but cannot answer
-a read over its pending set at acceptable cost. Ladybug is the named candidate:
-a graph traversal over buffered Cypher is not obviously cheaper than the
-alternative. Owned by the Ladybug phase (RUNBOOK phase 4).]`
+`[FROZEN]` *(by ADR-0063. Both arms now have an adapter over a real database:
+Ladybug, Postgres, Neon and SQLite decline the read path and their rule is a
+reported skip; `LivePostgresProjectionStore` offers it and its rule ran. The
+falsifier — an adapter that cannot answer at acceptable cost — is what the
+"expose no read path" arm exists for, and Ladybug took it.)*
 **Rule:** `batch_reads_reflect_pending_writes` — gated on
 `ProjectionProbe::READS_THROUGH_BATCH`; write a probe row, read it back through
 the same batch before commit, assert the pending value. CF-18 governs the gate:
@@ -5560,10 +5641,10 @@ sync compensation.
 **Evaluated at the typed layer's phase exit, and two things had changed — only
 one of them expected.** The typed layer's planning pass recorded this clause's
 subject as *absent from the tree*, and that is no longer true: `reset` is a
-method on the port (`crates/happenstance-core/src/projection.rs:497`),
+method on the port (`crates/happenstance-core/src/projection.rs:521`),
 `ResetError::Refused` is a variant (`:287`), and
 `refused_reset_changes_nothing` is a real rule registered in the projection
-suite (`crates/happenstance-testkit/src/projection.rs:1360`, `:1909`). The
+suite (`crates/happenstance-testkit/src/projection.rs:1411`, `:1962`). The
 mechanism and its instrument are both here.
 
 **What is still absent is an adapter, and the count is therefore unavailable
@@ -5653,7 +5734,7 @@ batch at a position the store's event log actually assigned, assert success and
 assert the checkpoint advanced.
 **Cases:** E2E-23.
 **Rejects:** an adapter that validates. That is a perfectly reasonable reading of
-"advances `id`'s checkpoint to `position`" (`projection.rs:177-189`), it would be
+"advances `id`'s checkpoint to `position`" (`projection.rs:511-513`), it would be
 equally conformant today, and it makes a narrow projection re-scan the same
 range forever on every restart —
 Norvant's `cold_chain_certificate_expiry` matches about 40 of 37,000 events a
@@ -5860,7 +5941,7 @@ new port surface and no store-side knowledge of what a skip means.
 **Evaluated at the typed layer's phase exit, and the count is zero — but not for
 the reason the falsifier anticipated.** The falsifier expected *"record"* to
 degrade into *"log a warning"*. It did not: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:401`) writes nothing anywhere, logs nothing,
+(`crates/happenstance/src/runner.rs:524`) writes nothing anywhere, logs nothing,
 and **halts** on the first failure it meets. There is no `on_error`, no
 `SkipPolicy` and no policy argument of any kind, and that absence is deliberate
 rather than unfinished — it is this clause's own *Rejects* read one layer up. A
@@ -5961,7 +6042,7 @@ and the obstacle is now stronger than *"nobody got round to it"*.** The port's
 shared between tasks at all — and moving one into a `tokio::spawn` would
 additionally require `Send`, which the flavour that exists for `wasm32` cannot
 promise. `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:401`) therefore drives exactly one
+(`crates/happenstance/src/runner.rs:524`) therefore drives exactly one
 projection per call, catches no unwind, and spawns nothing; N read models cost N
 independent reads.
 
@@ -6009,7 +6090,7 @@ implementation.
 **Cases:** E2E-31.
 **Rejects:** the obvious implementation — emit through a command handler after
 `commit` returns — which re-emits on every rebuild. It also falsifies the port's
-own escape hatch: `projection.rs:28-30` tells a projection that cannot be
+own escape hatch: `projection.rs:98-100` tells a projection that cannot be
 transactional to be idempotent instead, and an outward-writing projection cannot
 be. On the Kestrel Cold Chain hub both stores are the same SQLite file, so the
 transaction is physically available and the two ports forbid expressing it. The
@@ -6089,7 +6170,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:401`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:524`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 
@@ -6113,7 +6194,11 @@ because the work list did not exist. It does now, and this is it.
 **PS-34 — If PS-5 is falsified and `Batch` keeps its lifetime, the port MUST
 document that an implementer has to spell the parameter `Self::Batch<'_>`
 literally, and MUST carry a doctest that does.**
-`[PROVISIONAL — contingent on PS-5; dead the moment `type Batch;` lands]`
+`[NON-NORMATIVE — its own marker said "dead the moment `type Batch;` lands", and
+that landed at phase 6; ADR-0063 froze PS-5, so the condition this clause hangs
+on can no longer occur. The ID is retained so that citations resolve; the doctest
+the clause asked for exists anyway, on `ProjectionStore`, and is what `E0195`'s
+disposition rests on.]`
 **Rule:** a doctest on `ProjectionStore` implementing the port for a toy store,
 which cannot rot because CI runs it.
 **Cases:** E2E-24.
@@ -6226,7 +6311,7 @@ registry macro `event_store_conformance!` uses, so it inherits the tokio,
 blocking and wasm flavours without a second mechanism.
 
 **All seventeen now exist.** `for_each_projection_store_rule`
-(`crates/happenstance-testkit/src/projection.rs:1884-1919`) is the single
+(`crates/happenstance-testkit/src/projection.rs:1937-1972`) is the single
 enumeration they are emitted from, and `no_orphan_projection_rules` holds that
 list and the module's own rules to each other in both directions — so the table
 below is checkable against one place rather than counted by hand. Two sentences
@@ -6545,7 +6630,7 @@ Cases: E2E-42.
 one by origin timestamp or by origin position, so that a replicated event lands
 where it "belongs". It is the intuitive merge and it silently destroys every
 projection on the store: `ProjectionStore::checkpoint` is one scalar that
-`ReadOptions::from` resumes at (`projection.rs:454-455`), so an event inserted
+`ReadOptions::from` resumes at (`projection.rs:477-478`), so an event inserted
 below an existing checkpoint is never read, never applied, and never reported
 missing. The port has never chosen between the two, and this is the choice.
 
@@ -9175,7 +9260,7 @@ this section's terms: three of the six projection rules the roadmap specifies �
 rollback leaves both unchanged, a dropped batch leaves both unchanged, a failed
 commit leaves the store unchanged — cannot observe the read model at all, because
 generic suite code holding a `P::Batch<'_>` can only pass it to `commit` or
-`rollback` (`projection.rs:504-513`). By CF-1 those three are decorative until
+`rollback` (`projection.rs:527-536`). By CF-1 those three are decorative until
 something can write a row. That is not an argument about ergonomics; it is the
 reason a suite that can test only the checkpoint half of a two-write invariant
 cannot reject an adapter that commits the checkpoint and silently drops the
@@ -9282,10 +9367,10 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 34 | 24 | 9 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 42 | 33 | 8 | 1 | 0 |
-| §4 `ProjectionStore` | `PS` | 38 | 17 | 15 | 3 | 3 |
+| §4 `ProjectionStore` | `PS` | 38 | 20 | 10 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 40 | 33 | 4 | 2 | 1 |
-| **Total** | | **201** | **138** | **46** | **12** | **5** |
+| **Total** | | **201** | **141** | **41** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9398,16 +9483,16 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|
 | PS-1 | FROZEN | `commit_is_atomic_with_the_read_model`, `commit_advances_the_checkpoint`, `fai… | E2E-17, E2E-21, E2E-23 |
 | PS-2 | FROZEN | `commit_is_atomic_with_the_read_model` | E2E-17, E2E-24 |
-| PS-3 | PROVISIONAL | `cargo hack --feature-powerset` in `cargo xtask ci`, which already runs; the e… | *(none directly; cites E2E-15, E2E-25)* |
-| PS-4 | PROVISIONAL | `commit_is_atomic_with_the_read_model` | E2E-24 |
-| PS-5 | PROVISIONAL | `MemoryProjectionStore` and one real adapter compiling without the `where Self… | E2E-19, E2E-24 |
-| PS-6 | PROVISIONAL | the signature; no runtime rule. Enforced by the compiler on every implementer. | E2E-24 |
+| PS-3 | NON-NORMATIVE | `cargo hack --feature-powerset` in `cargo xtask ci`, which already runs; the e… | *(none directly; cites E2E-15, E2E-25)* |
+| PS-4 | FROZEN | `commit_is_atomic_with_the_read_model` | E2E-24 |
+| PS-5 | FROZEN | `MemoryProjectionStore` and one real adapter compiling without the `where Self… | E2E-19, E2E-24 |
+| PS-6 | PROVISIONAL | `begin_makes_no_round_trip` †, `begin_resolves_at_its_first_poll_without_a_run… | E2E-24 |
 | PS-7 | FROZEN | `dropped_batch_leaves_store_usable` | E2E-24 |
 | PS-8 | FROZEN | `rollback_leaves_both_unchanged` | E2E-24, E2E-28 |
 | PS-9 | PROVISIONAL | *(none — see clause)* | E2E-20, E2E-29 |
 | PS-10 | FROZEN | a compile test on the `Projection` trait — a doctest annotated `compile_fail,E… | E2E-20, E2E-29 |
 | PS-11 | PROVISIONAL | `commit_is_atomic_with_the_read_model` | E2E-20, E2E-21, E2E-22, E2E-17 |
-| PS-12 | PROVISIONAL | `batch_reads_reflect_pending_writes` | E2E-21, E2E-22 |
+| PS-12 | FROZEN | `batch_reads_reflect_pending_writes` | E2E-21, E2E-22 |
 | PS-13 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-21, E2E-22 |
 | PS-14 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-22 |
 | PS-15 | PROVISIONAL | `commit_rejects_a_foreign_batch` | E2E-19 |
@@ -9429,7 +9514,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-31 | FROZEN | *(none — see clause)* | E2E-31 |
 | PS-32 | NON-NORMATIVE | *(none — see clause)* | E2E-20 |
 | PS-33 | NON-NORMATIVE | *(none — see clause)* | *(none directly; cites E2E-26, E2E-28)* |
-| PS-34 | PROVISIONAL | a doctest on `ProjectionStore` implementing the port for a toy store, which ca… | E2E-24 |
+| PS-34 | NON-NORMATIVE | a doctest on `ProjectionStore` implementing the port for a toy store, which ca… | E2E-24 |
 | PS-35 | NON-NORMATIVE | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
 | PS-36 | FROZEN | *(none — see clause)* | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |

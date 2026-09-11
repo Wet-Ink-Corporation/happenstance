@@ -79,17 +79,21 @@ backporting: a fix lands in the next release, and the release before it is not
 patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
 upgrade.
 
-`0.2.0` is the first stable release, and what that does and does not promise is
-worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
-[`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from here.
-`ProjectionStore` is **not**: it ships behind an off-by-default
-`unstable-projection` feature and carries a documented semver exemption until two
-adapters at opposite ends of the batch-shape axis have passed its conformance
-suite. A breaking change there is not a violation of this table.
+`0.2.0` was the first stable release and `0.3.0` is current; what each promises
+is worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
+[`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
+`0.2.0`. `ProjectionStore` was **not** at `0.2.0` — it shipped behind an
+off-by-default `unstable-projection` feature with a documented semver exemption
+— and **is from `0.3.0`**: adapters at both ends of its batch-shape axis passed
+its conformance suite and ADR-0063 lifted the gate. What remains exempt is the
+typed projection *runner* behind `happenstance`'s `unstable-projection`
+feature, for a reason that crate names; a breaking change there is not a
+violation of this table.
 
 | Version | Supported |
 |---|---|
-| `0.2.0` | ✅ current |
+| `0.3.0` | ✅ current |
+| `0.2.0` | ❌ superseded by `0.3.0`; its `unstable-projection` surface was exempt and has moved |
 | `0.2.0-alpha.*` | ❌ yanked at the `0.2.0` release |
 | anything earlier | ❌ |
 

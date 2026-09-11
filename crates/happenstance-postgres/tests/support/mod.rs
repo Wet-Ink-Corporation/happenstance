@@ -55,8 +55,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use happenstance_postgres::event_store::PostgresEventStore;
-use happenstance_postgres::migration;
 #[cfg(all(feature = "projection-store", feature = "conformance"))]
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+use happenstance_postgres::live_projection_store::LivePostgresProjectionStore;
+use happenstance_postgres::migration;
 use happenstance_postgres::projection_store::PostgresProjectionStore;
 use happenstance_postgres::sqlx::postgres::PgPoolOptions;
 use happenstance_postgres::sqlx::{Executor, PgPool};
@@ -829,3 +831,66 @@ const COMMIT_FAULT_TRIGGER: &str = concat!(
     "BEFORE INSERT OR UPDATE ON projection_checkpoint ",
     "FOR EACH ROW EXECUTE FUNCTION projection_commit_fault();",
 );
+
+/// The far end of PS-2's batch-shape axis: one backing store, any number of
+/// [`LivePostgresProjectionStore`] handles.
+///
+/// A wrapper over [`PostgresProjectionFixture`] rather than a second copy of
+/// it: the container, the schema-per-instance isolation, the pool sizing and
+/// the commit-fault trigger are identical, because the *storage* is identical.
+/// What differs is the store type handed out by `connect`, which is the whole
+/// of what the axis is about.
+///
+/// The capabilities are declared here rather than delegated as constants,
+/// because an associated `const` cannot be delegated in a way a reader can
+/// check at a glance. They are the same three values for the same reasons,
+/// and `READS_THROUGH_BATCH` — the one that differs between the two stores —
+/// is not a fixture capability at all: it lives on the store's probe.
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+#[derive(Debug)]
+pub(crate) struct LivePostgresProjectionFixture(PostgresProjectionFixture);
+
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+impl LivePostgresProjectionFixture {
+    /// Mints a fresh, empty schema name for this instance.
+    pub(crate) fn new() -> Self {
+        Self(PostgresProjectionFixture::new())
+    }
+
+    /// This instance's pool, for a test that needs to drive raw SQL against the
+    /// same schema its handles use.
+    pub(crate) async fn pool_for_test(&self) -> PgPool {
+        self.0.pool_for_test().await
+    }
+}
+
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+impl happenstance_testkit::ProjectionFixture for LivePostgresProjectionFixture {
+    type Store = LivePostgresProjectionStore;
+
+    /// A MUST, met the same way the buffered fixture meets it — and here the
+    /// two handles' batches are two **open transactions on two backend
+    /// sessions**, which is the sharpest form of the per-session hazard this
+    /// capability exists to expose.
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+
+    /// Declined, for the buffered store's reason: the live store holds no
+    /// protection policy either.
+    const RESET_REFUSAL: Capability = Capability::declined(
+        "LivePostgresProjectionStore holds no protection policy: the read model          belongs to the caller and this adapter owns only the checkpoint row and          the transaction that carries it, so there is no projection it could          decline to reset and `reset` returns `Refused` on no path at all",
+    );
+
+    /// Supported by the same trigger. What it exercises is sharper here: the
+    /// checkpoint upsert fails inside a transaction whose read-model statements
+    /// have **already reached the server**, so the rule is checking that the
+    /// adapter really does roll those back rather than leave them committed.
+    const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        LivePostgresProjectionStore::new(self.0.pool_for_test().await)
+    }
+
+    async fn arm_commit_fault(&self) {
+        self.0.arm_commit_fault().await;
+    }
+}

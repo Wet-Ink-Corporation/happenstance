@@ -22,14 +22,15 @@ publish = false
 # names still resolve, through the facade's `pub use happenstance_core::*`.
 #
 # `unstable-projection` is spelled here rather than defaulted, and the name is
-# the promise: the projection port is not frozen. An application that only
-# wants the command loop does not write this line.
+# the promise: the *runner*'s `apply` shape is not yet proved at its far end.
+# The port beneath it is frozen since ADR-0063. An application that only wants
+# the command loop does not write this line.
 #
 # `default-features = false` and the three named explicitly, because the default
 # set carries `memory` and an application that has chosen a durable store has no
 # use for `MemoryEventStore` in its binary. Turning it off is what a consumer
 # would do, and doing it here is what keeps this manifest an honest model of one.
-happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.3.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
   "unstable-projection",
@@ -42,10 +43,10 @@ happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", 
 # user_version`, which is what makes sharing one file safe rather than lucky.
 # `projection-store` is named, and naming it is the point. It left this crate's
 # default set at PS-3's verdict, so a bare `cargo add happenstance-sqlite` gets
-# the event store and nothing else. The projection half forwards
-# `happenstance-core/unstable-projection` — a port PS-2's bar has not been met
-# for — and an application that wants it now says so, in the one place a reader
-# of this example will look for what it costs.
+# the event store and nothing else. It forwarded the contract crate's gate
+# until ADR-0063 lifted it; now it gates only the adapter's own module, and an
+# application that wants the projection role still says so here, in the one
+# place a reader of this example will look for what it costs.
 happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = [
   "projection-store",
 ] }

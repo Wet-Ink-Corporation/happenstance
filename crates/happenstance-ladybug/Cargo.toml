@@ -12,10 +12,11 @@ categories.workspace = true
 publish = false
 
 [dependencies]
-# `unstable-projection` is named here rather than inherited: this crate's whole
-# subject is the projection port, and feature unification is per build — the
-# `-p` doc step and every `cargo hack` combination build this crate alone.
-happenstance-core = { workspace = true, features = ["std", "unstable-projection"] }
+# No projection feature: the port this crate's whole subject implements is
+# unconditional on the contract crate since ADR-0063. (Until then
+# `unstable-projection` was named here rather than inherited, because feature
+# unification is per build and the `-p` doc step builds this crate alone.)
+happenstance-core = { workspace = true, features = ["std"] }
 thiserror.workspace = true
 
 [dev-dependencies]

@@ -289,11 +289,11 @@ impl ProjectionStore for BufferingProjectionStore {
     /// There is no connection to check out, no transaction to open and no lock
     /// to take — which is the whole shape. A store that had something to acquire
     /// here would be the other end of the axis.
-    fn begin(&self) -> Self::Batch {
-        BufferingBatch {
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        Ok(BufferingBatch {
             stamp: self.stamp,
             journal: Vec::new(),
-        }
+        })
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
@@ -423,7 +423,12 @@ impl ProjectionProbe for BufferingProjectionStore {
     /// the load-bearing one.
     const READS_THROUGH_BATCH: bool = true;
 
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
         // Appended, never collapsed. Nothing reaches `committed` on this path —
         // the assertion `the_read_model_changes_only_at_commit` makes directly,
         // and the one a green suite alone cannot make.
@@ -431,22 +436,28 @@ impl ProjectionProbe for BufferingProjectionStore {
             key: key.to_owned(),
             value,
         });
+        Ok(())
     }
 
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
         batch.journal.push(Op::DeleteAll);
+        Ok(())
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error> {
         Ok(self.committed.borrow().rows.get(key).copied())
     }
 
-    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64> {
-        match staged(&batch.journal, key) {
+    async fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
+        Ok(match staged(&batch.journal, key) {
             Staged::Value(value) => Some(value),
             Staged::Cleared => None,
             Staged::Silent => self.committed.borrow().rows.get(key).copied(),
-        }
+        })
     }
 }
 

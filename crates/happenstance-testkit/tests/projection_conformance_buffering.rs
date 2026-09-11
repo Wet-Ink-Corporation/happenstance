@@ -81,8 +81,8 @@ async fn the_read_model_changes_only_at_commit() {
     // The anchor, so that "unchanged" is a *recorded* state rather than the
     // empty one: a store that had committed nothing would preserve nothing
     // anybody could have broken.
-    let mut anchor = writer.begin();
-    writer.probe_write(&mut anchor, "anchor", 1);
+    let mut anchor = writer.begin().await.unwrap();
+    writer.probe_write(&mut anchor, "anchor", 1).await.unwrap();
     writer
         .commit(anchor, &id, anchored, Authority::Live)
         .await
@@ -98,10 +98,10 @@ async fn the_read_model_changes_only_at_commit() {
          the rest of this test is comparing the empty state against itself"
     );
 
-    let mut batch = writer.begin();
-    writer.probe_write(&mut batch, "staged", 7);
-    writer.probe_delete_all(&mut batch);
-    writer.probe_write(&mut batch, "staged", 9);
+    let mut batch = writer.begin().await.unwrap();
+    writer.probe_write(&mut batch, "staged", 7).await.unwrap();
+    writer.probe_delete_all(&mut batch).await.unwrap();
+    writer.probe_write(&mut batch, "staged", 9).await.unwrap();
 
     // Three ops queued, including one that would clear the whole read model.
     // Committed state is read through a *fresh* handle, so nothing about this
@@ -134,7 +134,10 @@ async fn the_read_model_changes_only_at_commit() {
     // Read-through is the *other* answer, and asserting it here is what keeps
     // the row above from being satisfied by a store that simply lost the write.
     assert_eq!(
-        writer.probe_read_through(&batch, "staged"),
+        writer
+            .probe_read_through(&mut batch, "staged")
+            .await
+            .unwrap(),
         Some(9),
         "the journal must answer for its own last staged write, or the assertion \
          above is satisfied by a store that dropped it"

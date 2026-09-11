@@ -23,13 +23,82 @@ not the same as what a user needed to be told.
   crates. Adding a conformance rule is a semver-*minor* change that can turn a
   passing adapter's CI red, so treat a minor bump there as breaking and pin it
   exactly.
-- **`ProjectionStore` ships behind an off-by-default `unstable-projection`
-  feature** — declared on `happenstance-core`, and forwarded by `happenstance`
-  for the typed runner built over it — and is exempt from semver. Four adapters
-  clear its suite; what keeps it gated is that PS-2 asks for two at *opposite
-  ends* of the batch-shape axis and the far end is unreachable through the port's
-  own signatures, so the freeze waits on a replacement axis rather than on
-  another adapter. See [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
+- **`ProjectionStore` shipped behind an off-by-default `unstable-projection`
+  feature at `0.2.0`** and was exempt from semver. It is not, from `0.3.0`:
+  ADR-0063 lifted the gate on the evidence ADR-0062 produced, and the
+  feature survives on `happenstance-core` only as an empty name so that
+  `0.2.0` manifests resolve. What `happenstance` still holds behind a feature
+  of the same name is the typed **runner**, whose `Projection::apply` shape is
+  not yet proved at its far end. See
+  [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
+
+## [0.3.0] — 2026-09-11
+
+The projection port joins the promise. `0.2.0` froze `EventStore` and shipped
+`ProjectionStore` behind an off-by-default feature with a written exemption,
+because the far end of the axis its freeze condition named could not be built
+through the port's own signatures. This release moves those signatures, builds
+that far end, proves the port against it, and freezes it — so from here the
+`[FROZEN]` `PS` clauses in [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md)
+are semver-binding exactly as the `ES` ones are.
+
+**Read the first entry below before upgrading an adapter.** It is a breaking
+change to `ProjectionStore` and `ProjectionProbe` as they stood at `0.2.0`.
+The exemption that feature carried is what made it a minor bump rather than a
+major; it is the last change that exemption will ever cover, because the
+surface it covered is now frozen.
+
+All seven crates move to `0.3.0` together, `happenstance-testkit` included:
+its projection rules drive the moved seam, so a `0.2.0` fixture author takes
+this release with the contract crate rather than beside it.
+
+### Changed
+
+- **The projection port's probe seam and `begin` moved, under ADR-0062.**
+  `ProjectionStore::begin` is `async` and fallible, and `ProjectionProbe`'s
+  three batch-touching members — `probe_write`, `probe_delete_all`,
+  `probe_read_through` — take `&mut Self::Batch` and return a future of a
+  `Result`. Breaking to every implementer of either trait, and exempt from
+  semver because both live behind `unstable-projection`, which is what the
+  exemption was kept for. The reason is the finding ADR-0060 recorded: the old
+  signatures made a batch that is a live transaction impossible to build for
+  `sqlx` and impossible to *report* for any driver, so the suite could not tell
+  the two ends of PS-2's batch-shape axis apart. PS-6's own falsifier — *"an
+  adapter that must reserve something from the server before the first
+  write"* — had fired on `sqlx`'s `BEGIN`, and this is that firing recorded.
+  A buffering adapter's `begin` is a future that is ready at its first poll and
+  costs no round trip; `happenstance-neon` proves it over a transport that
+  fails every request. The typed runner gains `ProjectionError::Begin` and
+  loses `ProjectionError::Rollback`: it now pulls a chunk's first event
+  *before* opening a batch, so an empty replay — or one whose last chunk was
+  exactly `chunk` long — never opens a write set it would only roll back,
+  which was free for a buffer and is a `BEGIN` round trip for a live
+  transaction. The arm that reported that rollback failing is produced
+  nowhere and is gone.
+- **`happenstance-postgres` carries a second projection store,
+  `LivePostgresProjectionStore`, whose batch is a `sqlx::Transaction`.** It is
+  the far end of PS-2's axis: it declares `READS_THROUGH_BATCH = true`
+  truthfully and passes all seventeen rules against a live server, with
+  `batch_reads_reflect_pending_writes` and `rebuild_is_chunk_size_invariant`
+  reported as runs rather than skips for the first time on any adapter over a
+  real database. It is an instrument for the port's freeze rather than a
+  product: the typed layer's `Projection::apply` is synchronous and cannot
+  issue a statement into a live transaction, so an application still uses
+  `PostgresProjectionStore`. **PS-2's bar is met as written.**
+- **The `unstable-projection` gate is lifted on `happenstance-core`, under
+  ADR-0063.** `ProjectionStore`, its value types, `MemoryProjectionStore` and
+  `ProjectionProbe` (still behind `conformance`) are unconditional, and the
+  `[FROZEN]` `PS` clauses are semver-binding exactly as the `ES` ones are. PS-3
+  is retired; PS-4, PS-5 and PS-12 are frozen on the two ends of the axis
+  passing; PS-34 is retired with PS-5 frozen; PS-6 stays provisional under
+  ADR-0062. The feature is **retained, empty**, on `happenstance-core` —
+  removing a feature is a breaking change and a `0.2.0` manifest names it —
+  and `conformance` implies nothing again. Adapters' `projection-store` flags
+  no longer forward it. `happenstance`'s `unstable-projection` keeps gating the
+  typed runner, now for the runner's own reason (`Projection::apply` is
+  synchronous), and no longer forwards to the contract crate. A consumer of
+  the port drops the feature from their dependency line; a consumer of the
+  runner keeps it.
 
 ## [0.2.0] — 2026-09-10
 

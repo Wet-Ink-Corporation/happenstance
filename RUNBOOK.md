@@ -579,8 +579,8 @@ ADR-0026 must be written against two unlike peers, not one.
 |---|---|---|---|
 | Does the `ProjectionStore` port survive contact with a real transaction API | 6 | **settled — PS-4 – PS-8.** The borrowed GAT does not survive on the `Send` flavour; the batch becomes owned. Note that this does **not** make the foreign-batch hazard unrepresentable — that claim was compiled and refuted (`PRESSURE-TEST.md:179-201`): a lifetime names a region, not an instance | 0017 |
 | Does `commit` reject a batch begun on another store instance | 6 | **provisional — PS-15.** Only a generative brand rejects the call; the owned batch does not | 0017 |
-| Is a `Batch` read-your-writes within one chunk | 6 | **provisional — PS-12** | 0017 |
-| Ship the projection port behind `unstable-projection` at 0.1, or freeze it | 6 | **provisional — PS-3.** The honest option if the two batch shapes disagree, and it decouples publication from this phase | 0017 |
+| Is a `Batch` read-your-writes within one chunk | 6 | **settled — PS-12 frozen by ADR-0063**, both arms with an adapter over a real database | 0017, 0063 |
+| Ship the projection port behind `unstable-projection` at 0.1, or freeze it | 6 | **settled — PS-3 retired.** Shipped gated at `0.2.0` (ADR-0036, reaffirmed by ADR-0060); frozen after it by ADR-0063, once ADR-0062 had put an adapter at each end of the batch-shape axis | 0036, 0060, 0062, 0063 |
 | May `commit` name a position no applied event occupies; may a checkpoint move backwards | 6 | **settled — PS-21; provisional — PS-22** | 0018 |
 | Ladybug checkpoint placement; how a projection expresses graph mutations; `lbug`'s blocking API | 11 | open | 0025 |
 | Do projections poll, or does `EventStore` grow a tail/subscription seam | 9 | **settled for 0.1 — ES-32: absent, and stated as absent.** Phase 7's runner polls and phase 7 records the cost of N views × N reads; **phase 9 has now recorded its half** — the one-paragraph verdict is in phase 9's session log, and it says the seam is cheap to reopen post-0.1 *only* in the additive shape this clause already names. The previous plan named an owner whose work list had no item for it; both phases now carry one | — (post-0.1) |
@@ -686,13 +686,13 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 46 `[PROVISIONAL]` clauses
+### The 41 `[PROVISIONAL]` clauses
 
 Phase 12 cannot audit "every provisional clause has its falsifier scheduled"
 against prose. Grouped by what falsifies them, because they do not fail
-independently — seventeen of the `PS` rows wait on the same missing adapter, and
-counting them as seventeen open questions overstates the exposure by a factor of
-seventeen.
+independently — most of the `PS` rows waited on one missing adapter until
+ADR-0062 built it and ADR-0063 froze what it proved, and counting them as
+separate open questions overstated the exposure by that factor.
 
 | Group | Clauses | Falsified by | Owning phase |
 |---|---|---|---|
@@ -704,10 +704,8 @@ seventeen.
 | `Bytes`' human-readable form | WF-11 | a peer that cannot buffer a payload through any human-readable encoder | 9 |
 | The `!Send` flavour and `append` ownership | ES-7, ES-17 | the Cloudflare adapter, and `dynosaur` failing to erase a generic `append` | 1 and 4, confirmed 9 |
 | No tail seam at 0.1 | ES-32 | a Durable Object making one cheap enough to reopen | 9 (verdict), post-0.1 — **answered**; the one-paragraph verdict is in phase 9's session log. It answers *this* falsifier only: the clause's own benchmark-shaped one — E2E-32's fan-out runner holding N views within their staleness budget — is untouched and stays phase 7's |
-| The whole batch shape and write seam | PS-4 – PS-6, PS-9, PS-11, PS-12, PS-15 | **PS-2 alone** — `CheckpointOnlyStore` passing, or a third adapter disagreeing with the two that froze it | 6, re-tested 11 |
+| The write seam's consumers, the foreign-batch hazard, and `begin`'s round trip | PS-6, PS-9, PS-11, PS-15 | each its own, since ADR-0063 froze PS-4, PS-5 and PS-12 on both ends of the axis passing: a second generic consumer (PS-9, PS-11); a zero-cost instance-naming construction (PS-15); an adapter that must reserve something from its server and cannot afford the round trip (PS-6) | 6, re-tested 11, narrowed 12 |
 | Reset, checkpoint regression, chunked rebuild, query drift | PS-16, PS-22 – PS-25 | a rebuild that skips event 1, or a projection that cannot refuse a reset | 6 |
-| Ship behind `unstable-projection` | PS-3 | the two batch shapes disagreeing at phase 6 | 6, decided at 12 |
-| The E0195 spelling trap | PS-34 | a third implementer hitting it after the diagnostic is documented | 6, re-tested 11 |
 | Compensation's shape and the merge rule's details | SY-7, SY-10, SY-20 – SY-23, SY-29, SY-30 | two unlike peers that cannot both express it | 13 |
 | Where a per-peer watermark lives | SY-31 | a peer with no transaction to put it in | 13 |
 | Membership as a port operation | ES-41 | an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip | 9 or 10, whichever adapter lands first. Completeness has an instrument at neither end |
@@ -823,7 +821,7 @@ suite, because none has a body. An instrument is not a target.
 | Position allocation | `MemoryEventStore` — under the append lock | `happenstance-postgres` — `nextval()` outside the transaction | That the cost is a **measurement, not a signature**: nothing in the port's types can express the invariant `nextval()` breaks. So the skeleton settled the shape and [an experiment](experiments/position-visibility/README.md) settled the number | **fixture, phase 3** — `PreCommitPositionStore` fails `nothing_below_an_observed_position_appears_later` deterministically on one thread (CF-13). Adapter at phase 10 |
 | Transport | in-process | `happenstance-neon` — one-shot HTTP, no cursor, no interactive transaction | That a store with no connection, no cursor and no interactive transaction satisfies `EventStore` **as written** — and that a probe-then-write `append` compiles and races. Eight capability limits, none of them a type error | **empty at both ends.** Adapter at phase 10 |
 | Async flavour | `Send` native | `LocalMemoryEventStore`, then a Durable Object | That a genuinely `!Send` error and a genuinely `!Send` store compile against the bare flavour on `wasm32`, and that the *derived* flavour does not imply a `Send` error either (ADR-0009) | **fixture, phase 1** — `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28). Adapter at phase 9 |
-| Batch shape | a SQL transaction | Ladybug's graph write handle | That an owned batch serves SQL, HTTP and a graph handle — **and that a borrowed GAT still works too**, which cuts against §4.2's argument and is phase 6's to weigh | **empty at both ends**, and there is no projection suite to run either end against. Adapter at phase 11 |
+| Batch shape | a SQL transaction | Ladybug's graph write handle | That an owned batch serves SQL, HTTP and a graph handle — **and that a borrowed GAT still works too**, which cuts against §4.2's argument and is phase 6's to weigh | **both ends occupied.** Four buffered adapters and two instruments at the near end; `LivePostgresProjectionStore` — a `sqlx` transaction as the batch — at the far end since ADR-0062, passing all seventeen rules against a live server with `READS_THROUGH_BATCH = true` declared truthfully. Phase 10b had found the far end forbidden by the port's own signatures; ADR-0062 moved them. Frozen by ADR-0063 |
 | Handle multiplicity | one handle per fixture | two handles onto one backing store | Nothing. No skeleton has two handles onto one backing store | **fixture, phase 3** — `Fixture::connect` and `SECOND_HANDLE` (CF-16); `CachedHeadFixture` fails `two_handles_observe_each_others_appends`. Every fixture still hands out refcount clones of one in-process object, so no *connection* has been opened twice. Adapter at phase 8 |
 | Durability | in-memory | a store that survives a process reopen | Nothing. Every body is `todo!()` | **fixture, phase 3** — `REOPEN` and `acknowledged_writes_survive_a_reopen` (CF-17); `LosingFixture` fails it. Nothing yet loses a write to a *fault* rather than to an instruction. Adapter at phase 8 |
 | Completeness | a whole log | a store holding only a suffix | Nothing | **empty at both ends**, and nothing is planned before phase 14 (CF-27) |
@@ -5415,6 +5413,79 @@ frozen ones cost something to change.
   dependency closure and requires every phase in it to read `done`; adding the row
   now would either redden the gate or require marking phase 12 `done` over an
   unpublished release. The order stays publish → mark `done` → add the row.
+
+- **2026-09-10 — PS-2's owner answered the phase-10b result, and the far end of
+  the batch-shape axis is occupied.** ADR-0062 (`references/adr/0062-the-probe-seam-moves-and-the-far-end-is-built.md`)
+  took the arm ADR-0060 §3 named and declined: `ProjectionStore::begin` is
+  `async` and fallible, and `probe_write`, `probe_delete_all` and
+  `probe_read_through` take `&mut Self::Batch` and return a future of a `Result`.
+  Breaking to every implementer, free because `unstable-projection` carries the
+  exemption — which is what the gate was kept for. PS-6's own falsifier — *"an
+  adapter that must reserve something from the server before the first write"* —
+  had fired on `sqlx`'s `BEGIN` at 10b and nobody had recorded it; its MUST is
+  rewritten to the discipline the old signature enforced, and two tests hold that
+  discipline where the signature no longer can.
+
+  **The instrument is `LivePostgresProjectionStore`**
+  (`crates/happenstance-postgres/src/live_projection_store.rs`): `type Batch =`
+  a `sqlx::Transaction<'static, Postgres>` — the binding the phase-2 skeleton
+  declared and phase 10b could not discharge — declaring `READS_THROUGH_BATCH =
+  true` truthfully. Verified rather than asserted, against a live PostgreSQL in
+  a container: **20 of 20** in `tests/live_projection.rs`, all seventeen rules
+  plus three adapter-private tests, one of which asserts on the `RuleOutcome`
+  value that `batch_reads_reflect_pending_writes` and
+  `rebuild_is_chunk_size_invariant` reported `Ran` — the first time either has
+  run against anything but an in-process map. The buffered store's own 21 stayed
+  green on the moved seam, as did the rest of the workspace and the constitution's
+  compiled examples, one of whose `compile_fail` fences would otherwise have
+  started passing for the wrong reason.
+
+  **What the two ends disagreed about: nothing the port had to move for.** The
+  live shape needs an explicit `ROLLBACK` on the regression path where a buffer
+  drops a `Vec`; PS-7 is met by the driver's rollback-on-drop; a statement
+  refused mid-batch poisons the transaction and the seam's new `Result` is what
+  reports it. Each is the far end being harder, not the port being wrong. PS-2's
+  MUST is met as written.
+
+  **Not done here, and named as the next decision rather than taken in passing:
+  lifting the gate.** It is a semver promise on a published crate and owed its own
+  record (ADR-0063, if taken). What that record must weigh is the bound this pass
+  found: the typed layer's `Projection::apply` is synchronous, so an application
+  can push into a buffered batch and cannot issue a statement into a live one —
+  the live store is an instrument for the *port's* freeze, not a product, and
+  whether `apply` moves is the typed layer's axis, not this port's. The ADR is
+  staged for `/redkiln:kb-ingest` at
+  `.kb/_intake/2026-09-10-adr-0062-the-probe-seam-moves.md`.
+
+- **2026-09-11 — the gate comes off.** ADR-0063
+  (`references/adr/0063-the-projection-port-is-frozen.md`) takes the decision
+  ADR-0062 left: `ProjectionStore` is **frozen**, `happenstance-core`'s
+  `projection` module and re-exports are unconditional, `conformance` implies
+  nothing again, and a `[FROZEN]` `PS` clause is semver-binding exactly as an
+  `ES` one is. The feature name `unstable-projection` stays on the contract
+  crate, empty, because removing a feature is breaking and a `0.2.0` manifest
+  names it; the two `xtask` tests that held the gate on are inverted rather
+  than deleted, and a third refuses any in-tree forward of the retired feature.
+
+  **What stays gated is the typed runner**, behind `happenstance`'s feature of
+  the same name, for the runner's own reason: `Projection::apply` is
+  synchronous, so the far end the port was just proved against is one the
+  runner cannot drive for a projection that writes rows. Freezing `apply` now
+  would freeze a shape proved at one end of its axis — the mistake ADR-0060
+  refused for the port.
+
+  **Clauses:** PS-3 and PS-34 retired to `[NON-NORMATIVE]`; PS-4, PS-5 and
+  PS-12 `[FROZEN]` on both ends of the axis standing on them; PS-6 stays
+  provisional under ADR-0062; PS-9, PS-11, PS-15 and the rebuild cluster stay on
+  their own falsifiers — the ledger row above that grouped seven clauses under
+  *PS-2 alone* was a simplification the clauses' own text never made, and it is
+  narrowed. §1.3's census is 141 / 41 / 12 / 7 and §7.2 is regenerated.
+
+  Verified: `cargo xtask ci` green, the lint that pinned `conformance` to the
+  gate inverted to hold the empty case, the recipe test inverted to refuse a
+  dependency line naming a feature the port does not need. Staged for
+  `/redkiln:kb-ingest` at
+  `.kb/_intake/2026-09-11-adr-0063-the-projection-port-is-frozen.md`.
 
 ---
 

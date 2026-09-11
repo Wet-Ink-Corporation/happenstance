@@ -22,10 +22,11 @@ readme = "README.md"
 # `unstable-projection` is named rather than inherited. Feature unification is
 # per build, and this crate is checked twice on its own — once for the host and
 # once for `wasm32`, where nothing else is in the build to unify with.
-# `unstable-projection` is NOT here, and its absence is the point: it is forwarded
-# by the `projection-store` feature below rather than taken unconditionally. Held
-# here it would reach every consumer of this crate whatever features they chose,
-# which is how a gate that two other crates maintain gets walked around by a third.
+# `unstable-projection` is NOT here, and since ADR-0063 it is nowhere: the port
+# it gated is unconditional on the contract crate, and the feature survives
+# there only as an empty name so `0.2.0` manifests resolve. While the port was
+# gated its absence from this line was the point — held here it would have
+# reached every consumer of this crate whatever features they chose.
 happenstance-core = { workspace = true, features = ["std"] }
 # Payloads travel base64, not `\x` hex. Both round-trip through the endpoint
 # correctly — measured, in both directions — and the choice is arithmetic: hex is
@@ -112,17 +113,19 @@ http-body-util = "0.1"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [features]
-# The event store only. `projection-store` left this set with ADR-0036: it forwards
-# an unfrozen port, and PS-3 says such a port ships behind an off-by-default flag.
+# The event store only. `projection-store` left this set with ADR-0036, when the
+# port it forwarded was unfrozen; the port is frozen now and the flag stays out
+# because a consumer who wants only the event store should not compile the
+# other role.
 default = ["event-store"]
 # The transport and the error type are unconditional: they are the crate's actual
 # contribution and both roles are written in terms of them.
 event-store = []
-# Forwards the contract crate's own gate, the way `happenstance-sqlite` does. It was
-# empty while the dependency above carried the flag unconditionally — so the feature
-# named the capability while doing none of the gating, and turning it off changed
-# nothing a consumer could observe.
-projection-store = ["happenstance-core/unstable-projection"]
+# The projection role. It forwarded the contract crate's `unstable-projection`
+# gate until ADR-0063 lifted it; forwarding a feature that now turns nothing on
+# would tell a reader the port is gated, so the list is empty and what the flag
+# gates is this crate's own module.
+projection-store = []
 # `impl ProjectionProbe for NeonProjectionStore`, and the probe table it writes
 # through. Off by default, because that table is the *suite's* read model and has
 # no business in an application's database.

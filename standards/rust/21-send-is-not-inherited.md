@@ -31,7 +31,9 @@ easier; the obligation did not move.**
 ```rust
 use std::sync::Arc;
 
-use happenstance_core::{Authority, ProjectionId, SendProjectionStore, SequencePosition};
+use happenstance_core::{
+    Authority, CommitError, ProjectionId, SendProjectionStore, SequencePosition,
+};
 
 fn spawn_a_batch<S>(store: Arc<S>, id: ProjectionId)
 where
@@ -39,7 +41,7 @@ where
     S::Batch: Send,
 {
     drop(tokio::spawn(async move {
-        let batch = store.begin();
+        let batch = store.begin().await.map_err(CommitError::Store)?;
         // The batch is live across a suspension point, which is what a runner
         // does between applying an event and deciding to commit.
         tokio::task::yield_now().await;
@@ -63,14 +65,16 @@ fence above it is the positive control RS-01-2 actually cares about.
 
 ```rust,compile_fail
 # use std::sync::Arc;
-# use happenstance_core::{Authority, ProjectionId, SendProjectionStore, SequencePosition};
+# use happenstance_core::{
+#     Authority, CommitError, ProjectionId, SendProjectionStore, SequencePosition,
+# };
 fn spawn_a_batch<S>(store: Arc<S>, id: ProjectionId)
 where
     S: SendProjectionStore<Error: Send> + Send + Sync + 'static,
     // `S::Batch: Send` is missing, and nothing above implies it.
 {
     drop(tokio::spawn(async move {
-        let batch = store.begin();
+        let batch = store.begin().await.map_err(CommitError::Store)?;
         tokio::task::yield_now().await;
         store
             .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
@@ -88,9 +92,9 @@ tests pass; the projection layer has silently stopped being storage-agnostic, no
 conformance rule covers it because conformance is about adapters, and the
 regression appears in review as a shorter signature.
 
-**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:108 (S::Batch: Send)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:99 (stops compiling)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:90 (cannot be used here)` ·
+**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:110 (S::Batch: Send)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:101 (stops compiling)` ·
+`crates/happenstance-ladybug/tests/port_shape.rs:92 (cannot be used here)` ·
 [SPECIFICATION PS-36](../../spec/SPECIFICATION.md) *(`[FROZEN]`: the `Send`
 flavour transitively requires `Batch: Send`, and why no gate can pin it)* ·
 [SPECIFICATION ES-5](../../spec/SPECIFICATION.md) *(why the bound cannot be

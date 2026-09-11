@@ -626,7 +626,7 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
 
     type Batch = MutantBatch<D>;
 
-    fn begin(&self) -> Self::Batch {
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
         // Checking the connection out. A batch begun while it is already out
         // does not hold it, and every write path below refuses such a batch —
         // which is how a store that never gives its connection back answers
@@ -634,14 +634,14 @@ impl<D: Defect> ProjectionStore for MutantStore<D> {
         let free = !self.connection.get();
         self.connection.set(true);
 
-        MutantBatch {
+        Ok(MutantBatch {
             stamp: self.stamp,
             writes: BTreeMap::new(),
             clear_all: false,
             connection: Rc::clone(&self.connection),
             holds_the_connection: free,
             defect: PhantomData,
-        }
+        })
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
@@ -762,25 +762,36 @@ impl<D: Defect> ProjectionProbe for MutantStore<D> {
     /// second arm.
     const READS_THROUGH_BATCH: bool = D::READS_THROUGH_BATCH;
 
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
         D::stage_write(batch, key, value);
+        Ok(())
     }
 
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
         batch.writes.clear();
         batch.clear_all = true;
+        Ok(())
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error> {
         Ok(self.state.borrow().rows.get(key).copied())
     }
 
-    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64> {
+    async fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
         // Bound rather than inlined: the step takes `&State`, and a temporary
         // `Ref` inside the argument list would be dropped at the end of the
         // statement it was created in.
         let state = self.state.borrow();
-        D::probe_read_through(&state, batch, key)
+        Ok(D::probe_read_through(&state, batch, key))
     }
 }
 

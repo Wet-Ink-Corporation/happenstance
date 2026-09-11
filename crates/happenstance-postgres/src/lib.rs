@@ -12,13 +12,17 @@
 //! no `todo!()` and no `#![allow(clippy::todo)]` any more — the allow left with
 //! the last stub, which is the contract it was written under.
 //!
-//! Its batch is **not** `sqlx::Transaction<'static, Postgres>`, which is what the
-//! skeleton declared. That binding cannot be discharged: `begin` is total,
-//! synchronous and infallible, and every route to a `sqlx` transaction is
-//! `async` and fallible. A skeleton did not report it because `todo!()` has type
-//! `!` and coerces to anything. The account is in
-//! [`projection_store`]'s module documentation, along with what it settles about
-//! PS-2's live-transaction axis.
+//! It carries **two** projection stores, and they are not two ways of doing the
+//! same thing. [`projection_store`]'s batch is an owned statement list replayed
+//! at commit — the shape an application uses, because the typed layer's
+//! `Projection::apply` is synchronous and can push into a buffer. The skeleton
+//! had declared `sqlx::Transaction<'static, Postgres>` instead, and that binding
+//! could not be discharged while `begin` was total, synchronous and infallible;
+//! a skeleton did not report it because `todo!()` has type `!` and coerces to
+//! anything. ADR-0062 moved `begin` and the probe seam, and
+//! [`live_projection_store`] is that binding discharged: a batch that **is** a
+//! live transaction, standing at the far end of PS-2's batch-shape axis and
+//! passing the suite there — an instrument for the freeze rather than a product.
 //!
 //! **The crate ships in `0.2.0`.** The release set was five, decided, and the
 //! owner re-opened it on this crate's evidence at `e597c34`; the manifest carries
@@ -185,6 +189,10 @@ mod query_sql;
 #[cfg(feature = "projection-store")]
 #[cfg_attr(docsrs, doc(cfg(feature = "projection-store")))]
 pub mod projection_store;
+
+#[cfg(feature = "projection-store")]
+#[cfg_attr(docsrs, doc(cfg(feature = "projection-store")))]
+pub mod live_projection_store;
 
 #[cfg(feature = "event-store")]
 #[cfg_attr(docsrs, doc(cfg(feature = "event-store")))]

@@ -67,8 +67,8 @@ use crate::projection::{
 /// // Never run: the enum says so, and no `Option` is involved.
 /// assert_eq!(store.checkpoint(&id).await?, Checkpoint::NeverRun);
 ///
-/// // `begin` is neither async nor fallible: opening a buffer cannot fail.
-/// let mut batch = store.begin();
+/// // `begin` never yields and never fails here: opening a buffer is free.
+/// let mut batch = store.begin().await?;
 /// batch.write("depot-7", 12);
 ///
 /// // Nothing is visible yet — not the row, not the checkpoint.
@@ -88,7 +88,7 @@ use crate::projection::{
 ///
 /// // The dual: the caller's own batch carries the deletes, because the port
 /// // has no idea what the read model is.
-/// let mut clearing = store.begin();
+/// let mut clearing = store.begin().await?;
 /// clearing.delete_all();
 /// store.reset(clearing, &id).await?;
 ///
@@ -233,9 +233,9 @@ impl MemoryProjectionBatch {
     ///
     /// Gated on `conformance` because its only caller is, and a private method
     /// whose caller is behind a feature is dead code in every build that does
-    /// not ask for it. That combination is reachable and ordinary — `default,
-    /// unstable-projection` without `conformance` is what an application using
-    /// the projection runner resolves — and it failed `RUSTFLAGS="-D warnings"`
+    /// not ask for it. That combination is reachable and ordinary — `default`
+    /// without `conformance` is what an application using the projection
+    /// runner resolves — and it failed `RUSTFLAGS="-D warnings"`
     /// with *method `read_through` is never used*.
     ///
     /// **Not `#[expect(dead_code)]`**, which would be actively wrong: `expect`
@@ -293,8 +293,8 @@ impl SendProjectionStore for MemoryProjectionStore {
     // type in both places and it compiles.
     type Batch = MemoryProjectionBatch;
 
-    fn begin(&self) -> Self::Batch {
-        self.open()
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        Ok(self.open())
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
@@ -382,20 +382,31 @@ impl crate::projection::ProjectionProbe for MemoryProjectionStore {
     /// read back through before it commits.
     const READS_THROUGH_BATCH: bool = true;
 
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
         batch.write(key, value);
+        Ok(())
     }
 
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
         batch.delete_all();
+        Ok(())
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error> {
         Ok(self.get(key))
     }
 
-    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64> {
-        batch.read_through(self.get(key), key)
+    async fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
+        Ok(batch.read_through(self.get(key), key))
     }
 }
 

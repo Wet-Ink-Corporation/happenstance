@@ -71,8 +71,8 @@ impl ProjectionStore for TestStore {
 
     type Batch = TestBatch;
 
-    fn begin(&self) -> Self::Batch {
-        TestBatch::default()
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        Ok(TestBatch::default())
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
@@ -135,25 +135,36 @@ impl ProjectionStore for TestStore {
 impl ProjectionProbe for TestStore {
     const READS_THROUGH_BATCH: bool = true;
 
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
         batch.writes.insert(key.to_owned(), value);
+        Ok(())
     }
 
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
         batch.writes.clear();
         batch.clear_all = true;
+        Ok(())
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error> {
         Ok(self.rows.borrow().get(key).copied())
     }
 
-    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64> {
-        batch
+    async fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
+        Ok(batch
             .writes
             .get(key)
             .copied()
-            .or_else(|| self.rows.borrow().get(key).copied())
+            .or_else(|| self.rows.borrow().get(key).copied()))
     }
 }
 
@@ -167,13 +178,30 @@ impl ProjectionProbe for TestStore {
 /// grew or lost a parameter is `error[E0631]` — none of them a silent pass. The
 /// bounds name `ProjectionProbe` only, never `TestStore`, so what is checked is
 /// the trait rather than this file's instrument.
-/// `probe_read` is the one asynchronous member, so it cannot be coerced to a
-/// plain `fn` pointer without erasing the future. This helper pins it instead:
-/// its return type names `Result<Option<u64>, P::Error>` explicitly, so a
-/// re-typed `probe_read` fails here.
+/// Every member is asynchronous since ADR-0062, so none can be coerced to a
+/// plain `fn` pointer without erasing the future. These helpers pin them
+/// instead: each return type names its `Result<…, P::Error>` explicitly, so a
+/// re-typed member fails here, and each batch-touching helper takes
+/// `&mut P::Batch`, so a member that slipped back to a shared borrow fails too.
 ///
-/// No `+ Send` on the bound, deliberately — matching the declaration, which has
-/// none and must not acquire one.
+/// No `+ Send` on any bound, deliberately — matching the declarations, which
+/// have none and must not acquire one.
+fn takes_the_write_future<'a, P: ProjectionProbe>(
+    store: &'a P,
+    batch: &'a mut P::Batch,
+    key: &'a str,
+    value: u64,
+) -> impl Future<Output = Result<(), P::Error>> + 'a {
+    store.probe_write(batch, key, value)
+}
+
+fn takes_the_delete_all_future<'a, P: ProjectionProbe>(
+    store: &'a P,
+    batch: &'a mut P::Batch,
+) -> impl Future<Output = Result<(), P::Error>> + 'a {
+    store.probe_delete_all(batch)
+}
+
 fn takes_the_read_future<P: ProjectionProbe>(
     store: &P,
     key: &str,
@@ -181,13 +209,21 @@ fn takes_the_read_future<P: ProjectionProbe>(
     store.probe_read(key)
 }
 
+fn takes_the_read_through_future<'a, P: ProjectionProbe>(
+    store: &'a P,
+    batch: &'a mut P::Batch,
+    key: &'a str,
+) -> impl Future<Output = Result<Option<u64>, P::Error>> + 'a {
+    store.probe_read_through(batch, key)
+}
+
 fn probe_members_have_the_published_signatures<P: ProjectionProbe>() {
     let reads_through_batch: bool = P::READS_THROUGH_BATCH;
 
-    let write: fn(&P, &mut P::Batch, &str, u64) = P::probe_write;
-    let delete_all: fn(&P, &mut P::Batch) = P::probe_delete_all;
-    let read_through: fn(&P, &P::Batch, &str) -> Option<u64> = P::probe_read_through;
+    let write = takes_the_write_future::<P>;
+    let delete_all = takes_the_delete_all_future::<P>;
     let read = takes_the_read_future::<P>;
+    let read_through = takes_the_read_through_future::<P>;
 
     // The coercions above are the assertion; naming the values keeps clippy's
     // `no_effect_underscore_binding` off a test whose entire point is a
@@ -209,14 +245,16 @@ fn probe_shape_matches_the_specification() {
 /// emits a blanket impl, so `SendProjectionStore` implies `ProjectionStore` and
 /// a second probe trait would collide for the reason ADR-0008 records
 /// (`error[E0275]`). One probe serves both flavours.
-#[test]
-fn the_probe_is_a_supertrait_of_the_bare_flavour() {
-    fn needs_only_the_probe<P: ProjectionProbe>(store: &P) -> P::Batch {
-        store.begin()
+#[tokio::test]
+async fn the_probe_is_a_supertrait_of_the_bare_flavour() {
+    async fn needs_only_the_probe<P: ProjectionProbe>(store: &P) -> Result<P::Batch, P::Error> {
+        store.begin().await
     }
 
     let store = TestStore::default();
-    let batch = needs_only_the_probe(&store);
+    let batch = needs_only_the_probe(&store)
+        .await
+        .expect("opening a batch should succeed");
     assert!(batch.writes.is_empty());
 }
 
@@ -234,8 +272,11 @@ async fn round_trip<P: ProjectionProbe>(
     id: &ProjectionId,
     position: SequencePosition,
 ) -> Result<Option<u64>, P::Error> {
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, "k", 7);
+    let mut batch = store.begin().await.expect("opening a batch should succeed");
+    store
+        .probe_write(&mut batch, "k", 7)
+        .await
+        .expect("the probe write should succeed");
 
     // Nothing an open batch holds is visible yet.
     assert_eq!(store.probe_read("k").await?, None);
@@ -286,12 +327,18 @@ async fn drive_every_member<P: ProjectionProbe>(
     id: &ProjectionId,
     position: SequencePosition,
 ) -> Result<(), P::Error> {
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, "pending", 42);
+    let mut batch = store.begin().await.expect("opening a batch should succeed");
+    store
+        .probe_write(&mut batch, "pending", 42)
+        .await
+        .expect("the probe write should succeed");
 
     if P::READS_THROUGH_BATCH {
         assert_eq!(
-            store.probe_read_through(&batch, "pending"),
+            store
+                .probe_read_through(&mut batch, "pending")
+                .await
+                .expect("reading through the batch should succeed"),
             Some(42),
             "a store declaring READS_THROUGH_BATCH must see its own pending write"
         );
@@ -307,8 +354,11 @@ async fn drive_every_member<P: ProjectionProbe>(
     assert_eq!(store.probe_read("pending").await?, Some(42));
 
     // The dual: the caller's own batch carries the deletes.
-    let mut clearing = store.begin();
-    store.probe_delete_all(&mut clearing);
+    let mut clearing = store.begin().await.expect("opening a batch should succeed");
+    store
+        .probe_delete_all(&mut clearing)
+        .await
+        .expect("the probe delete should succeed");
     store
         .reset(clearing, id)
         .await
@@ -319,8 +369,11 @@ async fn drive_every_member<P: ProjectionProbe>(
     assert_eq!(store.probe_read("pending").await?, None);
 
     // `rollback` still discards, and the store is still usable afterwards.
-    let mut abandoned = store.begin();
-    store.probe_write(&mut abandoned, "abandoned", 1);
+    let mut abandoned = store.begin().await.expect("opening a batch should succeed");
+    store
+        .probe_write(&mut abandoned, "abandoned", 1)
+        .await
+        .expect("the probe write should succeed");
     store.rollback(abandoned).await?;
     assert_eq!(store.probe_read("abandoned").await?, None);
 

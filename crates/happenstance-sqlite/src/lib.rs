@@ -88,11 +88,10 @@
 // `docs.rs` builds this crate with `--all-features` and `--cfg docsrs`
 // (`Cargo.toml`'s `[package.metadata.docs.rs]`), which means the rendered page
 // shows `projection_store` beside `event_store` with nothing to distinguish
-// them. Two of this crate's three features are off by default and one of those
-// gates an explicitly unstable port, so a reader who cannot see a badge draws
-// the wrong conclusion from a page that is otherwise accurate — they add
-// `SqliteProjectionStore` to a project and discover the feature flag from a
-// compiler error, and the semver exemption never.
+// them. Two of this crate's three features are off by default, so a reader
+// who cannot see a badge draws the wrong conclusion from a page that is
+// otherwise accurate — they add `SqliteProjectionStore` to a project and
+// discover the feature flag from a compiler error.
 //
 // `feature(doc_cfg)` is nightly, which is why this is `cfg_attr`-gated on
 // `docsrs` rather than written plainly: the flag is set by the docs.rs build and

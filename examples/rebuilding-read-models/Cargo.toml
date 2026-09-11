@@ -15,13 +15,15 @@ publish = false
 [dependencies]
 # `unstable-projection` is not optional here in the way it is elsewhere — it is
 # the entire subject. `Projection`, `run_projection`, `Progressed` and
-# `ProjectionError` all live behind it, and the name is the promise: the port
-# beneath them is not frozen, so this example's imports make no semver claim.
+# `ProjectionError` all live behind it, and the name is the promise: not about
+# the port beneath them, which is frozen since ADR-0063, but about the runner's
+# own `apply` shape, which is not yet proved at its far end — so this example's
+# runner imports make no semver claim.
 #
 # `default-features = false` drops `memory`: an application that has chosen a
 # durable store has no use for `MemoryEventStore` in its binary, and every view
 # below is rebuilt from a file rather than from a `Vec`.
-happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.3.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
   "unstable-projection",

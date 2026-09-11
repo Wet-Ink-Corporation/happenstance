@@ -49,15 +49,15 @@ mod weak_flavour {
     /// the batch `begin` hands out is the one `commit` accepts, for a store the
     /// caller knows nothing else about.
     ///
-    /// `begin` is neither `async` nor fallible here, and the absence of `.await`
-    /// and `?` on that line is load-bearing: restoring either for symmetry with
-    /// `EventStore` makes this function stop compiling.
+    /// `begin` is `async` and fallible since ADR-0062, and its failure has no
+    /// arm of its own on `CommitError`: a batch that could not be opened is a
+    /// store failure, which is what `CommitError::Store` names.
     pub(crate) async fn advance<S: ProjectionStore>(
         store: &S,
         id: &ProjectionId,
         position: SequencePosition,
     ) -> Result<(), CommitError<S::Error>> {
-        let batch = store.begin();
+        let batch = store.begin().await.map_err(CommitError::Store)?;
         store.commit(batch, id, position, Authority::Live).await
     }
 }
@@ -66,7 +66,9 @@ mod weak_flavour {
 mod send_flavour {
     use std::sync::Arc;
 
-    use happenstance_core::{Authority, ProjectionId, SendProjectionStore, SequencePosition};
+    use happenstance_core::{
+        Authority, CommitError, ProjectionId, SendProjectionStore, SequencePosition,
+    };
 
     /// Hold a batch across an await inside a real `tokio::spawn`.
     ///
@@ -108,7 +110,7 @@ mod send_flavour {
         S::Batch: Send,
     {
         let handle = tokio::spawn(async move {
-            let batch = store.begin();
+            let batch = store.begin().await.map_err(CommitError::Store)?;
             tokio::task::yield_now().await;
             store
                 .commit(batch, &id, SequencePosition::FIRST, Authority::Live)

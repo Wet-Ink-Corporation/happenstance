@@ -31,9 +31,10 @@
 //! stayed that way, green, until the pre-publication review read the two
 //! manifests side by side.
 //!
-//! It now writes what the recipe prescribes. `unstable-projection` is
-//! unconditional, because the six port types this store implements against are
-//! behind it and an adapter cannot make its own port impl optional;
+//! It now writes what the recipe prescribes. The dependency line names no
+//! feature, because the six port types this store implements against are
+//! unconditional since ADR-0063 (it named `unstable-projection` while they were
+//! gated, and an adapter cannot make its own port impl optional);
 //! `conformance` is a feature *of this crate* that forwards to the contract
 //! crate's, and the two `impl ProjectionProbe` blocks below carry the `#[cfg]`
 //! that goes with it. The cost is one further feature-powerset combination for
@@ -310,11 +311,11 @@ impl ProjectionStore for OutsideProjectionStore {
     // this is what that buys: the concrete type, spelled straight out.
     type Batch = OutsideBatch;
 
-    fn begin(&self) -> OutsideBatch {
-        OutsideBatch {
+    async fn begin(&self) -> Result<OutsideBatch, OutsideStoreError> {
+        Ok(OutsideBatch {
             stamp: self.locked().stamp,
             operations: Vec::new(),
-        }
+        })
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, OutsideStoreError> {
@@ -420,24 +421,35 @@ impl ProjectionProbe for OutsideProjectionStore {
     // methods a caller drives, so a bug in the write path is a bug the suite can
     // reach. Pushing the operation here instead would give the suite a private
     // road around the code under test.
-    fn probe_write(&self, batch: &mut OutsideBatch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut OutsideBatch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), OutsideStoreError> {
         batch.write(key, value);
+        Ok(())
     }
 
-    fn probe_delete_all(&self, batch: &mut OutsideBatch) {
+    async fn probe_delete_all(&self, batch: &mut OutsideBatch) -> Result<(), OutsideStoreError> {
         batch.delete_all();
+        Ok(())
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, OutsideStoreError> {
         Ok(self.locked().rows.get(key).copied())
     }
 
-    fn probe_read_through(&self, batch: &OutsideBatch, key: &str) -> Option<u64> {
+    async fn probe_read_through(
+        &self,
+        batch: &mut OutsideBatch,
+        key: &str,
+    ) -> Result<Option<u64>, OutsideStoreError> {
         let mut rows = self.locked().rows.clone();
         for operation in &batch.operations {
             apply(&mut rows, operation);
         }
-        rows.get(key).copied()
+        Ok(rows.get(key).copied())
     }
 }
 
@@ -493,11 +505,11 @@ impl ProjectionStore for CheckpointOnlyStore {
     type Error = OutsideStoreError;
     type Batch = OutsideBatch;
 
-    fn begin(&self) -> OutsideBatch {
-        OutsideBatch {
+    async fn begin(&self) -> Result<OutsideBatch, OutsideStoreError> {
+        Ok(OutsideBatch {
             stamp: self.locked().stamp,
             operations: Vec::new(),
-        }
+        })
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, OutsideStoreError> {
@@ -563,23 +575,34 @@ impl ProjectionProbe for CheckpointOnlyStore {
     // methods a caller drives, so a bug in the write path is a bug the suite can
     // reach. Pushing the operation here instead would give the suite a private
     // road around the code under test.
-    fn probe_write(&self, batch: &mut OutsideBatch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut OutsideBatch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), OutsideStoreError> {
         batch.write(key, value);
+        Ok(())
     }
 
-    fn probe_delete_all(&self, batch: &mut OutsideBatch) {
+    async fn probe_delete_all(&self, batch: &mut OutsideBatch) -> Result<(), OutsideStoreError> {
         batch.delete_all();
+        Ok(())
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, OutsideStoreError> {
         Ok(self.locked().rows.get(key).copied())
     }
 
-    fn probe_read_through(&self, batch: &OutsideBatch, key: &str) -> Option<u64> {
+    async fn probe_read_through(
+        &self,
+        batch: &mut OutsideBatch,
+        key: &str,
+    ) -> Result<Option<u64>, OutsideStoreError> {
         let mut rows = self.locked().rows.clone();
         for operation in &batch.operations {
             apply(&mut rows, operation);
         }
-        rows.get(key).copied()
+        Ok(rows.get(key).copied())
     }
 }

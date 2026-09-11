@@ -61,8 +61,8 @@ archify deliver architecture workspace.json workspace.html \
 
 | | SHA-256 | Bytes |
 |---|---|---|
-| `workspace.json` | `293a80ccd7675f1c0062b6da937dcfd8da6e42a0500f0a47fe8a5e9b4f7c821a` | 10,065 |
-| `workspace.html` | `3a0de2acf97abe38c49b69cd8a4be76828672fd821224e54f9e0a3b1bc6c8052` | 736,642 |
+| `workspace.json` | `3ef8557101917a6c1ec0a04fd07c3c9aefeb88032b095e943e1b10e1a2d98279` | 9,676 |
+| `workspace.html` | `b91e4df46b4dbf21d8359d13d825419ec9d8705ed003a1c5951e494baa7b18a6` | 736,689 |
 
 `--repo-root` is not optional here. The source declares nine `sources` references
 into this repository, and the renderer refuses to draw until it has checked every

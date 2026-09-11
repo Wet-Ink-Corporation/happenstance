@@ -2966,7 +2966,7 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
     let mut problems = Vec::new();
 
     for (heading, marker, column) in [
-        ("### The 46 ", "PROVISIONAL", 2usize),
+        ("### The 41 ", "PROVISIONAL", 2usize),
         ("### The 12 ", "DEFERRED", 1usize),
     ] {
         let expected: BTreeSet<String> = maturities

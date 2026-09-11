@@ -1569,7 +1569,11 @@ mod tests {
     use crate::spec_trace::workspace_root;
     use crate::{OPTIONAL, REQUIRED, Step, wasm_steps};
 
-    /// The feature gating the projection module and its re-exports.
+    /// The feature that gated the projection module and its re-exports from
+    /// phase 6 until ADR-0063 lifted it. It is still declared on the contract
+    /// crate — empty, so a `0.2.0` manifest keeps resolving — and it still gates
+    /// the typed layer's *runner*, whose `Projection::apply` shape is the axis
+    /// ADR-0062 named as the next one.
     const GATE: &str = "unstable-projection";
 
     /// The warning policy, spelled once and compared everywhere it appears.
@@ -1674,14 +1678,13 @@ mod tests {
             .unwrap_or_else(|| panic!("no step named `{name}`"))
     }
 
-    /// Every crate that names a projection item in its own `src/`, and must
-    /// therefore ask for [`GATE`] in its own manifest rather than inherit it from
-    /// whatever else the workspace build happened to turn on.
-    ///
-    /// Feature unification is per *build*. `cargo doc -p <crate>` and every
-    /// `cargo hack` combination build one crate at a time, so a manifest that
-    /// relies on a sibling's feature selection compiles in the workspace build
-    /// and nowhere else.
+    /// Every crate that names a projection item in its own `src/`. While the
+    /// port was gated, each had to ask for [`GATE`] in its own manifest rather
+    /// than inherit it from whatever else the workspace build turned on; since
+    /// ADR-0063 the port is unconditional and the obligation is the reverse —
+    /// none of them may still forward the retired feature to the contract
+    /// crate, because a forward that turns nothing on tells a reader the port
+    /// is gated when it is not.
     const DEPENDENTS: &[&str] = &[
         "happenstance-sqlite",
         "happenstance-ladybug",
@@ -1713,55 +1716,66 @@ mod tests {
             .unwrap_or("")
     }
 
-    /// The maturity signal an adapter author meets first is the feature table,
-    /// because that is what `cargo add` shows them — not a doc comment three
-    /// screens inside a module they have to already be reading.
+    /// The retired feature is still declared — empty, off by default — so a
+    /// manifest written against `0.2.0` resolves. It is the one feature in this
+    /// workspace that is *meant* to gate nothing, and this is where that is
+    /// written down rather than left to look like an oversight.
     #[test]
-    fn the_projection_port_is_behind_an_off_by_default_feature() {
+    fn the_retired_projection_feature_is_still_declared_and_empty() {
         let manifest = read("crates/happenstance-core/Cargo.toml");
 
         assert!(
-            manifest.contains(&format!("\n{GATE} = ")),
-            "`{GATE}` is not declared in happenstance-core's `[features]`"
+            manifest.contains(&format!("\n{GATE} = []")),
+            "`{GATE}` is not declared as an empty feature in happenstance-core's \
+             `[features]`; removing it breaks every `0.2.0` manifest that names it, \
+             and giving it a body would re-gate something ADR-0063 froze"
         );
         assert!(
             !default_features(&manifest).contains(GATE),
-            "`{GATE}` is on by default, which hands the port to every caller who \
-             never asked for it: {}",
+            "`{GATE}` joined the defaults; it gates nothing, and a no-op in the \
+             default set is a feature table telling a story the compiler does not: {}",
             default_features(&manifest)
         );
     }
 
-    /// A feature that gates nothing is a feature table telling a story the
-    /// compiler does not: the module and the re-exports are the two places the
-    /// item is either reachable or invisible.
+    /// The port is unconditional: no `cfg` on the module and none on its
+    /// re-exports. The two assertions that used to hold the gate *on* now hold
+    /// it *off*, in the same two places, because those are still the two places
+    /// the item is either reachable or invisible.
     #[test]
-    fn the_gate_is_mounted_on_the_module_and_its_re_exports() {
+    fn the_port_is_mounted_unconditionally() {
         let lib = read("crates/happenstance-core/src/lib.rs");
         let cfg = format!("#[cfg(feature = \"{GATE}\")]");
-        let doc_cfg = format!("#[cfg_attr(docsrs, doc(cfg(feature = \"{GATE}\")))]");
 
         assert!(
-            lib.contains(&format!("{cfg}\n{doc_cfg}\npub mod projection;")),
-            "`pub mod projection;` is not gated the way `memory`'s module is"
+            !lib.contains(&cfg),
+            "`lib.rs` gates something on `{GATE}` again; ADR-0063 lifted that \
+             gate and re-closing it is a decision record, not a line edit"
         );
         assert!(
-            lib.contains(&format!("{cfg}\n{doc_cfg}\npub use projection::{{")),
-            "the projection re-exports are not gated, so the module is invisible \
+            lib.contains("\npub mod projection;"),
+            "`pub mod projection;` is not mounted at the crate root"
+        );
+        assert!(
+            lib.contains("\npub use projection::{"),
+            "the projection re-exports are missing, so the module is reachable \
              and its items are not"
         );
     }
 
-    /// The powerset proves the combinations compile; this proves the *manifests*
-    /// are the reason, which is the half a workspace build cannot distinguish
-    /// because it unifies features across every member at once.
+    /// No dependent still forwards the retired feature to the contract crate.
+    ///
+    /// The forward compiles — the feature exists and is empty — which is exactly
+    /// why a test is needed: nothing else would notice a manifest telling its
+    /// reader the port is gated.
     #[test]
-    fn every_crate_that_names_a_projection_item_opts_in() {
+    fn no_crate_forwards_the_retired_feature_to_the_contract_crate() {
         for package in DEPENDENTS {
             let manifest = read(&format!("crates/{package}/Cargo.toml"));
             assert!(
-                manifest.contains(GATE),
-                "{package} names a projection item and never asks for `{GATE}`"
+                !manifest.contains(&format!("happenstance-core/{GATE}")),
+                "{package} still forwards `{GATE}` to the contract crate, which \
+                 turns nothing on since ADR-0063 and says the port is gated"
             );
         }
     }
@@ -1805,9 +1819,10 @@ mod tests {
                 default_features(&manifest)
             );
             assert!(
-                manifest.contains(&format!("\"happenstance-core/{GATE}\"")),
-                "the typed layer gates a runner on `{GATE}` without forwarding \
-                 it to the contract crate, whose port the runner is built on"
+                !manifest.contains(&format!("\"happenstance-core/{GATE}\"")),
+                "the typed layer forwards `{GATE}` to the contract crate, where \
+                 it has gated nothing since ADR-0063; the runner's gate is about \
+                 the runner"
             );
             assert!(
                 lib.contains(&format!("{cfg}\nmod runner;")),

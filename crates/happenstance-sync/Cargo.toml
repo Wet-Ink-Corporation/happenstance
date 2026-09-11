@@ -15,16 +15,13 @@ publish = false
 # `serde` is non-optional here: replication is the reason `happenstance-core`'s
 # serde feature exists.
 #
-# `unstable-projection` earns its place for a reason no compiler error would have
+# `unstable-projection` was here for a reason no compiler error would have
 # shown: this crate names no projection *type*, but `lib.rs`'s open-questions
 # prose carries cross-crate intra-doc links into the port, and a link into a
 # `cfg`-gated item is a hard rustdoc error under `broken_intra_doc_links = "deny"`
-# the moment the gate is closed. The `-p` documentation step is where that lands.
-happenstance-core = { workspace = true, features = [
-  "std",
-  "serde",
-  "unstable-projection",
-] }
+# the moment the gate is closed. The port is unconditional since ADR-0063, so
+# the links resolve on every configuration and the feature is gone from here.
+happenstance-core = { workspace = true, features = ["std", "serde"] }
 # Direct as of phase 5. It was not, because the envelope derives were withdrawn
 # pending a versioned wire format; ADR-0016 §11 settles that, and `wire::Envelope`
 # carries a `Serialize` derive and a hand-written `Deserialize`. The message types

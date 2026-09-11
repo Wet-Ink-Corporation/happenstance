@@ -137,8 +137,8 @@ async fn a_refused_checkpoint_takes_the_read_model_down_with_it() {
     let store = fixture.connect().await;
     let id = ProjectionId::new("regression-probe");
 
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, "k", 1);
+    let mut batch = store.begin().await.unwrap();
+    store.probe_write(&mut batch, "k", 1).await.unwrap();
     store
         .commit(
             batch,
@@ -149,8 +149,8 @@ async fn a_refused_checkpoint_takes_the_read_model_down_with_it() {
         .await
         .expect("the first commit should succeed");
 
-    let mut behind = store.begin();
-    store.probe_write(&mut behind, "k", 99);
+    let mut behind = store.begin().await.unwrap();
+    store.probe_write(&mut behind, "k", 99).await.unwrap();
     let error = store
         .commit(
             behind,

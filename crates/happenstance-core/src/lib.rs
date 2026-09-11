@@ -35,13 +35,7 @@
 //! | Where it sits in the log | [`SequencePosition`], [`SequencedEvent`] |
 //! | What to read | [`Query`], [`QueryItem`], [`ReadOptions`] |
 //! | What must not have changed | [`AppendCondition`] |
-//! | Storage seams | [`EventStore`], `ProjectionStore` |
-//!
-//! `ProjectionStore` is deliberately not a link, for the reason given under
-//! *Getting started* below: it is behind the off-by-default `unstable-projection`
-//! feature, and an intra-doc link into a `cfg`-gated item is a hard rustdoc error
-//! on every configuration where the gate is closed — which includes the default
-//! one this page is rendered on. (D13)
+//! | Storage seams | [`EventStore`], [`ProjectionStore`] |
 //!
 //! # Design notes
 //!
@@ -74,11 +68,9 @@
 //! Enable the `memory` feature (on by default) and use `MemoryEventStore` — see
 //! its documentation for a runnable walkthrough of the read-decide-append loop.
 //! `MemoryProjectionStore` is its projection-side twin, and its page carries a
-//! runnable `begin` → write → `commit` → read-back walkthrough of its own; it
-//! needs `unstable-projection` as well, because it implements the port that
-//! feature gates.
+//! runnable `begin` → write → `commit` → read-back walkthrough of its own.
 //!
-//! Neither name is a link here. It would be a broken one whenever the feature is
+//! Neither name is a link here. It would be a broken one whenever `memory` is
 //! off, and `cargo doc --no-default-features` treats a broken intra-doc link as a
 //! hard error rather than a warning (D13).
 //!
@@ -90,24 +82,23 @@
 //! * **`serde`** — `Serialize`/`Deserialize` for the wire types. Off by
 //!   default so the contract crate carries no serialisation opinion; enabled by
 //!   replication adapters that need one.
-//! * **`unstable-projection`** — the `ProjectionStore` port, its value types and
-//!   `MemoryProjectionStore`. **Off by default and exempt from semver**, and the
-//!   reason is not that nothing real implements it: four adapters over storage
-//!   this workspace does not fully control clear all seventeen rules. It is that
-//!   PS-2 asks for two adapters at *opposite ends* of the batch-shape axis, and
-//!   all four sit at the same end, because the other end is unreachable through
-//!   this port's own signatures. The `projection` module header has the mechanism.
-//!   Pulls in no dependency and implies neither `std` nor `memory`.
+//! * **`unstable-projection`** — **retired, and gates nothing.** From `0.2.0`
+//!   to ADR-0063 it held the `ProjectionStore` port out of the semver promise,
+//!   for the reason the [`projection`] module header records. The port is
+//!   unconditional now, and frozen. The feature is still declared, empty, so a
+//!   manifest written against `0.2.0` keeps resolving — removing a feature is a
+//!   breaking change and this one was never worth a major.
 //! * **`conformance`** — `ProjectionProbe`, the write seam the projection
 //!   conformance suite drives an adapter's read model through. For adapter
 //!   authors running that suite against their own store; nothing in the runtime
-//!   path needs it. Off by default, pulls in no dependency, and implies exactly
-//!   one thing — `unstable-projection`, because the probe is defined inside the
-//!   module that feature gates. Not `std`, not `memory`.
+//!   path needs it. Off by default, pulls in no dependency, and implies no other
+//!   feature — not `std`, not `memory`, and since ADR-0063 not
+//!   `unstable-projection` either, because the module it lives in is no longer
+//!   gated.
 //!
-//!   The name is deliberately not a link here, for the reason given under
-//!   *Getting started*: a link into a `cfg`-gated item is a hard error when the
-//!   feature is off, and `cargo doc --no-default-features` is a gate step.
+//!   The name is deliberately not a link here: a link into a `cfg`-gated item is
+//!   a hard error when the feature is off, and `cargo doc --no-default-features`
+//!   is a gate step.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -125,22 +116,19 @@ mod validate;
 
 pub mod store;
 
-#[cfg(feature = "unstable-projection")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+// Unconditional since ADR-0063. It sat behind `unstable-projection` from
+// phase 6 to the lift, and the two `xtask` tests that held it there now hold
+// the opposite: no `cfg` on this line, and none on the re-exports below.
 pub mod projection;
 
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 mod memory;
 
-// Both features, because this is the projection port's reference implementation
-// and the port is what it implements. `memory` alone cannot render it and
-// `unstable-projection` alone does not ask for it.
-#[cfg(all(feature = "memory", feature = "unstable-projection"))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(feature = "memory", feature = "unstable-projection")))
-)]
+// `memory` alone, like its event-store twin: the port it implements is
+// unconditional.
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 mod projection_memory;
 
 pub use append::{AppendCondition, Guard};
@@ -157,8 +145,6 @@ pub use query::{Query, QueryItem, ReadOptions};
 pub use store::{EventStore, SendEventStore, collect, read_decision_model};
 pub use tag::{MAX_TAG_LEN, Tag, Tags};
 
-#[cfg(feature = "unstable-projection")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use projection::{
     Authority, Checkpoint, CommitError, ProjectionId, ProjectionStore, ResetError,
     SendProjectionStore,
@@ -172,11 +158,8 @@ pub use projection::ProjectionProbe;
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory::{MemoryEventStore, MemoryStoreError};
 
-#[cfg(all(feature = "memory", feature = "unstable-projection"))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(feature = "memory", feature = "unstable-projection")))
-)]
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use projection_memory::{
     MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
 };

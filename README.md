@@ -12,21 +12,24 @@ it.
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](#licence)
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: `0.2.0`, and worth being precise about what that number claims.** The
+> **Status: `0.3.0`, and worth being precise about what that number claims.** The
 > contract, the typed layer and a 116-rule conformance suite across four families
 > are real and tested, and **five adapters have run the suite** — SQLite against a
 > real file on disk, across the event-store, projection, concurrency and model
 > families; a Cloudflare Durable Object on `wasm32`; a live PostgreSQL 17.10,
 > including the concurrency family at 64 contenders; a live Neon endpoint over
 > one-shot HTTP; and LadybugDB for the projection role alone. **Seven crates are
-> in the `0.2.0` release set**, which is the set the manifests and
+> in the `0.3.0` release set**, which is the set the manifests and
 > `xtask/src/package.rs`'s `PUBLISHABLE` agree on.
 >
-> What `0.2.0` promises: the `EventStore` clauses marked `[FROZEN]` in
-> [the specification](spec/SPECIFICATION.md) are semver-binding from here.
-> What it does not: `ProjectionStore` ships behind an off-by-default
-> `unstable-projection` feature and is exempt from semver until two adapters at
-> opposite ends of the batch-shape axis have passed its suite.
+> What `0.3.0` promises: every clause marked `[FROZEN]` in
+> [the specification](spec/SPECIFICATION.md) — the `EventStore` ones since
+> `0.2.0`, and the `ProjectionStore` ones from this release. `0.2.0` shipped the
+> projection port behind an off-by-default `unstable-projection` feature, exempt
+> from semver; adapters at both ends of its batch-shape axis now pass its suite
+> and ADR-0063 lifted the gate. The typed projection *runner* stays behind
+> `happenstance`'s `unstable-projection`, for a reason of its own that the crate
+> names.
 >
 > What it is not is production mileage — see the note under [status](#status),
 > which is narrower than the ticks suggest. Ladybug and replication come next, and
@@ -133,19 +136,19 @@ checkpoint until the runner has caught up, and `200` after.
 
 ## Status
 
-A ✅ below means **in the `0.2.0` release set and passing its suite**. It does not
-say the version is on the registry: nothing is published at `0.2.0` until the
+A ✅ below means **in the `0.3.0` release set and passing its suite**. It does not
+say the version is on the registry: nothing is published at `0.3.0` until the
 publish sequence has actually been run, and this table is written before it.
 
 | Crate | Role | Status |
 |---|---|---|
-| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ in the `0.2.0` release set |
-| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ in the `0.2.0` release set |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ in the `0.2.0` release set — 116 rules across four families |
-| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ in the `0.2.0` release set; passes the suite against a real file |
-| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ in the `0.2.0` release set; passes the suite on `wasm32` — read the note below |
-| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.2.0` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
-| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.2.0` release set; passes its suites against a live endpoint, with one open clause question its README names |
+| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ in the `0.3.0` release set |
+| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ in the `0.3.0` release set |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ in the `0.3.0` release set — 116 rules across four families |
+| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ in the `0.3.0` release set; passes the suite against a real file |
+| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ in the `0.3.0` release set; passes the suite on `wasm32` — read the note below |
+| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.3.0` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
+| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.3.0` release set; passes its suites against a live endpoint, with one open clause question its README names |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ✅ passes the projection suite against the real driver; **cannot** be published — `lbug` does not render on docs.rs |
 | [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
 
@@ -163,17 +166,17 @@ misread.** It is no longer a stub: the event store clears 101 of 101 conformance
 rules against a live PostgreSQL 17.10 including the concurrency family at 64
 contenders — the first adapter here to clear that family against a store whose
 writers are *not* serialised — and the projection store clears the projection
-suite, 14 rules run and 3 reported as skips. **It ships in `0.2.0`**, together
+suite, 14 rules run and 3 reported as skips. **It ships in `0.3.0`**, together
 with `happenstance-neon`: the release set was five, decided, and the owner
 re-opened it on that evidence at `e597c34`. It is the *first* adapter here to
 clear the concurrency family against a store whose writers are not serialised,
 not the only one — `happenstance-neon` clears it too, over the same server
 through a different transport. A ✅ in this column means *in the release set and
-passing its suite*; nothing is in the `0.2.0` release set until the publish
+passing its suite*; nothing is in the `0.3.0` release set until the publish
 sequence in [`RUNBOOK.md`](RUNBOOK.md) has actually been run.
 
 `happenstance-cloudflare` is the row most easily misread, and it ships in
-`0.2.0` with the thinnest evidence of the seven. Two things a reader should have
+`0.3.0` with the thinnest evidence of the seven. Two things a reader should have
 before weighing it. It passes the conformance suite under a `node:sqlite`-backed
 shim rather than under `workerd` itself — `.kb/open-questions/no-workerd-class-runner-in-the-gate.md`
 is the standing record of what that establishes and what it does not — and it is
@@ -189,10 +192,10 @@ answer to what is built.
 
 ```toml
 [dependencies]
-happenstance = "0.2"
+happenstance = "0.3"
 ```
 
-Add an adapter when you want durability — `happenstance-sqlite = "0.2"` — and
+Add an adapter when you want durability — `happenstance-sqlite = "0.3"` — and
 `happenstance-testkit` as a `[dev-dependencies]` if you are writing one of your
 own. **Pin the testkit exactly.** Adding a conformance rule is a semver-*minor*
 change that can turn a passing adapter's CI red, which is why it carries its own

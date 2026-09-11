@@ -10,6 +10,26 @@ use std::path::Path;
 /// This crate's own manifest.
 const MANIFEST: &str = include_str!("../Cargo.toml");
 
+/// The contiguous run of `#` comment lines directly above the first line that
+/// starts with `key`, joined with spaces. Empty if the key is absent or has no
+/// comment above it — which the caller asserts against rather than tolerates.
+fn comment_block_above(manifest: &str, key: &str) -> String {
+    let lines: Vec<&str> = manifest.lines().collect();
+    let Some(at) = lines.iter().position(|line| line.starts_with(key)) else {
+        return String::new();
+    };
+    lines[..at]
+        .iter()
+        .rev()
+        .take_while(|line| line.trim_start().starts_with('#'))
+        .map(|line| line.trim_start_matches('#').trim())
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// The named section's lines, comments and blanks dropped.
 fn section(manifest: &str, heading: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -189,17 +209,31 @@ fn unstable_projection_is_declared_off_by_default() {
         "`unstable-projection` joined the defaults: {default}"
     );
 
-    // It forwards to the contract crate's own gate, or says in the manifest why
-    // it does not. Either way the decision is written down where the next
-    // reader looks for it.
+    // It does not forward to the contract crate's feature of the same name —
+    // that one gates nothing since ADR-0063 lifted the port's gate, and a
+    // forward of an empty feature would tell a reader the port is gated — and
+    // the manifest says so in a comment, where the next reader looks for it.
     let forwards = value.contains("happenstance-core/unstable-projection");
-    let stated = MANIFEST
-        .lines()
-        .any(|line| line.trim_start().starts_with('#') && line.contains("unstable-projection"));
     assert!(
-        forwards && stated,
-        "`unstable-projection` neither forwards to the contract crate nor \
-         states in a comment why it does not: {value}"
+        !forwards,
+        "`unstable-projection` forwards to the contract crate, where it has \
+         gated nothing since ADR-0063: {value}"
+    );
+
+    // The comment block immediately above the declaration, and only that
+    // block. The `[dependencies]` comment names the feature too, so scanning
+    // every comment in the manifest would keep passing after the explanation
+    // beside the declaration was deleted — which is the deletion this guards.
+    let adjacent = comment_block_above(MANIFEST, "unstable-projection = ");
+    assert!(
+        adjacent.contains("runner") && adjacent.contains("apply"),
+        "the comment above `unstable-projection` does not say what the feature \
+         gates — the runner, for `apply`'s sake: {adjacent:?}"
+    );
+    assert!(
+        adjacent.contains("no longer forwards") || adjacent.contains("forwards nothing"),
+        "the comment above `unstable-projection` does not say why it no longer \
+         forwards to the contract crate: {adjacent:?}"
     );
 
     // It only adds. A feature that names a removal is one `--all-features`

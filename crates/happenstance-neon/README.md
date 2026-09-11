@@ -8,7 +8,7 @@ storage-agnostic event sourcing library built on the
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant with one open clause question, and in the `0.2.0` release
+> **Status: conformant with one open clause question, and in the `0.3.0` release
 > set.** 124 gated tests pass against a live Neon endpoint. One does not, and it
 > is stated here rather than hidden — see *The one rule this adapter does not
 > pass*, below. Only the registry can say whether the release has happened yet.
@@ -47,8 +47,8 @@ records comes from that one sentence.
 ## The transport is yours
 
 ```toml
-happenstance-neon = "0.2"
-happenstance-neon = { version = "0.2", features = ["projection-store"] }
+happenstance-neon = "0.3"
+happenstance-neon = { version = "0.3", features = ["projection-store"] }
 ```
 
 **This crate owns no socket.** `SqlTransport` is a one-method trait taking the

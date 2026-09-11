@@ -343,7 +343,7 @@ async fn a_position_above_i64_max_round_trips_through_the_store() {
     let id = ProjectionId::new("a_position_above_i64_max");
     let position = SequencePosition::new(VALUE).expect("u64::MAX - 1 is not zero");
 
-    let batch = writer.begin();
+    let batch = writer.begin().await.unwrap();
     writer
         .commit(batch, &id, position, Authority::Live)
         .await
@@ -378,7 +378,7 @@ async fn a_stored_zero_is_reported_rather_than_defaulted() {
     let store = fixture.connect().await;
     let id = ProjectionId::new("a_stored_zero");
 
-    let batch = store.begin();
+    let batch = store.begin().await.unwrap();
     store
         .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
         .await
@@ -422,7 +422,7 @@ async fn a_stored_authority_this_build_does_not_know_is_reported() {
     let store = fixture.connect().await;
     let id = ProjectionId::new("a_stored_authority");
 
-    let batch = store.begin();
+    let batch = store.begin().await.unwrap();
     store
         .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
         .await
@@ -475,8 +475,8 @@ async fn a_clone_accepts_its_origins_write_set_and_a_second_handle_does_not() {
     let stranger = fixture.connect().await;
     let id = ProjectionId::new("a_clone_and_a_second_handle");
 
-    let mut batch = origin.begin();
-    origin.probe_write(&mut batch, KEY, VALUE);
+    let mut batch = origin.begin().await.unwrap();
+    origin.probe_write(&mut batch, KEY, VALUE).await.unwrap();
     clone
         .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
         .await
@@ -485,8 +485,8 @@ async fn a_clone_accepts_its_origins_write_set_and_a_second_handle_does_not() {
              — so it must accept a write set its origin began",
         );
 
-    let mut batch = origin.begin();
-    origin.probe_write(&mut batch, KEY, 1);
+    let mut batch = origin.begin().await.unwrap();
+    origin.probe_write(&mut batch, KEY, 1).await.unwrap();
     match stranger
         .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
         .await
@@ -495,14 +495,14 @@ async fn a_clone_accepts_its_origins_write_set_and_a_second_handle_does_not() {
         outcome => panic!("`commit` must answer `ForeignBatch`, and answered {outcome:?}"),
     }
 
-    let mut batch = origin.begin();
-    origin.probe_delete_all(&mut batch);
+    let mut batch = origin.begin().await.unwrap();
+    origin.probe_delete_all(&mut batch).await.unwrap();
     match stranger.reset(batch, &id).await {
         Err(ResetError::ForeignBatch) => {}
         outcome => panic!("`reset` must answer `ForeignBatch`, and answered {outcome:?}"),
     }
 
-    match stranger.rollback(origin.begin()).await {
+    match stranger.rollback(origin.begin().await.unwrap()).await {
         Err(projection_store::LadybugProjectionStoreError::ForeignBatch) => {}
         outcome => panic!("`rollback` must answer `ForeignBatch`, and answered {outcome:?}"),
     }
@@ -571,8 +571,8 @@ async fn a_commit_that_meets_an_open_write_transaction_is_refused_and_recovers()
     held.query("CREATE (:__hs_probe {k: 'blocker', v: 1})")
         .expect("the blocking write is the test environment's");
 
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, KEY, VALUE);
+    let mut batch = store.begin().await.unwrap();
+    store.probe_write(&mut batch, KEY, VALUE).await.unwrap();
     match store
         .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
         .await
@@ -604,8 +604,8 @@ async fn a_commit_that_meets_an_open_write_transaction_is_refused_and_recovers()
         "a commit refused at `BEGIN` never reached either half, so nothing moved"
     );
 
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, KEY, VALUE);
+    let mut batch = store.begin().await.unwrap();
+    store.probe_write(&mut batch, KEY, VALUE).await.unwrap();
     store
         .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
         .await

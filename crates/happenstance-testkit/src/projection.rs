@@ -313,6 +313,52 @@ pub mod rules {
     // an orphan, which is the right answer rather than a false positive.
     // ---------------------------------------------------------------------
 
+    /// Opens a batch and unwraps, failing the test with context on error.
+    ///
+    /// `begin` is a future of a `Result` since ADR-0062, so that a batch that
+    /// is a live transaction has somewhere to put its round trip and its
+    /// failure. No rule asserts on that failure: a store that cannot open a
+    /// batch cannot be observed doing anything else.
+    async fn begin_ok<S: ProjectionStore>(store: &S) -> S::Batch {
+        match store.begin().await {
+            Ok(batch) => batch,
+            Err(err) => panic!("opening a batch should succeed, got {err:?}"),
+        }
+    }
+
+    /// Writes a probe row and unwraps, failing the test with context on error.
+    async fn probe_write_ok<S: ProjectionProbe>(
+        store: &S,
+        batch: &mut S::Batch,
+        key: &str,
+        value: u64,
+    ) {
+        if let Err(err) = store.probe_write(batch, key, value).await {
+            panic!("writing a probe row into an open batch should succeed, got {err:?}");
+        }
+    }
+
+    /// Queues deletion of every probe row and unwraps, failing the test with
+    /// context on error.
+    async fn probe_delete_all_ok<S: ProjectionProbe>(store: &S, batch: &mut S::Batch) {
+        if let Err(err) = store.probe_delete_all(batch).await {
+            panic!("queuing a delete-all into an open batch should succeed, got {err:?}");
+        }
+    }
+
+    /// Reads a probe row through an open batch and unwraps, failing the test
+    /// with context on error. Only reached behind `require_read_through!`.
+    async fn probe_read_through_ok<S: ProjectionProbe>(
+        store: &S,
+        batch: &mut S::Batch,
+        key: &str,
+    ) -> Option<u64> {
+        match store.probe_read_through(batch, key).await {
+            Ok(row) => row,
+            Err(err) => panic!("reading through an open batch should succeed, got {err:?}"),
+        }
+    }
+
     /// Commits and unwraps, failing the test with context on error.
     async fn commit_ok<S: ProjectionStore>(
         store: &S,
@@ -470,8 +516,8 @@ pub mod rules {
         // below is allowed to compare against.
         let position = SequencePosition::FIRST;
 
-        let mut batch = writer.begin();
-        writer.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+        let mut batch = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut batch, PROBE_KEY, PROBE_VALUE).await;
         commit_ok(&writer, batch, &id, position, Authority::Live).await;
 
         let observer = fixture.connect().await;
@@ -525,8 +571,8 @@ pub mod rules {
         let writer = fixture.connect().await;
         let id = ProjectionId::new("commit_is_atomic_with_the_read_model");
 
-        let mut batch = writer.begin();
-        writer.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+        let mut batch = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut batch, PROBE_KEY, PROBE_VALUE).await;
         commit_ok(
             &writer,
             batch,
@@ -641,16 +687,16 @@ pub mod rules {
         // The anchor, so that "unchanged" is a *recorded* state rather than the
         // empty one: a store that preserved `NeverRun` and no rows preserved
         // nothing anybody could have broken.
-        let mut anchor = writer.begin();
-        writer.probe_write(&mut anchor, ANCHOR_KEY, PROBE_VALUE);
+        let mut anchor = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut anchor, ANCHOR_KEY, PROBE_VALUE).await;
         commit_ok(&writer, anchor, &id, anchored, Authority::Live).await;
 
         let before = checkpoint_ok(&fixture.connect().await, &id).await;
 
         fixture.arm_commit_fault().await;
 
-        let mut faulted = writer.begin();
-        writer.probe_write(&mut faulted, PROBE_KEY, SECOND_VALUE);
+        let mut faulted = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut faulted, PROBE_KEY, SECOND_VALUE).await;
         let outcome = writer
             .commit(faulted, &id, after(anchored), Authority::Live)
             .await;
@@ -732,14 +778,14 @@ pub mod rules {
         let id = ProjectionId::new("rollback_leaves_both_unchanged");
         let position = SequencePosition::FIRST;
 
-        let mut anchor = writer.begin();
-        writer.probe_write(&mut anchor, ANCHOR_KEY, PROBE_VALUE);
+        let mut anchor = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut anchor, ANCHOR_KEY, PROBE_VALUE).await;
         commit_ok(&writer, anchor, &id, position, Authority::Live).await;
 
         let before = checkpoint_ok(&fixture.connect().await, &id).await;
 
-        let mut discarded = writer.begin();
-        writer.probe_write(&mut discarded, PROBE_KEY, SECOND_VALUE);
+        let mut discarded = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut discarded, PROBE_KEY, SECOND_VALUE).await;
         rollback_ok(&writer, discarded).await;
 
         let observer = fixture.connect().await;
@@ -789,13 +835,13 @@ pub mod rules {
         let id = ProjectionId::new("dropped_batch_leaves_store_usable");
         let position = SequencePosition::FIRST;
 
-        let mut abandoned = writer.begin();
-        writer.probe_write(&mut abandoned, PROBE_KEY, PROBE_VALUE);
+        let mut abandoned = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut abandoned, PROBE_KEY, PROBE_VALUE).await;
         // Bare: no `commit`, no `rollback`. This is the line the rule is about.
         drop(abandoned);
 
-        let mut second = writer.begin();
-        writer.probe_write(&mut second, SECOND_KEY, SECOND_VALUE);
+        let mut second = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut second, SECOND_KEY, SECOND_VALUE).await;
         commit_ok(&writer, second, &id, position, Authority::Live).await;
 
         let observer = fixture.connect().await;
@@ -830,7 +876,7 @@ pub mod rules {
     /// PS-15. The check is at run time by a stamp minted per store *instance*,
     /// because the type-level fix was compiled and refuted: a lifetime names a
     /// region rather than an instance, so two `&Store` references unify and
-    /// `b.commit(a.begin(), …)` still type-checks. The only construction that
+    /// `b.commit(begin_ok(&a).await, …)` still type-checks. The only construction that
     /// names an instance is a generative brand, which forbids the batch escaping
     /// the closure that began it — defeating the caller the hazard is about.
     ///
@@ -858,8 +904,8 @@ pub mod rules {
         let id = ProjectionId::new("commit_rejects_a_foreign_batch");
         let position = SequencePosition::FIRST;
 
-        let mut batch = origin.begin();
-        origin.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+        let mut batch = begin_ok(&origin).await;
+        probe_write_ok(&origin, &mut batch, PROBE_KEY, PROBE_VALUE).await;
 
         match stranger.commit(batch, &id, position, Authority::Live).await {
             Err(CommitError::ForeignBatch) => {}
@@ -920,7 +966,7 @@ pub mod rules {
 
         // Empty on purpose: this projection considered the range and applied
         // nothing from it, which is the ordinary case for a narrow projection.
-        let considered_nothing = writer.begin();
+        let considered_nothing = begin_ok(&writer).await;
         commit_ok(&writer, considered_nothing, &id, position, Authority::Live).await;
 
         let observer = fixture.connect().await;
@@ -967,12 +1013,12 @@ pub mod rules {
         let earlier = SequencePosition::FIRST;
         let later = after(earlier);
 
-        let mut anchor = writer.begin();
-        writer.probe_write(&mut anchor, ANCHOR_KEY, PROBE_VALUE);
+        let mut anchor = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut anchor, ANCHOR_KEY, PROBE_VALUE).await;
         commit_ok(&writer, anchor, &id, later, Authority::Live).await;
 
-        let mut regressing = writer.begin();
-        writer.probe_write(&mut regressing, PROBE_KEY, SECOND_VALUE);
+        let mut regressing = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut regressing, PROBE_KEY, SECOND_VALUE).await;
         match writer
             .commit(regressing, &id, earlier, Authority::Live)
             .await
@@ -1037,12 +1083,12 @@ pub mod rules {
         let earlier = SequencePosition::FIRST;
         let later = after(earlier);
 
-        let mut first = writer.begin();
-        writer.probe_write(&mut first, PROBE_KEY, PROBE_VALUE);
+        let mut first = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut first, PROBE_KEY, PROBE_VALUE).await;
         commit_ok(&writer, first, &slower, earlier, Authority::Live).await;
 
-        let mut second = writer.begin();
-        writer.probe_write(&mut second, SECOND_KEY, SECOND_VALUE);
+        let mut second = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut second, SECOND_KEY, SECOND_VALUE).await;
         commit_ok(&writer, second, &faster, later, Authority::Live).await;
 
         let observer = fixture.connect().await;
@@ -1137,9 +1183,9 @@ pub mod rules {
         let id = ProjectionId::new("reset_clears_rows_and_checkpoint_together");
         let position = SequencePosition::FIRST;
 
-        let mut batch = writer.begin();
-        writer.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
-        writer.probe_write(&mut batch, SECOND_KEY, SECOND_VALUE);
+        let mut batch = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut batch, PROBE_KEY, PROBE_VALUE).await;
+        probe_write_ok(&writer, &mut batch, SECOND_KEY, SECOND_VALUE).await;
         commit_ok(&writer, batch, &id, position, Authority::Live).await;
 
         // ---- the half PS-16 pairs its rule with: a `reset` that errors ----
@@ -1152,8 +1198,8 @@ pub mod rules {
 
         let stranger_fixture = open().await;
         let stranger = stranger_fixture.connect().await;
-        let mut foreign = stranger.begin();
-        stranger.probe_delete_all(&mut foreign);
+        let mut foreign = begin_ok(&stranger).await;
+        probe_delete_all_ok(&stranger, &mut foreign).await;
 
         match writer.reset(foreign, &id).await {
             Err(ResetError::ForeignBatch) => {}
@@ -1187,8 +1233,8 @@ pub mod rules {
         );
 
         // ---- and the successful one: both halves, together ----
-        let mut clearing = writer.begin();
-        writer.probe_delete_all(&mut clearing);
+        let mut clearing = begin_ok(&writer).await;
+        probe_delete_all_ok(&writer, &mut clearing).await;
         reset_ok(&writer, clearing, &id).await;
 
         let observer = fixture.connect().await;
@@ -1265,8 +1311,8 @@ pub mod rules {
         let rebuilt_through = SequencePosition::FIRST;
         let protected_through = after(rebuilt_through);
 
-        let mut rebuildable = writer.begin();
-        writer.probe_write(&mut rebuildable, PROBE_KEY, PROBE_VALUE);
+        let mut rebuildable = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut rebuildable, PROBE_KEY, PROBE_VALUE).await;
         commit_ok(
             &writer,
             rebuildable,
@@ -1276,8 +1322,8 @@ pub mod rules {
         )
         .await;
 
-        let mut protected = writer.begin();
-        writer.probe_write(&mut protected, SECOND_KEY, SECOND_VALUE);
+        let mut protected = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut protected, SECOND_KEY, SECOND_VALUE).await;
         commit_ok(
             &writer,
             protected,
@@ -1299,7 +1345,7 @@ pub mod rules {
 
         // Empty: the caller asked for no deletes at all, so anything that goes
         // missing below went missing because the store removed it.
-        reset_ok(&writer, writer.begin(), &van_stock).await;
+        reset_ok(&writer, begin_ok(&writer).await, &van_stock).await;
 
         let observer = fixture.connect().await;
         assert_eq!(
@@ -1377,8 +1423,8 @@ pub mod rules {
         let id = ProjectionId::new("refused_reset_changes_nothing");
         let position = SequencePosition::FIRST;
 
-        let mut batch = writer.begin();
-        writer.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+        let mut batch = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut batch, PROBE_KEY, PROBE_VALUE).await;
         commit_ok(&writer, batch, &id, position, Authority::Live).await;
 
         fixture.protect_from_reset(&id).await;
@@ -1390,8 +1436,8 @@ pub mod rules {
         let row_before = probe_read_ok(&before, PROBE_KEY).await;
         let checkpoint_before = checkpoint_ok(&before, &id).await;
 
-        let mut clearing = writer.begin();
-        writer.probe_delete_all(&mut clearing);
+        let mut clearing = begin_ok(&writer).await;
+        probe_delete_all_ok(&writer, &mut clearing).await;
 
         match writer.reset(clearing, &id).await {
             Err(ResetError::Refused) => {}
@@ -1552,12 +1598,12 @@ pub mod rules {
         // about.
         let first = SequencePosition::FIRST;
 
-        let mut applied = writer.begin();
-        writer.probe_write(&mut applied, PROBE_KEY, PROBE_VALUE);
+        let mut applied = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut applied, PROBE_KEY, PROBE_VALUE).await;
         commit_ok(&writer, applied, &rebuilt, first, Authority::Live).await;
 
-        let mut clearing = writer.begin();
-        writer.probe_delete_all(&mut clearing);
+        let mut clearing = begin_ok(&writer).await;
+        probe_delete_all_ok(&writer, &mut clearing).await;
         reset_ok(&writer, clearing, &rebuilt).await;
 
         let after_reset = checkpoint_ok(&fixture.connect().await, &rebuilt).await;
@@ -1567,7 +1613,7 @@ pub mod rules {
         // properly" means to everyone who has not got a `reset`.
         commit_ok(
             &writer,
-            writer.begin(),
+            begin_ok(&writer).await,
             &substituted,
             first,
             Authority::Live,
@@ -1658,11 +1704,11 @@ pub mod rules {
         let fixture = open().await;
         let writer = fixture.connect().await;
 
-        let mut batch = writer.begin();
-        writer.probe_write(&mut batch, PROBE_KEY, PROBE_VALUE);
+        let mut batch = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut batch, PROBE_KEY, PROBE_VALUE).await;
 
         assert_eq!(
-            writer.probe_read_through(&batch, PROBE_KEY),
+            probe_read_through_ok(&writer, &mut batch, PROBE_KEY).await,
             Some(PROBE_VALUE),
             "a store declaring `READS_THROUGH_BATCH` must let an open batch see \
              its own pending writes, and this one answered from committed state. \
@@ -1736,13 +1782,15 @@ pub mod rules {
             let mut position = SequencePosition::FIRST;
 
             for slice in REBUILD_SEQUENCE.chunks(chunk) {
-                let mut batch = writer.begin();
+                let mut batch = begin_ok(&writer).await;
                 for key in slice {
                     // The read-modify-write, entirely through the batch. A plain
                     // `set` here would make this rule chunk-insensitive and
                     // therefore decorative.
-                    let seen = writer.probe_read_through(&batch, key).unwrap_or(0);
-                    writer.probe_write(&mut batch, key, seen + 1);
+                    let seen = probe_read_through_ok(&writer, &mut batch, key)
+                        .await
+                        .unwrap_or(0);
+                    probe_write_ok(&writer, &mut batch, key, seen + 1).await;
                 }
                 commit_ok(&writer, batch, &id, position, Authority::Rebuilding).await;
                 position = after(after(position));
@@ -1817,8 +1865,8 @@ pub mod rules {
         // A rebuild starts by clearing what is there. `reset` is a *step* here
         // and not the subject: the rules that interrogate it are the reset
         // family's.
-        let mut clearing = writer.begin();
-        writer.probe_delete_all(&mut clearing);
+        let mut clearing = begin_ok(&writer).await;
+        probe_delete_all_ok(&writer, &mut clearing).await;
         reset_ok(&writer, clearing, &id).await;
 
         let first_chunk = SequencePosition::FIRST;
@@ -1829,8 +1877,8 @@ pub mod rules {
             (first_chunk, PROBE_KEY, PROBE_VALUE),
             (second_chunk, SECOND_KEY, SECOND_VALUE),
         ] {
-            let mut batch = writer.begin();
-            writer.probe_write(&mut batch, key, value);
+            let mut batch = begin_ok(&writer).await;
+            probe_write_ok(&writer, &mut batch, key, value).await;
             commit_ok(&writer, batch, &id, position, Authority::Rebuilding).await;
 
             let observer = fixture.connect().await;
@@ -1846,8 +1894,8 @@ pub mod rules {
             );
         }
 
-        let mut caught_up_batch = writer.begin();
-        writer.probe_write(&mut caught_up_batch, ANCHOR_KEY, PROBE_VALUE);
+        let mut caught_up_batch = begin_ok(&writer).await;
+        probe_write_ok(&writer, &mut caught_up_batch, ANCHOR_KEY, PROBE_VALUE).await;
         commit_ok(&writer, caught_up_batch, &id, caught_up, Authority::Live).await;
 
         let observer = fixture.connect().await;
@@ -2161,8 +2209,13 @@ fn two_opens_make_two_isolated_stores() {
         let id = ProjectionId::new("two_opens_make_two_isolated_stores");
         let position = SequencePosition::FIRST;
 
-        let mut batch = writer.begin();
-        happenstance_core::ProjectionProbe::probe_write(&writer, &mut batch, "depot-7", 12);
+        let mut batch = writer
+            .begin()
+            .await
+            .expect("opening a batch on the first fixture's store should succeed");
+        happenstance_core::ProjectionProbe::probe_write(&writer, &mut batch, "depot-7", 12)
+            .await
+            .expect("writing a probe row into the batch should succeed");
         writer
             .commit(batch, &id, position, Authority::Live)
             .await
