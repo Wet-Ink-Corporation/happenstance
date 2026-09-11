@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-core"
-description = "DCB-compliant event sourcing contract: types, storage ports, and an in-memory reference event store."
+description = "DCB-compliant event sourcing contract: the EventStore and ProjectionStore ports, their value types, and in-memory reference stores for both."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

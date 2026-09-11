@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-testkit"
-description = "DCB conformance suite for happenstance event store adapters."
+description = "Conformance suites for happenstance event store and projection store adapters: the bar an adapter must clear to exist."
 # Its own version, not the workspace's (CF-32). Adding a conformance rule is a
 # semver-MINOR change that can turn a passing adapter's CI red, so this crate's
 # number has to move on its own schedule — and a version inherited from the

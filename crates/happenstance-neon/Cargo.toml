@@ -1,6 +1,6 @@
 [package]
 name = "happenstance-neon"
-description = "Neon serverless PostgreSQL event store adapter for happenstance, over one-shot HTTP."
+description = "Neon serverless PostgreSQL event store and projection store adapters for happenstance, over one-shot HTTP."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

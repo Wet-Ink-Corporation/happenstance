@@ -5186,7 +5186,7 @@ is the release.
       crate going live and the next being pushed, and not before it. What covers
       them beforehand is `package-check`'s `--list` assertion above, and what
       covers them afterwards is `scripts/stranger-install-smoke.sh`.
-- [ ] Publish in dependency order: `happenstance-core` → `happenstance-testkit` →
+- [x] Publish in dependency order: `happenstance-core` → `happenstance-testkit` →
       `happenstance` → `happenstance-sqlite` → `happenstance-cloudflare` →
       `happenstance-postgres` → `happenstance-neon`. Each must be live before the
       next resolves against it. The order is forced rather than chosen: **all
