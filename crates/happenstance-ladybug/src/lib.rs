@@ -84,10 +84,12 @@
 //! owned-buffered-batch implementer, not PS-2's second shape.
 //! `MemoryProjectionStore`, the testkit's buffering variant,
 //! `SqliteProjectionStore`, `examples/outside-projection-adapter` and now this
-//! one all buffer, and phase 10b established that the axis's other end is not
-//! merely unbuilt but **forbidden by the port** for both drivers PS-2 names. What
-//! phase 11 fills is the **write-vocabulary** axis — Cypher rather than SQL, a
-//! graph rather than tables.
+//! one all buffer. Phase 10b established that the axis's other end was, as the
+//! port then stood, **forbidden by its signatures** for both drivers PS-2 names;
+//! ADR-0062 moved those signatures and `happenstance-postgres` built that end,
+//! which is what let ADR-0063 freeze the port. None of that was this crate's to
+//! do. What phase 11 fills is the **write-vocabulary** axis — Cypher rather than
+//! SQL, a graph rather than tables.
 //!
 //! 1. **LadybugDB has no transaction handle type.** Transactions are Cypher
 //!    statements on a connection, so PS-4's "a `Batch` MUST NOT be required to

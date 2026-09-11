@@ -221,6 +221,22 @@ where
         rollback: Option<W>,
     },
 
+    /// The projection store could not open a write set for the next chunk.
+    ///
+    /// A buffering adapter never produces this — opening a buffer cannot fail —
+    /// but a batch that is a live transaction has a connection to acquire and a
+    /// `BEGIN` to issue, and either can be refused (ADR-0062). Chunks already
+    /// committed stay committed, and nothing from the chunk that would have
+    /// followed was read.
+    #[error("opening a write set for the next chunk failed")]
+    Begin {
+        /// What the run had committed before this.
+        progress: Progressed,
+        /// The projection store's own refusal.
+        #[source]
+        source: W,
+    },
+
     /// The chunk's single commit failed.
     ///
     /// Nothing in that chunk is durable and the checkpoint did not move, so the
@@ -265,6 +281,7 @@ where
             Self::Read { progress, .. }
             | Self::Decode { progress, .. }
             | Self::Apply { progress, .. }
+            | Self::Begin { progress, .. }
             | Self::Commit { progress, .. }
             | Self::Rollback { progress, .. } => *progress,
         }
@@ -549,7 +566,10 @@ where
     let mut progress = Progressed::default();
 
     loop {
-        let mut batch = models.begin();
+        let mut batch = match models.begin().await {
+            Ok(batch) => batch,
+            Err(source) => return Err(ProjectionError::Begin { progress, source }),
+        };
         let mut applied = 0usize;
         let mut last = None;
         let mut stopped = None;

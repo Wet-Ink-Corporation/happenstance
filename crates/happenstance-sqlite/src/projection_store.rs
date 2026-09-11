@@ -637,14 +637,15 @@ impl SendProjectionStore for SqliteProjectionStore {
     // compiling is the evidence for.
     type Batch = SqliteBatch;
 
-    // Neither `async` nor fallible — which is what this adapter said it wanted:
-    // opening the batch allocates a `Vec` and the port's old `async` + `Result`
-    // was a round trip it did not need. PS-6 settled it in that direction.
+    // Never awaits and never fails: opening the batch allocates a `Vec`. The
+    // signature went back to `async` + `Result` under ADR-0062 so that a batch
+    // that is a live transaction has somewhere to put its `BEGIN`; PS-6's
+    // discipline — spend no round trip you do not need — is this body.
     //
     // It is also the only mint: the batch carries this instance's stamp, and
     // there is no public constructor that could produce one without it.
-    fn begin(&self) -> Self::Batch {
-        SqliteBatch::stamped(self.stamp)
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        Ok(SqliteBatch::stamped(self.stamp))
     }
 
     /// How far `id` has been brought, and whether its rows are authoritative.
@@ -801,9 +802,14 @@ impl happenstance_core::ProjectionProbe for SqliteProjectionStore {
     /// reported skips rather than omitted.
     const READS_THROUGH_BATCH: bool = false;
 
-    /// Queues one probe row. Synchronous and infallible, because queueing SQL
+    /// Queues one probe row. Never awaits and never fails, because queueing SQL
     /// into a buffer the caller owns cannot fail.
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
         batch.push(
             "INSERT INTO projection_probe (k, v) VALUES (?, ?) \
              ON CONFLICT(k) DO UPDATE SET v = excluded.v",
@@ -816,13 +822,15 @@ impl happenstance_core::ProjectionProbe for SqliteProjectionStore {
                 Value::Integer(value.cast_signed()),
             ],
         );
+        Ok(())
     }
 
     /// Queues removal of every probe row, so that
     /// [`reset`](happenstance_core::ProjectionStore::reset) can be checked
     /// without the suite knowing what a read model is.
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
         batch.push("DELETE FROM projection_probe", core::iter::empty());
+        Ok(())
     }
 
     /// Reads one probe row from **committed** state, through the same blocking
@@ -852,7 +860,11 @@ impl happenstance_core::ProjectionProbe for SqliteProjectionStore {
     /// has no read path, and the panic is the honest answer: any value returned
     /// here would be a claim about pending writes SQLite has never been told
     /// about.
-    fn probe_read_through(&self, _batch: &Self::Batch, _key: &str) -> Option<u64> {
+    async fn probe_read_through(
+        &self,
+        _batch: &mut Self::Batch,
+        _key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
         unimplemented!(
             "SqliteBatch buffers its statements, so `READS_THROUGH_BATCH` is \
              `false` and this is never called: there is no open transaction to \

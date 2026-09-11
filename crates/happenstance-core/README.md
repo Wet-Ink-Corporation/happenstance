@@ -15,9 +15,11 @@ event store. Storage-agnostic, and built on the
 >
 > **Two different maturity claims live here and they are not the same claim.** The
 > `EventStore` clauses marked `[FROZEN]` in the specification are **semver-binding
-> from `0.2.0`**. `ProjectionStore` is **not** frozen: it ships behind the
-> off-by-default `unstable-projection` feature and carries a written semver
-> exemption, for the structural reason its own module header gives.
+> from `0.2.0`**. `ProjectionStore` was **not**, at `0.2.0`: it shipped behind
+> the off-by-default `unstable-projection` feature with a written semver
+> exemption. Its freeze condition was met by ADR-0062 and ADR-0063 lifted the
+> gate, so it is frozen and unconditional from the next release; the feature
+> name survives, empty, so a `0.2.0` manifest still resolves.
 >
 > See [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md),
 > where every clause carries a maturity marker and, where it is not settled, the

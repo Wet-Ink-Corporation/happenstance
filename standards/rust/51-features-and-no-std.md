@@ -52,7 +52,7 @@ a feature line to blame. The gate's `--all-features` steps only ever see the
 "on" configuration, so the combination that fails is the one nothing runs.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:49 (serde?/std)` ·
-`spec/SPECIFICATION.md:379 (Cargo features are additive)` ·
+`spec/SPECIFICATION.md:387 (Cargo features are additive)` ·
 [Cargo Book — feature unification](https://doc.rust-lang.org/cargo/reference/features.html#feature-unification) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-51-2. Reach an optional dependency with `dep:` and `?/`; a bare `dep/feature` in a default feature enables the dependency.
@@ -180,7 +180,7 @@ The host build, `cargo test --workspace --all-features` and clippy are all
 green; the mandatory `--no-default-features` doc build of `happenstance-core` is
 the only step in the gate that sees it.
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:115 (extern crate alloc)` ·
+**Evidence.** `crates/happenstance-core/src/lib.rs:106 (extern crate alloc)` ·
 `crates/happenstance-core/src/error.rs:184 (impl core::error::Error for ConditionViolated)` ·
 `crates/happenstance-core/src/store.rs:156 (core::error::Error + 'static)` ·
 [core::error::Error](https://doc.rust-lang.org/core/error/trait.Error.html) *(checked 2026-08-09, rustc 1.97.1)*
@@ -230,7 +230,7 @@ event in a crate's life that cannot be undone: a yank removes the version from
 the resolver and leaves the page exactly as it is, so the first impression the
 crate makes is a build log, and the fix ships as the *next* version.
 
-**Evidence.** `crates/happenstance-core/Cargo.toml:112 (package.metadata.docs.rs)` ·
-`crates/happenstance-core/src/lib.rs:113 (feature(doc_cfg))` ·
+**Evidence.** `crates/happenstance-core/Cargo.toml:99 (package.metadata.docs.rs)` ·
+`crates/happenstance-core/src/lib.rs:104 (feature(doc_cfg))` ·
 `xtask/src/main.rs:1058 (is a cfg nobody sets except docs.rs)` ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*

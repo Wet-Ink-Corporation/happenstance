@@ -1,25 +1,30 @@
-//! Whether the adapter shape PS-2 still needs can implement `probe_read_through`.
+//! The adapter shape PS-2 needs, and the probe seam that now admits it.
 //!
 //! PS-2 is `[FROZEN]` and its Rule names the two ends of the batch-shape axis
 //! the port must be proved against — *"one adapter holding a live transaction
-//! (rusqlite or `sqlx`) and one that cannot hold anything across an await"*. The
-//! first is unbuilt, and ADR-0036 is the decision that records it as unbuilt.
-//! Every store that has ever declared `READS_THROUGH_BATCH = true` in this
-//! workspace answers from an in-process map or a buffer, and the one adapter
-//! that has run the suite declares `false`.
+//! (rusqlite or `sqlx`) and one that cannot hold anything across an await"*.
+//! Until ADR-0062 this file was the compiled record of why the first end could
+//! not be built honestly: `probe_read_through` was synchronous, infallible and
+//! took `&Self::Batch`, so a store whose batch *is* a transaction could
+//! implement the probe only by declaring `READS_THROUGH_BATCH = false` — a
+//! false statement about itself — and the suite could not tell it apart from a
+//! buffering store. ADR-0060 recorded that finding and declined to act on it in
+//! an adapter lane; ADR-0062 acted on it.
 //!
-//! This file asks whether that is scarcity or structure, and answers it by
-//! construction. `LiveTransactionStore`'s batch **is** a transaction: statements
-//! are issued as they are made, against a connection the batch owns, and reading
-//! one back is real I/O — `&mut` because a driver borrows the connection to run a
-//! statement (`sqlx`'s `Executor for &mut Transaction`, `rusqlite`'s `&mut
-//! Transaction`), and `.await` because it yields.
+//! This file now asks the inverted question, and answers it by construction.
+//! `LiveTransactionStore`'s batch **is** a transaction: statements are issued as
+//! they are made, against a connection the batch owns, and reading one back is
+//! real I/O — `&mut` because a driver borrows the connection to run a statement
+//! (`sqlx`'s `Executor for &mut Transaction`, `rusqlite`'s `&mut Transaction`),
+//! and `.await` because it yields. Under the moved seam it declares
+//! `READS_THROUGH_BATCH = true` truthfully and the read-through rule can run
+//! against it.
 //!
-//! Nothing here proposes a signature. `ProjectionProbe` is behind `conformance`
-//! and the port beneath it is `[PROVISIONAL]`; whether the probe's shape moves
-//! belongs to whoever owns PS-2's clause. What this file supplies is the
-//! measurement that decision would otherwise be taken without: the three bodies
-//! the current signature admits for this store, each run rather than argued.
+//! What this file does **not** claim is that PS-2's bar is met. This store is an
+//! in-process instrument with a simulated yield, not an adapter over storage the
+//! workspace does not control. It establishes that the far end is now
+//! *reachable and reportable* — the two properties ADR-0060 found missing — and
+//! leaves standing at it to an adapter.
 //!
 //! # Why the store is defined here and is not `MemoryProjectionStore`
 //!
@@ -34,7 +39,7 @@
 #![cfg(feature = "conformance")]
 
 use std::collections::BTreeMap;
-use std::panic::AssertUnwindSafe;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use happenstance_core::{
@@ -61,6 +66,9 @@ struct LiveError;
 struct Server {
     rows: Mutex<BTreeMap<String, u64>>,
     checkpoints: Mutex<BTreeMap<ProjectionId, Checkpoint>>,
+    /// Armed, the next statement is refused — a constraint violation, a lost
+    /// connection. What a live transaction can do that a buffer cannot.
+    refuse_statements: AtomicBool,
 }
 
 /// A live transaction, and the point of this file.
@@ -76,17 +84,28 @@ struct LiveTransaction {
 }
 
 impl LiveTransaction {
+    /// Issues one statement through the open transaction.
+    ///
+    /// `&mut self` because the driver borrows the connection; `async` because
+    /// the statement is I/O; `Result` because a statement on a live
+    /// transaction can fail, and after it does the transaction is poisoned
+    /// rather than merely unhelpful.
+    async fn execute(&mut self, key: &str, value: u64) -> Result<(), LiveError> {
+        // A real yield, not a formality: it is what the old synchronous probe
+        // could not bridge from inside the suite's runtime.
+        tokio::task::yield_now().await;
+        if self.server.refuse_statements.load(Ordering::SeqCst) {
+            return Err(LiveError);
+        }
+        self.uncommitted.insert(key.to_owned(), value);
+        Ok(())
+    }
+
     /// Reads one row through the open transaction, committed state included.
     ///
     /// **This is the method `ProjectionProbe::probe_read_through` exists to
-    /// expose, and its signature is the whole finding.** `&mut self` because the
-    /// driver borrows the connection to issue a statement; `async` because the
-    /// statement is I/O; `Result` because a statement on a live transaction can
-    /// fail, and after it does the transaction is poisoned rather than merely
-    /// unhelpful.
+    /// expose, and its signature is what ADR-0062 changed the probe to meet.**
     async fn select(&mut self, key: &str) -> Result<Option<u64>, LiveError> {
-        // A real yield, not a formality: it is what makes this future
-        // unbridgeable from a synchronous caller already inside a runtime.
         tokio::task::yield_now().await;
         if let Some(pending) = self.uncommitted.get(key) {
             return Ok(Some(*pending));
@@ -110,12 +129,15 @@ impl ProjectionStore for LiveTransactionStore {
 
     type Batch = LiveTransaction;
 
-    fn begin(&self) -> Self::Batch {
-        LiveTransaction {
+    /// Acquires a connection and opens the transaction: a round trip, and a
+    /// failure, which is why `begin` is a future of a `Result`.
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        tokio::task::yield_now().await;
+        Ok(LiveTransaction {
             server: Arc::clone(&self.server),
             uncommitted: BTreeMap::new(),
             clear_all: false,
-        }
+        })
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
@@ -185,23 +207,29 @@ impl ProjectionStore for LiveTransactionStore {
     }
 }
 
-/// The probe, written the only way the current signature permits.
+/// The probe, written the honest way — which the seam now permits.
 ///
-/// `READS_THROUGH_BATCH` is `false`, and that is **a false statement about this
-/// store** — the transaction above reads its own uncommitted writes by
-/// construction, which `the_transaction_reads_its_own_uncommitted_writes` runs.
-/// It is declared `false` because the alternative bodies are worse, and the
-/// three tests below are what "worse" means, measured.
+/// `READS_THROUGH_BATCH` is `true` and that is a **true statement about this
+/// store**: every batch-touching member issues a statement through the
+/// transaction, awaiting the yield and surfacing the failure, exactly as a
+/// driver-backed adapter would.
 impl ProjectionProbe for LiveTransactionStore {
-    const READS_THROUGH_BATCH: bool = false;
+    const READS_THROUGH_BATCH: bool = true;
 
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
-        batch.uncommitted.insert(key.to_owned(), value);
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
+        batch.execute(key, value).await
     }
 
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
+        tokio::task::yield_now().await;
         batch.uncommitted.clear();
         batch.clear_all = true;
+        Ok(())
     }
 
     async fn probe_read(&self, key: &str) -> Result<Option<u64>, Self::Error> {
@@ -210,21 +238,28 @@ impl ProjectionProbe for LiveTransactionStore {
         Ok(rows.get(key).copied())
     }
 
-    fn probe_read_through(&self, _batch: &Self::Batch, _key: &str) -> Option<u64> {
-        unimplemented!("a live transaction cannot be read synchronously or infallibly")
+    async fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
+        batch.select(key).await
     }
 }
 
 // =====================================================================
-// What the store can do, and what the probe can report about it
+// What the store can do, and what the probe can now report about it
 // =====================================================================
 
-/// The property PS-2's unbuilt end is defined by. It holds.
+/// The property PS-2's far end is defined by. It holds.
 #[tokio::test(flavor = "current_thread")]
 async fn the_transaction_reads_its_own_uncommitted_writes() {
     let store = LiveTransactionStore::default();
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, "depot-7", 12);
+    let mut batch = store.begin().await.expect("opening a batch should succeed");
+    store
+        .probe_write(&mut batch, "depot-7", 12)
+        .await
+        .expect("the probe write should succeed");
 
     assert_eq!(
         batch.select("depot-7").await,
@@ -239,167 +274,140 @@ async fn the_transaction_reads_its_own_uncommitted_writes() {
     );
 }
 
-/// Body 1 — decline the capability. What every adapter does today, and the
-/// declaration is false.
+/// The honest declaration compiles, and the probe answers **through the
+/// port's own seam** rather than through an inherent method of this file.
+///
+/// Before ADR-0062 the only body that compiled here declared the capability
+/// `false` and left `probe_read_through` as `unimplemented!()`; the suite then
+/// took PS-12's rule as a reported skip and went green having exercised
+/// nothing. This is that skip becoming a run.
 #[tokio::test(flavor = "current_thread")]
-async fn declining_the_capability_is_the_only_body_that_compiles_and_it_lies() {
+async fn the_probe_reports_the_pending_write_through_the_batch() {
     const {
         assert!(
-            !<LiveTransactionStore as ProjectionProbe>::READS_THROUGH_BATCH,
-            "the shipped signature admits no other honest declaration for this store"
+            <LiveTransactionStore as ProjectionProbe>::READS_THROUGH_BATCH,
+            "a store whose batch is a live transaction declares the capability it has"
         );
     }
 
-    // The declaration is false, and the falseness is measurable rather than
-    // rhetorical: the same batch, read through its own async path, answers.
     let store = LiveTransactionStore::default();
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, "van-3", 5);
-    assert_eq!(batch.select("van-3").await, Ok(Some(5)));
+    let mut batch = store.begin().await.expect("opening a batch should succeed");
+    store
+        .probe_write(&mut batch, "van-3", 5)
+        .await
+        .expect("the probe write should succeed");
 
-    // PS-12's rule is emitted as a reported skip carrying this store's stated
-    // reason, so the suite goes green having exercised nothing. That is PS-2
-    // part 2 being recorded as met by an adapter whose defining property was
-    // never run.
+    assert_eq!(
+        store.probe_read_through(&mut batch, "van-3").await,
+        Ok(Some(5)),
+        "the probe seam reaches the transaction's own uncommitted write"
+    );
+    assert_eq!(
+        store.probe_read("van-3").await,
+        Ok(None),
+        "while the committed read model has not moved"
+    );
 }
 
-/// Body 2 — answer from committed state. Compiles, and returns the wrong answer.
+/// A refused statement surfaces as the port's error rather than vanishing.
 ///
-/// Not hypothetical: it is the shortest body that type-checks, and PS-12 is the
-/// only thing that forbids it. Written out here so the wrong implementation is
-/// named rather than left to be inferred.
+/// The old seam was infallible, so a store handed a live transaction had no
+/// way to say a statement had failed and the transaction was poisoned. This is
+/// the `Result` earning its place: a probe write that fails is an `Err` the
+/// suite can see, not a silently empty batch.
 #[tokio::test(flavor = "current_thread")]
-async fn answering_from_committed_state_compiles_and_is_wrong() {
+async fn a_failed_statement_is_reported_through_the_seam() {
+    let store = LiveTransactionStore::default();
+    let mut batch = store.begin().await.expect("opening a batch should succeed");
+    store.server.refuse_statements.store(true, Ordering::SeqCst);
+
+    assert_eq!(
+        store.probe_write(&mut batch, "yard-2", 4).await,
+        Err(LiveError),
+        "the refused statement is the port's error, surfaced where the suite          can decide not to commit the batch"
+    );
+    assert_eq!(
+        store.probe_read_through(&mut batch, "yard-2").await,
+        Ok(None),
+        "and the transaction did not absorb the write it refused"
+    );
+}
+
+/// The named wrong implementation PS-12 forbids, kept so it stays named.
+///
+/// Answering `probe_read_through` from committed state compiles under the new
+/// seam exactly as it did under the old one — it is the shortest body that
+/// type-checks — and returns `None` for a row the transaction can see. PS-12's
+/// rule, `batch_reads_reflect_pending_writes`, is what rejects it; this test is
+/// the wrong body written out so the rule has something to point at.
+#[tokio::test(flavor = "current_thread")]
+async fn answering_from_committed_state_still_compiles_and_is_still_wrong() {
     fn probe_read_through_from_committed(
         store: &LiveTransactionStore,
-        _batch: &LiveTransaction,
+        _batch: &mut LiveTransaction,
         key: &str,
-    ) -> Option<u64> {
-        let rows = store.server.rows.lock().ok()?;
-        rows.get(key).copied()
+    ) -> Result<Option<u64>, LiveError> {
+        let rows = store.server.rows.lock().map_err(|_| LiveError)?;
+        Ok(rows.get(key).copied())
     }
 
     let store = LiveTransactionStore::default();
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, "hub-1", 9);
+    let mut batch = store.begin().await.expect("opening a batch should succeed");
+    store
+        .probe_write(&mut batch, "hub-1", 9)
+        .await
+        .expect("the probe write should succeed");
 
     assert_eq!(
-        probe_read_through_from_committed(&store, &batch, "hub-1"),
-        None,
+        probe_read_through_from_committed(&store, &mut batch, "hub-1"),
+        Ok(None),
         "the committed-state body answers `None` for a row the transaction can \
          see. A suite believing this reads a pending write as absent"
     );
     assert_eq!(batch.select("hub-1").await, Ok(Some(9)));
 }
 
-/// Body 3 — block on the future. Panics, inside the runtime the suite runs in.
-///
-/// The suite drives an async port, so the probe is always called from inside a
-/// runtime. `Handle::block_on` refuses there by design; on a multi-thread
-/// runtime `block_in_place` would be needed as well, which a current-thread
-/// runtime does not have and `wasm32` has neither of.
-#[tokio::test(flavor = "current_thread")]
-async fn blocking_on_the_future_panics_inside_the_runtime_the_suite_uses() {
-    let store = LiveTransactionStore::default();
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, "yard-2", 4);
-
-    let handle = tokio::runtime::Handle::current();
-    let blocked = std::panic::catch_unwind(AssertUnwindSafe(|| {
-        handle.block_on(async { batch.select("yard-2").await })
-    }));
-
-    let panic = blocked.expect_err("`block_on` inside a runtime is not permitted");
-    let message = panic
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| panic.downcast_ref::<&str>().copied())
-        .unwrap_or("<non-string panic>");
-    assert!(
-        message.contains("blocking") || message.contains("runtime"),
-        "the panic is the runtime refusing a nested block_on, and its wording is \
-         tokio's rather than ours; got: {message}"
-    );
-}
-
-/// The probe, called. There is one body and it is a panic.
-#[test]
-#[should_panic(expected = "a live transaction cannot be read synchronously")]
-fn calling_the_probe_is_the_third_outcome_and_it_is_a_panic() {
-    let store = LiveTransactionStore::default();
-    let batch = store.begin();
-    let _ = store.probe_read_through(&batch, "depot-7");
-}
-
 // =====================================================================
-// The pin: the constraint is recorded where the freeze decision reads
+// The pin: the seam's shape is recorded where the freeze decision reads
 // =====================================================================
 
-/// The port's own declaration.
+/// The port's own declaration of the member this file is about.
 ///
 /// Read as text rather than named, because the property being pinned is that
-/// **this exact receiver** is what the section describes.
-const DECLARATION: &str =
-    "fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64>;";
+/// **this exact receiver** — `&mut Self::Batch`, a future, a `Result` — is what
+/// the section describes. A signature that slid back to `&Self::Batch` or to a
+/// synchronous `Option<u64>` would make this store's honest body a compile
+/// error again, and the section would be describing a seam that no longer
+/// exists.
+const DECLARATION: &str = "    fn probe_read_through(\n        &self,\n        batch: &mut Self::Batch,\n        key: &str,\n    ) -> impl Future<Output = Result<Option<u64>, Self::Error>>;";
 
 /// The heading the port carries while that declaration stands.
-const SECTION: &str = "# This signature cannot be met by a batch that is a live transaction";
+const SECTION: &str = "# This signature is the one a live transaction can meet";
 
 /// The section and the signature stand or fall together.
 ///
-/// Two directions, and both matter. A signature that moves — to `&mut`, to a
-/// hand-desugared `impl Future`, to a `Result` — leaves a page telling adapter
-/// authors about an obstacle that is gone; and a section deleted while the
-/// signature stands puts the workspace back where the audit found it, with the
-/// live-transaction end of PS-2's axis unbuilt and nothing saying why.
-///
-/// Not a substitute for reading this file: the three bodies above are the
-/// evidence, and this is only what keeps them attached to the thing they are
-/// evidence about.
+/// Two directions, and both matter. A signature that moves leaves a page
+/// telling adapter authors the far end is reachable when it is not; a section
+/// deleted while the signature stands loses the record of *why* the seam has
+/// the shape it has, which is the record ADR-0060 was written to keep.
 ///
 /// Known cost, stated rather than discovered: [`DECLARATION`] is matched as a
-/// string, so renaming the `batch` parameter fails this test for a cosmetic
+/// string, so reformatting the declaration fails this test for a cosmetic
 /// reason. That is the price of pinning the receiver rather than the method
-/// name, and the receiver is the whole subject. The message says which of the
-/// two came apart, so the fix is a one-line edit here.
+/// name, and the receiver is the whole subject.
 #[test]
-fn the_recorded_constraint_is_pinned_to_the_signature_it_describes() {
+fn the_recorded_seam_is_pinned_to_the_signature_it_describes() {
     const PORT: &str = include_str!("../src/projection.rs");
     assert_eq!(
         PORT.contains(DECLARATION),
         PORT.contains(SECTION),
-        "`probe_read_through`'s declaration and the section recording what it \
-         costs a live-transaction adapter have come apart. If the signature \
-         moved, this file moves with it; if the section went, PS-2's owner is \
-         back to reading the absence of an adapter as scarcity"
+        "`probe_read_through`'s declaration and the section recording why it has \
+         that shape have come apart. If the signature moved, this file moves \
+         with it; if the section went, the reason the seam is `&mut`, async and \
+         fallible is no longer written where an adapter author reads"
     );
-}
-
-/// The section says "compiler-checked". Deleting the fences makes it prose.
-///
-/// Added because reverting the section leg by leg found this one pinned by
-/// nothing: the heading and the paragraphs survived the removal of both fences
-/// and the whole gate stayed green, leaving a page that *claims* a compiler
-/// checked something no compiler is looking at.
-///
-/// The error codes are named, not just the fences. `compile_fail` on its own
-/// passes when the snippet fails to compile for any reason at all — a typo, a
-/// missing import — which is the wrong implementation this rule forbids, and it
-/// is the exact failure mode `standards/rust/60-what-a-test-must-prove.md`
-/// describes for a test that cannot say what it rejected.
-#[test]
-fn the_two_halves_of_the_obstacle_stay_compiler_checked() {
-    const PORT: &str = include_str!("../src/projection.rs");
-    if !PORT.contains(SECTION) {
-        return; // The test above owns that failure; this one would only echo it.
-    }
-    for fence in ["```compile_fail,E0596", "```compile_fail,E0728"] {
-        assert!(
-            PORT.contains(fence),
-            "the section claims both halves are compiler-checked, and `{fence}` \
-             is gone. E0596 is the mutable borrow a driver needs to issue a \
-             statement; E0728 is the await the statement is. Prose asserting \
-             either is what this file exists to replace"
-        );
-    }
+    assert!(
+        PORT.contains(DECLARATION),
+        "the declaration this file's honest body compiles against is gone"
+    );
 }

@@ -31,8 +31,8 @@ storage-agnostic event sourcing library built on the
 ## Features, and the one that costs you a promise
 
 ```toml
-happenstance-sqlite = "0.2"                                # the event store
-happenstance-sqlite = { version = "0.2", features = ["projection-store"] }
+happenstance-sqlite = "0.3"                                # the event store
+happenstance-sqlite = { version = "0.3", features = ["projection-store"] }
 
 rusqlite = "0.40"                                          # only for tables of your own
 ```
@@ -69,13 +69,14 @@ every consumer who already had one.
 is deliberate.**
 
 The event store implements a port whose clauses are frozen. The projection store
-implements one that is not: `ProjectionStore` is provisional, and PS-2's bar for
-freezing it — a hostile store failing the suite, *and* two adapters at opposite
-ends of the batch-shape axis passing it — is met on its first half only. One
-adapter has run the projection suite. So `projection-store` forwards
-`happenstance-core`'s `unstable-projection` gate, and enabling it opts you into a
-surface that makes **no semver promise**: it can change shape in a patch release,
-and `cargo-semver-checks` will not stop it.
+implemented one that was not, until ADR-0063: `ProjectionStore` was provisional
+while PS-2's bar for freezing it — a hostile store failing the suite, *and* two
+adapters at opposite ends of the batch-shape axis passing it — was met on its
+first half only. The second half was met by ADR-0062 and the port is frozen
+now, so `projection-store` forwards nothing to the contract crate any more and
+the surface it gates makes the same semver promise the event store does. It
+stays off by default because a consumer who wants only the event store should
+not compile the other role.
 
 That is worth having and it is worth choosing. Nothing about the event store
 changes either way, and a projection built on this today is a projection you may

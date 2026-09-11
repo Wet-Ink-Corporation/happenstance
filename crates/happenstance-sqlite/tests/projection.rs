@@ -239,8 +239,8 @@ const VALUE: u64 = 4_211;
 
 /// Commits one probe row at `position`, failing the test with context on error.
 async fn commit_one(store: &SqliteProjectionStore, id: &ProjectionId, position: SequencePosition) {
-    let mut batch = store.begin();
-    store.probe_write(&mut batch, KEY, VALUE);
+    let mut batch = store.begin().await.unwrap();
+    store.probe_write(&mut batch, KEY, VALUE).await.unwrap();
     store
         .commit(batch, id, position, Authority::Live)
         .await
@@ -368,8 +368,8 @@ async fn a_cloned_store_accepts_the_batch_its_origin_began() {
     let clone = origin.clone();
     let id = ProjectionId::new("a_cloned_store_accepts_its_origins_batch");
 
-    let mut batch = origin.begin();
-    origin.probe_write(&mut batch, KEY, VALUE);
+    let mut batch = origin.begin().await.unwrap();
+    origin.probe_write(&mut batch, KEY, VALUE).await.unwrap();
 
     clone
         .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
@@ -406,8 +406,8 @@ async fn a_batch_from_another_handle_is_refused_by_every_method_that_takes_one()
     let stranger = fixture.connect().await;
     let id = ProjectionId::new("a_batch_from_another_handle");
 
-    let mut batch = origin.begin();
-    origin.probe_write(&mut batch, KEY, VALUE);
+    let mut batch = origin.begin().await.unwrap();
+    origin.probe_write(&mut batch, KEY, VALUE).await.unwrap();
     match stranger
         .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
         .await
@@ -416,14 +416,14 @@ async fn a_batch_from_another_handle_is_refused_by_every_method_that_takes_one()
         outcome => panic!("`commit` must answer `ForeignBatch`, and answered {outcome:?}"),
     }
 
-    let mut batch = origin.begin();
-    origin.probe_delete_all(&mut batch);
+    let mut batch = origin.begin().await.unwrap();
+    origin.probe_delete_all(&mut batch).await.unwrap();
     match stranger.reset(batch, &id).await {
         Err(ResetError::ForeignBatch) => {}
         outcome => panic!("`reset` must answer `ForeignBatch`, and answered {outcome:?}"),
     }
 
-    match stranger.rollback(origin.begin()).await {
+    match stranger.rollback(origin.begin().await.unwrap()).await {
         Err(SqliteProjectionStoreError::ForeignBatch) => {}
         outcome => panic!("`rollback` must answer `ForeignBatch`, and answered {outcome:?}"),
     }

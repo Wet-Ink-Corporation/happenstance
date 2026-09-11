@@ -253,10 +253,10 @@ integration-test target — cargo never hands those to a compiler, and a fence
 that is never compiled is decoration (F1-04, and
 [`80-the-gate.md`](80-the-gate.md)).
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:186 (pub use bytes)` ·
-`crates/happenstance-core/src/lib.rs:193 (pub use futures_core)` ·
-`crates/happenstance-sqlite/src/lib.rs:143 (pub use rusqlite)` ·
-`crates/happenstance-sqlite/src/lib.rs:185 (compile_fail,E0433)` ·
+**Evidence.** `crates/happenstance-core/src/lib.rs:169 (pub use bytes)` ·
+`crates/happenstance-core/src/lib.rs:176 (pub use futures_core)` ·
+`crates/happenstance-sqlite/src/lib.rs:142 (pub use rusqlite)` ·
+`crates/happenstance-sqlite/src/lib.rs:184 (compile_fail,E0433)` ·
 `crates/happenstance-cloudflare/src/lib.rs:587 (pub use {happenstance_core, worker})` ·
 `crates/happenstance-core/src/store.rs:178 (impl Stream<Item = Result<SequencedEvent, Self::Error>>)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)

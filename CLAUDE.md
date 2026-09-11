@@ -37,7 +37,11 @@ crates/happenstance-ladybug/     graph projection store only. real and conforman
                                  that means CANNOT: `lbug` does not render on docs.rs.
 crates/happenstance-postgres/    the store that does not serialise its writers. both roles
                                  real and conformant at phase 10b. published from `0.2.0`,
-                                 by the release-set decision recorded at `e597c34`.
+                                 by the release-set decision recorded at `e597c34`. carries
+                                 TWO projection stores: the buffered one an application
+                                 uses, and `LivePostgresProjectionStore` — a live `sqlx`
+                                 transaction as the batch — the instrument that stood at the
+                                 far end of PS-2's axis and let ADR-0063 freeze the port.
 crates/happenstance-neon/        Postgres over one-shot HTTP: no connection, no interactive
                                  transaction, no cursor. real and conformant at phase 10b
                                  against a live endpoint — and the adapter that falsified
@@ -453,11 +457,21 @@ with a clause, the clause wins; the summaries are orientation only.
 
 Changing a `[FROZEN]` clause requires a new ADR, not an edit.
 
-- **The projection store port is provisional.** It has no conformance suite yet,
-  and a port without one is a guess. It gets frozen when the first real
-  projection adapter can be built against it. The invariant it must preserve —
-  read-model write and checkpoint write in one transaction — is documented on
-  the trait.
+- ~~**The projection store port is provisional.**~~ Frozen by
+  [ADR-0063](references/adr/0063-the-projection-port-is-frozen.md), after
+  [ADR-0062](references/adr/0062-the-probe-seam-moves-and-the-far-end-is-built.md)
+  moved `begin` and the probe seam and built the far end of PS-2's batch-shape
+  axis — `LivePostgresProjectionStore`, a `sqlx` transaction as the batch,
+  passing all seventeen rules against a live server. The invariant — read-model
+  write and checkpoint write in one transaction — is documented on the trait
+  and enforced by `commit_is_atomic_with_the_read_model`. What is **still
+  open** is one layer up: `Projection::apply` in the typed layer is synchronous,
+  so an application can push into a buffered batch and cannot issue a statement
+  into a live one. That is why `happenstance`'s `unstable-projection` still
+  gates the *runner*, while `happenstance-core`'s feature of the same name is
+  retained empty for `0.2.0` manifests and gates nothing. Do not resolve the
+  `apply` question in passing; it is the runner's own axis and owed its own
+  record.
 - ~~**SQLite driver** (`rusqlite` vs `sqlx`).~~ Settled at phase 2 by building
   both: `happenstance-sqlite` is `rusqlite`, `happenstance-postgres` is `sqlx`,
   and the two are in the tree for different reasons rather than as candidates.

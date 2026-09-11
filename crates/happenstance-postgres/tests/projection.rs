@@ -144,7 +144,12 @@ async fn a_position_above_bigint_is_refused_at_the_write() {
     let too_large = SequencePosition::new(u64::MAX).expect("u64::MAX is non-zero");
 
     let outcome = store
-        .commit(store.begin(), &id, too_large, Authority::Live)
+        .commit(
+            store.begin().await.unwrap(),
+            &id,
+            too_large,
+            Authority::Live,
+        )
         .await;
 
     assert!(
@@ -177,7 +182,7 @@ async fn the_stored_authority_round_trips() {
     let id = ProjectionId::new("authority-round-trip");
     store
         .commit(
-            store.begin(),
+            store.begin().await.unwrap(),
             &id,
             SequencePosition::FIRST,
             Authority::Rebuilding,

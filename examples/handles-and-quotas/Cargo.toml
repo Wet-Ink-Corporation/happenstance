@@ -19,7 +19,7 @@ publish = false
 # `default-features = false` drops `memory` as well: every boundary below is
 # read from a file, and an application that has chosen a durable store has no
 # use for `MemoryEventStore` in its binary.
-happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.3.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
 ] }

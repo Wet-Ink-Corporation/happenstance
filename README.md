@@ -24,9 +24,12 @@ it.
 >
 > What `0.2.0` promises: the `EventStore` clauses marked `[FROZEN]` in
 > [the specification](spec/SPECIFICATION.md) are semver-binding from here.
-> What it does not: `ProjectionStore` ships behind an off-by-default
-> `unstable-projection` feature and is exempt from semver until two adapters at
-> opposite ends of the batch-shape axis have passed its suite.
+> What it did not, at `0.2.0`: `ProjectionStore` shipped behind an off-by-default
+> `unstable-projection` feature and was exempt from semver. Adapters at both
+> ends of its batch-shape axis now pass its suite and ADR-0063 lifted the gate,
+> so from the next release the `[FROZEN]` `PS` clauses are semver-binding too.
+> The typed projection *runner* stays behind `happenstance`'s
+> `unstable-projection`, for a reason of its own that the crate names.
 >
 > What it is not is production mileage — see the note under [status](#status),
 > which is narrower than the ticks suggest. Ladybug and replication come next, and
@@ -189,10 +192,10 @@ answer to what is built.
 
 ```toml
 [dependencies]
-happenstance = "0.2"
+happenstance = "0.3"
 ```
 
-Add an adapter when you want durability — `happenstance-sqlite = "0.2"` — and
+Add an adapter when you want durability — `happenstance-sqlite = "0.3"` — and
 `happenstance-testkit` as a `[dev-dependencies]` if you are writing one of your
 own. **Pin the testkit exactly.** Adding a conformance rule is a semver-*minor*
 change that can turn a passing adapter's CI red, which is why it carries its own

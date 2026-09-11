@@ -82,10 +82,13 @@ upgrade.
 `0.2.0` is the first stable release, and what that does and does not promise is
 worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from here.
-`ProjectionStore` is **not**: it ships behind an off-by-default
-`unstable-projection` feature and carries a documented semver exemption until two
-adapters at opposite ends of the batch-shape axis have passed its conformance
-suite. A breaking change there is not a violation of this table.
+`ProjectionStore` was **not** at `0.2.0`: it shipped behind an off-by-default
+`unstable-projection` feature with a documented semver exemption. Adapters at
+both ends of its batch-shape axis have since passed its conformance suite and
+ADR-0063 lifted the gate, so from the next release the `[FROZEN]` `PS` clauses
+are semver-binding too. What remains exempt is the typed projection *runner*
+behind `happenstance`'s `unstable-projection` feature, for a reason that crate
+names; a breaking change there is not a violation of this table.
 
 | Version | Supported |
 |---|---|

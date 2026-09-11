@@ -38,16 +38,13 @@ pass.
 >   following that name to the registry finds nothing.
 >
 > The `ProjectionStore`
-> suite is now all seventeen rules the specification names, each with a wrong
-> store in this crate's `tests/` that fails it — but the port it checks is still
-> `[PROVISIONAL]` and ships behind an off-by-default feature. The reason is no
-> longer that nothing real has cleared it: four adapters over storage this
-> workspace does not fully control now do. It is **structural**. PS-2 asks for two
-> adapters at opposite ends of the batch-shape axis, and all four sit at the same
-> end — an owned, buffered write set — because the other end, a batch holding a
-> live transaction, is unreachable through this port's signatures: `begin` is
-> total, synchronous and infallible, and no real driver hands out a transaction
-> that way. The freeze waits on a replacement axis rather than on another adapter.
+> suite is all seventeen rules the specification names, each with a wrong
+> store in this crate's `tests/` that fails it — and the port it checks is
+> frozen since ADR-0063. Five adapters over storage this workspace does not
+> fully control clear it, and since ADR-0062 they stand at both ends of the
+> batch-shape axis PS-2 asks for — four owned, buffered write sets and one
+> `sqlx` transaction. A projection rule appearing or changing is a minor bump
+> here exactly as an event-store rule is.
 > Several axes of the instrument
 > portfolio also have no implementation at their far end — see
 > [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
@@ -167,10 +164,9 @@ both. `fixtures::MemoryProjectionFixture` is the worked example.
 
 **All seventeen rules §4.11 names, today**, each with a wrong store in this
 crate's own `tests/` that fails it and is asserted to fail *exactly* the rules its
-registry row declares. The port is still `[PROVISIONAL]` and lives behind
-`happenstance-core`'s off-by-default `unstable-projection` feature: this suite is
-what will freeze it, and what would clear that bar is an adapter over storage
-this workspace does not control — which neither fixture shipped here is.
+registry row declares. The port is frozen since ADR-0063, on this suite going
+green against adapters at both ends of its batch-shape axis — a bar neither
+fixture shipped here could have cleared, because a fixture is not an adapter.
 
 ### The benchmark harness — which is *not* the bar
 

@@ -58,12 +58,25 @@ async fn store_is_reachable_from_the_public_surface() {
 // =====================================================================
 
 #[test]
-fn begin_is_synchronous_and_infallible() {
+fn begin_resolves_at_its_first_poll_without_a_runtime() {
+    use core::task::{Context, Poll, Waker};
+
     let store = MemoryProjectionStore::new();
 
-    // No `.await`, no `?`. Restoring either for symmetry with `EventStore`
-    // makes this line stop compiling.
-    let batch = store.begin();
+    // `begin` is async and fallible on the port since ADR-0062, so that a
+    // batch that is a live transaction can have a round trip and a failure
+    // here. A buffer has neither, and this is what "neither" compiles to:
+    // the future is ready at its first poll, driven by a no-op waker with no
+    // executor anywhere in the test.
+    let mut pending = core::pin::pin!(store.begin());
+    let batch = match pending
+        .as_mut()
+        .poll(&mut Context::from_waker(Waker::noop()))
+    {
+        Poll::Ready(Ok(batch)) => batch,
+        Poll::Ready(Err(error)) => match error {},
+        Poll::Pending => panic!("opening a buffer yielded, which is a round trip"),
+    };
 
     drop(batch);
 }
@@ -96,7 +109,7 @@ async fn open_batch_is_invisible_until_commit() {
     let id = ProjectionId::new("van_stock");
     let position = SequencePosition::FIRST;
 
-    let mut batch = store.begin();
+    let mut batch = store.begin().await.unwrap();
     batch.write("depot-7", 12);
 
     assert_eq!(
@@ -122,7 +135,7 @@ async fn commit_installs_rows_and_checkpoint_together() {
     let id = ProjectionId::new("van_stock");
     let position = SequencePosition::FIRST;
 
-    let mut batch = store.begin();
+    let mut batch = store.begin().await.unwrap();
     batch.write("depot-7", 12);
     store
         .commit(batch, &id, position, Authority::Live)
@@ -149,11 +162,21 @@ async fn commit_records_the_authority_it_was_given() {
     let position = SequencePosition::FIRST;
 
     store
-        .commit(store.begin(), &live, position, Authority::Live)
+        .commit(
+            store.begin().await.unwrap(),
+            &live,
+            position,
+            Authority::Live,
+        )
         .await
         .expect("commit succeeds");
     store
-        .commit(store.begin(), &rebuilding, position, Authority::Rebuilding)
+        .commit(
+            store.begin().await.unwrap(),
+            &rebuilding,
+            position,
+            Authority::Rebuilding,
+        )
         .await
         .expect("commit succeeds");
 
@@ -180,7 +203,7 @@ async fn empty_batch_still_advances_the_checkpoint() {
     // Nothing written: the position is the one *considered*, not the one
     // applied, so a run that produced no read-model change still moves on.
     store
-        .commit(store.begin(), &id, position, Authority::Live)
+        .commit(store.begin().await.unwrap(), &id, position, Authority::Live)
         .await
         .expect("commit succeeds");
 
@@ -197,14 +220,14 @@ async fn regressing_position_is_rejected_and_changes_nothing() {
     let first = SequencePosition::FIRST;
     let second = next(first);
 
-    let mut batch = store.begin();
+    let mut batch = store.begin().await.unwrap();
     batch.write("depot-7", 12);
     store
         .commit(batch, &id, second, Authority::Live)
         .await
         .expect("commit succeeds");
 
-    let mut regressing = store.begin();
+    let mut regressing = store.begin().await.unwrap();
     regressing.write("depot-7", 99);
     let error = store
         .commit(regressing, &id, first, Authority::Live)
@@ -239,7 +262,12 @@ async fn distinct_projections_advance_independently() {
     let position = SequencePosition::FIRST;
 
     store
-        .commit(store.begin(), &one, position, Authority::Live)
+        .commit(
+            store.begin().await.unwrap(),
+            &one,
+            position,
+            Authority::Live,
+        )
         .await
         .expect("commit succeeds");
 
@@ -267,7 +295,7 @@ async fn commit_rejects_a_foreign_batch() {
 
     // `b.commit(a.begin(), ..)` still type-checks: a lifetime names a region,
     // not an instance, so this is a run-time rejection by design.
-    let mut foreign = a.begin();
+    let mut foreign = a.begin().await.unwrap();
     foreign.write("depot-7", 12);
 
     let error = b
@@ -291,14 +319,14 @@ async fn reset_rejects_a_foreign_batch() {
     let id = ProjectionId::new("van_stock");
     let position = SequencePosition::FIRST;
 
-    let mut seeded = b.begin();
+    let mut seeded = b.begin().await.unwrap();
     seeded.write("depot-7", 12);
     b.commit(seeded, &id, position, Authority::Live)
         .await
         .expect("commit succeeds");
 
     let error = b
-        .reset(a.begin(), &id)
+        .reset(a.begin().await.unwrap(), &id)
         .await
         .expect_err("a batch begun elsewhere is refused");
 
@@ -328,7 +356,7 @@ async fn commit_rejects_a_foreign_batch_from_default_stores() {
     let b = MemoryProjectionStore::default();
     let id = ProjectionId::new("van_stock");
 
-    let mut foreign = a.begin();
+    let mut foreign = a.begin().await.unwrap();
     foreign.write("depot-7", 12);
 
     let error = b
@@ -355,13 +383,13 @@ async fn reset_rejects_a_foreign_batch_from_default_stores() {
     let id = ProjectionId::new("van_stock");
     let position = SequencePosition::FIRST;
 
-    let mut seeded = b.begin();
+    let mut seeded = b.begin().await.unwrap();
     seeded.write("depot-7", 12);
     b.commit(seeded, &id, position, Authority::Live)
         .await
         .expect("commit succeeds");
 
-    let mut foreign = a.begin();
+    let mut foreign = a.begin().await.unwrap();
     foreign.delete_all();
 
     let error = b
@@ -389,7 +417,7 @@ async fn dropped_batch_leaves_store_usable() {
     let position = SequencePosition::FIRST;
 
     {
-        let mut abandoned = store.begin();
+        let mut abandoned = store.begin().await.unwrap();
         abandoned.write("depot-7", 99);
         // No commit, no rollback: just a drop, which is what an apply loop that
         // panics or returns early actually does.
@@ -399,7 +427,7 @@ async fn dropped_batch_leaves_store_usable() {
 
     // The half a reviewer's probe once found a store failing: it answered
     // `Busy` forever afterwards.
-    let mut second = store.begin();
+    let mut second = store.begin().await.unwrap();
     second.write("depot-8", 5);
     store
         .commit(second, &id, position, Authority::Live)
@@ -418,7 +446,7 @@ async fn rollback_leaves_both_unchanged() {
     let store = MemoryProjectionStore::new();
     let id = ProjectionId::new("van_stock");
 
-    let mut batch = store.begin();
+    let mut batch = store.begin().await.unwrap();
     batch.write("depot-7", 99);
     store.rollback(batch).await.expect("rollback succeeds");
 
@@ -439,7 +467,7 @@ async fn reset_clears_rows_and_checkpoint_together() {
     let id = ProjectionId::new("van_stock");
     let position = SequencePosition::FIRST;
 
-    let mut seeded = store.begin();
+    let mut seeded = store.begin().await.unwrap();
     seeded.write("depot-7", 12);
     store
         .commit(seeded, &id, position, Authority::Live)
@@ -448,7 +476,7 @@ async fn reset_clears_rows_and_checkpoint_together() {
 
     // The caller's own batch carries the deletes: the port has no idea what the
     // read model is.
-    let mut clearing = store.begin();
+    let mut clearing = store.begin().await.unwrap();
     clearing.delete_all();
     store.reset(clearing, &id).await.expect("reset succeeds");
 
@@ -466,11 +494,11 @@ async fn reset_returns_the_projection_to_never_run() {
     let first = SequencePosition::FIRST;
 
     store
-        .commit(store.begin(), &id, first, Authority::Live)
+        .commit(store.begin().await.unwrap(), &id, first, Authority::Live)
         .await
         .expect("commit succeeds");
 
-    let mut clearing = store.begin();
+    let mut clearing = store.begin().await.unwrap();
     clearing.delete_all();
     store.reset(clearing, &id).await.expect("reset succeeds");
 
@@ -497,16 +525,26 @@ async fn reset_is_scoped_to_one_projection() {
     let position = SequencePosition::FIRST;
 
     store
-        .commit(store.begin(), &one, position, Authority::Live)
+        .commit(
+            store.begin().await.unwrap(),
+            &one,
+            position,
+            Authority::Live,
+        )
         .await
         .expect("commit succeeds");
     store
-        .commit(store.begin(), &two, position, Authority::Live)
+        .commit(
+            store.begin().await.unwrap(),
+            &two,
+            position,
+            Authority::Live,
+        )
         .await
         .expect("commit succeeds");
 
     store
-        .reset(store.begin(), &one)
+        .reset(store.begin().await.unwrap(), &one)
         .await
         .expect("reset succeeds");
 
@@ -537,8 +575,11 @@ mod probe {
         id: &ProjectionId,
         position: SequencePosition,
     ) -> Result<Option<u64>, CommitError<S::Error>> {
-        let mut batch = store.begin();
-        store.probe_write(&mut batch, "depot-7", 12);
+        let mut batch = store.begin().await.map_err(CommitError::Store)?;
+        store
+            .probe_write(&mut batch, "depot-7", 12)
+            .await
+            .map_err(CommitError::Store)?;
         store.commit(batch, id, position, Authority::Live).await?;
         store
             .probe_read("depot-7")
@@ -573,11 +614,14 @@ mod probe {
             );
         }
 
-        let mut batch = store.begin();
-        store.probe_write(&mut batch, "depot-7", 12);
+        let mut batch = store.begin().await.unwrap();
+        store.probe_write(&mut batch, "depot-7", 12).await.unwrap();
 
         assert_eq!(
-            store.probe_read_through(&batch, "depot-7"),
+            store
+                .probe_read_through(&mut batch, "depot-7")
+                .await
+                .unwrap(),
             Some(12),
             "the pending write is visible through the open batch"
         );
@@ -594,24 +638,30 @@ mod probe {
         let id = ProjectionId::new("van_stock");
         let first = SequencePosition::FIRST;
 
-        let mut seeded = store.begin();
-        store.probe_write(&mut seeded, "depot-7", 12);
-        store.probe_write(&mut seeded, "depot-8", 1);
+        let mut seeded = store.begin().await.unwrap();
+        store.probe_write(&mut seeded, "depot-7", 12).await.unwrap();
+        store.probe_write(&mut seeded, "depot-8", 1).await.unwrap();
         store
             .commit(seeded, &id, first, Authority::Live)
             .await
             .expect("commit succeeds");
 
-        let mut batch = store.begin();
-        store.probe_write(&mut batch, "depot-7", 99);
+        let mut batch = store.begin().await.unwrap();
+        store.probe_write(&mut batch, "depot-7", 99).await.unwrap();
 
         assert_eq!(
-            store.probe_read_through(&batch, "depot-7"),
+            store
+                .probe_read_through(&mut batch, "depot-7")
+                .await
+                .unwrap(),
             Some(99),
             "a pending write shadows the committed row"
         );
         assert_eq!(
-            store.probe_read_through(&batch, "depot-8"),
+            store
+                .probe_read_through(&mut batch, "depot-8")
+                .await
+                .unwrap(),
             Some(1),
             "and committed rows the batch does not touch are still visible"
         );
@@ -624,17 +674,17 @@ mod probe {
         let first = SequencePosition::FIRST;
         let second = next(first);
 
-        let mut seeded = store.begin();
-        store.probe_write(&mut seeded, "depot-7", 12);
-        store.probe_write(&mut seeded, "depot-8", 5);
+        let mut seeded = store.begin().await.unwrap();
+        store.probe_write(&mut seeded, "depot-7", 12).await.unwrap();
+        store.probe_write(&mut seeded, "depot-8", 5).await.unwrap();
         store
             .commit(seeded, &id, second, Authority::Live)
             .await
             .expect("commit succeeds");
 
         // The suite can clear the read model without knowing its shape.
-        let mut clearing = store.begin();
-        store.probe_delete_all(&mut clearing);
+        let mut clearing = store.begin().await.unwrap();
+        store.probe_delete_all(&mut clearing).await.unwrap();
         store.reset(clearing, &id).await.expect("reset succeeds");
 
         assert_eq!(

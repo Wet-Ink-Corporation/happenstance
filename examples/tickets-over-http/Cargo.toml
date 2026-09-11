@@ -28,11 +28,12 @@ path = "src/main.rs"
 
 [dependencies]
 # `unstable-projection` because the runner is one, and the name is the promise:
-# the port beneath `Projection` and `run_projection` is not frozen.
+# `Projection::apply`'s shape is not yet proved at its far end. The port beneath
+# it is frozen since ADR-0063 and needs no feature.
 #
 # `default-features = false` drops `memory`: two processes cannot share a
 # `Vec` behind an `RwLock`, which is the whole reason this example exists.
-happenstance = { version = "0.2.0-alpha.1", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.3.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
   "unstable-projection",

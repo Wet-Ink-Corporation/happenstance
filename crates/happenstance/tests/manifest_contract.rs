@@ -189,17 +189,23 @@ fn unstable_projection_is_declared_off_by_default() {
         "`unstable-projection` joined the defaults: {default}"
     );
 
-    // It forwards to the contract crate's own gate, or says in the manifest why
-    // it does not. Either way the decision is written down where the next
-    // reader looks for it.
+    // It does not forward to the contract crate's feature of the same name —
+    // that one gates nothing since ADR-0063 lifted the port's gate, and a
+    // forward of an empty feature would tell a reader the port is gated — and
+    // the manifest says so in a comment, where the next reader looks for it.
     let forwards = value.contains("happenstance-core/unstable-projection");
     let stated = MANIFEST
         .lines()
         .any(|line| line.trim_start().starts_with('#') && line.contains("unstable-projection"));
     assert!(
-        forwards && stated,
-        "`unstable-projection` neither forwards to the contract crate nor \
-         states in a comment why it does not: {value}"
+        !forwards,
+        "`unstable-projection` forwards to the contract crate, where it has \
+         gated nothing since ADR-0063: {value}"
+    );
+    assert!(
+        stated,
+        "`unstable-projection` does not say in a manifest comment what it gates \
+         and why it no longer forwards"
     );
 
     // It only adds. A feature that names a removal is one `--all-features`

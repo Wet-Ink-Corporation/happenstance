@@ -853,8 +853,8 @@ impl SendProjectionStore for LadybugProjectionStore {
     /// the write set allocates a `Vec` and nothing more. It is also the only
     /// mint — there is no public constructor that could produce one without a
     /// stamp.
-    fn begin(&self) -> Self::Batch {
-        GraphWriteSet::stamped(self.stamp)
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        Ok(GraphWriteSet::stamped(self.stamp))
     }
 
     /// How far `id` has been brought, and whether its nodes are authoritative.
@@ -1013,9 +1013,14 @@ impl happenstance_core::ProjectionProbe for LadybugProjectionStore {
     /// adapter sends*, not about what LadybugDB can do.
     const READS_THROUGH_BATCH: bool = false;
 
-    /// Queues one probe node. Synchronous and infallible, because queueing Cypher
+    /// Queues one probe node. Never awaits and never fails, because queueing Cypher
     /// into a buffer the caller owns cannot fail.
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
         batch.push_raw_cypher(
             "MERGE (p:__hs_probe {k: $k}) SET p.v = $v",
             [
@@ -1026,13 +1031,15 @@ impl happenstance_core::ProjectionProbe for LadybugProjectionStore {
                 ("v", Value::UInt64(value)),
             ],
         );
+        Ok(())
     }
 
     /// Queues removal of every probe node, so that
     /// [`reset`](happenstance_core::ProjectionStore::reset) can be checked
     /// without the suite knowing what a read model is.
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
         batch.push("MATCH (p:__hs_probe) DELETE p", []);
+        Ok(())
     }
 
     /// Reads one probe node from **committed** state.
@@ -1064,7 +1071,11 @@ impl happenstance_core::ProjectionProbe for LadybugProjectionStore {
     /// has no read path, and the panic is the honest answer: any value returned
     /// here would be a claim about pending writes LadybugDB has never been told
     /// about.
-    fn probe_read_through(&self, _batch: &Self::Batch, _key: &str) -> Option<u64> {
+    async fn probe_read_through(
+        &self,
+        _batch: &mut Self::Batch,
+        _key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
         unimplemented!(
             "GraphWriteSet buffers its statements, so `READS_THROUGH_BATCH` is \
              `false` and this is never called: there is no open transaction to \

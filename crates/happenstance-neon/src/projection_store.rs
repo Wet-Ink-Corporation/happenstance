@@ -13,10 +13,14 @@
 //! That made this adapter the owned-batch evidence from the far end of the
 //! transport axis, and it surfaced two places where the port asked for something
 //! this adapter had no way to mean. Both have since been answered rather than
-//! left standing. [`ProjectionStore::begin`] is no longer `async` and no longer
-//! fallible: there is nothing here to open and nothing that can fail — `begin` is
-//! a `Vec::new()` and a stamp — and this adapter is the one PS-6 was written for.
-//! [`ProjectionStore::rollback`] is still both, deliberately, because `Drop`
+//! left standing. [`ProjectionStore::begin`] became synchronous and infallible
+//! for this adapter's sake — PS-6 — and then went back to `async` and fallible
+//! under ADR-0062, because the synchronous shape forbade a batch that is a live
+//! transaction and PS-6's own falsifier had fired. What survives is PS-6's
+//! *discipline*, now on the implementer: `begin` here is a `Vec::new()` and a
+//! stamp, a future ready at its first poll, and a unit test below proves it
+//! makes no round trip by running it over a transport that fails every one.
+//! [`ProjectionStore::rollback`] is `async` and fallible too, because `Drop`
 //! cannot await and an adapter holding a real resource needs somewhere to release
 //! it; this one holds none, so dropping the statement list is the whole of its
 //! rollback.
@@ -358,11 +362,13 @@ impl<T: SqlTransport> ProjectionStore for NeonProjectionStore<T> {
     // longer carries a lifetime this adapter had no use for.
     type Batch = NeonWriteBatch;
 
-    // No round trip, and now no `async` and no `Result` either. There is nothing
-    // to open and nothing that can fail: this adapter is the one PS-6 is written
-    // for, and the shape finally says so.
-    fn begin(&self) -> Self::Batch {
-        NeonWriteBatch::stamped(self.stamp)
+    // No round trip. The signature is `async` and fallible since ADR-0062 so
+    // that a live-transaction adapter has somewhere to put its `BEGIN`; this
+    // body has nothing to open and nothing that can fail, never awaits, and is
+    // therefore a future ready at its first poll — `begin_makes_no_round_trip`
+    // below runs it over a transport that fails every request to prove it.
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        Ok(NeonWriteBatch::stamped(self.stamp))
     }
 
     /// Reads `id`'s checkpoint, or [`Checkpoint::NeverRun`] when it has no row.
@@ -639,21 +645,25 @@ fn qualified_probe(config: &NeonConfig) -> String {
 impl<T: SqlTransport> happenstance_core::ProjectionProbe for NeonProjectionStore<T> {
     /// `false`, and it is **forced** rather than chosen.
     ///
-    /// Two things make it so and either would be enough. A [`NeonWriteBatch`] is
-    /// a list of statements that has been sent to the endpoint exactly never, so
-    /// there is no open transaction to read through — and answering from
-    /// *committed* state is what PS-12 forbids by name. And
-    /// [`probe_read_through`](happenstance_core::ProjectionProbe::probe_read_through)
-    /// is synchronous and infallible, while every answer this adapter can give
-    /// costs an HTTPS round trip.
+    /// A [`NeonWriteBatch`] is a list of statements that has been sent to the
+    /// endpoint exactly never, so there is no open transaction to read through
+    /// — and answering from *committed* state is what PS-12 forbids by name.
+    /// The probe seam being asynchronous since ADR-0062 changes nothing here:
+    /// the obstacle was never the signature but the transport, which has no
+    /// interactive transaction for a read to go through.
     ///
     /// The two rules that would have used it are emitted as reported skips
     /// carrying this reason rather than omitted.
     const READS_THROUGH_BATCH: bool = false;
 
-    /// Queues one probe row. Synchronous and infallible, because queueing a
+    /// Queues one probe row. Never awaits and never fails, because queueing a
     /// statement into a buffer the caller owns cannot fail.
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
         batch.push(SqlStatement::with_params(
             format!(
                 "INSERT INTO {} (k, v) VALUES ($1, $2::bigint) \
@@ -668,16 +678,18 @@ impl<T: SqlTransport> happenstance_core::ProjectionProbe for NeonProjectionStore
                 serde_json::Value::String(value.cast_signed().to_string()),
             ],
         ));
+        Ok(())
     }
 
     /// Queues removal of every probe row, so that
     /// [`reset`](happenstance_core::ProjectionStore::reset) can be checked
     /// without the suite knowing what a read model is.
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
         batch.push(SqlStatement::new(format!(
             "DELETE FROM {}",
             qualified_probe(&self.config)
         )));
+        Ok(())
     }
 
     /// Reads one probe row from **committed** state.
@@ -727,7 +739,11 @@ impl<T: SqlTransport> happenstance_core::ProjectionProbe for NeonProjectionStore
     /// has no read path, and the panic is the honest answer: any value returned
     /// here would be a claim about pending writes the endpoint has never been
     /// told about.
-    fn probe_read_through(&self, _batch: &Self::Batch, _key: &str) -> Option<u64> {
+    async fn probe_read_through(
+        &self,
+        _batch: &mut Self::Batch,
+        _key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
         unimplemented!(
             "a NeonWriteBatch has been sent to the endpoint exactly never, so \
              `READS_THROUGH_BATCH` is `false` and this is never called: there is no \
@@ -763,6 +779,20 @@ mod tests {
     /// The bare projection-store flavour, at a concrete transport.
     fn assert_bare_flavour<P: ProjectionStore>() {}
 
+    /// PS-6's discipline, compiled: `begin` spends no round trip.
+    ///
+    /// `NullTransport` fails **every** request, so a `begin` that reached the
+    /// endpoint would return `Err`. It returns `Ok`, and it does so at its
+    /// first poll with no runtime — which is what "a buffering adapter's
+    /// `begin` costs nothing" means now that the signature no longer says it.
+    #[test]
+    fn begin_makes_no_round_trip() {
+        let store = store();
+        let batch = poll_once(store.begin())
+            .expect("`begin` reached the transport, which refuses everything");
+        assert!(batch.is_empty());
+    }
+
     #[test]
     fn the_store_is_a_bare_projection_store() {
         assert_bare_flavour::<NeonProjectionStore<NullTransport>>();
@@ -774,7 +804,9 @@ mod tests {
     fn the_batch_owns_itself() {
         let batch = {
             let store = store();
-            store.begin()
+            // Polled once with no runtime: a buffer's `begin` is ready at its
+            // first poll, which is PS-6's discipline compiled rather than argued.
+            poll_once(store.begin()).expect("opening a buffer cannot fail")
         };
         assert!(batch.is_empty());
     }
@@ -786,7 +818,7 @@ mod tests {
         let right = store();
         assert!(matches!(
             poll_once(right.commit(
-                left.begin(),
+                poll_once(left.begin()).expect("opening a buffer cannot fail"),
                 &projection_id(),
                 SequencePosition::new(1).unwrap(),
                 Authority::Live,
@@ -833,7 +865,7 @@ mod tests {
     #[test]
     fn a_commit_appends_the_upsert_and_the_regression_guard() {
         let store = store();
-        let mut batch = store.begin();
+        let mut batch = poll_once(store.begin()).expect("opening a buffer cannot fail");
         batch.push(crate::transport::SqlStatement::new("SELECT 1"));
         let request = store.commit_request(
             batch,

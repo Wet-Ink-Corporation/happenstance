@@ -805,7 +805,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
 ///
 /// Widening it by deleting the terms cannot land — 45 names arrive at once, and
 /// four of them are not rule names at all. So the guard moves from the prose to
-/// [`UNRESOLVABLE_RULE_NAMES`], where each of those 45 is written down with the
+/// [`UNRESOLVABLE_RULE_NAMES`], where each of those 47 is written down with the
 /// reason nothing can find it, twenty-six of them against the file that *does*
 /// hold the test. What the clause says about its own rules no longer decides
 /// whether they are checked.
@@ -1003,7 +1003,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 45] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 47] = [
     // ---- VT: value types -------------------------------------------------
     (
         "VT-5",
@@ -1198,6 +1198,22 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 45] = [
         Unresolvable::Scheduled("the phase that lands history removal, with ES-38"),
     ),
     // ---- PS: the projection store ----------------------------------------
+    (
+        // ADR-0062 took the round-trip discipline off the signature, so the
+        // port can no longer enforce it and no suite rule can observe a
+        // round trip that a buffering adapter never makes. The two tests that
+        // do observe it live where the transport is: Neon's, over one that
+        // fails every request, and the contract crate's, polled once with no
+        // executor.
+        "PS-6",
+        "begin_makes_no_round_trip",
+        Unresolvable::Elsewhere("crates/happenstance-neon/src/projection_store.rs"),
+    ),
+    (
+        "PS-6",
+        "begin_resolves_at_its_first_poll_without_a_runtime",
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/projection_memory.rs"),
+    ),
     (
         "PS-25",
         "changed_query_starts_a_new_checkpoint",

@@ -1,54 +1,46 @@
 //! The projection store port.
 //!
-//! # Status: behind `unstable-projection`, and this is why
+//! # Status: frozen, and how that was earned
 //!
-//! Unlike [`EventStore`](crate::EventStore), this port is **not yet frozen**, and
-//! naming the `unstable-projection` feature is how you say you accept that. It is
-//! exempt from this crate's semver promise for as long as the feature exists.
+//! Like [`EventStore`](crate::EventStore), this port is **frozen** and inside
+//! the crate's semver promise, since ADR-0063. It was not, from `0.2.0` until
+//! that decision: it shipped behind an off-by-default `unstable-projection`
+//! feature with a written exemption, and the reason it did is worth keeping
+//! here because it is the reason the freeze means something now.
 //!
-//! The reason is **not** that nothing tests it, which is what this header used to
-//! say. All seventeen conformance rules §4.11 assigns to an adapter's own suite
-//! are written and drive this port, a deliberately wrong store that writes a
-//! checkpoint without its read model fails one of them by name, and two
-//! structurally unlike batch shapes pass all of them.
+//! The bar the specification set (PS-2) was not a count of adapters but a
+//! **spread**: the suite green against two adapters at opposite ends of the
+//! batch-shape axis — one whose batch is an owned write set replayed at commit,
+//! and one whose batch *is* a live transaction. Every implementation there had
+//! ever been sat at the first end, and ADR-0060 found the second was not merely
+//! unbuilt but unreachable through this port's own signatures: `begin` was
+//! total, synchronous and infallible while every route to a real driver's
+//! transaction is `async` and fallible; and the probe seam the suite drives a
+//! read model through was synchronous, infallible and took `&Self::Batch`,
+//! while a driver borrows its connection mutably to issue a statement. A
+//! live-transaction store could implement the port only by declaring
+//! `READS_THROUGH_BATCH = false` — a false statement about itself — so the
+//! suite could not tell the two ends apart. A skeleton did not report any of
+//! this because `todo!()` has type `!` and coerces to anything.
 //!
-//! The reason is the bar the specification set for freezing it. `spec/SPECIFICATION.md`
-//! §4's PS-2 requires the suite to be green against **two adapters at opposite
-//! ends of the batch-shape axis**, and its *Rejects* field names the alternative
-//! verbatim: the schedule that freezes this port against `MemoryProjectionStore`
-//! and one in-process transaction. That schedule has been overtaken. **Four
-//! adapters over storage this workspace does not fully control now clear all
-//! seventeen rules** — `happenstance-sqlite`, `happenstance-postgres`,
-//! `happenstance-neon` and `happenstance-ladybug` — alongside the two
-//! testkit-side instruments. The bar did not move when they arrived, and the
-//! reason it did not is the point of the paragraph below.
+//! ADR-0062 moved those signatures: `begin` is `async` and fallible, and the
+//! three batch-touching probe members take `&mut Self::Batch` and return a
+//! future of a `Result`. `happenstance-postgres` then built the far end — a
+//! store whose batch is a `sqlx::Transaction`, declaring `READS_THROUGH_BATCH =
+//! true` truthfully — and it passed all seventeen rules against a live server,
+//! with PS-12's read-through rule reported as a run rather than a skip for the
+//! first time on any adapter over a real database. The two ends disagreed about
+//! nothing the port had to move for. That is the measurement PS-2 asked for,
+//! and ADR-0063 is the freeze taken on it.
 //!
-//! (The name is not a link, for the reason the crate root gives: it is behind
-//! `memory`, and `unstable-projection` without `memory` is a configuration this
-//! module renders in.)
+//! **What is frozen is this port.** The typed layer's `Projection::apply` is
+//! synchronous, so an application can push into a buffered batch and cannot
+//! issue a statement into a live one; the runner built over this port stays
+//! behind `happenstance`'s own `unstable-projection` for that reason, and it is
+//! the typed layer's axis rather than this port's.
 //!
-//! **Why more adapters do not clear it.** PS-2 names *two adapters at opposite
-//! ends of the batch-shape axis*, and every implementation there has ever been
-//! sits at one end: an **owned, buffered write set** replayed at commit. The far
-//! end — a batch holding a **live transaction** — is not merely unbuilt, it is
-//! **unreachable through this port's own signatures**. `begin` is total,
-//! synchronous and infallible, and every route to a real driver's transaction is
-//! `async` and fallible, so no driver whose transaction is acquired
-//! asynchronously can be that far end. A skeleton did not report this because
-//! `todo!()` has type `!` and coerces to anything; `happenstance-postgres`
-//! discovered it against `sqlx` and `happenstance-ladybug` preserved a compiling
-//! counter-example at `experiments/live-handle-projection-batch/`.
-//!
-//! So the freeze waits on a **replacement axis**, not on another adapter, and
-//! writing "what would clear it" as a list of adapters was the mistake this
-//! paragraph replaces. ADR-0060 re-evaluates the axis.
-//!
-//! **What is not decided here:** which axis replaces it. `0.2.0` ships with the
-//! gate still closed, and this module states the evidence rather than the verdict.
-//!
-//! Treat the shape as subject to change: a rule may be added, and a signature may
-//! move, without a major version, because the feature is what carries the
-//! exemption.
+//! Changing a signature here is now a breaking change with a decision record
+//! behind it, which is what *frozen* means in this workspace.
 //!
 //! # The invariant that drives the design
 //!
@@ -155,10 +147,10 @@ impl ProjectionId {
     ///
     /// Do not read the inconsistency as a deliberate "opaque operator-chosen
     /// key" design. There is no decision behind it. It is left standing because
-    /// `ProjectionId` belongs to [`ProjectionStore`], which is provisional, has
-    /// no conformance suite, and is frozen at a later phase — and a validating
-    /// constructor with nothing able to check it would be exactly the decorative
-    /// rule this project's conformance discipline exists to prevent. Adding a
+    /// no conformance rule checks what a validating constructor would enforce
+    /// — so one would be exactly the decorative rule this project's discipline
+    /// exists to prevent — and because adding validation to a frozen port's
+    /// constructor is a decision record, not a line edit. Adding a
     /// fallible `parse` beside this constructor would be worse than either
     /// choice: two constructors enforcing different rules is the defect that
     /// makes an invalid value reachable through the weaker one.
@@ -304,8 +296,8 @@ pub enum ResetError<E> {
 /// A store that holds read models and their replay checkpoints.
 ///
 /// See the [module documentation](self) for the transactional invariant this
-/// shape exists to enforce, for why the batch is owned, and for its provisional
-/// status.
+/// shape exists to enforce, for why the batch is owned, and for how its freeze
+/// was earned.
 ///
 /// Two traits, one set of doc attributes. `trait_variant` derives
 /// [`SendProjectionStore`] from [`ProjectionStore`] and copies this block onto
@@ -355,9 +347,11 @@ pub enum ResetError<E> {
 ///     // No lifetime, and no `where Self: 'a`.
 ///     type Batch = ToyBatch;
 ///
-///     // Not `async`, and not fallible: opening a buffer cannot fail.
-///     fn begin(&self) -> ToyBatch {
-///         ToyBatch::default()
+///     // `async` and fallible on the port because a batch that is a live
+///     // transaction has a round trip and a failure here. A buffer has neither:
+///     // this body never yields and never fails, and costs what it looks like.
+///     async fn begin(&self) -> Result<ToyBatch, ToyError> {
+///         Ok(ToyBatch::default())
 ///     }
 ///
 ///     async fn checkpoint(&self, _id: &ProjectionId) -> Result<Checkpoint, ToyError> {
@@ -415,7 +409,7 @@ pub enum ResetError<E> {
 /// let store = ToyStore::default();
 /// let id = ProjectionId::new("toy");
 ///
-/// let mut batch = store.begin();
+/// let mut batch = store.begin().await?;
 /// batch.rows.push(("depot-7".to_owned(), 12));
 /// store
 ///     .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
@@ -451,13 +445,29 @@ pub trait ProjectionStore {
 
     /// Opens a write set.
     ///
-    /// Neither `async` nor fallible, and this is not an asymmetry with
-    /// [`EventStore`](crate::EventStore) waiting to be tidied away. An
-    /// `async fn begin() -> Result<…>` *implies a round trip*, which an adapter
-    /// on a one-shot HTTP transport with no connection and no cursor cannot
-    /// afford and does not need: opening a buffer cannot fail, and an adapter
-    /// that really must talk to its server takes that trip at `commit`.
-    fn begin(&self) -> Self::Batch;
+    /// `async` and fallible, and it was neither until ADR-0062. The old shape
+    /// argued that an `async fn begin() -> Result<…>` *implies a round trip*,
+    /// which an adapter on a one-shot HTTP transport cannot afford. It does
+    /// not imply one: an `async fn` whose body never awaits is a future that
+    /// is ready at its first poll, and `Ok(Vec::new())` is what every buffering
+    /// adapter in this workspace writes here. What the old shape *forbade* was
+    /// a batch that is a live transaction, because every route to a real
+    /// driver's transaction is `async` and fallible — `sqlx`'s
+    /// `Pool::begin().await?` has no synchronous spelling and private fields —
+    /// and PS-6's own falsifier, *an adapter that must reserve something from
+    /// the server before the first write*, is exactly that `BEGIN`.
+    ///
+    /// The discipline the old signature enforced is now the implementer's:
+    /// **an adapter with nothing to reserve MUST NOT spend a round trip here.**
+    /// A transport that can count its requests can assert it, and
+    /// `happenstance-neon` does.
+    ///
+    /// # Errors
+    ///
+    /// Returns the adapter's error if a write set could not be opened — a
+    /// connection that could not be acquired, a `BEGIN` that was refused. A
+    /// buffering adapter has no failing path and returns `Ok` unconditionally.
+    async fn begin(&self) -> Result<Self::Batch, Self::Error>;
 
     /// How far this projection has been brought, and whether its rows are
     /// authoritative.
@@ -556,13 +566,11 @@ pub trait ProjectionStore {
 ///
 /// ```toml
 /// [dependencies]
-/// # `unstable-projection`, not optionally: the `impl ProjectionStore` below
-/// # is unconditional in the adapter's `src/`, and every item it names lives
-/// # behind that feature, which is not in the default set. Forwarding it
-/// # through the adapter's own `[features]` the way `conformance` is forwarded
-/// # would leave the port impl unable to compile without a flag no consumer
-/// # would know to pass.
-/// happenstance-core = { version = "…", features = ["unstable-projection"] }
+/// # No feature: the port and every item the `impl ProjectionStore` below
+/// # names are unconditional since ADR-0063. (From `0.2.0` until then this
+/// # line had to carry `unstable-projection`, because the port impl in an
+/// # adapter's `src/` cannot be made optional and the port was gated.)
+/// happenstance-core = "…"
 ///
 /// [features]
 /// # Forwards to the contract crate. The `impl ProjectionProbe` lives in `src/`
@@ -604,18 +612,43 @@ pub trait ProjectionProbe: ProjectionStore {
 
     /// Writes one probe row into an open batch.
     ///
-    /// Infallible and synchronous: it mutates a batch the caller owns, which
-    /// cannot fail. Nothing becomes durable until the batch reaches
-    /// [`commit`](ProjectionStore::commit).
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64);
+    /// A future of a `Result`, because the batch may be a live transaction and
+    /// then this is a statement: I/O that yields and can fail. A buffering
+    /// adapter pushes onto a vector, never awaits and never fails, and its
+    /// body reads `async move { batch.push(…); Ok(()) }`. Nothing becomes
+    /// durable until the batch reaches [`commit`](ProjectionStore::commit)
+    /// either way.
+    ///
+    /// Spelled `-> impl Future<…>` with **no `+ Send`**, for the reason
+    /// [`probe_read`](Self::probe_read) gives.
+    ///
+    /// # Errors
+    ///
+    /// Returns the adapter's error if the statement was refused. A refused
+    /// statement on a live transaction may poison it; the suite treats any
+    /// error here as the batch being unusable and does not commit it.
+    fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
 
     /// Queues deletion of every probe row into an open batch.
     ///
     /// Exists so [`reset`](ProjectionStore::reset) is checkable *without the
     /// suite knowing what a read model is*. `reset` takes the caller's own
     /// deletes, so a suite with no way to express "delete everything" cannot
-    /// exercise it at all.
-    fn probe_delete_all(&self, batch: &mut Self::Batch);
+    /// exercise it at all. Shaped like [`probe_write`](Self::probe_write) for
+    /// the same reason.
+    ///
+    /// # Errors
+    ///
+    /// Returns the adapter's error if the statement was refused.
+    fn probe_delete_all(
+        &self,
+        batch: &mut Self::Batch,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
 
     /// Reads one probe row from the **committed** read model.
     ///
@@ -642,72 +675,32 @@ pub trait ProjectionProbe: ProjectionStore {
     /// Only called when [`READS_THROUGH_BATCH`](Self::READS_THROUGH_BATCH) is
     /// `true`; may be `unimplemented!()` otherwise.
     ///
-    /// # This signature cannot be met by a batch that is a live transaction
+    /// # This signature is the one a live transaction can meet
     ///
-    /// Stated here because the freeze decision reads this page and would
-    /// otherwise read it as scarcity. Synchronous, infallible and `&Self::Batch`
-    /// is answerable by a store that holds its pending writes in a map or a
-    /// buffer — which is every implementation in this workspace — and is not
-    /// answerable at all by one whose batch *is* an open transaction, because a
-    /// driver borrows the connection mutably to issue a statement and the
-    /// statement is I/O.
+    /// `&mut Self::Batch` because a driver borrows its connection mutably to
+    /// issue a statement — `sqlx`'s `Executor for &mut Transaction`,
+    /// `rusqlite`'s `&mut Transaction`; a future because the statement is I/O
+    /// and yields; a `Result` because a statement on a live transaction can
+    /// fail. Until ADR-0062 it was `fn(&self, &Self::Batch, &str) -> Option<u64>`,
+    /// and `tests/probe_live_transaction_shape.rs` recorded what that cost: a
+    /// store whose batch *is* a transaction could satisfy it only by declaring
+    /// `READS_THROUGH_BATCH = false`, a false statement about itself, so the
+    /// suite could not tell a live-transaction adapter from a buffering one.
+    /// That file now runs the honest body instead.
     ///
-    /// Both halves are compiler-checked below rather than asserted. The mutable
-    /// borrow first:
+    /// A buffering adapter that can read its own pending set — a map layered
+    /// over committed state — answers from the map without awaiting. One that
+    /// cannot declares `false` and leaves this `unimplemented!()`, which is a
+    /// conformant answer and the reported-skip path.
     ///
-    /// ```compile_fail,E0596
-    /// /// `sqlx`'s `Executor for &mut Transaction`, and `rusqlite`'s `&mut
-    /// /// Transaction`, in the smallest shape that carries the obligation.
-    /// struct Transaction;
-    /// impl Transaction {
-    ///     fn select(&mut self, key: &str) -> Option<u64> {
-    ///         let _ = key;
-    ///         None
-    ///     }
-    /// }
+    /// # Errors
     ///
-    /// // error[E0596]: cannot borrow `*batch` as mutable, as it is behind a
-    /// // `&` reference — which is the receiver `probe_read_through` supplies.
-    /// fn probe_read_through(batch: &Transaction, key: &str) -> Option<u64> {
-    ///     batch.select(key)
-    /// }
-    /// ```
-    ///
-    /// and then the await, with the borrow already conceded:
-    ///
-    /// ```compile_fail,E0728
-    /// struct Transaction;
-    /// impl Transaction {
-    ///     async fn select(&mut self, key: &str) -> Option<u64> {
-    ///         let _ = key;
-    ///         None
-    ///     }
-    /// }
-    ///
-    /// // error[E0728]: `await` is only allowed inside `async` functions and
-    /// // blocks — and this method is not one.
-    /// fn probe_read_through(batch: &mut Transaction, key: &str) -> Option<u64> {
-    ///     batch.select(key).await
-    /// }
-    /// ```
-    ///
-    /// The three bodies that remain are each wrong in a different way, and
-    /// `tests/probe_live_transaction_shape.rs` runs all three against a store
-    /// whose batch is a transaction: declaring `READS_THROUGH_BATCH = false`
-    /// states something false about the store and takes the read-through rule as
-    /// a reported skip; answering from committed state returns `None` for a row
-    /// the transaction can see, which is what this method's own first sentence
-    /// forbids; and blocking on the future panics with *"Cannot start a runtime
-    /// from within a runtime"*, because the suite always calls the probe from
-    /// inside one.
-    ///
-    /// **Nothing is decided here.** `spec/SPECIFICATION.md` §4's PS-2 is
-    /// `[FROZEN]` and names a live-transaction adapter as the end of the
-    /// batch-shape axis still to be built; whether this signature moves before
-    /// that adapter is written belongs to that clause's owner, not to this
-    /// method's documentation. What is recorded is that that end's absence has
-    /// a cause in this line, and not only in nobody having got to it.
-    fn probe_read_through(&self, batch: &Self::Batch, key: &str) -> Option<u64>;
+    /// Returns the adapter's error if the read could not be issued.
+    fn probe_read_through(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+    ) -> impl Future<Output = Result<Option<u64>, Self::Error>>;
 }
 
 #[cfg(test)]
@@ -753,8 +746,8 @@ mod tests {
 
         type Batch = WitnessBatch;
 
-        fn begin(&self) -> Self::Batch {
-            WitnessBatch::default()
+        async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+            Ok(WitnessBatch::default())
         }
 
         async fn checkpoint(&self, _id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
@@ -795,15 +788,18 @@ mod tests {
 
         assert_eq!(store.checkpoint(&id).await.unwrap(), Checkpoint::NeverRun);
 
-        let mut batch = store.begin();
+        let mut batch = store.begin().await.unwrap();
         batch.writes += 1;
         store
             .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
             .await
             .unwrap();
 
-        store.reset(store.begin(), &id).await.unwrap();
-        store.rollback(store.begin()).await.unwrap();
+        store
+            .reset(store.begin().await.unwrap(), &id)
+            .await
+            .unwrap();
+        store.rollback(store.begin().await.unwrap()).await.unwrap();
     }
 
     /// AC-002. No `_` arm: a fourth state fails this test rather than widening
@@ -889,12 +885,23 @@ mod tests {
         assert_eq!(recovered, WitnessError);
     }
 
-    /// AC-004. No `.await` and no `?`: making `begin` async or fallible is a
-    /// compile error here rather than a review miss.
+    /// ADR-0062 inverted AC-004. `begin` is a future of a `Result`, and a
+    /// buffering store's future is ready at its first poll: no executor is
+    /// needed to drive it, which is the compiled form of "costs no round trip".
     #[test]
-    fn begin_is_neither_async_nor_fallible() {
+    fn begin_is_async_and_fallible_and_a_buffer_resolves_at_first_poll() {
+        use core::task::{Context, Poll, Waker};
+
         let store = Witness;
-        let batch: <Witness as ProjectionStore>::Batch = store.begin();
+        let mut pending = core::pin::pin!(store.begin());
+        let batch = match pending
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+        {
+            Poll::Ready(Ok(batch)) => batch,
+            Poll::Ready(Err(error)) => panic!("a buffer cannot fail to open: {error}"),
+            Poll::Pending => panic!("a buffer's `begin` yielded, which is a round trip"),
+        };
         assert_eq!(batch.writes, 0);
         assert_eq!(Rc::strong_count(&batch.not_send), 1);
     }

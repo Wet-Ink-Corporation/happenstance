@@ -18,34 +18,37 @@
 //! type Batch = sqlx::Transaction<'static, Postgres>;   // and five `todo!()`
 //! ```
 //!
-//! **That binding cannot be discharged, and no compiler said so.** `todo!()` has
-//! type `!`, which coerces to everything, so a skeleton type-checks against a
-//! signature nothing can implement — the hazard the specification already names
-//! about skeletons in general, and that this file demonstrated in particular.
-//! Three facts settle it:
+//! **That binding could not be discharged under the port as it then stood, and
+//! no compiler said so.** `todo!()` has type `!`, which coerces to everything,
+//! so a skeleton type-checks against a signature nothing can implement — the
+//! hazard the specification already names about skeletons in general, and that
+//! this file demonstrated in particular. Three facts settled it at phase 10b:
 //!
-//! * [`begin`](happenstance_core::ProjectionStore::begin) is **total,
-//!   synchronous and infallible**. There is no `Result`, no `await`, and no
+//! * [`begin`](happenstance_core::ProjectionStore::begin) was **total,
+//!   synchronous and infallible**. There was no `Result`, no `await`, and no
 //!   argument to fail on.
 //! * `sqlx`'s only constructor for a transaction is `Transaction::begin`, which
 //!   is `async` and fallible; `Transaction`'s fields are private, so the type
 //!   cannot be assembled by hand. `Pool::try_acquire` is synchronous but yields
 //!   a `PoolConnection`, and `BEGIN` is still a round trip.
 //! * [`ProjectionProbe::probe_write`](happenstance_core::ProjectionProbe::probe_write)
-//!   is synchronous and infallible too, so even given a live transaction there
-//!   is no point at which this adapter could issue a statement into it.
+//!   was synchronous and infallible too, so even given a live transaction there
+//!   was no point at which this adapter could issue a statement into it.
 //!
-//! The comment this file used to carry — *"this adapter's real body will acquire
-//! the pooled connection at the first statement rather than here"* — was
-//! self-refuting: with `Batch = Transaction` there is no first-statement seam
-//! inside the adapter, because `begin` must **return** the transaction.
+//! ADR-0060 recorded that finding as the reason the port stayed gated, and
+//! ADR-0062 acted on it: `begin` and the probe seam are `async` and fallible
+//! now, and the binding this file could not discharge is discharged one module
+//! over, in [`live_projection_store`](crate::live_projection_store). That store
+//! is the far end of PS-2's batch-shape axis and it passes the suite.
 //!
-//! So the batch is [`PostgresProjectionBatch`]: an owned, `Send`, `'static` list
-//! of parameterised statements, replayed inside one transaction that `commit`
-//! and `reset` open for themselves. That is PS-4's deferred write set, the same
-//! shape `happenstance-sqlite` reaches by a different route, and what the port's
-//! shape change cost this adapter is the deletion of a `where Self: 'a` clause
-//! for a lifetime nothing read.
+//! **This store stays as it is.** The batch is [`PostgresProjectionBatch`]: an
+//! owned, `Send`, `'static` list of parameterised statements, replayed inside
+//! one transaction that `commit` and `reset` open for themselves — PS-4's
+//! deferred write set, the same shape `happenstance-sqlite` reaches by a
+//! different route. It is the store an application uses, because the typed
+//! layer's `Projection::apply` is synchronous and can push into a buffer but
+//! cannot issue a statement into a live transaction. The live store is an
+//! instrument; this one is the product.
 //!
 //! # What that costs, stated rather than discovered
 //!
@@ -62,16 +65,18 @@
 //! `batch_reads_reflect_pending_writes` about a second source of truth Postgres
 //! never sees, and is rejected on the record for that reason.
 //!
-//! # What this settles about PS-2, which is not this adapter's to change
+//! # What this settled about PS-2, and what settled it back
 //!
 //! PS-2 is `[FROZEN]` and names a live-transaction adapter as the far end of the
-//! batch-shape axis still to be built, offering `rusqlite` or `sqlx` as the two
-//! candidates. **Both are now refuted, each by its own mechanism.** `rusqlite`'s
-//! `Transaction<'_>` is `!Send`, so a live handle costs the `SendProjectionStore`
-//! impl; `sqlx`'s transaction cannot be produced by a total synchronous `begin`
-//! at all. The axis end is not merely unbuilt — the port's own signatures forbid
-//! it for the two drivers the clause names. That is a result about the freeze,
-//! and it belongs to PS-2's owner rather than to this file.
+//! batch-shape axis, offering `rusqlite` or `sqlx` as the two candidates. Phase
+//! 10b found both refuted under the port as it stood, each by its own mechanism:
+//! `rusqlite`'s `Transaction<'_>` is `!Send`, so a live handle costs the
+//! `SendProjectionStore` impl; `sqlx`'s transaction could not be produced by a
+//! total synchronous `begin` at all. That result went to PS-2's owner, and the
+//! owner's answer is ADR-0062: the `sqlx` refutation was a defect in the port's
+//! signatures, not a property of the axis, and the signatures moved. The
+//! `rusqlite` refutation stands — it is a property of that driver — which is
+//! why the far end is a `sqlx` store and lives in this crate.
 //!
 //! # The invariant
 //!
@@ -105,10 +110,10 @@ use crate::error::PostgresProjectionStoreError;
 /// second schema object with no `IF NOT EXISTS` arm to make the migration
 /// idempotent; and the `CHECK` in migration 2 is what keeps the column honest.
 /// What matters is that the authority is **stored** rather than inferred.
-const AUTHORITY_LIVE: &str = "live";
+pub(crate) const AUTHORITY_LIVE: &str = "live";
 
 /// [`Authority::Rebuilding`] as it is stored.
-const AUTHORITY_REBUILDING: &str = "rebuilding";
+pub(crate) const AUTHORITY_REBUILDING: &str = "rebuilding";
 
 /// The conformance suite's own read model.
 ///
@@ -137,7 +142,7 @@ CREATE TABLE IF NOT EXISTS projection_probe (
 /// [`begin`](SendProjectionStore::begin) is the trap that looks equivalent: it
 /// hands store A and store B the identical sequence 1, 2, 3…, and the
 /// foreign-batch check never fires.
-fn mint_stamp() -> u64 {
+pub(crate) fn mint_stamp() -> u64 {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     NEXT.fetch_add(1, Ordering::Relaxed)
 }
@@ -314,7 +319,7 @@ impl PostgresProjectionStore {
 ///
 /// A free function rather than a method on [`PgParam`], because `bind` consumes
 /// and returns the query by value, so the loop has to own it.
-fn bind_all<'q>(
+pub(crate) fn bind_all<'q>(
     mut query: sqlx::query::Query<'q, Postgres, sqlx::postgres::PgArguments>,
     params: &'q [PgParam],
 ) -> sqlx::query::Query<'q, Postgres, sqlx::postgres::PgArguments> {
@@ -349,7 +354,9 @@ async fn replay(
 /// Fallible rather than a cast, for the reason the event store's own converter
 /// is: `bigint` is signed and admits zero, and `unsigned_abs()` would turn a
 /// corrupt negative row into a plausible position.
-fn position_from_row(stored: i64) -> Result<SequencePosition, PostgresProjectionStoreError> {
+pub(crate) fn position_from_row(
+    stored: i64,
+) -> Result<SequencePosition, PostgresProjectionStoreError> {
     u64::try_from(stored)
         .ok()
         .and_then(SequencePosition::new)
@@ -360,7 +367,9 @@ fn position_from_row(stored: i64) -> Result<SequencePosition, PostgresProjection
 ///
 /// `SequencePosition` is a `NonZeroU64` and `bigint` is signed, so the top half
 /// of the domain has no representation. It is refused rather than wrapped.
-fn position_to_row(position: SequencePosition) -> Result<i64, PostgresProjectionStoreError> {
+pub(crate) fn position_to_row(
+    position: SequencePosition,
+) -> Result<i64, PostgresProjectionStoreError> {
     i64::try_from(position.get()).map_err(|_| {
         PostgresProjectionStoreError::CheckpointOutOfRange {
             // Reported as the negative it would have become, which is the value a
@@ -377,7 +386,7 @@ fn position_to_row(position: SequencePosition) -> Result<i64, PostgresProjection
 /// than silently stored as `live` — reporting a half-finished rebuild as a live
 /// projection is the failure this arm exists to prevent, and a constraint
 /// violation names it where it happened.
-const fn authority_to_row(authority: Authority) -> &'static str {
+pub(crate) const fn authority_to_row(authority: Authority) -> &'static str {
     match authority {
         Authority::Live => AUTHORITY_LIVE,
         Authority::Rebuilding => AUTHORITY_REBUILDING,
@@ -393,11 +402,12 @@ impl SendProjectionStore for PostgresProjectionStore {
     /// line said while every body below was `todo!()`.
     type Batch = PostgresProjectionBatch;
 
-    /// Neither `async` nor fallible — and now that is a property this adapter can
-    /// actually hold: minting an empty `Vec` and copying a `u64` cannot fail and
-    /// touches no connection.
-    fn begin(&self) -> Self::Batch {
-        PostgresProjectionBatch::stamped(self.stamp)
+    /// Never awaits and never fails: minting an empty `Vec` and copying a `u64`
+    /// touches no connection. The signature is `async` and fallible for the
+    /// live store's sake, and this body is what PS-6's discipline looks like on
+    /// a buffer.
+    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
+        Ok(PostgresProjectionBatch::stamped(self.stamp))
     }
 
     /// Reads `id`'s checkpoint, or [`Checkpoint::NeverRun`] when it has no row.
@@ -623,9 +633,14 @@ impl happenstance_core::ProjectionProbe for PostgresProjectionStore {
     /// rather than omitted.
     const READS_THROUGH_BATCH: bool = false;
 
-    /// Queues one probe row. Synchronous and infallible, because queueing a
+    /// Queues one probe row. Never awaits and never fails, because queueing a
     /// statement into a buffer the caller owns cannot fail.
-    fn probe_write(&self, batch: &mut Self::Batch, key: &str, value: u64) {
+    async fn probe_write(
+        &self,
+        batch: &mut Self::Batch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), Self::Error> {
         batch.push(
             "INSERT INTO projection_probe (k, v) VALUES ($1, $2) \
              ON CONFLICT (k) DO UPDATE SET v = excluded.v",
@@ -637,13 +652,15 @@ impl happenstance_core::ProjectionProbe for PostgresProjectionStore {
                 PgParam::int8(value.cast_signed()),
             ],
         );
+        Ok(())
     }
 
     /// Queues removal of every probe row, so that
     /// [`reset`](happenstance_core::ProjectionStore::reset) can be checked
     /// without the suite knowing what a read model is.
-    fn probe_delete_all(&self, batch: &mut Self::Batch) {
+    async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
         batch.push("DELETE FROM projection_probe", core::iter::empty());
+        Ok(())
     }
 
     /// Reads one probe row from **committed** state.
@@ -670,7 +687,11 @@ impl happenstance_core::ProjectionProbe for PostgresProjectionStore {
     /// has no read path, and the panic is the honest answer: any value returned
     /// here would be a claim about pending writes Postgres has never been told
     /// about.
-    fn probe_read_through(&self, _batch: &Self::Batch, _key: &str) -> Option<u64> {
+    async fn probe_read_through(
+        &self,
+        _batch: &mut Self::Batch,
+        _key: &str,
+    ) -> Result<Option<u64>, Self::Error> {
         unimplemented!(
             "PostgresProjectionBatch buffers its statements, so `READS_THROUGH_BATCH` \
              is `false` and this is never called: there is no open transaction to \

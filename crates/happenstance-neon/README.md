@@ -47,8 +47,8 @@ records comes from that one sentence.
 ## The transport is yours
 
 ```toml
-happenstance-neon = "0.2"
-happenstance-neon = { version = "0.2", features = ["projection-store"] }
+happenstance-neon = "0.3"
+happenstance-neon = { version = "0.3", features = ["projection-store"] }
 ```
 
 **This crate owns no socket.** `SqlTransport` is a one-method trait taking the

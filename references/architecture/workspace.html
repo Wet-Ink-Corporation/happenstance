@@ -5498,7 +5498,7 @@
         <ul>
           <li>&bull; EventStore carries no Send bound so it compiles on wasm32; trait_variant derives SendEventStore from it</li>
           <li>&bull; read returns the stream at the top level and is not async — nesting it would silently drop + Send</li>
-          <li>&bull; ProjectionStore is behind unstable-projection and is not frozen; no two unlike batch shapes have settled it</li>
+          <li>&bull; ProjectionStore is frozen (ADR-0063): adapters at both ends of the batch-shape axis pass its suite; only the typed runner stays behind unstable-projection</li>
         </ul>
       </div>
 

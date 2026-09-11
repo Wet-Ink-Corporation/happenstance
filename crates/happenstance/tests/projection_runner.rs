@@ -436,7 +436,7 @@ async fn checkpoint_only_runner(
         .expect("the fixture reads");
 
     for event in read {
-        let mut batch = models.begin();
+        let mut batch = models.begin().await.unwrap();
         let decoded: Stock = Json
             .decode(event.event.data())
             .expect("the fixture decodes");
@@ -445,7 +445,7 @@ async fn checkpoint_only_runner(
             .expect("the oracle cannot fail");
         // The defect, in one line: the batch is dropped and a fresh, empty one
         // carries the checkpoint forward.
-        let empty = models.begin();
+        let empty = models.begin().await.unwrap();
         models
             .commit(
                 empty,
@@ -589,7 +589,7 @@ async fn a_checkpoint_at_the_last_position_reports_exhausted_key_space() {
     // A projection that has run to the top of the key space: rows written, and
     // a checkpoint at the last position anything can occupy.
     let last = SequencePosition::new(u64::MAX).expect("the last position is not zero");
-    let mut batch = models.begin();
+    let mut batch = models.begin().await.unwrap();
     batch.write("d7", 7);
     models
         .commit(batch, projection.id(), last, happenstance::Authority::Live)

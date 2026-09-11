@@ -45,8 +45,8 @@ storage-agnostic event sourcing library built on the
 ## Features
 
 ```toml
-happenstance-postgres = "0.2"                              # the event store
-happenstance-postgres = { version = "0.2", features = ["projection-store"] }
+happenstance-postgres = "0.3"                              # the event store
+happenstance-postgres = { version = "0.3", features = ["projection-store"] }
 
 sqlx = "0.8"                                               # only for queries of your own
 ```
@@ -56,11 +56,13 @@ are on this crate's public signatures, so `sqlx` is re-exported: reach it as
 `happenstance_postgres::sqlx::…`. That buys *type identity* — the `sqlx::Error`
 you match on is the one this crate's error enum actually carries.
 
-`projection-store` is off by default and forwards `happenstance-core`'s own
-`unstable-projection` gate. **That port is not frozen**, carries a documented
-semver exemption, and the reason it is still gated is recorded in ADR-0060: the
-signatures a freeze would promise are the ones that forbid the second batch
-shape from existing.
+`projection-store` is off by default and gates this crate's own projection
+modules — two of them. `PostgresProjectionStore` buffers and is the one an
+application uses; `LivePostgresProjectionStore` holds a live `sqlx`
+transaction as its batch and is the instrument that stood at the far end of
+PS-2's batch-shape axis, which is what let ADR-0063 freeze the port. The flag
+forwarded `happenstance-core`'s `unstable-projection` gate until that decision;
+it forwards nothing now, because the port needs no feature.
 
 ## The problem this crate is here to solve
 

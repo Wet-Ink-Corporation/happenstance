@@ -1352,7 +1352,7 @@ async fn retire(
     id: &ProjectionId,
     delete: &'static str,
 ) -> Result<()> {
-    let mut batch = models.begin();
+    let mut batch = models.begin().await?;
     batch.push(delete, []);
     models.reset(batch, id).await?;
     Ok(())

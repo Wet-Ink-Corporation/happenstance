@@ -106,8 +106,11 @@
 //!   on every attempt. Its own page carries the policy.
 //! * [**The typed projection runner**][projection-runner] — decoded events into
 //!   a read model, in chunks, with the rows and the checkpoint moving in one
-//!   commit. Behind `unstable-projection` because the port beneath it is not
-//!   frozen; one call drives one projection, and it never buffers the replay.
+//!   commit. Behind `unstable-projection` — not for the port beneath it, which
+//!   is frozen since ADR-0063, but for [`Projection::apply`] being synchronous:
+//!   a projection can push into a buffered batch and cannot issue a statement
+//!   into a live one, and whether that shape survives is the runner's own open
+//!   axis. One call drives one projection, and it never buffers the replay.
 //!
 //! # Features
 //!
@@ -122,7 +125,7 @@
 //! | `std` *(default)* | the standard library, forwarded to the contract |
 //! | `memory` *(default)* | `MemoryEventStore`, forwarded to the contract |
 //! | `serde` | the contract's wire-format derives, for replication |
-//! | `unstable-projection` | the projection runner, over an unfrozen port |
+//! | `unstable-projection` | the projection runner; `apply` is unproved |
 //!
 //! # Testing without a database
 //!
@@ -239,13 +242,12 @@ pub use runner::{Progressed, Projection, ProjectionError, run_projection};
 //
 // Written out rather than globbed, and the glob is what shipped: `pub use
 // happenstance_core::*;` re-exports whatever the *compiled* contract crate
-// exposes, and the contract's projection items are gated on **its**
-// `unstable-projection`, not on this crate's. `happenstance-testkit` is this
-// crate's dev-dependency and enables that feature unconditionally, so under
-// `cargo test` — and in any consumer's graph where a second crate asks for it —
-// the whole unfrozen projection port resolved at `happenstance::` with this
-// crate's `unstable-projection` off, which is the opposite of what that
-// feature's manifest comment promises a reader.
+// exposes, and while the contract's projection items were gated on **its**
+// `unstable-projection` that meant `happenstance-testkit` — this crate's
+// dev-dependency, which enabled the feature unconditionally — resolved the
+// whole unfrozen port at `happenstance::` under `cargo test` with this crate's
+// own feature off. The port is unconditional now (ADR-0063); the list stays
+// written out because the second cost below has not gone anywhere.
 //
 // The glob cost a second thing that never showed up as a failure: every future
 // addition to the contract crate was an addition to this crate's public surface
@@ -283,25 +285,18 @@ pub use happenstance_core::{bytes, futures_core};
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use happenstance_core::{MemoryEventStore, MemoryStoreError};
 
-// The unfrozen port, behind this crate's gate as well as the contract's. The
-// module is on the list because a *module* is a name too, and `src/tests.rs`'s
-// `same_projection_id` is the witness that `happenstance::projection` still
-// resolves to the contract's.
-#[cfg(feature = "unstable-projection")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+// The port, frozen since ADR-0063 and mounted unconditionally like the rest of
+// the contract. The module is on the list because a *module* is a name too, and
+// `src/tests.rs`'s `same_projection_id` is the witness that
+// `happenstance::projection` still resolves to the contract's. What stays
+// behind this crate's `unstable-projection` is the *runner* above, not the
+// port it runs over.
 pub use happenstance_core::projection;
-#[cfg(feature = "unstable-projection")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use happenstance_core::{Authority, Checkpoint, CommitError, ProjectionId};
-#[cfg(feature = "unstable-projection")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use happenstance_core::{ProjectionStore, ResetError, SendProjectionStore};
 
-#[cfg(all(feature = "memory", feature = "unstable-projection"))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(feature = "memory", feature = "unstable-projection")))
-)]
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use happenstance_core::{
     MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
 };

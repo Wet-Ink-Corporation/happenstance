@@ -77,8 +77,8 @@
 //! `EventStore` clauses marked `[FROZEN]` in the specification are
 //! **semver-binding** here as everywhere, and this crate carries the workspace's
 //! **MSRV of 1.97.1**, which ADR-0029 made a promise at exactly this release.
-//! What is still *not* frozen is `ProjectionStore`, which this crate does not
-//! implement at all.
+//! `ProjectionStore` was not frozen at that release and is since ADR-0063; this
+//! crate does not implement it at all, so neither state touched it.
 //!
 //! Until this release the crates.io name was held by the `0.0.0` placeholder
 //! `cargo xtask reserve` generates — a standalone crate sharing nothing with this

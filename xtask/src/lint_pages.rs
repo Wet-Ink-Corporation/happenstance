@@ -565,6 +565,10 @@ const PORT_RECIPE: &str = "crates/happenstance-core/src/projection.rs";
 /// manifest says is implied.
 const IMPLIES_TOKEN: &str = "implies";
 
+/// The words a page must use when the manifest's `conformance` implies nothing,
+/// so that the empty case is a claim the check can read rather than a silence.
+const IMPLIES_NOTHING: &str = "implies no other feature";
+
 /// The two commands whose disagreement C2-05 is about.
 ///
 /// Cargo's resolver deliberately does not unify a dev-dependency's features into
@@ -1432,13 +1436,20 @@ struct FeatureCostFacts {
 ///
 /// They are the same sentence read forwards and backwards. Outward, the page
 /// told an author that `conformance` *"implies no other feature"* while
-/// `crates/happenstance-core/Cargo.toml` says `conformance = ["unstable-projection"]`
-/// — the surface PS-3 holds exempt from semver, turned on in a `[dependencies]`
+/// `crates/happenstance-core/Cargo.toml` said `conformance = ["unstable-projection"]`
+/// — the surface PS-3 held exempt from semver, turned on in a `[dependencies]`
 /// table where Cargo's global, additive feature unification hands it to every
-/// application downstream. Inward, the page said nothing at all about the four
+/// application downstream. Inward, the page said nothing at all about the
 /// features its own dev-dependency turns on, which unify into `cargo test` and
 /// not into `cargo build`, so an adapter's `src/` compiles against a larger
 /// contract crate than its consumers will get.
+///
+/// ADR-0063 lifted the gate and `conformance` implies nothing again. The check
+/// did not go away with the defect: the manifest is still the fact and the page
+/// is still the claim, and the direction that now bites is a page still saying
+/// the feature implies something — or a recipe still turning on the retired
+/// feature — after the manifest stopped. An implication list that is empty is
+/// a state to hold the page against, not a premise gone.
 ///
 /// # What this does not verify
 ///
@@ -1465,13 +1476,6 @@ fn feature_cost_problems(
 
     let mut problems = Vec::new();
 
-    if facts.conformance_implies.is_empty() {
-        problems.push(format!(
-            "{CORE_MANIFEST} — `conformance` implies nothing any more, so C2-01's premise is \
-             gone and this pin is what must move: the page is free to say the feature implies \
-             no other (C2-01)."
-        ));
-    }
     if facts.port_recipe == Recipe::default() {
         problems.push(format!(
             "{PORT_RECIPE} — carries no `toml` fence naming {CORE_CRATE} that this check can \
@@ -1513,13 +1517,17 @@ fn feature_cost_problems(
 }
 
 /// C2-01, outward: every paragraph that speaks about what `conformance` implies
-/// names what the manifest says it implies.
+/// names what the manifest says it implies — and, when the manifest says it
+/// implies nothing, says *that* rather than naming a feature it no longer does.
 ///
-/// A *positive* pin in [`publication_pin_problems`]'s sense. The shipped
-/// sentence — *"It pulls in no crate and implies no other feature — not `std`,
-/// not `memory`"* — carries [`IMPLIES_TOKEN`] and names neither
-/// `unstable-projection` nor anything else the manifest lists, so it fails
-/// without this function holding a list of forbidden phrasings.
+/// A *positive* pin in [`publication_pin_problems`]'s sense. The sentence that
+/// shipped before the gate — *"It pulls in no crate and implies no other feature
+/// — not `std`, not `memory`"* — carried [`IMPLIES_TOKEN`] and named neither
+/// `unstable-projection` nor anything else the manifest then listed, so it
+/// failed without this function holding a list of forbidden phrasings. Since
+/// ADR-0063 that sentence is true again, and the mirror failure is the one this
+/// function now also rejects: a page that goes on naming `unstable-projection`
+/// as implied after the manifest stopped implying it.
 fn implication_problems(implied_by_manifest: &[String], paragraphs: &[String]) -> Vec<String> {
     use crate::lints::TESTKIT_LIB;
 
@@ -1537,6 +1545,14 @@ fn implication_problems(implied_by_manifest: &[String], paragraphs: &[String]) -
 
     let mut problems = Vec::new();
     for claim in claims {
+        if implied_by_manifest.is_empty() && !claim.contains(IMPLIES_NOTHING) {
+            problems.push(format!(
+                "{TESTKIT_LIB} — a paragraph says what `{CORE_FEATURE_CONFORMANCE}` implies, \
+                 and {CORE_MANIFEST} says it implies nothing: {claim:?}. Say so in the words \
+                 `{IMPLIES_NOTHING}`, so the sentence can be held to the manifest the way a \
+                 named implication is (C2-01)."
+            ));
+        }
         for implied in implied_by_manifest {
             if !claim.contains(implied) {
                 problems.push(format!(
@@ -1568,6 +1584,16 @@ fn recipe_copy_problems(port: &Recipe, copy: &Recipe) -> Vec<String> {
                 "{TESTKIT_LIB} — its recipe's `{CORE_CRATE}` dependency line does not enable \
                  `{feature}`, which {PORT_RECIPE} prescribes unconditionally because an \
                  adapter's `impl ProjectionStore` is unconditional (C2-01)."
+            ));
+        }
+    }
+    for feature in &copy.dependency_features {
+        if !port.dependency_features.contains(feature) {
+            problems.push(format!(
+                "{TESTKIT_LIB} — its recipe's `{CORE_CRATE}` dependency line enables \
+                 `{feature}`, which {PORT_RECIPE} does not prescribe. Since ADR-0063 the port \
+                 needs no feature, and a line that still names one tells an author the port \
+                 is gated (C2-01)."
             ));
         }
     }
@@ -1667,7 +1693,7 @@ fn feature_cost_is_stated() -> Result<()> {
         port_recipe: item_toml_fences(&port)
             .iter()
             .map(|fence| recipe_of(fence))
-            .find(|recipe| !recipe.dependency_features.is_empty())
+            .find(|recipe| !recipe.dependency_features.is_empty() || !recipe.forwarded.is_empty())
             .unwrap_or_default(),
         testkit_core_features: testkit_manifest
             .lines()
@@ -5225,9 +5251,8 @@ mod tests {
     const PORT_FENCE: &str = "\
 /// ```toml\n\
 /// [dependencies]\n\
-/// # `unstable-projection`, not optionally: the `impl ProjectionStore` below\n\
-/// # is unconditional in the adapter's `src/`.\n\
-/// happenstance-core = { version = \"…\", features = [\"unstable-projection\"] }\n\
+/// # No feature: the port is unconditional since ADR-0063.\n\
+/// happenstance-core = \"…\"\n\
 ///\n\
 /// [features]\n\
 /// # Forwards to the contract crate.\n\
@@ -5237,14 +5262,36 @@ mod tests {
 /// happenstance-testkit = \"…\"\n\
 /// ```\n";
 
+    /// The port's fence as it stood while the port was gated, kept so the
+    /// check's behaviour against a recipe that *does* prescribe a dependency
+    /// feature stays exercised.
+    const GATED_PORT_FENCE: &str = "\
+/// ```toml\n\
+/// [dependencies]\n\
+/// happenstance-core = { version = \"…\", features = [\"unstable-projection\"] }\n\
+///\n\
+/// [features]\n\
+/// conformance = [\"happenstance-core/conformance\"]\n\
+/// ```\n";
+
     fn port_recipe() -> Recipe {
         recipe_of(&item_toml_fences(PORT_FENCE)[0])
     }
 
     fn feature_cost_facts() -> FeatureCostFacts {
         FeatureCostFacts {
-            conformance_implies: vec!["unstable-projection".to_owned()],
+            conformance_implies: Vec::new(),
             port_recipe: port_recipe(),
+            testkit_core_features: ["std", "memory", "conformance"].map(str::to_owned).to_vec(),
+        }
+    }
+
+    /// The facts as they stood while the port was gated: `conformance` implied
+    /// `unstable-projection`, and the recipe turned it on unconditionally.
+    fn gated_feature_cost_facts() -> FeatureCostFacts {
+        FeatureCostFacts {
+            conformance_implies: vec!["unstable-projection".to_owned()],
+            port_recipe: recipe_of(&item_toml_fences(GATED_PORT_FENCE)[0]),
             testkit_core_features: ["std", "memory", "conformance", "unstable-projection"]
                 .map(str::to_owned)
                 .to_vec(),
@@ -5270,7 +5317,7 @@ mod tests {
         assert_eq!(
             port_recipe(),
             Recipe {
-                dependency_features: vec!["unstable-projection".to_owned()],
+                dependency_features: Vec::new(),
                 forwarded: vec![r#"conformance = ["happenstance-core/conformance"]"#.to_owned()],
             },
             "the comment lines above each key are prose and must not be read as \
@@ -5287,8 +5334,10 @@ mod tests {
 
     #[test]
     fn the_feature_cost_check_rejects_the_shipped_page_in_both_directions() {
+        // Held against the *gated* facts, which is the state the shipped page
+        // was wrong in: the sentence it carried is true again since ADR-0063.
         let problems = feature_cost_problems(
-            &feature_cost_facts(),
+            &gated_feature_cost_facts(),
             SHIPPED_STEP_ONE,
             &doc_toml_fences(SHIPPED_STEP_ONE),
         );
@@ -5318,7 +5367,7 @@ mod tests {
         const CORRECTED: &str = "\
 //! ```toml\n\
 //! [dependencies]\n\
-//! happenstance-core = { version = \"0.2.0-alpha.1\", features = [\"unstable-projection\"] }\n\
+//! happenstance-core = \"0.2.0-alpha.1\"\n\
 //!\n\
 //! [features]\n\
 //! conformance = [\"happenstance-core/conformance\"]\n\
@@ -5327,8 +5376,7 @@ mod tests {
 //! happenstance-testkit = \"=0.2.0-alpha.1\"\n\
 //! ```\n\
 //!\n\
-//! `conformance` implies `unstable-projection`, because the probe is defined\n\
-//! inside the module that feature gates.\n\
+//! `conformance` implies no other feature — not `std`, not `memory`.\n\
 //!\n\
 //! This crate depends on `happenstance-core` with `std`, `memory` and\n\
 //! `conformance` on. `cargo build` does not unify a dev-dependency's features\n\
@@ -5367,19 +5415,22 @@ mod tests {
 //! This crate depends on `happenstance-core` with `std`, `memory` and\n\
 //! `conformance`. `cargo build` and `cargo test` differ.\n";
 
-        let unimplying = FeatureCostFacts {
-            conformance_implies: Vec::new(),
-            ..feature_cost_facts()
-        };
-        let problems = feature_cost_problems(
-            &unimplying,
-            SHIPPED_STEP_ONE,
-            &doc_toml_fences(SHIPPED_STEP_ONE),
+        // A page still naming the implication after the manifest dropped it is
+        // the mirror of the shipped defect, and it is the one that bites now.
+        let problems =
+            feature_cost_problems(&feature_cost_facts(), DENIED, &doc_toml_fences(DENIED));
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("says it implies nothing")),
+            "a `conformance` that implies nothing makes a page naming an implied \
+             feature the stale artefact: {problems:?}"
         );
         assert!(
-            problems.iter().any(|p| p.contains("C2-01's premise is")),
-            "a `conformance` that implies nothing makes the page's old sentence \
-             true and this pin the stale artefact: {problems:?}"
+            problems.iter().any(|p| p
+                .contains("which crates/happenstance-core/src/projection.rs does not prescribe")),
+            "and a recipe still turning the retired feature on in `[dependencies]` \
+             tells an author the port is gated: {problems:?}"
         );
 
         let no_port = FeatureCostFacts {
@@ -5394,7 +5445,11 @@ mod tests {
         );
 
         assert_eq!(
-            feature_cost_problems(&feature_cost_facts(), DENIED, &doc_toml_fences(DENIED)),
+            feature_cost_problems(
+                &gated_feature_cost_facts(),
+                DENIED,
+                &doc_toml_fences(DENIED)
+            ),
             Vec::<String>::new(),
             "the check counts a token and requires the manifest's own names \
              beside it; whether the sentence is *right* is a reader's, and that \

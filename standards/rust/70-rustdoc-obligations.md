@@ -84,7 +84,7 @@ remove it.
 
 **Evidence.** `Cargo.toml:211 (Members opt in with)` · `Cargo.toml:214 (missing_docs)` ·
 `Cargo.toml:227 (missing_errors_doc)` ·
-`crates/happenstance-core/Cargo.toml:116 ([lints])` ·
+`crates/happenstance-core/Cargo.toml:103 ([lints])` ·
 `crates/happenstance-core/src/store.rs:258 (AppendError::NoEvents)` ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)
 
@@ -154,7 +154,7 @@ consumer — is a hard error. `MemoryProjectionStore`'s page linking
 `conformance` off. The rule does not change; the gate grew a third
 configuration so that the rule is checked where the consumer stands.
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:108 (The name is deliberately not a link here)` ·
+**Evidence.** `crates/happenstance-core/src/lib.rs:99 (The name is deliberately not a link here)` ·
 `crates/happenstance-core/src/store.rs:106 (It is not linked because)` ·
 `crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
 `xtask/src/main.rs:908 (no default features)` ·
@@ -247,7 +247,7 @@ one toolchain. crates.io versions can be yanked and never removed, so the broken
 rendering is permanent for that number, and the author learns about it from the
 docs.rs build log rather than from anything they ran.
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:113 (feature(doc_cfg))` ·
+**Evidence.** `crates/happenstance-core/src/lib.rs:104 (feature(doc_cfg))` ·
 `xtask/src/main.rs:66 (nightly rustdoc build with)` ·
 [rustc removed features](https://raw.githubusercontent.com/rust-lang/rust/master/compiler/rustc_feature/src/removed.rs) *(checked 2026-08-09, rustc 1.97.1)* ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*

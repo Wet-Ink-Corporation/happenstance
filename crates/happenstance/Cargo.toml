@@ -126,20 +126,26 @@ postcard = ["dep:postcard"]
 # it did not.
 cbor = ["dep:ciborium"]
 # The typed projection runner: `Projection`, `run_projection`, `Progressed` and
-# `ProjectionError`. **Off by default**, and the name is the promise: the port
-# beneath it — `happenstance-core`'s `ProjectionStore` — is not frozen, so these
-# four items make no semver promise at all. A reader has to type the word
-# `unstable` before any of them is in their build.
+# `ProjectionError`. **Off by default**, and the name is still the promise —
+# but the subject of the instability moved. Until ADR-0063 it was the port
+# beneath the runner, `happenstance-core`'s `ProjectionStore`, which is frozen
+# now and reachable here without any feature. What is unproved is the runner's
+# own shape: `Projection::apply` is synchronous, so a projection can push into
+# a buffered batch and cannot issue a statement into a batch that is a live
+# transaction (ADR-0062 named this as the axis after the port's). These four
+# items make no semver promise until that is settled, and a reader still has to
+# type the word `unstable` before any of them is in their build.
 #
-# It forwards, and the forwarding is not optional: `ProjectionStore`,
-# `ProjectionId`, `Checkpoint` and `Authority` all live behind the contract
-# crate's own `unstable-projection` gate, so the runner cannot compile without
-# it. `MemoryProjectionStore` needs `memory` as well, which stays a separate
-# switch here for the same reason it is one there — a fixture is not a port.
+# It no longer forwards to the contract crate: `happenstance-core`'s
+# `unstable-projection` is retained there as an empty feature so `0.2.0`
+# manifests resolve, and forwarding a feature that turns nothing on would tell
+# a reader the port is gated. `MemoryProjectionStore` needs `memory`, which
+# stays a separate switch here for the same reason it is one there — a fixture
+# is not a port.
 #
 # `dep:futures-core` is the one dependency this feature turns on. See the
 # `[dependencies]` comment above for why it adds no node to the graph.
-unstable-projection = ["happenstance-core/unstable-projection", "dep:futures-core"]
+unstable-projection = ["dep:futures-core"]
 
 [package.metadata.docs.rs]
 all-features = true
