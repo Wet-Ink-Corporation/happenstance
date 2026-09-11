@@ -31,6 +31,7 @@ related:
   - kb-open-question-projection-id-unvalidated-001
   - kb-open-question-probe-read-through-signature-001
   - kb-open-question-projection-batch-sql-statement-type-001
+  - kb-open-question-apply-synchronous-live-store-001
 source_paths:
   - .kb/_intake/0007-projection-runner-decodes.md
   - .kb/_intake/2026-08-13-adr-0017-projection-batch.md

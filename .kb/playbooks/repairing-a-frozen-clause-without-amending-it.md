@@ -40,6 +40,7 @@ related:
   - kb-open-question-no-ps-rule-name-resolved-001
   - kb-decision-0051
   - kb-decision-0056
+  - kb-decision-0062
   - kb-decision-0061
   - kb-open-question-one-shot-http-es-11-001
   - kb-open-question-cf-38-case-naming-no-clause-001

@@ -36,6 +36,8 @@ related:
   - kb-reference-busy-timeout-margin-001
   - kb-open-question-adr-0022-falsifiers-fired-001
   - kb-reference-shipped-append-condition-sql-001
+  - kb-reference-host-clocksource-tsc-hpet-001
+  - kb-decision-0064
 source_paths:
   - .kb/_intake/0034-append-condition-experiment-2026-08.md
   - .kb/_intake/0033-adr-0022-append-condition-strategy.md

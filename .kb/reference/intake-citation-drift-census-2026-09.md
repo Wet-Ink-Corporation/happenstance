@@ -21,6 +21,7 @@ related:
   - kb-reference-phase-8-spec-reconciliation-001
   - kb-decision-0045
   - kb-open-question-disjoint-boundaries-no-clause-001
+  - kb-open-question-docs-citation-anchor-contradiction-001
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/docs-citation-form-and-clause-content.md
 last_reviewed: 2026-09-07

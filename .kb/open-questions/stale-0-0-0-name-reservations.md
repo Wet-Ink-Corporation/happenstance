@@ -19,14 +19,22 @@ summary: >-
   disjoint compatibility range confers nothing on 0.2.0. Forced by the next registry-dependent
   question this ambiguity recurs in, or by phase 12's publish of 0.2.0, after which the reservations
   are either yanked as superseded or left standing as a permanent, slightly confusing prefix to
-  every crate's release history.
+  every crate's release history. Re-read 2026-09-08 for the CLAUDE.md MSRV correction: all seven
+  publishable crates now carry 0.0.0 (happenstance-postgres and happenstance-neon joined the set
+  the day e597c34 put them in the release set), three additionally carry 0.2.0-alpha.1, nothing is
+  yanked, and max_stable_version reads 0.0.0 everywhere - so no consumer is pinned to anything,
+  0.2.0 is a first real release for all seven, and the registry semver baseline cannot run until
+  the tag lands. kb-decision-0037's promise binds from that tag and not before.
 depends_on: []
 related:
   - kb-open-question-adapter-version-lockstep-001
+  - kb-decision-0037
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/adapter-driver-reexport-policy.md
   - .kb/_intake/remediation-2026-09-04-briefs/repository-url-and-security-channel.md
-last_reviewed: 2026-09-07
+  - .kb/_intake/2026-09-08-adr-0004-msrv-becomes-a-promise-at-publication.md
+  - CLAUDE.md
+last_reviewed: 2026-09-11
 ---
 
 # Whether the live `0.0.0` name-reservation releases should be yanked before a real `0.2.0` ships
@@ -53,6 +61,26 @@ with every other version, so a `0.0.0` release confers no obligation on
 `0.2.0` and no consumer could have written a version requirement against it
 that resolves to anything else.
 
+**Re-read 2026-09-08, and the count is seven.** The registry was queried
+again for the correction to `CLAUDE.md`'s MSRV constraint — the one that
+replaced *"nothing is published, so no downstream consumer is pinned to
+anything"* with a measured statement — and the intake brief behind that
+correction (`2026-09-08-adr-0004-msrv-becomes-a-promise-at-publication.md`)
+records the result: **every one of the seven publishable crates carries
+`0.0.0`**, the same three still additionally carry `0.2.0-alpha.1`, nothing is
+yanked, and `max_stable_version` reads `0.0.0` on all seven. The two new rows
+are `happenstance-postgres` and `happenstance-neon`, which `e597c34` put into
+the release set that same day and which were claimed at their phase, per
+`RUNBOOK.md:1218`'s rule that the remaining names are reserved as their crates
+arrive. The consequence the correction drew, and the one that matters here:
+**no consumer is pinned to anything today**, `0.2.0` is a first real release
+for all seven rather than a successor to anything, and the registry semver
+baseline cannot run until the `0.2.0` tag lands because no crate has a
+compatible published predecessor to diff against. That is also the sense in
+which `kb-decision-0037` is dated rather than immediate — the MSRV becomes a
+promise *from that tag*, and the `0.0.0` rows are not the predecessor that
+would make it one sooner.
+
 **Two unrelated briefs met this same fact and both had to argue past it rather
 than use it.** The driver re-export brief
 (`adapter-driver-reexport-policy.md`) was investigating whether
@@ -78,8 +106,8 @@ route around the ambiguity in front of them.
 
 ## What is not decided
 
-Whether the `0.0.0` releases across all five crates should be yanked before
-`0.2.0` ships as the real release, so that the next question this same
+Whether the `0.0.0` releases across all seven crates — five at the first read,
+seven at the second — should be yanked before `0.2.0` ships as the real release, so that the next question this same
 ambiguity touches does not have to re-derive the "a `0.0.0` in a disjoint
 range confers nothing" argument from scratch. Yanking costs nothing a consumer
 could be relying on — no version requirement resolves to `0.0.z` from outside
@@ -101,7 +129,8 @@ decide deliberately to leave them standing.
 
 1. Is there any reason to prefer leaving the `0.0.0` reservations live once
    `0.2.0` exists, or is yanking them strictly cleanup with no downside?
-2. Does yanking all five happen together, or only the two — `happenstance-sqlite`,
-   `happenstance-cloudflare` — that have no `0.2.0-alpha.1` companion yet?
+2. Does yanking all seven happen together, or only the four —
+   `happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres`,
+   `happenstance-neon` — that have no `0.2.0-alpha.1` companion?
 3. Who owns running the yank, and is it a `0.2.0` release-checklist item or a
    follow-up after?

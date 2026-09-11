@@ -62,6 +62,18 @@ summary: >-
   `kb-decision-0004`/`kb-decision-0029`, `kb-decision-0006`/`kb-decision-0007`, and
   `kb-decision-0007`/`kb-decision-0031`), and ADR-0061 repairs `spec/SPECIFICATION.md`'s ES-11 clause
   itself under `kb-playbook-repair-frozen-clause-001`'s test rather than touching any decision atom.
+  The 2026-09-11 wave (`2026-09-11-intake`) added three more: ADR-0062 (phase 12, the projection port's
+  probe seam and `begin` move to `&mut Self::Batch` / async / fallible, and `LivePostgresProjectionStore`
+  runs 20 of 20 against a live PostgreSQL, meeting PS-2's MUST as written with no axis change), ADR-0063
+  (phase 12, freezing `ProjectionStore` on that evidence while keeping `happenstance-core`'s
+  `unstable-projection` feature declared and empty and narrowing `happenstance`'s feature of the same
+  name to the runner alone, since `Projection::apply` is still synchronous), and ADR-0064 (phase null,
+  the dedicated measurement host's conditions are declared data rather than ritual, and its preflight is
+  structurally unreachable from any merge-blocking job). None of the three supersedes a row on this map.
+  ADR-0063 discharges ADR-0036 and ADR-0060 rather than superseding either — both said gate the port
+  until PS-2's bar was met, both were correct when written, and ADR-0062 met the bar — the same shape
+  this map already records for ADR-0060 reaffirming ADR-0036 above, so neither row is flipped or
+  annotated.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -78,7 +90,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-04-intake
   - .kb/_governance/integration-waves/2026-09-07-intake
   - .kb/_governance/integration-waves/2026-09-09-intake
-last_reviewed: 2026-09-09
+  - .kb/_governance/integration-waves/2026-09-11-intake
+last_reviewed: 2026-09-11
 ---
 
 # Decision map
@@ -444,6 +457,36 @@ map.
 | ADR-0025 | [`kb-decision-0025`](../decisions/0025-the-ladybug-projection-adapter.md) | The Ladybug projection adapter — a checkpoint node, raw Cypher, and a blocking driver | accepted | 11 | — |
 | ADR-0060 | [`kb-decision-0060`](../decisions/0060-ps-2s-axis-re-evaluated.md) | The projection port keeps its gate, and the reason ADR-0036 gave has expired | accepted | 11 | — |
 | ADR-0061 | [`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md) | ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none | accepted | 10 | — |
+
+## 2026-09-11 intake: the probe seam moves, the port freezes, and the measurement host gets declared conditions (ADR-0062, ADR-0063, ADR-0064)
+
+Three decision atoms, one wave (`2026-09-11-intake`), `.kb/decisions/`. ADR-0062 moves the probe seam
+`probe_write`/`probe_delete_all`/`probe_read_through` to `&mut Self::Batch` / async / fallible and moves
+`begin` with it, because a probe seam moved without `begin` would let a live-transaction store report
+itself and still be unable to exist for `sqlx`; `LivePostgresProjectionStore` (`happenstance-postgres`)
+runs 20 of 20 against a live PostgreSQL with `READS_THROUGH_BATCH = true` now a true statement, so PS-2's
+MUST is met as written and no port-axis change is needed. It `depends_on` `kb-decision-0060` (the bar it
+meets), `kb-decision-0036` (the gate it was first shipped behind) and `kb-decision-0017` (the owned-`Batch`
+shape the moved seam still owns). ADR-0063 freezes `ProjectionStore`, `ProjectionProbe` and their value
+types on that evidence — a signature change to any of them is now a breaking change with a decision record
+behind it — keeps `happenstance-core`'s `unstable-projection` feature declared and empty rather than
+removed, and narrows `happenstance`'s feature of the same name to gate the projection runner alone, because
+`Projection::apply` is still synchronous and cannot drive a live-transaction batch; it `depends_on`
+`kb-decision-0062` (the evidence the freeze rests on), `kb-decision-0036`, `kb-decision-0060` and
+`kb-decision-0017`. ADR-0064 declares the dedicated Linux measurement host's conditions as data —
+`ops/host/host.env`, applied by scripts that only write and asserted by a `preflight.sh` that only reads —
+and records that the preflight is structurally unreachable from `xtask`'s step table, `.redkiln/config.yaml`'s
+`verify:` block or any CI job, with `ops/` held on `xtask/src/affected.rs`'s `INERT` list. Both atoms carry a
+provenance note: at this worktree's `HEAD` neither long-form ADR record is present and the code the atom
+describes (`begin`'s async signature, the narrowed `happenstance` feature) has not yet landed, so each states
+what the lane binds when it lands rather than a fact already true of `main`, the same shape `kb-decision-0037`
+used. None of the three supersedes a row on this map — all three carry `supersedes: null`.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0062 | [`kb-decision-0062`](../decisions/0062-the-probe-seam-moves-and-the-far-end-is-built.md) | The probe seam moves, begin moves with it, and the far end is built | accepted | 12 | — |
+| ADR-0063 | [`kb-decision-0063`](../decisions/0063-the-projection-port-is-frozen.md) | The projection port is frozen, and the typed layer keeps a gate of the same name | accepted | 12 | — |
+| ADR-0064 | [`kb-decision-0064`](../decisions/0064-the-measurement-host-has-declared-conditions.md) | The measurement host has declared conditions, and its preflight is unreachable from the gate | accepted | — | — |
 
 ## Adding a row
 

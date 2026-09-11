@@ -28,6 +28,8 @@ depends_on: []
 related:
   - kb-decision-0022
   - kb-reference-append-condition-experiment-001
+  - kb-reference-host-clocksource-tsc-hpet-001
+  - kb-decision-0064
   - kb-open-question-adr-0022-falsifiers-fired-001
   - kb-reference-nested-block-on-lost-wakeup-001
   - kb-open-question-testkit-contention-tolerance-001
