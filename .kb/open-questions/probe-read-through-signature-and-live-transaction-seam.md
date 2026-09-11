@@ -2,7 +2,7 @@
 id: kb-open-question-probe-read-through-signature-001
 title: probe_read_through's signature cannot be implemented correctly by a live transaction
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   crates/happenstance-core/src/projection.rs declares fn
@@ -53,20 +53,35 @@ summary: >-
   keeps the port's gate on exactly this ground and declines the signature
   change, stating it is PS-2's owner's call rather than an adapter lane's —
   so this question stays open, with a wider scope than when it was written.
+  Resolved 2026-09-10 by ADR-0062 (kb-decision-0062): the seam moves, all of it —
+  probe_write, probe_delete_all and probe_read_through take &mut Self::Batch and
+  return a Result-bearing future with no Send bound — and begin moves with it, to
+  async fn begin(&self) -> Result<Self::Batch, Self::Error>, which this atom never
+  proposed and which is what lets a sqlx store exist at all: the phase-10b refutation
+  was a property of begin's signature, not of the axis. The corollary question closes
+  with it — the brief records LivePostgresProjectionStore declaring READS_THROUGH_BATCH
+  = true as a true statement and passing 20 of 20, so the two ends of PS-2's axis are
+  now distinguishable and its MUST is met as written. At this worktree's HEAD (86a410c)
+  begin is still synchronous at crates/happenstance-core/src/projection.rs:460; the
+  decision is recorded on lane/projection-probe-seam and binds when it lands.
 depends_on: []
 related:
   - kb-decision-0036
   - kb-decision-0060
+  - kb-decision-0062
+  - kb-decision-0063
   - kb-decision-0017
   - kb-open-question-provisional-falsifiers-001
   - kb-open-question-projection-batch-no-apply-001
   - kb-open-question-ps-19-scope-narrower-001
+  - kb-open-question-apply-synchronous-live-store-001
   - kb-decision-0025
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/probe-read-through-and-the-live-transaction-end.md
   - .kb/_intake/2026-09-08-ps-2-live-transaction-axis-is-forbidden-not-unbuilt.md
   - .kb/_intake/2026-09-08-adr-0060-ps-2s-axis-re-evaluated.md
-last_reviewed: 2026-09-09
+  - .kb/_intake/2026-09-10-adr-0062-the-probe-seam-moves.md
+last_reviewed: 2026-09-11
 ---
 
 # probe_read_through's signature cannot be implemented correctly by a live transaction
@@ -213,3 +228,68 @@ Whether `spec/SPECIFICATION.md` needs an amendment beyond ADR-0060's
 amendment to PS-2's `Rule` (the MUST, the maturity marker and the `Cases`
 are untouched). `READS_THROUGH_BATCH`'s own shape, and what a
 live-transaction adapter's `Batch` should be if one is ever admissible.
+
+## Resolved 2026-09-10 — the whole seam, and `begin` with it; `status` superseded
+
+Everything above is the state of knowledge on 2026-09-04 and 2026-09-08 and is
+left exactly as written, per this layer's README. ADR-0062, "The probe seam
+moves, `begin` moves with it, and the far end is built" (`kb-decision-0062`),
+now holds the answer, so this atom moves to `superseded` rather than
+`withdrawn` — the question was worth asking, its compiled table above is what
+the decision cites as the reason, and a reader arriving here needs sending on.
+
+**The first of the four options is taken, and at a wider scope than any of
+them.** The seam moves at seam grain, as *The scope is the probe seam, not one
+method* argued: `probe_write`, `probe_delete_all` and `probe_read_through` take
+`&mut Self::Batch` and return `impl Future<Output = Result<…, Self::Error>>`
+with no `Send` bound. **And `begin` moves too** — `async fn begin(&self) ->
+Result<Self::Batch, Self::Error>` — which this atom never proposed. *What is
+true today* recorded that `sqlx`'s only transaction constructor is `async` and
+fallible and drew from it a second, independent mechanism; the decision draws
+the consequence this atom stopped short of: with the probe seam moved and
+`begin` unmoved, a live-transaction store could *report* itself truthfully and
+still could not *exist* for `sqlx`. The phase-10b refutation was a property of
+`begin`'s signature, not of the axis. The `probe_read_through`-alone fix this
+atom originally recommended was tried against that finding and confirmed
+insufficient, exactly as ADR-0060 said; the `READS_THROUGH_BATCH` split (the
+fourth option) and rewording PS-2 to drop the far end were rejected on the
+grounds this atom gave — the split removes the false statement and leaves the
+hole, the rewording produces the monoculture PS-2's `Rejects` forbids.
+
+**The corollary question closes with it.** *The question* asked whether PS-2's
+live-transaction bar could be judged met by an adapter forced to declare the
+capability `false` to compile. It no longer has to: the brief records
+`LivePostgresProjectionStore` in `happenstance-postgres`, `type Batch` owning a
+`sqlx::Transaction<'static, Postgres>`, declaring `READS_THROUGH_BATCH = true`
+as a **true** statement and passing 20 of 20 against a live PostgreSQL —
+including an adapter-private assertion that `batch_reads_reflect_pending_writes`
+returned `RuleOutcome::Ran`, the first time PS-12's rule has executed against
+anything but an in-process map. The two ends of the axis are therefore
+distinguishable by the instrument, and PS-2's MUST is met as written. The
+standing cost named under *Cost of delay* — every adapter built meanwhile has
+an incentive to buffer — is gone with the signature that created it.
+
+**What moved that this atom did not see coming.** PS-6's falsifier — *an
+adapter that must reserve something from the server before the first write* —
+had fired at phase 10b and nobody had said so: it is `sqlx`'s `BEGIN`. Its MUST
+is rewritten to the discipline the synchronous `begin` protected by
+construction, and two named tests hold it where the signature no longer can.
+That is the decision's finding, not this question's, and it lives in
+`kb-decision-0062`.
+
+**What this resolution hands on.** The gate itself — *What this does not
+settle* left PS-2's verdict to the clause's owner, and lifting
+`unstable-projection` is a semver promise on a published crate with its own
+record, `kb-decision-0063`. And the typed layer's `Projection::apply` is still
+synchronous, so an application can push into a buffered batch and cannot issue
+a statement into a live one; that is the typed layer's axis rather than this
+port's, and it is open at `kb-open-question-apply-synchronous-live-store-001`.
+
+**Tense.** At this worktree's `HEAD` (`86a410c`) none of this has landed:
+`fn begin(&self) -> Self::Batch` still stands at
+`crates/happenstance-core/src/projection.rs:460`, `probe_read_through` at
+`:710` still takes `&Self::Batch`, and the long form
+`references/adr/0062-the-probe-seam-moves-and-the-far-end-is-built.md` the
+brief names is not in this checkout. The decision is recorded on
+`lane/projection-probe-seam` and binds when it lands; this atom closes on the
+decision, not on the diff.

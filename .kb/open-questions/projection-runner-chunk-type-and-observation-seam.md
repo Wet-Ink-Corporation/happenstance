@@ -40,6 +40,8 @@ related:
   - kb-decision-0007
   - kb-open-question-ps-19-scope-narrower-001
   - kb-playbook-anchoring-citations-001
+  - kb-decision-0063
+  - kb-open-question-apply-synchronous-live-store-001
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/projection-runner-chunk-and-observation.md
 last_reviewed: 2026-09-07

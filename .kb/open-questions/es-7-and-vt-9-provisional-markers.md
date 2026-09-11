@@ -31,7 +31,18 @@ summary: >-
   keeps the port's gate on that ground without rewording PS-2's MUST or moving a marker. The
   transferable observation therefore gets one clause sharper: a falsifier can be decoration a
   priori and not only in retrospect, and spec-trace detects neither shape, because it checks that
-  a clause's citations resolve rather than whether its stated condition is reachable.
+  a clause's citations resolve rather than whether its stated condition is reachable. 2026-09-10/11:
+  the PS-2 instance moved the other way. ADR-0062 made the unfireable falsifier fireable by moving
+  begin and the probe seam rather than the marker — begin is async and fallible, the three probes
+  take &mut Self::Batch and return a Result future — and PS-2's MUST is met as written by
+  LivePostgresProjectionStore, 20 of 20 against a live PostgreSQL. PS-6's own falsifier ("an
+  adapter that must reserve something from the server before the first write" — sqlx's BEGIN) had
+  fired unreported and was acted on: its MUST is rewritten to the property the old signature
+  protected, and two tests hold it where the signature no longer can. ADR-0063 records that
+  "thirteen clauses on PS-2 alone" was the RUNBOOK ledger's simplification: PS-4, PS-5 and PS-12
+  stood on PS-2's axis and freeze with it; PS-9, PS-11, PS-15 and the rebuild cluster stand on
+  their own falsifiers. ES-7 and VT-9 are untouched. Both ADRs are recorded from a lane; at
+  86a410c the spec still carries PS-6's old MUST.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -49,6 +60,9 @@ related:
   - kb-decision-0060
   - kb-open-question-probe-read-through-signature-001
   - kb-open-question-one-shot-http-es-11-001
+  - kb-decision-0062
+  - kb-decision-0063
+  - kb-open-question-apply-synchronous-live-store-001
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/0001-async-port-flavours.md
@@ -57,12 +71,14 @@ source_paths:
   - .kb/_intake/2026-09-08-adr-0025-ladybug-projection-adapter.md
   - .kb/_intake/2026-09-08-ps-2-live-transaction-axis-is-forbidden-not-unbuilt.md
   - .kb/_intake/2026-09-08-adr-0060-ps-2s-axis-re-evaluated.md
+  - .kb/_intake/2026-09-10-adr-0062-the-probe-seam-moves.md
+  - .kb/_intake/2026-09-11-adr-0063-the-projection-port-is-frozen.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/tests/local_conformance.rs
   - crates/happenstance-core/src/memory.rs
   - references/adr/0001-async-port-flavours.md
   - references/adr/0014-event-identity-and-recorded-time.md
-last_reviewed: 2026-09-09
+last_reviewed: 2026-09-11
 ---
 
 # Two provisional markers whose falsifiers can no longer falsify
@@ -187,9 +203,64 @@ genuinely is a live transaction *can* implement the port, and must then declare
 the suite cannot tell the two ends apart; that seam is
 `kb-open-question-probe-read-through-signature-001`. ADR-0060 keeps the port's gate on exactly
 that ground, without rewording PS-2's MUST or moving PS-3's marker, and proposes the probe
-signature change without making it. Thirteen `[PROVISIONAL]` clauses are gated on PS-2 alone, and
-a provisional group waiting on an adapter nobody can build waits forever — which is why this
-instance is the one that most needed writing down rather than leaving as a schedule slipping.
+signature change without making it. Thirteen `[PROVISIONAL]` clauses were then ledgered as gated
+on PS-2 alone, and a provisional group waiting on an adapter nobody can build waits forever — which
+is why this instance is the one that most needed writing down rather than leaving as a schedule
+slipping. It is also the instance that has since moved, and the count of thirteen did not survive
+the move; both are the next section's subject.
+
+## 2026-09-10/11: the PS-2 instance moved the other way
+
+The a-priori pair above were recorded with three exits named and none taken: reword PS-2's axis,
+move the port's `begin`/probe seam, or record the bar as unmeetable in its stated terms.
+`kb-decision-0062` took the second, and the way it took it is a third arm of this atom's
+observation rather than another instance of it. **A falsifier that never could fire can be made
+fireable — by moving the signature that foreclosed it, not the marker that named it.** The three
+probes now take `&mut Self::Batch` and return `impl Future<Output = Result<…, Self::Error>>`, and
+`begin` moved with them to `async fn begin(&self) -> Result<Self::Batch, Self::Error>`, because
+with the probe seam moved and `begin` unmoved a live-transaction store could report itself and
+still could not exist for `sqlx`. That is the record's own diagnosis of the phase-10b refutation
+this atom cited: it was a property of `begin`'s signature, not of the axis. With the signature
+gone, `LivePostgresProjectionStore` sits at the far end beside the buffered store — `type Batch`
+owns a `sqlx::Transaction<'static, Postgres>`, `READS_THROUGH_BATCH = true` is a true statement
+about it, and it runs 20 of 20 against a live PostgreSQL with `batch_reads_reflect_pending_writes`
+and `rebuild_is_chunk_size_invariant` returning `Ran` for the first time against anything but an
+in-process map. **PS-2's MUST is met as written**, without a word of it changing, and the two ends
+disagreed about nothing the port had to move for. The seam question this atom pointed at,
+`kb-open-question-probe-read-through-signature-001`, is resolved by it.
+
+The same record found a fourth marker in this atom's first class and treated it differently from
+the first two. **PS-6's falsifier had fired and nobody had said so.** *"An adapter that must
+reserve something from the server before the first write"* is `sqlx`'s `BEGIN`, and it had been in
+the tree since phase 10b. ES-7 and VT-9 are conditions met without effect on their clause; PS-6's
+condition was met and the clause was *wrong*, because the MUST it protected — `begin` neither
+`async` nor fallible — was precisely what kept the far end out. ADR-0062 rewrote that MUST to the
+discipline the signature had been standing in for — a buffering adapter's `begin` resolves at its
+first poll and never fails — and moved the enforcement from the compiler to two tests that hold it
+where a signature no longer can: `begin_makes_no_round_trip` in `happenstance-neon`, over a
+transport that fails every request, and `begin_resolves_at_its_first_poll_without_a_runtime` in
+the contract crate, polled once with no executor. PS-6 stays `[PROVISIONAL]`; `kb-decision-0063`
+declined to freeze it the day its MUST was rewritten. So the first class now has two outcomes on
+record: marker left standing over a harmless condition (ES-7, VT-9), and MUST rewritten to what
+the condition revealed (PS-6). Neither moved a marker.
+
+`kb-decision-0063` then froze the port, and in doing so corrected a number this atom carried from
+the RUNBOOK. *"Thirteen `[PROVISIONAL]` clauses gated on PS-2 alone"* was the ledger row's
+simplification, not a claim the clauses made. PS-4, PS-5 and PS-12 stood on PS-2's batch-shape
+axis and are frozen with it, on both ends now standing; PS-3 and PS-34 are retired to
+`[NON-NORMATIVE]` with their IDs kept; PS-9, PS-11, PS-15 and the rebuild cluster carry their own
+falsifiers and stay provisional on them — freezing those on the ledger's word against the clauses'
+was one of the alternatives the record rejected. PS-4's Rust-level limb is unchanged by any of
+this: `Projection::apply` is still synchronous, the traversal-before-write dependency is still one
+no batch shape can carry, and ADR-0063 keeps the typed layer's `unstable-projection` gate on the
+runner for exactly that reason. Whether `apply` moves is `kb-open-question-apply-synchronous-live-store-001`
+and the typed layer's axis, not this port's.
+
+**What this section does not change.** ES-7 and VT-9 are untouched — neither record names them,
+and their falsifiers are as decorative as they were. Both records are staged from a lane: at this
+worktree's `86a410c`, `spec/SPECIFICATION.md:5183` still reads *"`begin` MUST be neither `async`
+nor fallible"* and the census still reads 138/46/12/5, so this section states what the lane binds
+when it lands rather than what `HEAD` shows.
 
 ## The transferable observation
 
@@ -211,14 +282,30 @@ a clause's citations resolve, never whether the condition the clause states is r
 reachability means reading a falsifier against a signature, which is the same human reading task,
 now owed at authoring time as well as at reconciliation time.
 
+**And 2026-09-10 adds the third arm, which is the constructive one: when the a-priori kind is found,
+the remedy is not always to restate the falsifier.** PS-2's far end was unreachable because of a
+signature, and ADR-0062 reached it by changing the signature — the falsifier was left as written and
+made fireable, then fired in the direction that *met* the bar. That is the opposite of decoration:
+a marker whose condition was foreclosed by construction became one whose condition was checked by a
+running adapter. It also sharpens what PS-6 shows about the first kind. A condition that has
+occurred without effect is decoration only if the clause was right; PS-6's condition had occurred
+and the clause was what stood in the way, so "already fired harmlessly" and "already fired and
+nobody looked" are different findings that read identically to `spec-trace`. The reading task is
+therefore three-way — has it fired, could it fire, and if it fired, was the clause right — and the
+third question is the one the first two instances of this atom never had to ask.
+
 ## Owner
 
 Unassigned as a *marker-editing* task. The evidence is owned: ES-7's by ADR-0001 and ADR-0008,
 VT-9's by ADR-0014. What no ADR owns is the act of restating either falsifier so that it would
 discriminate again, and phase 9 is where both first have the instrument to justify it.
 
-The 2026-09 pair are owned the same way and no further: PS-4's evidence by `kb-decision-0025` and
-PS-2's by `kb-decision-0060`, both of which deliberately stop short of touching a marker or a
-Rule. Restating PS-4's Rust-level limb so it could fire, and deciding between rewording PS-2's
-axis, moving the port's `begin`/probe seam, and recording the bar as unmeetable in its stated
-terms, is PS-2's owner's call and is unassigned.
+The 2026-09 pair were owned the same way until 2026-09-10, and PS-2's half is now taken. The call
+this section left unassigned — reword PS-2's axis, move the port's `begin`/probe seam, or record
+the bar as unmeetable — was made by `kb-decision-0062` (the seam moved, the bar was met) and closed
+by `kb-decision-0063` (the port is frozen; PS-4, PS-5 and PS-12 with it). PS-6's rewritten MUST is
+ADR-0062's and its eventual freeze is nobody's yet, by ADR-0063's own choice. What stays unowned
+is exactly what this atom was opened on: restating ES-7's and VT-9's falsifiers so they would
+discriminate again, and restating PS-4's Rust-level limb — which is now
+`kb-open-question-apply-synchronous-live-store-001`'s territory, since the limb cannot fire until
+`Projection::apply` can carry I/O.

@@ -28,6 +28,7 @@ related:
   - kb-governance-referent-not-reasoning-001
   - kb-decision-0055
   - kb-open-question-es-17-two-adapter-measurement-001
+  - kb-open-question-immutability-check-pre-commit-001
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/append-batch-ownership.md
   - CLAUDE.md

@@ -20,6 +20,7 @@ related:
   - kb-governance-what-may-refute-a-finding-001
   - kb-open-question-cf-25-cf-26-portfolio-check-001
   - kb-reference-intake-citation-drift-census-001
+  - kb-playbook-control-fires-on-instrument-001
 source_paths:
   - .kb/_intake/lesson-a-check-that-verifies-the-address-not-the-referent.md
   - xtask/src/spec_trace.rs

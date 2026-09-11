@@ -87,6 +87,27 @@ summary: >-
   answered by ADR-0061; sub-questions 1 and 2 stay open) and
   kb-open-question-reset-refusal-declension-001 (the window it named has closed — four adapters now
   run the projection suite and all four decline the capability — without answering the question).
+  The 2026-09-11 wave (`2026-09-11-intake`) added two new questions — kb-open-question-apply-synchronous-live-store-001
+  (ADR-0062 built a live-transaction projection store and ADR-0063 froze the port on that evidence, and
+  both deliberately left `Projection::apply`'s still-synchronous signature to the typed layer; the runner
+  cannot drive a live batch through it, and neither record owns whether `apply` moves) and
+  kb-open-question-immutability-check-pre-commit-001 (`redkiln validate --kb`'s accepted-decision
+  immutability check compares the working tree against `HEAD`, so it is a dirty-tree guard that clears the
+  moment an edit is committed and cannot tell a referent repair from a reversal — demonstrated by its own
+  refusal of `kb-decision-0058`'s citation repointing) — and flipped
+  kb-open-question-probe-read-through-signature-001 to Superseded (by ADR-0062, `kb-decision-0062`: the
+  whole probe seam moved, `begin` with it, and PS-2's MUST is met as written). Four further questions were
+  amended in place without a status flip: kb-open-question-provisional-falsifiers-001 (ADR-0062 rewrote
+  PS-6's MUST rather than moving another marker, and the runner-side residual moves to the new
+  apply-synchronous question), kb-open-question-projection-module-exemption-scope-001 (ADR-0063's freeze
+  narrows the premise: the exemption question dissolves for a port that is no longer gated, and what
+  remains is the testkit manifest's mechanical forward), kb-open-question-cf-33-cf-34-scope-001 (a third
+  instance — `ops/host/preflight.sh` — joins the sqlite `#[cfg(test)]` check and the benchmark completion
+  panic, re-anchored to CF-33/CF-34's live lines) and kb-open-question-stale-0-0-0-name-reservations-001
+  (the registry read confirmed: seven crates at `0.0.0`, three additionally at `0.2.0-alpha.1`, nothing
+  yanked, and `0.2.0` a first real release for all seven). kb-open-question-docs-citation-anchor-contradiction-001
+  gained a dated answer to its Option-C sub-question (re-anchor at promotion, refusing the wave, is the
+  chosen remedy) without closing.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -103,7 +124,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-04-intake
   - .kb/_governance/integration-waves/2026-09-07-intake
   - .kb/_governance/integration-waves/2026-09-09-intake
-last_reviewed: 2026-09-09
+  - .kb/_governance/integration-waves/2026-09-11-intake
+last_reviewed: 2026-09-11
 ---
 
 # Open-questions index
@@ -191,7 +213,15 @@ what the question is, not its evidence. The last two were added by the
   clause is `[FROZEN]` — what cannot be met is its bar rather than a falsifier, and thirteen
   `[PROVISIONAL]` clauses wait on it alone. ADR-0060 (`kb-decision-0060`) keeps the port's gate on
   that ground without rewording PS-2's `MUST` or moving a marker. A falsifier can be decoration a
-  priori, not only in retrospect, and `spec-trace` detects neither shape.
+  priori, not only in retrospect, and `spec-trace` detects neither shape. Amended 2026-09-10/11: ADR-0062
+  (`kb-decision-0062`) moves the seam rather than the marker and finds PS-6's own falsifier had already
+  fired unremarked (it is `sqlx`'s `BEGIN`), rewriting its MUST to the discipline the old signature used
+  to protect by construction. ADR-0063 (`kb-decision-0063`) narrows what "thirteen clauses wait on PS-2
+  alone" means: PS-4, PS-5 and PS-12 freeze with the axis now built at both ends, while PS-9, PS-11,
+  PS-15 and the rebuild cluster stay on their own separate falsifiers, the RUNBOOK grouping having been a
+  simplification the clauses themselves never made. PS-4's own Rust-level limb — `apply` synchronous, a
+  traversal I/O — is unmoved and unowned, and is now `kb-open-question-apply-synchronous-live-store-001`'s
+  territory rather than this atom's.
 - **Open** — [`nothing-owns-the-post-phase-reconciliation.md`](../open-questions/nothing-owns-the-post-phase-reconciliation.md)
   (`kb-open-question-post-phase-reconciliation-001`) — no phase carries an
   item obliging anyone to read the specification back against the tree a
@@ -248,7 +278,19 @@ what the question is, not its evidence. The last two were added by the
   (`kb-open-question-docs-citation-anchor-contradiction-001`) — three stacked defects in
   `docs/append-conditions.md`: a citation of ES-40 that contradicted it, a dead `file:line` landing
   mid-paragraph in an unrelated doc comment, and an unrecognised bare `:NNN` shorthand. Recommends
-  the anchored form and declines a mechanical contradiction check as impossible. Added 2026-09-07.
+  the anchored form and declines a mechanical contradiction check as impossible. Added 2026-09-07. Amended
+  2026-09-11: the Option-C sub-question is answered at review — re-anchor at promotion in
+  `/redkiln:kb-ingest`, refusing the wave, is the chosen remedy, and this wave's own two staged citation
+  drifts (`lints.rs` and CF-34) were caught and repointed that way; the warning-scan alternative is
+  declined as the wrong side of the citation-scan boundary. The question does not close.
+- **Open** — [`accepted-atom-immutability-check-is-pre-commit-only.md`](../open-questions/accepted-atom-immutability-check-is-pre-commit-only.md)
+  (`kb-open-question-immutability-check-pre-commit-001`) — `redkiln validate --kb`'s accepted-decision
+  immutability check compares the working tree against `HEAD`, not a commit against a merge base, so it
+  is a dirty-tree guard: it reports a refusal on an uncommitted edit and clears the instant that edit is
+  committed, and cannot distinguish a referent-only repair from a reversal — its own refusal of
+  `kb-decision-0058`'s stale-citation repointing (`4e13ee2`) demonstrates both halves at once. Three
+  remedies are named and none chosen: a carried body hash, a documented referent-only carve-out, or a CI
+  diff against the merge base. Added 2026-09-11.
 - **Open** — [`sole-evidence-pin-requirement-generality.md`](../open-questions/sole-evidence-pin-requirement-generality.md)
   (`kb-open-question-sole-evidence-pin-generality-001`) — `the_shotgun_mutants_sole_coverage_is_pinned`
   only requires a pin for REGISTRY's one shotgun mutant, while a crude regex found roughly sixteen
@@ -574,7 +616,11 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-cf-33-cf-34-scope-001`) — a ratio-based `#[cfg(test)]` check in
   `happenstance-sqlite` sits outside CF-33's stated `src/` scope, and a benchmark completion panic
   sits adjacent to CF-34's merge-red prohibition; no governing principle reconciles both with the
-  frozen text as written. Added 2026-09-07.
+  frozen text as written. Added 2026-09-07. Amended 2026-09-11: a third instance,
+  `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
+  exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
+  the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
+  their live lines (`spec/SPECIFICATION.md:8994-9019`, `:9021-9034`), both stale as previously cited.
 - **Open** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the
@@ -586,7 +632,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   contradicting commentary, or narrowed to exclude the position counter; specific to
   `happenstance-cloudflare`'s compensation-based atomicity, since `happenstance-sqlite`'s
   `sqlite_sequence` is under transaction control and a rollback restores it. Added 2026-09-07.
-- **Open** — [`probe-read-through-signature-and-live-transaction-seam.md`](../open-questions/probe-read-through-signature-and-live-transaction-seam.md)
+- **Superseded** — [`probe-read-through-signature-and-live-transaction-seam.md`](../open-questions/probe-read-through-signature-and-live-transaction-seam.md)
   (`kb-open-question-probe-read-through-signature-001`) — whether `ProjectionProbe::probe_read_through`
   moves to `&mut Self::Batch` / async / fallible before phase 10, or the live-transaction adapter is
   built against today's shape and PS-2 part 2 is judged on a declared-false capability; corroborates
@@ -595,7 +641,10 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   synchronous and infallible too, so the recommended `&mut`/async/`Result` move on
   `probe_read_through` is not sufficient alone — and ADR-0060 (`kb-decision-0060`) keeps the port's
   gate on exactly this ground, declining the signature change as PS-2's owner's call rather than an
-  adapter lane's; the question stays open, wider than when it was written.
+  adapter lane's; the question stays open, wider than when it was written. **Resolved 2026-09-10** by
+  ADR-0062 (`kb-decision-0062`): the whole seam moves, `begin` with it, `LivePostgresProjectionStore`
+  runs 20 of 20 against a live PostgreSQL, and PS-2's MUST is met as written; the apply-side residual
+  the resolution hands on is `kb-open-question-apply-synchronous-live-store-001`.
 - **Open** — [`projection-batch-sql-seam-statement-type.md`](../open-questions/projection-batch-sql-seam-statement-type.md)
   (`kb-open-question-projection-batch-sql-statement-type-001`) — whether `SqliteBatch::push`'s
   landed `&'static str` narrowing is the seam's final shape or a minted `Statement` newtype follows
@@ -618,7 +667,11 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-projection-module-exemption-scope-001`) — ADR-0036's unstable-projection
   exemption text names only `happenstance-core` and `happenstance`; `happenstance-testkit`'s
   projection module is unconditional, making `ProjectionFixture` ordinary un-exempt published API
-  on the documents as written. Added 2026-09-07.
+  on the documents as written. Added 2026-09-07. Amended 2026-09-11: ADR-0063 (`kb-decision-0063`)
+  freezes the port the exemption gated, dissolving the scope question for a trait that is no longer
+  exempt anywhere — `ProjectionFixture` is a committed surface on a frozen trait, the ordinary case —
+  and leaving only the mechanical residue (the testkit manifest's forward of the now-empty feature, and
+  a third `xtask` test asserting nothing still forwards it). Annotated, not closed.
 - **Open** — [`trait-variant-caret-resolves-past-the-locked-gate.md`](../open-questions/trait-variant-caret-resolves-past-the-locked-gate.md)
   (`kb-open-question-trait-variant-caret-001`) — the blanket impl binding constraint 4 rests on is
   pinned only by a caret (`0.1.3`); every guard on its shape is `#[cfg(test)]` and thus
@@ -684,6 +737,16 @@ the decision and reference atoms this domain also owns.
   (`kb-open-question-seal-the-codec-001`) — whether `Codec` is later sealed, now that `0.2.0` is
   live and the window to do so for free has closed; bundles the `UnknownTag`-split and
   `Boundary::absorb` sub-questions ADR-0049 left undone. Added 2026-09-07.
+- **Open** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
+  (`kb-open-question-apply-synchronous-live-store-001`) — `Projection::apply` is synchronous
+  (`crates/happenstance/src/domain.rs:249`) and `run_projection` folds events through it before
+  handing the batch to the store, exactly right for a buffered batch and exactly wrong for one that
+  is a live transaction; ADR-0062 built the live end and ADR-0063 froze the port on it while
+  deliberately leaving `apply`'s shape to the typed layer, narrowing `happenstance`'s
+  `unstable-projection` feature to gate the runner alone for that reason. Neither record owns
+  whether `apply` moves, to what shape, or whether the runner's gate comes off with it; forced by the
+  first application needing a row-writing projection against a live-transaction store through the
+  runner, or a decision to publish the runner ungated first. Added 2026-09-11.
 
 ## Brand identity: the name, the mark, and where it lives
 
@@ -720,7 +783,11 @@ See [`domain-map.md`](domain-map.md#publication-and-release-readiness) for the d
   (`kb-open-question-stale-0-0-0-name-reservations-001`) — two publishable crates are live on
   crates.io at `0.0.0` only while three others carry both `0.0.0` and `0.2.0-alpha.1`; ADR-0044's
   re-export policy and the security-channel decision both hit the ambiguity independently. Added
-  2026-09-07.
+  2026-09-07. Amended 2026-09-08: a second registry read grounded two more rows (postgres, neon) in
+  `e597c34` and `RUNBOOK.md`'s "remaining names are claimed at their phases" rule — all seven
+  publishable crates carry `0.0.0`, three additionally carry `0.2.0-alpha.1`, nothing is yanked, and
+  `0.2.0` is a first real release for all seven; the sub-question naming "two" crates without a
+  `0.2.0-alpha.1` companion now names four.
 - **Open** — [`cloudflare-worker-feature-gate.md`](../open-questions/cloudflare-worker-feature-gate.md)
   (`kb-open-question-cloudflare-feature-gate-001`) — `happenstance-cloudflare`'s manifest declares
   no `[features]` table and `worker`'s types (`SqlStorage`, `State`, `Error`) sit on every public

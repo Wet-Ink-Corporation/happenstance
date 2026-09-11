@@ -35,6 +35,7 @@ related:
   - kb-open-question-rustdoc-citation-form-001
   - kb-open-question-cf-36-unperformed-cross-reference-001
   - kb-open-question-disjoint-boundaries-no-clause-001
+  - kb-open-question-immutability-check-pre-commit-001
   - kb-open-question-es-6-unwritable-rule-001
   - kb-open-question-read-page-budget-001
   - kb-open-question-experiment-raw-output-ignored-001

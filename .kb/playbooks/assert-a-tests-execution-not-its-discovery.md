@@ -28,6 +28,7 @@ related:
   - kb-playbook-verify-referent-report-coverage-001
   - kb-decision-0037
   - kb-playbook-anchoring-citations-001
+  - kb-playbook-control-fires-on-instrument-001
 source_paths:
   - .kb/_intake/2026-09-03-pre-publication-review.md
   - references/evaluation/review-pre-publication-2026-09-03.md

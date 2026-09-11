@@ -31,7 +31,17 @@ summary: >-
   happenstance would have made. What the case adds is that a reason can expire independently of
   the decision it supported, and that the honest record of an expired reason is a new atom rather
   than a repaired one - a decision whose stated reason has been quietly updated can no longer
-  explain why it was taken.
+  explain why it was taken. A fifth instance, 2026-09-08, and the smallest: kb-decision-0058
+  cited crates/happenstance-sqlite/src/event_store.rs:1229-1296, line 1229 was blank, and at
+  4e13ee2 its three ranges were repointed to the constructs they always named with not one word
+  of reasoning moved - a line number is a referent, and repairing it changes nothing the atom
+  asserts. It is the first instance in which the rule collided with the check that enforces it:
+  redkiln validate --kb refused the repair on the uncommitted tree and passed it once committed,
+  so the discrimination this atom draws is one the instrument cannot
+  (kb-open-question-immutability-check-pre-commit-001). And one alternative rejected by name:
+  superseding a correct decision to repair a citation would lie about its status to every later
+  reader and would not fix the gate, because the citation lint reads every atom under .kb/
+  regardless of status.
 depends_on: []
 related:
   - kb-decision-0002
@@ -50,6 +60,10 @@ related:
   - kb-decision-0037
   - kb-open-question-dagger-convention-vs-maturity-markers-001
   - kb-open-question-references-adr-correction-policy-001
+  - kb-decision-0058
+  - kb-open-question-immutability-check-pre-commit-001
+  - kb-decision-0062
+  - kb-decision-0063
 source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md
@@ -59,7 +73,8 @@ source_paths:
   - references/adr/0006-bare-name-to-the-typed-layer.md
   - CONTRIBUTING.md
   - .kb/decisions/README.md
-last_reviewed: 2026-09-09
+  - .kb/_intake/2026-09-08-intake-is-outside-the-citation-scan.md
+last_reviewed: 2026-09-11
 ---
 
 # Rewrite the referent, never the reasoning
@@ -83,7 +98,13 @@ superseded record is that it says what was true when the choice was made. And a 
 expire while the decision it supported still stands — which is a rewrite the test forbids just as
 firmly, and for the same cause one layer up.
 
-## Four worked instances — three from one week, and one nine phases later
+A `path:line` citation is a referent in exactly the sense a crate name is. The sentence around
+it asserts something about a construct — a function, a transaction body, a lock — and the line
+range is the string on the front of that construct, moved by every edit above it in the file.
+Repointing a drifted range to the construct it always named preserves the meaning; leaving it
+would preserve the digits and, after enough drift, point the reader at something else entirely.
+
+## Five worked instances — three from one week, one nine phases later, and one that met the check
 
 **Rewritten in place.** ADR-0001, ADR-0003 and ADR-0004 all named the contract crate
 `eventum-core` when written. When ADR-0005 renamed the project to `happenstance` and ADR-0006
@@ -127,6 +148,28 @@ adapter has run the suite"* into *"four have"* would convert a true claim about 
 tree into a false claim about what a decision found — the same conversion that rewriting `eventum`
 into `happenstance` would have made, applied to the reason rather than the referent.
 
+**A line number, repaired in place.** [ADR-0058](kb-decision-0058) cited lines 1229–1296 of
+`crates/happenstance-sqlite/src/event_store.rs`, and on 2026-09-08 line 1229 was blank — the
+range is written here as prose rather than as a citation, because the lint that found it reads
+this atom too. The ranges were stale on arrival, inherited from a `_intake` brief written four days
+earlier against a tree the merge-join read path had since moved, and promoted from a directory
+the citation scan excludes (`CITATION_SCAN_EXCLUDE` in `xtask/src/lints.rs`) into one it
+checks. `cargo xtask ci` had been red on `main` since the wave merged. At `4e13ee2` the atom's
+one citing sentence had its three ranges repointed to the constructs they had always named —
+one line of the file changed, and not one word of reasoning moved. It is the smallest instance
+and the purest: nothing the atom asserts about the SQLite write path is different after the
+repair, only the address at which a reader finds the evidence.
+
+It is also the first instance in which the rule met the check that enforces it. `redkiln
+validate --kb` refused the repair on the uncommitted tree — *"accepted decision 'kb-decision-0058'
+was edited in place"* — and passed it the moment the edit was committed. The check compares the
+working tree against `HEAD`, so it is a dirty-tree guard: it cannot tell a referent repair from a
+reversal, it obstructs the first, and it would wave through the second if the second arrived as a
+commit. The discrimination this atom draws is therefore one the instrument cannot make, and what
+to do about that — a stronger check, or a documented carve-out for referent-only edits — is
+[kb-open-question-immutability-check-pre-commit-001](kb-open-question-immutability-check-pre-commit-001)
+rather than something this atom settles.
+
 ## Why the discrimination has to be explicit
 
 Without it, an editor facing a stale crate name has two bad defaults: leave everything alone,
@@ -143,3 +186,14 @@ The fourth instance names the axis the first three left implicit. An expired rea
 tempting rewrite in the corpus, because the decision above it is still correct and nothing looks
 broken after the edit. The honest record of one is a new atom, never a repaired one: a decision
 whose stated reason has been quietly updated can no longer explain why it was taken.
+
+The fifth names the alternative the rule exists to forbid, from the other side. Faced with a red
+gate and a check that refuses the edit, the path of least resistance is to supersede ADR-0058
+with a copy carrying the corrected ranges. That was considered and is worse on both counts that
+matter. It would mark a correct, unreversed decision `superseded` — a false statement about the
+decision's status, read as fact by every later wave — and it would not fix the gate, because the
+citation lint reads every atom under `.kb/` regardless of status, so the broken record would stay
+red beside its replacement. Supersession is the instrument for a decision that has changed; a
+citation that has drifted is not one, and reaching for supersession there is the mirror image of
+rewriting `eventum` into `happenstance` — a true status converted into a false one to make a
+tool stop complaining.

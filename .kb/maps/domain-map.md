@@ -87,7 +87,14 @@ summary: >-
   and is still an amendment), and `kb-playbook-count-or-index-nobody-re-derives-001` gained a third
   defect shape, a status claim a fired falsifier made false with no number in it — none of the
   four bullets these atoms already carry below was rewritten, since each one-line orientation still
-  holds.
+  holds. The 2026-09-11 wave (`2026-09-11-intake`) added three decisions to the ports domain — ADR-0062
+  (phase 12, the probe seam and `begin` move to `&mut Self::Batch` / async / fallible, and
+  `LivePostgresProjectionStore` proves the live-transaction end 20/20 against real PostgreSQL), ADR-0063
+  (phase 12, `ProjectionStore` freezes on that evidence, discharging ADR-0036 and ADR-0060 rather than
+  superseding either) and ADR-0064 (phase null, the dedicated measurement host's conditions are declared
+  data and its preflight is structurally unreachable from the gate) — plus two new reference/playbook
+  atoms from the same host work: a TSC-versus-hpet clocksource finding and the control-design lesson its
+  three probes needed before either was trusted. No new domain opened.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -105,7 +112,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-04-intake
   - .kb/_governance/integration-waves/2026-09-07-intake
   - .kb/_governance/integration-waves/2026-09-09-intake
-last_reviewed: 2026-09-09
+  - .kb/_governance/integration-waves/2026-09-11-intake
+last_reviewed: 2026-09-11
 ---
 
 # Domain map
@@ -301,6 +309,29 @@ superseding. ADR-0061 narrows ES-11's asynchronous-driver sufficiency condition 
 than to any decision atom, `depends_on` `kb-decision-0011`. None of the three supersedes a row on
 this map.
 
+The 2026-09-11 wave added a fourteenth, fifteenth and sixteenth: `.kb/decisions/0062`, `.kb/decisions/0063`
+and `.kb/decisions/0064`. ADR-0062 answers the question ADR-0060 left to PS-2's owner — the probe seam
+(`probe_write`, `probe_delete_all`, `probe_read_through`) and `begin` all move to `&mut Self::Batch` /
+async / fallible, because a probe seam moved without `begin` would let a live-transaction store report
+itself and still be unable to exist for `sqlx`; `LivePostgresProjectionStore` in `happenstance-postgres`
+owns a `sqlx::Transaction<'static, Postgres>` as its `Batch` and runs 20 of 20 against a live PostgreSQL,
+so PS-2's MUST is met as written and no further axis change is needed, `depends_on` `kb-decision-0060`
+(the bar it meets), `kb-decision-0036` (the gate first shipped) and `kb-decision-0017` (the owned-`Batch`
+shape the moved seam still owns). ADR-0063 freezes `ProjectionStore`, `ProjectionProbe` and their value
+types on that evidence — the same status `EventStore` already holds — keeps `happenstance-core`'s
+`unstable-projection` feature declared and empty rather than removed, and narrows `happenstance`'s
+feature of the same name to gate the projection runner alone, since `Projection::apply`
+(`crates/happenstance/src/domain.rs:249`) is still synchronous and cannot drive a statement into a live
+batch; it discharges ADR-0036 and ADR-0060 rather than superseding either, `depends_on` `kb-decision-0062`,
+`kb-decision-0036`, `kb-decision-0060` and `kb-decision-0017`. ADR-0064 declares the dedicated Linux
+measurement host's conditions as data (`ops/host/host.env`), applied by scripts that only write and
+asserted by a `preflight.sh` that only reads, and records that the preflight is structurally unreachable
+from `xtask`'s step table, `.redkiln/config.yaml`'s `verify:` block or any CI job — `ops/` sits on
+`xtask/src/affected.rs`'s `INERT` list. Both ADR-0062 and ADR-0063 carry a provenance note: at this
+worktree's `HEAD` the code each describes has not yet landed on `main`, so each atom states what the lane
+binds when it lands rather than a fact already true of the tree, the same shape `kb-decision-0037` used.
+None of the three supersedes a row on this map.
+
 **Reference**
 
 - [`port-traits-compiled-findings.md`](../reference/port-traits-compiled-findings.md)
@@ -353,6 +384,13 @@ this map.
   `u64::MAX - 1` exactly. Run out of the workspace and out of the gate; the cited raw output is not
   in the tree (`.gitignore:69`'s `*-output.txt`), so the figures are the source README's own
   transcription. Added 2026-09-09.
+- [`host-clocksource-tsc-vs-hpet-2026-09.md`](../reference/host-clocksource-tsc-vs-hpet-2026-09.md)
+  (`kb-reference-host-clocksource-tsc-hpet-001`) — the dedicated measurement host boots with its TSC
+  disabled by the kernel and falls back to `hpet`, a 73x tax per timer read (1,390 ns vs. 19 ns); the
+  third of three probes, the only one with no forced row left to misreport, measured `tsc=reliable`
+  refuted (62,493 backwards reads per million migrations vs. 0 in 500,000 on `hpet`). The paired
+  runner's own control fails on this host under `hpet`, so criterion targets and allocation counts
+  stay usable and the ratio half of the harness does not. Added 2026-09-11.
 - [`event-clone-allocations-and-layout-2026-09.md`](../reference/event-clone-allocations-and-layout-2026-09.md)
   (`kb-reference-event-clone-allocations-001`) — the t+2 allocation cost of `Tags::from_pairs`
   versus `Tag::from_static`, the `Bytes::clone` first-clone allocation, and the corrected 24-byte
@@ -404,6 +442,11 @@ this map.
 - [`testing-interleavings-with-cold-futures.md`](../playbooks/testing-interleavings-with-cold-futures.md)
   (`kb-playbook-cold-future-hand-polling-001`) — hand-polling two cold futures out of order to
   make a conformance rule observe a specific interleaving with no executor, thread or clock.
+- [`a-control-that-can-fire-on-the-instrument.md`](../playbooks/a-control-that-can-fire-on-the-instrument.md)
+  (`kb-playbook-control-fires-on-instrument-001`) — a control that can only fire on the fault it
+  watches for is worth less than one with a row whose outcome physics forces regardless: two of
+  three TSC probes were discarded on their own evidence before the third, with nothing left to
+  misreport, was trusted. Added 2026-09-11.
 - [`assert-a-tests-execution-not-its-discovery.md`](../playbooks/assert-a-tests-execution-not-its-discovery.md)
   (`kb-playbook-assert-execution-not-discovery-001`) — a gate check built on `cargo test --list`
   cannot see a silenced test, since that output is byte-identical with and without `#[ignore]`;
