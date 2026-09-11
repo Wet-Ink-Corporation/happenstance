@@ -7,7 +7,7 @@ storage-agnostic event sourcing library built on the
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.2.0` release set.** This is the first
+> **Status: conformant, and in the `0.3.0` release set.** This is the first
 > happenstance adapter to pass
 > [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)'s
 > conformance suite against a real file on disk — the event store family, the
@@ -78,9 +78,9 @@ the surface it gates makes the same semver promise the event store does. It
 stays off by default because a consumer who wants only the event store should
 not compile the other role.
 
-That is worth having and it is worth choosing. Nothing about the event store
-changes either way, and a projection built on this today is a projection you may
-have to edit at the next release.
+That is worth choosing rather than inheriting. Nothing about the event store
+changes either way, and a projection built on this today is built on a frozen
+port: the next edit it needs will come with a decision record and a major.
 
 ## The shape it represents
 

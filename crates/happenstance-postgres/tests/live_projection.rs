@@ -10,8 +10,14 @@
 //!
 //! ```console
 //! cargo test -p happenstance-postgres --all-features --test live_projection -- --ignored --list
-//! cargo test -p happenstance-postgres --all-features --test live_projection -- --ignored --show-output
+//! cargo test -p happenstance-postgres --all-features --test live_projection -- --ignored --show-output --test-threads=1
 //! ```
+//!
+//! `--test-threads=1` on the run and not on the listing: each fixture instance
+//! opens a pool sized for the concurrency family, the container's
+//! `max_connections` is finite, and twenty fixtures opening pools at once is
+//! how a rule fails on a pool timeout that says nothing about the adapter.
+//! `--list` opens no connection and needs no such flag.
 //!
 //! # What this adapter reports rather than passes
 //!

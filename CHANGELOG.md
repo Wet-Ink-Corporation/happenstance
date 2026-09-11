@@ -68,7 +68,13 @@ this release with the contract crate rather than beside it.
   write"* — had fired on `sqlx`'s `BEGIN`, and this is that firing recorded.
   A buffering adapter's `begin` is a future that is ready at its first poll and
   costs no round trip; `happenstance-neon` proves it over a transport that
-  fails every request. The typed runner gains `ProjectionError::Begin`.
+  fails every request. The typed runner gains `ProjectionError::Begin` and
+  loses `ProjectionError::Rollback`: it now pulls a chunk's first event
+  *before* opening a batch, so an empty replay — or one whose last chunk was
+  exactly `chunk` long — never opens a write set it would only roll back,
+  which was free for a buffer and is a `BEGIN` round trip for a live
+  transaction. The arm that reported that rollback failing is produced
+  nowhere and is gone.
 - **`happenstance-postgres` carries a second projection store,
   `LivePostgresProjectionStore`, whose batch is a `sqlx::Transaction`.** It is
   the far end of PS-2's axis: it declares `READS_THROUGH_BATCH = true`

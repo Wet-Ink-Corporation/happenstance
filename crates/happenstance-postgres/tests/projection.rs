@@ -26,7 +26,7 @@
 //!
 //! ```console
 //! cargo test -p happenstance-postgres --all-features --test projection -- --ignored --list
-//! cargo test -p happenstance-postgres --all-features --test projection -- --ignored --show-output
+//! cargo test -p happenstance-postgres --all-features --test projection -- --ignored --show-output --test-threads=1
 //! ```
 //!
 //! `--list` first, so "no rule is absent from the run" is proven rather than

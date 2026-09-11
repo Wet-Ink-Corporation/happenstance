@@ -569,6 +569,25 @@ const IMPLIES_TOKEN: &str = "implies";
 /// so that the empty case is a claim the check can read rather than a silence.
 const IMPLIES_NOTHING: &str = "implies no other feature";
 
+/// The ways a sentence carves an exception out of [`IMPLIES_NOTHING`].
+///
+/// *"implies no other feature except `unstable-projection`"* carries the exact
+/// words the empty case asks for and states a named implication anyway. The
+/// carve-out has to sit in the **same sentence** — *"— not `std`, not
+/// `memory`."* is the shape the honest sentence takes, and it ends there — so
+/// the search runs from the phrase to the next full stop and no further.
+const EXCEPTION_WORDS: &[&str] = &["except", "other than", "apart from", "besides", "save for"];
+
+/// The exception word a zero-implication sentence carves out with, if any.
+fn implies_nothing_with_an_exception(claim: &str) -> Option<&'static str> {
+    let after = &claim[claim.find(IMPLIES_NOTHING)? + IMPLIES_NOTHING.len()..];
+    let sentence = after.split('.').next().unwrap_or("");
+    EXCEPTION_WORDS
+        .iter()
+        .copied()
+        .find(|word| sentence.contains(word))
+}
+
 /// The two commands whose disagreement C2-05 is about.
 ///
 /// Cargo's resolver deliberately does not unify a dev-dependency's features into
@@ -1545,13 +1564,22 @@ fn implication_problems(implied_by_manifest: &[String], paragraphs: &[String]) -
 
     let mut problems = Vec::new();
     for claim in claims {
-        if implied_by_manifest.is_empty() && !claim.contains(IMPLIES_NOTHING) {
-            problems.push(format!(
-                "{TESTKIT_LIB} — a paragraph says what `{CORE_FEATURE_CONFORMANCE}` implies, \
-                 and {CORE_MANIFEST} says it implies nothing: {claim:?}. Say so in the words \
-                 `{IMPLIES_NOTHING}`, so the sentence can be held to the manifest the way a \
-                 named implication is (C2-01)."
-            ));
+        if implied_by_manifest.is_empty() {
+            if !claim.contains(IMPLIES_NOTHING) {
+                problems.push(format!(
+                    "{TESTKIT_LIB} — a paragraph says what `{CORE_FEATURE_CONFORMANCE}` implies, \
+                     and {CORE_MANIFEST} says it implies nothing: {claim:?}. Say so in the words \
+                     `{IMPLIES_NOTHING}`, so the sentence can be held to the manifest the way a \
+                     named implication is (C2-01)."
+                ));
+            } else if let Some(exception) = implies_nothing_with_an_exception(claim) {
+                problems.push(format!(
+                    "{TESTKIT_LIB} — a paragraph says `{IMPLIES_NOTHING}` and then carves one out \
+                     (`{exception}`), while {CORE_MANIFEST} says the feature implies nothing at \
+                     all: {claim:?}. A zero-implication claim with an exception is a named \
+                     implication wearing the other sentence's words (C2-01)."
+                ));
+            }
         }
         for implied in implied_by_manifest {
             if !claim.contains(implied) {
@@ -5389,6 +5417,64 @@ mod tests {
                 &doc_toml_fences(CORRECTED)
             ),
             Vec::<String>::new()
+        );
+    }
+
+    /// A sentence that says "implies no other feature" and then carves one out
+    /// carries the exact words the empty case asks for, and is a named
+    /// implication anyway. Rejected as such, and the honest sentence — which
+    /// ends its clause at a full stop before naming anything — is the control.
+    #[test]
+    fn a_zero_implication_claim_with_an_exception_is_rejected() {
+        const CARVED_OUT: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = \"…\"\n\
+//!\n\
+//! [features]\n\
+//! conformance = [\"happenstance-core/conformance\"]\n\
+//! ```\n\
+//!\n\
+//! `conformance` implies no other feature except `unstable-projection`, which\n\
+//! costs nothing.\n\
+//!\n\
+//! This crate depends on `happenstance-core` with `std`, `memory` and\n\
+//! `conformance` on. `cargo build` does not unify a dev-dependency's features\n\
+//! and `cargo test` does.\n";
+
+        const HONEST: &str = "\
+//! ```toml\n\
+//! [dependencies]\n\
+//! happenstance-core = \"…\"\n\
+//!\n\
+//! [features]\n\
+//! conformance = [\"happenstance-core/conformance\"]\n\
+//! ```\n\
+//!\n\
+//! `conformance` implies no other feature — not `std`, not `memory`. While the\n\
+//! port was gated it implied `unstable-projection`, except that gate is gone.\n\
+//!\n\
+//! This crate depends on `happenstance-core` with `std`, `memory` and\n\
+//! `conformance` on. `cargo build` does not unify a dev-dependency's features\n\
+//! and `cargo test` does.\n";
+
+        let problems = feature_cost_problems(
+            &feature_cost_facts(),
+            CARVED_OUT,
+            &doc_toml_fences(CARVED_OUT),
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("carves one out (`except`)")),
+            "the carve-out passed as a zero-implication claim: {problems:?}"
+        );
+
+        assert_eq!(
+            feature_cost_problems(&feature_cost_facts(), HONEST, &doc_toml_fences(HONEST)),
+            Vec::<String>::new(),
+            "a carve-out in a *later* sentence is history, not a claim, and the \
+             search stops at the full stop"
         );
     }
 

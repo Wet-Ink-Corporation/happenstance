@@ -849,10 +849,11 @@ impl SendProjectionStore for LadybugProjectionStore {
 
     /// A fresh, empty write set stamped with this store's identity.
     ///
-    /// Neither `async` nor fallible, which is what this adapter wanted: opening
-    /// the write set allocates a `Vec` and nothing more. It is also the only
-    /// mint — there is no public constructor that could produce one without a
-    /// stamp.
+    /// `async` and fallible on the port since ADR-0062, for a batch that is a
+    /// live transaction; this one allocates a `Vec` and nothing more, so the
+    /// future is ready at its first poll and the `Result` is always `Ok`. It is
+    /// also the only mint — there is no public constructor that could produce
+    /// one without a stamp.
     async fn begin(&self) -> Result<Self::Batch, Self::Error> {
         Ok(GraphWriteSet::stamped(self.stamp))
     }

@@ -7,7 +7,7 @@ event store. Storage-agnostic, and built on the
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: `0.2.0`.** The contract and its 93-rule event-store conformance suite
+> **Status: `0.3.0`.** The contract and its 93-rule event-store conformance suite
 > are real and tested, and **five adapters have cleared a suite against storage
 > this workspace does not fully control** — a file on disk, a Durable Object on
 > `wasm32`, a pooled PostgreSQL server, a one-shot HTTP proxy with no connection
@@ -18,8 +18,8 @@ event store. Storage-agnostic, and built on the
 > from `0.2.0`**. `ProjectionStore` was **not**, at `0.2.0`: it shipped behind
 > the off-by-default `unstable-projection` feature with a written semver
 > exemption. Its freeze condition was met by ADR-0062 and ADR-0063 lifted the
-> gate, so it is frozen and unconditional from the next release; the feature
-> name survives, empty, so a `0.2.0` manifest still resolves.
+> gate, so it is **frozen and unconditional from `0.3.0`**; the feature name
+> survives, empty, so a `0.2.0` manifest still resolves.
 >
 > See [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md),
 > where every clause carries a maturity marker and, where it is not settled, the

@@ -98,10 +98,14 @@ impl LivePostgresBatch {
     ///
     /// # Security
     ///
-    /// Values are **bound** rather than interpolated, for the reason
-    /// [`PostgresProjectionBatch::push`](crate::projection_store::PostgresProjectionBatch::push)
-    /// gives: a statement assembled from decoded event data is a SQL injection
-    /// whose source is the log.
+    /// `sql` is `&'static str`, so it cannot be assembled at run time, and the
+    /// values are **bound** rather than interpolated — the same two guards as
+    /// [`PostgresProjectionBatch::push`](crate::projection_store::PostgresProjectionBatch::push),
+    /// for the same reason: a statement built out of decoded event data is a
+    /// SQL injection whose source is the log, and here it does not even wait
+    /// for `commit` to reach the server. [`execute_raw_sql`](Self::execute_raw_sql)
+    /// is the escape hatch, separately named so that reaching for it is a
+    /// decision.
     ///
     /// # Errors
     ///
@@ -109,10 +113,28 @@ impl LivePostgresBatch {
     /// statement or the connection failed.
     pub async fn execute(
         &mut self,
-        sql: &str,
+        sql: &'static str,
         params: impl IntoIterator<Item = PgParam>,
     ) -> Result<(), PostgresProjectionStoreError> {
-        let params: Vec<PgParam> = params.into_iter().collect();
+        self.execute_raw_sql(sql, params.into_iter().collect())
+            .await
+    }
+
+    /// Issues one statement whose **shape** is computed at run time.
+    ///
+    /// The honest case is an `IN (…)` list sized by the number of parameters.
+    /// Everything [`execute`](Self::execute) says about binding still applies:
+    /// values belong in `params`, never in `sql`.
+    ///
+    /// # Errors
+    ///
+    /// [`PostgresProjectionStoreError::Driver`] if the server refused the
+    /// statement or the connection failed.
+    pub async fn execute_raw_sql(
+        &mut self,
+        sql: &str,
+        params: Vec<PgParam>,
+    ) -> Result<(), PostgresProjectionStoreError> {
         bind_all(sqlx::query(sql), &params)
             .execute(&mut *self.transaction)
             .await?;

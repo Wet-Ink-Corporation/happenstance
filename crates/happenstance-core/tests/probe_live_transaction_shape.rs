@@ -395,19 +395,26 @@ const SECTION: &str = "# This signature is the one a live transaction can meet";
 /// string, so reformatting the declaration fails this test for a cosmetic
 /// reason. That is the price of pinning the receiver rather than the method
 /// name, and the receiver is the whole subject.
+///
+/// The source is read with its line endings normalised. [`DECLARATION`] spans
+/// four lines, and a checkout with `core.autocrlf` on hands `include_str!` a
+/// `\r\n` file — which is how this test was green on every host but the
+/// Windows runner, where it failed for a reason that had nothing to do with
+/// what it asserts.
 #[test]
 fn the_recorded_seam_is_pinned_to_the_signature_it_describes() {
-    const PORT: &str = include_str!("../src/projection.rs");
+    let port = include_str!("../src/projection.rs").replace("\r\n", "\n");
+    let port: &str = &port;
     assert_eq!(
-        PORT.contains(DECLARATION),
-        PORT.contains(SECTION),
+        port.contains(DECLARATION),
+        port.contains(SECTION),
         "`probe_read_through`'s declaration and the section recording why it has \
          that shape have come apart. If the signature moved, this file moves \
          with it; if the section went, the reason the seam is `&mut`, async and \
          fallible is no longer written where an adapter author reads"
     );
     assert!(
-        PORT.contains(DECLARATION),
+        port.contains(DECLARATION),
         "the declaration this file's honest body compiles against is gone"
     );
 }

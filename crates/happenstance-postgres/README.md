@@ -109,10 +109,13 @@ gets no `projection_checkpoint` table.
 ## What the projection batch is, and what it costs you
 
 `PostgresProjectionBatch` is an **owned buffered write set**, not a live
-`sqlx::Transaction`. That is not a shortcut. `ProjectionStore::begin` is total,
-synchronous and infallible, and every route to a `sqlx` transaction is `async`
-and fallible — so the transaction is opened inside `commit`, which replays your
-statements and writes the checkpoint in one unit.
+`sqlx::Transaction`, and that is the store an application uses: the typed
+layer's `Projection::apply` is synchronous and can push into a buffer. Its
+transaction is opened inside `commit`, which replays your statements and writes
+the checkpoint in one unit. `ProjectionStore::begin` has been `async` and
+fallible since ADR-0062, which is what lets `LivePostgresProjectionStore` open
+a real transaction *there* instead — the instrument for the port's freeze, not
+the store you build a projection on.
 
 The consequence for you: **a projection whose `apply` must read what it has
 already written in the same batch cannot be written against this adapter.**

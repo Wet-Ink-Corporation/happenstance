@@ -226,8 +226,9 @@ where
     /// A buffering adapter never produces this — opening a buffer cannot fail —
     /// but a batch that is a live transaction has a connection to acquire and a
     /// `BEGIN` to issue, and either can be refused (ADR-0062). Chunks already
-    /// committed stay committed, and nothing from the chunk that would have
-    /// followed was read.
+    /// committed stay committed. The first event of the chunk that would have
+    /// followed *was* read — a batch is only opened once one is in hand — and
+    /// it is not applied; a restart re-reads it from the checkpoint.
     #[error("opening a write set for the next chunk failed")]
     Begin {
         /// What the run had committed before this.
@@ -252,16 +253,6 @@ where
         #[source]
         source: CommitError<W>,
     },
-
-    /// Discarding a chunk that applied nothing failed.
-    #[error("discarding the batch failed")]
-    Rollback {
-        /// What the run had committed before this.
-        progress: Progressed,
-        /// The projection store's own refusal.
-        #[source]
-        source: W,
-    },
 }
 
 impl<R, W> ProjectionError<R, W>
@@ -282,8 +273,7 @@ where
             | Self::Decode { progress, .. }
             | Self::Apply { progress, .. }
             | Self::Begin { progress, .. }
-            | Self::Commit { progress, .. }
-            | Self::Rollback { progress, .. } => *progress,
+            | Self::Commit { progress, .. } => *progress,
         }
     }
 
@@ -566,12 +556,31 @@ where
     let mut progress = Progressed::default();
 
     loop {
+        // The first event of a chunk is pulled *before* a write set is opened.
+        // An empty replay, and a replay whose last chunk was exactly `chunk`
+        // long, therefore never open a batch they would only roll back. That
+        // was free while `begin` allocated a `Vec`; for a batch that is a live
+        // transaction it is a `BEGIN` round trip and a failure path (ADR-0062),
+        // and a run that has nothing to apply should touch the store not at all.
+        let first = match next_event(stream.as_mut()).await {
+            None => return Ok(progress),
+            // No batch is open, so there is nothing to roll back — which is
+            // what the `None` says, rather than a rollback that was skipped.
+            Some(Err(source)) => return Err(Stopped::Read(source).into_error(progress, None)),
+            Some(Ok(event)) => event,
+        };
+
         let mut batch = match models.begin().await {
             Ok(batch) => batch,
             Err(source) => return Err(ProjectionError::Begin { progress, source }),
         };
-        let mut applied = 0usize;
-        let mut last = None;
+
+        if let Err(stopped) = apply_one(projection, codec, &first, &mut batch) {
+            let rollback = models.rollback(batch).await.err();
+            return Err(stopped.into_error(progress, rollback));
+        }
+        let mut applied = 1usize;
+        let mut last = first.position;
         let mut stopped = None;
         let mut exhausted = false;
 
@@ -594,7 +603,7 @@ where
                         break;
                     }
                     applied += 1;
-                    last = Some(event.position);
+                    last = event.position;
                 }
             }
         }
@@ -607,28 +616,16 @@ where
             return Err(stopped.into_error(progress, rollback));
         }
 
-        match last {
-            // The rows and the checkpoint in the port's **single** `commit`.
-            // The position is the one the last applied event actually carries,
-            // never a computed or anticipated one.
-            Some(position) => {
-                models
-                    .commit(batch, projection.id(), position, Authority::Live)
-                    .await
-                    .map_err(|source| ProjectionError::Commit { progress, source })?;
-                progress.through = Some(position);
-                progress.applied += applied;
-            }
-            // Nothing was applied, so there is nothing to make durable and no
-            // checkpoint to move. Committing an empty batch here would claim
-            // the run had considered a position it never reached.
-            None => {
-                models
-                    .rollback(batch)
-                    .await
-                    .map_err(|source| ProjectionError::Rollback { progress, source })?;
-            }
-        }
+        // The rows and the checkpoint in the port's **single** `commit`. The
+        // position is the one the last applied event actually carries, never a
+        // computed or anticipated one — and there is always one, because a
+        // chunk is only opened once its first event is in hand.
+        models
+            .commit(batch, projection.id(), last, Authority::Live)
+            .await
+            .map_err(|source| ProjectionError::Commit { progress, source })?;
+        progress.through = Some(last);
+        progress.applied += applied;
 
         if exhausted {
             return Ok(progress);
