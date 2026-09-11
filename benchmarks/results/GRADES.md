@@ -1,7 +1,7 @@
 # What to expect
 
 **One run, one machine, 2026-09-10**, at commit `54044ac` on the dedicated Linux
-measurement host — 21 unrelated containers removed, CPU regime pinned, scheduled
+measurement host — CPU regime pinned, scheduled
 maintenance masked. Conditions:
 [`../README.md#conditions`](../README.md#conditions), Host B. Raw output:
 [`raw/*-linux.*`](raw/). History entry:
