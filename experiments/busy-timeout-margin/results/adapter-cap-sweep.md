@@ -42,16 +42,32 @@ prints `test result: FAILED`. Nothing else is changed, and the constant is
 restored afterwards.
 
 ```sh
-measure() {                     # $1 = value, $2 = launches
-  sed -i "s/pub const BUSY_TIMEOUT_MS: u64 = [0-9_]*;/pub const BUSY_TIMEOUT_MS: u64 = ${1};/" \
-    crates/happenstance-sqlite/src/connection.rs
-  fail=0
-  for i in $(seq 1 "$2"); do
-    out=$(cargo test --locked -p happenstance-sqlite --test concurrency -- --test-threads=1 2>&1)
+F=crates/happenstance-sqlite/src/connection.rs
+
+# Capture the shipped value and restore it on ANY exit, interrupt included.
+# This is not ceremony: without it, a Ctrl-C between two launches leaves the
+# adapter's own constant rewritten in the working tree, and every later run —
+# gate, test, or the next cell of this sweep — silently measures a value
+# nobody chose. It is the same hazard as a killed `cargo hack --no-dev-deps`
+# leaving manifests stripped.
+ORIG=$(grep -oE 'pub const BUSY_TIMEOUT_MS: u64 = [0-9_]+;' "$F")
+restore() { sed -i "s/pub const BUSY_TIMEOUT_MS: u64 = [0-9_]*;/${ORIG}/" "$F"; }
+trap restore EXIT INT TERM
+
+measure() {                     # $1 = value, $2 = launches, $3... = extra args
+  local value="$1" launches="$2"; shift 2
+  sed -i "s/pub const BUSY_TIMEOUT_MS: u64 = [0-9_]*;/pub const BUSY_TIMEOUT_MS: u64 = ${value};/" "$F"
+  local fail=0
+  for i in $(seq 1 "$launches"); do
+    out=$(cargo test --locked -p happenstance-sqlite --test concurrency "$@" 2>&1)
     echo "$out" | grep -q "^test result: FAILED" && fail=$((fail+1))
   done
-  echo "${1}: ${fail}/${2} red"
+  echo "${value}: ${fail}/${launches} red"
 }
+
+measure 5_000  8 -- --test-threads=1
+measure 15_000 16 -- --test-threads=1
+measure 30_000 8 -- --test-threads=1
 ```
 
 **`--test-threads=1` is the worst case, not the gate's case, and that is
@@ -59,8 +75,17 @@ deliberate.** It is counter-intuitive enough to state plainly: serialising the
 *rules* gives each 64-contender race the whole machine, so all 64 writers run
 genuinely simultaneously and contention is maximal. Letting libtest overlap the
 three rules — what `cargo xtask ci` actually does — spreads them and makes the
-suite *less* likely to go red, not more. Measured here, at 5,000 ms: 8 of 8 red
-serialised against 1 of 8 red at the gate's own parallelism.
+suite *less* likely to go red, not more.
+
+That comparison is **its own run**, not a pair of rows lifted out of the sweep
+below. A shared host makes absolute times meaningless and back-to-back arms the
+only honest comparison, which is what [Conditions](#conditions)' *host load* row
+says. Both arms at 5,000 ms, eight launches each:
+
+| parallelism at 5,000 ms | launches | red |
+| --- | ---: | ---: |
+| `--test-threads=1` | 8 | **8** |
+| libtest default (the gate's) | 8 | **1** |
 
 That is the same direction as [the core sweep](busy-timeout-margin.md), where
 cutting the process to one core reduced the worst wait about 450x. A sensitive
@@ -87,6 +112,14 @@ Same host as everything else here — see
 | **5,000** *(shipped before this)* | 8 | **7** | **88%** |
 | **15,000** | 16 | **0** | **0%** |
 | **30,000** | 8 | **0** | **0%** |
+
+**The 5,000 ms row here reads 7 of 8, and the parallelism table above reads 8 of
+8, and they are not the same eight launches.** Two runs of the same cell on a
+shared host, 7 and 8 — **15 of 16 red between them**. Both are printed rather
+than reconciled into one figure, because averaging two runs of a coin that lands
+heads most of the time says less than showing the two runs. Nothing below turns
+on which: the question this page answers is whether the cap clears the cell at
+all, and 15,000 ms cleared 16 of 16 where 5,000 ms cleared 1 of 16.
 
 The failing rules are the two that require *every* contender to commit —
 `positions_are_unique_under_concurrent_appends` on the count, and
