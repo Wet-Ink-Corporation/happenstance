@@ -36,6 +36,7 @@ use happenstance_core::{
 struct Armed {
     violate: AtomicU32,
     fail_read: AtomicU32,
+    contend: AtomicU32,
 }
 
 impl Armed {
@@ -87,6 +88,34 @@ impl Armed {
 pub enum FaultyStoreError<E> {
     /// The wrapper produced this failure because it was armed to.
     Injected,
+    /// The wrapper refused this append the way a contended store refuses one.
+    ///
+    /// **Transient, and that is the entire point.** Nothing underneath went
+    /// wrong, nothing was written, and the identical call succeeds once the
+    /// arming is spent — the shape SQLite produces as `SQLITE_BUSY` when a
+    /// writer waits out `busy_timeout` without ever acquiring the lock, and
+    /// PostgreSQL as a serialisation failure.
+    ///
+    /// It is deliberately **not** [`Injected`](Self::Injected). That variant
+    /// means *the fixture broke this on purpose*; this one means *the fixture
+    /// was busy*, and a caller that cannot tell them apart is the defect this
+    /// variant exists to make testable.
+    ///
+    /// # Which channel it arrives on, and why that is the whole instrument
+    ///
+    /// It reaches a caller as
+    /// [`AppendError::Store`]`(FaultyStoreError::Contended)` — the adapter's
+    /// own failure channel — and **not** as
+    /// [`AppendError::ConditionViolated`]. That is what makes it the input the
+    /// conformance suite cannot currently classify:
+    /// [`AppendError::is_condition_violated`] answers `false`, exactly as it
+    /// would for a store that had genuinely broken, so a busy store and a
+    /// broken store arrive as the same value.
+    ///
+    /// Routing it through `ConditionViolated` instead would be a fixture
+    /// telling a lie a real store never tells: no condition was evaluated,
+    /// because the lock was never taken.
+    Contended,
     /// The wrapped store failed for its own reasons.
     ///
     /// The inner error is carried, never rendered: it stays reachable through
@@ -101,6 +130,10 @@ impl<E: core::fmt::Display> core::fmt::Display for FaultyStoreError<E> {
             Self::Injected => f.write_str(
                 "the test fixture injected this failure; nothing underneath it went wrong",
             ),
+            Self::Contended => f.write_str(
+                "the test fixture refused this append as a contended store would; \
+                 nothing underneath it went wrong and a retry may succeed",
+            ),
             Self::Store(err) => write!(f, "the wrapped store failed: {err}"),
         }
     }
@@ -109,7 +142,9 @@ impl<E: core::fmt::Display> core::fmt::Display for FaultyStoreError<E> {
 impl<E: core::error::Error + 'static> core::error::Error for FaultyStoreError<E> {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
-            Self::Injected => None,
+            // Neither has an underlying cause to expose: both are this
+            // wrapper's own answers, produced without calling the inner store.
+            Self::Injected | Self::Contended => None,
             Self::Store(err) => Some(err),
         }
     }
@@ -171,6 +206,13 @@ where
 /// the **same** counters, so the total number of injected failures across every
 /// clone is at most the number armed; which clone receives which failure is
 /// deliberately unspecified.
+///
+/// Three inputs can be armed, and they are not interchangeable.
+/// [`violate_next`](Self::violate_next) produces the DCB *rejection* signal,
+/// [`fail_next_read`](Self::fail_next_read) a mid-stream read failure, and
+/// [`contend_next`](Self::contend_next) a **transient** refusal on the store's
+/// own error channel — the busy store, which no in-process store in this
+/// workspace can otherwise be.
 ///
 /// Use [`SendFaultyStore`] where the inner store implements
 /// [`SendEventStore`] and the wrapper has to
@@ -279,6 +321,19 @@ impl<S: EventStore> FaultyStore<S> {
         self.armed.fail_read.store(n, Ordering::Relaxed);
         self
     }
+
+    /// Refuses the next `n` appends as **contended**, on the store's own error
+    /// channel.
+    ///
+    /// See [`SendFaultyStore::contend_next`] for what this is for and why the
+    /// count is exact under a race; this flavour differs only in the bound.
+    ///
+    /// `n = 0` arms nothing and is legal.
+    #[must_use]
+    pub fn contend_next(self, n: u32) -> Self {
+        self.armed.contend.store(n, Ordering::Relaxed);
+        self
+    }
 }
 
 impl<S: SendEventStore> SendFaultyStore<S> {
@@ -311,6 +366,70 @@ impl<S: SendEventStore> SendFaultyStore<S> {
         self.armed.fail_read.store(n, Ordering::Relaxed);
         self
     }
+
+    /// Refuses the next `n` appends as **contended**, on the store's own error
+    /// channel.
+    ///
+    /// The inner store is never called for a refused append, so nothing is
+    /// written, no position is allocated and the head does not move. Each
+    /// refusal consumes one; when the count reaches zero the wrapper delegates
+    /// again, which is what makes the refusal *transient* rather than a
+    /// poisoned fixture. `n = 0` arms nothing and is legal.
+    ///
+    /// The refusal arrives as
+    /// [`AppendError::Store`]`(`[`FaultyStoreError::Contended`]`)`. Read that
+    /// variant's page before using this: the channel is not an implementation
+    /// detail, it is the entire instrument.
+    ///
+    /// # Why this exists
+    ///
+    /// Every in-process store in this workspace is always available: no
+    /// reference store, and no wrapper before this one, can produce a **busy**
+    /// append. So the question *what does a rule do when a conformant store is
+    /// merely contended?* had no executable answer, and both remedies proposed
+    /// for it were gated on an instrument that did not exist.
+    ///
+    /// **Rejects: a conformance rule that treats a transient refusal as
+    /// non-conformance.** Two of the concurrency family's rules require *every*
+    /// contender to commit, so one refusal reddens them —
+    /// `tests/contended_store_instruments.rs` drives exactly that and pins the
+    /// behaviour as it stands today.
+    ///
+    /// # It is exact under a race, not approximate
+    ///
+    /// The count is consumed with a checked `fetch_update`, so when `m` racing
+    /// callers meet an arming of `n`, exactly `min(n, m)` are refused however
+    /// the threads interleave. *Which* callers lose is nondeterministic and
+    /// *how many* is not, which is what lets a rule assert on the count without
+    /// reading a clock — the thing CF-33 forbids.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use happenstance_core::{AppendError, Event, MemoryEventStore, SendEventStore};
+    /// use happenstance_testkit::{FaultyStoreError, SendFaultyStore, block_on};
+    ///
+    /// let store = SendFaultyStore::new(MemoryEventStore::new()).contend_next(1);
+    /// let seat = Event::new("Seated", &b"{}"[..])?;
+    ///
+    /// // The first caller is refused on the store channel, not as a violation.
+    /// let refused = block_on(SendEventStore::append(&store, &[seat.clone()], None));
+    /// assert!(matches!(
+    ///     refused,
+    ///     Err(AppendError::Store(FaultyStoreError::Contended))
+    /// ));
+    /// // And a contended store is not a conflicted one.
+    /// assert!(!refused.unwrap_err().is_condition_violated());
+    ///
+    /// // The arming is spent, so the retry lands.
+    /// assert!(block_on(SendEventStore::append(&store, &[seat], None)).is_ok());
+    /// # Ok::<(), happenstance_core::InvalidEventType>(())
+    /// ```
+    #[must_use]
+    pub fn contend_next(self, n: u32) -> Self {
+        self.armed.contend.store(n, Ordering::Relaxed);
+        self
+    }
 }
 
 impl<S: EventStore> EventStore for FaultyStore<S> {
@@ -332,6 +451,16 @@ impl<S: EventStore> EventStore for FaultyStore<S> {
         events: &[Event],
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        // Contention is checked **before** the violation, and the order is the
+        // honest one rather than an arbitrary tie-break: a store that never
+        // acquired the lock never evaluated the condition, so a refusal that
+        // reported a violated condition would be claiming an answer it could
+        // not have computed. This is also why it returns above the delegation —
+        // see the violation's comment below.
+        if take_contention(&self.armed) {
+            return Err(injected_contention());
+        }
+
         // Above the delegation, and returning without it: the inner `append` is
         // never called for an armed failure, so nothing is written and no
         // position is allocated. A wrapper that appended and then reported
@@ -385,7 +514,12 @@ impl<S: SendEventStore + Sync> SendEventStore for SendFaultyStore<S> {
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         // See the bare flavour's `append`: the inner store is never reached for
-        // an armed failure.
+        // an armed failure, and contention is answered before the condition
+        // because an unacquired lock evaluates nothing.
+        if take_contention(&self.armed) {
+            return Err(injected_contention());
+        }
+
         if take_violation(&self.armed) {
             return Err(injected_violation());
         }
@@ -411,6 +545,20 @@ impl<S: SendEventStore + Sync> SendEventStore for SendFaultyStore<S> {
 /// The injected violation, spelled once for both flavours.
 fn injected_violation<E>() -> AppendError<E> {
     AppendError::ConditionViolated(ConditionViolated::unspecified())
+}
+
+/// The injected contention, spelled once for both flavours.
+///
+/// `AppendError::Store` rather than `ConditionViolated`, and the return type
+/// pins it: this is the adapter's own failure channel, which is the one a
+/// caller cannot tell a transient refusal from a real breakage on.
+fn injected_contention<E>() -> AppendError<FaultyStoreError<E>> {
+    AppendError::Store(FaultyStoreError::Contended)
+}
+
+/// Whether an armed contention was consumed, spelled once for both flavours.
+fn take_contention(armed: &Armed) -> bool {
+    Armed::take(&armed.contend)
 }
 
 /// Whether an armed read failure was consumed, spelled once for both flavours.

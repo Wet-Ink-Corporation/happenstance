@@ -32,6 +32,37 @@ not the same as what a user needed to be told.
   not yet proved at its far end. See
   [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
+## [Unreleased]
+
+### Added
+
+- **`happenstance-testkit` can produce a *busy* store**, which nothing in this
+  workspace could before. `FaultyStore::contend_next(n)` and its `Send` sibling
+  refuse the next `n` appends as
+  `AppendError::Store(FaultyStoreError::Contended)` — a **transient** refusal on
+  the adapter's own error channel, spent once consumed, never reaching the inner
+  store. `FaultyStoreError` gains the `Contended` variant; it is
+  `#[non_exhaustive]`, so that is additive rather than breaking.
+
+  It exists because the suite has a blind spot that stopped being hypothetical.
+  `experiments/busy-timeout-margin` recorded `busy > 0` at the shipped
+  `CONTENDERS = 64` — the first nonzero busy count in this tree, and
+  [ADR-0022](references/adr/0022-append-condition-strategy.md) §11's own re-open
+  condition firing. CF-33 is `[FROZEN]` and denies a conformance rule a clock,
+  so a store that is *momentarily contended* and one that is *wrong* arrive as
+  the same failed attempt. Both remedies the open questions weigh were blocked
+  on an instrument that could produce the first, and this is that instrument.
+
+  `tests/contended_store_instruments.rs` drives it, and **pins today's
+  behaviour rather than changing it**: two concurrency rules
+  (`positions_are_unique_under_concurrent_appends`,
+  `append_returns_the_callers_own_last_position`) reject a store that is merely
+  busy, each on a different assertion, which is why a tolerance would be a
+  change to what those rules assert rather than one arm on a private enum.
+  Nothing in the suite's behaviour moves here. What the question is now owed is
+  a decision — see `.kb/open-questions/adr-0022-falsifiers-have-fired.md` and
+  `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`.
+
 ## [0.3.2] — 2026-09-20
 
 A dependency-advisory release. [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285)
