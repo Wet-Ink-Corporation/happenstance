@@ -27,6 +27,7 @@ related:
   - kb-decision-0017
   - kb-decision-0018
   - kb-decision-0019
+  - kb-decision-0065
   - kb-reference-phase-8-spec-reconciliation-001
 source_paths:
   - .kb/_intake/0003-opaque-payloads.md
@@ -34,10 +35,12 @@ source_paths:
   - .kb/_intake/0005-rename-to-happenstance.md
   - .kb/_intake/0006-bare-name-to-the-typed-layer.md
   - .kb/_intake/0014-event-identity-and-recorded-time.md
+  - .kb/_intake/2026-09-21-adr-0022-s11-superseded-busy-timeout-is-fifteen-seconds.md
   - .kb/_governance/integration-waves/2026-08-10-intake-2/02-placement-and-adjudication.md
+  - .kb/_governance/integration-waves/2026-09-21-intake/02-placement-and-adjudication.md
   - .kb/README.md
   - .kb/decisions/README.md
-last_reviewed: 2026-08-13
+last_reviewed: 2026-09-21
 ---
 
 # An accepted-but-provisional ADR has no status the KB can express
@@ -64,6 +67,12 @@ one title; one claim stands and one was later reversed by a following ADR. Marki
 `happenstance` stands untouched by ADR-0006's correction of the crate allocation it was bundled
 with. Marking either `accepted` hides that a stated part of it does not bind any longer.
 
+**2026-09-21: there are three of them, and the third is finer-grained than either.**
+`kb-decision-0065` partly supersedes ADR-0022 at §11 — one section of fifteen, and one of the
+three pragma values that section fixed, `journal_mode` and `synchronous` standing — where both
+earlier cases split a document roughly in half. The convention therefore has to scale down
+further than the 2026-08-10 import assumed it would ever be asked to.
+
 ## What is not decided
 
 **Whether the 2026-08-10 convention is the corpus's real answer or a stopgap.** The convention
@@ -74,6 +83,17 @@ reserved for full supersession only — a partly-superseded ADR keeps `supersede
 carries the correction as prose plus a `related` link instead. That is a working convention
 adopted to avoid inventing frontmatter keys `KbFrontmatter` does not own, not a schema change, and
 nothing enforces that a future import applies it the same way.
+
+**2026-09-21 is the first evidence on the *stopgap* side.** The staged intake behind
+`kb-decision-0065` asked in writing for the other spelling — "should carry
+`supersedes: [kb-decision-0022]` **scoped to §11**" — and the wave declined it, because the key
+carries no scope and `.kb/decisions/README.md` binds setting it to flipping the old atom, a flip
+that would misdescribe fourteen sections still load-bearing at `HEAD`
+(`.kb/_governance/integration-waves/2026-09-21-intake/02-placement-and-adjudication.md`,
+Adjudication 1). A convention that a well-informed author, reading the corpus, writes *against* is
+not one the schema makes self-evident — which is what a stopgap looks like from the inside, and is
+the first datum this question has had that distinguishes the two answers rather than restating the
+gap.
 
 **Whether the schema should grow instead.** The alternative not taken here is extending
 `status`'s enum, or adding an optional qualifier field (a `provisional: bool` or similar)

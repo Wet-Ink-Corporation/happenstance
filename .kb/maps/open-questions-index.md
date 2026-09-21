@@ -107,7 +107,14 @@ summary: >-
   (the registry read confirmed: seven crates at `0.0.0`, three additionally at `0.2.0-alpha.1`, nothing
   yanked, and `0.2.0` a first real release for all seven). kb-open-question-docs-citation-anchor-contradiction-001
   gained a dated answer to its Option-C sub-question (re-anchor at promotion, refusing the wave, is the
-  chosen remedy) without closing.
+  chosen remedy) without closing. The 2026-09-21 wave (`2026-09-21-intake`) amended three questions in
+  place without a status flip, none closed: kb-open-question-adr-0022-falsifiers-fired-001 (the fourth
+  route it named is now taken, but on §11 rather than §8 — `kb-decision-0065` partly supersedes
+  ADR-0022's `busy_timeout` value; §9 and §8/§16 stand), kb-open-question-testkit-contention-tolerance-001
+  (the blocking instrument it asked for now exists and discriminates the two arms; the conflation itself
+  is unchanged, since `AppendError` still has no `Busy` variant), and
+  kb-open-question-adr-status-vocabulary-001 (a third instance of the drift, now at section rather than
+  document grain, plus a first datum toward convention-or-stopgap).
 depends_on: []
 related:
   - kb-map-domain-001
@@ -125,7 +132,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-07-intake
   - .kb/_governance/integration-waves/2026-09-09-intake
   - .kb/_governance/integration-waves/2026-09-11-intake
-last_reviewed: 2026-09-11
+  - .kb/_governance/integration-waves/2026-09-21-intake
+last_reviewed: 2026-09-21
 ---
 
 # Open-questions index
@@ -324,7 +332,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
 - **Open** — [`adr-status-vocabulary-exceeds-the-schema.md`](../open-questions/adr-status-vocabulary-exceeds-the-schema.md)
   (`kb-open-question-adr-status-vocabulary-001`) — `KbFrontmatter`'s status
   enum has no value for "accepted, provisional" or "partly superseded," both
-  load-bearing in the imported ADR corpus.
+  load-bearing in the imported ADR corpus. Amended 2026-09-21: a third instance of the convention,
+  now at section grain — `kb-decision-0065` partly supersedes ADR-0022 at §11 only, one of fifteen
+  sections, narrower than ADR-0005/ADR-0006's half-document grain — plus a first datum on the
+  convention-vs-stopgap half: the staged intake asked in writing for `supersedes` scoped to §11 and
+  was declined, since the key carries no scope and flipping it would misdescribe fourteen sections
+  still load-bearing at `HEAD`.
 - **Superseded** — [`projection-store-batch-has-no-apply-seam.md`](../open-questions/projection-store-batch-has-no-apply-seam.md)
   (`kb-open-question-projection-batch-no-apply-001`) — `ProjectionStore::Batch`
   carries no trait bounds, so generic code can open and commit a batch and
@@ -506,7 +519,13 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   shape. Added 2026-09-04. Amended 2026-09-07: the defect is three conformance rules, not one
   classification arm, since two of the three that can fail under contention assert on a count
   rather than `Attempt::Failed`; `CONTENDERS` has already moved once after publication,
-  unversioned (8 to 64), so a lowering to 8 would be a revert to the published value.
+  unversioned (8 to 64), so a lowering to 8 would be a revert to the published value. Amended
+  2026-09-21: the blocking instrument now exists (`FaultyStore::contend_next`,
+  `crates/happenstance-testkit/src/faulty.rs:333`) and discriminates a merely-contended store from
+  a broken one at the fixture-arm grain; `kb-decision-0065` lowers the observed red rate (0 in 16
+  vs. 7 in 8 at `--test-threads=1`) but the classifier-level conflation stands unchanged, since
+  `AppendError::is_condition_violated` is the only signal the port offers and answers `false` for a
+  busy store exactly as for a broken one.
 - **Open** — [`remint-identity-precondition-is-trust-only.md`](../open-questions/remint-identity-precondition-is-trust-only.md)
   (`kb-open-question-remint-precondition-trust-only-001`) —
   `SqliteEventStore::remint_identity`'s own test runs same-file,
@@ -538,7 +557,11 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   2 of 44 rows at `CONTENDERS = 64`) and widens the chain-vs-aggregate loss to 1.54x-1.86x warm,
   11.8x cold, with a fourth, boundary-bound arm beating the chain outright in most cells; a
   fourth route now exists: superseding ADR-0022's SQL-shape items only (§8, items 1 and 2), narrower
-  than superseding the whole decision and wider than ratifying it unchanged.
+  than superseding the whole decision and wider than ratifying it unchanged. Amended 2026-09-21:
+  `kb-decision-0065` takes that fourth route, but on §11 rather than §8 — partly superseding ADR-0022's
+  `busy_timeout` value (5,000 ms → 15,000 ms) after `kb-reference-busy-timeout-margin-001` fired §11's
+  own `busy > 0` reopen condition. §9 stands and now outranks §11, still owed its twenty-line
+  reproduction; §8/§16 stands, unresolved.
 
 - **Open** — [`off-poll-adapter-visibility-defect-undetected.md`](../open-questions/off-poll-adapter-visibility-defect-undetected.md)
   (`kb-open-question-off-poll-visibility-defect-001`) — an off-poll adapter (`happenstance-postgres`,

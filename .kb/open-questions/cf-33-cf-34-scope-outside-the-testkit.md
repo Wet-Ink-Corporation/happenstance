@@ -32,6 +32,7 @@ related:
   - kb-decision-0058
   - kb-open-question-testkit-contention-tolerance-001
   - kb-decision-0064
+  - kb-decision-0065
   - kb-reference-host-clocksource-tsc-hpet-001
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/timed-assertions-outside-the-testkit.md

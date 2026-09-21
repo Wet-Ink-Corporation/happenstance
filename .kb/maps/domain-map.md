@@ -94,7 +94,13 @@ summary: >-
   superseding either) and ADR-0064 (phase null, the dedicated measurement host's conditions are declared
   data and its preflight is structurally unreachable from the gate) — plus two new reference/playbook
   atoms from the same host work: a TSC-versus-hpet clocksource finding and the control-design lesson its
-  three probes needed before either was trusted. No new domain opened.
+  three probes needed before either was trusted. No new domain opened. The 2026-09-21 wave
+  (`2026-09-21-intake`) added one decision, ADR-0065 (phase null, partly superseding ADR-0022 at
+  section 11 only — `BUSY_TIMEOUT_MS` moves from 5,000 to 15,000 ms after `kb-reference-busy-timeout-margin-001`
+  fired section 11's own reopen condition), and one reference atom,
+  `kb-reference-busy-timeout-adapter-cap-sweep-001` (the adapter-level cap sweep ADR-0065 rests on,
+  closing the margin atom's own first caveat by running the shipped adapter's concurrency target
+  rather than the experiment's candidate). No new domain opened.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -113,7 +119,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-07-intake
   - .kb/_governance/integration-waves/2026-09-09-intake
   - .kb/_governance/integration-waves/2026-09-11-intake
-last_reviewed: 2026-09-11
+  - .kb/_governance/integration-waves/2026-09-21-intake
+last_reviewed: 2026-09-21
 ---
 
 # Domain map
@@ -332,6 +339,16 @@ worktree's `HEAD` the code each describes has not yet landed on `main`, so each 
 binds when it lands rather than a fact already true of the tree, the same shape `kb-decision-0037` used.
 None of the three supersedes a row on this map.
 
+The 2026-09-21 wave (`2026-09-21-intake`) added a seventeenth, `.kb/decisions/0065`. ADR-0065 partly
+supersedes ADR-0022 at section 11 only — the `busy_timeout` value `happenstance-sqlite` ships. Section
+11 fixed it at 5,000 ms on a premise (`busy = 0` in every row of the 64-contender table) that
+`kb-reference-busy-timeout-margin-001` measured false, firing section 11's own reopen condition
+(`busy > 0`); ADR-0065 sets `BUSY_TIMEOUT_MS` to 15,000, measured this time against the shipped
+adapter's own concurrency target rather than the experiment's candidate. `depends_on`
+`kb-decision-0022`; `supersedes` stays `null` and `kb-decision-0022` keeps `status: accepted`
+unflipped, since sections 4, 6, 7, 9, 10, 12 and 15 still stand — the same partial-supersession shape
+`kb-decision-0031` used against ADR-0007. See [`decision-map.md`](decision-map.md) for the row.
+
 **Reference**
 
 - [`port-traits-compiled-findings.md`](../reference/port-traits-compiled-findings.md)
@@ -400,6 +417,12 @@ None of the three supersedes a row on this map.
   margin is 1.3x to 1.4x, not more; fewer cores is not safer and the build profile barely enters,
   both refuting a plausible prediction. Records `busy > 0`, where the 2026-08-16 append-condition
   experiment recorded `busy = 0` at the same contender count. Added 2026-09-04.
+- [`busy-timeout-adapter-cap-sweep-2026-09.md`](../reference/busy-timeout-adapter-cap-sweep-2026-09.md)
+  (`kb-reference-busy-timeout-adapter-cap-sweep-001`) — the sibling measurement run on the shipped
+  `happenstance-sqlite` concurrency target rather than the experiment's candidate: at
+  `--test-threads=1`, the worst case the host can produce, 5,000 ms went red 7 launches of 8 and
+  15,000 ms went red 0 of 16. Closes `kb-reference-busy-timeout-margin-001`'s own first caveat and
+  is the measurement `kb-decision-0065` rests on. Added 2026-09-21.
 - [`nested-block-on-lost-wakeup-2026-09.md`](../reference/nested-block-on-lost-wakeup-2026-09.md)
   (`kb-reference-nested-block-on-lost-wakeup-001`) — `park`/`unpark` coalesce to one token per
   thread, so a `block_on` nested inside another inside the testkit's own executor can lose its
