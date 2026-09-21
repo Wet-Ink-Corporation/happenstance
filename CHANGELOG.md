@@ -32,6 +32,38 @@ not the same as what a user needed to be told.
   not yet proved at its far end. See
   [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
+## [0.3.2] — 2026-09-20
+
+A dependency-advisory release. [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285)
+turned this repository's gate red on `rustls 0.23.43`, and `Cargo.lock` now
+carries `0.23.45`. **No consumer of these crates was exposed**, and the release
+exists so that the number can say so rather than because anything that ships
+moved.
+
+### Security
+
+- **`rustls` moves `0.23.43` → `0.23.45` in `Cargo.lock`**
+  ([RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285),
+  [GHSA-2mjx-qc3c-rqvc](https://github.com/rustls/rustls/security/advisories/GHSA-2mjx-qc3c-rqvc)).
+  rustls accepted TLS 1.3 handshake messages sent at the wrong encryption level
+  when they followed a key-changing message in the same record, which RFC 8446
+  §5.1 requires be terminated with an `unexpected_message` alert. Be exact about
+  the reach, because *a high-severity advisory in a published crate's graph* and
+  what actually happened here are different claims:
+  `cargo tree -e normal -i rustls --all-features` prints **nothing to print**.
+  There is no non-dev edge to `rustls` anywhere in this workspace. It enters
+  twice, both times through `[dev-dependencies]` — `happenstance-neon`'s live
+  HTTPS test transport names it directly, and `happenstance-postgres` reaches it
+  through `testcontainers` → `bollard`. Nobody who installs either crate
+  resolves it. What the advisory did break is the gate itself, which runs
+  `cargo deny check advisories` both as its own CI job and inside
+  `cargo xtask ci`; that one cause accounts for all four jobs that were failing.
+- **No library code changed**, and every crate is republished at the same number
+  so the set stays in lockstep, the testkit included. What a reader gains from
+  the new version is that the published `.crate` tarballs carry a `Cargo.lock`
+  that `cargo deny` passes — which is what an auditor who unpacks or vendors one
+  actually looks at.
+
 ## [0.3.1] — 2026-09-11
 
 A description-only release. crates.io shows a crate's manifest `description`
