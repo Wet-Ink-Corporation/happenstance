@@ -21,6 +21,7 @@ entries, which is what lets `run.sh` promise to terminate unattended.
 | --- | --- |
 | [`busy-timeout-margin.md`](busy-timeout-margin.md) | the control against ADR-0022 §11, what the instrument costs, the five-point core sweep, the per-contender distribution, and the contender sweep where ADR-0022's falsifier fires |
 | [`lost-wakeup.md`](lost-wakeup.md) | M-1's nested `block_on` probe — the other way a contended run stops with no diagnostic |
+| [`adapter-cap-sweep.md`](adapter-cap-sweep.md) | **not from `run.sh`** — the red rate of the real adapter's own conformance target at four candidate caps, and what raising one costs when nothing is contended; the page that closes caveat 1 |
 
 `raw/waits/` holds one file per cell: every contender's own maximum busy-handler
 wait, one per line, 640 lines for a 64-contender cell. The printed rows carry

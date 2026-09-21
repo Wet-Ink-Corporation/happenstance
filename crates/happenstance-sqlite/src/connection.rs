@@ -56,10 +56,60 @@ pub const SYNCHRONOUS: i64 = 1;
 /// the conformance suite and there must not be one, so an unbounded wait
 /// converts a livelock into a hung job that names no rule.
 ///
-/// Five seconds was measured to absorb 64-way contention with zero `SQLITE_BUSY`
-/// (ADR-0022 §11), which is what makes that zero mean something rather than
-/// being the zero an unbounded handler would also have produced.
-pub const BUSY_TIMEOUT_MS: u64 = 5_000;
+/// # Fifteen seconds, and why it is not five
+///
+/// ADR-0022 §11 set this to five seconds on a measurement that reported
+/// `busy = 0` in every row of its 64-contender table, and rested the value on
+/// that zero: *"the timeout did real work and never ran out"*. **That premise
+/// is falsified.** `experiments/busy-timeout-margin` — built to make §11's own
+/// re-open condition fireable, because nothing in the tree had ever reported a
+/// busy count — recorded `busy > 0` at the shipped `CONTENDERS = 64` in one
+/// launch of seven, with a margin of only 1.31x–1.38x on the plateau and every
+/// wait figure a *lower* bound.
+///
+/// The consequence is not an unsound store. `committed` stays correct in every
+/// row, so what fails is **liveness**, in the one place CF-33 guarantees the
+/// suite cannot diagnose it: `SQLITE_BUSY` → `AppendError::Store` →
+/// `Attempt::Failed` → a red rule telling an adapter author their store is
+/// wrong when nothing about it is.
+///
+/// Fifteen was then measured rather than reasoned, on **this** adapter rather
+/// than on the experiment's candidate — which is what closes that experiment's
+/// own first caveat. Serialised so that all 64 contenders get the whole
+/// machine, which is the worst case this host can produce:
+///
+/// | `BUSY_TIMEOUT_MS` | red launches |
+/// | ---: | ---: |
+/// | 5,000 | 7 of 8 |
+/// | **15,000** | **0 of 16** |
+/// | 30,000 | 0 of 8 |
+///
+/// **It costs nothing in the healthy path**, which is the argument that
+/// decided it over staying put: the handler returns the instant the lock is
+/// acquired, so the cap bounds only the pathological tail. Measured at the
+/// gate's own parallelism, passing runs took 4.91–5.65 s at five seconds and
+/// 4.99–5.40 s at fifteen — indistinguishable. What the raise does buy is paid
+/// by a genuinely stuck writer, which now takes 15 s rather than 5 s to
+/// report; that path is rare and ends in a red rule rather than a hang.
+///
+/// **Thirty seconds was rejected**: also clean here, but with no measured gain
+/// over fifteen on this host, and it triples the pathological wait. The core
+/// sweep is what makes fifteen defensible off this host rather than lucky —
+/// fewer cores measured *better*, by about 450x from twenty cores to one, so a
+/// smaller CI runner sits in the safer regime rather than the riskier one.
+///
+/// # What this does **not** fix
+///
+/// A store that is momentarily contended and a store that is wrong still
+/// arrive as the same failed `Attempt`. Raising the cap lowers the *rate* at
+/// which that conflation bites; it does not remove it, and it cannot — CF-33
+/// is `[FROZEN]` and denies a rule the clock that would tell them apart. That
+/// question is the testkit's, not this constant's, and it is owed its own
+/// decision:
+/// `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`. The
+/// instrument it was blocked on now exists —
+/// `happenstance_testkit::FaultyStore::contend_next`.
+pub const BUSY_TIMEOUT_MS: u64 = 15_000;
 
 /// Opens (creating if absent) the database at `path` and configures it.
 ///

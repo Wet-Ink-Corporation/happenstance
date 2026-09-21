@@ -34,6 +34,36 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Changed
+
+- **`happenstance-sqlite`'s busy timeout is 15 s, was 5 s.**
+  `connection::BUSY_TIMEOUT_MS` moves on measurement, superseding
+  [ADR-0022](references/adr/0022-append-condition-strategy.md) §11 in part.
+  §11 rested the old value on *"`busy = 0` in every row of the 64-contender
+  table"*, and that premise is falsified: `experiments/busy-timeout-margin`
+  recorded `busy > 0` at the shipped `CONTENDERS = 64` in one launch of seven,
+  with a margin of 1.31x–1.38x and every wait figure a lower bound.
+
+  Nothing was unsound — `committed` is correct in every row, so what failed is
+  **liveness**, arriving as a red concurrency rule telling an adapter author
+  their store is wrong when it is not. Measured on the shipping adapter rather
+  than on the experiment's candidate, worst case, the target goes red 7 launches
+  in 8 at 5,000 ms and 0 in 16 at 15,000 ms
+  (`experiments/busy-timeout-margin/results/adapter-cap-sweep.md`).
+
+  **It costs nothing when nothing is contended**, which is what decided it: the
+  handler returns the instant the lock is acquired, so the cap bounds only the
+  tail. Passing runs took 4.91–5.65 s before and 4.99–5.40 s after. What it is
+  paid for by is a genuinely stuck writer, which now takes 15 s rather than 5 s
+  to report — rare, and it still ends in a red rule rather than a hang, because
+  the cap stays finite. CF-33 forbids the suite a watchdog, so an unbounded
+  handler remains rejected and this stays the only liveness bound in the system.
+
+  It does **not** fix the underlying conflation: a contended store and a broken
+  store are still the same `Attempt`, and no value of this constant can change
+  that. See `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`,
+  whose instrument is the `contend_next` entry below.
+
 ### Added
 
 - **`happenstance-testkit` can produce a *busy* store**, which nothing in this
