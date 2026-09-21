@@ -19,6 +19,7 @@ related:
   - kb-decision-0058
   - kb-decision-0053
   - kb-reference-busy-timeout-margin-001
+  - kb-reference-busy-timeout-adapter-cap-sweep-001
   - kb-reference-nested-block-on-lost-wakeup-001
   - kb-open-question-adr-0022-falsifiers-fired-001
   - kb-open-question-read-page-budget-001

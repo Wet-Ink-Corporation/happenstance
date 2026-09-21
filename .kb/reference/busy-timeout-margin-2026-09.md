@@ -27,7 +27,9 @@ summary: >-
 depends_on: []
 related:
   - kb-decision-0022
+  - kb-decision-0065
   - kb-reference-append-condition-experiment-001
+  - kb-reference-busy-timeout-adapter-cap-sweep-001
   - kb-reference-host-clocksource-tsc-hpet-001
   - kb-decision-0064
   - kb-open-question-adr-0022-falsifiers-fired-001

@@ -73,7 +73,16 @@ summary: >-
   ADR-0063 discharges ADR-0036 and ADR-0060 rather than superseding either — both said gate the port
   until PS-2's bar was met, both were correct when written, and ADR-0062 met the bar — the same shape
   this map already records for ADR-0060 reaffirming ADR-0036 above, so neither row is flipped or
-  annotated.
+  annotated. The 2026-09-21 wave (`2026-09-21-intake`) added one more: ADR-0065, partly superseding
+  ADR-0022 at section 11 only. Section 11 fixed `busy_timeout` at 5,000 ms on a premise —
+  `busy = 0` in every row of the 64-contender table — and named its own reopen condition as
+  `busy > 0`; `kb-reference-busy-timeout-margin-001` measured `busy > 0` at the shipped
+  `CONTENDERS = 64`, and the condition fired. ADR-0065 sets `BUSY_TIMEOUT_MS` to 15,000, measured
+  against the shipped adapter itself (`kb-reference-busy-timeout-adapter-cap-sweep-001`) rather
+  than the experiment's candidate. `supersedes: null` on the new atom and `status: accepted`
+  unflipped on `kb-decision-0022` — sections 4, 6, 7, 9, 10, 12 and 15 stand untouched — the same
+  partial-supersession shape `kb-decision-0031` used against ADR-0007 and `kb-decision-0006` used
+  against ADR-0005, both already recorded in *Reading the partial-supersession chain* below.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -91,7 +100,8 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-07-intake
   - .kb/_governance/integration-waves/2026-09-09-intake
   - .kb/_governance/integration-waves/2026-09-11-intake
-last_reviewed: 2026-09-11
+  - .kb/_governance/integration-waves/2026-09-21-intake
+last_reviewed: 2026-09-21
 ---
 
 # Decision map
@@ -220,7 +230,7 @@ nothing, since ADR-0020 published its own contrary prediction as explicitly fals
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted | 8 | — |
+| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted (partly superseded) | 8 | partly superseded by `kb-decision-0065` |
 | ADR-0031 | [`kb-decision-0031`](../decisions/0031-the-runner-collapses-upward.md) | One runner, in happenstance — the checkpoint pump collapses upward | accepted | 7 | partly supersedes `kb-decision-0007` |
 | ADR-0032 | [`kb-decision-0032`](../decisions/0032-adr-0021-serde-attribution-correction.md) | The serde-encoded framing region is rejected on two grounds, and ADR-0003 was never one of them | accepted | 7 | supersedes `kb-decision-0021` |
 | ADR-0033 | [`kb-decision-0033`](../decisions/0033-happenstance-macros-out-of-scope-for-0-1.md) | happenstance-macros is out of scope for 0.1 | accepted | 7 | — |
@@ -246,6 +256,14 @@ on.
 0004 stays `status: accepted` because its reasoning (the floor is a preference until first
 publish) is what 0029 acted on, not what it reversed — `superseded_by` is deliberately left
 `null` on 0004, and 0029's `depends_on` carries the edge instead.
+
+`kb-decision-0022` → `kb-decision-0065` is the same partial shape at section grain rather than
+document grain: ADR-0065 touches only ADR-0022's §11 (the `busy_timeout` value), leaving §4, §6,
+§7, §9, §10, §12 and §15 standing, so `kb-decision-0022` keeps `status: accepted` with
+`superseded_by: null` and this map's row is annotated rather than flipped — see
+[`../open-questions/adr-status-vocabulary-exceeds-the-schema.md`](../open-questions/adr-status-vocabulary-exceeds-the-schema.md)
+for why the convention scaling down to one section of fifteen, rather than half a document, is
+itself live evidence in that open question.
 
 ## 2026-08-20 phase-9 wave (ADR-0023, ADR-0034)
 
@@ -487,6 +505,25 @@ used. None of the three supersedes a row on this map — all three carry `supers
 | ADR-0062 | [`kb-decision-0062`](../decisions/0062-the-probe-seam-moves-and-the-far-end-is-built.md) | The probe seam moves, begin moves with it, and the far end is built | accepted | 12 | — |
 | ADR-0063 | [`kb-decision-0063`](../decisions/0063-the-projection-port-is-frozen.md) | The projection port is frozen, and the typed layer keeps a gate of the same name | accepted | 12 | — |
 | ADR-0064 | [`kb-decision-0064`](../decisions/0064-the-measurement-host-has-declared-conditions.md) | The measurement host has declared conditions, and its preflight is unreachable from the gate | accepted | — | — |
+
+## 2026-09-21 intake: the busy timeout is fifteen seconds (ADR-0065)
+
+One decision atom, one wave (`2026-09-21-intake`), `.kb/decisions/`. ADR-0065 partly supersedes
+ADR-0022 at section 11 only — the `busy_timeout` value `happenstance-sqlite` ships. Section 11 set
+5,000 ms on the premise that `busy = 0` held in every row of the 64-contender table and named its
+own reopen condition as `busy > 0`; `kb-reference-busy-timeout-margin-001` (2026-09-04) measured
+`busy > 0` at the shipped `CONTENDERS = 64`, firing that condition. ADR-0065 sets
+`BUSY_TIMEOUT_MS` to 15,000, this time measured against the shipped adapter's own concurrency
+target rather than the experiment's candidate (`kb-reference-busy-timeout-adapter-cap-sweep-001`,
+created the same wave): at `--test-threads=1`, the worst case the host can produce, 5,000 ms went
+red 7 launches of 8 and 15,000 ms went red 0 of 16. `depends_on: [kb-decision-0022]`; `supersedes`
+is `null` and `kb-decision-0022` is not flipped — sections 4, 6, 7, 9, 10, 12 and 15 stand — the
+same shape `kb-decision-0031` used against ADR-0007. See *Reading the partial-supersession chain*
+above.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0065 | [`kb-decision-0065`](../decisions/0065-adr-0022-s11-busy-timeout-is-fifteen-seconds.md) | ADR-0022 §11 is superseded in part — the busy timeout is fifteen seconds | accepted | — | partly supersedes `kb-decision-0022` |
 
 ## Adding a row
 

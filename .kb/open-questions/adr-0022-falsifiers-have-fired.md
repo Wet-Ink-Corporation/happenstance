@@ -30,7 +30,9 @@ summary: >-
 depends_on: []
 related:
   - kb-decision-0022
+  - kb-decision-0065
   - kb-reference-busy-timeout-margin-001
+  - kb-reference-busy-timeout-adapter-cap-sweep-001
   - kb-reference-append-condition-experiment-001
   - kb-open-question-es-17-two-adapter-measurement-001
   - kb-open-question-testkit-contention-tolerance-001
@@ -44,12 +46,15 @@ source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/append-condition-sql-shape.md
   - .kb/_intake/remediation-2026-09-04-briefs/transient-contention-tolerance.md
   - .kb/_intake/remediation-2026-09-04-briefs/sqlite-blocking-seam.md
+  - .kb/_intake/2026-09-21-adr-0022-s11-superseded-busy-timeout-is-fifteen-seconds.md
   - references/evaluation/review-pre-publication-2026-09-03.md
   - experiments/busy-timeout-margin/
+  - experiments/busy-timeout-margin/results/adapter-cap-sweep.md
   - experiments/shipped-append-condition-sql/
   - references/adr/0022-append-condition-strategy.md
   - crates/happenstance-sqlite/src/event_store.rs
-last_reviewed: 2026-09-07
+  - crates/happenstance-sqlite/src/connection.rs
+last_reviewed: 2026-09-21
 ---
 
 # Two of ADR-0022's falsifiers have fired, a third cannot fire as written, and nobody has re-opened
@@ -152,3 +157,52 @@ Phase 12, when the pragma set (`synchronous`, the busy timeout, the runtime-seam
 documented property of a published adapter rather than an internal decision this workspace can
 revisit freely. Superseding, re-opening or ratifying ADR-0022 before then is materially cheaper than
 after: a downstream crate that has pinned against the current behavior is not yet a stakeholder.
+
+## Partly answered 2026-09-21 — §11 is decided by the fourth move; §9 and §8/§16 stand
+
+**One of the three findings is now settled, and by the move this atom itself proposed.** The
+paragraph above offers a fourth reading — *supersede it in part* — and offers it for section 8,
+listing section 11 among the sections it would leave untouched. `kb-decision-0065` applies exactly
+that move to section 11 instead: it supersedes ADR-0022 at section 11 only, says in terms that
+sections 4, 6, 7, 9, 10, 12 and 15 stand, and therefore carries `supersedes: null` while
+`kb-decision-0022` stays `accepted` — the same shape `kb-decision-0007` used against ADR-0006. The
+irony is worth leaving on the record rather than tidying away: the sentence that found the right
+instrument pointed it at the wrong section, because it was written about section 8.
+
+`crates/happenstance-sqlite/src/connection.rs:112`'s `BUSY_TIMEOUT_MS` is now `15_000`, decided on a
+measurement of *this adapter's own* concurrency target rather than the experiment's candidate —
+`kb-reference-busy-timeout-adapter-cap-sweep-001`, which closes the first caveat the margin page
+still carries. At `--test-threads=1`, 5,000 ms went red in 7 launches of 8 and 15,000 ms in 0 of 16.
+Note what that does to the *finding* recorded above: nothing. The firing stands exactly as written,
+`exhausted` reading included — what changed is that the falsifier has been answered rather than
+re-argued, and the replacement falsifier now names an instrument that can fire it, which the
+original never had for as long as it existed.
+
+**The routing question is half answered.** This atom asked who owns the testkit-facing
+contention-tolerance question section 11's firing raises, versus who owns section 9's runtime-seam
+correction. The first half has an owner: `kb-open-question-testkit-contention-tolerance-001`, and
+the instrument it was blocked on now exists — `FaultyStore::contend_next`
+(`crates/happenstance-testkit/src/faulty.rs:333`), with
+`crates/happenstance-testkit/tests/contended_store_instruments.rs` showing both affected rules
+reject a merely-contended store. Raising the cap lowers the rate at which a contended store is
+mistaken for a broken one; it cannot remove it, because CF-33 is `[FROZEN]` and denies a rule the
+clock that would tell them apart. The second half is still unowned.
+
+**Section 9 stands, and it outranks section 11 now that section 11 is settled.** It is a
+correctness gap — a store outliving the runtime it captured — rather than a liveness cap, and it is
+still owed the twenty-line reproduction its own falsifier's *"a deployment shows"* wording demands.
+Nothing in this wave built that deployment, and the ordering above holds: reproduction before
+remedy.
+
+**Sections 8 and 16 stand, and the repair is a decision rather than a documentation sweep.** The
+falsifier still cannot fire as written, and the repair path still runs through a `[FROZEN]` clause:
+ES-27's `Rejects:` prose quoting the aggregate's "roughly 200x". That citation has drifted — it now
+reads at `spec/SPECIFICATION.md:4061-4066`, with the figure itself on `:4065`, not the
+`:3902-3905` the paragraph above cites. Repoint by the anchor rather than the offset, which moves
+every wave.
+
+So this atom is **amended, not withdrawn**: `status` stays `accepted`, because two of its three
+findings are exactly as open as they were. Its title's final clause — *"and nobody has re-opened"* —
+is now false for one of the three, and is left standing on purpose under this layer's own rule that
+a question is not rewritten into its own answer. A reader who wants the current state reads this
+section; a reader who wants what was known on 2026-09-07 reads the ones above it.

@@ -30,20 +30,25 @@ related:
   - kb-decision-0034
   - kb-decision-0022
   - kb-decision-0010
+  - kb-decision-0065
   - kb-open-question-poll-count-rule-strength-001
   - kb-open-question-adr-0022-falsifiers-fired-001
   - kb-open-question-cf-33-cf-34-scope-001
   - kb-open-question-adapter-version-lockstep-001
   - kb-reference-busy-timeout-margin-001
+  - kb-reference-busy-timeout-adapter-cap-sweep-001
   - kb-reference-nested-block-on-lost-wakeup-001
 source_paths:
   - .kb/_intake/2026-09-03-pre-publication-review.md
   - .kb/_intake/remediation-2026-09-04-briefs/transient-contention-tolerance.md
+  - .kb/_intake/2026-09-21-adr-0022-s11-superseded-busy-timeout-is-fifteen-seconds.md
   - references/evaluation/review-pre-publication-2026-09-03.md
   - experiments/busy-timeout-margin/
   - crates/happenstance-testkit/src/concurrency.rs
+  - crates/happenstance-testkit/src/faulty.rs
+  - crates/happenstance-testkit/tests/contended_store_instruments.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-21
 ---
 
 # A busy store and a broken store are the same Attempt, and the suite cannot tell them apart
@@ -130,3 +135,49 @@ whoever next proposes changing `CONTENDERS` — raising it moves the busy-timeou
 its current 1.31x–1.38x floor, lowering it trades contention realism for gate speed and reverts to
 the published value, and either change must amend `RUNBOOK.md`'s phase-8 and phase-10 proof
 artefacts and the status table in the same commit or recreate the discrepancy the raise cured.
+
+## Amended 2026-09-21 — the instrument exists, and it has already told the two arms apart
+
+**The missing instrument was built to the paragraph above almost word for word, and it was not a
+neutral tool.** `SendFaultyStore::contend_next` (`crates/happenstance-testkit/src/faulty.rs:429`,
+and `FaultyStore::contend_next` at `:333`) is the decorator this atom specified: it wraps
+`MemoryEventStore`, refuses the next *n* appends as
+`AppendError::Store(FaultyStoreError::Contended)` (`:556`), and lets the rest through. So the
+sentence that said *"both live arms are gated by the same missing instrument"* is discharged. What
+this section records is that the same paragraph's second claim — that the instrument would
+*discriminate* the arms, not merely gate them — was a prediction, and it has now returned a result.
+
+**The result is asymmetric, and it is the finding.**
+`a_retry_loop_gated_on_the_dcb_signal_never_retries_a_busy_store`
+(`crates/happenstance-testkit/tests/contended_store_instruments.rs:290`) drives the same contended
+store twice. Gated on `AppendError::is_condition_violated` (`happenstance-core/src/error.rs:253`) —
+the *only* classifier the port offers a caller — the loop retries zero times and is left holding a
+refusal it cannot name, because that predicate answers `false` for a busy store exactly as it does
+for a broken one. Gated on the store channel instead, the loop retries once and lands. The
+consequence for this question is direct: **the per-fixture arm can be prototyped in the testkit
+today and the per-error arm cannot be prototyped at all**, because there is nothing in
+`happenstance-core` for a rule to match on until `AppendError::Busy` exists. The contract-side arm
+is therefore still bought on argument — VT-25 / CF-40's precedent, against *one implementor is not
+a spread* — while the fixture-side arm is now the one that can be built and measured before it is
+chosen. That is a real change to the shape of the fork and not merely to its readiness.
+
+**The reasoned "three rules, not one classification arm" claim is now executed.**
+`two_rules_reject_a_store_that_is_merely_contended` (`:346`) drives each affected rule separately
+and matches its panic message against the assertion it was expected to fail — *"every contender
+must commit"* for `positions_are_unique_under_concurrent_appends`, *"did not commit an
+unconditional append"* for `append_returns_the_callers_own_last_position` — rather than asserting a
+bare `#[should_panic]`, which ADR-0010 rejects by name for recording only that *something* failed.
+Its negative control (`:390`) runs the same fixture unarmed and asserts `RuleOutcome::Ran`, so a
+declined capability cannot masquerade as an isolated contention. The named wrong implementation
+that every arm of this question needed, and that no registered racer could produce, now lives in
+the testkit's own `tests/`.
+
+**`kb-decision-0065` lowers the rate and does not touch the conflation.** Raising
+`happenstance-sqlite`'s `BUSY_TIMEOUT_MS` to `15_000` makes a busy refusal rarer at the shipped
+`CONTENDERS = 64` — 0 red launches in 16 at `--test-threads=1` against 7 in 8 at five seconds
+(`kb-reference-busy-timeout-adapter-cap-sweep-001`) — and that atom says in terms that no value of
+that constant can remove the conflation, because CF-33 still denies a rule the clock. It also
+leaves `CONTENDERS` alone, on ADR-0022 §12's grounds. So nothing above is softened, and **nothing
+at all still remains an arm on exactly its original terms**: a suite that tolerates a busy store has
+stopped measuring conformance and started measuring luck. What has changed is that the two live
+arms no longer cost the same to try.
