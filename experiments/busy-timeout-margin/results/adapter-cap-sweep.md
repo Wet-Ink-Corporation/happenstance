@@ -52,7 +52,16 @@ F=crates/happenstance-sqlite/src/connection.rs
 # leaving manifests stripped.
 ORIG=$(grep -oE 'pub const BUSY_TIMEOUT_MS: u64 = [0-9_]+;' "$F")
 restore() { sed -i "s/pub const BUSY_TIMEOUT_MS: u64 = [0-9_]*;/${ORIG}/" "$F"; }
-trap restore EXIT INT TERM
+
+# `restore` hangs off EXIT alone, and the signal traps *exit* rather than
+# restoring directly. The obvious spelling — `trap restore EXIT INT TERM` — is
+# wrong in a way that looks right: a signal handler that returns without
+# exiting hands control back to the script, so Ctrl-C would restore the file
+# and then fall straight into the next `measure`, which rewrites it. Exiting
+# from the handler is what makes the EXIT trap the single restore path.
+trap restore EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 measure() {                     # $1 = value, $2 = launches, $3... = extra args
   local value="$1" launches="$2"; shift 2
