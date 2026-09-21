@@ -7,7 +7,8 @@ authority_tier: note
 summary: >-
   ADR-0022 wrote three conditions under which it would be re-opened. The 2026-09-03
   pre-publication review checked all three, two have fired and the third is unfireable as written,
-  and no re-opening has happened. Section 11 said re-open if any run ever reports busy > 0; busy > 0
+  and one of the three has since been re-opened in part: section 11, by kb-decision-0065 on
+  2026-09-21. The other two have not. Section 11 said re-open if any run ever reports busy > 0; busy > 0
   was observed at the shipped CONTENDERS = 64, one launch in seven, the first nonzero busy count
   anywhere in this tree, and the shape matters — busy = 1 and busy = 2, three attempts in 6,720
   across seven launches at that count, with exhausted = 0 on both rows, which is structurally zero on
@@ -23,10 +24,11 @@ summary: >-
   adapter emits; measured, the chain that does ship loses to that aggregate in nine of nine two-tag
   cells and is beaten again by a boundary-bound chain, which is the finding the falsifier was written
   to catch and which its own wording excludes. ADR-0022 is accepted and
-  immutable, so a fired falsifier cannot amend it: what is not decided is whether it is superseded,
-  re-opened with a scoped amendment, or explicitly ratified as still correct with the firings
-  recorded against it — and who takes that call. Forced by phase 12, after which the pragma set is a
-  documented property of a published adapter.
+  immutable, so a fired falsifier cannot amend it: what had to be decided, per firing, was whether it
+  is superseded, re-opened with a scoped amendment, or explicitly ratified as still correct with the
+  firings recorded against it — and who takes that call. Section 11 took the scoped route and is
+  answered; sections 9 and 8/16 are not, and neither has an owner. Forced by phase 12, after which
+  the pragma set is a documented property of a published adapter.
 depends_on: []
 related:
   - kb-decision-0022
