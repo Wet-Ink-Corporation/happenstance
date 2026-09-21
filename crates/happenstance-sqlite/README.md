@@ -125,7 +125,7 @@ trust:
 | --- | --- | --- |
 | `journal_mode` | `WAL` | readers do not block the writer, which is what makes a long replay and a second handle onto one file workable at the same time |
 | `synchronous` | `NORMAL` (`1`) | durable across a process crash; on power loss it can lose the tail since the last checkpoint. `OFF` is not on the menu — the specification names it as the wrong implementation the reopen rule exists to reject |
-| `busy_timeout` | `5,000` ms | finite *and* generous. Measured to absorb 64-way write contention with no `SQLITE_BUSY`; an unbounded handler would turn a livelock into a hung job that names no rule |
+| `busy_timeout` | `15,000` ms | finite *and* generous, and both halves are load-bearing. Raised from `5,000` on measurement: at the old value the concurrency target went red on a `SQLITE_BUSY` in 7 launches of 8 under maximum contention, and at the new one in 0 of 16. It costs nothing when nothing is contended — the handler returns as soon as the lock is acquired — so the cap bounds only the tail. It stays **finite** because an unbounded handler would turn a livelock into a hung job naming no rule |
 
 ## Limits this store enforces
 
