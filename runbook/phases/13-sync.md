@@ -1,6 +1,6 @@
 ## Phase 13 — `happenstance-sync` and its testkit
 
-> Carried from `RUNBOOK.md:5492-5598` at `3916f29`, verbatim below this note.
+> Carried from `RUNBOOK.md:5492-5598` at `f89e184`, verbatim below this note.
 > **Edited since the split:** the dependency row now includes phase 17, because
 > `0.4.0` changes the published surface this phase builds on — see the
 > [roadmap](../roadmap.md). The "Phase 12 is in the dependency row as ordering"

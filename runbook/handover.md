@@ -12,7 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/runbook-split`, one commit on `3916f29`, open as a PR against `main`. 2026-09-28.
+`65253fc` on `main`, plus `lane/runbook-citations-after-squash` open as a PR.
+2026-09-28.
 
 ## Where things are
 
@@ -30,35 +31,27 @@ work lives* has the rules.
 
 ## In flight
 
-Branch `lane/runbook-split`, committed and open as a PR:
+Branch `lane/runbook-citations-after-squash`, open as a PR. PR #14 (the split)
+merged as a **squash**, `65253fc`, so `3916f29` — the commit the runbook cited as
+the pre-split state — is not on `main`. It is still fetchable through
+`refs/pull/14/head`, but citations belong on `main`: they now name `f89e184`,
+where `RUNBOOK.md` and `HANDOVER.md` are byte-identical to `3916f29`. The frozen
+banner at `RUNBOOK.md:3` names `65253fc`, line-for-line with `f89e184`.
 
-- The runbook split into `runbook/`. `RUNBOOK.md` frozen in place — only one-line,
-  same-count edits made to it, so every `RUNBOOK.md:N` citation still resolves.
-- `xtask/src/lints.rs`: the status check reads `runbook/README.md` and refuses a
-  released version with no milestone row; linked phase cells compare as text;
-  the ledger check reads `runbook/ledgers.md`. Three new tests.
-- `xtask/src/affected.rs`: `runbook/` is inert, as `RUNBOOK.md` was.
-- `CLAUDE.md`: the repository map points at `runbook/`, and *Where the work lives*
-  is rewritten for manual tracking with redkiln retired.
-- `HANDOVER.md`'s title marks it as a record.
-- `references/seeds/sqlite-on-wasm.md`: a new seed.
-- `.kb/_intake/decisions/`: three Weigh-In decision atoms (D-1, D-2, D-3),
-  written by the Weigh-In tool, waiting to be taken into `.kb/` by hand.
-
-Verified: `cargo xtask ci` green on this branch (the LadybugDB step skipped, its
-driver not configured here); the status check watched failing on a deliberately
-broken table. Details in [`log.md`](log.md).
+Verified: `cargo run -p xtask -- lints` green; `RUNBOOK.md` still 5,704 lines.
 
 ## Next action
 
-Merge the `lane/runbook-split` PR once reviewed. Then the rest of
-[phase 15](phases/15-reconcile.md)'s work list, starting with the top-level
-documents that still describe `0.2.0` as unpublished.
+Merge this PR, then [phase 15](phases/15-reconcile.md)'s next item: the top-level
+documents that still describe `0.2.0` as unpublished — `README.md:139-141` and
+`:175-176`, `CONTRIBUTING.md:23` and `:323-352`, and the comment at
+`.github/workflows/ci.yml:1107-1116`.
 
 ## Waiting on the owner
 
-- Nothing blocking. Optional: `lane/0.2.0-closeout` and
-  `origin/worktree-kb-intake-2026-09-11` are merged too, and were outside D-3.
+- Nothing blocking. Optional: `lane/0.2.0-closeout`,
+  `origin/worktree-kb-intake-2026-09-11` and `origin/lane/runbook-split` are all
+  merged, and were outside D-3.
 
 ## Do not re-open
 
@@ -90,5 +83,7 @@ record, and the owner.
   `.claude/settings.local.json`; it stays enabled in the user settings for other
   repositories. A fresh clone does not carry that file, so there its hooks can
   still write to `.redkiln/telemetry/` — do not commit new telemetry as work.
+- **This repository's PRs have been squash-merged.** Any citation of a commit on a
+  PR branch dies with the branch; cite a commit on `main`, or wait for the merge.
 - **Nothing validates `.kb/` frontmatter now.** Read any diff under
   `.kb/decisions/` for an edited accepted body before it merges.

@@ -1,6 +1,6 @@
 # Roadmap — from `0.3.2` to `1.0.0`
 
-Written 2026-09-28 at `3916f29`, when the runbook was split. The status of each
+Written 2026-09-28 at `f89e184`, when the runbook was split. The status of each
 phase lives in the [index](README.md#status), not here; this file says **why the
 order is what it is**, which is the part a status table cannot carry.
 

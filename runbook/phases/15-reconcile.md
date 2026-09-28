@@ -25,7 +25,7 @@ so they are repaired first.
 - [x] `runbook_status_matches_the_registry` repaired: a released version with no
       milestone row is now a failure rather than a skip, and a linked phase cell
       compares as its text. Both defects are pinned by tests that fail on the table
-      as `3916f29` left it. The ledger check reads `runbook/ledgers.md`.
+      as `f89e184` left it. The ledger check reads `runbook/ledgers.md`.
 - [ ] `HANDOVER.md`, `REMEDIATION-HANDOVER.md` and `SESSION-DECISIONS-0.2.0.md`
       read as records, not status. `HANDOVER.md`'s title now says so; its body
       still describes `0.2.0` as unpublished, in the present tense, and is left
@@ -79,7 +79,7 @@ so they are repaired first.
       Decide whether they ship as `0.3.3` or ride `0.4.0`; the first is a
       behaviour change to a published adapter, which argues for not waiting.
 
-**Proof artefact.** The status lint failing on the table as `3916f29` left it and
+**Proof artefact.** The status lint failing on the table as `f89e184` left it and
 passing on this one — `a_released_version_with_no_row_is_refused` and
 `a_milestone_row_holds_its_phase_to_done` in `xtask/src/lints.rs`.
 
@@ -104,3 +104,5 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   SQLite on `wasm32` added. D-1 (sync inside 1.0), D-2 and D-3 decided; redkiln
   retired and `CLAUDE.md` rewritten for manual tracking. D-3 executed.
   `cargo xtask ci` green. Committed on `lane/runbook-split`.
+- 2026-09-28 — PR #14 merged as squash `65253fc`; citations of `3916f29` moved to
+  `f89e184`, where the monolith is byte-identical.
