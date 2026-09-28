@@ -10,9 +10,23 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-28 — citations moved off a squashed commit
+
+*`lane/runbook-citations-after-squash`, opened as a PR.* Phase 15.
+
+PR #14 merged as a squash (`65253fc`), leaving `3916f29` off `main`. Eleven
+citations named it; ten now name `f89e184`, where `RUNBOOK.md` and `HANDOVER.md`
+are byte-identical to it, and the handover is rewritten. The squash was checked
+byte-identical to the PR head `b38d966` before local `main` was moved to it.
+
+**Verified.** `cargo run -p xtask -- lints` green; `RUNBOOK.md` line count
+unchanged at 5,704.
+
+---
+
 ## 2026-09-28 — the runbook becomes a directory
 
-*Committed on `lane/runbook-split`, and opened as a PR.* Phase 15.
+*Merged as PR #14, squash `65253fc`.* Phase 15.
 
 **Taken stock.** Four read-only audits across the runbook, the backlog, the crates
 and specification, and the knowledge base. The findings are the work list in
@@ -27,7 +41,7 @@ written; the roadmap written; a seed for SQLite on `wasm32`.
 
 **Verified.**
 - The xtask unit tests for the changed lints, including three new ones that fail
-  on the table as `3916f29` left it.
+  on the table as `f89e184` left it.
 - `cargo run -p xtask -- lints` green on the new files: 29 status rows against 5
   released versions, both clause ledgers matching §7.2, and V-6's 180 citations
   still resolving.

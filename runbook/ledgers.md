@@ -13,7 +13,7 @@ naming a clause that has moved, or a row with no owning phase fails the gate.
 
 The full history of all three — the struck rows, the settled decisions, the
 queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
-`3916f29`. Nothing was deleted to make this file short; it was left behind.
+`f89e184`. Nothing was deleted to make this file short; it was left behind.
 
 ## The ADR queue
 
@@ -33,7 +33,7 @@ still unwritten, which is why they are out of order with the numbers around them
 
 ## Open decisions
 
-The rows of the decision ledger (`RUNBOOK.md:505-619` at `3916f29`) that were still
+The rows of the decision ledger (`RUNBOOK.md:505-619` at `f89e184`) that were still
 open when the runbook was split, and the owner each now has. A row leaves this
 table when an ADR or a clause settles it, and the archive keeps it either way.
 

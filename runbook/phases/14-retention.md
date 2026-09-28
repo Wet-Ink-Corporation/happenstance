@@ -1,6 +1,6 @@
 ## Phase 14 — Retention, deletion and completeness
 
-> Carried from `RUNBOOK.md:5602-5650` at `3916f29`, verbatim below this note.
+> Carried from `RUNBOOK.md:5602-5650` at `f89e184`, verbatim below this note.
 > **Edited since the split:** ADR-0028's *decision* moves to phase 17, because one
 > of its two answers adds a method to `EventStore` and breaks every published
 > adapter — cheap before 1.0 and expensive after. This phase builds what 17

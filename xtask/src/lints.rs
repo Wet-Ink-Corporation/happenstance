@@ -3472,7 +3472,7 @@ State is one of `not started`, `in progress`, `blocked`, `done`.
         );
     }
 
-    /// The table as `3916f29` left it, cut to the rows that carry the argument:
+    /// The table as `f89e184` left it, cut to the rows that carry the argument:
     /// four releases in the changelog, one milestone row, and phase 12 — the
     /// publication phase — reading `not started`.
     const RELEASED_WITHOUT_ROWS: &str = "\
