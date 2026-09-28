@@ -136,9 +136,9 @@ checkpoint until the runner has caught up, and `200` after.
 
 ## Status
 
-A ✅ below means **in the `0.3.2` release set and passing its suite**. It does not
-say the version is on the registry: nothing is published at `0.3.2` until the
-publish sequence has actually been run, and this table is written before it.
+A ✅ below means **in the `0.3.2` release set and passing its suite**. All seven
+crates in that set are on crates.io at `0.3.2`; the manifests and
+`xtask/src/package.rs`'s `PUBLISHABLE` are what name them.
 
 | Crate | Role | Status |
 |---|---|---|
@@ -171,9 +171,7 @@ with `happenstance-neon`: the release set was five, decided, and the owner
 re-opened it on that evidence at `e597c34`. It is the *first* adapter here to
 clear the concurrency family against a store whose writers are not serialised,
 not the only one — `happenstance-neon` clears it too, over the same server
-through a different transport. A ✅ in this column means *in the release set and
-passing its suite*; nothing is in the `0.3.2` release set until the publish
-sequence in [`RUNBOOK.md`](RUNBOOK.md) has actually been run.
+through a different transport. Both have been on crates.io since `0.2.0`.
 
 `happenstance-cloudflare` is the row most easily misread, and it ships in
 `0.3.2` with the thinnest evidence of the seven. Two things a reader should have

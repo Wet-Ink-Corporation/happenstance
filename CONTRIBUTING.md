@@ -20,8 +20,10 @@ the code has not yet voted on.
 ADR-0001 is the worked example of a marker being *earned off*: it lifted when
 `LocalMemoryEventStore` — the first `!Send` implementer of either port — passed
 the conformance suite, which is the exact condition its banner had named.
-ADR-0003 and ADR-0004 still carry theirs. Do not let an unpublished API surface, or an
-MSRV nobody depends on, decide a design question on its own.
+ADR-0003 and ADR-0004 still carry theirs. That used to be cheap, because nothing
+was published and nobody depended on the MSRV. It stopped being cheap at `0.2.0`:
+the API surface is on crates.io, and ADR-0037 made the MSRV a promise. A design
+question that would move either one is now also a semver question.
 
 ## One thing to get right before you clone, on Windows
 
@@ -319,35 +321,30 @@ else, so its examples compile and its citations resolve.
 Keep the reasoning in the commit message. A diff shows what changed; the message
 should say what constraint made that the right change.
 
-Pull requests run an extra `cargo-semver-checks` job over five of the seven
-publishable crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
-`happenstance-sqlite` and `happenstance-cloudflare` — with `--baseline-rev`
-pointed at the commit the branch started from. A breaking change is fine — an
-accidental one is not.
+Pull requests run `cargo-semver-checks` twice over all seven publishable crates —
+`happenstance-core`, `happenstance`, `happenstance-testkit`, `happenstance-sqlite`,
+`happenstance-cloudflare`, `happenstance-postgres` and `happenstance-neon`. A
+breaking change is fine; an accidental one is not.
 
-**`happenstance-postgres` and `happenstance-neon` are absent deliberately, and
-only from this baseline.** Neither had a published version before `0.2.0`, so
-diffing their surface against the base commit compares two states no consumer
-could ever install, and every difference it finds is a break against nothing.
-They rejoin when the registry carries `0.2.0` — the same moment the registry
-baseline turns on, which is the one that watches them for the thing that matters.
+The crates are named rather than counted, because the count has been wrong here
+**twice**. This paragraph said *three* from the release that had three, through
+two phases that each added one; it then said *five* through the release that made
+the set seven. A number in a document nobody re-reads goes stale silently, and
+`xtask/src/package.rs`'s `PUBLISHABLE` is the list actually held against the
+manifests. `stated_crate_counts` in `xtask/src/lints.rs` reads this paragraph on
+every run, and it was written because of this sentence.
 
-The crates are named rather than counted, because the count has now been wrong
-here **twice**. This paragraph said *three* from the release that had three,
-through two phases that each added one; it then said *five* through the release
-that made the set seven. A number in a document nobody re-reads is a number that
-goes stale silently, and `xtask/src/package.rs`'s `PUBLISHABLE` is the list
-actually held against the manifests. `stated_crate_counts` in
-`xtask/src/lints.rs` now reads this paragraph on every run, and it was written
-because of this sentence.
-
-Know what that job proves and what it does not. It proves *this pull request*
-does not break the API it branched from. It proves nothing about the last
-released version: a break merged two pull requests ago is part of the baseline
-and so is invisible. The registry baseline that would catch it is the outstanding
-half of phase 12's `cargo-semver-checks` work — it cannot be added before the
-registry carries `0.2.0`, because there is nothing to diff against until then,
-and it must be added immediately after, because from that moment there is.
+The two runs answer different questions. The **rev baseline** diffs against the
+commit the branch started from. It catches a break introduced by *this pull
+request*, and it cannot see a break merged two pull requests ago, because that
+break is already in its baseline. The **registry baseline** diffs against the
+newest compatible version on crates.io. It catches a break against what a consumer
+can actually install, and it does not say which pull request introduced it. The
+registry baseline has run on every pull request since `86a410c`, the commit that
+turned it on once `0.2.0` was published. Until then the registry had nothing to
+diff against. `happenstance-postgres` and `happenstance-neon` were left out of the
+rev baseline until phase 15. Before `0.2.0` their surface had no published
+predecessor, so every difference was a break against nothing.
 
 A separate weekly job runs `cargo deny check advisories` and nothing else. A new
 advisory against a dependency nobody has touched is the only failure that arrives

@@ -30,12 +30,16 @@ so they are repaired first.
       read as records, not status. `HANDOVER.md`'s title now says so; its body
       still describes `0.2.0` as unpublished, in the present tense, and is left
       verbatim because it is cited by line.
-- [ ] `README.md:139-141` and `:175-176` stop saying nothing is published at
+- [x] `README.md:139-141` and `:175-176` stop saying nothing is published at
       `0.3.2`. `CONTRIBUTING.md:23` and `:323-352` stop describing the registry
       semver baseline as future work, and `.github/workflows/ci.yml:1107-1116`'s
       comment stops telling a reader to delete an `if: false` that is gone. Check
       whether the rev-baseline job at `ci.yml:1092` still lists five crates of
       seven, and whether it should.
+      Done: all seven are at `0.3.2` on crates.io, measured on 2026-09-28. It
+      listed five and should not have. Its own comment said `happenstance-postgres`
+      and `happenstance-neon` rejoined at `0.2.0`, so both are now in the list. The
+      line numbers above are as `5afcca1` had them.
 - [ ] `CLAUDE.md` stops calling "does ingest re-check append conditions" the
       central unanswered question; SY-1 – SY-7 settled it. Same correction in
       `crates/happenstance-sync/src/lib.rs:116-119`.
@@ -106,3 +110,11 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   `cargo xtask ci` green. Committed on `lane/runbook-split`.
 - 2026-09-28 — PR #14 merged as squash `65253fc`; citations of `3916f29` moved to
   `f89e184`, where the monolith is byte-identical.
+- 2026-09-28 — PR #15 merged by rebase as `db99a72` and `5afcca1`. The handover
+  and log are brought current. `README.md`, `CONTRIBUTING.md` and `ci.yml`'s
+  semver comments no longer call the registry empty, and the rev baseline now
+  covers all seven crates. The two `standards/rust` citations into `ci.yml` were
+  repointed by anchor. So were the constitution's `CONTRIBUTING.md:196`, and a
+  seed's `CONTRIBUTING.md:356-365`, which had been stale before this change.
+  Verified: `cargo run -p xtask -- lints`, `cargo xtask lint-constitution`,
+  `cargo xtask spec-trace` and `cargo xtask affected --base main` all green.
