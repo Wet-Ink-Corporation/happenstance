@@ -1,4 +1,4 @@
-# Handover — the path to `0.2.0`
+# Handover — the path to `0.2.0` (a record since 2026-09-28; the live handover is `runbook/handover.md`, and `0.2.0` shipped 2026-09-10)
 
 **Read this before `RUNBOOK.md`.** The runbook says *what the plan is*; this says
 *where the plan actually got to*, which is the thing that goes stale fastest and

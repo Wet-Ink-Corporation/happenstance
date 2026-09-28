@@ -1924,8 +1924,23 @@ fn changelog_scope_matches_publishable() -> Result<()> {
     Ok(())
 }
 
-/// The plan of record, whose `## Status` table routes the next contributor.
-const RUNBOOK: &str = "RUNBOOK.md";
+/// The plan of record's index, whose `## Status` table routes the next
+/// contributor.
+///
+/// It was `RUNBOOK.md` until the runbook was split into `runbook/`. That file
+/// stays, frozen with its line numbers intact, because about 2,250 `path:line`
+/// citations resolve against it — one of them in an accepted decision atom,
+/// which may not be edited to repoint it. The live table is here, and so is this
+/// check.
+const RUNBOOK: &str = "runbook/README.md";
+
+/// The file holding the provisional and deferred clause ledgers
+/// [`runbook_clause_ledgers_match_the_specification`] audits.
+///
+/// Separate from [`RUNBOOK`] because the index is read on every session and the
+/// ledgers are read when a clause moves; loading 180 lines of clause ledger to
+/// learn which phase is next is the cost the split exists to remove.
+const RUNBOOK_LEDGERS: &str = "runbook/ledgers.md";
 
 /// The four states `RUNBOOK.md`'s own legend permits, plus the em dash a
 /// *milestone* row carries in place of one.
@@ -1961,8 +1976,39 @@ struct PhaseRow {
 /// `CHANGELOG.md`'s heading spells it bare; four phase rows spell their state
 /// bolded and the legend spells it bare. Both differences are decoration a
 /// reader does not see, so neither may be a difference this check sees either.
+///
+/// Link syntax was in that list by this comment's title and not by its body
+/// until the split: `[Publish 0.2.0](#phase-12…)` reached the comparison with
+/// its brackets and target attached, so no linked phase cell could ever equal
+/// the plain text a reader sees. Every phase row is linked, which made the
+/// defect total rather than occasional.
 fn unmark(cell: &str) -> String {
-    cell.replace(['*', '`'], "").trim().to_owned()
+    unlink(&cell.replace(['*', '`'], "")).trim().to_owned()
+}
+
+/// `[text](target)` reduced to `text`, everywhere in `cell`.
+///
+/// Only the complete shape is reduced: a `[` with no matching `](…)` is left
+/// as written, because a cell that merely contains a bracket is not a link and
+/// guessing where one ends would invent text the reader never sees.
+fn unlink(cell: &str) -> String {
+    let mut out = String::with_capacity(cell.len());
+    let mut rest = cell;
+    while let Some(open) = rest.find('[') {
+        let after_open = &rest[open + 1..];
+        let Some(close) = after_open.find("](") else {
+            break;
+        };
+        let after_target_open = &after_open[close + 2..];
+        let Some(end) = after_target_open.find(')') else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        out.push_str(&after_open[..close]);
+        rest = &after_target_open[end + 1..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Whether `text` names `crate_name` as a whole crate name.
@@ -2108,9 +2154,9 @@ fn prerequisites(rows: &[PhaseRow], start: &[String]) -> Vec<String> {
 /// mounted in its own `tests/`. Every other reader of that table is a person,
 /// and four consecutive documents' worth of people read past it.
 ///
-/// # The two axes, and why neither is a judgement
+/// # The three axes, and why none is a judgement
 ///
-/// Both compare the table against a file outside it, so neither can be settled
+/// Each compares the table against a file outside it, so none can be settled
 /// by rewording the table.
 ///
 /// 1. **A released version vouches for its prerequisites.** `CHANGELOG.md`
@@ -2122,6 +2168,13 @@ fn prerequisites(rows: &[PhaseRow], start: &[String]) -> Vec<String> {
 ///    `xtask/src/package.rs`'s `PUBLISHABLE` — the same constant
 ///    [`changelog_scope_matches_publishable`] treats as the authority on what
 ///    this workspace ships — may not read `not started`.
+///
+/// 3. **A released version has a row.** Axis 1 used to skip a dated changelog
+///    heading with no milestone row to match, so the axis held only as long as
+///    somebody remembered to add one. Nobody did: `0.2.0`, `0.3.0`, `0.3.1` and
+///    `0.3.2` all shipped while the table's only milestone was `0.2.0-alpha.1`,
+///    and phase 12 read `not started` beside a published release — which a
+///    `0.2.0` row would have refused, since that row waits on phase 12.
 ///
 /// # What this does not verify
 ///
@@ -2175,10 +2228,17 @@ fn runbook_status_matches_the_registry() -> Result<()> {
         }
     }
 
-    // Axis 1 — a released version vouches for every phase it waited on.
+    // Axis 1 — a released version vouches for every phase it waited on, and
+    // every released version has a row to vouch through.
     let mut vouched = 0usize;
     for version in released_versions(&changelog) {
         let Some(milestone) = rows.iter().find(|r| r.phase == version) else {
+            problems.push(format!(
+                "{RUNBOOK} — {CHANGELOG} records `{version}` as released and the status table \
+                 has no milestone row naming it. A release the table does not know about is \
+                 one this axis silently skips, and four releases were skipped that way before \
+                 this line existed."
+            ));
             continue;
         };
         vouched += 1;
@@ -2952,7 +3012,7 @@ fn ledger_rows(runbook: &str, heading: &str, clause_col: usize) -> Vec<(usize, S
 fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
     let root = workspace_root()?;
     let spec = at(&root, SPECIFICATION)?;
-    let runbook = at(&root, RUNBOOK)?;
+    let runbook = at(&root, RUNBOOK_LEDGERS)?;
 
     let maturities = clause_maturities(&spec);
     if maturities.is_empty() {
@@ -2978,7 +3038,7 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
         let rows = ledger_rows(&runbook, heading, column);
         if rows.is_empty() {
             problems.push(format!(
-                "{RUNBOOK} — no ledger table found under a heading starting `{heading}`, so the \
+                "{RUNBOOK_LEDGERS} — no ledger table found under a heading starting `{heading}`, so the \
                  {marker} audit phase 12 owes has nothing behind it. Rename the heading back or \
                  delete this axis deliberately rather than by omission."
             ));
@@ -3000,14 +3060,14 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
                     "this deferred clause names no owning phase. A deferral nobody owns is a decision taken by omission, which is the shape phase 12's criterion exists to refuse"
                 };
                 problems.push(format!(
-                    "{RUNBOOK}:{line} — {what}, and a blank cell reads as covered."
+                    "{RUNBOOK_LEDGERS}:{line} — {what}, and a blank cell reads as covered."
                 ));
             }
         }
 
         for clause in expected.difference(&named) {
             problems.push(format!(
-                "{RUNBOOK} — `{clause}` is `[{marker}]` in {SPECIFICATION} §7.2 and appears in \
+                "{RUNBOOK_LEDGERS} — `{clause}` is `[{marker}]` in {SPECIFICATION} §7.2 and appears in \
                  no row of the `{heading}…` ledger. That is the shape phase 3 and phase 5 both \
                  shipped: a heading whose count is right and whose rows are short, which a \
                  phase-12 audit reading the table alone reports as everything owned."
@@ -3015,7 +3075,7 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
         }
         for clause in named.difference(&expected) {
             problems.push(format!(
-                "{RUNBOOK} — the `{heading}…` ledger names `{clause}`, which {SPECIFICATION} \
+                "{RUNBOOK_LEDGERS} — the `{heading}…` ledger names `{clause}`, which {SPECIFICATION} \
                  §7.2 does not mark `[{marker}]`. A row that outlives its clause's maturity \
                  overstates what is still open, and the count above it stops meaning anything."
             ));
@@ -3334,6 +3394,7 @@ State is one of `not started`, `in progress`, `blocked`, `done`.
         let mut out = Vec::new();
         for version in released_versions(changelog) {
             let Some(milestone) = rows.iter().find(|r| r.phase == version) else {
+                out.push(format!("{version} has no row"));
                 continue;
             };
             for number in prerequisites(&rows, &milestone.depends_on) {
@@ -3408,6 +3469,81 @@ State is one of `not started`, `in progress`, `blocked`, `done`.
         assert_eq!(
             rows.iter().find(|r| r.number == "10").unwrap().state,
             "not started"
+        );
+    }
+
+    /// The table as `3916f29` left it, cut to the rows that carry the argument:
+    /// four releases in the changelog, one milestone row, and phase 12 — the
+    /// publication phase — reading `not started`.
+    const RELEASED_WITHOUT_ROWS: &str = "\
+## Status
+
+| # | Phase | Depends on | State | Proof artefact |
+|---|---|---|---|---|
+| 7 | [The typed layer](#phase-7) | — | done | a `trybuild` compile-fail case |
+| — | **`0.2.0-alpha.1`** | 7 | — | — |
+| 8 | [`happenstance-sqlite`](#phase-8) | 7 | done | the concurrency macro |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8 | not started | docs.rs green |
+";
+
+    const FOUR_RELEASES: &str = "\
+## [Unreleased]
+
+## [0.3.0] — 2026-09-11
+
+## [0.2.0] — 2026-09-10
+
+## [0.2.0-alpha.1] — 2026-08-16
+";
+
+    /// The drift the split found: the old axis 1 skipped both releases, so a
+    /// published phase read `not started` and the check passed.
+    #[test]
+    fn a_released_version_with_no_row_is_refused() {
+        assert_eq!(
+            disagreements(RELEASED_WITHOUT_ROWS, FOUR_RELEASES),
+            vec!["0.3.0 has no row", "0.2.0 has no row"]
+        );
+    }
+
+    /// Adding the missing row is not enough on its own, which is the point of
+    /// adding it: the `0.2.0` row waits on phase 12, and phase 12 is not done.
+    #[test]
+    fn a_milestone_row_holds_its_phase_to_done() {
+        let with_rows = RELEASED_WITHOUT_ROWS.replace(
+            "| 12 |",
+            "| — | **`0.2.0`** | 12 | — | — |\n| — | **`0.3.0`** | 12 | — | — |\n| 12 |",
+        );
+        assert_eq!(
+            disagreements(&with_rows, FOUR_RELEASES),
+            vec!["0.3.0 waits on phase 12", "0.2.0 waits on phase 12"]
+        );
+        let done = with_rows.replace("| not started |", "| done |");
+        assert!(
+            disagreements(&done, FOUR_RELEASES).is_empty(),
+            "{:?}",
+            disagreements(&done, FOUR_RELEASES)
+        );
+    }
+
+    /// A linked phase cell compares as the text a reader sees. Before `unlink`,
+    /// `[Publish 0.2.0](#phase-12…)` reached the comparison whole, so no linked
+    /// cell could ever match a version.
+    #[test]
+    fn a_linked_cell_compares_as_its_text() {
+        assert_eq!(
+            unmark("[**Publish `0.2.0`**](#phase-12--publish-020)"),
+            "Publish 0.2.0"
+        );
+        assert_eq!(unmark("**`0.3.2`**"), "0.3.2");
+        assert_eq!(
+            unmark("[Sync](phases/13-sync.md) and [Retention](phases/14.md)"),
+            "Sync and Retention"
+        );
+        // Not a link, so left alone rather than guessed at.
+        assert_eq!(
+            unmark("a [bracket without a target"),
+            "a [bracket without a target"
         );
     }
 
