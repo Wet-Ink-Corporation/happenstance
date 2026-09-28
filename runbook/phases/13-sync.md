@@ -4,7 +4,9 @@
 > **Edited since the split:** the dependency row now includes phase 17, because
 > `0.4.0` changes the published surface this phase builds on — see the
 > [roadmap](../roadmap.md). The "Phase 12 is in the dependency row as ordering"
-> paragraph is history: phase 12 is done.
+> paragraph is history: phase 12 is done. The ADR-0026 and ADR-0027 work items
+> are reworded to say they *record* SY-1 – SY-7 rather than reopen them — the
+> section above them already treated those clauses as settled.
 
 
 **Goal.** Replication between happenstance instances, expressed as a **port with
@@ -51,12 +53,13 @@ provides the atomicity and the identity that makes it idempotent.
       rule that a name is reserved when its phase starts, not before — the point
       being that by now there is a crate to justify it with.
 
-- [ ] ADR-0026. What ingest promises, what makes re-delivery harmless, and what
-      the port may assume about a transport it cannot see. The two real peers are a
+- [ ] ADR-0026. Record the ingest boundary SY-1 – SY-7 already fix, and settle
+      what makes re-delivery harmless and what the port may assume about a transport it cannot see. The two real peers are a
       Durable Object over a socket and a Postgres over one-shot HTTP with no
       interactive transaction; a `SyncPeer` that cannot be implemented by the second
       is a `SyncPeer` shaped like the first. Phase 2's sketch is the evidence.
-- [ ] ADR-0027. The merge rule, the compensation contract, whether replication is
+- [ ] ADR-0027. Record SY-1 – SY-7's ingest and compensation constraints as
+      settled, not open, and decide the merge rule, whether replication is
       whole-log or scoped (SY-27, SY-28 — a spoke holding a filtered subset cannot
       distinguish "not yet received" from "filtered out", so a position-based resume
       watermark against a hub is unsound), idempotent bulk ingest in bounded round

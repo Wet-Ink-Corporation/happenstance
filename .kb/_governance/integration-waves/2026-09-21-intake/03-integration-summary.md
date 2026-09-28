@@ -77,8 +77,8 @@ on — written after those atoms existed, since it is Op 1. `kb-decision-0065`'s
 was written (Op 2, after Op 1). The three `merge_existing` ops (3–5) each
 gain `kb-decision-0065` in `related`; ops 3 and 4 additionally gain
 `kb-reference-busy-timeout-adapter-cap-sweep-001`. Reciprocal backlinks — the
-sweep atom's own `related` gaining the open questions, and four *other*,
-pre-existing reference/governance atoms
+sweep atom's own `related` gaining the open questions, and five *other*,
+pre-existing atoms — three reference, one governance, one open question
 (`busy-timeout-margin-2026-09.md`, `append-condition-experiment-2026-08.md`,
 `one-connection-latency-2026-09.md`, `cf-33-cf-34-scope-outside-the-testkit.md`,
 `what-may-refute-a-finding.md`) gaining a pointer to `kb-decision-0065` or the

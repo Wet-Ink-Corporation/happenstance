@@ -20,7 +20,7 @@ summary: >-
   the other half of that table: at libtest's default parallelism — what cargo xtask ci actually runs —
   5,000 ms went red 1 of 8, the same direction as the sibling's finding that fewer simultaneously-
   runnable contenders measure safer. Raising the cap costs nothing when nothing is contended: passing-
-  run target durations were 4.91–5.65 s at 5,000 ms and 4.99–5.40 s at 15,000 ms, indistinguishable on
+  run target durations were 4.51–5.65 s at 5,000 ms and 4.99–5.40 s at 15,000 ms, indistinguishable on
   a shared host, because the busy handler returns the instant the lock is acquired and the cap bounds
   only the tail. Every failure was a liveness failure — committed was correct in every row, and the
   two rules that went red are the two that require every contender to commit. Conditions, because
@@ -119,6 +119,11 @@ parallelism, passing-run target durations: 4.91, 5.47, 5.48, 5.57, 5.65, 4.51 s 
 raise *is* paid for by: a genuinely stuck writer now reports in 15 s rather than 5 s, a rare path
 that still ends in a red rule rather than a hang, because the cap stays finite.
 
+*Erratum, 2026-09-28.* The six durations above run from 4.51 s, not 4.91 s; the
+range was misquoted as 4.91–5.65 s in this atom's summary and in
+`kb-decision-0065` (lines 29 and 123). The decision atom is accepted and is not
+edited in place; the conclusion it draws — raising the cap is free on the healthy
+path — does not depend on the lower bound.
 ## Conditions, and what this cannot show
 
 Windows 11, i9-13905H (14c/20t) — the same host as every other page in this experiment, and

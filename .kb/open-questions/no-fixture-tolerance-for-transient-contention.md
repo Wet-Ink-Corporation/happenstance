@@ -149,8 +149,8 @@ this section records is that the same paragraph's second claim — that the inst
 
 **The result is asymmetric, and it is the finding.**
 `a_retry_loop_gated_on_the_dcb_signal_never_retries_a_busy_store`
-(`crates/happenstance-testkit/tests/contended_store_instruments.rs:290`) drives the same contended
-store twice. Gated on `AppendError::is_condition_violated` (`happenstance-core/src/error.rs:253`) —
+(`crates/happenstance-testkit/tests/contended_store_instruments.rs:290`) drives two identically
+armed contended stores, one per retry strategy. Gated on `AppendError::is_condition_violated` (`happenstance-core/src/error.rs:253`) —
 the *only* classifier the port offers a caller — the loop retries zero times and is left holding a
 refusal it cannot name, because that predicate answers `false` for a busy store exactly as it does
 for a broken one. Gated on the store channel instead, the loop retries once and lands. The
