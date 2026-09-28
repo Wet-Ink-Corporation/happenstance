@@ -136,9 +136,10 @@ checkpoint until the runner has caught up, and `200` after.
 
 ## Status
 
-A ✅ below means **in the `0.3.2` release set and passing its suite**. All seven
-crates in that set are on crates.io at `0.3.2`; the manifests and
-`xtask/src/package.rs`'s `PUBLISHABLE` are what name them.
+A ✅ below means **passing its suite**. The seven rows that also say *in the
+`0.3.2` release set* are on crates.io at `0.3.2`; the manifests and
+`xtask/src/package.rs`'s `PUBLISHABLE` are what name them. `happenstance-ladybug`
+passes its suite and is not published, for the reason its row gives.
 
 | Crate | Role | Status |
 |---|---|---|
