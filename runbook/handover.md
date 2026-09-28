@@ -36,7 +36,9 @@ merged as a **squash**, `65253fc`, so `3916f29` — the commit the runbook cited
 the pre-split state — is not on `main`. It is still fetchable through
 `refs/pull/14/head`, but citations belong on `main`: they now name `f89e184`,
 where `RUNBOOK.md` and `HANDOVER.md` are byte-identical to `3916f29`. The frozen
-banner at `RUNBOOK.md:3` names `65253fc`, line-for-line with `f89e184`.
+banner at `RUNBOOK.md:3` names `65253fc`: its predecessor `f89e184` with four
+lines edited in place — the banner and two status rows — so line numbers agree
+and those four lines' text does not.
 
 Verified: `cargo run -p xtask -- lints` green; `RUNBOOK.md` still 5,704 lines.
 

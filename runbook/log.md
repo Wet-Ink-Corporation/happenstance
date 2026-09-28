@@ -12,7 +12,8 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ## 2026-09-28 — citations moved off a squashed commit
 
-*`lane/runbook-citations-after-squash`, opened as a PR.* Phase 15.
+*`lane/runbook-citations-after-squash`, PR #15. Its commit on `main` is recorded
+here when it merges — a PR-branch commit would not survive a squash.* Phase 15.
 
 PR #14 merged as a squash (`65253fc`), leaving `3916f29` off `main`. Eleven
 citations named it; ten now name `f89e184`, where `RUNBOOK.md` and `HANDOVER.md`
