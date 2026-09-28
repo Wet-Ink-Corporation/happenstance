@@ -86,9 +86,15 @@ references/                      evidence kept for citation, binding nothing.
   architecture/                    the workspace drawn — one traced command loop, the
                                    in-process boundary, and where operator-owned
                                    storage begins. self-contained HTML and its source.
-  seeds/                           raw material for `/redkiln:initiative`.
+  seeds/                           raw material for future planning. problem and vision only.
 docs/                            user documentation. nothing else.
-RUNBOOK.md                       the plan of record, and how far it has got.
+runbook/                         the plan of record, and how far it has got. start a
+                                 session at runbook/handover.md, then the status table in
+                                 runbook/README.md. one file per open phase; the roadmap
+                                 to 1.0 in runbook/roadmap.md.
+RUNBOOK.md                       the frozen monolith the runbook was split from. phases
+                                 0–12 in full. never shrink it: ~2,250 `RUNBOOK.md:N`
+                                 citations resolve against its line numbers.
 
 .kb/                             the knowledge base — what is settled.
   decisions/                       the ADRs, one atom each. accepted ones are immutable.
@@ -97,9 +103,9 @@ RUNBOOK.md                       the plan of record, and how far it has got.
   open-questions/                  what is deliberately not settled.
   maps/                            the indexes: domain, decisions, open questions.
   product/ design/                 personas and journeys; signed-off design patterns.
-  _intake/                         staging. `/redkiln:kb-ingest` consumes and clears it.
-.bklg/                           the backlog — work in motion. `redkiln status`.
-.redkiln/                        config, the pinned process pack, templates, telemetry.
+  _intake/                         staging for atoms, written into .kb/ by hand.
+.bklg/                           the redkiln backlog, frozen 2026-09-28. read, never edit.
+.redkiln/                        redkiln's config and telemetry, frozen. redkiln is retired here.
 ```
 
 **🔩 skeleton** means real associated types and `todo!()` bodies, `publish =
@@ -154,113 +160,44 @@ never waits on replication.
 
 ## Where the work lives
 
-This repository is Redkiln-managed. Three trees, and they answer different
-questions — putting something in the wrong one is how it stops being findable.
+**Redkiln is retired in this repository as of 2026-09-28.** Tracking is manual
+until `redkiln-rs` is live, which is after happenstance's 1.0. Do not run
+`redkiln` commands or the `/redkiln:*` skills here: the trees they wrote are now
+records, and a command run against them re-opens a process nobody is following.
 
+- **[`runbook/`](runbook/README.md) — what is being done, and how far it has got.**
+  The only tracker. Start at `runbook/handover.md`; the status table in
+  `runbook/README.md` is held to the changelog and the registry by
+  `cargo xtask lints`.
 - **`.kb/` — what is settled.** Durable knowledge as *atoms*: markdown with
-  frontmatter that `redkiln validate --kb` checks. An **accepted decision atom is
-  immutable** — validation checks each one against `HEAD`, so correcting one means
-  writing a new atom that supersedes it, never editing the body. That is the
-  discipline the ADRs were always written under and nothing previously enforced.
+  frontmatter. **An accepted decision atom is immutable** — correcting one means
+  writing a new atom that supersedes it, never editing the body. Atoms are now
+  written by hand, from `.kb/_intake/`: copy the frontmatter shape of a
+  neighbouring atom of the same kind, add the atom to the right map under
+  `.kb/maps/`, and remove the intake file it came from.
+
+  **Nothing validates `.kb` frontmatter any more.** `redkiln validate --kb` was
+  the only check, and immutability was only ever enforced pre-commit. Read a diff
+  that touches `.kb/decisions/` for an edited accepted body before merging it.
 
   **A decision lives in two places on purpose.** `.kb/decisions/` holds the
-  numbered *atoms* — canonical, ~115 lines each, carrying the frontmatter, the
-  status and the supersession graph that `validate --kb` enforces.
-  `references/adr/` holds the full original records, up to 1,508 lines, carrying
-  the compiler transcripts, the rejected alternatives and the measurement tables
-  a summary cannot hold. Link the atom; cite the record by `file:line`. Deleting
-  the second because the first exists would discard about 76% of the corpus, and
-  `spec-trace` will catch you, because `spec/SPECIFICATION.md` cites line ranges
-  that only exist in the long form.
-
-  **The count is deliberately not written here.** It said *"the seventeen
-  atoms"* until 2026-09-07 and by then there were thirty-two, because a number
-  in a file that loads on every task is a number nobody re-reads — the same
-  defect this file already names one paragraph down, where the publishable-crate
-  count is spelled with its members precisely because a bare count had drifted
-  once. `ls .kb/decisions/` is the answer and cannot go stale. Note that the two
-  directories do **not** hold the same number of things: not every atom has a
-  long-form record behind it, so an atom without one in `references/adr/` is
-  normal rather than a gap to fill.
-
-  Atoms are authored by `/redkiln:kb-ingest` from `.kb/_intake/`, not by hand:
-  hand-writing them produces the directory layout of the process without the
-  process, which is why the first attempt at this was reverted (`0269720`).
-- **`.bklg/` — work in motion.** Initiatives decompose into projects, projects into
-  stories. `redkiln status`, `redkiln next`, `redkiln board`.
-- **`.redkiln/` — the engine.** Config, the process pack and templates (both pinned
-  at `init`), and committed telemetry.
-
-**The CLI is the only writer of an item's system frontmatter.** Never hand-edit
-`id`, `stage`, `status`, `updated` or `links`; drive every state change through
-`redkiln <command>`. A `PreToolUse` hook denies the edit, and the prose body of an
-artifact is yours to write freely.
-
-Six templates under `.redkiln/templates/` are deliberately customised — `spec.md`,
-`_design.md`, `_intake-brief.md`, `discover.md` and the two gate checklists — so
-`redkiln doctor` reports six `template-drift` advisories forever. That is expected,
-and the `backlog` CI job asserted the set was **exactly** those six: a seventh is a
-template someone changed without deciding to, and a missing one is a customisation
-reverted by `adopt --templates`.
-
-**That job is disabled as of 2026-09-04** — this repository has moved off the
-redkiln version it pins, so the pinned CLI reports drift against a process the
-repository no longer runs. It is `if: false` rather than deleted, so it shows as
-*skipped* rather than vanishing: the job's own argument is that a check which
-quietly stops running is worth less than none, because the green tick keeps
-arriving. **While it is off, nothing enforces `.kb` frontmatter validation,
-hand-edited item frontmatter, or the six-template assertion above** — all three
-merge green. The restore path and the full cost are written at the job in
-`.github/workflows/ci.yml`.
-
-**Accepted-atom immutability was in that list and has been removed from it,
-because restoring the job would not restore it.** The check compares the working
-tree against the file as `HEAD` has it — verified by editing an accepted atom's
-body and watching `redkiln validate --kb` report *"accepted decision
-'kb-decision-0042' was edited in place"* on the uncommitted change. It follows
-that the check passes the moment that edit is committed, and a CI checkout's
-working tree **is** `HEAD`, so this half has never been able to fire there and
-would not fire if the job were switched on tomorrow. It is a real check with a
-real subject — a local edit, before it is committed — and the honest statement of
-its reach is *pre-commit*, not *pre-merge*. What would enforce it in CI is a
-different instrument: a diff of every `status: accepted` atom body against the
-merge base, which nothing in this repository has yet.
-
-Related, and it is why this correction matters rather than being pedantry: the
-`0.2.0` certification review named this job as the check that would have caught
-three ADRs the specification cites while none had an atom. It would not have.
-`redkiln validate --kb` exits 0 at `HEAD` today, because it validates the atoms
-that **exist**; three records in `references/adr/` with no atom are invisible to
-it. Nothing here — enabled or disabled — resolves the status of a cited ADR.
-
-**`doctor` also reports four `process-pack` advisories, and they are not the six.**
-`initiative.yaml`, `project.yaml`, `project-lite.yaml` and `story.yaml` under
-`.redkiln/processes/` all differ *substantively* from the installed CLI's bundled
-defaults. That is the same cause as the disabled job one paragraph up — the packs
-were pinned at `init` and the installed CLI has moved on — but it is a different
-set of files with a different remedy (`adopt --packs`, not `--templates`), and it
-was undocumented here until 2026-09-07 while the six-template case was written
-down twice. Read the advisory count as **six plus four**; a fifth pack advisory
-means a pack changed without a decision, exactly as a seventh template does.
-`adopt --packs` is not forbidden the way `adopt --templates` is, but it is not
-free either: it adopts a process the in-flight backlog was not planned under, so
-it waits for a quiet moment rather than being run because `upgrade` suggested it.
-
-**Never run `redkiln adopt --templates`.** `redkiln upgrade` recommends it, and it
-is wrong here: it would overwrite all six customisations with the bundled defaults,
-silently — and the CI assertion above would then fail on the *absence* it created.
-The customisations are the repository's own gate bars, and one of them (the
-one-line checklist boxes) exists because the parser matches line-by-line and a
-wrapped box can never match.
-
-`_design.md` is the bundled design stage repurposed. Redkiln ships it because
-nothing else in its pipeline could perceive what a screen looks like; a library has
-the same hole in another medium, so here it asks for the **public API surface** —
-signatures, visibility decisions, what the shape costs a caller, and a doctest in
-place of a mock. Every other check in this repository is satisfied by an API that
-is correct and unusable. `design.capture` is deliberately absent from
-`.redkiln/config.yaml`, which makes the perceptual review a *skip* rather than a
-silent pass: there is no app to screenshot.
+  numbered *atoms*, ~115 lines each, carrying the status and the supersession
+  graph. `references/adr/` holds the full original records, up to 1,508 lines,
+  carrying the compiler transcripts, the rejected alternatives and the measurement
+  tables a summary cannot hold. Link the atom; cite the record by `file:line`.
+  Deleting the second because the first exists would discard about 76% of the
+  corpus, and `spec-trace` will catch you, because `spec/SPECIFICATION.md` cites
+  line ranges that only exist in the long form. Not every atom has a long-form
+  record, and `ls .kb/decisions/` is the count — it is deliberately not written
+  here.
+- **`.bklg/` — a frozen record.** The backlog as redkiln left it on 2026-09-28: three
+  initiatives (one an empty template), 190 stories, none at done, because phases 10–12 and releases
+  `0.2.0` – `0.3.2` were run from the runbook rather than through it. Its
+  `spec.md` bodies remain useful planning material — phases 13, 14 and 20 point
+  at them — but its stages and statuses are not current and are not to be edited.
+- **`.redkiln/` — frozen.** Config, the pinned process pack and templates, and
+  telemetry. The `backlog` CI job that checked it has been `if: false` since
+  2026-09-04 and stays that way.
 
 ## Binding constraints
 
@@ -394,15 +331,10 @@ cargo test --workspace --all-features
 cargo run -p course-subscriptions        # the worked example
 cargo xtask wasm                        # just the wasm32 check
 cargo xtask spec-trace                  # just the specification's cross-references
-
-redkiln status                          # the backlog roll-up
-redkiln next                            # what is actually actionable
-redkiln validate --kb && redkiln doctor # the backlog and knowledge base check
 ```
 
-The middle two are not conveniences — they are the commands `.redkiln/config.yaml`'s
-`verify:` block wires to redkiln's story and integration grains, so they run whether
-or not anyone types them.
+`affected` is the scoped gate for a change in progress and `ci --fast` the bar for
+an intermediate step; neither replaces `cargo xtask ci` before a merge.
 
 `cargo xtask ci` runs: fmt, clippy with `-D warnings`, tests, four wasm32 steps —
 the build of `happenstance-core`, which is the standing guard on constraint 1 and
@@ -451,7 +383,7 @@ what is **true now** — 201 numbered clauses, each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
 naming the conformance rule that checks it and the wrong implementation it
 forbids. `cargo xtask spec-trace` is a gate step precisely so those markers and
-citations cannot rot into decoration. [`RUNBOOK.md`](RUNBOOK.md) says
+citations cannot rot into decoration. [`runbook/`](runbook/README.md) says
 **who settles what is still open, and when**. Where a summary below disagrees
 with a clause, the clause wins; the summaries are orientation only.
 

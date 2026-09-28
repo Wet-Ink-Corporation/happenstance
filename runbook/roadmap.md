@@ -1,0 +1,116 @@
+# Roadmap — from `0.3.2` to `1.0.0`
+
+Written 2026-09-28 at `3916f29`, when the runbook was split. The status of each
+phase lives in the [index](README.md#status), not here; this file says **why the
+order is what it is**, which is the part a status table cannot carry.
+
+## Where it starts
+
+Seven crates are published at `0.3.2` — `happenstance-core`, `happenstance`,
+`happenstance-testkit`, `happenstance-sqlite`, `happenstance-cloudflare`,
+`happenstance-postgres` and `happenstance-neon` — with no `todo!()` left in any of
+them. `EventStore` has been `[FROZEN]` since `0.2.0` and `ProjectionStore` since
+`0.3.0` (ADR-0063). The specification carries 141 `[FROZEN]`, 41
+`[PROVISIONAL]`, 12 `[DEFERRED]` and 7 `[NON-NORMATIVE]` clauses — `cargo xtask
+spec-trace`'s figures, and the ones to trust over this sentence.
+
+What is not finished:
+
+- **`happenstance-sync`** is a skeleton: the port traits and `MemorySyncPeer`
+  exist, no runner does, `happenstance-sync-testkit` does not, and its four
+  `todo!()` bodies are blocked on `happenstance-core` having no write path that
+  preserves a foreign `EventId`. Phase 13.
+- **Retention** has no answer: ES-39, CF-27 and SY-32 are `[DEFERRED]`, and one
+  of ADR-0028's two answers adds a method to `EventStore`. Phase 14.
+- **The typed layer's runner** is still behind `unstable-projection`:
+  `Projection::apply` is synchronous and nothing owns that question; there is no
+  failure-policy seam (PS-27) and no fan-out runner (PS-30).
+- **`happenstance-ladybug`** is finished and cannot publish until `lbug` builds
+  on docs.rs.
+- **Nothing defines 1.0.** No document in the repository states what it
+  promises; `HS-I0006`'s charter names it an explicit non-goal
+  (`.bklg/from-contract-to-published-library/initiative.md:170`), and `SECURITY.md`
+  says *"Pre-1.0, and honestly so"*.
+
+## The ordering rule
+
+**Anything that could break a published crate is decided before 1.0, even where
+the code that uses it lands after.** In `0.x` the minor is the breaking
+position and a break costs a version number; after `1.0.0` it costs a major and
+every downstream `Cargo.toml`. So the roadmap runs a **decision window** — phases
+16 and 17 — ahead of the implementation phases, and asks each open question one
+thing first: *does its answer change a published signature?* If it does, it is
+answered in that window, whether or not its implementation is.
+
+That rule is why two decisions move earlier than the phases that own them.
+**ADR-0028's decision** moves from phase 14 to phase 17, because one answer adds
+a method to `EventStore`. **ADR-0026's published-surface half** — whether
+`happenstance-core` needs a write path that preserves a foreign identity — moves
+to phase 17 for the same reason; the rest of ADR-0026 stays phase 13's.
+
+## The sequence
+
+```
+12 ─▶ 15 ─▶ 16 ─▶ 17 [0.4.0] ─▶ 13 ─▶ 14 ─▶ 21 [1.0.0]
+                   │                      ▲
+                   ├─▶ 18 ────────────────┤   the typed runner, alongside sync
+                   └─▶ 19b                │   SQLite on wasm32; a candidate spoke for 13
+                                          │
+off the path, and free to run alongside it:
+      15 ─▶ 19a                           │   SQLite on wasm32, the skeleton
+      15 ─▶ 20 ───────────────────────────┘   documentation that teaches
+```
+| # | Phase | Why here | Days |
+|---|---|---|---|
+| 15 | [Reconcile the record](phases/15-reconcile.md) | Every plan-of-record document stopped between 2026-09-07 and 09-11 and four releases went out after. A plan read off a stale table sends somebody to build what is built — which has happened here once already, and held a release for it. | 2–3 |
+| 16 | [Define 1.0](phases/16-define-1-0.md) | Nothing else can be sequenced against a target nobody has written down. | 2 |
+| 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | The last cheap place to break a published signature. | 5–8 |
+| 13 | [`happenstance-sync`](phases/13-sync.md) | After 17, because 17 may change the core surface a peer is built against. Inside 1.0 (D-1). | 12 |
+| 14 | [Retention and completeness](phases/14-retention.md) | Builds what 17 decided about forgetting. | 5 |
+| 18 | [The typed runner leaves its gate](phases/18-typed-runner.md) | An application author's runner is the one piece of the typed layer still marked unstable. | 5–8 |
+| 19a | [SQLite on `wasm32` — skeleton](phases/19-sqlite-on-wasm.md) | Cheap, and its three answers set 19b's cost. | 3 |
+| 19b | [SQLite on `wasm32` — the adapter](phases/19-sqlite-on-wasm.md) | After 17, against the `0.4.0` surface; a candidate offline spoke for 13. | 8–10 |
+| 20 | [Documentation that teaches](phases/20-docs-that-teach.md) | 1.0 is a promise to a reader who is not the author. Planned in `.bklg/docs-that-teach/`, tracked here. | to be estimated |
+| 21 | [`1.0.0`](phases/21-one-point-oh.md) | Last, by definition. | 3–5, plus a soak |
+
+**Solo, the 1.0 path is about 34–43 working days**: 15, 16, 17, 13, 14, 18 and 21.
+Sync is inside 1.0 (D-1 below), so 13 and 14 are on the path rather than beside it;
+without them it would have been 17–26. Phases 19a and 20 run alongside and are not
+counted. Every figure is an estimate carried into a repository whose own history
+records estimates being wrong, and the session logs are where the actuals go.
+
+## Decisions taken
+
+Each changed the shape of the table, and each is recorded in the Weigh-In ledger
+with a decision atom staged at `.kb/_intake/decisions/`.
+
+- **D-1 — `happenstance-sync` is inside 1.0** (`wi-40b321`, decided 2026-09-28).
+  The recommendation was the opposite — ship 1.0 on the contract, typed layer,
+  testkit and four adapters, with sync on its own `0.x` line — and was overridden.
+  So phase 21 depends on 13 and 14, and the path is the longer figure above. What
+  the recommendation feared is worth keeping in view: sync is the least-settled
+  piece, and it now sits on the critical path to the promise.
+- **D-2 — `.bklg/` is frozen, and this runbook tracks the rest**
+  (`wi-016abe`, decided 2026-09-28). Decided as *close `HS-I0006` and re-plan*,
+  then shaped by the retirement of redkiln the same day: there is no CLI to close
+  it with, so nothing in `.bklg/` is advanced or closed. It stays as the record
+  redkiln left, 190 stories and none at done, and the remaining work is planned
+  in `phases/`. `CLAUDE.md` states the rule. Tracking is manual until `redkiln-rs`
+  is live, after 1.0.
+- **D-3 — delete the merged branches** (`wi-b9b9ab`, decided 2026-09-28). Six
+  `lane/*` branches squash-merged in PRs #7–#13, and
+  `wip/hs-p0012-benchmark-harness`, whose story was redone on `main` and shipped
+  in `v0.2.0`. Executed the same day; the tips at deletion are recorded in
+  [phase 15](phases/15-reconcile.md).
+
+## What is deliberately not on this roadmap
+
+- **`happenstance-macros`.** Out of scope by ADR-0033, on a measured 0.50:1
+  ceremony ratio against a 1:1 threshold. Reopened only by the conditions that ADR
+  names.
+- **DCB wire interoperability (WF-1).** Deferred on a reason that got stronger at
+  phase 5: DCB publishes no wire format to interoperate with.
+- **Measured-not-claimed performance publication** and **the licensing and
+  commercial seam** (`references/seeds/`). Both are seeds with no initiative;
+  neither changes a published signature, so neither is a 1.0 question. Phase 16
+  may decide otherwise, and should say so if it does.

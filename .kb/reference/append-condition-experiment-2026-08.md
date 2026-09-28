@@ -34,6 +34,7 @@ related:
   - kb-reference-position-visibility-experiment-001
   - kb-open-question-es-17-two-adapter-measurement-001
   - kb-reference-busy-timeout-margin-001
+  - kb-reference-busy-timeout-adapter-cap-sweep-001
   - kb-open-question-adr-0022-falsifiers-fired-001
   - kb-reference-shipped-append-condition-sql-001
   - kb-reference-host-clocksource-tsc-hpet-001

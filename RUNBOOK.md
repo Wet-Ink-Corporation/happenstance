@@ -1,6 +1,6 @@
-# Runbook
+# Runbook — the frozen monolith
 
-The plan for finishing happenstance, and the record of how far it has got.
+**Frozen at `3916f29` (2026-09-28); the live runbook is [`runbook/README.md`](runbook/README.md).** Kept, line numbers intact, because about 2,250 `RUNBOOK.md:N` citations resolve against it; edit only one line in place.
 
 ## What changed, and why
 
@@ -162,9 +162,9 @@ turned out to be one DCB already provides.
 | 8 | [`happenstance-sqlite`](#phase-8--happenstance-sqlite) | 4, 6, 7 | done | the concurrency macro green at 64 contenders, and an acknowledged write surviving a process reopen |
 | 9 | [Cloudflare Durable Object](#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green under `workerd`, and a real `worker::Error`-carrying error type that either loses information the caller needs or demonstrably does not |
 | 10a | [Postgres event store](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | **done** | the concurrency macro green on a store that does **not** serialise its writers, with the visibility cost measured |
-| 10b | [Postgres projections, and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | in progress | `happenstance-neon`'s capability skip list — the transport axis's far end stated honestly — and no `todo!()` left on either crate |
+| 10b | [Postgres projections, and Neon](#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | done | `happenstance-neon`'s capability skip list — the transport axis's far end stated honestly — and no `todo!()` left on either crate |
 | 11 | [Ladybug projection store](#phase-11--ladybug-projection-store) | 6 | done | the projection suite green on a non-SQL batch, and a written verdict on whether phase 6's freeze held |
-| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10a** | not started | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
+| 12 | [**Publish `0.2.0`**](#phase-12--publish-020) | 7, 8, **10a** | done | docs.rs green under `--all-features` and the `docsrs` cfg; `cargo-semver-checks` reporting against a registry baseline |
 | 13 | [`happenstance-sync`](#phase-13--happenstance-sync-and-its-testkit) | 5, 8, 9, 10a, 10b, 12 | not started | one suite green against three peers, two of them unlike, and a byte-identical payload round trip |
 | 14 | [Retention and completeness](#phase-14--retention-deletion-and-completeness) | 13 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
 

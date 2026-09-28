@@ -455,6 +455,9 @@ pub(crate) fn is_inert(path: &str) -> bool {
         "CLAUDE.md",
         "CONTRIBUTING.md",
         "RUNBOOK.md",
+        // The live runbook since the split; `RUNBOOK.md` above is its frozen
+        // predecessor. Inert for the same reason: prose no package compiles.
+        "runbook/",
         "LICENSE-MIT",
         "LICENSE-APACHE",
         ".gitignore",
@@ -851,6 +854,8 @@ mod tests {
     #[test]
     fn a_top_level_prose_file_selects_nothing() {
         let affected = affected_packages(&changed(&["RUNBOOK.md"]), &members());
+        assert!(affected.is_empty());
+        let affected = affected_packages(&changed(&["runbook/handover.md"]), &members());
         assert!(affected.is_empty());
     }
 

@@ -57,6 +57,7 @@ related:
   - kb-decision-0059
   - kb-decision-0060
   - kb-decision-0061
+  - kb-decision-0065
   - kb-reference-mutation-coverage-arm-two-001
   - kb-open-question-cf-5-per-rule-or-branch-001
   - kb-open-question-adr-0022-falsifiers-fired-001
