@@ -1,6 +1,6 @@
 # Runbook — the frozen monolith
 
-**Frozen at `65253fc` (2026-09-28), line-for-line with `f89e184`; the live runbook is [`runbook/README.md`](runbook/README.md).** Kept, line numbers intact, because about 2,250 `RUNBOOK.md:N` citations resolve against it; edit only one line in place.
+**Frozen at `65253fc` (2026-09-28): its predecessor `f89e184` with four lines edited in place, so line numbers agree; the live runbook is [`runbook/README.md`](runbook/README.md).** Kept, line numbers intact, because about 2,250 `RUNBOOK.md:N` citations resolve against it; edit only one line in place.
 
 ## What changed, and why
 
