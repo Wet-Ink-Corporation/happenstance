@@ -1026,101 +1026,42 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
-          # Compare against the commit this pull request branched from, not the
-          # registry. The original reason was that every name sat at `0.0.0` and
-          # Cargo treats each `0.0.x` as incompatible with every other, so there
-          # was no compatible predecessor to diff against and the job reported
-          # nothing while still going green.
+          # Compare against the commit this pull request branched from. This
+          # catches a break introduced *by this pull request*. It cannot see a
+          # break merged two pull requests ago, because that break is already
+          # part of its baseline. The registry baseline below covers that case.
           #
-          # **That reason expires when `0.2.0` reaches the registry, and it has
-          # not yet.** Measured at the release pass: `max_stable_version` is
-          # `0.0.0` for all seven crates, three of them additionally carry
-          # `0.2.0-alpha.1`, and nothing is yanked — so no crate has a compatible
-          # published predecessor and the registry baseline is still unavailable.
-          # It is the one that matters for release safety. Adding it is the outstanding
-          # half of phase 12's `cargo-semver-checks` work and is deliberately not
-          # done in the same change as the release itself — the registry has to
-          # carry `0.2.0` before a job can diff against it, and a job that fails
-          # because the version it names does not exist yet teaches nobody
-          # anything.
-          #
-          # Be clear about what the rev baseline buys until then. It catches a
-          # break introduced *by this pull request*. It says nothing about breaks
-          # against the last release — a break merged two pull requests ago is
-          # part of the baseline and therefore invisible here. Both baselines are
-          # kept once the registry one lands: the registry for release safety,
-          # this one for review signal.
+          # Until `0.2.0` this was the only baseline. Every name sat at `0.0.0`,
+          # and Cargo treats each `0.0.x` as incompatible with every other, so
+          # the registry had no compatible predecessor to diff against.
           baseline-rev: ${{ github.event.pull_request.base.sha }}
-          # Every published crate, the facade included. `happenstance` re-exports
-          # the contract wholesale today, so its surface is currently a duplicate
-          # of happenstance-core's — but it is the crate `cargo add happenstance`
-          # installs, and the moment the typed layer grows an API of its own it
-          # stops being a duplicate. One extra rustdoc build is cheaper than
-          # remembering to add the line later.
-          # Five of the seven crates the release publishes. `happenstance-sqlite`
-          # and `happenstance-cloudflare` were watched here *before* they
-          # shipped, on the argument the paragraph above makes: one extra
-          # rustdoc build is cheaper than remembering to add the line later, and
-          # a public surface no instrument watches is the thing this job exists
-          # to prevent.
+          # All seven published crates, the facade included. `happenstance`
+          # re-exports the contract wholesale today, so its surface duplicates
+          # happenstance-core's. It is still the crate `cargo add happenstance`
+          # installs, and it stops being a duplicate the moment the typed layer
+          # grows an API of its own.
           #
-          # **This comment said "all five of them" and claimed that foresight
-          # meant the line needed no edit at the release.** The release set moved
-          # to seven at `e597c34` and the sentence did not, which made it assert
-          # a coverage the line beneath it does not provide. The two absent names
-          # are absent *deliberately* and the block below gives the reason — but
-          # deliberate and complete are different claims, and only one of them
-          # was true.
-          #
-          # **Two names are deliberately absent, and only from this baseline.**
-          # `happenstance-postgres` and `happenstance-neon` had no published
-          # version before `0.2.0`: on `main` they are phase-2 skeletons, so
-          # diffing their surface against the base commit compares two states a
-          # consumer has never been able to install, and every difference it
-          # finds is a "break" against nothing. The first pull request to run
-          # this job proved the point rather than argued it — it failed on
-          # `inherent_method_const_removed` for `NeonProjectionStore::new`,
-          # which stopped being `const` because the store gained a per-instance
-          # stamp and a `const fn` would hand every instance the same one
-          # (`crates/happenstance-neon/src/projection_store.rs:224-228`). A true
-          # finding, about a crate with no consumers.
-          #
-          # **They rejoin the moment `0.2.0` is on the registry**, which is the
-          # same moment the registry baseline below turns on — and that one
-          # watches them for the thing that actually matters. Until then this
-          # line is the honest scope of a rev baseline, not a hole in it.
-          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare
+          # `happenstance-postgres` and `happenstance-neon` were left out of this
+          # line until phase 15. Before `0.2.0` they had no published version, so
+          # diffing against the base commit compared two states no consumer could
+          # install, and every difference was a "break" against nothing. The
+          # first run proved it: `inherent_method_const_removed` fired for
+          # `NeonProjectionStore::new`, which stopped being `const` when the
+          # store gained a per-instance stamp. The finding was true, and it was
+          # about a crate with no consumers. Both crates have been on crates.io
+          # since `0.2.0`, so that reason has expired.
+          package: happenstance, happenstance-core, happenstance-testkit, happenstance-sqlite, happenstance-cloudflare, happenstance-postgres, happenstance-neon
 
-      # THE REGISTRY BASELINE, AND IT IS ONE WORD FROM WORKING.
+      # THE REGISTRY BASELINE. It diffs against the newest compatible published
+      # version, which is what a consumer can actually install. It does not say
+      # which pull request introduced a break. The rev baseline above does.
       #
-      # This is the outstanding half of phase 12's `cargo-semver-checks` work,
-      # written out at the `0.2.0` closeout so that turning it on is an edit to
-      # `if:` rather than a step somebody has to compose from a checklist line
-      # after a release, which is exactly when nobody is reading checklists.
-      #
-      # It is `if: false` rather than absent, and the two are not the same. The
-      # `backlog` job one file-section up records the argument in full: a check
-      # that quietly stops running is worth less than none, because the green
-      # tick keeps arriving. A check that was never written is worse still —
-      # nothing marks the hole.
-      #
-      # **Why it cannot run yet, and it is not shyness.** Omitting `baseline-rev`
-      # makes the action diff against the newest *compatible* published version.
-      # There is none: the registry carries `0.2.0-alpha.1`, and Cargo treats a
-      # prerelease as incompatible with the release it precedes, so this step
-      # fails today with "no baseline" for a reason that has nothing to do with
-      # the code. A job that fails because the version it names does not exist
-      # teaches nobody anything, and it teaches them it loudly.
-      #
-      # **To enable it:** delete the `if: false` line below, in the same change
-      # that marks phase 12 `done`. Nothing else about this step needs to move.
-      #
-      # Both baselines are kept rather than one replacing the other, and they
-      # answer different questions. The rev baseline above catches a break
-      # introduced *by this pull request* and is silent about a break merged two
-      # pull requests ago, which is part of its baseline. This one catches breaks
-      # against the last thing a consumer can actually install, and is silent
-      # about which pull request introduced them.
+      # It was written at the `0.2.0` closeout and held behind `if: false` until
+      # the registry had something compatible to diff against. The registry then
+      # carried only `0.2.0-alpha.1`, and Cargo treats a prerelease as
+      # incompatible with the release it precedes. `86a410c` turned it on once
+      # `0.2.0` was published, and removed, in the same commit, the semver
+      # exemption that only the empty registry had justified.
       - name: semver against the published baseline
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:

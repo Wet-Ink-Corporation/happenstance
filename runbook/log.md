@@ -10,10 +10,31 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-28 — the record current, and the registry is not empty
+
+*`lane/phase-15-publication-state`. Its commits on `main` are recorded here when it
+merges.* Phase 15.
+
+The handover and this log brought current as of `5afcca1`: PR #15's entry names its
+rebased commits. Then the top-level documents that still described the registry as
+empty — `README.md`'s status legend and its postgres paragraph, `CONTRIBUTING.md`'s
+provisional-ADR paragraph and its semver section, and both semver comment blocks in
+`ci.yml` — say what is true: seven crates at `0.3.2` on crates.io, and the registry
+baseline running since `86a410c`. The rev baseline now watches all seven crates;
+`happenstance-postgres` and `happenstance-neon` were left out only because they had
+no published predecessor, and the comment that excluded them said they rejoined at
+`0.2.0`.
+
+**Verified.** `max_stable_version` is `0.3.2` for all seven crates, measured against
+the crates.io API before the README was edited. The gate checks are listed in the
+phase 15 session log.
+
+---
+
 ## 2026-09-28 — citations moved off a squashed commit
 
-*`lane/runbook-citations-after-squash`, PR #15. Its commit on `main` is recorded
-here when it merges — a PR-branch commit would not survive a squash.* Phase 15.
+*Merged as PR #15 by **rebase**, not squash: `db99a72` and `5afcca1` on `main`.
+The PR-branch commits `6d49501` and `029dfba` are not on `main`.* Phase 15.
 
 PR #14 merged as a squash (`65253fc`), leaving `3916f29` off `main`. Eleven
 citations named it; ten now name `f89e184`, where `RUNBOOK.md` and `HANDOVER.md`

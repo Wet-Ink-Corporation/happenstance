@@ -12,18 +12,22 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`65253fc` on `main`, plus `lane/runbook-citations-after-squash` open as a PR.
+`5afcca1` on `main`, plus `lane/phase-15-publication-state` open as a PR.
 2026-09-28.
 
 ## Where things are
 
-Seven crates are published at `0.3.2`; `EventStore` has been frozen since `0.2.0`
+Seven crates are published at `0.3.2`. `EventStore` has been frozen since `0.2.0`,
 and `ProjectionStore` since `0.3.0`. Phases 0–12 are done. What remains is
-sequenced in [`roadmap.md`](roadmap.md): reconcile the record (15), define 1.0
-(16), a breaking window released as `0.4.0` (17), then sync (13), retention (14)
-and the typed runner (18), and `1.0.0` (21) last. **Sync is inside 1.0**, so 13
-and 14 are on the critical path. SQLite on `wasm32` (19) and the documentation
-work (20) run alongside.
+sequenced in [`roadmap.md`](roadmap.md):
+- reconcile the record (15);
+- define 1.0 (16);
+- a breaking window, released as `0.4.0` (17);
+- then sync (13), retention (14) and the typed runner (18);
+- and `1.0.0` (21) last.
+
+**Sync is inside 1.0**, so phases 13 and 14 are on the critical path. SQLite on
+`wasm32` (19) and the documentation work (20) run alongside.
 
 **Redkiln is retired here.** This runbook is the only tracker until `redkiln-rs`,
 after 1.0. `.bklg/` and `.redkiln/` are frozen records; `CLAUDE.md`'s *Where the
@@ -31,29 +35,39 @@ work lives* has the rules.
 
 ## In flight
 
-Branch `lane/runbook-citations-after-squash`, open as a PR. PR #14 (the split)
-merged as a **squash**, `65253fc`, so `3916f29` — the commit the runbook cited as
-the pre-split state — is not on `main`. It is still fetchable through
-`refs/pull/14/head`, but citations belong on `main`: they now name `f89e184`,
-where `RUNBOOK.md` and `HANDOVER.md` are byte-identical to `3916f29`. The frozen
-banner at `RUNBOOK.md:3` names `65253fc`: its predecessor `f89e184` with four
-lines edited in place — the banner and two status rows — so line numbers agree
-and those four lines' text does not.
+Branch `lane/phase-15-publication-state`, open as a PR. It does two things.
 
-Verified: `cargo run -p xtask -- lints` green; `RUNBOOK.md` still 5,704 lines.
+First, it brings the record current. PR #15 merged by **rebase** as `db99a72` and
+`5afcca1`, and `log.md` now names those commits.
+
+Second, it fixes phase 15's publication-state item. `README.md`, `CONTRIBUTING.md`
+and `ci.yml`'s two semver comment blocks no longer describe the registry as empty.
+The rev baseline in `ci.yml` now lists all seven crates. `happenstance-postgres`
+and `happenstance-neon` had been left out only while they lacked a published
+predecessor, and this PR's `semver` job is the first run that includes them.
+
+Verified: see the phase 15 session log.
 
 ## Next action
 
-Merge this PR, then [phase 15](phases/15-reconcile.md)'s next item: the top-level
-documents that still describe `0.2.0` as unpublished — `README.md:139-141` and
-`:175-176`, `CONTRIBUTING.md:23` and `:323-352`, and the comment at
-`.github/workflows/ci.yml:1107-1116`.
+Merge this PR. Then take [phase 15](phases/15-reconcile.md)'s next open item:
+`CLAUDE.md` and `crates/happenstance-sync/src/lib.rs:116-119` stop calling
+"does ingest re-check append conditions" the central open question. SY-1 – SY-7
+settled it.
+
+Found in passing and not fixed: the doc comment on
+`no_accepted_semver_break_outlives_its_reason` (`xtask/src/lints.rs:943`) still
+says the registry-baseline step "is `if: false`". The check itself is correct,
+because the exemption it guards is gone.
 
 ## Waiting on the owner
 
-- Nothing blocking. Optional: `lane/0.2.0-closeout`,
-  `origin/worktree-kb-intake-2026-09-11` and `origin/lane/runbook-split` are all
-  merged, and were outside D-3.
+- **`0.3.3` or `0.4.0`** for `CHANGELOG.md`'s `[Unreleased]`: SQLite's busy
+  timeout (ADR-0065) and `FaultyStore::contend_next`. The first is a behaviour
+  change to a published adapter. Phase 15 lists this.
+- Optional: `lane/0.2.0-closeout`, `origin/worktree-kb-intake-2026-09-11`,
+  `origin/lane/runbook-split` and `origin/lane/runbook-citations-after-squash` are
+  all merged. The first three were outside D-3; the last merged after it.
 
 ## Do not re-open
 
@@ -85,7 +99,8 @@ record, and the owner.
   `.claude/settings.local.json`; it stays enabled in the user settings for other
   repositories. A fresh clone does not carry that file, so there its hooks can
   still write to `.redkiln/telemetry/` — do not commit new telemetry as work.
-- **This repository's PRs have been squash-merged.** Any citation of a commit on a
-  PR branch dies with the branch; cite a commit on `main`, or wait for the merge.
+- **The merge method varies.** PR #14 was squash-merged and PR #15 rebase-merged,
+  and both rewrite commit ids. A citation of a PR-branch commit dies with the
+  branch, so cite the commit on `main` after the merge.
 - **Nothing validates `.kb/` frontmatter now.** Read any diff under
   `.kb/decisions/` for an edited accepted body before it merges.
