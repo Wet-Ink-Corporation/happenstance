@@ -247,20 +247,20 @@ code around it.
    Let-chains stabilised in 1.88 and are now available.
 
    The instruction that replaced it is the same instruction, one level up:
-   **weigh the floor, because `0.2.0` is where it becomes a promise.** The old
+   **weigh the floor, because since `0.2.0` it has been a promise.** The old
    text here said *"nothing is published, so no downstream consumer is pinned to
    anything"*, and that was ADR-0004's whole reason for carrying a **provisional**
-   marker. `0.2.0` is what the marker named as its own end — and the tense matters,
-   because it has not happened yet. Measured against the registry: every one of the
-   seven carries `0.0.0`, three of them additionally carry `0.2.0-alpha.1`, nothing
-   is yanked, and `max_stable_version` reads `0.0.0` everywhere. So **no consumer is
-   pinned to anything today**, `0.2.0` is a first real release for all seven, and no
-   crate has a compatible published predecessor — which is also why the registry
-   semver baseline cannot run until the tag lands. From that tag, raising the floor
+   marker. `0.2.0` is what the marker named as its own end, and it shipped on
+   2026-09-10. Measured against the registry on 2026-09-29: all seven crates are
+   published at `0.2.0`, `0.3.0`, `0.3.1` and `0.3.2`; the three `0.2.0-alpha.1`
+   releases are yanked; each `0.0.0` reservation still stands; and
+   `max_stable_version` reads `0.3.2` everywhere. So **a consumer can be pinned to
+   the floor now**, and the registry semver baseline has run against the published
+   versions since `86a410c`. Since that tag, raising the floor
    is a breaking change that needs a decision record rather than a commit message.
    Raising it at phase 2 was a deliberate trade recorded in an ADR, which is what
    the old text asked for; what stays forbidden is moving it in silence, and the bar
-   for moving it at all is about to be higher than it was.
+   for moving it at all is higher than it was before `0.2.0`.
 
    Two things follow that are easy to miss. The MSRV now **equals**
    `rust-toolchain.toml`'s pin, so the `msrv` CI job proves nothing until the two

@@ -96,7 +96,7 @@ handover is rewritten whole each time, so a stale one is visibly stale — its
 | — | **`0.3.0`** | 10b, 12 | — | released 2026-09-11 — the projection port frozen (ADR-0063) |
 | — | **`0.3.1`** | 12 | — | released 2026-09-11 — descriptions only |
 | — | **`0.3.2`** | 12 | — | released 2026-09-20 — a dependency advisory (`rustls`) |
-| 15 | [Reconcile the record](phases/15-reconcile.md) | 12 | in progress | the status lint failing on the pre-split table and passing on this one |
+| 15 | [Reconcile the record](phases/15-reconcile.md) | 12 | done | the status lint failing on the pre-split table and passing on this one |
 | 16 | [Define 1.0](phases/16-define-1-0.md) | 15 | not started | the 1.0 charter, with a disposition for every non-frozen clause on a promised surface |
 | 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | 16 | not started | `0.4.0` released, every semver break traced to a decision |
 | 13 | [`happenstance-sync` and its testkit](phases/13-sync.md) | 5, 8, 9, 10a, 10b, 12, 17 | not started | one suite green against three peers, two of them unlike, and a byte-identical round trip |

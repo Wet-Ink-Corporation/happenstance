@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`5e60b3d` on `main`, plus `lane/phase-15-exit` open as a PR.
-2026-09-28.
+`4c538e7` on `main`, plus `lane/phase-15-close` open as a PR.
+2026-09-29.
 
 ## Where things are
 
@@ -33,38 +33,31 @@ sequenced in [`roadmap.md`](roadmap.md):
 after 1.0. `.bklg/` and `.redkiln/` are frozen records; `CLAUDE.md`'s *Where the
 work lives* has the rules.
 
-Phase 15 has every work item ticked and five of its six exit criteria. It stays
-`in progress` on one: `CLAUDE.md`'s binding constraint 5 describes the registry
-as it was before `0.2.0`, and that paragraph is the owner's (`wi-6c9f77`).
+**Phase 15 is done.** Every document and tool that says where happenstance has
+got to agrees with `git log` and the registry, `cargo xtask lint-kb` guards the
+accepted decisions, and every open question past its own deadline has an owner
+in phase 16.
 
 ## In flight
 
-Branch `lane/phase-15-exit`, open as a PR: the adapter pages' registry hedges
-corrected, and phase 15's exit criteria ticked where true. Nothing else is in
-flight.
+Branch `lane/phase-15-close`, open as a PR: constraint 5's tense (`wi-6c9f77`),
+and phase 15 set to `done`. Nothing else is in flight.
 
-`log.md` now names PR #21's squash, `5e60b3d`.
+`log.md` now names PR #22's squash, `4c538e7`.
 
 ## Next action
 
-Merge this PR. Then the owner settles `wi-6c9f77`: the tense of `CLAUDE.md`'s
-binding constraint 5, the last open criterion. Once that lands, phase 15 is
-`done`, and the next action is [phase 16](phases/16-define-1-0.md), *Define 1.0*.
-Its work list now carries every open question phase 15 found past its own
-deadline.
+Merge this PR. Then start [phase 16](phases/16-define-1-0.md), *Define 1.0*: the
+crate set, a disposition for every non-frozen clause on a promised surface, and
+the open questions phase 15 handed it.
 
 ## Waiting on the owner
 
 - Review the Weigh-In defaults taken during the unattended session, with
   `/weigh:in digest`.
-- **`wi-6c9f77` (blocked):** `CLAUDE.md`'s binding constraint 5 still says, in
-  the present tense, that `0.2.0` "has not happened yet" and that nothing is
-  yanked. Correcting the tense leaves the MSRV constraint unchanged, but the
-  paragraph is a binding constraint, so the edit waits for the owner. Phase 15's
-  third exit criterion stays open until it lands.
 - Optional: `lane/0.2.0-closeout`, `origin/worktree-kb-intake-2026-09-11`,
   `origin/lane/runbook-split` and `origin/lane/runbook-citations-after-squash` are
-  all merged. The first three were outside D-3; the last merged after it.
+  all merged, and so are the six `lane/phase-15-*` branches. None was deleted.
 - `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png` are
   untracked, and committing them is the owner's call.
 

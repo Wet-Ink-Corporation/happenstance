@@ -143,12 +143,13 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
       reads `done`.
       `runbook_status_matches_the_registry`: 29 status rows agree with five
       released versions.
-- [ ] No top-level document states, in the present tense, a publication state
+- [x] No top-level document states, in the present tense, a publication state
       the registry contradicts.
-      **Open.** The adapter pages' registry hedges and `CLAUDE.md`'s "nothing is
-      published yet" are corrected. `CLAUDE.md`'s binding constraint 5 still
-      says `0.2.0` "has not happened yet", and editing a binding constraint is
-      the owner's call: `wi-6c9f77`, blocked.
+      The adapter pages' registry hedges and `CLAUDE.md`'s "nothing is
+      published yet" were corrected at `4c538e7`. `CLAUDE.md`'s binding
+      constraint 5 described the registry as it stood before `0.2.0`; the owner
+      decided on 2026-09-29 that its tense be corrected (`wi-6c9f77`), and it now
+      states the registry as measured that day, with the MSRV rule unchanged.
 - [x] What checks `.kb/` until `redkiln-rs` is decided, even if the answer is
       nothing.
 - [x] D-1, D-2 and D-3 decided, reflected, and — for D-3 — executed.
@@ -242,3 +243,11 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   manifests. LadybugDB conformance skipped on its probe. After the rebase onto
   `5e60b3d`: `lints`, `lint-kb`, `lint-constitution`, `spec-trace` and
   `affected --base main`.
+- 2026-09-29 — PR #22 squash-merged as `4c538e7`. The owner decided `wi-6c9f77`:
+  constraint 5's tense is corrected, against the registry as read from the
+  crates.io API that day (every crate's `max_stable_version` is `0.3.2`, the
+  three alphas yanked, every `0.0.0` standing). The MSRV rule and its number
+  are untouched. The decision atom goes into `.kb/decisions/` beside the other
+  six, with the same frontmatter treatment. Every exit criterion is ticked, and
+  **phase 15 is `done`**. Verified: `lints` (the status row now reads `done`),
+  `lint-kb`, `lint-constitution`, `spec-trace` and `affected --base main`.
