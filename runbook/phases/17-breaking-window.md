@@ -38,6 +38,12 @@ Whatever phase 16 classified as breaking.
       type, `ProjectionId` validation, the `trait-variant` caret, a feature table
       for `happenstance-cloudflare`, the empty-emission idiom, heterogeneous tuple
       boundaries, the read-page budget and ES-17's append ownership.
+- [ ] **A named `Chunk` type for `run_projection`** — sub-question 1 of
+      `.kb/open-questions/projection-runner-chunk-type-and-observation-seam.md`,
+      whose deadline was the `ProjectionStore` freeze. Replacing `NonZeroUsize`
+      is breaking now that ADR-0063 retired the exemption, so it is owned here
+      (`wi-0ed2c1`); sub-question 2, an observation seam, is additive and goes
+      with phase 18.
 - [ ] **Whether `happenstance-core`'s empty `unstable-projection` feature goes.**
       It gates nothing and is kept so `0.2.0` manifests resolve; removing a feature
       is a break, so if it goes, it goes here.

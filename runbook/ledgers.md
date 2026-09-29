@@ -42,6 +42,13 @@ table when an ADR or a clause settles it, and the archive keeps it either way.
 | `conflicting_position`: a promise every adapter owes, or a hint one may omit | 16 | open — Neon-over-HTTP was the forcing case and now exists; phase 16's clause audit reads it |
 | Is ES-10's global visibility statement what happenstance needs, or would a per-boundary one do | 16 | open — raised by the phase-2 measurement; ADR-0063's single-position `Checkpoint` may have answered it, and phase 16 decides whether it did |
 | `append`'s ownership of its batch — two builds of the same adapter differing only in ownership (ADR-0012's falsifier item 1, escalated by ADR-0022 §13) | 17 | open — ES-17 stays `[PROVISIONAL]` until measured or renewed; ADR-0055 kept the borrowed batch at `0.2.0` |
+| ADR-0022's falsifiers have fired: supersede, re-open (scoped) or ratify its pragma and runtime-seam sections | 16 | open — forced by phase 12, now past; given an owner by phase 15 (`adr-0022-falsifiers-have-fired`) |
+| Whether the 2026-09-06 `msrv-premise` ratification supersedes ADR-0037, and what the floor is | 16 | open — "`0.2.0` is the only cheap moment" has passed; goes with phase 16's MSRV item (`msrv-ratification-conflicts-with-the-accepted-floor`) |
+| Whether a workerd-class runner enters `cargo xtask ci`, and which platform clauses stay unproven without one | 16 | open — phase 12 made "conformant on Cloudflare" a promise (`no-workerd-class-runner-in-the-gate`) |
+| Who owns reconciling the specification after each phase, and whether `spec-trace` mechanises it | 16 | open — forced by phase 6 and phase 12, both past (`nothing-owns-the-post-phase-reconciliation`) |
+| Which read fault `PostgresFixture` arms, and whether it needs new capability machinery | 16 | open — owed at phase 10's remainder (`postgres-fixture-read-fault-declension-is-owed`) |
+| An infallible pre-validated `Tags` / `Tag` constructor in `happenstance-core` | 16 | open — additive; an ADR owed by ADR-0020, forced by the first API change after `0.1` (`d-1-the-validated-type-has-no-total-path`) |
+| A named `Chunk` type for `run_projection` in place of `NonZeroUsize` | 17 | open — breaking since ADR-0063; its deadline was the `ProjectionStore` freeze (`projection-runner-chunk-type-and-observation-seam`, sub-question 1) |
 | Is replication whole-log or scoped | 13 | deferred — SY-27, SY-28 |
 | Idempotent bulk ingest inside one round trip | 13 | deferred — SY-14 |
 | Does a peer declare its own limits | 13 | deferred — SY-18 |

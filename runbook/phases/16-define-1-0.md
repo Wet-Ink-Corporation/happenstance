@@ -44,6 +44,39 @@ charter records that rather than re-arguing it.
 - [ ] **The clause questions the split left open**: `conflicting_position`, and
       whether ADR-0063 answered ES-10's global-versus-per-boundary question (see
       [ledgers](../ledgers.md#open-decisions)).
+- [ ] **The open questions whose own deadline passed**, given to this phase by
+      phase 15 (`wi-0ed2c1`: a question goes to phase 17 only if answering it
+      breaks a published crate). Each is answered in its own record or closed
+      with a reason; the classification item above re-reads every assignment.
+      Their deadlines named `0.2.0`, phase 12, the `ProjectionStore` freeze or an
+      earlier phase, and every one of those has passed. In
+      `.kb/open-questions/`:
+      - **Decisions**, each with a row in the [ledgers](../ledgers.md#open-decisions):
+        `adr-0022-falsifiers-have-fired` (supersede, re-open or ratify §§4–15),
+        `msrv-ratification-conflicts-with-the-accepted-floor` (with the MSRV item
+        above), `no-workerd-class-runner-in-the-gate`,
+        `nothing-owns-the-post-phase-reconciliation`,
+        `postgres-fixture-read-fault-declension-is-owed` and
+        `d-1-the-validated-type-has-no-total-path` (additive, an ADR owed by
+        ADR-0020).
+      - **Clause dispositions**, for the clause audit above:
+        `cf-25-cf-26-portfolio-check-does-not-exist`,
+        `cf-36-names-a-cross-reference-nothing-performs`,
+        `es-23-frozen-doc-musts-adapter-half`, `read-fault-rule-has-no-clause`,
+        `vt-30-provisional-marker-is-stale-and-unscheduled`,
+        `reset-refusal-declension-has-no-clause`, `es-7-and-vt-9-provisional-markers`
+        (its PS-4 limb goes with `Projection::apply` in phase 17),
+        `cf-18-residuals-after-declension-by-inheritance` and
+        `model-only-kind-memberless-dormant-or-withdrawn`.
+      - **Already on the classification list above**, with their deadlines now
+        passed too: `adapter-version-lockstep-and-cf-32` and
+        `cf-23-emitter-names-mandatory-and-marked-unstable` stay here; the other
+        eight are phase 17's.
+- [ ] **`.kb` link resolution.** `cargo xtask lint-kb` checks accepted decision
+      bodies and nothing else; no check resolves `related`, `depends_on` or
+      `superseded_by` since redkiln retired. Decide whether one is owed before
+      1.0 or recorded as not. Left by phase 15's closure of
+      `accepted-atom-immutability-check-is-pre-commit-only`.
 - [ ] **`happenstance-ladybug`**: inside 1.0 behind an upstream `lbug` fix, or
       published with docs.rs building it without its `driver` feature (every item
       is behind that `cfg`, so the page would be the crate-root prose only), or
