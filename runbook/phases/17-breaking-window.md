@@ -43,6 +43,9 @@ Whatever phase 16 classified as breaking.
       is a break, so if it goes, it goes here.
 - [ ] **Release `0.4.0`.** `cargo-semver-checks` against the `0.3.x` registry
       baseline reports breaks, and each one it reports traces to a decision above.
+      `CHANGELOG.md`'s `[Unreleased]` entries — SQLite's fifteen-second busy
+      timeout (ADR-0065) and `FaultyStore::contend_next` — ship in `0.4.0`;
+      there is no `0.3.3` (`wi-052920`).
 
 **Proof artefact.** `0.4.0` on crates.io, and a table in its changelog entry
 mapping every major finding `cargo-semver-checks` reported to the decision that

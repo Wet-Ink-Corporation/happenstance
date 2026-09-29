@@ -1,4 +1,4 @@
-# Pre-publication remediation — handover
+# Pre-publication remediation — handover (a record since 2026-09-28; the live handover is `runbook/handover.md`)
 
 > **Superseded as a status report, kept as a record.** This document is accurate
 > about the remediation and stale about the project. Two of its claims below have

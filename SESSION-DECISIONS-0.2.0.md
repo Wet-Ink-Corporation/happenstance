@@ -1,4 +1,4 @@
-# Decision log — the `0.2.0` closeout session
+# Decision log — the `0.2.0` closeout session (a record since 2026-09-28; `0.2.0` shipped 2026-09-10, and the live handover is `runbook/handover.md`)
 
 Every decision this session took that a reader could reasonably have taken
 differently, with the options that were on the table, the evidence that separated

@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`c0df525` on `main`, plus `lane/phase-15-ingest-settled` open as a PR.
+`ae501c5` on `main`, plus `lane/phase-15-small-corrections` open as a PR.
 2026-09-28.
 
 ## Where things are
@@ -33,39 +33,35 @@ sequenced in [`roadmap.md`](roadmap.md):
 after 1.0. `.bklg/` and `.redkiln/` are frozen records; `CLAUDE.md`'s *Where the
 work lives* has the rules.
 
+Phase 15 is being finished unattended, one PR per work item, self-merged on green
+(`wi-ab0a5a`).
+
 ## In flight
 
-Branch `lane/phase-15-ingest-settled`, open as a PR. It records that SY-1 – SY-7
-settled whether ingest re-checks append conditions. The fix is in `CLAUDE.md`, in
-`happenstance-sync`'s crate root and `peer.rs`, and in two sentences of spec prose
-under SY-1 and SY-6 that quoted the crate's old claim. No MUST, marker or rule
-moved. Every edit to a file cited by line kept its line count.
+Branch `lane/phase-15-small-corrections`, open as a PR. It carries four of phase
+15's items: `happenstance-sqlite` says *host only*; `REMEDIATION-HANDOVER.md` and
+`SESSION-DECISIONS-0.2.0.md` say in their titles that they are records;
+`[Unreleased]` rides `0.4.0`, and phase 17 says so; and two things found in
+passing, a stale lint doc comment and a phase 13 work item. Every edit to a file
+cited by line kept its line count.
 
-`log.md` now names PR #16's squash, `c0df525`.
+`log.md` now names PR #17's squash, `ae501c5`.
 
 ## Next action
 
-Merge this PR. Then take [phase 15](phases/15-reconcile.md)'s next open item:
-`happenstance-sqlite`'s crate root and README say *host only*, since it does not
-build for `wasm32-unknown-unknown`.
-
-Found in passing and not fixed:
-- The doc comment on `no_accepted_semver_break_outlives_its_reason`
-  (`xtask/src/lints.rs:943`) still says the registry-baseline step "is
-  `if: false`". The check itself is correct.
-- `happenstance-sync`'s `identity` module still defines placeholder `EventId`,
-  `StoreId` and `RecordedAt`, long after phase 4 put the real ones in
-  `happenstance-core`. Deleting them is phase 13's work; its file does not yet
-  list it.
+Merge this PR. Then take [phase 15](phases/15-reconcile.md)'s `.kb` lint
+(`wi-38373d`): an xtask check that fails when an accepted atom's body differs from
+the merge base, run in the gate.
 
 ## Waiting on the owner
 
-- **`0.3.3` or `0.4.0`** for `CHANGELOG.md`'s `[Unreleased]`: SQLite's busy
-  timeout (ADR-0065) and `FaultyStore::contend_next`. The first is a behaviour
-  change to a published adapter. Phase 15 lists this.
+- Review the Weigh-In defaults taken during the unattended session, with
+  `/weigh:in digest`.
 - Optional: `lane/0.2.0-closeout`, `origin/worktree-kb-intake-2026-09-11`,
   `origin/lane/runbook-split` and `origin/lane/runbook-citations-after-squash` are
   all merged. The first three were outside D-3; the last merged after it.
+- `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png` are
+  untracked, and committing them is the owner's call.
 
 ## Do not re-open
 
@@ -83,6 +79,7 @@ record, and the owner.
 - `happenstance-ladybug` is finished and does not publish while `lbug` fails on
   docs.rs — phase 11, `crates/happenstance-ladybug/src/lib.rs`.
 - The `0.2.0` release set is seven crates — `e597c34`.
+- `[Unreleased]` ships in `0.4.0`; there is no `0.3.3` — `wi-052920`.
 
 ## Traps
 
