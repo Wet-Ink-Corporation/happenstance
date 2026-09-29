@@ -10,10 +10,34 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-28 — ingest re-checking is settled, and the documents say so
+
+*`lane/phase-15-ingest-settled`. Its commit on `main` is recorded here when it
+merges.* Phase 15.
+
+`CLAUDE.md` and `happenstance-sync`'s crate root called "does ingest re-check
+append conditions" the central open question, and `peer.rs`'s `EventGroup` doc
+said the same. The specification settled it in SY-1 – SY-7: six clauses frozen,
+and SY-7, compensation authorship, provisional. All three now say so, and so do
+two sentences of prose under SY-1 and SY-6 that had quoted the crate's claim. The
+crate root's ledger bullets on identity (VT-5) and ordering (SY-19) were as stale
+and are corrected with it. What `CLAUDE.md` now names as open is what the
+specification defers: SY-14, SY-18, SY-27 and SY-32.
+
+Every edit to a file cited by line — `SPECIFICATION.md`, and the crate's `lib.rs`
+and `peer.rs` — kept its line count, so no citation moved. The frozen clauses'
+MUSTs, markers and rules are unchanged; only non-normative prose under them was.
+
+**Verified.** `cargo xtask spec-trace`, `cargo run -p xtask -- lints`,
+`cargo xtask lint-constitution` and `cargo xtask affected --base main`, all green.
+`cargo doc -p happenstance-sync` built with `-D warnings`, which covers the edited
+intra-doc links.
+
+---
+
 ## 2026-09-28 — the record current, and the registry is not empty
 
-*`lane/phase-15-publication-state`. Its commits on `main` are recorded here when it
-merges.* Phase 15.
+*Merged as PR #16, squash `c0df525`.* Phase 15.
 
 The handover and this log brought current as of `5afcca1`: PR #15's entry names its
 rebased commits. Then the top-level documents that still described the registry as

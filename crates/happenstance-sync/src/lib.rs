@@ -87,7 +87,7 @@
 //! carry **no** derives. They did briefly, the derives were withdrawn, and phase
 //! 5 has not restored them: a `#[derive]` on a public message type *is* a wire
 //! format, and **what travels is phase 13's** — the message set, version
-//! negotiation, and whether ingest re-checks append conditions. This ADR lands
+//! negotiation, and how the guard SY-6 describes is carried. This ADR lands
 //! the envelope and nothing else. In particular [`SyncError`] is not extended
 //! (SY-30 is untouched): a version refusal is a decoding failure with its own
 //! error, [`wire::WireError`], and folding it into the runner's enum would take a
@@ -107,18 +107,18 @@
 //!
 //! * **Event identity across instances.** Sketched, as
 //!   [`identity::EventId`] — the pair `(StoreId, SequencePosition)`.
-//!   Where it should finally live is a contract-crate question and is **not**
-//!   settled here; see [`identity`], which also records why these three types
-//!   are reachable only through their module.
+//!   Settled since: VT-5 puts `EventId` in `happenstance-core`, which exports
+//!   it. These placeholders are phase 13's to delete; [`identity`] records why
+//!   they are reachable only through their module.
 //! * **Idempotent ingest.** In the port's contract
 //!   ([`IngestStore::ingest`]) and implemented in [`memory`]. Not yet checked by
 //!   anything, because `happenstance-sync-testkit` does not exist.
-//! * **Append conditions across a boundary.** Still *the* central design
-//!   question. This sketch carries the origin's condition as
-//!   [`EventGroup::guard`](peer::EventGroup::guard) and documents it as evidence
-//!   rather than as an instruction, which is a position rather than an answer.
-//! * **Ordering.** Untouched. The merge rule is not sketched and nothing here
-//!   should be read as choosing one.
+//! * **Append conditions across a boundary.** Settled by SY-1 – SY-7: ingest
+//!   never refuses, and a conflict is compensated by an ordinary append. The
+//!   origin's condition travels as [`EventGroup::guard`](peer::EventGroup::guard),
+//!   evidence rather than an instruction (SY-6). Nothing here enforces it yet.
+//! * **Ordering.** Settled by SY-19: local position is arrival order, and two
+//!   peers need not agree on a total order. The sketch implements neither.
 //! * **`wasm32` compatibility.** Checked. The whole crate builds for
 //!   `wasm32-unknown-unknown`, and the bare [`SyncPeer`] and [`IngestStore`]
 //!   flavours are what the Cloudflare side implements.

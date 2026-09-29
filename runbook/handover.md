@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`5afcca1` on `main`, plus `lane/phase-15-publication-state` open as a PR.
+`c0df525` on `main`, plus `lane/phase-15-ingest-settled` open as a PR.
 2026-09-28.
 
 ## Where things are
@@ -35,30 +35,28 @@ work lives* has the rules.
 
 ## In flight
 
-Branch `lane/phase-15-publication-state`, open as a PR. It does two things.
+Branch `lane/phase-15-ingest-settled`, open as a PR. It records that SY-1 – SY-7
+settled whether ingest re-checks append conditions. The fix is in `CLAUDE.md`, in
+`happenstance-sync`'s crate root and `peer.rs`, and in two sentences of spec prose
+under SY-1 and SY-6 that quoted the crate's old claim. No MUST, marker or rule
+moved. Every edit to a file cited by line kept its line count.
 
-First, it brings the record current. PR #15 merged by **rebase** as `db99a72` and
-`5afcca1`, and `log.md` now names those commits.
-
-Second, it fixes phase 15's publication-state item. `README.md`, `CONTRIBUTING.md`
-and `ci.yml`'s two semver comment blocks no longer describe the registry as empty.
-The rev baseline in `ci.yml` now lists all seven crates. `happenstance-postgres`
-and `happenstance-neon` had been left out only while they lacked a published
-predecessor, and this PR's `semver` job is the first run that includes them.
-
-Verified: see the phase 15 session log.
+`log.md` now names PR #16's squash, `c0df525`.
 
 ## Next action
 
 Merge this PR. Then take [phase 15](phases/15-reconcile.md)'s next open item:
-`CLAUDE.md` and `crates/happenstance-sync/src/lib.rs:116-119` stop calling
-"does ingest re-check append conditions" the central open question. SY-1 – SY-7
-settled it.
+`happenstance-sqlite`'s crate root and README say *host only*, since it does not
+build for `wasm32-unknown-unknown`.
 
-Found in passing and not fixed: the doc comment on
-`no_accepted_semver_break_outlives_its_reason` (`xtask/src/lints.rs:943`) still
-says the registry-baseline step "is `if: false`". The check itself is correct,
-because the exemption it guards is gone.
+Found in passing and not fixed:
+- The doc comment on `no_accepted_semver_break_outlives_its_reason`
+  (`xtask/src/lints.rs:943`) still says the registry-baseline step "is
+  `if: false`". The check itself is correct.
+- `happenstance-sync`'s `identity` module still defines placeholder `EventId`,
+  `StoreId` and `RecordedAt`, long after phase 4 put the real ones in
+  `happenstance-core`. Deleting them is phase 13's work; its file does not yet
+  list it.
 
 ## Waiting on the owner
 
@@ -78,8 +76,7 @@ record, and the owner.
   the opposite and was overridden.
 - Redkiln is retired until `redkiln-rs`; `.bklg/` is frozen and not advanced —
   D-2, `wi-016abe`, and the owner's instruction of 2026-09-28.
-- Ingest is unconditional, with compensation — SY-1 – SY-7. (Two files still call
-  it open; phase 15 corrects them.)
+- Ingest is unconditional, with compensation — SY-1 – SY-7.
 - The projection port is frozen — ADR-0063.
 - The MSRV is 1.97.1 and a promise since `0.2.0` — ADR-0029, ADR-0037.
 - `happenstance-macros` is out of scope — ADR-0033.
