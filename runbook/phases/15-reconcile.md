@@ -80,7 +80,7 @@ so they are repaired first.
       citation passes as the one body repair a diff can recognise. Three
       two-way calls: where the base comes from (`wi-80cba0`),
       how much frontmatter it checks (`wi-5f78c4`), and repairs (`wi-5fce24`).
-- [ ] A KB intake wave that closes what is already answered —
+- [x] A KB intake wave that closes what is already answered —
       `query-union-rule-is-owed-and-unowned`,
       `testkit-projection-module-unstable-projection-exemption-scope`,
       `stale-0-0-0-name-reservations`, the gap-read half of
@@ -91,6 +91,17 @@ so they are repaired first.
       briefs ingested on 2026-09-07. By hand now, since redkiln is retired; the
       three Weigh-In decisions staged at `.kb/_intake/decisions/` go in the same
       pass.
+      Done, by hand. Closed as superseded: `query-union-rule-is-owed-and-unowned`,
+      `testkit-projection-module-unstable-projection-exemption-scope`,
+      `stale-0-0-0-name-reservations` (by default, `wi-c24401`) and, since the
+      lint answered it, `accepted-atom-immutability-check-is-pre-commit-only`.
+      Only the gap-read half of `es-38-and-gap-read-rules-are-unowned` was
+      answered, so it is amended and stays open with phase 14.
+      `global-versus-per-boundary-visibility-invariant` was verified and does
+      **not** close: the falsifier did not fire at ADR-0063, but nothing answers
+      it, and phase 16 owns it. The orphan is indexed, the intake README removed,
+      and the six Weigh-In decisions are in `.kb/decisions/` with their bodies
+      verbatim, in their own section of the decision map.
 - [ ] The open questions whose own deadline has passed — "at `0.2.0`", "at phase
       12", "at the `ProjectionStore` freeze" — each get a new owner in phase 16 or
       17, recorded in that phase's file.
@@ -178,3 +189,10 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   number after a colon, including the ratios ADR-0033 rests on: now it needs a
   `path.ext:` before the colon. And `affected` on `main` checked only uncommitted
   edits: it now falls back to `HEAD^` as the gate step does.
+- 2026-09-28 — PR #19 squash-merged as `13e4dd8`. On `lane/phase-15-kb-intake`,
+  rebased onto it: the KB intake wave, by hand. The review workflow's three
+  findings on this branch are fixed in it: the lint's frontmatter rule restated
+  in the immutability closure, `cf-17` was on `domain-map.md` though not on this
+  index, and the index is stamped. Verified: `cargo run -p xtask -- lint-kb`
+  green against `13e4dd8` (no accepted body changed; the six new atoms are
+  new), `lints`, `lint-constitution`, `spec-trace` and `affected --base main`.

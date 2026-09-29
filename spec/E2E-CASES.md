@@ -846,7 +846,7 @@ so an author extending that to items would find it natural. Such an adapter stil
 passes every rule in the suite and breaks the runner: SPECIFICATION.md's ES-15
 says in terms that no order-invariance rule can catch it, because sorting the
 items is precisely what makes their order stop mattering. VT-31's
-`query_union_is_item_concatenation` is the rule that would, and it is still owed.
+`query_union_is_item_concatenation` is the rule that would, and it landed at phase 4.
 
 ---
 

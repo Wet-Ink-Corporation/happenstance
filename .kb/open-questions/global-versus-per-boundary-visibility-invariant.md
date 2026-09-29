@@ -19,6 +19,9 @@ summary: >-
   than settling it: it rejects arm B-tag on the invariant and not on cost, so if the checkpoint
   turns out to be boundary-scoped the reopening now takes ADR-0024's mechanism with it as well as
   ADR-0013's argument.
+  Re-read 2026-09-28 and not closed: ADR-0063 froze a single-position checkpoint (PS-17, PS-20),
+  so the named falsifier did not fire at the freeze, but ADR-0063 does not address ES-10 and sub-
+  questions 1, 2 and 4 are untouched. Phase 16 owns it (runbook/ledgers.md, Open decisions).
 depends_on: []
 related:
   - kb-decision-0013
@@ -35,7 +38,7 @@ source_paths:
   - references/adr/0024-position-visibility-mechanism.md
   - experiments/position-visibility/
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-28
 ---
 
 # Whether the visibility invariant needs to be global
@@ -126,3 +129,13 @@ new ADR, per this repository's standing rule that a frozen clause changes by ADR
 5. If the premise falls, is ADR-0024 reopened as well as ADR-0013 — and is the trigger the
    throughput ratio it was priced at in phase 2, or the cluster-wide staleness coupling the phase
    10 remeasurement exposed, which is the cost B-tag would actually avoid?
+
+## Re-read 2026-09-28 — not closed; phase 16 owns it
+
+Phase 15 was asked to verify this before closing it, and it does not close. What changed: ADR-0063
+froze `ProjectionStore` with `commit` taking one `SequencePosition`, and PS-17 and PS-20 fix a
+checkpoint per `(store, ProjectionId)` resumed strictly after its position — so the falsifier this
+question names, a boundary-scoped checkpoint, did not fire at the freeze. What did not: ADR-0063
+never mentions ES-10, visibility or boundaries, PS-23 and PS-24 are still provisional, and
+sub-questions 1, 2 and 4 are addressed nowhere. `runbook/ledgers.md`'s *Open decisions* table
+gives the question to phase 16, which decides whether ADR-0063 answered it.

@@ -2,7 +2,7 @@
 id: kb-open-question-stale-0-0-0-name-reservations-001
 title: Whether the live 0.0.0 name-reservation releases should be yanked before a real 0.2.0 ships
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   happenstance-core, happenstance and happenstance-testkit each carry both a 0.0.0 and a
@@ -25,6 +25,10 @@ summary: >-
   yanked, and max_stable_version reads 0.0.0 everywhere - so no consumer is pinned to anything,
   0.2.0 is a first real release for all seven, and the registry semver baseline cannot run until
   the tag lands. kb-decision-0037's promise binds from that tag and not before.
+  Resolved 2026-09-28: 0.2.0 shipped on 2026-09-10 with the three 0.2.0-alpha.1 releases yanked
+  and every 0.0.0 left standing, and CHANGELOG.md's 0.2.0 entry records why a 0.0.0 is not a
+  predecessor. Closed by default (wi-c24401): yanking the 0.0.0s stays available as the owner's
+  registry action.
 depends_on: []
 related:
   - kb-open-question-adapter-version-lockstep-001
@@ -34,7 +38,7 @@ source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/repository-url-and-security-channel.md
   - .kb/_intake/2026-09-08-adr-0004-msrv-becomes-a-promise-at-publication.md
   - CLAUDE.md
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-28
 ---
 
 # Whether the live `0.0.0` name-reservation releases should be yanked before a real `0.2.0` ships
@@ -134,3 +138,17 @@ decide deliberately to leave them standing.
    `happenstance-neon` — that have no `0.2.0-alpha.1` companion?
 3. Who owns running the yank, and is it a `0.2.0` release-checklist item or a
    follow-up after?
+
+## Resolved 2026-09-28 — status `superseded`
+
+The forcing event has passed. `0.2.0` shipped on 2026-09-10. The three `0.2.0-alpha.1`
+releases were yanked with it (`86a410c`), and every `0.0.0` was left standing: on 2026-09-28
+the registry shows all seven crates with an unyanked `0.0.0`, and `0.2.0` through `0.3.2` live.
+`CHANGELOG.md`'s `0.2.0` entry carries the argument this question wanted written down once — a
+`0.0.0` is not a predecessor, because there was never anything under it — so no later decision
+has to re-derive it.
+
+Sub-question 1 is answered by what happened rather than by a record, and that is recorded here
+as a Weigh-In default, `wi-c24401`, for the owner to review. Sub-questions 2 and 3 are moot
+unless someone decides to yank, which would be the owner's registry action and a new question.
+Closed by hand in phase 15's intake wave.

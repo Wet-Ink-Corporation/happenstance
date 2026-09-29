@@ -6,6 +6,9 @@ status: accepted
 authority_tier: note
 summary: >-
   A FROZEN marker binds the design; it does not assert that anything checks it. Two clauses demonstrate the difference. ES-38's rule, positions_are_not_reused_after_removal, cannot be written today: it needs a store capable of removing events, the fixture declares no such capability, and the completeness instrument it depends on is deferred with nothing planned before phase 14. And read_from_a_gap_position, which ES-9 is owed, is now named by two accepted decisions — ADR-0013 and ADR-0011 — and scheduled by neither; ADR-0011 claims ES-9 itself but assigns no owner to this rule, and ADR-0013 says explicitly that '0013 covered it' must not become the reason it goes unclaimed. What is not decided is who writes each, and whether a frozen clause may name a rule with no owning phase at all. Owner for ES-38's rule: phase 14. Owner for read_from_a_gap_position: unassigned, which is the point. Related in shape but not in subject to the ES-6 question, which is about a rule that cannot be written rather than one nobody has been asked to write.
+  Amended 2026-09-28: the gap-read half is answered — read_from_a_gap_position landed at phase 4
+  (d480446), ES-9 defines its behaviour, and FromIsAnOffsetStore and BackwardsIgnoredStore fail
+  it. The ES-38 half stays open, owned by phase 14, and its sub-question 3 is unanswered.
 depends_on: []
 related:
   - kb-decision-0013
@@ -19,7 +22,7 @@ source_paths:
   - references/adr/0013-position-assignment-and-visibility.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/src/suite.rs
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-28
 ---
 
 # Two frozen clauses name rules that are unwritten and unscheduled
@@ -88,3 +91,17 @@ sat unclaimed under `spec_trace`'s `(new)`/`†` escape hatch.
 3. When `CF-27` lands, does `positions_are_not_reused_after_removal` get
    written against whatever removal-capable fixture arrives with it, or does
    phase 14 need its own instrument decision first?
+
+## Amended 2026-09-28 — the gap-read half is answered; the question stays open
+
+`read_from_a_gap_position` exists. It landed at phase 4 in `d480446`, is registered in the
+testkit's suite, is failed by `FromIsAnOffsetStore` and `BackwardsIgnoredStore` in
+`tests/mutation_coverage.rs`, and ES-9 now states the behaviour it checks;
+`spec/SPECIFICATION.md` strikes it from the list of unwritten rules. Sub-question 1 is answered.
+
+The ES-38 half is not. ES-38 records `positions_are_not_reused_after_removal` as examined at phase
+4 and deliberately not written, blocked on CF-27's completeness instrument, and names phase 14 as
+its owner; `runbook/phases/14-retention.md` carries it as an open work item. Sub-question 3 —
+instrument first or rule first — is still unanswered, and is phase 14's. Sub-question 2 is answered
+in part by mechanism: `spec_trace`'s `UNRESOLVABLE_RULE_NAMES` makes every unwritten rule a clause
+names carry a declared reason, though the reason is a sentence rather than a phase.
