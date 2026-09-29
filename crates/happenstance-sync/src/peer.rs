@@ -232,7 +232,7 @@ impl PushBatch {
 /// re-evaluate against its own log, because the receiver's log contains events
 /// the origin never saw and re-checking would reject a fact that is already
 /// durable elsewhere. SY-6 settles what it is for: an adjudicator may read it,
-/// and a guard carrying `after` is refused at ingest. Phase 13 enforces both.
+/// and a guard carrying `after` is refused at ingest. Phase 13 builds the refusal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct EventGroup {
