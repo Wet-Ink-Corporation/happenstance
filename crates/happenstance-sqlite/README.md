@@ -12,10 +12,10 @@ storage-agnostic event sourcing library built on the
 > [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)'s
 > conformance suite against a real file on disk — the event store family, the
 > concurrency family, the generated model family and the projection family. The
-> `publish = false` this callout used to name is gone: the crate-set re-plan put
-> it in the release beside `happenstance`, `happenstance-core` and
-> `happenstance-testkit`. Only the registry can say whether that release has
-> happened yet.
+> `publish = false` this callout used to name is gone. **It is host only:** it
+> does not build for `wasm32-unknown-unknown` — `rusqlite` fails at
+> `libsqlite3_sys`, and reads hop through `spawn_blocking` — and nothing in the
+> gate checks that target. `references/seeds/sqlite-on-wasm.md` has the detail.
 
 ## Which crate do I want?
 

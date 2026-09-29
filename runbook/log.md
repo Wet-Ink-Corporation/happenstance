@@ -10,10 +10,31 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-28 — four small corrections, and the record catches up with PR #17
+
+*`lane/phase-15-small-corrections`. Its commit on `main` is recorded here when it
+merges.* Phase 15.
+
+The handover said PR #17 was still open; `git log` shows it merged as `ae501c5`,
+and the entry below now says so. Four of phase 15's items, on one branch because
+their work files are disjoint (`wi-faa4be`):
+- `happenstance-sqlite`'s crate root and README say *host only*: it does not build
+  for `wasm32-unknown-unknown`, and no gate step checks that target.
+- `REMEDIATION-HANDOVER.md` and `SESSION-DECISIONS-0.2.0.md` say in their titles
+  that they are records, as `HANDOVER.md` already did. Bodies verbatim.
+- `[Unreleased]` rides `0.4.0` (`wi-052920`), and phase 17 says so.
+- Found in passing: a stale `if: false` in a lint's doc comment, corrected; and a
+  phase 13 work item to delete `happenstance-sync`'s placeholder identity types.
+
+Every edited file that is cited by line kept its line count.
+
+**Verified.** See the phase 15 session log.
+
+---
+
 ## 2026-09-28 — ingest re-checking is settled, and the documents say so
 
-*`lane/phase-15-ingest-settled`. Its commit on `main` is recorded here when it
-merges.* Phase 15.
+*Merged as PR #17, squash `ae501c5`.* Phase 15.
 
 `CLAUDE.md` and `happenstance-sync`'s crate root called "does ingest re-check
 append conditions" the central open question, and `peer.rs`'s `EventGroup` doc

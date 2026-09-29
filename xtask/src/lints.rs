@@ -940,11 +940,11 @@ fn prose_of(path: &str, body: &str) -> String {
 ///
 /// # The anchor
 ///
-/// The registry-baseline step in `ci.yml` is `if: false` for the same reason the
-/// exemption is free: there is nothing published to diff against. Enabling that
-/// step and keeping the exemption are contradictory states — the first says a
-/// consumer can now be pinned, the second says none can. This fails when both
-/// are true.
+/// The registry-baseline step in `ci.yml` was `if: false` for the same reason the
+/// exemption was free, and `86a410c` enabled it once `0.2.0` was on crates.io, so
+/// the exemption must be gone. The two states contradict each other — an enabled
+/// step says a consumer can be pinned, the exemption says none can — so this fails
+/// if the exemption comes back while the `if: false` line is absent.
 ///
 /// # What it does not verify
 ///

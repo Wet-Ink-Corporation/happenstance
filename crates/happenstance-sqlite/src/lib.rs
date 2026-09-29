@@ -23,13 +23,13 @@
 //!
 //! # The shape this crate represents
 //!
-//! **Serialising, `Send`, native.** One connection behind one [`Mutex`](std::sync::Mutex),
-//! so writers queue by construction and positions are assigned under a lock. It
-//! implements [`SendEventStore`](happenstance_core::SendEventStore) and
-//! [`SendProjectionStore`](happenstance_core::SendProjectionStore), and it is
-//! deliberately *one* point in the portfolio rather than the reference: a port
+//! **Serialising, `Send`, native — and native means host only.** One connection
+//! behind one [`Mutex`](std::sync::Mutex), so writers queue by construction and
+//! positions are assigned under a lock. It implements [`SendEventStore`](happenstance_core::SendEventStore)
+//! and [`SendProjectionStore`](happenstance_core::SendProjectionStore), and a port
 //! frozen against this shape alone would be frozen against SQLite wearing four
-//! hats.
+//! hats. It does **not** build for `wasm32-unknown-unknown`: `rusqlite` fails at
+//! `libsqlite3_sys`, reads hop through `spawn_blocking`, and no gate step checks it.
 //!
 //! # What the type checker has already decided
 //!

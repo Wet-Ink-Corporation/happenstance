@@ -78,6 +78,10 @@ provides the atomicity and the identity that makes it idempotent.
       exists. The same three-part rationale `memory.rs:16-23` gives for
       `MemoryEventStore`, and the same cold-start problem the projection port had
       without one.
+- [ ] Delete `happenstance-sync`'s placeholder `EventId`, `StoreId` and
+      `RecordedAt` from `src/identity.rs`, and use `happenstance-core`'s, which
+      phase 4 put there. The module's own docs call them placeholders that phase 4
+      deletes; phase 4 did not. Found in passing during phase 15.
 - [ ] Envelope types on phase 5's tested wire format, with the format version
       first.
 - [ ] Ingest bound on `EventStore`, not `SendEventStore` — the Cloudflare side is

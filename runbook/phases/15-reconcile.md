@@ -26,10 +26,13 @@ so they are repaired first.
       milestone row is now a failure rather than a skip, and a linked phase cell
       compares as its text. Both defects are pinned by tests that fail on the table
       as `f89e184` left it. The ledger check reads `runbook/ledgers.md`.
-- [ ] `HANDOVER.md`, `REMEDIATION-HANDOVER.md` and `SESSION-DECISIONS-0.2.0.md`
+- [x] `HANDOVER.md`, `REMEDIATION-HANDOVER.md` and `SESSION-DECISIONS-0.2.0.md`
       read as records, not status. `HANDOVER.md`'s title now says so; its body
       still describes `0.2.0` as unpublished, in the present tense, and is left
       verbatim because it is cited by line.
+      Done: the other two titles say so as well, each edited in place on line 1,
+      so all three line counts are unchanged (420, 376 and 979). The bodies are
+      verbatim.
 - [x] `README.md:139-141` and `:175-176` stop saying nothing is published at
       `0.3.2`. `CONTRIBUTING.md:23` and `:323-352` stop describing the registry
       semver baseline as future work, and `.github/workflows/ci.yml:1107-1116`'s
@@ -49,10 +52,14 @@ so they are repaired first.
       them are corrected. The neighbouring bullets in the crate's ledger, on
       identity (VT-5) and ordering (SY-19), were just as stale and are corrected
       as well. Every edit to a cited file kept its line count.
-- [ ] `happenstance-sqlite`'s crate root and README say *host only*. It does not
+- [x] `happenstance-sqlite`'s crate root and README say *host only*. It does not
       build for `wasm32-unknown-unknown` (`rusqlite` fails at `libsqlite3_sys`, and
       reads hop through `spawn_blocking`), nothing in the gate checks it, and
       nothing says so. See `references/seeds/sqlite-on-wasm.md`.
+      Done: the crate root's shape paragraph and the README's status callout say
+      it, each rewritten in place with its line count kept. The README sentence
+      it replaced, "only the registry can say whether that release has happened",
+      was stale as well.
 - [x] The backlog, by D-2: `.bklg/` and `.redkiln/` are frozen records and
       redkiln is retired until `redkiln-rs`, after 1.0. `CLAUDE.md`'s *Where the
       work lives* says so, and this runbook is the only tracker. No item in
@@ -84,10 +91,12 @@ so they are repaired first.
       `3b1ffb7`, `d8fd819`. `lane/0.2.0-closeout` and
       `origin/worktree-kb-intake-2026-09-11` are also merged and were outside the
       decision.
-- [ ] `CHANGELOG.md`'s `[Unreleased]` holds two merged entries — SQLite's busy
+- [x] `CHANGELOG.md`'s `[Unreleased]` holds two merged entries — SQLite's busy
       timeout at fifteen seconds (ADR-0065) and `FaultyStore::contend_next`.
       Decide whether they ship as `0.3.3` or ride `0.4.0`; the first is a
       behaviour change to a published adapter, which argues for not waiting.
+      Decided by the owner, `wi-052920`: they ride `0.4.0`, and there is no
+      `0.3.3`. [Phase 17](17-breaking-window.md) says so beside its release item.
 
 **Proof artefact.** The status lint failing on the table as `f89e184` left it and
 passing on this one — `a_released_version_with_no_row_is_refused` and
@@ -128,3 +137,12 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   recorded as settled in `CLAUDE.md`, `happenstance-sync`'s crate root and
   `peer.rs`, and the spec prose quoting them. SY-1's and SY-6's MUSTs and markers
   are untouched. Verified: see `log.md`.
+- 2026-09-28 — The handover said PR #17 was open; `git log` shows it merged as
+  squash `ae501c5`, and `git log` wins. On `lane/phase-15-small-corrections`
+  (items bundled under `wi-faa4be`): `happenstance-sqlite` says *host only*; the
+  two remaining record titles say they are records; the `[Unreleased]` item is
+  closed by `wi-052920`; and, found in passing, `no_accepted_semver_break_outlives_its_reason`'s
+  doc comment no longer calls the registry baseline `if: false`, and phase 13 lists
+  deleting `happenstance-sync`'s placeholder identity types.
+  Verified: `cargo run -p xtask -- lints`, `cargo xtask lint-constitution`,
+  `cargo xtask spec-trace` and `cargo xtask affected --base main`, all green.
