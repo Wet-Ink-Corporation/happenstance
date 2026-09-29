@@ -98,14 +98,15 @@ handover is rewritten whole each time, so a stale one is visibly stale — its
 | — | **`0.3.2`** | 12 | — | released 2026-09-20 — a dependency advisory (`rustls`) |
 | 15 | [Reconcile the record](phases/15-reconcile.md) | 12 | done | the status lint failing on the pre-split table and passing on this one |
 | 16 | [Define 1.0](phases/16-define-1-0.md) | 15 | done | the 1.0 charter, with a disposition for every non-frozen clause on a promised surface |
-| 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | 16 | not started | `0.4.0` released, every semver break traced to a decision |
+| 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | 16 | in progress | `0.4.0` released, every semver break traced to a decision |
+| 17b | [After the window — the additive half](phases/17b-after-the-window.md) | 17 | not started | VT-14, VT-30 and ES-7 frozen; the minimal-versions and floating-dependency jobs watched failing once |
 | 18 | [The typed runner leaves its gate](phases/18-typed-runner.md) | 17 | not started | the rebuild example compiled with no unstable feature in its graph |
 | 13 | [`happenstance-sync` and its testkit](phases/13-sync.md) | 5, 8, 9, 10a, 10b, 12, 17, 18 | not started | one suite green against three peers, two of them unlike, and a byte-identical round trip |
 | 14 | [Retention and completeness](phases/14-retention.md) | 13, 17 | not started | a store that holds only a suffix of its own log, and a runner that fails loudly against it |
 | 19a | [SQLite on `wasm32` — skeleton](phases/19-sqlite-on-wasm.md) | 15 | not started | a skeleton building for `wasm32` in the gate, with a verdict on driver, storage and CI |
 | 19b | [SQLite on `wasm32` — the adapter](phases/19-sqlite-on-wasm.md) | 17, 19a | not started | both conformance suites green on `wasm32`, in the gate |
 | 20 | [Documentation that teaches](phases/20-docs-that-teach.md) | 15 | in progress | the docs initiative's Definition of Done, re-observed from a clean checkout |
-| 21 | [`1.0.0`](phases/21-one-point-oh.md) | 13, 14, 16, 17, 18, 20 | not started | the promised crates at `1.0.0`, and the clause audit clean |
+| 21 | [`1.0.0`](phases/21-one-point-oh.md) | 13, 14, 16, 17, 17b, 18, 20 | not started | the promised crates at `1.0.0`, and the clause audit clean |
 
 State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in place.
 A milestone row names a released version and the phase it waited on;

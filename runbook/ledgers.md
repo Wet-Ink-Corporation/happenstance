@@ -17,11 +17,12 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0072.** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0073.** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
-the runner's named `Chunk` (0070) and ES-10's scope (0071).
+the runner's named `Chunk` (0070) and ES-10's scope (0071). Phase 17 opened with
+0072, which split it at its release and created phase 17b.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14 and are
 still unwritten, which is why they are out of order with the numbers around them.
 
@@ -255,15 +256,15 @@ says why.
 | VT-6 | freeze-by-13 | Sync-testkit's `restored_peer_does_not_reissue_identities` is the instrument for the marker's harm half. Phase 9 answered the eviction half: Durable Object storage outlives the isolate, so mint-once is available |
 | VT-9 | freeze-by-13 | A sync-testkit rule that ingest preserves `RecordedAt`, with a mutant. ADR-0066 restates the clock falsifier, which no longer discriminates |
 | VT-10 | freeze-by-17 | Settled against a compiling spike, SQLite implementing `IngestStore` beside `append` — the marker's own instrument. The spike decides whether core grows a foreign-identity write path, each adapter does, or neither; phase 13 confirms it |
-| VT-14 | freeze-by-17 | An RTL identifier corpus check (Arabic, Hebrew, Persian, with mixed LTR) comes back empty, with the E11 reproduction added to `experiments/` |
+| VT-14 | freeze-by-17b | Moved from 17 by ADR-0072, additive. An RTL identifier corpus check (Arabic, Hebrew, Persian, with mixed LTR) comes back empty, with the E11 reproduction added to `experiments/` |
 | VT-21 | freeze-by-13 | SY-18 is where a floor is first compared across a peer set, and phase 13's two real peers (Durable Object, Neon over HTTP) are the tightest targets in the plan |
 | VT-22 | renew-past-1.0: a real domain event that legitimately carries more than 64 tags | The marker's own domain falsifier; the richest scenario event carries 8. A firing is answered by a store's own larger documented limit — every shipped adapter accepts 128 or more — not by raising the floor within 1.x |
 | VT-23 | renew-past-1.0: a real decision model that legitimately needs more than 128 items | The marker's own domain falsifier; the largest scenario model uses 4. A firing is answered by the store evaluating more, which every chunking adapter already does with no ceiling |
 | VT-24 | freeze-by-13 | Sync ingest is the first consumer that batches by the floor (E2E-35), and SY-14 is where a group larger than 128 would surface |
-| VT-30 | freeze-by-17 | ADR-0054's alias and builder-state decided in one pass; limb 2 retired by a record or by a multi-guard bench scenario |
+| VT-30 | freeze-by-17b | Moved from 17 by ADR-0072, additive. ADR-0054's alias and builder-state decided in one pass; limb 2 retired by a record or by a multi-guard bench scenario |
 | WF-1 | renew-past-1.0: a DCB implementation publishes a wire-level encoding, or a user needs to read another implementation's log | The format is private and WF-8 versions it, so a bridge is additive: a separate `happenstance-dcb-interop` crate with its own ADR. Phase 13 records the renewal in ADR-0026 |
 | WF-11 | renew-past-1.0: a workerd-class isolate must forward a payload another store accepted, at or above about 36.6 MB under a 128 MiB cap (peak is payload × 11/3) | `serialize_str` makes a human-readable encoder hold the whole payload. The instrument is phase 17's workerd sibling job; phase 13 confirms which encoding the sync transport uses |
-| ES-7 | freeze-by-17 | Frozen in the record that answers `trait-variant-caret-resolves-past-the-locked-gate` and ES-17's ownership, its falsifier restated to cover a consumer's unlocked resolve |
+| ES-7 | freeze-by-17b | Moved from 17 by ADR-0072, additive under the recommended caret answer; an exact pin is taken at 17 instead. Frozen in the record that answers `trait-variant-caret-resolves-past-the-locked-gate` and ES-17's ownership, its falsifier restated to cover a consumer's unlocked resolve |
 | ES-11 | freeze-by-17 | A record superseding ADR-0061's choice to keep the marker, now that `happenstance-neon` is in the 1.0 set; settles ES-11 and ES-12 together for the one-shot-HTTP shape |
 | ES-12 | freeze-by-17 | The same record as ES-11. Falsifier: `query_items_share_one_snapshot` red on a one-shot-HTTP adapter |
 | ES-17 | freeze-by-17 | Already on phase 17's work list: take ADR-0055's two-build measurement and act on it, or freeze the borrowed batch by a record |
