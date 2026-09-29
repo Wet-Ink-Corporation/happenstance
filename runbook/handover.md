@@ -12,62 +12,68 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`230065f` on `main` (PR #24, phase 16), plus `lane/phase-16-log`, which records
-that merge. 2026-09-29.
+`d6e42df` on `main` (PR #25, the phase-16 log), plus `lane/p17-kickoff`, which
+opens phase 17. 2026-09-29.
 
 ## Where things are
 
 Seven crates are published at `0.3.2`. `EventStore` has been frozen since `0.2.0`,
-and `ProjectionStore` since `0.3.0`. Phases 0–12, 15 and 16 are done. What remains
-is sequenced in [`roadmap.md`](roadmap.md):
-- a breaking window, released as `0.4.0` (17);
-- then the typed runner (18), sync (13) and retention (14), in that order. Phase
-  16 moved 18 ahead of 13, because SY-20's rule consumes a declaration 18 builds;
-- and `1.0.0` (21) last.
+and `ProjectionStore` since `0.3.0`. Phases 0–12, 15 and 16 are done; **phase 17
+is in progress**. What remains is sequenced in [`roadmap.md`](roadmap.md): the
+breaking window released as `0.4.0` (17), its additive half (17b), then the typed
+runner (18), sync (13) and retention (14), and `1.0.0` (21) last.
 
-**1.0 is now defined.** [ADR-0066](../.kb/decisions/0066-what-1-0-promises.md)
-names nine crates (the seven published plus `happenstance-sync` and
-`happenstance-sync-testkit`; `happenstance-ladybug` is outside). Every non-frozen
-clause has one row in [`ledgers.md`](ledgers.md)'s *The 1.0 dispositions*, and
-`cargo xtask lints` holds it: `freeze-by-N` must name a phase that is not done
-and is inside phase 21's prerequisites. CF-39 is the one clause frozen here.
+**Phase 17 is split at its release** ([ADR-0072](../.kb/decisions/0072-phase-17-is-split-at-the-release.md)).
+A read-only research pass over every item re-estimated the unsplit phase at about
+275 hours. Phase 17 now keeps what breaks or changes behaviour on a published
+crate, plus the `workerd` job, and ends at `0.4.0` (25–30 days). Phase 17b takes
+the additive items (8–10 days), and phase 21 waits on it. VT-14, VT-30 and ES-7
+are `freeze-by-17b`.
 
-**Redkiln is retired here.** This runbook is the only tracker until `redkiln-rs`,
-after 1.0. `.bklg/` and `.redkiln/` are frozen records; `CLAUDE.md`'s *Where the
-work lives* has the rules.
+**The owner's calls at kickoff:** spike the ES-11 fence on Neon (ask again if it
+fails); promise `AppendError::Busy`, with the typed commit loop retrying it inside
+`Retry`; a `NEON_CONNECTION` secret, a Cloudflare API token for a deployed Durable
+Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-Nothing but the bookkeeping on `lane/phase-16-log`: PR #24's squash commit in
-`log.md` and phase 16's session log, and this file.
+`lane/p17-kickoff`: ADR-0072, the 17b phase file, the status table, roadmap and
+ledger rows. The approved lane plan is phase 17's session log; each lane is one PR.
 
 ## Next action
 
-Start [phase 17](phases/17-breaking-window.md), the breaking window, in a fresh
-session. Set its status row to `in progress` in that session's first commit.
-Its heaviest item is the foreign-identity spike (VT-10), so start there. The
-`workerd` sibling job and the minimal-versions job are the other new
-infrastructure it owes.
+Merge `lane/p17-kickoff`, then start lane L1, **VT-10's foreign-identity spike**,
+on `lane/p17-foreign-identity`. It holds the most uncertainty and breaks nothing
+published:
+- replace `happenstance-sync`'s placeholder identity types with core's;
+- generalise SQLite's private `write_batch` to a local and a foreign origin, with a
+  `#[cfg(test)]` `IngestStore` spike;
+- add a structural one-statement test on Neon, as SY-14 evidence;
+- write VT-10's record, taking ADR-0073.
 
 ## Waiting on the owner
 
-- Merge `lane/phase-16-log`.
-- Phase 17's estimate (5–8 days) predates the work phase 16 added to it: the
-  `workerd` and minimal-versions jobs, ADR-0022 §9's reproduction, ADR-0069's
-  constructor and the VT-6 mint-per-open call. Re-estimate it at the start of
-  phase 17.
-- ADR-0066 §5 (the semver exemptions, and ES-6 sub-question 4) is the record's
-  own call, not yours. It is now accepted, so changing it needs a superseding
-  record before phase 21.
-- Still open from phase 15: the Weigh-In digest (`/weigh:in digest`); the merged
-  `lane/*` branches, none deleted; and the untracked `runbook/phase-15-afk-prompt.md`
-  and `assets/brand/happenstance-mark.png`.
+- Add `NEON_CONNECTION` and the Cloudflare API token as repository secrets before
+  lanes L5 (`Busy`), L6a (`workerd`) and L8 (ES-11).
+- Defaults the lanes will take unless overridden before they start:
+  - `trait-variant` keeps its caret (17b);
+  - `apply` is async on one trait;
+  - PS-25's digest is a hand-written FNV-1a;
+  - `ProjectionId` refuses the full ADR-0015 set, with a generic reserved prefix;
+  - Neon's `push` narrowing rides `0.4.0`;
+  - VT-30 is a deprecated alias;
+  - the new CI jobs are not required checks.
+- The `workerd` job's two-instance rules need a namespaced constructor on
+  `CloudflareEventStore`, which becomes a 1.0 promise. It is flagged in lane L6a's PR.
+- Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the
+  untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open
 
 Settled, with the record that settled it. Re-opening one needs a new decision
 record, and the owner.
 
+- Phase 17 is split at the release; 17b holds the additive half — ADR-0072.
 - What 1.0 promises: nine crates, ladybug outside, versioning, `workerd` before
   1.0, soak, support window and licence — ADR-0066 and its seven `wi-*` atoms.
 - The MSRV holds at 1.97.1, and after 1.0 a rise is bounded — ADR-0067.
@@ -84,6 +90,13 @@ record, and the owner.
 
 ## Traps
 
+- **17b is not a breaking window.** An item whose answer turns out to break a
+  published crate goes back to phase 17 (ADR-0072's rule), not into a `0.5.0`.
+- **Bump to `0.4.0` at the first breaking PR** (lane L4), or the semver job goes
+  red against `0.3.2` on every intermediate PR. Leave the CHANGELOG heading at
+  `[Unreleased]` until the release PR.
+- **Never touch `Fixture::arm_mid_batch_fault` or its *k*.** CF-39 is frozen
+  (ADR-0066), and `Busy`, CF-23 and the `workerd` fixture all edit the testkit.
 - **The gate's `tests` step is the memory hog.** Verify in slices with
   `cargo run -p xtask -- <step>`; do not pipe the whole gate into `tail`.
 - **`cargo hack --no-dev-deps` rewrites manifests.** A killed gate run can strip
@@ -91,19 +104,14 @@ record, and the owner.
 - **SQLite's concurrency rule flakes on Windows**, worse with more CPU. Do not
   isolate the test to reproduce it; it is owned by two open questions already.
 - **The redkiln plugin is disabled for this repository only**, in the gitignored
-  `.claude/settings.local.json`; it stays enabled in the user settings for other
-  repositories. A fresh clone does not carry that file, so there its hooks can
-  still write to `.redkiln/telemetry/` — do not commit new telemetry as work.
-- **The merge method varies.** PR #14 was squash-merged and PR #15 rebase-merged,
-  and both rewrite commit ids. A citation of a PR-branch commit dies with the
-  branch, so cite the commit on `main` after the merge.
+  `.claude/settings.local.json`. A fresh clone does not carry that file, so its
+  hooks can still write to `.redkiln/telemetry/` — do not commit new telemetry.
+- **The merge method varies**, and both squash and rebase rewrite commit ids. Cite
+  the commit on `main` after the merge.
 - **`cargo xtask lint-kb` needs history.** It compares `.kb/decisions/` against
-  the merge base and fails on a shallow clone; CI's `gate` job checks out at
-  `fetch-depth: 0` for it. Only a repointed `path:line` citation passes as a
-  repair; any other edit to an accepted body is a supersession.
+  the merge base and fails on a shallow clone. Only a repointed `path:line`
+  citation passes as a repair on an accepted body.
 - **A staged file blocks `git rebase`.** The stray `.redkiln/telemetry/` change
   stays staged, so rebase a branch in a throwaway `git worktree` instead.
 - **Thirteen of fourteen proposed freezes were refuted.** A clause's marker
-  moves on evidence in the tree, not on an argument that its falsifier is
-  decorative. ADR-0066 §2 records each refutation. Read it before proposing to
-  freeze anything early.
+  moves on evidence in the tree, not on an argument. ADR-0066 §2 records each.

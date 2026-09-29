@@ -10,6 +10,24 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-29 — phase 17 opens, split at its release
+
+*Uncommitted at writing; `lane/p17-kickoff`.*
+Phase 17.
+
+The handover asked for a re-estimate at the start of phase 17. A read-only
+research pass, one reader per cluster of work items and a sequencing synthesis,
+put the phase at about 275 hours against its 5–8 days. The owner split it
+(ADR-0072): phase 17 keeps what breaks or changes behaviour on a published crate,
+plus the `workerd` job, and ends at `0.4.0`. A new phase, 17b, takes the additive
+items, and phase 21 waits on it. VT-14, VT-30 and ES-7 moved to `freeze-by-17b`.
+The status table, roadmap and ledgers carry the split. The owner also chose to
+spike ES-11's fence on Neon, and to promise `AppendError::Busy`.
+
+**Verified.** See phase 17's session log.
+
+---
+
 ## 2026-09-29 — phase 16 is done: what 1.0 promises
 
 *Merged as PR #24, squash `230065f`.*

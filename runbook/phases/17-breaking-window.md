@@ -11,6 +11,15 @@ on a published trait, so they are made here, before the phases that implement
 them. One release rather than several, because each breaking minor asks every
 adopter to move once.
 
+**Split at the release** by
+[ADR-0072](../../.kb/decisions/0072-phase-17-is-split-at-the-release.md). This phase
+keeps every item whose answer changes a published signature or behaviour, and the
+`workerd` job whose measurement sets published constants; it ends at `0.4.0`. The
+additive items — `QueryItem`'s total constructor, VT-14, VT-30, ES-7 with its
+floating-dependency job, the minimal-versions job, CF-40's `MetadataLen`, and the
+tuple and `then(&[])` closures — are [phase 17b](17b-after-the-window.md)'s. An item
+whose answer turns out to break a published crate comes back here.
+
 **Decisions it settles.** ADR-0028 (moved from phase 14). The published-surface
 half of ADR-0026. The `Projection::apply` record the port's freeze left owed.
 Whatever phase 16 classified as breaking (ADR-0066), the ES-11 record that
@@ -48,9 +57,6 @@ gave to this phase.
       - `projection-id-is-unvalidated`, **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
         the sync runner's reservation is decided here, not at phase 13.
-      - `then-empty-emission-idiom-and-the-nothing-to-do-channel`.
-      - `tuple-boundary-heterogeneous-event-type` — option A forecloses B and C,
-        so the choice is the break, not the build.
       - `es-17-two-adapter-measurement-is-unscheduled` — take ADR-0055's restated
         measurement and act on it, or freeze `&[Event]` by a record. ES-17 below.
       - `no-fixture-tolerance-for-transient-contention` — a `Busy` variant on the
@@ -66,8 +72,11 @@ gave to this phase.
       **Not here, and on purpose.** Three of the split's candidates were
       classified additive. `read-page-budget-is-unspecified` goes after 1.0.
       `trait-variant-caret-resolves-past-the-locked-gate` is answered by a pin, an
-      assertion or a CI job rather than a signature — but ES-7's freeze rides the
-      record that answers it, and that record is written here.
+      assertion or a CI job rather than a signature; ES-7's freeze rides the
+      record that answers it, and ADR-0072 moved that record to phase 17b. So did
+      `then-empty-emission-idiom-and-the-nothing-to-do-channel` and
+      `tuple-boundary-heterogeneous-event-type`, whose recommended answers break
+      nothing.
       `cloudflare-worker-feature-gate` was closed at phase 16: the crate has no
       features table to gate. And `adapter-version-lockstep-and-cf-32` was closed
       by ADR-0066's versioning section rather than sent on.
@@ -92,13 +101,8 @@ gave to this phase.
       Additive, and it rides this window because ADR-0068 named no other owner.
       (ES-27's `Rejects:` repair, the other thing ADR-0068 left owed, landed at
       phase 16.)
-- [ ] **ADR-0069's total `QueryItem` constructor.** An infallible constructor
-      taking a first `EventType` as its own parameter, any further types and a
-      `Tags`, canonicalising exactly as `QueryItem::new` does
-      (`crates/happenstance-core/src/query.rs:56-76`). Additive, so it is not on
-      the breaking list; it ships in `0.4.0` with this window's other
-      `happenstance-core` work. The spelling (`QueryItem::of` is ADR-0069's
-      candidate) is settled here by compiling it, and the session log records it.
+- [ ] ~~**ADR-0069's total `QueryItem` constructor.**~~ Moved to
+      [phase 17b](17b-after-the-window.md) by ADR-0072: additive.
 - [ ] **VT-6 for Postgres and Neon: mint-per-open, or not**
       (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`).
       Phase 13 closes the restore gap, but it runs after this window, and
@@ -145,25 +149,15 @@ gave to this phase.
       the statement length at which a Durable Object refuses — and **ADR-0052's
       partition widths**, the public `MAX_QUERY_ARMS_PER_STATEMENT` and
       `MAX_QUERY_PARAMETERS_PER_STATEMENT`, measured so far only against the shim.
-- [ ] **A minimal-versions CI job.** After a lockstep `1.0.0` the crates version
-      independently (ADR-0066), and each adapter declares the core it needs as
-      `happenstance-core = "1.N"`. A lower bound nothing ever resolves against is
-      a guess, so a sibling job builds the workspace at its minimal versions and
-      keeps every declared bound honest. A sibling rather than a gate step: it
-      needs a nightly resolver.
+- [ ] ~~**A minimal-versions CI job.**~~ Moved to
+      [phase 17b](17b-after-the-window.md) by ADR-0072: it changes no surface.
 - [ ] **The clause follow-ups phase 16 gave this phase.** Each `freeze-by-17` row
       in [the 1.0 dispositions](../ledgers.md), and what freezes it:
       - **VT-10** — the foreign-identity spike above, with SQLite implementing
         `IngestStore` beside `append`. It must not foreclose SY-14's
         bounded-round-trip ingest, which phase 13 measures.
-      - **VT-14** — an RTL identifier corpus check (Arabic, Hebrew and Persian,
-        with mixed LTR) comes back empty, and the E11 reproduction goes into
-        `experiments/`.
-      - **VT-30** — ADR-0054's alias and builder-state questions decided in one
-        pass; limb 2 retired by a record or by a multi-guard benchmark scenario.
-      - **ES-7** — frozen in the record that answers
-        `trait-variant-caret-resolves-past-the-locked-gate` and ES-17's ownership,
-        its falsifier restated to cover a consumer's unlocked resolve.
+      - ~~**VT-14**, **VT-30**, **ES-7**~~ — `freeze-by-17b` since ADR-0072; each
+        is additive under its recommended answer.
       - **ES-11, ES-12** — the ES-11 record above.
       - **ES-17** — the measurement or the freezing record, above.
       - **ES-41** — with ADR-0028. The transport half is already answered: Neon
@@ -187,8 +181,8 @@ gave to this phase.
       **SY-21** (inside the `apply` record, which must name it; phase 18 freezes);
       **PS-25** (the derived-id remedy or the digest-in-checkpoint one — the
       second changes the frozen port's `commit`, so the choice is made here);
-      **CF-40**'s `MetadataLen` build under ADR-0043 (phase 13 then decides the
-      budget unit); and **PS-38**'s documented no-lagging-replica obligation
+      **CF-40**'s `MetadataLen` build under ADR-0043 moved to 17b with ADR-0072
+      (phase 13 then decides the budget unit); and **PS-38**'s documented no-lagging-replica obligation
       (phase 18 freezes it with PS-23).
 - [ ] **Release `0.4.0`.** `cargo-semver-checks` against the `0.3.x` registry
       baseline reports breaks, and each one it reports traces to a decision above.
@@ -208,20 +202,38 @@ caused it — a break with no row is one nobody decided.
 - [ ] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
       `happenstance-postgres`, and a record classifies its remedy as additive or
       breaking; a breaking remedy has landed.
-- [ ] `QueryItem`'s total constructor (ADR-0069) and the guard-plan
-      `LIST SUBQUERY` assertion (ADR-0068) are in the tree.
+- [ ] The guard-plan `LIST SUBQUERY` assertion (ADR-0068) is in the tree.
+      (`QueryItem`'s total constructor moved to 17b with ADR-0072.)
 - [ ] The `apply` record is accepted.
 - [ ] Every open question phase 16 classified as breaking is answered or closed.
 - [ ] `0.4.0` is released and its semver findings are fully traced.
-- [ ] The `workerd` and minimal-versions jobs exist, each has been watched
-      failing once, and the SQL-text wall and partition widths are recorded as
-      measured on `workerd`.
+- [ ] The `workerd` job exists, has been watched failing once, and the SQL-text
+      wall and partition widths are recorded as measured on `workerd`, locally
+      and on a deployed Durable Object. (The minimal-versions job moved to 17b
+      with ADR-0072.)
 - [ ] Every `freeze-by-17` clause in [`ledgers.md`](../ledgers.md)'s 1.0
       dispositions is `[FROZEN]`, or re-dispositioned by a record that says why.
+      VT-14, VT-30 and ES-7 were re-dispositioned to `freeze-by-17b` by ADR-0072.
 - [ ] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
 
-**Estimate.** 5–8 days. The range is honest: the spread is mostly the
-foreign-identity spike, which nobody has attempted.
+**Estimate.** ~~5–8 days.~~ **25–30 days**, re-estimated at the phase's start
+(2026-09-29) after phase 16 added the `workerd` job, ADR-0022 §9, ADR-0069's
+constructor and VT-6 to it. A read-only research pass over every item put the
+unsplit phase at about 275 hours; ADR-0072 moved the additive part, 8–10 days of
+it, to 17b. The spread is the `workerd` harness, `Busy` across three adapters,
+the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
 
 **Session log**
+
+- 2026-09-29 — Started. Re-estimated from a read-only research pass over every
+  item (one reader per cluster, then a sequencing synthesis). The owner chose to
+  split the phase at its release (ADR-0072, phase 17b), to spike the ES-11 fence
+  on Neon rather than take a named exception, and to promise `AppendError::Busy`
+  with the typed commit loop retrying it inside `Retry`. The owner is providing a
+  `NEON_CONNECTION` secret, a Cloudflare API token for a deployed Durable Object
+  leg, and Docker for testcontainers Postgres. Work runs in lanes, one PR each:
+  kickoff; VT-10; the provided-method spike with ADR-0028; the `apply` and
+  port-clause records; the renames and manifest breaks; `Busy`; the `workerd`
+  job, then Cloudflare's partition; ES-17; ES-11 on Neon; ADR-0022 §9;
+  `ProjectionId`; the codec; the release.

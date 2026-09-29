@@ -590,6 +590,15 @@ editing neither body.
 | ADR-0070 | [`kb-decision-0070`](../decisions/0070-the-runner-takes-a-named-chunk.md) | The runner takes a named Chunk, and gets no observation seam at 1.0 | accepted | 16 | — |
 | ADR-0071 | [`kb-decision-0071`](../decisions/0071-es-10-stays-global.md) | ES-10 stays global, because the frozen checkpoint is one position | accepted | 16 | — |
 
+## 2026-09-29: the breaking window, written by hand (phase 17)
+
+Phase 17's records, written by hand as each of its lanes lands. ADR-0072 is the first: the phase is split
+at its release, and the additive items go to a new phase, 17b.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0072 | [`kb-decision-0072`](../decisions/0072-phase-17-is-split-at-the-release.md) | Phase 17 is split at the release — what must ship in 0.4.0, and 17b after it | accepted | 17 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
