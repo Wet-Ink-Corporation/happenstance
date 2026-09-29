@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`13e4dd8` on `main`, plus `lane/phase-15-kb-intake` open as a PR.
+`6d35bc6` on `main`, plus `lane/phase-15-overdue-owners` open as a PR.
 2026-09-28.
 
 ## Where things are
@@ -38,19 +38,18 @@ Phase 15 is being finished unattended, one PR per work item, self-merged on gree
 
 ## In flight
 
-Branch `lane/phase-15-kb-intake`, open as a PR: the KB intake wave, by hand.
+Branch `lane/phase-15-overdue-owners`, open as a PR: every open question past
+its own deadline has an owner in phase 16.
 
-Committed and waiting behind it: `lane/phase-15-overdue-owners` (every open
-question past its own deadline given an owner in phase 16 or 17) and
-`lane/phase-15-exit` (the adapter pages' registry hedges corrected, then the
-exit gate).
+Committed and waiting behind it: `lane/phase-15-exit` — the adapter pages'
+registry hedges corrected, and the exit gate.
 
-`log.md` now names PR #19's squash, `13e4dd8`.
+`log.md` now names PR #20's squash, `6d35bc6`.
 
 ## Next action
 
-Merge this PR. Then rebase and open `lane/phase-15-overdue-owners`, then
-`lane/phase-15-exit`.
+Merge this PR. Then rebase `lane/phase-15-exit`, tick phase 15's exit criteria
+that are true, and open it.
 
 ## Waiting on the owner
 
