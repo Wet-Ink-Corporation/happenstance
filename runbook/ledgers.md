@@ -48,7 +48,8 @@ table when an ADR or a clause settles it, and the archive keeps it either way.
 | Who owns reconciling the specification after each phase, and whether `spec-trace` mechanises it | 16 | open — forced by phase 6 and phase 12, both past (`nothing-owns-the-post-phase-reconciliation`) |
 | Which read fault `PostgresFixture` arms, and whether it needs new capability machinery | 16 | open — owed at phase 10's remainder (`postgres-fixture-read-fault-declension-is-owed`) |
 | An infallible pre-validated `Tags` / `Tag` constructor in `happenstance-core` | 16 | open — additive; an ADR owed by ADR-0020, forced by the first API change after `0.1` (`d-1-the-validated-type-has-no-total-path`) |
-| A named `Chunk` type for `run_projection` in place of `NonZeroUsize` | 17 | open — breaking since ADR-0063; its deadline was the `ProjectionStore` freeze (`projection-runner-chunk-type-and-observation-seam`, sub-question 1) |
+| A named `Chunk` type and an observation seam for `run_projection` | 16 | open — due at the `ProjectionStore` freeze, now past; free while `happenstance`'s `unstable-projection` gates the runner, so decided before phase 18 lifts it (`projection-runner-chunk-type-and-observation-seam`) |
+| Whether `remint_identity`'s documented procedure owes an in-process check | 16 | open — first forced at phase 5, now past (`remint-identity-precondition-is-trust-only`) |
 | Is replication whole-log or scoped | 13 | deferred — SY-27, SY-28 |
 | Idempotent bulk ingest inside one round trip | 13 | deferred — SY-14 |
 | Does a peer declare its own limits | 13 | deferred — SY-18 |

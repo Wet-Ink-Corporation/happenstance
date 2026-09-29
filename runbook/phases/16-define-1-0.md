@@ -58,7 +58,13 @@ charter records that rather than re-arguing it.
         `nothing-owns-the-post-phase-reconciliation`,
         `postgres-fixture-read-fault-declension-is-owed` and
         `d-1-the-validated-type-has-no-total-path` (additive, an ADR owed by
-        ADR-0020).
+        ADR-0020), `remint-identity-precondition-is-trust-only` (whether
+        `remint_identity`'s documented procedure owes an in-process check; its
+        own first deadline was phase 5), and
+        `projection-runner-chunk-type-and-observation-seam` — a named `Chunk`
+        type and an observation seam for `run_projection`. Neither is a break
+        while `happenstance`'s `unstable-projection` still gates the runner, so
+        both are decided here and phase 18 builds them before it lifts the gate.
       - **Clause dispositions**, for the clause audit above:
         `cf-25-cf-26-portfolio-check-does-not-exist`,
         `cf-36-names-a-cross-reference-nothing-performs`,
@@ -66,8 +72,10 @@ charter records that rather than re-arguing it.
         `vt-30-provisional-marker-is-stale-and-unscheduled`,
         `reset-refusal-declension-has-no-clause`, `es-7-and-vt-9-provisional-markers`
         (its PS-4 limb goes with `Projection::apply` in phase 17),
-        `cf-18-residuals-after-declension-by-inheritance` and
-        `model-only-kind-memberless-dormant-or-withdrawn`.
+        `cf-18-residuals-after-declension-by-inheritance`,
+        `model-only-kind-memberless-dormant-or-withdrawn` and
+        `read-to-backwards-limit-composition-gap` (owed before the first SQL
+        adapter shipped a windowed backwards read, which `0.2.0` did).
       - **Already on the classification list above**, with their deadlines now
         passed too: `adapter-version-lockstep-and-cf-32` and
         `cf-23-emitter-names-mandatory-and-marked-unstable` stay here; the other
