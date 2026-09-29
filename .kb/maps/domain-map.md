@@ -101,6 +101,11 @@ summary: >-
   `kb-reference-busy-timeout-adapter-cap-sweep-001` (the adapter-level cap sweep ADR-0065 rests on,
   closing the margin atom's own first caveat by running the shipped adapter's concurrency target
   rather than the experiment's candidate). No new domain opened.
+  Phase 16's 2026-09-29 pass, written by hand, added six decisions (ADR-0066 through ADR-0071, all
+  phase 16, none superseding a row): 0066 and 0067 to publication and release readiness, 0069 and
+  0070 to the typed layer, and 0068 and 0071 to the ports domain. It annotated ten open questions
+  superseded where each domain lists them, and added one,
+  `kb-open-question-postgres-neon-store-id-no-restore-001`, to the ports domain.
 depends_on: []
 related:
   - kb-map-open-questions-index-001
@@ -120,7 +125,7 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-09-intake
   - .kb/_governance/integration-waves/2026-09-11-intake
   - .kb/_governance/integration-waves/2026-09-21-intake
-last_reviewed: 2026-09-21
+last_reviewed: 2026-09-29
 ---
 
 # Domain map
@@ -221,7 +226,9 @@ byte-identical),
 2026-08-13 verdict stands),
 `kb-open-question-es-6-unwritable-rule-001`,
 `kb-open-question-provisional-falsifiers-001`,
-`kb-open-question-post-phase-reconciliation-001`,
+`kb-open-question-post-phase-reconciliation-001` (**superseded** 2026-09-29: owned by process —
+step 6 of the session protocol and a reconciliation line in every open phase's exit criteria; the
+mechanised half is declined),
 `kb-open-question-cf-36-unperformed-cross-reference-001` (added 2026-08-17 — CF-36 is `[FROZEN]`
 and claims a level-marker cross-reference `cargo xtask spec-trace` does not perform),
 `kb-open-question-no-ps-rule-name-resolved-001` (added 2026-08-17 — CF-38 is `[FROZEN]`; a bare
@@ -348,6 +355,17 @@ adapter's own concurrency target rather than the experiment's candidate. `depend
 `kb-decision-0022`; `supersedes` stays `null` and `kb-decision-0022` keeps `status: accepted`
 unflipped, since sections 4, 6, 7, 9, 10, 12 and 15 still stand — the same partial-supersession shape
 `kb-decision-0031` used against ADR-0007. See [`decision-map.md`](decision-map.md) for the row.
+
+Phase 16's 2026-09-29 pass, written by hand, added two decisions to this domain. ADR-0068
+(`.kb/decisions/0068`) settles what `kb-open-question-adr-0022-falsifiers-fired-001` left open after
+ADR-0065: ADR-0022 §8 is superseded at items 1 and 2 with §16's falsifier for it, re-grounded on the
+correlated `EXISTS` chain that actually ships; §9 is not decided and its reproduction goes to phase
+17; the remaining sections are ratified. `supersedes` stays `null` and `kb-decision-0022` stays
+accepted, the ADR-0065 shape again. ADR-0071 (`.kb/decisions/0071`) keeps ES-10's visibility
+invariant global and `[FROZEN]`, because ADR-0063 froze a one-position checkpoint at every seam, and
+closes `kb-open-question-global-vs-boundary-visibility-001`, `depends_on` `kb-decision-0013`,
+`kb-decision-0024` and `kb-decision-0063`. The same pass's other four decisions sit in the
+publication and typed-layer domains below. See [`decision-map.md`](decision-map.md) for the rows.
 
 **Reference**
 
@@ -484,7 +502,8 @@ self-contained list. The ones this domain owns:
 `kb-open-question-projection-batch-no-apply-001` (**superseded** 2026-08-13 by
 `kb-decision-0017`; sub-question 3 stays open, with the typed layer),
 `kb-open-question-query-union-rule-unowned-001`,
-`kb-open-question-global-vs-boundary-visibility-001`,
+`kb-open-question-global-vs-boundary-visibility-001` (**superseded** 2026-09-29 by
+`kb-decision-0071`: ES-10 stays global and `[FROZEN]`),
 `kb-open-question-postgres-arm-c-cost-001` (**superseded** 2026-09-07 by `kb-decision-0024`: the
 shipped adapter measures no discriminating steady-state cost, and the residual moves to
 `kb-open-question-off-poll-visibility-defect-001`),
@@ -509,7 +528,8 @@ instead, and nothing currently scheduled produces the two-build evidence),
 suite runs on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a `node:sqlite`
 shim, never under `workerd`; ADR-0023 records the exclusion as an escalated, not a rejected,
 finding, and WF-11's memory-ceiling non-fire is a second independent consequence of the same
-absent runner),
+absent runner. **Superseded** 2026-09-29 by `kb-decision-0066`: a workerd runner lands before 1.0
+as a sibling CI job, built in phase 17, not as a gate step),
 `kb-open-question-adapter-default-projection-feature-001` (added 2026-09-02 — ADR-0036 ships
 `ProjectionStore` behind off-by-default `unstable-projection`, `happenstance-sqlite` now forwards
 that gate correctly, and `happenstance-neon`/`happenstance-postgres` still carry
@@ -535,7 +555,12 @@ one surface as the same failed `Attempt`; no longer hypothetical now that `busy 
 observed at the shipped contender count),
 `kb-open-question-remint-precondition-trust-only-001` (added 2026-09-04 — `remint_identity`'s own
 test never actually restores or clones a store, so VT-6's `[PROVISIONAL]` marker rests on a
-same-process assertion rather than the cross-instance one its text describes),
+same-process assertion rather than the cross-instance one its text describes. **Superseded**
+2026-09-29: every append re-reads the persisted identity and refuses a stale handle
+(`f719b2a`); the gap beside it is the successor entry below),
+`kb-open-question-postgres-neon-store-id-no-restore-001` (added 2026-09-29 — `happenstance-postgres`
+and `happenstance-neon` mint their `StoreId` once and take neither branch VT-6 requires of mint-once,
+so a restore or a Neon branch re-issues identities; owned by phase 13),
 `kb-open-question-query-plan-parameter-chunking-001` (added 2026-09-04 — the 30,000-parameter
 budget is enforced on `write_tag_rows`'s insert path but not proven never to be hit on the
 400-arm-per-statement query-chunking path. **Superseded** 2026-09-07 by `kb-decision-0052` and
@@ -548,11 +573,14 @@ unpartitioned failure mode, found in the same pass, is the residual),
 named re-open conditions have fired and the third cannot fire as written, and nobody has yet
 decided whether the decision is superseded, re-opened, or ratified as still correct with the
 firings recorded against it. Amended 2026-09-07 with the shipped-adapter remeasurement's sharper
-figures and a corrected reading of `busy > 0`'s rate; stays **open**),
+figures and a corrected reading of `busy > 0`'s rate; stays **open**. Amended 2026-09-29:
+`kb-decision-0068` answers §8 and §16; §9 stays open with phase 17),
 `kb-open-question-msrv-ratification-conflict-001` (added 2026-09-07 — the ratified pre-publication
 recommendation to lower the MSRV to 1.95 is absent from the discharge queue, and the 1.88 figure
 both `kb-decision-0029` and `kb-decision-0037` state is contradicted by a compiled bisection naming
-1.95.0 as the first passing version; filed as a conflict rather than forced to resolve),
+1.95.0 as the first passing version; filed as a conflict rather than forced to resolve.
+**Superseded** 2026-09-29 by `kb-decision-0067`: the floor holds at 1.97.1, the ratification is
+withdrawn, and the `cfg_select!` threshold is corrected to 1.95),
 `kb-open-question-off-poll-visibility-defect-001` (added 2026-09-07 — an off-poll adapter,
 `happenstance-postgres` hopping onto a captured `sqlx` runtime `Handle`, has a real, demonstrated
 visibility defect no poll-based schedule can reach, because the port exposes no suspension point a
@@ -563,7 +591,8 @@ conformant-control obligation is discharged once per rule or once per branch ins
 rule; ES-22's arm 2 is the first place the difference is visible),
 `kb-open-question-postgres-read-fault-declension-001` (added 2026-09-07 — `PostgresFixture`
 inherits a `READ_FAULT` declension that is false about a store whose `PgReadStream` holds a
-server-side cursor, the gap ADR-0051's CF-18 discharge found),
+server-side cursor, the gap ADR-0051's CF-18 discharge found. **Superseded** 2026-09-29: built at
+phase 10b (`2ed06b4`) — `PostgresFixture` arms `READ_FAULT` with a raising view),
 `kb-open-question-read-fault-rule-no-clause-001` (added 2026-09-07 — the third entry in
 `UNCLAIMED_PENDING_ADR`, mirroring `kb-open-question-disjoint-boundaries-no-clause-001` and
 `kb-open-question-model-family-rule-no-clause-001`: a live rule with no owning clause),
@@ -605,7 +634,8 @@ phase 10, corroborating ADR-0036's part-2-unmet finding with a second causal rea
 `Statement` newtype follows once `ProjectionStore` freezes),
 `kb-open-question-projection-runner-chunk-observation-001` (added 2026-09-07 — the chunk type and
 default plus the runner's observation seam, both priced at zero code-cost-of-delay by ADR-0036's
-exemption),
+exemption. **Superseded** 2026-09-29 by `kb-decision-0070`: a named `Chunk`, no `Default`, and no
+observation seam at 1.0),
 `kb-open-question-reset-refusal-declension-001` (added 2026-09-07 — `RESET_REFUSAL` has no
 CF-39-shaped clause after ADR-0042's retraction, so a fixture can declare it and override
 `protect_from_reset` with an empty body, passing vacuously),
@@ -691,6 +721,12 @@ supersession, since ADR-0020's own contrary prediction was published as explicit
 - [`0059-the-domain-event-guard-checks-positional-agreement.md`](../decisions/0059-the-domain-event-guard-checks-positional-agreement.md)
   (`kb-decision-0059`) — added 2026-09-07. Named-const doctests and examples plus an xtask lint
   land now; a positional-agreement precondition on `assert_domain_event` is owed before `0.2.0`.
+- [`0069-queryitem-gains-a-total-constructor.md`](../decisions/0069-queryitem-gains-a-total-constructor.md)
+  (`kb-decision-0069`) — added 2026-09-29, phase 16. `QueryItem` gains an infallible constructor
+  taking at least one `EventType` by value, and the outward face of D-1 is closed as intended.
+- [`0070-the-runner-takes-a-named-chunk.md`](../decisions/0070-the-runner-takes-a-named-chunk.md)
+  (`kb-decision-0070`) — added 2026-09-29, phase 16. `run_projection`'s chunk becomes a named,
+  `#[non_exhaustive]` `Chunk` with no `Default`, and the runner gets no observation seam at 1.0.
 
 **Reference**
 
@@ -725,7 +761,8 @@ self-contained list. The ones this domain owns:
 `kb-open-question-d-1-no-total-path-001` (added 2026-08-17 — `QueryItem::new` is fallible even over
 already-validated inputs and `DomainEvent::tags` is total over a fallible `Tags`; no infallible
 route exists in either direction, and it is the single condition that would reopen ADR-0033's
-verdict),
+verdict. **Superseded** 2026-09-29 by `kb-decision-0069`: a total `QueryItem` constructor inward,
+working as intended outward, and ADR-0033's reopen condition does not fire),
 `kb-open-question-event-type-positional-mapping-001` (added 2026-09-07 — the worked examples'
 `EVENT_TYPES[n]` mapping from a fold position to a decoder is unchecked by the compiler in both
 `course-subscriptions` and `transfers-on-sqlite`; filed rather than amending ADR-0033, which the
@@ -843,13 +880,21 @@ design and the ADR corpus it rests on, while this one is about what changes the 
   (`kb-decision-0057`) — `happenstance-testkit`'s resolvable dev-dependency version key is dropped
   from every publishable crate's manifest, with a gate step asserting none carries one back; a
   deliberate exception stands for `examples/outside-projection-adapter`.
+- [`0066-what-1-0-promises.md`](../decisions/0066-what-1-0-promises.md)
+  (`kb-decision-0066`) — added 2026-09-29, phase 16. The 1.0 charter: nine promised crates, one
+  disposition per unfrozen clause held in `runbook/ledgers.md`, CF-39 frozen, lockstep at 1.0.0
+  then independent versions, and Cloudflare's claim is conformance on workerd.
+- [`0067-msrv-after-1-0-rises-are-bounded.md`](../decisions/0067-msrv-after-1-0-rises-are-bounded.md)
+  (`kb-decision-0067`) — added 2026-09-29, phase 16. The MSRV holds at 1.97.1 into 1.0; after it, a
+  rise ships only in a minor, only to a stable at least six months old, with a CHANGELOG entry.
 
 **Open questions** — see [`open-questions-index.md`](open-questions-index.md) for the full,
 self-contained list. The ones this domain owns:
-`kb-open-question-adapter-version-lockstep-001`,
+`kb-open-question-adapter-version-lockstep-001` (**superseded** 2026-09-29 by `kb-decision-0066`),
 `kb-open-question-facade-does-not-match-adr-0006-001`,
 `kb-open-question-stale-0-0-0-name-reservations-001`,
-`kb-open-question-cloudflare-feature-gate-001`,
+`kb-open-question-cloudflare-feature-gate-001` (**superseded** 2026-09-29 by `kb-decision-0066`:
+no features table, classified additive),
 `kb-open-question-rustdoc-citation-form-001`.
 
 ## Adding a domain

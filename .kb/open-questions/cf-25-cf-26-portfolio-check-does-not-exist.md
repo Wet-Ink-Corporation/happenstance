@@ -24,7 +24,7 @@ related:
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/portfolio-check-and-the-port-freeze-bar.md
   - .kb/_intake/es-42-marker-earned-off-at-0-2-0.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # CF-25 and CF-26 name a portfolio check cargo xtask spec-trace does not perform
@@ -96,3 +96,19 @@ machine-checked; today it would not have been.
    green, near end unbuilt) count as an axis with a far end for CF-25's
    purposes? That reading decides whether the `ProjectionStore` freeze passes
    outright or has to name an acceptance.
+
+## Phase 16 — 2026-09-29
+
+**Classification: additive** — repository tooling and specification text; no crate signature
+moves. CF-25 and CF-26 are `[FROZEN]`, so neither has a row in `runbook/ledgers.md`, *The 1.0 dispositions*
+(`kb-decision-0066`). The forcing event has passed: `kb-decision-0063` froze `ProjectionStore`
+after `kb-decision-0062` built the far end (`LivePostgresProjectionStore`), which meets CF-25's
+bar in substance, but neither record cites CF-25 or CF-26, and `xtask/src/spec_trace.rs` still
+has no portfolio logic (`grep -ciE "portfolio|far end"` returns 0 at `3dcba41`). Sub-question 3
+is moot for that freeze; 1 and 2 stand.
+
+**Owner now: phase 13.** The next freezes CF-25 gates are the SY clauses on the peer port, and
+each either lands with the check or takes CF-25's second route, naming the axis it accepts risk
+on and the record that accepts it. A Rule-line repair saying the check is a reviewer's walk
+rather than `spec-trace` is a `[FROZEN]`-clause repair under `kb-playbook-repair-frozen-clause-001`,
+and phase 21's clause audit holds whichever route was taken.

@@ -36,7 +36,7 @@ related:
   - kb-open-question-projection-batch-no-apply-001
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/projection-batch-sql-seam.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # Is &'static str the projection batch's final SQL seam, or does a minted Statement type follow?
@@ -141,3 +141,15 @@ answering this once for all three, not whether the obligation should be
 stated); and whether `happenstance-core` should document a trust-boundary
 statement for `metadata`/`data` reaching a projection store at all, which
 is a contract-level question this atom does not reach.
+
+## Phase 16 — 2026-09-29
+
+**Classification: breaking-if-answered → phase 17** (`runbook/phases/17-breaking-window.md`;
+`kb-decision-0066`). This atom assumed the surface was semver-exempt, and that premise is stale.
+`kb-decision-0063` froze the port, and both batches' `push(&mut self, sql: &'static str, …)` are
+published: `crates/happenstance-sqlite/src/projection_store.rs:487` and
+`crates/happenstance-postgres/src/projection_store.rs:252`. Option B changes that parameter's type,
+so only `0.4.0` can absorb it. Recording *Option A is final* closes the atom without a break.
+Either record also says whether Neon's `push(SqlStatement)`
+(`crates/happenstance-neon/src/projection_store.rs:181`) owes the same narrowing. Ladybug's
+`push_raw_cypher` is outside 1.0 under `kb-decision-0066`'s crate set. **Owner now: phase 17.**

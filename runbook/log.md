@@ -10,9 +10,38 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-29 — phase 16 is done: what 1.0 promises
+
+*`lane/phase-16-define-1-0`, one PR, left open for the owner to merge. Its commit
+on `main` is recorded here when it merges.*
+Phase 16.
+
+ADR-0066 is the 1.0 charter: nine crates by name, `happenstance-ladybug`
+outside; versions released in lockstep at `1.0.0` and independent after; a
+`workerd` sibling job before 1.0; the rc soak, supported versions and a licence
+promise. Five sibling records settle what it needed first: ADR-0067 (MSRV after
+1.0), ADR-0068 (ADR-0022 §§8, 16), ADR-0069 (a total `QueryItem` constructor),
+ADR-0070 (the runner's `Chunk`) and ADR-0071 (ES-10 stays global). Seven owner
+decisions are Weigh-In atoms, `wi-2798d5`, `wi-d61f21`, `wi-8e5bd4`,
+`wi-460397`, `wi-1408e8`, `wi-cbc941` and `wi-7899af`.
+
+Every non-frozen clause has one row in `ledgers.md`'s *The 1.0 dispositions*,
+and `cargo xtask lints` now refuses a missing row, a bad disposition, or a
+`freeze-by-N` naming a phase that is done or outside phase 21's prerequisites.
+CF-39 is frozen. The other thirteen freezes the survey proposed were refuted
+by adversarial verification and given later owners. Phase 17's work list is
+the breaking half of the open questions, plus ADR-0022 §9's reproduction and
+the guard-plan assertion (ADR-0068) and `QueryItem`'s total constructor
+(ADR-0069). Phase 18 now runs before phase 13: SY-20's rule at 13 consumes the
+convergence declaration 18 builds, and the two had no order between them.
+
+**Verified.** See the phase 16 session log for the gate slices that ran.
+
+---
+
 ## 2026-09-29 — phase 15 is done
 
-*`lane/phase-15-close`. Its commit on `main` is recorded here when it merges.*
+*Merged as PR #23, squash `3dcba41`.*
 Phase 15.
 
 The owner decided `wi-6c9f77`: `CLAUDE.md`'s binding constraint 5 no longer

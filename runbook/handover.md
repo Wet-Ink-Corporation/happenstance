@@ -12,71 +12,73 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`4c538e7` on `main`, plus `lane/phase-15-close` open as a PR.
-2026-09-29.
+`3dcba41` on `main`, plus `lane/phase-16-define-1-0` open as one PR for the
+owner to merge. 2026-09-29.
 
 ## Where things are
 
 Seven crates are published at `0.3.2`. `EventStore` has been frozen since `0.2.0`,
-and `ProjectionStore` since `0.3.0`. Phases 0–12 are done. What remains is
-sequenced in [`roadmap.md`](roadmap.md):
-- reconcile the record (15);
-- define 1.0 (16);
+and `ProjectionStore` since `0.3.0`. Phases 0–12 and 15 are done, and **phase 16
+is done in this PR**. What remains is sequenced in [`roadmap.md`](roadmap.md):
 - a breaking window, released as `0.4.0` (17);
 - then sync (13), retention (14) and the typed runner (18);
 - and `1.0.0` (21) last.
 
-**Sync is inside 1.0**, so phases 13 and 14 are on the critical path. SQLite on
-`wasm32` (19) and the documentation work (20) run alongside.
+**1.0 is now defined.** [ADR-0066](../.kb/decisions/0066-what-1-0-promises.md)
+names nine crates (the seven published plus `happenstance-sync` and
+`happenstance-sync-testkit`; `happenstance-ladybug` is outside). Every non-frozen
+clause has one row in [`ledgers.md`](ledgers.md)'s *The 1.0 dispositions*, and
+`cargo xtask lints` holds it: `freeze-by-N` must name a phase that is not done
+and is inside phase 21's prerequisites. CF-39 is the one clause frozen here.
 
 **Redkiln is retired here.** This runbook is the only tracker until `redkiln-rs`,
 after 1.0. `.bklg/` and `.redkiln/` are frozen records; `CLAUDE.md`'s *Where the
 work lives* has the rules.
 
-**Phase 15 is done.** Every document and tool that says where happenstance has
-got to agrees with `git log` and the registry, `cargo xtask lint-kb` guards the
-accepted decisions, and every open question past its own deadline has an owner
-in phase 16.
-
 ## In flight
 
-Branch `lane/phase-15-close`, open as a PR: constraint 5's tense (`wi-6c9f77`),
-and phase 15 set to `done`. Nothing else is in flight.
-
-`log.md` now names PR #22's squash, `4c538e7`.
+Branch `lane/phase-16-define-1-0`, one PR, left open for the owner:
+- six records, ADR-0066 – ADR-0071, and seven Weigh-In atoms;
+- the disposition table and its lint;
+- the open questions closed or routed;
+- phase 17's work list;
+- the phase files' new items.
 
 ## Next action
 
-Merge this PR. Then start [phase 16](phases/16-define-1-0.md), *Define 1.0*: the
-crate set, a disposition for every non-frozen clause on a promised surface, and
-the open questions phase 15 handed it.
+The owner reviews and merges the phase 16 PR, and fills in its squash commit in
+`log.md`. Then start [phase 17](phases/17-breaking-window.md), the breaking window.
+Its heaviest item is the foreign-identity spike (VT-10), so start there. The
+`workerd` sibling job and the minimal-versions job are the other new
+infrastructure it owes.
 
 ## Waiting on the owner
 
-- Review the Weigh-In defaults taken during the unattended session, with
-  `/weigh:in digest`.
-- Optional: `lane/0.2.0-closeout`, `origin/worktree-kb-intake-2026-09-11`,
-  `origin/lane/runbook-split` and `origin/lane/runbook-citations-after-squash` are
-  all merged, and so are the six `lane/phase-15-*` branches. None was deleted.
-- `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png` are
-  untracked, and committing them is the owner's call.
+- Merge the phase 16 PR. Your seven calls are recorded as `wi-2798d5`,
+  `wi-d61f21`, `wi-8e5bd4`, `wi-460397`, `wi-1408e8`, `wi-cbc941` and
+  `wi-7899af`.
+- ADR-0066 §5 is the record's own call rather than yours: the semver exemption
+  list, and re-exported driver error payloads being inside the promise. Revise
+  it before merge if you disagree.
+- Still open from phase 15: the Weigh-In digest (`/weigh:in digest`); the merged
+  `lane/*` branches, none deleted; and the untracked `runbook/phase-15-afk-prompt.md`
+  and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open
 
 Settled, with the record that settled it. Re-opening one needs a new decision
 record, and the owner.
 
-- `happenstance-sync` is inside 1.0 — D-1, `wi-40b321`. The recommendation was
-  the opposite and was overridden.
+- What 1.0 promises: nine crates, ladybug outside, versioning, `workerd` before
+  1.0, soak, support window and licence — ADR-0066 and its seven `wi-*` atoms.
+- The MSRV holds at 1.97.1, and after 1.0 a rise is bounded — ADR-0067.
+- ES-10 stays global — ADR-0071.
+- `happenstance-sync` is inside 1.0 — D-1, `wi-40b321`.
 - Redkiln is retired until `redkiln-rs`; `.bklg/` is frozen and not advanced —
-  D-2, `wi-016abe`, and the owner's instruction of 2026-09-28.
+  D-2, `wi-016abe`.
 - Ingest is unconditional, with compensation — SY-1 – SY-7.
 - The projection port is frozen — ADR-0063.
-- The MSRV is 1.97.1 and a promise since `0.2.0` — ADR-0029, ADR-0037.
 - `happenstance-macros` is out of scope — ADR-0033.
-- `happenstance-ladybug` is finished and does not publish while `lbug` fails on
-  docs.rs — phase 11, `crates/happenstance-ladybug/src/lib.rs`.
-- The `0.2.0` release set is seven crates — `e597c34`.
 - `[Unreleased]` ships in `0.4.0`; there is no `0.3.3` — `wi-052920`.
 - An accepted decision's body is checked by `cargo xtask lint-kb` —
   `wi-38373d`.
@@ -102,3 +104,7 @@ record, and the owner.
   repair; any other edit to an accepted body is a supersession.
 - **A staged file blocks `git rebase`.** The stray `.redkiln/telemetry/` change
   stays staged, so rebase a branch in a throwaway `git worktree` instead.
+- **Thirteen of fourteen proposed freezes were refuted.** A clause's marker
+  moves on evidence in the tree, not on an argument that its falsifier is
+  decorative. ADR-0066 §2 records each refutation. Read it before proposing to
+  freeze anything early.

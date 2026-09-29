@@ -28,7 +28,7 @@ related:
   - kb-open-question-read-to-backwards-limit-composition-001
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/model-only-kind-has-no-members.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # Kind::ModelOnlyMutant has no members; keep it dormant, withdraw it, or make the emptiness a standing check
@@ -94,3 +94,20 @@ sibling withdrawal as controlling here.
 Phase 12's testkit public-surface pass, named as the review point regardless of outcome. If a
 third store of this shape has not appeared by then, "the shape recurs" will have been a prediction
 that did not pay, and Option B becomes the stronger answer on its own terms.
+
+## Phase 16 — 2026-09-29
+
+**Classification: not a 1.0 surface question.** The kind lives only in test targets
+(`crates/happenstance-testkit/tests/mutation_coverage.rs:146`), no clause concerns it, and it has
+no row in the disposition table. The forcing event — phase 12's testkit public-surface pass —
+has passed, and no third store of this shape was filed. By this atom's own test, Option B is now
+the stronger answer on its own terms.
+
+**Phase 16 did not choose** (`runbook/phases/16-define-1-0.md:76` classified it; ADR-0066 and
+the phase's other records are silent on it). The question **leaves the 1.0 path**, because it
+changes no published signature: every name involved — `Kind::ModelOnlyMutant`, `Witness`,
+`MODEL_ONLY_WITNESSES`, `HidingPlaceStore` — lives under `crates/happenstance-testkit/tests/`
+(`mutation_coverage.rs`, `mutation_coverage/mutants.rs`), and none appears in any crate's `src/`,
+so withdrawing it or keeping it breaks nothing a consumer compiles against. **Owner: after 1.0**,
+with no phase; it stays open for whoever next touches the mutation registry. Status unchanged: a
+recommendation strengthened is not a choice taken.

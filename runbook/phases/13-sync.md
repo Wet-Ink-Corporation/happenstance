@@ -7,6 +7,14 @@
 > paragraph is history: phase 12 is done. The ADR-0026 and ADR-0027 work items
 > are reworded to say they *record* SY-1 – SY-7 rather than reopen them — the
 > section above them already treated those clauses as settled.
+> **Edited at phase 16:** the crates.io claim is dated; five items are added —
+> the Postgres and Neon `StoreId` restore gap, a KV-capped peer for SY-18, the
+> filtered-store instrument SY-27 and SY-28 need before phase 14 would build it,
+> the `freeze-by-13` clauses from [the 1.0 dispositions](../ledgers.md), and
+> CF-25's bar for the peer-port freeze — with exit criteria for the clauses and
+> the restore gap (ADR-0066). The dependency row gains phase 18, because SY-20's
+> rule here consumes the convergence declaration phase 18 builds, and the two
+> had no order between them.
 
 
 **Goal.** Replication between happenstance instances, expressed as a **port with
@@ -51,7 +59,28 @@ provides the atomicity and the identity that makes it idempotent.
 
 - [ ] **Claim `happenstance-sync` and `happenstance-sync-testkit` on crates.io**, per phase 0's
       rule that a name is reserved when its phase starts, not before — the point
-      being that by now there is a crate to justify it with.
+      being that by now there is a crate to justify it with. Both were still
+      unclaimed on 2026-09-29 (the registry API answered `404` for each), and both
+      are among the nine crates 1.0 promises (ADR-0066), so this is the first
+      thing the phase does rather than the last.
+- [ ] **The Postgres and Neon `StoreId` has no restore detection**
+      (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`,
+      VT-6). Both mint once, in a migration —
+      `crates/happenstance-postgres/migrations/0001_event_log.sql:111-118` and
+      `crates/happenstance-neon/migrations/0001_neon_log.sql:139-141` — and neither
+      detects a restore, offers a re-mint, or documents a procedure, which are the
+      only two conditions under which VT-6 (by ADR-0014) permits mint-once. A
+      `pg_restore` of an older backup, or a Neon branch, which is a clone by
+      construction, can therefore re-issue an `(StoreId, position)` pair — the one
+      thing VT-6 forbids and the thing a sync watermark trusts. Close it before
+      `restored_peer_does_not_reissue_identities` is written, because that rule
+      would otherwise be red on the one-shot-HTTP Postgres peer this phase
+      builds, and on anything replicating from a native Postgres store. A re-mint
+      operation is an additive inherent method, and detection and a documented
+      procedure are additive too. Mint-per-open is a behaviour change, and phase
+      17's window closes before this phase opens, so phase 17 decides it; if
+      phase 17 declined it, the remedy here is one of the additive arms, and
+      mint-per-open would be a post-1.0 major.
 
 - [ ] ADR-0026. Record the ingest boundary SY-1 – SY-7 already fix, and settle
       what makes re-delivery harmless and what the port may assume about a transport it cannot see. The two real peers are a
@@ -92,6 +121,71 @@ provides the atomicity and the identity that makes it idempotent.
 - [ ] Record the DCB wire interop decision (WF-1) in ADR-0026's envelope section:
       named, deferred, with the experiment being a specific external implementation
       to interoperate with. Not silence.
+- [ ] **A KV-capped peer for SY-18.** The two real peers above are a SQL-backed
+      Durable Object (2 MiB rows) and Postgres over HTTP; neither has a per-value
+      cap, so neither can test whether `PeerLimits` prevents a failure or only
+      relocates it. SY-18's own falsifier is the Turnstile peer-D shape: a store
+      with a 128 KiB cap on each value, against an origin that has already
+      committed a 340 KB payload. A fixture peer with that cap is enough; it need
+      not be a real KV binding. VT-21's floor is compared across the peer set on
+      the same instrument. If it is not built, SY-18 is renewed past 1.0 by a
+      record naming the Turnstile experiment — safe, because `PeerLimits` is
+      `#[non_exhaustive]` — and not left deferred by default.
+- [ ] **The filtered-subset store, built here rather than at phase 14.** SY-27's
+      falsifier, and SY-28's after it, is a spoke holding a deliberately filtered
+      subset of a hub's log, attempting a position-based resume against it. That
+      is the same testkit-adjacent instrument as CF-27's suffix store
+      (`spec/E2E-CASES.md:1679-1684`), which the ledger gives to phase 14 —
+      and 14 runs after this phase. So either this phase builds the instrument, in
+      a shape phase 14 then extends into the suffix store, or a record
+      re-dispositions SY-27 and SY-28 before this phase exits. Freezing either
+      clause without the instrument is the decorative kind of freeze.
+- [ ] **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-13` row
+      in [the 1.0 dispositions](../ledgers.md), and what freezes it:
+      - **VT-6** — `restored_peer_does_not_reissue_identities` in the sync
+        testkit, after the restore gap above is closed.
+      - **VT-9** — a sync-testkit rule that ingest preserves `RecordedAt`, with a
+        mutant; ADR-0066 restates the clock falsifier.
+      - **VT-21** — compared across the peer set with SY-18; the tightest shipped
+        target, Neon at 131,072 bytes, clears the 64 KiB floor twice over.
+      - **VT-24** — SY-14's bulk ingest is the first consumer that batches by the
+        128-event floor.
+      - **SY-7** — ADR-0027; the falsification test on `MemorySyncPeer` with two
+        adjudicator configurations, its divergence recorded as the evidence.
+      - **SY-10** — both topologies expressible, as the exit criterion below
+        already requires, with `directional_merge_rules_compose`.
+      - **SY-14** — the bulk-ingest measurement against the Neon peer.
+      - **SY-18** — the KV-capped peer above.
+      - **SY-20** — `convergent_projection_is_interleaving_independent`, written
+        against the convergence declaration phase 18 builds. Phase 18 runs
+        first — it is in this phase's dependency row for that reason — so the
+        declaration exists when this rule is written.
+      - **SY-22** — the `cost-layers` test; the declaration's placement is fixed
+        with SY-21 at phases 17 and 18, both of which precede this phase.
+      - **SY-23** — ADR-0027's merge rule.
+      - **SY-27, SY-28, SY-29** — together, on the filtered-subset store above;
+        a peer-supplied `Query` exists on the port only if replication is scoped.
+      - **SY-30** — the two unlike real peers pushing real envelopes.
+      - **SY-31** — the runner half. The reserved `sync/` prefix is phase 17's,
+        with `projection-id-is-unvalidated`.
+      - **CF-40** — whether `payload_len` (data plus metadata) is the budget unit,
+        once phase 17 has built ADR-0043's `MetadataLen`.
+
+      WF-1 and WF-11 are renewed past 1.0, not frozen here; this phase records
+      WF-1's renewal in ADR-0026 and confirms which encoding the sync transport
+      forwards WF-11's payload through.
+- [ ] **CF-25's bar for the peer-port freeze**
+      (`.kb/open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md`).
+      CF-25 is `[FROZEN]` and gates every port freeze on `cargo xtask spec-trace`
+      reading §6.5's instrument-portfolio table, and `xtask/src/spec_trace.rs`
+      has no portfolio logic. The SY clauses on `SyncPeer` are the next port
+      freeze it gates, so each of them either lands with the check built, or
+      takes CF-25's second route: naming the axis it accepts risk on and the
+      record that accepts it. If the check stays unbuilt, CF-25's `Rule:` line is
+      repaired to say the check is a reviewer's walk rather than `spec-trace`,
+      under `kb-playbook-repair-frozen-clause-001`. The open question's
+      sub-questions 1 and 2 are answered either way; phase 21's clause audit
+      holds whichever route was taken.
 
 **Proof artefact.** `sync_peer_conformance!` green against `MemorySyncPeer` and
 **two structurally unlike networked peers** — a socket-reachable Durable Object and
@@ -112,6 +206,14 @@ two-peer half is what makes this a port rather than a protocol.
 - [ ] The byte-identical round trip is green, and ADR-0003 loses `provisional`.
 - [ ] Every `[DEFERRED]` `SY` clause is either settled or renewed against a named
       experiment; a renewal with no experiment is a build failure under CF-38.
+- [ ] Every `freeze-by-13` clause in [`ledgers.md`](../ledgers.md)'s 1.0
+      dispositions is `[FROZEN]`, or re-dispositioned by a record that says why.
+- [ ] `restored_peer_does_not_reissue_identities` is green against the
+      Postgres-backed peer, not only against the memory one, and both
+      `happenstance-postgres` and `happenstance-neon` document what they do on a
+      restore.
+- [ ] The specification is reconciled against this phase's changes (session
+      protocol step 6), and `cargo xtask spec-trace` passes.
 
 **Cases this makes writable.** E2E-33 – E2E-42, E2E-45, and the idempotency half
 of E2E-07 (ES-24).

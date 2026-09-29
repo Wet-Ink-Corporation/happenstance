@@ -2,7 +2,7 @@
 id: kb-open-question-adapter-version-lockstep-001
 title: Whether an adapter's version implies a happenstance-core version has no answer, and the easy answer collides with CF-32
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   A consumer on happenstance = "0.3" and happenstance-sqlite = "0.2" can hold two Event types that
@@ -21,17 +21,29 @@ summary: >-
   is the next time a consumer reports the two-Event confusion, or phase 12's publish of 0.2.0,
   after which any answer is a decision about already-published numbers rather than about numbers
   still in a pre-release window.
+  Resolved 2026-09-29 by kb-decision-0066, on the owner's decision. All crates release in lockstep at
+  1.0.0 and version independently after that. Each adapter declares the minimum core it needs
+  (happenstance-core = "1.N"), and a minimal-versions CI job, which is phase 17's work, keeps those
+  declared lower bounds honest. Each adapter's README states "conformant" as "passes
+  happenstance-testkit X.Y". CF-32 stands untouched. CF-29 and CF-31 are kept: a new rule that
+  detects violation of an already-frozen clause is a testkit minor, and a new requirement is a clause
+  change, an ADR and a major. An adapter's major follows the breaking version of any driver it
+  re-exports (ADR-0044).
 depends_on: []
 related:
   - kb-open-question-stale-0-0-0-name-reservations-001
   - kb-decision-0044
   - kb-open-question-testkit-contention-tolerance-001
+  - kb-decision-0066
+  - kb-decision-0057
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/adapter-driver-reexport-policy.md
   - spec/SPECIFICATION.md
   - xtask/src/package.rs
   - Cargo.toml
-last_reviewed: 2026-09-07
+  - crates/happenstance-testkit/Cargo.toml
+  - CHANGELOG.md
+last_reviewed: 2026-09-29
 ---
 
 # Whether an adapter's version implies a `happenstance-core` version has no answer, and the easy answer collides with CF-32
@@ -107,3 +119,42 @@ numbers still inside a pre-release window that resolves to nothing by default.
 3. What is the actual mechanism — a compatibility table, a minimum-version
    dependency declaration, a doctest — and does it need a new `cargo xtask ci`
    step the way CF-32 has one?
+
+## Closed — 2026-09-29
+
+`kb-decision-0066`, the 1.0 charter, answers this on the owner's decision of 2026-09-29. What tells
+a consumer which `happenstance-core` an adapter implies is the manifest, not prose. Each adapter
+declares the lowest core it works with as an ordinary dependency requirement
+(`happenstance-core = "1.N"`), and Cargo's resolver enforces it. A minimal-versions CI job, added
+by phase 17, resolves every declared lower bound and builds against it, so a requirement that
+claims more than the adapter needs fails in CI rather than on a consumer's machine. Each adapter
+already re-exports the core it was built against — `pub use happenstance_core;` at
+`crates/happenstance-sqlite/src/lib.rs:148`, `crates/happenstance-postgres/src/lib.rs:215` and
+`crates/happenstance-neon/src/lib.rs:173`, and `pub use {happenstance_core, worker};` at
+`crates/happenstance-cloudflare/src/lib.rs:587` — so a consumer who reaches core through the adapter
+cannot end up holding the second `Event` this atom opens with.
+
+The sub-questions:
+
+1. **Both, and neither alone.** The version relationship lives in a manifest fact with a CI check,
+   and the conformance claim lives in a README sentence ("passes `happenstance-testkit` X.Y"). No
+   new `[FROZEN]` clause is needed. This avoids the failure that got the lockstep sentence
+   withdrawn, which was prose that no check can see.
+2. **Beside CF-32, not amending it.** The 1.0.0 lockstep is a single release, not a promise that the
+   numbers move together afterwards, so it does not bring back the coupling CF-32 exists to prevent.
+   The testkit keeps its own `version` key (`crates/happenstance-testkit/Cargo.toml:36`), and after
+   1.0 it moves on its own schedule. What a testkit number *means*, now that a rule can turn a
+   passing adapter red, is settled by keeping CF-29 and CF-31. A rule that detects violation of a
+   clause already `[FROZEN]` is a testkit minor. A new requirement needs a clause change, which
+   means an ADR and a major. `CHANGELOG.md:20-25` already tells consumers to pin the testkit
+   exactly.
+3. **A minimum-version dependency declaration, checked by a minimal-versions job.** The release
+   tooling that bumps the numbers (`release-plz` or `cargo-release`) is chosen at phase 21.
+
+**Two limits, named in the charter rather than left to be found.** An adapter that re-exports its
+driver under ADR-0044 takes a major whenever that driver breaks, whatever the core did.
+`happenstance-core`'s own public dependency `futures-core 0.3` is still `0.x`, and the charter
+carries that as an accepted risk. **Owed and not done here:** ADR-0057 dropped the testkit's version
+key from the root manifest, but `Cargo.toml:62` still carries `version = "0.3.2"` on the testkit's
+workspace dependency. Phase 17 executes it. Closed by hand in phase 16. No accepted decision was
+edited.

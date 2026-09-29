@@ -30,7 +30,7 @@ source_paths:
   - Cargo.toml
   - xtask/src/main.rs
   - .github/workflows/ci.yml
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # The two-flavour port derivation is emitted by a caret-pinned proc macro that only --locked can see
@@ -88,3 +88,19 @@ Whenever `trait-variant` next publishes `0.1.4` or later — an event entirely o
 repository's control, and unpriced by any option here, because a shape change in a version nobody
 has published cannot be tested by anything in the tree today. The `store.rs` sentence correction is
 free at any time and should not wait for that event.
+
+## Phase 16 — 2026-09-29
+
+**Classification: additive**, and taken off phase 17's breaking list
+(`runbook/phases/17-breaking-window.md`; `kb-decision-0066`). An exact pin, a derivation
+contract in core's library code, and a CI job are all allowed in a 1.x minor, and none of them
+changes a signature. The pin carries a resolver-conflict cost for consumers, which is why it is
+worth a record. **But ES-7's freeze rides the record that answers this atom, and that record is
+written in phase 17**, with ES-7's falsifier restated to cover a consumer's unlocked resolve
+(its ES-7 row). So the owner is phase 17 even though nothing here breaks.
+
+Unchanged at `3dcba41`: the caret is still `trait-variant = "0.1.3"` (`Cargo.toml:151`), and the
+unscoped *"the gate builds `--locked`"* sentence is still at `crates/happenstance-core/src/store.rs:1176-1178`.
+The minimal-versions job `kb-decision-0066` sends to phase 17 tests declared **lower** bounds. It
+does not observe a floating upper resolve, so this atom's second question is still open.
+**Owner now: phase 17.**

@@ -2,7 +2,7 @@
 id: kb-open-question-global-vs-boundary-visibility-001
 title: Whether the visibility invariant needs to be global
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ADR-0013 freezes the visibility invariant globally rather than per consistency boundary, and
@@ -22,6 +22,14 @@ summary: >-
   Re-read 2026-09-28 and not closed: ADR-0063 froze a single-position checkpoint (PS-17, PS-20),
   so the named falsifier did not fire at the freeze, but ADR-0063 does not address ES-10 and sub-
   questions 1, 2 and 4 are untouched. Phase 16 owns it (runbook/ledgers.md, Open decisions).
+  Resolved 2026-09-29 by kb-decision-0071: ES-10 stays global and [FROZEN]. ADR-0063 froze a
+  single-position checkpoint at every seam (commit takes one SequencePosition, Checkpoint carries one
+  through, PS-17 and PS-20), and the record argues that shape on its own merits rather than from
+  ES-10: ES-30's unscoped head() is a polling-cost argument, a per-boundary checkpoint is an
+  open-ended set, and SequencePosition carries no boundary for replication. Sub-question 5 is on the
+  record: ADR-0024 reopens with ADR-0013, on the staleness coupling rather than throughput. The
+  falsifier is restated as a checkpoint-shape change. Sub-questions 2 to 4 are non-breaking and are
+  carried past 1.0 in the record's falsifier section.
 depends_on: []
 related:
   - kb-decision-0013
@@ -31,6 +39,8 @@ related:
   - kb-reference-position-visibility-adapter-remeasurement-001
   - kb-open-question-projection-batch-no-apply-001
   - kb-open-question-postgres-arm-c-cost-001
+  - kb-decision-0071
+  - kb-decision-0063
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - .kb/_intake/2026-09-07-adr-0024-position-visibility-mechanism.md
@@ -38,7 +48,8 @@ source_paths:
   - references/adr/0024-position-visibility-mechanism.md
   - experiments/position-visibility/
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-28
+  - crates/happenstance-core/src/projection.rs
+last_reviewed: 2026-09-29
 ---
 
 # Whether the visibility invariant needs to be global
@@ -139,3 +150,45 @@ question names, a boundary-scoped checkpoint, did not fire at the freeze. What d
 never mentions ES-10, visibility or boundaries, PS-23 and PS-24 are still provisional, and
 sub-questions 1, 2 and 4 are addressed nowhere. `runbook/ledgers.md`'s *Open decisions* table
 gives the question to phase 16, which decides whether ADR-0063 answered it.
+
+## Closed — 2026-09-29
+
+`kb-decision-0071` answers what the phase-15 re-read above said was still missing: an argument for
+the single-position checkpoint that does not lean on ES-10. ES-10 stays global and `[FROZEN]`. The
+premise is frozen at every seam it touches. `ProjectionStore::commit` takes exactly one
+`position: SequencePosition` (`crates/happenstance-core/src/projection.rs:498-504`), each
+`Checkpoint` variant carries one `through`, PS-17 fixes a checkpoint per `(store, ProjectionId)`,
+PS-20 resumes strictly after it (`spec/SPECIFICATION.md:5702`), and ADR-0063 put all of it under
+semver.
+
+The sub-questions:
+
+1. **Answered on the checkpoint's own merits.** ES-30 keeps `head()` unscoped because a narrow
+   projection has to checkpoint past events it examined and did not match, and that is a
+   polling-cost argument that never mentions visibility. A per-boundary checkpoint would hold one
+   position per boundary a projection's query touches, which is an open-ended set for any
+   projection that reads one type across every instance. That argument is reasoned, not measured.
+   And `SequencePosition` carries no boundary, so the replication clauses that cite ES-10 would need
+   the boundary to travel with the position. With sync inside 1.0, that leg now has weight of its
+   own. The two decisions are independently justified, not circular.
+2. **Carried past 1.0, not answered.** It is moot until someone proposes a boundary-scoped
+   checkpoint, and `kb-decision-0071`'s falsifier section says whoever proposes one answers it
+   first. It has no phase.
+3. **Carried past 1.0, not answered.** A reopening would have to re-read ES-25 and ES-26, which are
+   built on ES-10, rather than assume they are unaffected. It has no phase.
+4. **Carried past 1.0, not answered.** The hybrid can be evaluated on paper for free. Building it is
+   the checkpoint-shape change that fires the falsifier. It has no phase.
+5. **Answered.** If the premise ever falls, ADR-0024 reopens *with* ADR-0013, and the trigger is
+   the cluster-wide staleness coupling (4799.3 ms behind an unrelated five-second held write), not
+   throughput. Arm C has no measurable steady-state cost.
+
+**The falsifier, restated.** This question reopens on a checkpoint-shape change: a checkpoint that
+is boundary-scoped, or that carries more than one position a runner resumes from. That change is
+breaking for the frozen port whatever form it takes. `kb-decision-0071` adds one subtlety.
+`Checkpoint` is `#[non_exhaustive]`, so such a shape could arrive as a new variant without a major
+version, and it would fire the falsifier just the same. The shape decides, not the semver class.
+Sub-questions 2 to 4 need no owner before 1.0, because answering them breaks nothing. Phase 17 does
+not take them.
+
+This atom's row in `runbook/ledgers.md`'s *Open decisions* table is answered by this section.
+Closed by hand in phase 16. No accepted decision was edited.

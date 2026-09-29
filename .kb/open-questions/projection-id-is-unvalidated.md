@@ -16,7 +16,7 @@ source_paths:
   - references/adr/0015-validated-identifiers-and-store-limits.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-29
 ---
 
 # ProjectionId::new is infallible, and that was never decided
@@ -94,3 +94,17 @@ character the store's collation treats specially.
    numeric or character-set declaration analogous to `CF-40`'s pattern for
    event/tag limits, or is a projection id simple enough that one validator
    suffices?
+
+## Phase 16 — 2026-09-29
+
+**Classification: breaking-if-answered → phase 17, with SY-31's reserved `sync/` prefix**
+(`runbook/phases/17-breaking-window.md`; `kb-decision-0066`). The forcing event, the
+`ProjectionStore` freeze, passed at `kb-decision-0063` without an answer. `ProjectionId::new` is
+still infallible (`crates/happenstance-core/src/projection.rs:157`) on a frozen port type. A
+validating constructor that mirrors `EventType` and `Tag` returns `Result`, which is a break. So
+is refusing ids that are valid today, which is what reserving `sync/` for the sync runner's
+watermark would do. That is why SY-31's reservation limb is decided here and not at phase 13.
+
+Keeping `new` infallible and recording *deliberately opaque*, with any constraint left to the
+adapter boundary as a capacity limit (ADR-0015 §6), closes the atom with no break. **Owner now:
+phase 17.**

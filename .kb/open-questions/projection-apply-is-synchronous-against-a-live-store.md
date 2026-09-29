@@ -45,7 +45,7 @@ source_paths:
   - crates/happenstance/src/domain.rs
   - crates/happenstance/src/runner.rs
   - crates/happenstance/Cargo.toml
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-29
 ---
 
 # Projection::apply is synchronous, so the runner cannot drive the live store the port was frozen against
@@ -136,3 +136,19 @@ statement failure on a live batch; whether `Progressed` needs to report
 anything different for a live consumer; and anything about the port itself,
 which ADR-0063 already froze — this question is entirely on the typed
 layer's side of that line.
+
+## Phase 16 — 2026-09-29
+
+**Classification: exempt surface today, decided in phase 17's `apply` record**
+(`runbook/phases/17-breaking-window.md`). `Projection` sits behind `happenstance`'s
+`unstable-projection`, which makes no semver promise (`crates/happenstance/Cargo.toml:128-148`),
+so changing `apply` breaks nothing published. Phase 18 implements the answer and lifts the gate.
+If it does not, `kb-decision-0066` declares the runner exempt at 1.0. The record also carries
+PS-9, PS-11 and SY-21 (`runbook/ledgers.md`, *The 1.0 dispositions*).
+
+This atom's premise needs correcting. It cites `crates/happenstance/src/domain.rs:249`, which is
+`DecisionModel::apply`. `Projection::apply` is at `crates/happenstance/src/runner.rs:95-99`, and it
+already takes `batch: &mut StoreBatch<Self>` and returns `Result`, so the batch-handle shape has
+landed and only sync-versus-async is open. The stale claim in its own section is resolved:
+`crates/happenstance/Cargo.toml:148` no longer forwards to core. `kb-decision-0070` settles the
+adjacent `Chunk` question. **Owner now: phase 17 decides, phase 18 builds.**

@@ -29,6 +29,13 @@ summary: >-
   firings recorded against it — and who takes that call. Section 11 took the scoped route and is
   answered; sections 9 and 8/16 are not, and neither has an owner. Forced by phase 12, after which
   the pragma set is a documented property of a published adapter.
+  Amended 2026-09-29: §8 and §16 are answered, and §9 stays open, owned by phase 17.
+  kb-decision-0068 supersedes ADR-0022 in part, in kb-decision-0065's shape. §8 items 1 and 2 are
+  superseded, together with §16's falsifier for §8, because the chain the pre-publication review
+  measured stopped shipping at 8c8b215, before 0.2.0. The correlated EXISTS chain that ships keeps
+  most-selective-first as a requirement, on new ground, and the record authorises the repair of
+  ES-27's [FROZEN] Rejects: prose. The other sections are ratified. §9 is expressly not decided,
+  because its reproduction does not exist; phase 17 writes it.
 depends_on: []
 related:
   - kb-decision-0022
@@ -43,6 +50,7 @@ related:
   - kb-reference-one-connection-latency-001
   - kb-decision-0058
   - kb-open-question-query-plan-parameter-chunking-001
+  - kb-decision-0068
 source_paths:
   - .kb/_intake/2026-09-03-pre-publication-review.md
   - .kb/_intake/remediation-2026-09-04-briefs/append-condition-sql-shape.md
@@ -56,7 +64,9 @@ source_paths:
   - references/adr/0022-append-condition-strategy.md
   - crates/happenstance-sqlite/src/event_store.rs
   - crates/happenstance-sqlite/src/connection.rs
-last_reviewed: 2026-09-21
+  - experiments/correlated-exists-guard/
+  - crates/happenstance-sqlite/src/query_sql.rs
+last_reviewed: 2026-09-29
 ---
 
 # Two of ADR-0022's falsifiers have fired, a third cannot fire as written, and nobody has re-opened
@@ -208,3 +218,49 @@ findings are exactly as open as they were. Its title's final clause — *"and no
 is now false for one of the three, and is left standing on purpose under this layer's own rule that
 a question is not rewritten into its own answer. A reader who wants the current state reads this
 section; a reader who wants what was known on 2026-09-07 reads the ones above it.
+
+## Amended 2026-09-29 — §8 and §16 are answered; §9 stays open, owned by phase 17
+
+`kb-decision-0068` takes up the three sections this atom left open after `kb-decision-0065`, and
+settles two of them. It supersedes ADR-0022 in part, in the shape `kb-decision-0065` used. It
+carries `supersedes: null` and `depends_on: [kb-decision-0022, kb-decision-0065]`, and
+`kb-decision-0022` stays `accepted`. So of this atom's "which of three moves", the answer is the
+fourth move again, now for §8 as the paragraph above first proposed it.
+
+**§8 and §16: answered, and the finding above is corrected at its root.** Everything this atom says
+about §8 was measured on the uncorrelated `position IN (SELECT …)` chain in
+`experiments/shipped-append-condition-sql/`. That chain stopped shipping at `8c8b215`, on
+2026-09-05, before `0.2.0`. What ships is a correlated `EXISTS` intersection chain seeded by the
+most selective tag, with the guard's boundary bound into the seed
+(`crates/happenstance-sqlite/src/query_sql.rs:769-815`). `experiments/correlated-exists-guard/`
+measured it, and on the correlated chain (`chain-exists`, without the seed boundary that ships)
+most-selective-first is a 2.0x–2.2x *win* rather than the
+38.1x–44.0x loss recorded above. So `kb-decision-0068` supersedes §8's items 1 and 2. It keeps the
+ordering requirement and `tag_cardinality`, and changes the reason for them to the correlation.
+§16's falsifier for §8 goes with those items, and is replaced by one that has an instrument that can
+fire it: a `LIST SUBQUERY` in the multi-tag guard's plan, or least-selective-first measuring
+cheaper on the correlated chain. ES-27's "roughly 200x" (`spec/SPECIFICATION.md:4061-4066`) is a
+`[FROZEN]` clause's prose, and `kb-decision-0068` authorises its replacement text. Sections 1–7,
+10 and 12–15 are ratified, with each falsifier's state recorded against it.
+
+Two things were owed from that record. The ES-27 edit landed in the same change as
+`kb-decision-0068`, line-neutral, three lines for three. The other is an assertion in the adapter's
+own tests that the guard's plan has no `LIST SUBQUERY`; it is additive, **phase 17 owns it**, and
+until it exists the new falsifier fires only by hand.
+
+**§9: still open, now with an owner.** `kb-decision-0068` declines to decide it, on the ground this
+atom gave: the falsifier asks that *"a deployment shows"* the captured `Handle` costing something,
+and the twenty-line reproduction does not exist. It assigns that reproduction to **phase 17**, for
+a classification reason rather than an urgency one. If the hazard is real, the remedy is either an
+additive constructor, which can land after 1.0, or a change to what the existing `open` / `new`
+capture on two published adapters (`happenstance-sqlite` and `happenstance-postgres`), which
+would be a major after 1.0. Only the reproduction says which, and phase 17 carries it as a work
+item. The "second half" of this atom's routing question — who owns §9's runtime-seam correction —
+is answered: phase 17. The first half was already answered by
+`kb-open-question-testkit-contention-tolerance-001`.
+
+**Why this atom stays open.** `kb-decision-0068` says in its last section that this question "can
+close for §8 and §16" and "stays open for §9 alone, owned by phase 17". Closing it here would leave
+a decision and the question it answers disagreeing about whether the question is open, so the
+status stays `accepted`, as it did on 2026-09-21 when §11 was answered. It closes when phase 17's
+reproduction decides §9, either way. Amended by hand in phase 16. No accepted decision was edited.

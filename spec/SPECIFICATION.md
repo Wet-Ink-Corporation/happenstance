@@ -225,7 +225,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 201 clause IDs, of which 194 are normative:
-**141 `[FROZEN]`**, **41 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+**142 `[FROZEN]`**, **40 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -964,9 +964,9 @@ ingest. No store, runner or projection may derive an ordering from `RecordedAt`,
 and the contract MUST NOT state any relationship between `RecordedAt` order and
 `SequencePosition` order.
 
-`[PROVISIONAL — falsified by a target that cannot supply a wall clock at append
-time; a Cloudflare Durable Object returning a frozen clock between I/O
-operations is the candidate, and the Workers skeleton is the instrument]`
+`[PROVISIONAL — falsified if IngestStore cannot carry a foreign RecordedAt
+unchanged through the phase-13 envelope (ADR-0066 §2). The frozen-clock falsifier
+this marker used to name has fired on wasm32 with no effect, and is retired]`
 `Rule:` `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`;
 the "not an ordering key" half by §5's new
 `convergent_projection_is_interleaving_independent` (SY-20), which fails any fold
@@ -4061,9 +4061,9 @@ and two of the three were wrong.
 - **Rejects:** an adapter that drops the tag join from its condition probe. This
   is the natural first cut, because the join is the expensive half and the landed
   SQLite schema puts tags in a separate table
-  (`crates/happenstance-sqlite/src/event_store.rs:62-67`) — measured at roughly
-  200x a single-tag boundary's cost at 50,000 events, which is why ADR-0022
-  ships `tag_cardinality` and most-selective-tag-first probing as requirements.
+  (`crates/happenstance-sqlite/src/event_store.rs:62-67`) — two orders of
+  magnitude on ADR-0022's `GROUP BY` form, which is why the guard ships as a
+  correlated chain whose seed `tag_cardinality` orders (ADR-0068).
   Until this clause's
   rules landed, **no rule's verdict depended on the condition path matching
   tags**: every append-condition rule built its condition from `query_of_types`,
@@ -7298,7 +7298,7 @@ decision. It is stated in full because the consequences reach into the suite.
 spoke holding a deliberately filtered subset of a hub's log and attempt a
 position-based resume against it. The instrument the catalogue asks for is the
 same one — a testkit-adjacent store that holds only a suffix or a filtered subset
-of its own log (E2E-CASES.md:1595-1600). Owning phase: the phase that builds the
+of its own log (E2E-CASES.md:1679-1684). Owning phase: the phase that builds the
 two peer adapters, which must also build that instrument.]`
 Rule: `scoped_replication_resume_is_sound` (new, `happenstance-sync-testkit`),
 unwritable until this is settled.
@@ -7447,7 +7447,7 @@ become unreachable, the peer set MUST say so.
 
 `[DEFERRED — settled by building the retention case: a peer offline for 120 days
 against a 90-day compaction window, with a completeness instrument
-(E2E-CASES.md:1595-1600) standing in for the compacted peer. The experiment is
+(E2E-CASES.md:1679-1684) standing in for the compacted peer. The experiment is
 whether a scalar floor is sufficient, which E2E-46 argues it is not — a
 regulatory purge is scattered, not a prefix, and a floor is the shape a prefix
 truncation has. Owning phase: the phase that builds the two peer adapters, jointly
@@ -8294,10 +8294,10 @@ test at all. **The rule shape is confirmed against the first real one.**
 contract with nothing added to it — close every `rusqlite::Connection`,
 checkpoint the write-ahead log, leave the file alone — so the weaker operation was
 sufficient for the first adapter that could have forced the split and did not. The
-marker stays at this level rather than moving, because one adapter is not the
-spread that freezes a capability: the two the deferral was written against
-(HS-P0013, HS-P0014) have not answered, and moving a maturity marker is an ADR's
-act.]`
+two the deferral was written against (HS-P0013, HS-P0014) have since answered, and
+the marker stays because the medium has not (ADR-0066 §2): it is settled by phase
+19a's REOPEN verdict over memory, IndexedDB and OPFS storage, or by a workerd run
+that observes a real Durable Object eviction, and is renewed past 1.0 until then.]`
 Rule: `acknowledged_writes_survive_a_reopen` — the same rule CF-14 and ES-35
 name. `DurableFixture` in the testkit's own `tests/` was for two phases the only
 fixture in the workspace supplying this capability, and therefore the only reason
@@ -8425,12 +8425,12 @@ store's own write path**, by a mechanism the store cannot absorb, so that the
 append returns `Err`. The fixture MUST state the mechanism. A fixture whose
 store can absorb every fault it is able to arm MUST decline the capability with
 that as its stated reason.
-`[PROVISIONAL — falsified by a real adapter whose only injectable mid-batch
-fault is one its driver transparently absorbs, such as a connection killed
-mid-statement behind a reconnect-and-retry pool; that would make "the append
-returns Err" a promise no fixture over that adapter can keep. The instruments
-are the rusqlite adapter at phase 8 and the Postgres adapter at phase 10, and no
-adapter has armed a fault yet.]`
+`[FROZEN]` *(by ADR-0066. The falsifier was a real adapter whose only injectable
+mid-batch fault its driver transparently absorbs, such as a reconnect-and-retry
+pool. Three real adapters now arm one it cannot absorb: `happenstance-postgres`
+and `happenstance-neon` an `AFTER INSERT` trigger inside the server, and
+`happenstance-cloudflare` a trigger in its SQLite storage, and each append
+returns `Err`. `happenstance-sqlite` declines by scope and names that trigger.)*
 Rule: `arming_a_mid_batch_fault_makes_the_append_fail`, plus the existing
 `append_is_atomic_under_a_mid_batch_fault`, which this one makes non-vacuous.
 Cases: E2E-07, E2E-39.
@@ -9105,11 +9105,11 @@ lets a real failure through.
 
 **CF-34.** Performance MUST be measured by a separate harness, and that harness
 MUST NOT be part of the conformance bar. An adapter that is slow is conformant.
-`[PROVISIONAL — falsified if a complexity property turns out to be expressible as
-a deterministic assertion rather than a timing. The candidate is an
-instrumented fixture that counts rows examined rather than seconds elapsed, which
-would be a conformance rule and not a benchmark; if that works, this clause
-splits.]`
+`[PROVISIONAL — falsified when kb-open-question-cf-33-cf-34-scope-001 is answered
+(ADR-0066 §2). The rows-examined fixture this marker used to name is foreclosed by
+CF-33, which forbids a conformance rule to assert on an operation count; every
+plausible answer to that question touches this clause's text, so the marker stays
+until it is answered.]`
 Rule: none — the harness is not the bar, which is the clause's content.
 Cases: E2E-CASES.md:1671-1677 records this as one of the two things that are
 neither blocked nor cases.
@@ -9369,8 +9369,8 @@ between them because its *shape* does not wait on a transport but its
 | §3 `EventStore` | `ES` | 42 | 33 | 8 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 38 | 20 | 10 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
-| §6 conformance | `CF` | 40 | 33 | 4 | 2 | 1 |
-| **Total** | | **201** | **141** | **41** | **12** | **7** |
+| §6 conformance | `CF` | 40 | 34 | 3 | 2 | 1 |
+| **Total** | | **201** | **142** | **40** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9602,7 +9602,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-36 | FROZEN | `cargo xtask spec-trace` (CF-38), cross-referencing each case's level marker (… | E2E-28, E2E-29, E2E-39, E2E-42 |
 | CF-37 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
 | CF-38 | FROZEN | `cargo xtask spec-trace` (new step in `xtask/src/main.rs`'s `REQUIRED` list, `… | *all* |
-| CF-39 | PROVISIONAL | `arming_a_mid_batch_fault_makes_the_append_fail`, `append_is_atomic_under_a_mi… | E2E-07, E2E-39 |
+| CF-39 | FROZEN | `arming_a_mid_batch_fault_makes_the_append_fail`, `append_is_atomic_under_a_mi… | E2E-07, E2E-39 |
 | CF-40 | PROVISIONAL | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
 
 <!-- END GENERATED -->

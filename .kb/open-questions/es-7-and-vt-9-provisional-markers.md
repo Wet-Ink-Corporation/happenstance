@@ -78,7 +78,7 @@ source_paths:
   - crates/happenstance-core/src/memory.rs
   - references/adr/0001-async-port-flavours.md
   - references/adr/0014-event-identity-and-recorded-time.md
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-29
 ---
 
 # Two provisional markers whose falsifiers can no longer falsify
@@ -309,3 +309,21 @@ is exactly what this atom was opened on: restating ES-7's and VT-9's falsifiers 
 discriminate again, and restating PS-4's Rust-level limb — which is now
 `kb-open-question-apply-synchronous-live-store-001`'s territory, since the limb cannot fire until
 `Projection::apply` can carry I/O.
+
+## Phase 16 — 2026-09-29
+
+**Clause dispositions — neither marker is frozen now.** ES-7 is `freeze-by-17` and VT-9
+`freeze-by-13` (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`). Both were freeze-now candidates, and the 2026-09-29
+adversarial verification refuted both. **ES-7:** the blanket impl it rests on is emitted by
+`trait_variant`, still a caret (`Cargo.toml:151`), and its instrument, `LocalMemoryEventStore`,
+compiles only against the workspace's locked expansion — it cannot see a consumer's unlocked
+resolve. **VT-9:** the marker's own instrument never ran; Cloudflare's conformance runs on a
+`node:sqlite` host, not `workerd`, so a Durable Object's frozen clock was never exercised.
+
+So ES-7 freezes in phase 17's record answering `trait-variant-caret-resolves-past-the-locked-gate`,
+its falsifier restated to cover an unlocked resolve (`runbook/phases/17-breaking-window.md`).
+VT-9 freezes at phase 13 on a sync-testkit rule that ingest preserves `RecordedAt`, with a mutant;
+`kb-decision-0066` restates its clock falsifier, which this atom showed no longer discriminates.
+The PS-4 limb is `kb-open-question-apply-synchronous-live-store-001`'s, in phase 17's `apply`
+record. Citation drift: ES-7 is now `spec/SPECIFICATION.md:2760`, VT-9 `:958`. **Owners now:
+phase 17 (ES-7, PS-4's limb), phase 13 (VT-9).**

@@ -38,7 +38,7 @@ source_paths:
   - references/adr/0012-append-shape-and-preconditions.md
   - references/adr/0022-append-condition-strategy.md
   - RUNBOOK.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # The two-build measurement ES-17's falsifier requires is scheduled by nobody
@@ -121,3 +121,16 @@ requirement resolves to a pre-release, so only a dependent who named the alpha e
 pinned. Phase 12 removes that exemption rather than creating the first exposure. The KB half of
 this obligation is this open-question atom; the corresponding backlog row belongs in `.bklg/` and
 is not authored here.
+
+## Phase 16 — 2026-09-29
+
+**Classification: breaking-if-answered → phase 17. Clause disposition: ES-17 `[PROVISIONAL]` is
+`freeze-by-17`** (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`; `runbook/phases/17-breaking-window.md`).
+One answer, moving `append` to an owned batch, changes `EventStore::append`'s signature on core
+and on all four published adapters, so only `0.4.0` can take it. That gives the measurement the
+owner this atom found missing. Phase 17 either takes ADR-0055's restated two-build measurement
+against `happenstance-cloudflare`, through an experiment crate or a tag-count parameter, and acts
+on it, or it freezes `&[Event]` by a record that says why the measurement is not owed.
+
+ES-7's freeze is decided in the same phase, and the ledger groups the two clauses
+(`runbook/ledgers.md:156`). **Owner now: phase 17.**

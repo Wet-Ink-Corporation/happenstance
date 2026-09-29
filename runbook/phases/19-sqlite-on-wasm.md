@@ -71,4 +71,9 @@ on the target the crate claims, run by `cargo xtask ci`.
 **Estimate (19b).** 8–10 days, by analogy with phase 9's eight for the Durable
 Object — an analogy, not a measurement.
 
+**Exit criteria (each node)**
+
+- [ ] The specification is reconciled against this phase's changes (session
+      protocol step 6), and `cargo xtask spec-trace` passes.
+
 **Session log**

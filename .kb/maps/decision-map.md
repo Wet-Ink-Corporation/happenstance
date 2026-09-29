@@ -86,6 +86,11 @@ summary: >-
   The 2026-09-28 pass, the first written by hand since redkiln's retirement, added six Weigh-In
   decision atoms (kb-decision-wi-016abe, -052920, -38373d, -40b321, -ab0a5a, -b9b9ab) in their own
   section; none carries an ADR number or supersedes a row.
+  Phase 16's 2026-09-29 pass, also by hand, added ADR-0066 through ADR-0071 (kb-decision-0066 to
+  -0071, all phase 16) in their own section. None carries `supersedes`: ADR-0068 partly supersedes
+  ADR-0022 at §8 items 1–2 and §16's falsifier for §8, the ADR-0065 shape, so kb-decision-0022's row
+  gains a second partial-supersession annotation and stays accepted; ADR-0067 amends
+  kb-decision-0037 rather than superseding it, the fourth link in the ADR-0004 lineage.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -104,7 +109,7 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-09-intake
   - .kb/_governance/integration-waves/2026-09-11-intake
   - .kb/_governance/integration-waves/2026-09-21-intake
-last_reviewed: 2026-09-21
+last_reviewed: 2026-09-29
 ---
 
 # Decision map
@@ -233,7 +238,7 @@ nothing, since ADR-0020 published its own contrary prediction as explicitly fals
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted (partly superseded) | 8 | partly superseded by `kb-decision-0065` |
+| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted (partly superseded) | 8 | partly superseded by `kb-decision-0065`, `kb-decision-0068` |
 | ADR-0031 | [`kb-decision-0031`](../decisions/0031-the-runner-collapses-upward.md) | One runner, in happenstance — the checkpoint pump collapses upward | accepted | 7 | partly supersedes `kb-decision-0007` |
 | ADR-0032 | [`kb-decision-0032`](../decisions/0032-adr-0021-serde-attribution-correction.md) | The serde-encoded framing region is rejected on two grounds, and ADR-0003 was never one of them | accepted | 7 | supersedes `kb-decision-0021` |
 | ADR-0033 | [`kb-decision-0033`](../decisions/0033-happenstance-macros-out-of-scope-for-0-1.md) | happenstance-macros is out of scope for 0.1 | accepted | 7 | — |
@@ -341,7 +346,7 @@ separate partial supersessions.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0037 | [`kb-decision-0037`](../decisions/0037-msrv-becomes-a-promise-at-0-2-0.md) | The MSRV becomes a promise at 0.2.0, and the number does not move | accepted | 12 | amends `kb-decision-0004`, `kb-decision-0029` |
+| ADR-0037 | [`kb-decision-0037`](../decisions/0037-msrv-becomes-a-promise-at-0-2-0.md) | The MSRV becomes a promise at 0.2.0, and the number does not move | accepted | 12 | amends `kb-decision-0004`, `kb-decision-0029`; amended by `kb-decision-0067` |
 
 ## 2026-09-07 intake: phase 10 (ADR-0024, ADR-0038, ADR-0040)
 
@@ -548,8 +553,42 @@ this map. They are dated by `decided_at`, which Weigh-In writes in UTC, so three
 | — | [`kb-decision-wi-b9b9ab`](../decisions/wi-b9b9ab-d-3-delete-the-merged-branches.md) | Delete all seven | accepted | 15 | — |
 | — | [`kb-decision-wi-6c9f77`](../decisions/wi-6c9f77-may-claude-md-binding-constraint-5-s-stale.md) | May CLAUDE.md binding constraint 5's stale present-tense registry narrative (0.2.0 'has not happened yet', 'nothing is yanked', max_stable_version reads 0.0.0) be rewritten to the registry's current state, leaving the MSRV constraint itself unchanged: rewrite the tense; the MSRV constraint is unchanged | accepted | 15 | — |
 
+| — | [`kb-decision-wi-2798d5`](../decisions/wi-2798d5-which-crates-does-1-0-promise-and-is.md) | Which crates does 1.0 promise: nine; ladybug outside | accepted | 16 | — |
+| — | [`kb-decision-wi-d61f21`](../decisions/wi-d61f21-does-a-workerd-class-conformance-run-land.md) | Does a workerd-class conformance run land before 1.0: a workerd sibling job before 1.0 | accepted | 16 | — |
+| — | [`kb-decision-wi-8e5bd4`](../decisions/wi-8e5bd4-how-are-crate-versions-managed-after-1-0.md) | How are crate versions managed after 1.0: lockstep 1.0.0, then independent | accepted | 16 | — |
+| — | [`kb-decision-wi-460397`](../decisions/wi-460397-what-is-the-msrv-policy-after-1-0-and-what.md) | The MSRV policy after 1.0: hold 1.97.1; bounded rises | accepted | 16 | — |
+| — | [`kb-decision-wi-1408e8`](../decisions/wi-1408e8-how-long-a-soak-between-1-0-0-rc-1-and-1-0-0.md) | The rc soak: conditions only, no time floor | accepted | 16 | — |
+| — | [`kb-decision-wi-cbc941`](../decisions/wi-cbc941-what-does-the-project-promise-for-security.md) | Security support after 1.0: latest minor, plus the previous major for six months | accepted | 16 | — |
+| — | [`kb-decision-wi-7899af`](../decisions/wi-7899af-does-adr-0066-promise-that-the-licence-does-not.md) | The licence promise: the nine crates stay MIT OR Apache-2.0 for 1.x | accepted | 16 | — |
+
 The seventh row, `kb-decision-wi-6c9f77`, was added on 2026-09-29, when the owner
-decided the tense of `CLAUDE.md`'s binding constraint 5 and closed phase 15.
+decided the tense of `CLAUDE.md`'s binding constraint 5 and closed phase 15. The
+seven rows after it are the owner's phase-16 calls, taken in the planning session
+of 2026-09-29 and recorded in ADR-0066. They were moved from
+`.kb/_intake/decisions/` in phase 15's shape, with `phase: 16`, and their bodies
+are verbatim.
+
+## 2026-09-29: defining 1.0, written by hand (phase 16)
+
+Six ADR-numbered decision atoms, written by hand in phase 16. ADR-0066 and ADR-0068 have long-form
+records under `references/adr/`; the other four are atoms only. ADR-0066 is the 1.0 charter and the other five
+settle what it needed settled first: the MSRV after 1.0 (ADR-0067), what remains of ADR-0022's
+fired falsifiers (ADR-0068), D-1's total path (ADR-0069), the runner's chunk type and observation
+seam (ADR-0070), and whether ES-10 stays global (ADR-0071). Between them they close seven open
+questions. None carries `supersedes`. ADR-0068 partly supersedes ADR-0022 at §8 items 1 and 2 and
+§16's falsifier for §8, leaving §9 undecided and ratifying the rest, so `kb-decision-0022` stays
+accepted and its row gains a second annotation, the ADR-0065 shape. ADR-0067 amends
+`kb-decision-0037` and corrects the `cfg_select!` threshold both it and `kb-decision-0029` state,
+editing neither body.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0066 | [`kb-decision-0066`](../decisions/0066-what-1-0-promises.md) | What 1.0 promises — nine crates, one disposition per unfrozen clause, and CF-39 frozen | accepted | 16 | — |
+| ADR-0067 | [`kb-decision-0067`](../decisions/0067-msrv-after-1-0-rises-are-bounded.md) | The MSRV holds at 1.97.1 into 1.0, and after 1.0 a rise is bounded | accepted | 16 | amends `kb-decision-0037` |
+| ADR-0068 | [`kb-decision-0068`](../decisions/0068-adr-0022-sections-8-9-16-settled.md) | ADR-0022 §8 and §16 are superseded in part, §9 is not decided here, and the rest is ratified | accepted | 16 | partly supersedes `kb-decision-0022` |
+| ADR-0069 | [`kb-decision-0069`](../decisions/0069-queryitem-gains-a-total-constructor.md) | QueryItem gains a total constructor, and the outward face of D-1 is closed as intended | accepted | 16 | — |
+| ADR-0070 | [`kb-decision-0070`](../decisions/0070-the-runner-takes-a-named-chunk.md) | The runner takes a named Chunk, and gets no observation seam at 1.0 | accepted | 16 | — |
+| ADR-0071 | [`kb-decision-0071`](../decisions/0071-es-10-stays-global.md) | ES-10 stays global, because the frozen checkpoint is one position | accepted | 16 | — |
 
 ## Adding a row
 

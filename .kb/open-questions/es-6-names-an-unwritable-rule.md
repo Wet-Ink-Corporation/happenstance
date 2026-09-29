@@ -64,7 +64,7 @@ source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/prose-guard-retired-and-what-it-owes.md
   - .kb/_intake/remediation-2026-09-04-briefs/stated-only-defects-and-the-reopen-must.md
   - .kb/_intake/remediation-2026-09-04-briefs/adapter-driver-reexport-policy.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # ES-6 is frozen and names a rule that cannot be written
@@ -228,3 +228,19 @@ Whether the dagger convention survives at all, now that the guard it switched is
    yes closes the sealing option `kb-decision-0044` left unruled-on; answering no makes a
    `#[non_exhaustive]` adapter error's payload changeable at a minor version, and both answers are
    an ADR against a `[FROZEN]` clause rather than a note.
+
+## Phase 16 — 2026-09-29
+
+**Sub-question 4 is answered by `kb-decision-0066`.** Driver error payloads re-exported under
+ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1206`,
+are **inside** the 1.0 promise, with a named limit: an adapter's major follows the breaking
+version of the driver it re-exports. That rules out the sealing option `kb-decision-0044` left
+open. Writing the answer into ES-6's prose is phase 17's
+(`runbook/phases/17-breaking-window.md`).
+
+Sub-questions 1–3 are additive or process-only. `store_error_crosses_a_join_handle` is still
+unwritten and still a `Scheduled` entry in `UNRESOLVABLE_RULE_NAMES` (`xtask/src/spec_trace.rs:1169`).
+`crates/happenstance-cloudflare/src/lib.rs:350-355` records it as unwritable against today's port
+for every adapter, and a testkit rule can land in any minor. Whether an unresolvable entry must
+carry an owning phase is `xtask` policy. **Owner now: phase 17** for the prose; sub-questions 1–3
+stay open with no phase, not blocking 1.0.

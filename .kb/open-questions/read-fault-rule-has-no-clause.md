@@ -28,7 +28,7 @@ source_paths:
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
   - crates/happenstance-testkit/src/suite.rs
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # The read-fault rule checks a real hazard and belongs to no clause
@@ -55,3 +55,20 @@ The specification owner's attention before phase 12, on the reasoning already re
 2. Should `arm_read_fault` take an index argument the way `arm_mid_batch_fault(after)` does, so a rule can distinguish "failed at the first poll" from "failed mid-stream" — and if so, what does a non-paging adapter do with an index that names a page boundary it doesn't have?
 3. Does `LogError::ReadFailed`, added beside `WriteFailed` as the second variant a conformant store in the mutation binary produces, belong in the shared correct core as a contract-level fact, or does it stay a test-support convenience?
 4. Should `happenstance-cloudflare` or `happenstance-neon` arm a real read fault over a real medium before phase 12, so the rule's coverage stops being entirely in-process — the same question `kb-open-question-postgres-read-fault-declension-001` raises for `happenstance-postgres` specifically?
+
+## Phase 16 — 2026-09-29
+
+**Classification: additive** — a clause minted, no signature. **Sub-question 4 is answered in
+the tree:** `happenstance-postgres` and `happenstance-neon` declare `READ_FAULT` supported and
+arm a real fault over a real medium (`crates/happenstance-postgres/tests/support/mod.rs:488`,
+`crates/happenstance-neon/tests/support/mod.rs:198`); SQLite and Cloudflare decline
+(`crates/happenstance-sqlite/tests/support/mod.rs:199`, `crates/happenstance-cloudflare/tests/support/mod.rs:258`).
+That closes `postgres-fixture-read-fault-declension-is-owed`, and it lifts option A past the
+`[PROVISIONAL]`-at-most this atom assumed — it is the read-side twin of the evidence on which
+`kb-decision-0066` freezes CF-39.
+
+The rule is still the third `UNCLAIMED_PENDING_ADR` entry (`xtask/src/spec_trace.rs:2852`,
+`:2882`); sub-questions 1–3 stay open. **Owner now: phase 21 at the latest**, whose clause audit
+runs against `spec-trace`, which prints the unclaimed count on every green run. The one ADR over
+all three unclaimed entries (sub-question 1) may be taken by any phase before it. Not phase 17's:
+nothing here breaks.

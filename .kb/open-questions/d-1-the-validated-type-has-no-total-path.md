@@ -2,7 +2,7 @@
 id: kb-open-question-d-1-no-total-path-001
 title: D-1 — a validated identifier has no infallible route, in either direction
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   Two faces of one defect, both bearing on VT-18 which is FROZEN, both recorded by phase 7's use of
@@ -20,6 +20,12 @@ summary: >-
   What forces it is the first API change after 0.1, and the macros verdict, which names this
   defect's settlement with an infallible Tags path as the single condition that would reopen AC-013
   and require its 2026-08-16 measurement to be re-taken.
+  Resolved 2026-09-29 by kb-decision-0069, the record ADR-0020 owed. Inward face: QueryItem gains a
+  total constructor that takes at least one EventType by value, so the one failure left in
+  QueryItem::new, UnconstrainedItem, cannot be reached. It is additive and built in phase 17. Outward
+  face: closed as working as intended. Tags: FromIterator<Tag> is already infallible and
+  Tag::from_static exists, so the only fallible step left is validating a runtime string. No
+  infallible string-to-Tags path is added, so ADR-0033's reopen condition does not fire.
 depends_on: []
 related:
   - kb-decision-0020
@@ -28,6 +34,7 @@ related:
   - kb-decision-0059
   - kb-open-question-event-type-positional-mapping-001
   - kb-open-question-scope-coverage-helper-projection-gap-001
+  - kb-decision-0069
 source_paths:
   - .kb/_intake/contract-defect-log-phase-7.md
   - .kb/_intake/happenstance-macros-verdict.md
@@ -36,7 +43,7 @@ source_paths:
   - crates/happenstance-core/src/tag.rs
   - examples/course-subscriptions/src/main.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-08-17
+last_reviewed: 2026-09-29
 ---
 
 # D-1 — a validated identifier has no infallible route, in either direction
@@ -91,3 +98,35 @@ scrutiny the rest of `happenstance-core`'s surface got. The second is more concr
 derive that could also produce tags from runtime values would reach further into the worked example's
 current hand-written ceremony than the 40 lines its 2026-08-16 measurement counted, and that
 measurement would need to be retaken rather than assumed to still hold.
+
+## Closed — 2026-09-29
+
+`kb-decision-0069` is the decision record ADR-0020 routed this to. It spells out that it means
+ADR-0020's defect candidate D-1, not the runbook's D-1, which puts sync inside 1.0. It answers both
+faces, and it answers them differently.
+
+**Inward: a total constructor.** `QueryItem` gains a constructor that takes a first `EventType` as
+a parameter of its own, any further types, and a `Tags`, and returns `QueryItem` rather than a
+`Result`. `QueryItem::new` (`crates/happenstance-core/src/query.rs:56-76`) has exactly one failure
+left once its inputs are already-built `EventType`s: `UnconstrainedItem`, when types and tags are
+both empty. A signature that cannot receive zero types cannot reach that failure. The new
+constructor enforces the *same* rule as `new`, and canonicalises the same way, which is what
+answers ADR-0020's refusal of "a second constructor enforcing different rules". The addition is
+additive, it is built in phase 17, and VT-18 is not edited.
+
+**Outward: closed as working as intended.** At HEAD, `Tags: FromIterator<Tag>` is infallible
+(`crates/happenstance-core/src/tag.rs:479-487`) and `Tag::from_static` exists (`:112`). The one
+fallible step left is turning a runtime string into a `Tag`. That step is validation, and giving it
+a total path would admit exactly the value the type exists to exclude. The worked example's
+validate-at-construction newtype is the intended shape, not a workaround.
+
+**The macros verdict's condition does not fire.** ADR-0033 reopens only if D-1 is settled with an
+infallible `Tags` path, and this settlement deliberately adds none. AC-013 stays closed, and its
+2026-08-16 measurement is not re-taken.
+
+**Not answered, and owned elsewhere.** A boundary constrained by **tags only** still has no total
+constructor, because `QueryItem::tagged` stays fallible on an empty `Tags`. `kb-decision-0069`
+names that case as its falsifier, not as work, so it has no phase until a real model needs it.
+`Boundary::query` in `happenstance` also keeps its `Result`. Dropping it would break a published
+signature, and that record leaves it undecided. Closed by hand in phase 16. No accepted decision
+was edited.

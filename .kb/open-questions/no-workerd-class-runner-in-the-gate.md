@@ -2,7 +2,7 @@
 id: kb-open-question-workerd-runner-absent-001
 title: The gate executes every Cloudflare rule on a shim, and nothing owns the runner it is not
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   Phase 9 runs the whole conformance suite against a real Durable Object SqlStorage mapping on
@@ -26,6 +26,12 @@ summary: >-
   single-command property to admit one, and what stays unproven for as long as it does not.
   Forced by the next clause that needs a platform behaviour rather than a storage behaviour, and
   by phase 12, where first publish turns "conformant on Cloudflare" into a promise.
+  Resolved 2026-09-29 by kb-decision-0066, on the owner's decision: a workerd-class runner does not
+  enter cargo xtask ci. It lands before 1.0 as a sibling CI job shaped like live-postgres and
+  live-neon, and building it is phase 17's work. happenstance-cloudflare's 1.0 claim is conformance on
+  the real runtime. The SQL-text wall and ADR-0052's partition widths are measured on workerd before
+  they are promised. Sub-questions 2 and 4 go to phase 17 with the job, and sub-question 3 goes to
+  phase 13.
 depends_on: []
 related:
   - kb-decision-0010
@@ -35,6 +41,7 @@ related:
   - kb-reference-wf-11-memory-ceiling-verdict-001
   - kb-open-question-human-readable-encoding-limits-001
   - kb-open-question-cloudflare-feature-gate-001
+  - kb-decision-0066
 source_paths:
   - .kb/_intake/0023-the-sqlstorage-mapping-and-the-off-tokio-harness.md
   - .kb/_intake/wf-11-human-readable-encoding-measured-on-this-runtime.md
@@ -43,7 +50,10 @@ source_paths:
   - crates/happenstance-cloudflare/src/host.rs
   - crates/happenstance-cloudflare/tests/wf11_memory_ceiling.rs
   - xtask/src/proof.rs
-last_reviewed: 2026-09-07
+  - .github/workflows/ci.yml
+  - runbook/README.md
+  - runbook/phases/17-breaking-window.md
+last_reviewed: 2026-09-29
 ---
 
 # The gate executes every Cloudflare rule on a shim, and nothing owns the runner it is not
@@ -128,3 +138,31 @@ cannot be discharged by this harness at all.
    below the sibling's, splitting a pair `kb-decision-0052` left identical? The window
    closes at `0.2.0`, after which lowering either number is a break no signature change
    announces.
+
+## Closed — 2026-09-29
+
+`kb-decision-0066`, the 1.0 charter, answers sub-question 1 on the owner's decision of 2026-09-29,
+and phase 17 builds what it decides.
+
+1. **A separate CI job, and it lands before 1.0.** ADR-0023's objection was that a separate job
+   cannot satisfy "in the same run as the rest of the gate". That objection now has a precedent
+   against it in this repository. `live-postgres` and `live-neon` are sibling jobs, "never a step
+   inside" the gate (`.github/workflows/ci.yml:398-412`, `:805`), and they carry each database
+   adapter's conformance claim. A `workerd` job takes the same shape. `cargo xtask ci` keeps its
+   single-command, Windows-capable, Node-free property. And "conformant on Cloudflare" becomes a
+   claim about the real runtime rather than about the `node:sqlite` shim, which is what the charter
+   promises for `happenstance-cloudflare` at 1.0.
+2. **Narrowed, not answered.** Once the job exists, ADR-0023's exclusion list turns into a
+   different question: which of those exclusions does the job actually exercise? Phase 17 builds
+   the job, so phase 17 owns stating which of them it discharges. Until then the list stays a floor.
+3. **Not answered here.** Whether WF-11's unconstructible memory ceiling changes what replication
+   may assume about a forwarding peer is a replication question, and phase 13 owns it.
+4. **Decided in principle, measured in phase 17.** The SQL-text wall and ADR-0052's two partition
+   widths are measured on `workerd` before 1.0 promises them. If the measurement finds a narrower
+   wall, `happenstance-cloudflare`'s constants move while the crate is still `0.x`, which is the only
+   window in which lowering them is not a silent break.
+
+One false line followed from this atom's first paragraph. `runbook/README.md:90` gave phase 9's
+proof artefact as "every rule green under `workerd`", but the rules run against the `node:sqlite`
+shim; phase 16 corrected the line. Closed by hand in phase 16.
+No accepted decision was edited.
