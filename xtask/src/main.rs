@@ -84,6 +84,7 @@ use anyhow::{Context, Result, bail};
 
 mod affected;
 mod lint_constitution;
+mod lint_kb;
 mod lint_narrative;
 mod lint_pages;
 mod lint_workflows;
@@ -966,6 +967,7 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     lint_workflows::STEP,
+    lint_kb::STEP,
 ];
 
 const OPTIONAL: &[Step] = &[
@@ -1276,6 +1278,7 @@ fn main() -> ExitCode {
         Some("lint-rule-counts") => lints::stated_rule_counts(),
         Some("lint-retired-rules") => spec_trace::retired_rules(),
         Some("lint-workflows") => lint_workflows::run(),
+        Some("lint-kb") => lint_kb::run(),
         Some("lint-pages") => match std::env::args().nth(2).as_deref() {
             None => lint_pages::run(lint_pages::Mode::Check),
             Some("--write") => lint_pages::run(lint_pages::Mode::Write),

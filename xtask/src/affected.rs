@@ -202,6 +202,11 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     // only deliverable read by nothing. The check opens one directory and
     // starts no process, so it costs what the neighbours above it cost.
     crate::lint_workflows::run()?;
+    // Accepted decisions are immutable, and the story grain compares against the
+    // same base it was handed, so a branch that rewords one fails here and not
+    // first in CI. It reads the base through `git`, which is why it is also named
+    // in `RUNS_A_PACKAGE` below: it starts a process without compiling anything.
+    crate::lint_kb::run_against(base)?;
 
     let members = members(&root)?;
     let changed = changed_files(&root, base)?;
@@ -1281,6 +1286,11 @@ mod tests {
         (
             "package-check",
             "reads `cargo package --list`, which builds each publishable artifact",
+        ),
+        (
+            "lint-kb",
+            "starts `git` to read `.kb/decisions/` at the merge base; it compiles nothing, and \r
+             `run` calls it with its own base",
         ),
     ];
 

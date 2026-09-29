@@ -176,9 +176,15 @@ records, and a command run against them re-opens a process nobody is following.
   neighbouring atom of the same kind, add the atom to the right map under
   `.kb/maps/`, and remove the intake file it came from.
 
-  **Nothing validates `.kb` frontmatter any more.** `redkiln validate --kb` was
-  the only check, and immutability was only ever enforced pre-commit. Read a diff
-  that touches `.kb/decisions/` for an edited accepted body before merging it.
+  **Accepted decisions are checked; nothing else in `.kb` is.** `cargo xtask
+  lint-kb`, a gate step, fails when an atom under `.kb/decisions/` that read
+  `status: accepted` at the merge base has a changed body or has gone. Its
+  frontmatter is free, so a supersession passes. It checks frontmatter shape only
+  as far as it needs to (delimiters and a `status:` key), nothing outside
+  `.kb/decisions/`, and one repair passes: a repointed `path:line` citation, as
+  `kb-governance-referent-not-reasoning-001` allows (`wi-5f78c4`, `wi-5fce24`). CI's
+  `gate` job checks out full history so the base is there (`wi-80cba0`), and the
+  step fails, rather than skipping, on a clone with no base.
 
   **A decision lives in two places on purpose.** `.kb/decisions/` holds the
   numbered *atoms*, ~115 lines each, carrying the status and the supersession
