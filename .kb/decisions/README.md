@@ -6,8 +6,8 @@ the `phase` that owned it.
 
 ## The immutability rule
 
-**An accepted decision is never edited.** `redkiln validate --kb` checks each `status: accepted`
-decision atom against `HEAD` and fails the gate on a changed body. To correct one, write a new
+**An accepted decision is never edited.** `cargo xtask lint-kb` checks each `status: accepted`
+decision atom against the merge base and fails the gate on a changed body. To correct one, write a new
 atom carrying `supersedes: [<old id>]`, and flip the old atom's frontmatter to
 `status: superseded` + `superseded_by: <new id>`. That metadata flip is the only edit an
 accepted decision ever receives; its body is never reworded.
@@ -50,4 +50,4 @@ specification wins. An ADR is never updated to match the code.
 
 The rule these records were always written under — supersede, never edit — was prose in a
 README, and prose in a README is enforced by whoever remembers it. Here it is checked against
-`HEAD` on every run of the gate.
+the merge base on every run of the gate.

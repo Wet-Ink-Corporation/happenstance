@@ -57,7 +57,14 @@ jobs:
         # written for ships there.
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
+      # Full history, for one gate step: `no accepted decision's body has changed`
+      # (`xtask/src/lint_kb.rs`) reads `.kb/decisions/` at the base commit, and the
+      # default `fetch-depth: 1` leaves that commit out of the clone — the `semver`
+      # job below says the same for the same reason. The step refuses to run on a
+      # shallow clone rather than skipping, so removing this makes the gate red.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
 
       # rust-toolchain.toml pins the channel, the components and the
       # wasm32 target, so there is nothing to configure here.
@@ -160,6 +167,11 @@ jobs:
 
       - name: Run the gate
         run: cargo xtask ci
+        env:
+          # The base `lint-kb` compares accepted decisions against: the pull
+          # request's base commit, or the previous tip on a push. Empty on a
+          # schedule or a manual run, where the step falls back to the merge base.
+          HS_KB_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
 
   # The backlog and the knowledge base, checked by the tool that owns them.
   #

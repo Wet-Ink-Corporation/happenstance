@@ -10,10 +10,28 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-28 — an accepted decision's body cannot change
+
+*`lane/phase-15-kb-lint`. Its commit on `main` is recorded here when it
+merges.* Phase 15.
+
+The owner's answer to `wi-38373d`, built. `cargo xtask lint-kb` fails the gate
+when an atom under `.kb/decisions/` that was accepted at the merge base has a
+changed body or has gone. Its frontmatter may change only in the supersession
+keys and two pointer keys, and `accepted` may only become `superseded` with a
+successor named — so a supersession passes, and so does a repointed citation — the one repair the governance atom
+allows that a diff can see. It runs in `cargo xtask ci` and in `affected`, not
+in `lints`, because it starts `git`. CI's `gate` job now checks out at
+`fetch-depth: 0` and names the base in `HS_KB_BASE`; a shallow clone with no
+base is an error, never a skip.
+
+**Verified.** See the phase 15 session log.
+
+---
+
 ## 2026-09-28 — four small corrections, and the record catches up with PR #17
 
-*`lane/phase-15-small-corrections`. Its commit on `main` is recorded here when it
-merges.* Phase 15.
+*Merged as PR #18, squash `0d59926`.* Phase 15.
 
 The handover said PR #17 was still open; `git log` shows it merged as `ae501c5`,
 and the entry below now says so. Four of phase 15's items, on one branch because

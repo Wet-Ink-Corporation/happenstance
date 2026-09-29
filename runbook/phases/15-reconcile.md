@@ -65,12 +65,21 @@ so they are repaired first.
       work lives* says so, and this runbook is the only tracker. No item in
       `.bklg/` is advanced or closed — there is no CLI to do it with, and a hand
       edit to item frontmatter would forge a transition nobody made.
-- [ ] Decide what replaces redkiln's `.kb` checks until `redkiln-rs`, now that
+- [x] Decide what replaces redkiln's `.kb` checks until `redkiln-rs`, now that
       nothing validates atom frontmatter and accepted-atom immutability was only
       ever enforced pre-commit. The candidate is an `xtask` lint that diffs every
       `status: accepted` atom body against the merge base — the instrument
       `CLAUDE.md` already named as missing. *None* is a legitimate answer if it is
       written down.
+      Done: the owner chose the lint (`wi-38373d`), and it is built.
+      `cargo xtask lint-kb` is a gate step, and `affected` runs it. It fails
+      when an atom under `.kb/decisions/` that read `status: accepted` at the
+      merge base has a changed body or has gone. In the frontmatter only the
+      supersession keys and two pointer keys may change, and `accepted` may
+      only become `superseded` with a successor named; a repointed `path.ext:N`
+      citation passes as the one body repair a diff can recognise. Three
+      two-way calls: where the base comes from (`wi-80cba0`),
+      how much frontmatter it checks (`wi-5f78c4`), and repairs (`wi-5fce24`).
 - [ ] A KB intake wave that closes what is already answered —
       `query-union-rule-is-owed-and-unowned`,
       `testkit-projection-module-unstable-projection-exemption-scope`,
@@ -109,7 +118,7 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
       reads `done`.
 - [ ] No top-level document states, in the present tense, a publication state
       the registry contradicts.
-- [ ] What checks `.kb/` until `redkiln-rs` is decided, even if the answer is
+- [x] What checks `.kb/` until `redkiln-rs` is decided, even if the answer is
       nothing.
 - [x] D-1, D-2 and D-3 decided, reflected, and — for D-3 — executed.
 - [ ] [`handover.md`](../handover.md) names a next action the status table agrees
@@ -146,3 +155,26 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   deleting `happenstance-sync`'s placeholder identity types.
   Verified: `cargo run -p xtask -- lints`, `cargo xtask lint-constitution`,
   `cargo xtask spec-trace` and `cargo xtask affected --base main`, all green.
+- 2026-09-28 — PR #18 squash-merged as `0d59926`. On `lane/phase-15-kb-lint`:
+  `cargo xtask lint-kb` (`wi-38373d`), written against four wrong
+  implementations in its own tests, wired into `REQUIRED` and `affected`; the
+  gate job checks out full history (`wi-80cba0`). `wi-5fce24` was first taken
+  as "no repair channel", then reopened, because the accepted governance atom
+  `kb-governance-referent-not-reasoning-001` permits the citation repair
+  `citation_ranges_resolve` forces. Nineteen constitution citations into
+  `main.rs` and three into `ci.yml` repointed by anchor. Found in passing,
+  and blocked as authority-bound: `wi-6c9f77`, `CLAUDE.md` constraint 5's stale
+  registry tense. Verified: the xtask unit tests (the lint's twelve among them),
+  the lint failing on an edited accepted body and passing a status flip on the
+  real tree, `lints`, `lint-constitution`, `spec-trace` and `affected --base
+  main`.
+- 2026-09-28 — A read-only review workflow (four reviewers, two refuters per
+  finding; every finding held) found three defects in the lint before it merged,
+  and they are fixed on the same branch. The frontmatter was wholly free, so an
+  accepted atom's `summary` could be rewritten, and a flip to `proposed` freed
+  the body for the next change: now only the supersession and pointer keys may
+  move, and `accepted` exits only to `superseded` with a successor
+  (`wi-5f78c4`, reopened and re-defaulted). The citation carve-out erased any
+  number after a colon, including the ratios ADR-0033 rests on: now it needs a
+  `path.ext:` before the colon. And `affected` on `main` checked only uncommitted
+  edits: it now falls back to `HEAD^` as the gate step does.

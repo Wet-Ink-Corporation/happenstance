@@ -9,8 +9,8 @@ and `/redkiln:kb-ingest` promotes staged documents from `.kb/_intake/` into perm
 
 ## Atoms
 
-Each unit of knowledge is one **atom**: a markdown file with YAML frontmatter validated by
-`redkiln validate --kb` (`KbFrontmatter`, `src/schema/kb.ts`). Copy `_templates/atom.md` to a
+Each unit of knowledge is one **atom**: a markdown file with YAML frontmatter, once validated by
+`redkiln validate --kb` (retired here since 2026-09-28; nothing checks its shape now). Copy `_templates/atom.md` to a
 new file and fill it in. Required fields:
 
 | Field                    | Meaning                                                                                                               |
@@ -38,12 +38,12 @@ Use a tier from there rather than inventing one locally.
 
 - **Accepted decisions are immutable.** Once a `decision` atom reaches `status: accepted`, you
   do not edit its substance — you write a new atom that `supersedes` it and set the old one's
-  `status: superseded` + `superseded_by`. `redkiln validate --kb` flags edits to an accepted
-  decision.
+  `status: superseded` + `superseded_by`. `cargo xtask lint-kb` fails the gate on an edited
+  accepted decision body.
 - **Prefer merge-and-link over new files.** When new knowledge fits an existing atom, amend it
   and link, rather than spawning near-duplicates.
 - **No dangling links.** Every `depends_on` / `related` / `supersedes` / `superseded_by` id
-  must resolve to a real atom — `validate --kb` enforces this.
+  must resolve to a real atom — nothing enforces this since redkiln retired.
 
 ## Suggested layout
 
