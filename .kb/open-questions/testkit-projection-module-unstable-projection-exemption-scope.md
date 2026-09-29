@@ -2,7 +2,7 @@
 id: kb-open-question-projection-module-exemption-scope-001
 title: ADR-0036's unstable-projection exemption names two crates, and happenstance-testkit is not one of them
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ADR-0036 keeps ProjectionStore off the 0.2.0 freeze by shipping it behind the off-by-default
@@ -24,6 +24,10 @@ summary: >-
   third xtask test holding that no in-tree crate still forwards the retired feature; at 86a410c
   crates/happenstance-testkit/Cargo.toml still forwards it, so the atom is annotated rather than
   closed until the lane's manifest is readable.
+  Resolved 2026-09-28: all three of this atom's closing conditions hold at 0.3.0 and after — the
+  testkit no longer forwards the feature, the xtask test that forbids forwarding it exists, and
+  the testkit manifest describes no exemption — so there is no exemption left for the testkit to
+  sit inside (kb-decision-0063).
 depends_on: []
 related:
   - kb-decision-0036
@@ -36,7 +40,7 @@ source_paths:
   - crates/happenstance-testkit/Cargo.toml
   - .kb/decisions/0036-the-projection-port-ships-gated.md
   - .kb/_intake/2026-09-11-adr-0063-the-projection-port-is-frozen.md
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-28
 ---
 
 # ADR-0036's unstable-projection exemption names two crates, and happenstance-testkit is not one of them
@@ -117,3 +121,18 @@ projection family. At that point the question has no subject and the atom should
 pointer to `kb-decision-0063`. Reopened only if ADR-0063 itself is reopened — by a breaking change
 to `ProjectionStore` that an adapter the suite passes turns out to need — because that would
 re-raise, in a new form, whether the testkit's fixture trait moves with the port or ahead of it.
+
+## Resolved 2026-09-28 — status `superseded`
+
+Every condition *What closes it* names holds on `main`:
+- `happenstance-testkit`'s manifest enables `happenstance-core` at `std`, `memory` and
+  `conformance`, and forwards `unstable-projection` nowhere; its comment says the port is
+  unconditional since ADR-0063.
+- `xtask/src/main.rs` carries `no_crate_forwards_the_retired_feature_to_the_contract_crate`,
+  beside the two inverted tests, landed at `0.3.0` in `967f963`.
+- The testkit manifest's header says a projection rule appearing or changing is a minor bump
+  exactly as an event-store rule is — the same promise, with no exemption described.
+
+`happenstance`'s own `unstable-projection` still gates the typed runner, for ADR-0063's
+different reason, and does not reach the testkit. Closed pointing at `kb-decision-0063`, by
+hand in phase 15's intake wave.

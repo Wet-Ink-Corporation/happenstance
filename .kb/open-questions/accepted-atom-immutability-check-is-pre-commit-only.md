@@ -2,7 +2,7 @@
 id: kb-open-question-immutability-check-pre-commit-001
 title: The accepted-atom immutability check is a dirty-tree guard, and it cannot tell a referent repair from a reversal
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   redkiln validate --kb's immutability check compares each status: accepted
@@ -32,6 +32,10 @@ summary: >-
   is a judgement and not a byte comparison; if so, is the base the merge
   base or a carried hash; and does a carve-out require the lint to know what
   a citation is.
+  Resolved 2026-09-28 by kb-decision-wi-38373d and its enactment: cargo xtask lint-kb, a gate
+  step, compares every accepted .kb/decisions/ body against the merge base, so a committed
+  reversal is caught; the one carve-out is a repointed path:line citation, which a diff can
+  recognise, and a rename in place now needs its own decision (wi-5fce24).
 depends_on: []
 related:
   - kb-governance-referent-not-reasoning-001
@@ -44,7 +48,7 @@ source_paths:
   - CLAUDE.md
   - .github/workflows/ci.yml
   - .kb/decisions/README.md
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-28
 ---
 
 # The accepted-atom immutability check is a dirty-tree guard, and it cannot tell a referent repair from a reversal
@@ -121,3 +125,23 @@ remedies the corpus wants, whether a mechanical carve-out is possible at
 all or only expressible as the governance atom's judgement test, and — if a
 CI diff against the merge base is built — whether it subsumes the
 carve-out question or still needs one beside it.
+
+## Resolved 2026-09-28 — status `superseded`
+
+The owner chose the third remedy, a CI diff against the merge base (`kb-decision-wi-38373d`),
+and it is built: `cargo xtask lint-kb` (`xtask/src/lint_kb.rs`) is a gate step, and `cargo xtask
+affected` runs it too. It reads the status at the base and compares bodies, so a committed
+reversal fails, and so does a body edit hidden behind a status flip. Frontmatter is free, so a
+supersession passes.
+
+The carve-out question is answered by mechanism rather than judgement. The one repair
+`kb-governance-referent-not-reasoning-001` allows that a diff can recognise — a drifted
+`path:line` citation repointed in place — passes, because `citation_ranges_resolve` forces it.
+Every other body change fails, including a meaning-preserving rename, which is now a gate failure
+that needs its own decision (`wi-5fce24`). The lint does not need to know what a citation *means*,
+only where its numbers are.
+
+Not answered here, and not claimed: frontmatter *shape* (only delimiters and a `status:` key are
+checked — the status vocabulary is `adr-status-vocabulary-exceeds-the-schema`'s), link resolution
+for `related` / `depends_on` / `superseded_by`, and atoms outside `.kb/decisions/`. Phase 16 owns
+the link-resolution gap. Closed by hand in phase 15's intake wave.

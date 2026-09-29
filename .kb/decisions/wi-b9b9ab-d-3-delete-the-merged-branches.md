@@ -4,14 +4,17 @@ title: "Delete all seven"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"D-3 — Delete the merged branches.\", facing seven branches read as unmerged work in every stock-take, and six of them are not, we decided for Delete all seven and neglected Delete six, keep wip; Keep all, on the premise that nothing in d8fd819 is wanted, accepting that if wrong: the partial harness is gone once the reflog expires."
 depends_on: []
 related: []
-source_paths: ["runbook/roadmap.md"]
+source_paths:
+  - runbook/roadmap.md
+  - .kb/_intake/decisions/wi-b9b9ab-d-3-delete-the-merged-branches.md
 last_reviewed: "2026-09-28"
 reversibility: low
-phase: null
-supersedes: []
+phase: 15
+supersedes: null
 superseded_by: null
 weighin_item: "wi-b9b9ab"
 question: "D-3 — Delete the merged branches."

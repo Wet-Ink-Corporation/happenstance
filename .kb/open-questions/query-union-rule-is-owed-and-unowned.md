@@ -2,7 +2,7 @@
 id: kb-open-question-query-union-rule-unowned-001
 title: query_union_is_item_concatenation is owed by a clause and owned by no one
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   VT-31's residue is a conformance rule rather than a signature or a semantics question:
@@ -16,6 +16,9 @@ summary: >-
   pass that writes conformance rules, and by phase 4's close, after which an unclaimed rule has no
   obvious reader. This is the open question in the wave that most wants a human's yes rather than a
   later wave's inference.
+  Resolved 2026-09-28: the rule exists. query_union_is_item_concatenation landed at phase 4
+  (d480446) in happenstance-testkit's suite beside the other ES-15 rules, with
+  ItemDedupByTypeStore as the wrong implementation it fails, and VT-31 and ES-15 name it.
 depends_on: []
 related:
   - kb-decision-0011
@@ -27,7 +30,7 @@ source_paths:
   - references/adr/0011-read-laziness-and-isolation.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/src/suite.rs
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-28
 ---
 
 # query_union_is_item_concatenation is owed by a clause and owned by no one
@@ -87,3 +90,16 @@ named, owed, and declined.
    rules, or does it need new fixture machinery the existing query-union tests do not have?
 4. Is there a second residue rule anywhere else in the twenty-nine-ID extension ADR-0011 took on,
    with the same "declined, not solved" shape, that this pass's confirmation should also surface?
+
+## Resolved 2026-09-28 — status `superseded`
+
+The rule this question called owed and owned by no one exists, and it has an owner by
+placement. `query_union_is_item_concatenation` landed at phase 4, in `d480446`, in
+`crates/happenstance-testkit/src/suite.rs` beside the other ES-15 rules, registered in the
+suite's registry, with `ItemDedupByTypeStore` in `tests/mutation_coverage.rs` as the wrong
+implementation it fails. ES-15's prose and VT-31 name it, and `CHANGELOG.md`'s
+`0.2.0-alpha.1` entry records it. Sub-questions 1–3 are answered by that placement.
+Sub-question 4's second residue rule, `read_from_a_gap_position`, landed in the same commit;
+see `kb-open-question-es-38-and-gap-read-unowned-001`.
+
+Closed by hand in phase 15's intake wave. No accepted decision was edited.

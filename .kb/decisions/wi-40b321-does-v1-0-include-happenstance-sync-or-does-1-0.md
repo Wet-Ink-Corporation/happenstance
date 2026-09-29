@@ -4,14 +4,16 @@ title: "Sync inside 1.0"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Does v1.0 include happenstance-sync, or does 1.0 cover core, adapters and the typed layer with sync on its own 0.x line?\", facing it sets phase 21's dependencies and the length of the road to 1.0, we decided for Sync inside 1.0 and neglected Sync outside 1.0, on the premise that replication is the headline for first adopters, accepting that if wrong: 1.0 slips about 17 working days on the least-settled piece."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-40b321-does-v1-0-include-happenstance-sync-or-does-1-0.md
 last_reviewed: "2026-09-28"
 reversibility: low
-phase: null
-supersedes: []
+phase: 15
+supersedes: null
 superseded_by: null
 weighin_item: "wi-40b321"
 question: "Does v1.0 include happenstance-sync, or does 1.0 cover core, adapters and the typed layer with sync on its own 0.x line?"

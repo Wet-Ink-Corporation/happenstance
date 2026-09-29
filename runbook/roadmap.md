@@ -82,7 +82,7 @@ records estimates being wrong, and the session logs are where the actuals go.
 ## Decisions taken
 
 Each changed the shape of the table, and each is recorded in the Weigh-In ledger
-with a decision atom staged at `.kb/_intake/decisions/`.
+with a decision atom in `.kb/decisions/` (staged in `.kb/_intake/` until phase 15).
 
 - **D-1 — `happenstance-sync` is inside 1.0** (`wi-40b321`, decided 2026-09-28).
   The recommendation was the opposite — ship 1.0 on the contract, typed layer,

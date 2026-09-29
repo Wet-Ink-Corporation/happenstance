@@ -83,6 +83,9 @@ summary: >-
   unflipped on `kb-decision-0022` — sections 4, 6, 7, 9, 10, 12 and 15 stand untouched — the same
   partial-supersession shape `kb-decision-0031` used against ADR-0007 and `kb-decision-0006` used
   against ADR-0005, both already recorded in *Reading the partial-supersession chain* below.
+  The 2026-09-28 pass, the first written by hand since redkiln's retirement, added six Weigh-In
+  decision atoms (kb-decision-wi-016abe, -052920, -38373d, -40b321, -ab0a5a, -b9b9ab) in their own
+  section; none carries an ADR number or supersedes a row.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -524,6 +527,25 @@ above.
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
 | ADR-0065 | [`kb-decision-0065`](../decisions/0065-adr-0022-s11-busy-timeout-is-fifteen-seconds.md) | ADR-0022 §11 is superseded in part — the busy timeout is fifteen seconds | accepted | — | partly supersedes `kb-decision-0022` |
+
+## 2026-09-28: Weigh-In decisions, written by hand (phase 15)
+
+Six decision atoms, and the first wave written without `/redkiln:kb-ingest`, which is retired in
+this repository. Weigh-In staged each one in `.kb/_intake/decisions/` when the owner decided it;
+phase 15's intake pass gave each one this layer's frontmatter shape — `adr_id: null`, `phase: 15`,
+`supersedes: null` and its intake path in `source_paths` — kept Weigh-In's own fields as
+provenance, and left every body verbatim. None carries an ADR number, and none supersedes a row on
+this map. They are dated by `decided_at`, which Weigh-In writes in UTC, so three of them read
+2026-09-29.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| — | [`kb-decision-wi-016abe`](../decisions/wi-016abe-reconcile-hs-i0006-by-closing-it-as-is-and.md) | Close HS-I0006 and re-plan | accepted | 15 | — |
+| — | [`kb-decision-wi-052920`](../decisions/wi-052920-do-changelog-unreleased-s-entries-sqlite-busy.md) | Do CHANGELOG [Unreleased]'s entries (SQLite busy timeout, ADR-0065; FaultyStore::contend_next) ship as 0.3.3 or ride 0.4.0: Ride 0.4.0 | accepted | 15 | — |
+| — | [`kb-decision-wi-38373d`](../decisions/wi-38373d-what-checks-kb-frontmatter-and-accepted-atom.md) | What checks .kb frontmatter and accepted-atom immutability until redkiln-rs: xtask lint | accepted | 15 | — |
+| — | [`kb-decision-wi-40b321`](../decisions/wi-40b321-does-v1-0-include-happenstance-sync-or-does-1-0.md) | Sync inside 1.0 | accepted | 15 | — |
+| — | [`kb-decision-wi-ab0a5a`](../decisions/wi-ab0a5a-how-much-merge-authority-does-the-phase-15-afk.md) | How much merge authority does the phase 15 AFK session have over its own PRs: Self-merge on green | accepted | 15 | — |
+| — | [`kb-decision-wi-b9b9ab`](../decisions/wi-b9b9ab-d-3-delete-the-merged-branches.md) | Delete all seven | accepted | 15 | — |
 
 ## Adding a row
 

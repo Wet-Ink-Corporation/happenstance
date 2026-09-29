@@ -291,7 +291,7 @@ what the question is, not its evidence. The last two were added by the
   `/redkiln:kb-ingest`, refusing the wave, is the chosen remedy, and this wave's own two staged citation
   drifts (`lints.rs` and CF-34) were caught and repointed that way; the warning-scan alternative is
   declined as the wrong side of the citation-scan boundary. The question does not close.
-- **Open** — [`accepted-atom-immutability-check-is-pre-commit-only.md`](../open-questions/accepted-atom-immutability-check-is-pre-commit-only.md)
+- **Superseded** — [`accepted-atom-immutability-check-is-pre-commit-only.md`](../open-questions/accepted-atom-immutability-check-is-pre-commit-only.md)
   (`kb-open-question-immutability-check-pre-commit-001`) — `redkiln validate --kb`'s accepted-decision
   immutability check compares the working tree against `HEAD`, not a commit against a merge base, so it
   is a dirty-tree guard: it reports a refusal on an uncommitted edit and clears the instant that edit is
@@ -299,6 +299,9 @@ what the question is, not its evidence. The last two were added by the
   `kb-decision-0058`'s stale-citation repointing (`4e13ee2`) demonstrates both halves at once. Three
   remedies are named and none chosen: a carried body hash, a documented referent-only carve-out, or a CI
   diff against the merge base. Added 2026-09-11.
+  **Resolved 2026-09-28** by `kb-decision-wi-38373d`: `cargo xtask lint-kb` compares accepted
+  bodies against the merge base in the gate; frontmatter shape and link resolution are not
+  claimed.
 - **Open** — [`sole-evidence-pin-requirement-generality.md`](../open-questions/sole-evidence-pin-requirement-generality.md)
   (`kb-open-question-sole-evidence-pin-generality-001`) — `the_shotgun_mutants_sole_coverage_is_pinned`
   only requires a pin for REGISTRY's one shotgun mutant, while a crude regex found roughly sixteen
@@ -320,6 +323,11 @@ what the question is, not its evidence. The last two were added by the
   suffix. Discovered by this wave itself rather than sourced from either staged intake file. Three
   remedies of different cost are named and none is chosen: rename the file, carve a tracked
   exception, or treat the README's inline transcription as the evidence of record. Added 2026-09-09.
+- **Open** — [`cf-17-cf-14-maturity-markers-and-the-reopen-must.md`](../open-questions/cf-17-cf-14-maturity-markers-and-the-reopen-must.md)
+  (`kb-open-question-cf-17-cf-14-markers-001`) — a declaration MUST landed on PROVISIONAL CF-17's
+  text with `NoopReopenFixture` as its wrong implementation, and neither CF-17's marker nor
+  DEFERRED CF-14's moved; whether either should is open. Indexed 2026-09-28, in phase 15's intake
+  wave: the atom existed and no map named it.
 
 ## Contract ports, conformance, and the ADR corpus (2026-08-10 ADR import)
 
@@ -346,10 +354,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   parameter and no universal write vocabulary; sub-question 3 — whether this
   retroactively validates ADR-0006's discriminator — stays open, with the
   typed layer.
-- **Open** — [`query-union-rule-is-owed-and-unowned.md`](../open-questions/query-union-rule-is-owed-and-unowned.md)
+- **Superseded** — [`query-union-rule-is-owed-and-unowned.md`](../open-questions/query-union-rule-is-owed-and-unowned.md)
   (`kb-open-question-query-union-rule-unowned-001`) — `query_union_is_item_concatenation`
   is named as owed and declined by ADR-0011, which flags it as the one
   disposition a human should confirm rather than inherit.
+  **Resolved 2026-09-28**: the rule landed at phase 4 (`d480446`) with `ItemDedupByTypeStore` as
+  the wrong implementation it fails.
 - **Open** — [`global-versus-per-boundary-visibility-invariant.md`](../open-questions/global-versus-per-boundary-visibility-invariant.md)
   (`kb-open-question-global-vs-boundary-visibility-001`) — ADR-0013 froze the
   visibility invariant globally by decision, not by evidence; a boundary-scoped
@@ -357,6 +367,8 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-decision-0024`) inherited this premise rather than settling it, and a boundary-scoped
   checkpoint would now reopen ADR-0024's mechanism as well as ADR-0013's argument; no measurable
   steady-state cost was found against the built adapter.
+  Re-read 2026-09-28 and not closed: ADR-0063's single-position checkpoint means the falsifier did
+  not fire, but nothing answers the question; phase 16 owns it.
 - **Superseded** — [`postgres-arm-c-structural-cost.md`](../open-questions/postgres-arm-c-structural-cost.md)
   (`kb-open-question-postgres-arm-c-cost-001`) — whether a real `sqlx`
   adapter can express ADR-0013's chosen mechanism (xid8 + pg_snapshot_xmin)
@@ -383,6 +395,8 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   removal-capable store the fixture cannot declare, and `read_from_a_gap_position`
   is named by two accepted decisions (ADR-0011, ADR-0013) and owned by
   neither.
+  Amended 2026-09-28: the gap-read half is answered (`read_from_a_gap_position`, `d480446`); the
+  ES-38 half stays open with phase 14.
 - **Open** — [`projection-id-is-unvalidated.md`](../open-questions/projection-id-is-unvalidated.md)
   (`kb-open-question-projection-id-unvalidated-001`) — `ProjectionId::new` is
   infallible and unvalidated; ADR-0015 declined to validate it, on the
@@ -621,11 +635,13 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   states `happenstance` re-exports the contract and feature-gates the adapters; the live code is a
   bare `pub use happenstance_core::*` glob with no adapter dependency at all to feature-gate. Filed
   as unresolved rather than forcing either side to change. Added 2026-09-07.
-- **Open** — [`stale-0-0-0-name-reservations.md`](../open-questions/stale-0-0-0-name-reservations.md)
+- **Superseded** — [`stale-0-0-0-name-reservations.md`](../open-questions/stale-0-0-0-name-reservations.md)
   (`kb-open-question-stale-0-0-0-name-reservations-001`) — `happenstance-sqlite` and
   `happenstance-cloudflare` are live on crates.io at `0.0.0` only, while `happenstance-core`,
   `happenstance` and `happenstance-testkit` carry both `0.0.0` and `0.2.0-alpha.1`; two unrelated
   briefs hit the same ambiguity independently and both worked around it. Added 2026-09-07.
+  **Resolved 2026-09-28**: `0.2.0` shipped with the alphas yanked and every `0.0.0` left standing;
+  closed by default, `wi-c24401`.
 - **Open** — [`model-only-kind-memberless-dormant-or-withdrawn.md`](../open-questions/model-only-kind-memberless-dormant-or-withdrawn.md)
   (`kb-open-question-model-only-kind-memberless-001`) — `Kind::ModelOnlyMutant` has gone memberless
   now that `read_to_composes_with_multi_item_query` landed; dormant, withdrawn, and
@@ -686,7 +702,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `projection_store_conformance!`, and all four decline `RESET_REFUSAL`, so the population is still
   empty and the family still has no named wrong implementation; the cost of leaving it open no longer
   has a first-adapter deadline behind it.
-- **Open** — [`testkit-projection-module-unstable-projection-exemption-scope.md`](../open-questions/testkit-projection-module-unstable-projection-exemption-scope.md)
+- **Superseded** — [`testkit-projection-module-unstable-projection-exemption-scope.md`](../open-questions/testkit-projection-module-unstable-projection-exemption-scope.md)
   (`kb-open-question-projection-module-exemption-scope-001`) — ADR-0036's unstable-projection
   exemption text names only `happenstance-core` and `happenstance`; `happenstance-testkit`'s
   projection module is unconditional, making `ProjectionFixture` ordinary un-exempt published API
@@ -695,6 +711,8 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   exempt anywhere — `ProjectionFixture` is a committed surface on a frozen trait, the ordinary case —
   and leaving only the mechanical residue (the testkit manifest's forward of the now-empty feature, and
   a third `xtask` test asserting nothing still forwards it). Annotated, not closed.
+  **Resolved 2026-09-28** by `kb-decision-0063`: all three of the atom's closing conditions hold
+  on `main`.
 - **Open** — [`trait-variant-caret-resolves-past-the-locked-gate.md`](../open-questions/trait-variant-caret-resolves-past-the-locked-gate.md)
   (`kb-open-question-trait-variant-caret-001`) — the blanket impl binding constraint 4 rests on is
   pinned only by a caret (`0.1.3`); every guard on its shape is `#[cfg(test)]` and thus
@@ -802,7 +820,7 @@ See [`domain-map.md`](domain-map.md#publication-and-release-readiness) for the d
   (`kb-open-question-facade-does-not-match-adr-0006-001`) — `kb-decision-0006` states `happenstance`
   re-exports the contract and feature-gates the adapters; the live crate root is a bare glob with no
   adapter dependency to feature-gate. Added 2026-09-07.
-- **Open** — [`stale-0-0-0-name-reservations.md`](../open-questions/stale-0-0-0-name-reservations.md)
+- **Superseded** — [`stale-0-0-0-name-reservations.md`](../open-questions/stale-0-0-0-name-reservations.md)
   (`kb-open-question-stale-0-0-0-name-reservations-001`) — two publishable crates are live on
   crates.io at `0.0.0` only while three others carry both `0.0.0` and `0.2.0-alpha.1`; ADR-0044's
   re-export policy and the security-channel decision both hit the ambiguity independently. Added
@@ -811,6 +829,8 @@ See [`domain-map.md`](domain-map.md#publication-and-release-readiness) for the d
   publishable crates carry `0.0.0`, three additionally carry `0.2.0-alpha.1`, nothing is yanked, and
   `0.2.0` is a first real release for all seven; the sub-question naming "two" crates without a
   `0.2.0-alpha.1` companion now names four.
+  **Resolved 2026-09-28**: `0.2.0` shipped with the alphas yanked and every `0.0.0` left standing;
+  closed by default, `wi-c24401`.
 - **Open** — [`cloudflare-worker-feature-gate.md`](../open-questions/cloudflare-worker-feature-gate.md)
   (`kb-open-question-cloudflare-feature-gate-001`) — `happenstance-cloudflare`'s manifest declares
   no `[features]` table and `worker`'s types (`SqlStorage`, `State`, `Error`) sit on every public
