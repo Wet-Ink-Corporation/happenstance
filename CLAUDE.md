@@ -411,9 +411,15 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   are in `crates/happenstance-sqlite/src/`.
 - **Replication semantics.** `SequencePosition` is meaningful only within one
   store, so positions cannot be replicated as-is. Whether ingest re-checks
-  append conditions is the central unanswered question; it is written up in
-  `crates/happenstance-sync/src/lib.rs`, along with the shape of the peer port
-  itself and whether hub-and-spoke and peer-to-peer are one abstraction or two.
+  append conditions is **no longer open**. SY-1 – SY-6 are frozen: ingest never
+  refuses, a conflict is compensated by an ordinary append, and the origin's
+  condition is evidence rather than an instruction. SY-7, which assigns
+  compensation authorship to one peer, is provisional. The peer port's shape is
+  frozen too: one relationship per `SyncPeer`, and hub-ness is not a type
+  (SY-8, SY-9). SY-10, which makes hub-and-spoke and peer-to-peer both
+  first-class, is provisional. What is still open is deferred by clause: whole-log
+  or scoped replication (SY-27), bulk-ingest cost (SY-14), peer limits (SY-18)
+  and the retention floor (SY-32). Phase 13 builds against all of them.
 - **How a Postgres adapter buys position visibility.** `nextval()` allocates
   outside the transaction, so a Postgres store violates the visibility invariant
   by construction unless it does something about it. `xid8` +

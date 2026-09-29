@@ -6525,8 +6525,8 @@ as **evidence, not as an instruction**
 rejection more necessary rather than less, because prose is not a type
 constraint: `EventGroup::guard` is a **public** `Option<AppendCondition>` field
 on the wire type (`peer.rs:236-243`), so a receiver is handed exactly the value
-it would need to re-evaluate, and whether it may use it for anything at all is
-the crate's own stated open question. It is the natural first cut, because the
+it would need to re-evaluate. What it may be used for is SY-6's answer, and
+until phase 13 that answer is prose too. It is the natural first cut, because the
 condition arrives on the wire already (`append.rs:286-291`) and the receiving
 store's `append` will happily take it. It passes every event-store conformance
 rule, because it is one correct `append` call. It produces a peer set that
@@ -6667,8 +6667,8 @@ permits: the origin's condition is a **public** field on `EventGroup`
 (`crates/happenstance-sync/src/peer.rs:236-243`). The crate's own prose now
 rules it out — "evidence, not an instruction" (`peer.rs:230-235`) — and rules
 it out on the first of the two defects below, but a doc comment does not stop
-an implementer and the crate says so, calling what a receiver may do with the
-guard its central open question. Two independent defects, either fatal:
+an implementer, and until phase 13 builds the refusal this clause's rule names,
+nothing else does. Two independent defects, either fatal:
 
 - `after` is a `SequencePosition`, meaningful only inside the store that
   assigned it (`crates/happenstance-sync/src/lib.rs:100-104`), and it serialises

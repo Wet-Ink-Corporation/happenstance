@@ -40,9 +40,15 @@ so they are repaired first.
       listed five and should not have. Its own comment said `happenstance-postgres`
       and `happenstance-neon` rejoined at `0.2.0`, so both are now in the list. The
       line numbers above are as `5afcca1` had them.
-- [ ] `CLAUDE.md` stops calling "does ingest re-check append conditions" the
+- [x] `CLAUDE.md` stops calling "does ingest re-check append conditions" the
       central unanswered question; SY-1 – SY-7 settled it. Same correction in
       `crates/happenstance-sync/src/lib.rs:116-119`.
+      Done: SY-1 – SY-6 are frozen and SY-7 is provisional, and `CLAUDE.md` now
+      says so. The same claim was also in `peer.rs`'s `EventGroup` doc and in two
+      sentences of the specification's SY-1 and SY-6 prose that quoted it; all of
+      them are corrected. The neighbouring bullets in the crate's ledger, on
+      identity (VT-5) and ordering (SY-19), were just as stale and are corrected
+      as well. Every edit to a cited file kept its line count.
 - [ ] `happenstance-sqlite`'s crate root and README say *host only*. It does not
       build for `wasm32-unknown-unknown` (`rusqlite` fails at `libsqlite3_sys`, and
       reads hop through `spawn_blocking`), nothing in the gate checks it, and
@@ -118,3 +124,7 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   seed's `CONTRIBUTING.md:356-365`, which had been stale before this change.
   Verified: `cargo run -p xtask -- lints`, `cargo xtask lint-constitution`,
   `cargo xtask spec-trace` and `cargo xtask affected --base main` all green.
+- 2026-09-28 — PR #16 squash-merged as `c0df525`. The ingest re-check question is
+  recorded as settled in `CLAUDE.md`, `happenstance-sync`'s crate root and
+  `peer.rs`, and the spec prose quoting them. SY-1's and SY-6's MUSTs and markers
+  are untouched. Verified: see `log.md`.

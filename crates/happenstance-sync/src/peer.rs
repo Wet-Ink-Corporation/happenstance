@@ -231,8 +231,8 @@ impl PushBatch {
 /// origin checked before it decided; it is not a condition for the receiver to
 /// re-evaluate against its own log, because the receiver's log contains events
 /// the origin never saw and re-checking would reject a fact that is already
-/// durable elsewhere. Whether a receiver may use it for anything at all is the
-/// central open question of this crate and it is not settled by this sketch.
+/// durable elsewhere. SY-6 settles what it is for: an adjudicator may read it,
+/// and a guard carrying `after` is refused at ingest. Phase 13 enforces both.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct EventGroup {
