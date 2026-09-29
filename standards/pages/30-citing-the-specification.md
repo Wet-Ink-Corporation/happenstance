@@ -82,7 +82,7 @@ sentence is the specification's rather than the page's.
 link whose visible text is "here". Each of the four either rots or hides the
 authority.
 
-**Rejects.** A page citing `spec/SPECIFICATION.md:1462`. It resolves on the day
+**Rejects.** A page citing `spec/SPECIFICATION.md:1476`. It resolves on the day
 it is written and points at an unrelated clause the next time the file grows,
 and the reader who follows it reads the wrong rule with no way to tell — the
 failure mode stable ids exist to remove.

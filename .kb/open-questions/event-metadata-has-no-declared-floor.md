@@ -114,7 +114,7 @@ metadata gains a conformant refusal path; the contract guarantees no metadata ca
 **The question was decided by evidence this atom assumed did not exist.** The body above reasons
 from the four `MIN_SUPPORTED_*` constants and the three `StoreLimit` variants and finds no term for
 metadata anywhere in the port surface. There is one, and it had been there all along:
-`crates/happenstance-sync/src/identity.rs:199` computes `ReplicatedEvent::payload_len` as
+`crates/happenstance-sync/src/identity.rs:72` computes `ReplicatedEvent::payload_len` as
 `data.len()` plus `metadata.map_or(0, Bytes::len)`, and `crates/happenstance-sync/src/peer.rs:329`
 checks that sum against `PeerLimits::max_event_bytes`, whose `minimum()` is anchored at `65_536` —
 `MIN_SUPPORTED_EVENT_DATA_LEN`'s own number (`:312`). Two consequences follow. A separate non-zero

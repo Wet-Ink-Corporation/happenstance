@@ -225,7 +225,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 201 clause IDs, of which 194 are normative:
-**142 `[FROZEN]`**, **40 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+**143 `[FROZEN]`**, **39 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -402,7 +402,7 @@ unrelated crate wanted replication.
 |---|---|---|---|---|
 | **`EventStore`** | `crates/happenstance-core/src/store.rs:141-316` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it is the workspace's only adapter instrument to have *failed* a clause rather than passed one. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
 | **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` can drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:354-420`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six now run against the suite** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063), and the `unstable-projection` feature survives on the contract crate only as an empty name so that `0.2.0` manifests resolve | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the four buffered stores do not occupy |
-| **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:120`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
+| **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:140`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point, and it has narrowed to one port. `EventStore` is
 frozen because it has evidence: eighty-nine rules — each one shown to reject a
@@ -705,16 +705,18 @@ exact point ADR-0003 claims to win.
 
 The exemplar this clause was written against was `happenstance-sync`'s own
 proposal — "a UUIDv7 or a content hash in the event's **metadata**" — and it
-was withdrawn: the crate now proposes `(StoreId, SequencePosition)`
-(`crates/happenstance-sync/src/identity.rs:87-101`), which is what VT-5
-mandates. The replacement is stronger than the proposal was, because the tree
+was withdrawn: the crate proposed `(StoreId, SequencePosition)` instead, which
+is what VT-5 mandates, and since phase 17 it speaks `happenstance-core`'s own
+`EventId` (`crates/happenstance-core/src/identity.rs:97`) — its placeholder
+went, and `crates/happenstance-sync/src/identity.rs:11-20` says why. The replacement is stronger than the proposal was, because the tree
 now *forces* the wrong answer rather than merely suggesting it.
 `SequencedEvent` carried a position and an event and nothing else when the
 finding was made, so the crate's own compiled finding is that
 `impl IngestStore for MemoryEventStore` "cannot be written truthfully" —
 nowhere to put an accepted `EventId`, nowhere
-to read one back to answer `holds`
-(`crates/happenstance-sync/src/ingest.rs:38-50`). `Event::with_metadata`
+to read one back to answer membership. Phase 4 gave `SequencedEvent` the
+identity, and phase 17 found the write path the adapter's rather than core's
+(ADR-0073; `crates/happenstance-sync/src/ingest.rs:34-58`). `Event::with_metadata`
 (`crates/happenstance-core/src/event.rs:377-382`) is then the only free-form
 slot left on the type, and it is the one field the contract never inspects.
 That is where an implementer under deadline will put it, which is what makes
@@ -1019,11 +1021,23 @@ timestamps.
 The operation that accepts them MUST be defined by a separate trait, `IngestStore`,
 in `happenstance-sync`, implemented by a store adapter behind an optional feature.
 
-`[PROVISIONAL — falsified if a store adapter cannot implement `IngestStore`
-without duplicating `append`'s write path, in which case the operation belongs on
-`EventStore` after all; the SQLite adapter is the instrument and it settles the
-question the first time it implements both]`
-`Rule:` §5's `happenstance-sync-testkit` suite — `IngestStore` is the trait every
+`[FROZEN]` — by ADR-0073, at phase 17. The falsifier this clause carried — *a
+store adapter cannot implement `IngestStore` without duplicating `append`'s write
+path, in which case the operation belongs on `EventStore` after all; the SQLite
+adapter is the instrument* — was run on that instrument and did not fire.
+`impl SendIngestStore for SqliteEventStore`
+(`crates/happenstance-sqlite/src/ingest_spike.rs`, `#[cfg(test)]` until
+`happenstance-sync` publishes) goes through the same private `write_batch` that
+`append` calls — one `INSERT` statement for a local row and a foreign one — and
+what is ingest-only is a transaction frame, a watermark query and the values a
+foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1274`). Neon,
+at the far end of the transport axis, builds a whole ingest batch as one
+statement from the builders its `append` uses; that half is structural and was
+not executed. So **the write path is the adapter's**, and `happenstance-core`
+grows none. Reopened as a provided method on `EventStore` — additive — if a
+second adapter cannot route ingest through its own append writer.
+`Rule:` the spike's unit tests in `crates/happenstance-sqlite/src/ingest_spike.rs`
+until §5's suite exists; then §5's `happenstance-sync-testkit` suite — `IngestStore` is the trait every
 `SY-n` ingest clause is written against, and SY-5, SY-11 and SY-12 are its
 behavioural rules; here, the compile-level obligation is a new testkit compile
 test `append_does_not_accept_a_foreign_identity`
@@ -3868,8 +3882,8 @@ win.
   in every `contains_all` merge-scan (`tag.rs:347-361`), a writer-forgeable
   identity, and an identity dimension visible to every tag-only query. The
   metadata half used to point at `happenstance-sync`'s own proposal; that
-  proposal was withdrawn in favour of `(StoreId, SequencePosition)`
-  (`crates/happenstance-sync/src/identity.rs:87-101`), and what replaces it is
+  proposal was withdrawn in favour of `(StoreId, SequencePosition)`, now
+  `happenstance-core`'s `EventId` (`crates/happenstance-core/src/identity.rs:97`), and what replaces it is
   not a proposal but the shape the tree leaves open — `metadata` is the only
   slot on `Event` that no store, query or peer is permitted to look inside,
   which is exactly what makes it the tempting one.
@@ -4646,7 +4660,8 @@ adapter it was meant to spare. This is the **second** required method phase 4
 adds to the port; `head` is ES-30's.
 
 On `EventStore` rather than on `IngestStore`, where `happenstance-sync`'s sketch
-already has it as `holds` (`crates/happenstance-sync/src/ingest.rs:164`).
+had it as `holds` until phase 17 dropped it as a duplicate of this method
+(`crates/happenstance-sync/src/ingest.rs:95`).
 VT-7 is frozen on §3, and — the substantive reason — VT-8 already obliges
 **every** store to hold at most one event per `EventId`, so every store already
 maintains the index that answers this and none is taxed with a new one. A store
@@ -6394,7 +6409,7 @@ two candidates are both plausible enough to name.
 ports in two flavours each — `SyncPeer`/`SendSyncPeer`
 (`crates/happenstance-sync/src/peer.rs:81-82`) and
 `IngestStore`/`SendIngestStore`
-(`crates/happenstance-sync/src/ingest.rs:119-120`) — a `memory` reference peer, a
+(`crates/happenstance-sync/src/ingest.rs:139-140`) — a `memory` reference peer, a
 three-variant `SyncError` (`peer.rs:393`), and two stand-in peers in the
 crate's own `tests/` chosen to be as unlike each other as the deployment
 allows. The prose that used to end *"None of this is settled"* was replaced by
@@ -6416,8 +6431,9 @@ IngestStore for MemoryEventStore` — local trait, foreign type — compiles wit
 `happenstance-core` untouched, so the *trait* seam is discharged by coherence
 and `append` keeps its signature. The **value-type** seam is not:
 `SequencedEvent` has nowhere to hold an `EventId` it has accepted, so the body
-is `todo!()` and would be `todo!()` with unlimited time
-(`crates/happenstance-sync/src/ingest.rs:14-50`). The leak is smaller than the
+was `todo!()` and would have been `todo!()` with unlimited time
+(`crates/happenstance-sync/src/ingest.rs:34-45`, which records how phases 4 and
+17 closed it). The leak is smaller than the
 warning claimed and real, and it is a claim about a struct's fields rather than
 a port's signature — which is the cheaper of the two to land, and is VT-5's. A
 deferral you have not written down is not a deferral; it is a decision the next
@@ -6539,7 +6555,11 @@ conflicts with a fact it already holds, the compensation MUST be appended in the
 same `append` call as the losing event.**
 
 The losing event and its compensation are one batch:
-`append(&[losing, compensation], Some(&guard))`. A reader MUST NOT be able to
+`append(&[losing, compensation], Some(&guard))`. Read that example as ADR-0073
+reads it: under VT-10 `append` re-mints, so the batch that carries the losing
+event's foreign identity is one `IngestGroup` — the losing event plus its
+compensation — committed atomically by `IngestStore::ingest`
+(`crates/happenstance-sync/src/ingest.rs:216`). A reader MUST NOT be able to
 observe a state in which the log holds the losing event with nothing resolving
 it.
 
@@ -6837,16 +6857,16 @@ deserialising its payload"* (`references/adr/0003-opaque-payloads.md:14-15`). A
 metadata-borne identity fails the ADR's own test.
 
 The exemplar was the sync crate's own proposal and it was withdrawn: the crate
-now mints `(StoreId, SequencePosition)`
-(`crates/happenstance-sync/src/identity.rs:87-101`) and carries it on
-`ReplicatedEvent`, reachable without touching a payload byte, which is what
-this clause requires. The rejection keeps a live target anyway, and phase 2
-sharpened rather than removed it — `impl IngestStore for MemoryEventStore`
-cannot be written truthfully because `SequencedEvent` has nowhere to hold an
-accepted `EventId` and nowhere to read one back for `holds`
-(`crates/happenstance-sync/src/ingest.rs:38-50`). Until VT-5's identity lands
-on `SequencedEvent`, `metadata` is the only place an adapter author has left,
-and this clause is what stands between them and it.
+now carries `happenstance-core`'s `(StoreId, SequencePosition)`
+(`crates/happenstance-core/src/identity.rs:97`) on `ReplicatedEvent`, reachable
+without touching a payload byte, which is what this clause requires. The
+rejection keeps a live target anyway. Phase 2 sharpened it — `impl IngestStore
+for MemoryEventStore` could not be written truthfully, because `SequencedEvent`
+had nowhere to hold an accepted `EventId` — and phases 4 and 17 closed the two
+halves: the value type carries the identity, and the write path that accepts a
+foreign one is the adapter's (ADR-0073;
+`crates/happenstance-sync/src/ingest.rs:34-58`). An adapter author who reaches
+for `metadata` instead is exactly who this clause is written against.
 
 It also rejects the naïve fix, which is why this clause names `EventId` rather
 than "some queryable identity". Promoting identity to a `Tag` makes it queryable
@@ -7116,9 +7136,9 @@ luck into a property.
 
 This is the clause that makes convergence **checkable rather than hoped for**.
 The premise is now stated where an implementer meets it — `EventId::position`
-is documented as the origin's position and "*not where it landed here*", local
-position being arrival order and unrelated
-(`crates/happenstance-sync/src/identity.rs:116-119`) — and the merge rule that
+is documented as "*authorship order, not arrival order*" — it orders the event
+in its origin store, and the local position orders it here
+(`crates/happenstance-core/src/identity.rs:115-121`) — and the merge rule that
 would reconcile the two is explicitly untouched, with the crate warning that
 nothing in it should be read as choosing one (`lib.rs:120-121`). What neither
 says is that the acceptance has a price, and that the price is paid by every
@@ -9364,13 +9384,13 @@ between them because its *shape* does not wait on a transport but its
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 34 | 24 | 9 | 0 | 1 |
+| §2.1–§2.6 value types | `VT` | 34 | 25 | 8 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 42 | 33 | 8 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 38 | 20 | 10 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 40 | 34 | 3 | 2 | 1 |
-| **Total** | | **201** | **142** | **40** | **12** | **7** |
+| **Total** | | **201** | **143** | **39** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9387,7 +9407,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-7 | FROZEN | `event_id_is_not_matchable_by_query`, `contains_event_id_reports_membership` | E2E-32, E2E-34, E2E-36 |
 | VT-8 | FROZEN | `event_ids_are_unique_within_a_store` | E2E-33, E2E-36 |
 | VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `convergen… | E2E-41, E2E-43 |
-| VT-10 | PROVISIONAL | §5's `happenstance-sync-testkit` suite — `IngestStore` is the trait every `SY-… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
+| VT-10 | FROZEN | the spike's unit tests in `crates/happenstance-sqlite/src/ingest_spike.rs` unt… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
 | VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic`, `positions_are_uni… | E2E-10, E2E-46 |
 | VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
 | VT-13 | FROZEN | unit test `position_next_signals_overflow`; `read_from_is_inclusive`, `conditi… | E2E-10, E2E-16 |

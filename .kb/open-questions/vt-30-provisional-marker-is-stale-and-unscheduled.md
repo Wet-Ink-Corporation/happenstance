@@ -31,7 +31,7 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-VT-30 (`spec/SPECIFICATION.md:1861-1867`, `[PROVISIONAL]`) requires that
+VT-30 (`spec/SPECIFICATION.md:1875-1881`, `[PROVISIONAL]`) requires that
 `AppendCondition::new(query)` continue to produce a single unbounded guard and
 that `after`/`after_opt` continue to apply the given boundary to every guard
 already present. Its marker names a falsifier in two limbs: no adapter can
@@ -111,7 +111,7 @@ multi-guard benchmark scenario (`runbook/phases/17-breaking-window.md`). Freezin
 was proposed and refuted in the 2026-09-29 verification.
 
 The marker is staler than this atom recorded: it still calls the Postgres adapter unbuilt
-(`spec/SPECIFICATION.md:1893-1897`), and that event store has been real since phase 10b.
+(`spec/SPECIFICATION.md:1907-1911`), and that event store has been real since phase 10b.
 ADR-0054's `after_every_guard` has not landed — `after` and `after_opt` carry no `#[deprecated]`
 (`crates/happenstance-core/src/append.rs:187`, `:201`) — so adding the alias is additive and
 retiring the old names is a break only phase 17 can take. The ledger row naming phase 4

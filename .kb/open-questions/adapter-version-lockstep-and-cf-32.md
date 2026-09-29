@@ -56,7 +56,7 @@ through workspace inheritance — `Cargo.toml:39-41` gives
 `happenstance` — with one deliberate exception: `happenstance-testkit` carries
 its own `version` key rather than `version.workspace = true`
 (`crates/happenstance-testkit/Cargo.toml:21`). That exception is not an
-oversight. It is **CF-32**, `[FROZEN]` (`spec/SPECIFICATION.md:8872-8890`),
+oversight. It is **CF-32**, `[FROZEN]` (`spec/SPECIFICATION.md:8892-8910`),
 enforced by a `cargo xtask ci` manifest check that reads the `[package]` table
 and fails on an absent `version` key or one that mentions `workspace`. The
 clause states its reason at length: under a shared key, adding a conformance

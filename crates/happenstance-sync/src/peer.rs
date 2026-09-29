@@ -52,9 +52,9 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use happenstance_core::AppendCondition;
+use happenstance_core::{AppendCondition, EventId};
 
-use crate::identity::{EventId, ReplicatedEvent, Watermark};
+use crate::identity::{ReplicatedEvent, Watermark};
 
 /// One peer relationship.
 ///

@@ -115,6 +115,12 @@ mod query_sql;
 #[cfg(feature = "event-store")]
 mod row;
 
+// VT-10's instrument: `happenstance-sync`'s ingest port over this adapter's own
+// row writer. Test-only because that crate is unpublished; phase 13 makes it a
+// feature.
+#[cfg(all(test, feature = "event-store"))]
+mod ingest_spike;
+
 // No `///` doc on this declaration, and that is a constraint rather than a
 // preference: a doc comment written *here* is resolved in **this** module's
 // scope, while the module's own `//!` header is resolved in its own. Attaching

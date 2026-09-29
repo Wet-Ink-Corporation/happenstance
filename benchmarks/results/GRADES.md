@@ -142,7 +142,7 @@ cheaper than what happens.
 | memory | **6.1 ns**, zero allocations | 135 ns | **22×** |
 | sqlite | **4.70 µs** | 472 µs | **101×** |
 
-`spec/SPECIFICATION.md:4006` makes `head` a required method on exactly this
+`spec/SPECIFICATION.md:4020` makes `head` a required method on exactly this
 argument. It is a measured decision rather than a plausible one — though note
 that on Host A, before `limit` was honoured, the memory ratio was ~283,000×.
 Fixing `limit` took four orders of magnitude off the case for `head`, and 22×

@@ -3,7 +3,7 @@
 //! model.
 //!
 //! CF-5's second projection conformant variant, and the far end of §6's
-//! batch-shape axis (`spec/SPECIFICATION.md:5688-5693`). It is not a defect and
+//! batch-shape axis (`spec/SPECIFICATION.md:5703-5708`). It is not a defect and
 //! it MUST pass every projection rule: a rule that rejects it is a finding about
 //! the **rule** (CF-6), never about this store.
 //!
@@ -24,7 +24,7 @@
 //!   it holds no connection to (`references/adapter-shapes.md`), and the reading
 //!   of PS-4 that gives the port the least: *"PS-1 is satisfiable by opening the
 //!   transaction inside `commit` around a buffered write set"*
-//!   (`spec/SPECIFICATION.md:4849-4856`).
+//!   (`spec/SPECIFICATION.md:4864-4871`).
 //!
 //! PS-4 permits it outright, and PS-5 is what makes it expressible: `Batch` is
 //! `type Batch;`, an owned value with no lifetime, so the journal is a field
@@ -55,7 +55,7 @@
 //!
 //! Not PS-2. PS-2 is `[FROZEN]` and asks for two **adapters** at opposite ends
 //! of the axis, and its `Rejects:` clause names the two-instrument monoculture
-//! verbatim (`spec/SPECIFICATION.md:4760-4775`). This is a testkit instrument in
+//! verbatim (`spec/SPECIFICATION.md:4775-4790`). This is a testkit instrument in
 //! process memory. What it proves is the narrower and still worth having claim
 //! that a projection rule accepted a store built the other way round.
 //!

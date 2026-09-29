@@ -37,7 +37,7 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-`spec/SPECIFICATION.md:8108-8129` (CF-17, `[PROVISIONAL]`) now reads: a fixture declaring
+`spec/SPECIFICATION.md:8128-8149` (CF-17, `[PROVISIONAL]`) now reads: a fixture declaring
 `REOPEN` supported **MUST** make `reopen` discard process-level state over a medium that
 outlives the process's hold on it, **MUST** state the mechanism, and a fixture over a store with
 no such medium **MUST** decline the capability with that as its stated reason. The clause's
@@ -51,7 +51,7 @@ in `tests/mutation_coverage.rs` carries the hazard instead — it drives the fix
 rule, asserts it fails none, and asserts it converts three durability rules from reported skips
 into passes while an honest twin one line apart reports them as skips.
 
-CF-14 (`spec/SPECIFICATION.md:7992-8024`, `[DEFERRED]`) is unchanged by this work. Its deferral
+CF-14 (`spec/SPECIFICATION.md:8012-8044`, `[DEFERRED]`) is unchanged by this work. Its deferral
 was already about a different axis — whether a `reopen` capability can be honoured by rusqlite, a
 Durable Object and a one-shot HTTP client with one shape, or whether "durable" needs grading —
 and one of the three (`happenstance-sqlite`) has already answered with no grading needed, per the
@@ -97,6 +97,6 @@ was proposed and refuted on 2026-09-29, because Cloudflare's `REOPEN` is express
 `node:sqlite` shim rather than over Durable Object storage outliving its isolate.
 
 The marker text is half stale: it still says HS-P0013 and HS-P0014 *"have not answered"*
-(`spec/SPECIFICATION.md:8298-8299`), and Neon has. The renewal edit corrects that. The surface is
+(`spec/SPECIFICATION.md:8318-8319`), and Neon has. The renewal edit corrects that. The surface is
 additive either way: `Fixture`'s capability consts are defaulted (ADR-0042). **Owner now:
 phase 19a, or phase 17's `workerd` sibling job, whichever observes first.**

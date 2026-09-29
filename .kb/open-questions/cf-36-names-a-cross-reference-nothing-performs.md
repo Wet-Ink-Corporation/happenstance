@@ -47,7 +47,7 @@ last_reviewed: 2026-09-29
 
 ## What changed
 
-CF-36 (`spec/SPECIFICATION.md:8980-8991`) is `[FROZEN]` and its `Rule:` line
+CF-36 (`spec/SPECIFICATION.md:9000-9011`) is `[FROZEN]` and its `Rule:` line
 claims `cargo xtask spec-trace` cross-references each case's level marker
 (`E2E-CASES.md:19-28`). It did not: at `9b06836`, `grep -c "Level"
 xtask/src/spec_trace.rs` returned `0` against 58 `- **Level:**` markers, so a
@@ -122,7 +122,7 @@ cannot. Group 2 is cheaper than that deadline and named above.
 
 ## The citation this pass repointed, and the one it refused
 
-This atom cited `SPECIFICATION.md:8611-8622`, correct when written (CF-36 began
+This atom cited `SPECIFICATION.md:8631-8642`, correct when written (CF-36 began
 at 8611 at `2abb99f`) and stale since. The
 `stated-only-defects-and-the-reopen-must` brief offered `8648`. **That repoint
 was not applied.** Its anchor sentence — *"is recorded as what is still missing

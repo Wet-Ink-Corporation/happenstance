@@ -118,7 +118,7 @@ The pattern repeated inside the very wave that carried this finding. Two of
 the 2026-09-11 intake files cited `CITATION_SCAN_EXCLUDE` at
 `xtask/src/lints.rs:2003` and `:2007`, and the constant had moved to `:2488`
 under them while they waited; the measurement-host brief cited CF-34 at
-`spec/SPECIFICATION.md:8747` for a clause now at `:9021`. Neither would
+`spec/SPECIFICATION.md:8767` for a clause now at `:9021`. Neither would
 have reddened the gate — each line still exists and is not obviously the
 wrong kind of place — which is the milder, wrong-*place* half of the first
 defect above rather than the blank-line half. The 2026-09 census

@@ -84,7 +84,7 @@ settings string beside it.
 | Run | 2026-09-03, 06:14–06:27 local — **the one run every figure below comes from.** `results/raw/seed-ordering-replication.txt` is a later re-run of step 6 alone, and is the only file in `raw/` that is not from it |
 | Wall clock | thirteen minutes. The harness-reported durations sum to 730 s: conformance 1.92 s, conditions 0.00 s, emitted SQL 0.06 s, guard cost 557.12 s, query plans 111.30 s, seed ordering 49.48 s, selectivity 10.53 s |
 
-Nothing here sets `synchronous = OFF`. `spec/SPECIFICATION.md:7481-7484` names it
+Nothing here sets `synchronous = OFF`. `spec/SPECIFICATION.md:7501-7504` names it
 by name as a wrong implementation CF-14's reopen rule rejects, and the settings
 are printed rather than assumed so that a reader can check.
 

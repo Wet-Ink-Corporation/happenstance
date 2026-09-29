@@ -208,7 +208,7 @@ one-line convenience and no crate in the workspace can compile it, so the
 the overlap and there is no opt-out.
 
 **Evidence.** `crates/happenstance-sync/src/ingest.rs:14 (The escape is **coherence**)` ·
-`crates/happenstance-sync/src/ingest.rs:104 (compile_fail,E0117)` ·
+`crates/happenstance-sync/src/ingest.rs:124 (compile_fail,E0117)` ·
 [SPECIFICATION VT-10](../../spec/SPECIFICATION.md) ·
 [reference orphan rules](https://doc.rust-lang.org/reference/items/implementations.html#orphan-rules) *(checked 2026-08-09, rustc 1.97.1)*
 

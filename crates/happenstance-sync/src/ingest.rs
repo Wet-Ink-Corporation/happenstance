@@ -19,70 +19,90 @@
 //! about it. [`IngestStore`] is that trait, it lives here, and `append` keeps
 //! its signature.
 //!
-//! # What compiling it actually proved
+//! # Where the leak went
 //!
-//! Two things, and it is worth being precise about which:
+//! It shrank three times, and the last one closed it.
 //!
-//! * **The trait reaches a foreign store.** This crate writes
-//!   `impl IngestStore for happenstance_core::MemoryEventStore` — local trait,
-//!   foreign type — and it compiles with `happenstance-core` untouched. An
-//!   adapter crate can write the mirror image, foreign trait for its own local
-//!   type, and that also compiles. Both directions coherence allows are open.
-//! * **A third crate cannot.** `happenstance-sync-testkit`, which will define
-//!   neither the trait nor the store, is barred from writing the impl on an
-//!   adapter's behalf — see the `compile_fail` example below. That is not a
-//!   problem for a conformance suite, which takes an implementation rather than
-//!   supplying one, but it does mean there is no blanket
-//!   `impl<S: EventStore> IngestStore for S` waiting to make this free.
+//! **The value type.** [`SequencedEvent`](happenstance_core::SequencedEvent)
+//! once carried a position and an event and nothing else, so there was nowhere
+//! to put an identity a peer had minted. Phase 4 closed that: it carries
+//! `position`, `id`, `recorded_at` and `event`, and this module speaks the same
+//! [`EventId`](happenstance_core::EventId) and
+//! [`RecordedAt`](happenstance_core::RecordedAt) rather than placeholders of
+//! them.
 //!
-//! And one thing it did **not** prove, which is the finding rather than the
-//! reassurance: the impl below still cannot be written *truthfully* — though no
-//! longer for the reason first recorded here, and the move is worth following.
-//!
-//! The original obstruction was the **value type**.
-//! [`SequencedEvent`](happenstance_core::SequencedEvent) carried a position and
-//! an event and nothing else, so there was nowhere to put an identity a peer had
-//! minted. Phase 4 closed that: it now carries `position`, `id`, `recorded_at`
-//! and `event`, where `id` is a `happenstance_core::EventId` — the same
-//! `(store, position)` pair this crate's placeholder [`EventId`] sketches, in a
-//! different crate.
-//!
-//! What remains is the **write path**, one layer in. The only `&self` operation
-//! that adds to a store is
-//! [`EventStore::append`](happenstance_core::EventStore::append), and
+//! **The write path.** That left an identity with a place to sit and no door to
+//! come in through. The only `&self` operation that adds to a store is
+//! `append`, and `append` mints — `happenstance-core` states that no
+//! store-assigned value is ever supplied by a caller through it, which is the
+//! property that keeps the contract's write path from having to distinguish "I
+//! decided this" from "somebody else did and I am copying it". This crate used
+//! to write `impl SendIngestStore for MemoryEventStore` — local trait, foreign
+//! type — and it compiled, and every body was `todo!()`, because coherence lets
+//! a crate add a trait to a foreign type and never lets it reach inside one.
 //! `MemoryEventStore` mints `EventId::new(self.store_id, position)` for every
-//! event it writes. That is not an oversight to route around: `happenstance-core`
-//! states that no store-assigned value is ever supplied by a caller through
-//! `append`, which is exactly the property that keeps the contract's write path
-//! from having to distinguish "I decided this" from "somebody else did and I am
-//! copying it". `MemoryEventStore::restore` does preserve a foreign identity, and
-//! it is no help here: it builds a **new** store out of an owned snapshot, while
-//! [`ingest`](IngestStore::ingest) holds `&self` on an existing one. So a foreign
-//! identity has a place to sit and no door to come in through, and the bodies
-//! below would still be `todo!()` with unlimited time.
+//! event it writes, and nothing outside `happenstance-core` can make it do
+//! otherwise.
 //!
-//! So the trait seam is genuinely discharged and the **write path** seam is not.
-//! `EventStore::append` still does not need to change — that is the whole result
-//! — but the store's own crate has to offer *some* operation that accepts an
-//! identity it did not mint, because coherence lets this crate add a trait to a
-//! foreign type and never lets it reach inside one. That is a smaller leak than
-//! the warning claimed and a real one, and it has shrunk twice: first from a
-//! port signature to a struct's fields, and now from a struct's fields to one
-//! missing store operation.
+//! **Whose door it is.** Read that last sentence the other way round and it is
+//! the answer: the write path that accepts a foreign identity belongs to the
+//! crate that owns the store's internals, which is the adapter — and the
+//! adapters' schemas were built to take it. Each already keeps origin apart from
+//! position: SQLite and the Durable Object insert with the origin columns `NULL`
+//! and stamp local identity afterwards through an `IS NULL` marker that exists
+//! so an ingested row is *not* restamped, and Postgres and Neon write the origin
+//! pair explicitly under a unique index on it. So the ingest path need not be a
+//! second write path beside `append`: it can be the adapter's existing row
+//! writer, generalised to take a per-row origin, with what is ingest-only small
+//! enough to list — the deduplicating conflict clause, a per-row origin and
+//! recorded time, and the absence of any condition evaluation (SY-1).
 //!
-//! [`holds`](IngestStore::holds) is the one method the write path does not
-//! block, and naming it is what keeps the finding honest rather than sweeping.
-//! `EventStore::contains_event_id` landed alongside the identity fields and
-//! would answer it exactly; the only obstruction there is that this crate's
-//! placeholder [`EventId`] is a *different type* from the contract's, which
-//! [`crate::identity`] already records as phase 4's to remove. It is left
-//! `todo!()` with the others because an [`IngestStore`] whose
-//! [`ingest`](IngestStore::ingest) cannot run has nothing for `holds` to be
-//! true about.
+//! Two adapters show it, and not to the same standard. SQLite runs it: append
+//! and ingest prepare one `INSERT` in one writer and differ only in the values
+//! bound. Neon only spells it: its ingest statement is composed from the insert
+//! builder its append uses, and has never been sent to a server. Postgres and
+//! the Durable Object are argued from their schemas above and have not been
+//! built.
+//!
+//! The instrument is `crates/happenstance-sqlite/src/ingest_spike.rs`: this
+//! trait implemented for `SqliteEventStore`, in the adapter's own crate, over
+//! the same private writer `append` uses. `happenstance-core` grows nothing for
+//! it and no published signature changes. That spike is the run VT-10's
+//! falsifier names — *"a store adapter cannot implement `IngestStore` without
+//! duplicating append's write path"*, with SQLite as the instrument — and the
+//! phase-17 record states what it found.
+//!
+//! # What coherence still refuses
+//!
+//! **A third crate cannot write the impl.** `happenstance-sync-testkit`, which
+//! will define neither the trait nor the store, is barred from writing it on an
+//! adapter's behalf — see the `compile_fail` example on [`IngestStore`]. That is
+//! not a problem for a conformance suite, which takes an implementation rather
+//! than supplying one, but it does mean there is no blanket
+//! `impl<S: EventStore> IngestStore for S` waiting to make this free — and after
+//! the paragraphs above, no reason to want one: a blanket impl could only call
+//! `append`, and `append` re-mints.
+//!
+//! The in-memory store is the one this leaves without an implementation.
+//! `MemoryEventStore` lives in the contract crate, so the adapter-owned answer
+//! would put an ingest operation in `happenstance-core` — the letter VT-10
+//! forbids even where it would be additive. Its oracle is phase 13's, as a
+//! store this crate owns.
+//!
+//! # Membership is not on this trait
+//!
+//! It used to carry `holds(&EventId)`. That question is
+//! [`EventStore::contains_event_id`](happenstance_core::EventStore::contains_event_id),
+//! which landed with the identity fields and answers it exactly, so a runner
+//! binds `S: EventStore + IngestStore` and asks the store it already has. It is
+//! also not a question [`ingest`](IngestStore::ingest) needs asked first:
+//! deduplication happens *inside* the write, against the store's uniqueness on
+//! the origin pair (VT-8), and a probe-then-write would be the race that clause
+//! forbids.
 
-use happenstance_core::SequencePosition;
+use happenstance_core::{Event, StoreId};
 
-use crate::identity::{EventId, ReplicatedEvent, StoreId, Watermark};
+use crate::identity::{ReplicatedEvent, Watermark};
 
 /// A store that can accept events another store already minted.
 ///
@@ -124,50 +144,55 @@ pub trait IngestStore {
     /// This store's own incarnation identifier.
     ///
     /// Needed to tell "an event I minted, coming back to me" from "an event a
-    /// peer minted", which is the first check ingest makes and the one that
-    /// stops a replication loop.
+    /// peer minted". The first, while this store still holds it, is a skip like
+    /// any other re-delivery. One that claims this store's identity and is
+    /// *not* held means the store was restored or rewound under an identity it
+    /// should have re-minted (VT-6), and what ingest does with it is phase 13's
+    /// to settle.
     fn store_id(&self) -> StoreId;
 
-    /// Records events another store minted, preserving their identity.
+    /// Records events other stores minted, preserving their identity, together
+    /// with any compensation this side writes for them.
     ///
-    /// Each group lands atomically or not at all, and events land **at the
-    /// tail**: an ingested event is assigned the next local position like any
-    /// other write. Inserting it at the position its origin gave it would
-    /// rewrite history under a projection that has already read past it.
+    /// One call per pulled batch, not per event. **Each group lands atomically
+    /// or not at all**, compensation included; a store may commit the whole
+    /// batch as one unit, and one that can express it as one statement should.
+    ///
+    /// Events land **at the tail**: an ingested event is assigned the next local
+    /// position like any other write, and keeps its origin's
+    /// [`EventId`](happenstance_core::EventId) and
+    /// [`RecordedAt`](happenstance_core::RecordedAt) unchanged. Inserting it at
+    /// the position its origin gave it would rewrite history under a projection
+    /// that has already read past it.
+    ///
+    /// No append condition is evaluated, the origin's or this store's (SY-1). A
+    /// conflict is answered by the group's
+    /// [`compensation`](IngestGroup::compensation), which is minted here, as
+    /// ordinary local events, in the same transaction as the events it answers.
     ///
     /// Re-delivery is a no-op. A peer will offer the same event more than once —
     /// after a dropped connection, after a resume token that did not advance,
-    /// after an operator re-seeds a device — and each repeat must be skipped
-    /// rather than appended again or rejected.
+    /// after an operator re-seeds a device — and each repeat is skipped rather
+    /// than appended again or rejected. The skip is decided inside the write,
+    /// against the store's own uniqueness on the origin pair (VT-8), never by a
+    /// lookup ahead of it. A group whose foreign events were all skipped writes
+    /// no compensation either (SY-11): the first delivery already wrote it.
     ///
     /// # Errors
     ///
-    /// The adapter's error, for storage failures only. An event this store
+    /// The adapter's error, for storage failures and for capacity refusals —
+    /// neither of which is a judgement on the events. An event this store
     /// already holds is a skip and not an error; disagreeing with an event's
     /// content is not available as an option, because the event is already
     /// durable somewhere else and refusing it only guarantees the two logs never
     /// converge.
-    async fn ingest(&self, events: &[ReplicatedEvent]) -> Result<Ingested, Self::Error>;
+    async fn ingest(&self, groups: &[IngestGroup<'_>]) -> Result<Ingested, Self::Error>;
 
-    /// Whether this store already holds `id`.
-    ///
-    /// A dedicated operation rather than a [`Query`](happenstance_core::Query)
-    /// dimension, and that is deliberate. Identity is outside the query
-    /// language: a decision model that could filter on an `EventId` would be a
-    /// decision model whose consistency boundary depends on which store it is
-    /// running against, which is precisely what a replicated system cannot
-    /// afford.
-    ///
-    /// # Errors
-    ///
-    /// The adapter's error if the lookup fails.
-    async fn holds(&self, id: &EventId) -> Result<bool, Self::Error>;
-
-    /// The highest position this store has ingested from each origin store.
+    /// The highest origin position this store holds from each origin store.
     ///
     /// This is what a spoke sends as its resume position and what a hub answers
-    /// a pull against. It is derived from what was actually ingested rather than
-    /// stored as a separate counter, so it cannot drift from the log.
+    /// a pull against. It is derived from the log rather than stored as a
+    /// separate counter, so it cannot drift from what was actually written.
     ///
     /// # Errors
     ///
@@ -175,57 +200,56 @@ pub trait IngestStore {
     async fn watermark(&self) -> Result<Watermark, Self::Error>;
 }
 
-/// What one [`ingest`](IngestStore::ingest) did.
+/// One atomic unit of an [`ingest`](IngestStore::ingest): foreign events, and
+/// the local compensation this side writes for them.
+///
+/// Borrowed rather than owned. The runner already holds the pulled batch, and
+/// an ingest that took `Vec`s would make it clone every payload to hand them
+/// over for the length of one call.
+///
+/// `#[non_exhaustive]`, so a group is built with [`IngestGroup::new`] outside
+/// this crate. What travels beside a group is phase 13's to finish — the
+/// origin's guard is evidence (SY-6) that has nowhere to go here yet — and a
+/// field added then must not break every literal written before it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct IngestGroup<'a> {
+    /// Events another store minted, each carrying its origin identity and
+    /// recorded time.
+    pub events: &'a [ReplicatedEvent],
+    /// Events this store writes in answer to them, minted here.
+    ///
+    /// Written in the same transaction as [`events`](Self::events) (SY-2), and
+    /// only when at least one of those was new (SY-11). Empty for a group that
+    /// needs no answer, which is most of them.
+    pub compensation: &'a [Event],
+}
+
+impl<'a> IngestGroup<'a> {
+    /// A group of foreign `events`, answered by `compensation`.
+    #[must_use]
+    pub const fn new(events: &'a [ReplicatedEvent], compensation: &'a [Event]) -> Self {
+        Self {
+            events,
+            compensation,
+        }
+    }
+}
+
+/// What one [`ingest`](IngestStore::ingest) did, summed across its groups.
+///
+/// Counts, not positions. A runner decides what to do next from how much landed
+/// and how much was already here; where it landed locally is arrival order,
+/// unrelated to anything the runner tells a peer (SY-19), and a store that
+/// writes a batch in one statement should not be made to report per-row
+/// positions to satisfy a field nobody reads.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Ingested {
-    /// Events appended to the local log.
+    /// Foreign events appended to the local log.
     pub appended: usize,
-    /// Events skipped because this store already held their [`EventId`].
+    /// Foreign events skipped because this store already held their identity.
     pub skipped: usize,
-    /// The local position of the last appended event, if any were appended.
-    ///
-    /// Local, and unrelated to the position inside the events' own
-    /// [`EventId`]s: this is arrival order here, that is authorship order there.
-    pub last_local: Option<SequencePosition>,
-}
-
-/// The coherence proof, compiled.
-///
-/// `MemoryEventStore` belongs to `happenstance-core` and [`IngestStore`] belongs
-/// here, so this impl is the "local trait, foreign type" half of the orphan
-/// rule. It is what demonstrates that a foreign identity can reach a store
-/// without `happenstance-core` changing a line.
-///
-/// The bodies are `todo!()` and they are not merely unfinished. See this
-/// module's documentation: `SequencedEvent` does now have a field an identity
-/// fits in, and `MemoryEventStore` still has no operation that puts a *foreign*
-/// one there — `append` mints its own for every event it writes, and `restore`
-/// builds a whole new store. That is the residue of the leak, and it is a
-/// missing write path rather than a port signature.
-#[cfg(feature = "memory")]
-mod memory_store_ingest {
-    use happenstance_core::MemoryEventStore;
-
-    use super::{EventId, Ingested, ReplicatedEvent, SendIngestStore, StoreId, Watermark};
-
-    impl SendIngestStore for MemoryEventStore {
-        type Error = happenstance_core::MemoryStoreError;
-
-        fn store_id(&self) -> StoreId {
-            todo!("MemoryEventStore::store_id() answers this, as a happenstance_core::StoreId")
-        }
-
-        async fn ingest(&self, _events: &[ReplicatedEvent]) -> Result<Ingested, Self::Error> {
-            todo!("append mints an EventId per event, so no foreign identity can be preserved")
-        }
-
-        async fn holds(&self, _id: &EventId) -> Result<bool, Self::Error> {
-            todo!("contains_event_id would answer this, once the placeholder EventId is unified")
-        }
-
-        async fn watermark(&self) -> Result<Watermark, Self::Error> {
-            todo!("a watermark is derived from ingested events, and nothing can be ingested")
-        }
-    }
+    /// Compensation events written, minted here.
+    pub compensated: usize,
 }

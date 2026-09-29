@@ -3314,7 +3314,7 @@ mod tests {
 
     /// The only test that touches the real tree, and it touches it through the
     /// existing helpers rather than around them. `ES-1` and `VT-1` are declared
-    /// at `spec/SPECIFICATION.md:2460` and `:563`.
+    /// at `spec/SPECIFICATION.md:2474` and `:563`.
     #[test]
     fn clause_ids_reads_the_pinned_specification() {
         let ids = clause_ids(&workspace_root().unwrap())
