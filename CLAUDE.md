@@ -280,8 +280,8 @@ happenstance_testkit::event_store_conformance!(MyFixture::new());
 ```
 
 The expression builds a **`Fixture`**, not a store — that changed at phase 3 and
-the old `factory =` spelling is gone with no deprecated arm, because nothing is
-published yet. One fixture instance is one isolated backing store; each
+the old `factory =` spelling is gone with no deprecated arm, because nothing was
+published then. One fixture instance is one isolated backing store; each
 `connect()` on it is one handle onto that store. A fixture also declares
 `SECOND_HANDLE` and `REOPEN` as `Capability` associated constants, and a rule
 whose capability is declined still runs, reporting the fixture's stated reason

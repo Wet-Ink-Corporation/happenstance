@@ -24,7 +24,7 @@
 //! live transaction, standing at the far end of PS-2's batch-shape axis and
 //! passing the suite there — an instrument for the freeze rather than a product.
 //!
-//! **The crate ships in `0.2.0`.** The release set was five, decided, and the
+//! **The crate shipped in `0.2.0`.** The release set was five, decided, and the
 //! owner re-opened it on this crate's evidence at `e597c34`; the manifest carries
 //! no `publish` key. This paragraph said the opposite until the release pass,
 //! which would have told a docs.rs reader that the crate they were reading was

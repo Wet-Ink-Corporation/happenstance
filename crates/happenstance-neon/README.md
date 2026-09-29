@@ -11,7 +11,7 @@ storage-agnostic event sourcing library built on the
 > **Status: conformant with one open clause question, and in the `0.3.2` release
 > set.** 124 gated tests pass against a live Neon endpoint. One does not, and it
 > is stated here rather than hidden — see *The one rule this adapter does not
-> pass*, below. Only the registry can say whether the release has happened yet.
+> pass*, below. It has been on crates.io since `0.2.0`.
 
 ## Which crate do I want?
 

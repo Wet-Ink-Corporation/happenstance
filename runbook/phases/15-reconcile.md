@@ -133,15 +133,26 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
 
 **Exit criteria**
 
-- [ ] `cargo xtask ci` green, with the status and ledger checks reading `runbook/`.
-- [ ] Every released version has a milestone row, and every phase it waits on
+- [x] `cargo xtask ci` green, with the status and ledger checks reading `runbook/`.
+      Locally, in named slices, at `00d9405`: the whole-gate run passed
+      `formatting` and `clippy` and was killed in `tests` for memory, so `tests`
+      ran per package and every other step on its own. The status and ledger
+      checks read `runbook/`. On the exit PR, CI runs the whole gate on three
+      operating systems.
+- [x] Every released version has a milestone row, and every phase it waits on
       reads `done`.
+      `runbook_status_matches_the_registry`: 29 status rows agree with five
+      released versions.
 - [ ] No top-level document states, in the present tense, a publication state
       the registry contradicts.
+      **Open.** The adapter pages' registry hedges and `CLAUDE.md`'s "nothing is
+      published yet" are corrected. `CLAUDE.md`'s binding constraint 5 still
+      says `0.2.0` "has not happened yet", and editing a binding constraint is
+      the owner's call: `wi-6c9f77`, blocked.
 - [x] What checks `.kb/` until `redkiln-rs` is decided, even if the answer is
       nothing.
 - [x] D-1, D-2 and D-3 decided, reflected, and — for D-3 — executed.
-- [ ] [`handover.md`](../handover.md) names a next action the status table agrees
+- [x] [`handover.md`](../handover.md) names a next action the status table agrees
       with.
 
 **Estimate.** 2–3 days.
@@ -212,3 +223,22 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   an owner in phase 16 (`wi-0ed2c1`), and the review workflow's three findings
   on it are fixed. Verified: `lints` (both clause ledgers still match §7.2),
   `lint-constitution`, `spec-trace` and `affected --base main`.
+- 2026-09-28 — PR #21 squash-merged as `5e60b3d`. On `lane/phase-15-exit`: the
+  review workflow's exit audit found the registry hedges still standing in
+  `happenstance-sqlite`'s crate root, the postgres and neon READMEs and crate
+  roots, and one `CLAUDE.md` sentence outside the binding constraints; each is
+  corrected in place with its line count kept. Exit criteria: five of six
+  ticked. The third stays open on `wi-6c9f77`, so phase 15 stays `in
+  progress`. Gate slices run at `00d9405`: the whole-gate run through
+  `formatting` and `clippy` (killed in `tests` for memory); then `tests` per
+  package (every workspace package but `happenstance-ladybug`, which the step
+  excludes);
+  `proof-artefact`; the five wasm32 checks, `wasm-conformance-enumeration` and
+  `wasm-conformance`; `happenstance-ladybug`'s clippy; `documentation` and both
+  `happenstance-core` doc builds; the constitution's doctests;
+  `narrative-doctests`; `package-check`; `lints`; `lint-kb`; `cargo deny`; both
+  nightly docs.rs builds; and both `cargo hack` powersets, run in a throwaway
+  worktree so an interrupted `--no-dev-deps` could not strip this tree's
+  manifests. LadybugDB conformance skipped on its probe. After the rebase onto
+  `5e60b3d`: `lints`, `lint-kb`, `lint-constitution`, `spec-trace` and
+  `affected --base main`.

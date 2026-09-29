@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`6d35bc6` on `main`, plus `lane/phase-15-overdue-owners` open as a PR.
+`5e60b3d` on `main`, plus `lane/phase-15-exit` open as a PR.
 2026-09-28.
 
 ## Where things are
@@ -33,23 +33,25 @@ sequenced in [`roadmap.md`](roadmap.md):
 after 1.0. `.bklg/` and `.redkiln/` are frozen records; `CLAUDE.md`'s *Where the
 work lives* has the rules.
 
-Phase 15 is being finished unattended, one PR per work item, self-merged on green
-(`wi-ab0a5a`).
+Phase 15 has every work item ticked and five of its six exit criteria. It stays
+`in progress` on one: `CLAUDE.md`'s binding constraint 5 describes the registry
+as it was before `0.2.0`, and that paragraph is the owner's (`wi-6c9f77`).
 
 ## In flight
 
-Branch `lane/phase-15-overdue-owners`, open as a PR: every open question past
-its own deadline has an owner in phase 16.
+Branch `lane/phase-15-exit`, open as a PR: the adapter pages' registry hedges
+corrected, and phase 15's exit criteria ticked where true. Nothing else is in
+flight.
 
-Committed and waiting behind it: `lane/phase-15-exit` — the adapter pages'
-registry hedges corrected, and the exit gate.
-
-`log.md` now names PR #20's squash, `6d35bc6`.
+`log.md` now names PR #21's squash, `5e60b3d`.
 
 ## Next action
 
-Merge this PR. Then rebase `lane/phase-15-exit`, tick phase 15's exit criteria
-that are true, and open it.
+Merge this PR. Then the owner settles `wi-6c9f77`: the tense of `CLAUDE.md`'s
+binding constraint 5, the last open criterion. Once that lands, phase 15 is
+`done`, and the next action is [phase 16](phases/16-define-1-0.md), *Define 1.0*.
+Its work list now carries every open question phase 15 found past its own
+deadline.
 
 ## Waiting on the owner
 

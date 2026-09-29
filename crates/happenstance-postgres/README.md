@@ -7,7 +7,7 @@ storage-agnostic event sourcing library built on the
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.2.0` release set.** **107 of 107** gated
+> **Status: conformant, and in the `0.3.2` release set.** **107 of 107** gated
 > tests in the event-store binary pass against a live PostgreSQL 17.10 — the 95
 > rules of the event-store family, the 5 of the concurrency family at 64
 > contenders, the generated model family, and this crate's own six. The
@@ -19,8 +19,8 @@ storage-agnostic event sourcing library built on the
 > this one had. This was the **first adapter in the portfolio to clear the concurrency
 > family against a store whose writers are not serialised**, which is the whole
 > reason the crate exists; `happenstance-neon` reaches the same server through a
-> different transport and clears it too. Only the registry can say whether the
-> release has happened yet.
+> different transport and clears it too. It has been on crates.io since
+> `0.2.0`.
 >
 > **One of those gated tests is a stated declension rather than a run.** The
 > fixture declines `READ_YOUR_OWN_WRITES`, so the generated model family reports

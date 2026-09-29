@@ -17,9 +17,9 @@
 //! owner. `publish = false` is gone from its manifest, and its absence is half
 //! of an atomic pair: `PUBLISHABLE` (`xtask/src/package.rs`) names this crate,
 //! and `reconcile` fails on either half alone. So this crate is packaged by the
-//! gate and is in the `0.2.0` release set — but having passed the suite and
-//! being live on a registry are still two claims, and only the first is made
-//! here. Only the registry can say whether that release has happened yet.
+//! gate, and it has been on crates.io since `0.2.0`. Passing the suite and being
+//! live on a registry are still two claims, and they have separate records: the
+//! suite's is above, and the registry's is `CHANGELOG.md`, one entry per release.
 //!
 //! # The shape this crate represents
 //!
