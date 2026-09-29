@@ -10,9 +10,24 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-29 — phase 15 is done
+
+*`lane/phase-15-close`. Its commit on `main` is recorded here when it merges.*
+Phase 15.
+
+The owner decided `wi-6c9f77`: `CLAUDE.md`'s binding constraint 5 no longer
+describes the registry as it stood before `0.2.0`. It states the registry as
+read on 2026-09-29, and the MSRV rule it carries is unchanged. That was the last
+open exit criterion, so phase 15 is `done`. Its decision atom joins the other
+six Weigh-In atoms in `.kb/decisions/`.
+
+**Verified.** See the phase 15 session log.
+
+---
+
 ## 2026-09-28 — phase 15 at its exit, with one criterion waiting on the owner
 
-*`lane/phase-15-exit`. Its commit on `main` is recorded here when it merges.*
+*Merged as PR #22, squash `4c538e7`.*
 Phase 15.
 
 The last of the unattended session's work. The adapter pages stop hedging on a

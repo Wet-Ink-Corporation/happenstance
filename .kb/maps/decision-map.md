@@ -546,6 +546,10 @@ this map. They are dated by `decided_at`, which Weigh-In writes in UTC, so three
 | — | [`kb-decision-wi-40b321`](../decisions/wi-40b321-does-v1-0-include-happenstance-sync-or-does-1-0.md) | Sync inside 1.0 | accepted | 15 | — |
 | — | [`kb-decision-wi-ab0a5a`](../decisions/wi-ab0a5a-how-much-merge-authority-does-the-phase-15-afk.md) | How much merge authority does the phase 15 AFK session have over its own PRs: Self-merge on green | accepted | 15 | — |
 | — | [`kb-decision-wi-b9b9ab`](../decisions/wi-b9b9ab-d-3-delete-the-merged-branches.md) | Delete all seven | accepted | 15 | — |
+| — | [`kb-decision-wi-6c9f77`](../decisions/wi-6c9f77-may-claude-md-binding-constraint-5-s-stale.md) | May CLAUDE.md binding constraint 5's stale present-tense registry narrative (0.2.0 'has not happened yet', 'nothing is yanked', max_stable_version reads 0.0.0) be rewritten to the registry's current state, leaving the MSRV constraint itself unchanged: rewrite the tense; the MSRV constraint is unchanged | accepted | 15 | — |
+
+The seventh row, `kb-decision-wi-6c9f77`, was added on 2026-09-29, when the owner
+decided the tense of `CLAUDE.md`'s binding constraint 5 and closed phase 15.
 
 ## Adding a row
 
