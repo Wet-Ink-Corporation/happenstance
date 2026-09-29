@@ -10,10 +10,26 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-28 — every overdue open question has an owner
+
+*`lane/phase-15-overdue-owners`. Its commit on `main` is recorded here when it
+merges.* Phase 15.
+
+Twenty-eight open questions had passed a deadline of their own — `0.2.0`, phase
+12, the `ProjectionStore` freeze or an earlier phase. Each now has an owner in
+phase 16, as a decision or as a clause disposition, and eight join the ledgers'
+*Open decisions* table. The rule is `wi-0ed2c1`: phase 17 only when answering
+breaks a published crate. None did once checked, because the runner is still
+behind `happenstance`'s `unstable-projection`, and phase 16 re-reads every
+assignment in its own classification item.
+
+**Verified.** See the phase 15 session log.
+
+---
+
 ## 2026-09-28 — the KB intake wave, by hand
 
-*`lane/phase-15-kb-intake`. Its commit on `main` is recorded here when it
-merges.* Phase 15.
+*Merged as PR #20, squash `6d35bc6`.* Phase 15.
 
 The first intake wave since redkiln retired, written by hand. The six Weigh-In
 decision atoms move into `.kb/decisions/` in the neighbouring non-ADR shape,

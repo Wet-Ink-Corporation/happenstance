@@ -102,9 +102,18 @@ so they are repaired first.
       it, and phase 16 owns it. The orphan is indexed, the intake README removed,
       and the six Weigh-In decisions are in `.kb/decisions/` with their bodies
       verbatim, in their own section of the decision map.
-- [ ] The open questions whose own deadline has passed — "at `0.2.0`", "at phase
+- [x] The open questions whose own deadline has passed — "at `0.2.0`", "at phase
       12", "at the `ProjectionStore` freeze" — each get a new owner in phase 16 or
       17, recorded in that phase's file.
+      Done (`wi-0ed2c1`: phase 17 only if answering breaks a published crate,
+      otherwise phase 16). Twenty-eight questions were past their own deadline;
+      a review workflow found two that the first sweep missed. Phase 16 now lists
+      each one, as a decision or as a clause disposition, and the ten already on
+      its classification list keep their place there; eight rows join the
+      ledgers' *Open decisions*. No new owner is in phase 17: the runner's
+      `Chunk` type looked breaking, but `happenstance`'s `unstable-projection`
+      still gates the runner, so changing it is free until phase 18 lifts that
+      gate.
 - [x] The branches, by D-3: six squash-merged `lane/*` branches deleted locally
       and on origin, and `wip/hs-p0012-benchmark-harness` locally, on 2026-09-28.
       Tips at deletion: `998a545`, `f60d7e8`, `7d56bce`, `905e6ee`, `380c8ae`,
@@ -196,3 +205,10 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   index, and the index is stamped. Verified: `cargo run -p xtask -- lint-kb`
   green against `13e4dd8` (no accepted body changed; the six new atoms are
   new), `lints`, `lint-constitution`, `spec-trace` and `affected --base main`.
+- 2026-09-28 — PR #20 squash-merged as `6d35bc6`; its live Neon job failed once
+  on the known `query_items_share_one_snapshot` flake, outside the diff, and
+  passed on the one re-run the merge policy allows. On
+  `lane/phase-15-overdue-owners`: every open question past its own deadline has
+  an owner in phase 16 (`wi-0ed2c1`), and the review workflow's three findings
+  on it are fixed. Verified: `lints` (both clause ledgers still match §7.2),
+  `lint-constitution`, `spec-trace` and `affected --base main`.
