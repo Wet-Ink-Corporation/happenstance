@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`ae501c5` on `main`, plus `lane/phase-15-small-corrections` open as a PR.
+`0d59926` on `main`, plus `lane/phase-15-kb-lint` open as a PR.
 2026-09-28.
 
 ## Where things are
@@ -38,25 +38,29 @@ Phase 15 is being finished unattended, one PR per work item, self-merged on gree
 
 ## In flight
 
-Branch `lane/phase-15-small-corrections`, open as a PR. It carries four of phase
-15's items: `happenstance-sqlite` says *host only*; `REMEDIATION-HANDOVER.md` and
-`SESSION-DECISIONS-0.2.0.md` say in their titles that they are records;
-`[Unreleased]` rides `0.4.0`, and phase 17 says so; and two things found in
-passing, a stale lint doc comment and a phase 13 work item. Every edit to a file
-cited by line kept its line count.
+Branch `lane/phase-15-kb-lint`, open as a PR: `cargo xtask lint-kb` (`wi-38373d`),
+a gate step that fails when an accepted decision's body changes against the merge
+base. CI's `gate` job checks out full history for it.
 
-`log.md` now names PR #17's squash, `ae501c5`.
+Committed and waiting behind it: `lane/phase-15-kb-intake`, the KB intake wave,
+written by hand.
+
+`log.md` now names PR #18's squash, `0d59926`.
 
 ## Next action
 
-Merge this PR. Then take [phase 15](phases/15-reconcile.md)'s `.kb` lint
-(`wi-38373d`): an xtask check that fails when an accepted atom's body differs from
-the merge base, run in the gate.
+Merge this PR. Then rebase and open `lane/phase-15-kb-intake`; then phase 15's
+overdue open questions, each given an owner in phase 16 or 17.
 
 ## Waiting on the owner
 
 - Review the Weigh-In defaults taken during the unattended session, with
   `/weigh:in digest`.
+- **`wi-6c9f77` (blocked):** `CLAUDE.md`'s binding constraint 5 still says, in
+  the present tense, that `0.2.0` "has not happened yet" and that nothing is
+  yanked. Correcting the tense leaves the MSRV constraint unchanged, but the
+  paragraph is a binding constraint, so the edit waits for the owner. Phase 15's
+  third exit criterion stays open until it lands.
 - Optional: `lane/0.2.0-closeout`, `origin/worktree-kb-intake-2026-09-11`,
   `origin/lane/runbook-split` and `origin/lane/runbook-citations-after-squash` are
   all merged. The first three were outside D-3; the last merged after it.
@@ -80,6 +84,8 @@ record, and the owner.
   docs.rs — phase 11, `crates/happenstance-ladybug/src/lib.rs`.
 - The `0.2.0` release set is seven crates — `e597c34`.
 - `[Unreleased]` ships in `0.4.0`; there is no `0.3.3` — `wi-052920`.
+- An accepted decision's body is checked by `cargo xtask lint-kb` —
+  `wi-38373d`.
 
 ## Traps
 
@@ -96,5 +102,9 @@ record, and the owner.
 - **The merge method varies.** PR #14 was squash-merged and PR #15 rebase-merged,
   and both rewrite commit ids. A citation of a PR-branch commit dies with the
   branch, so cite the commit on `main` after the merge.
-- **Nothing validates `.kb/` frontmatter now.** Read any diff under
-  `.kb/decisions/` for an edited accepted body before it merges.
+- **`cargo xtask lint-kb` needs history.** It compares `.kb/decisions/` against
+  the merge base and fails on a shallow clone; CI's `gate` job checks out at
+  `fetch-depth: 0` for it. Only a repointed `path:line` citation passes as a
+  repair; any other edit to an accepted body is a supersession.
+- **A staged file blocks `git rebase`.** The stray `.redkiln/telemetry/` change
+  stays staged, so rebase a branch in a throwaway `git worktree` instead.
