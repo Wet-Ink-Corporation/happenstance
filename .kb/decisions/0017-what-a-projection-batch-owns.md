@@ -85,7 +85,7 @@ in the contract crate itself, gated behind `feature = "conformance"`, bare flavo
 placement is forced by coherence, not preference: an adapter's own `tests/` directory is a
 separate crate from the adapter, so neither a hypothetical testkit trait nor the adapter's own
 type is local to it, and the orphan rule rejects an impl attempted there
-(`spec/SPECIFICATION.md:5015-5031`).
+(`spec/SPECIFICATION.md:5030-5046`).
 
 Dropping a batch rolls back and leaves the store usable; `rollback` stays a port method rather
 than living only in `Drop`, because Rust has no async `Drop` and a store's rollback may need to be

@@ -51,7 +51,7 @@ as long as it was wrong, which is the failure mode the constitution's own
 `81-checks-that-cannot-be-types.md` names in the abstract, discovered inside
 the checker that atom is cited by. A companion brief (`sole-evidence-pins-and-
 moved-file-citations.md`) found the same shape one tree over: `spec-trace`'s
-own tolerance let a citation into `spec/SPECIFICATION.md:8656` stay green for
+own tolerance let a citation into `spec/SPECIFICATION.md:8676` stay green for
 one commit while pointing at the wrong line, because the replacement prose had
 been written to a line budget specifically to keep it inside the window.
 

@@ -18,10 +18,14 @@
 //! rather than waiting for a reader to notice.
 
 /// Every module of the crate under test, by the path a reader would cite.
-const SOURCES: [(&str, &str); 6] = [
+const SOURCES: [(&str, &str); 7] = [
     ("src/lib.rs", include_str!("../src/lib.rs")),
     ("src/connection.rs", include_str!("../src/connection.rs")),
     ("src/event_store.rs", include_str!("../src/event_store.rs")),
+    (
+        "src/ingest_spike.rs",
+        include_str!("../src/ingest_spike.rs"),
+    ),
     (
         "src/projection_store.rs",
         include_str!("../src/projection_store.rs"),
@@ -501,8 +505,15 @@ fn the_publication_pin_rejects_a_paraphrase_and_states_what_it_cannot_see() {
     );
 }
 
-/// The `happenstance-testkit` dependency lines this manifest declares, with
-/// their line numbers.
+/// The workspace crates this manifest dev-depends on that must stay path-only.
+///
+/// `happenstance-testkit` for CF-32's release order, and `happenstance-sync`
+/// because it is `publish = false` and unclaimed: a version requirement on it
+/// could never resolve at publish time. Both reasons are in `Cargo.toml` beside
+/// the lines.
+const PATH_ONLY_DEV_DEPENDENCIES: [&str; 2] = ["happenstance-testkit", "happenstance-sync"];
+
+/// The `name` dependency lines this manifest declares, with their line numbers.
 ///
 /// Read from the **keys**, never from the file's prose: this manifest's comments
 /// name `happenstance-testkit` five times while explaining how it is spelled, so
@@ -510,20 +521,22 @@ fn the_publication_pin_rejects_a_paraphrase_and_states_what_it_cannot_see() {
 /// one key are matched — `happenstance-testkit = { … }` and the dotted
 /// `happenstance-testkit.workspace = true` — because they mean the same thing
 /// and only one of them is written here today.
-fn testkit_dependency_lines(manifest: &str) -> Vec<(usize, &str)> {
+fn dependency_lines<'m>(manifest: &'m str, name: &str) -> Vec<(usize, &'m str)> {
     manifest
         .lines()
         .enumerate()
         .map(|(index, line)| (index + 1, line.trim()))
         .filter(|(_, line)| {
-            line.strip_prefix("happenstance-testkit")
+            line.strip_prefix(name)
                 .is_some_and(|rest| rest.starts_with(" =") || rest.starts_with('.'))
         })
         .collect()
 }
 
-/// What is wrong with how this manifest spells its testkit dev-dependency, if
-/// anything.
+/// What is wrong with how this manifest spells its `name` dev-dependency, if
+/// anything. Written for the testkit, and the reasoning below is the testkit's;
+/// `happenstance-sync` is held to the same three checks for a harder reason — it
+/// is not on the registry at all.
 ///
 /// **A dev-dependency that carries a version requirement has to resolve from the
 /// registry at publish time.** `happenstance-testkit` versions independently by
@@ -546,13 +559,12 @@ fn testkit_dependency_lines(manifest: &str) -> Vec<(usize, &str)> {
 /// is still there. That line is load-bearing for nothing in the workspace, and
 /// moving it would fix this once for every future adapter — a choice this test
 /// deliberately does not make, because it is a check on *this* manifest.
-fn publish_order_problems(manifest: &str) -> Vec<String> {
-    let lines = testkit_dependency_lines(manifest);
+fn publish_order_problems(manifest: &str, name: &str) -> Vec<String> {
+    let lines = dependency_lines(manifest, name);
 
     let [(number, line)] = lines.as_slice() else {
         return vec![format!(
-            "expected exactly one `happenstance-testkit` dependency line in Cargo.toml, \
-             found {}",
+            "expected exactly one `{name}` dependency line in Cargo.toml, found {}",
             lines.len()
         )];
     };
@@ -560,7 +572,7 @@ fn publish_order_problems(manifest: &str) -> Vec<String> {
     let mut problems = Vec::new();
     if line.contains("workspace") {
         problems.push(format!(
-            "Cargo.toml:{number} inherits the testkit dependency from \
+            "Cargo.toml:{number} inherits the {name} dependency from \
              `[workspace.dependencies]`, which carries a version requirement: {line:?}"
         ));
     }
@@ -571,25 +583,27 @@ fn publish_order_problems(manifest: &str) -> Vec<String> {
     }
     if !line.contains("path") {
         problems.push(format!(
-            "Cargo.toml:{number} does not reach the testkit by path, so cargo cannot strip \
+            "Cargo.toml:{number} does not reach {name} by path, so cargo cannot strip \
              it from the published manifest: {line:?}"
         ));
     }
     problems
 }
 
-/// The testkit dev-dependency does not constrain this crate's release order.
+/// Neither path-only dev-dependency constrains this crate's release order.
 ///
 /// See [`publish_order_problems`] for the mechanism and for what it cannot see.
 #[test]
-fn the_testkit_dev_dependency_carries_no_version_requirement() {
-    let problems = publish_order_problems(MANIFEST);
-    assert!(
-        problems.is_empty(),
-        "this crate cannot be published until happenstance-testkit is, for a dependency no \
-         consumer of it ever sees:\n- {}",
-        problems.join("\n- ")
-    );
+fn path_only_dev_dependencies_carry_no_version_requirement() {
+    for name in PATH_ONLY_DEV_DEPENDENCIES {
+        let problems = publish_order_problems(MANIFEST, name);
+        assert!(
+            problems.is_empty(),
+            "this crate cannot be published until {name} is, for a dependency no \
+             consumer of it ever sees:\n- {}",
+            problems.join("\n- ")
+        );
+    }
 }
 
 /// The check above rejects the three spellings that reintroduce the coupling,
@@ -606,7 +620,7 @@ fn the_publish_order_check_rejects_every_spelling_that_carries_a_version() {
         "[dev-dependencies]\nhappenstance-testkit = { version = \"0.2.0-alpha.1\", path = \"../happenstance-testkit\" }\n",
     ] {
         assert!(
-            !publish_order_problems(wrong).is_empty(),
+            !publish_order_problems(wrong, "happenstance-testkit").is_empty(),
             "the coupling was spelled {wrong:?} and the check stayed green"
         );
     }
@@ -614,7 +628,7 @@ fn the_publish_order_check_rejects_every_spelling_that_carries_a_version() {
     let right = "[dev-dependencies]\n\
                  happenstance-testkit = { path = \"../happenstance-testkit\", features = [\"proptest\"] }\n";
     assert!(
-        publish_order_problems(right).is_empty(),
+        publish_order_problems(right, "happenstance-testkit").is_empty(),
         "the path-only spelling `crates/happenstance/Cargo.toml` already uses was rejected"
     );
 }

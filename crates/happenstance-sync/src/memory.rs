@@ -13,7 +13,9 @@ use alloc::vec::Vec;
 
 use std::sync::Mutex;
 
-use crate::identity::{EventId, ReplicatedEvent, StoreId, Watermark};
+use happenstance_core::{EventId, StoreId};
+
+use crate::identity::{ReplicatedEvent, Watermark};
 use crate::peer::{Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer};
 
 /// Where a [`MemorySyncPeer`] pull left off.

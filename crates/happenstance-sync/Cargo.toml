@@ -43,11 +43,11 @@ tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]
 default = []
-# The coherence proof for `IngestStore` lives behind this flag, because it is an
-# impl *for a type in another crate* and that type only exists when
-# `happenstance-core/memory` is on. Not a default: nothing in this crate's own
-# API depends on it, and a feature that exists to compile one experiment should
-# not be paid for by anyone who is not running the experiment.
+# Gates nothing today. It carried `impl IngestStore for MemoryEventStore`, whose
+# bodies could only ever be `todo!()` — a foreign type's write path is out of this
+# crate's reach — and phase 17 deleted it. Kept, not removed, because phase 13's
+# in-memory ingest oracle, a store this crate owns, is planned behind it. Not a
+# default either way.
 memory = ["happenstance-core/memory"]
 
 [lints]

@@ -5,7 +5,7 @@
 #
 # Three reasons, and each is sufficient on its own.
 #
-# 1. **CF-34** (`spec/SPECIFICATION.md:8747`): performance MUST be measured by a
+# 1. **CF-34** (`spec/SPECIFICATION.md:8767`): performance MUST be measured by a
 #    separate harness which is not part of the conformance bar. A crate cargo
 #    cannot see from the root manifest is a crate no gate step can start
 #    depending on by accident.

@@ -96,7 +96,14 @@ provides the atomicity and the identity that makes it idempotent.
       peer-to-peer.
 - [ ] `IngestStore` in `happenstance-sync` (VT-10) — the seam through which a
       foreign identity arrives, and the reason `EventStore::append` never grew a
-      slot for one.
+      slot for one. **VT-10 is frozen by ADR-0073 (phase 17)**: the write path is
+      the adapter's own row writer. What is left here is turning the SQLite
+      spike's `cfg(test)` into a `sync` feature once this crate is published,
+      building the real peers' ingest the same way, a sync-owned in-memory oracle
+      (the `MemoryEventStore` impl was deleted, not finished), ingest's own error
+      type, the watermark's plan assertion, and the policy for an event claiming
+      this store's own `StoreId` that it does not hold — pinned, not endorsed, by
+      `pinned_vt6_breach_an_unheld_own_id_is_ingested_and_wedges_the_append_that_reaches_it`.
 - [ ] `sync_peer_conformance!` in `happenstance-sync-testkit`, emitted through
       phase 1's registry so it inherits the tokio/blocking/wasm flavours. **The
       suite never decodes a payload** (SY-35) — a suite that parses `data` would
@@ -107,10 +114,11 @@ provides the atomicity and the identity that makes it idempotent.
       exists. The same three-part rationale `memory.rs:16-23` gives for
       `MemoryEventStore`, and the same cold-start problem the projection port had
       without one.
-- [ ] Delete `happenstance-sync`'s placeholder `EventId`, `StoreId` and
-      `RecordedAt` from `src/identity.rs`, and use `happenstance-core`'s, which
-      phase 4 put there. The module's own docs call them placeholders that phase 4
-      deletes; phase 4 did not. Found in passing during phase 15.
+- [x] ~~Delete `happenstance-sync`'s placeholder `EventId`, `StoreId` and
+      `RecordedAt` from `src/identity.rs`, and use `happenstance-core`'s.~~ Done
+      at phase 17 (ADR-0073), pulled forward because the spike's trait had to
+      speak the store's own types: the placeholder `RecordedAt` was a `u64`, which
+      fired VT-9's restated falsifier by construction.
 - [ ] Envelope types on phase 5's tested wire format, with the format version
       first.
 - [ ] Ingest bound on `EventStore`, not `SendEventStore` — the Cloudflare side is

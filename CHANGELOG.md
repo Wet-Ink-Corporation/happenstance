@@ -64,6 +64,18 @@ not the same as what a user needed to be told.
   that. See `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`,
   whose instrument is the `contend_next` entry below.
 
+- **`happenstance-sqlite`'s `append` shares its row writer with replication
+  ingest, and behaves as it did.** The one `INSERT` it prepares now carries
+  `ON CONFLICT (origin_store, origin_position) DO NOTHING`. An appended row
+  binds its origin `NULL`, which SQLite's `UNIQUE` treats as distinct, so the
+  clause cannot fire for it: every row lands and is stamped exactly as before,
+  and the conformance suite, the concurrency family and both query-plan
+  assertions pass unchanged. It is there because the same writer now takes a
+  row carrying another store's identity, which is how
+  [ADR-0073](.kb/decisions/0073-the-foreign-identity-write-path-is-the-adapters.md)
+  settles that `happenstance-core` needs no foreign-identity write path. The
+  ingest half is test-only until `happenstance-sync` publishes.
+
 ### Added
 
 - **`happenstance-testkit` can produce a *busy* store**, which nothing in this

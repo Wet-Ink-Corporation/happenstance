@@ -4,8 +4,8 @@
 //!
 //! [`SyncPeer`] and [`IngestStore`] exist here to be *falsified by a type
 //! checker*, which is the only thing that can falsify a port before an adapter
-//! is written. Bodies outside [`memory`] are `todo!()` on purpose: the type
-//! checker is the instrument, not the runtime.
+//! is written. The stand-in peers in `tests/` are `todo!()` on purpose: the
+//! type checker is the instrument there, not the runtime.
 //!
 //! The question this sketch was built to answer is falsifiable and it is not
 //! "write a good trait". It is: **can a peer be stated without naming a
@@ -105,14 +105,14 @@
 //!
 //! What follows from that, and how far this sketch got with each:
 //!
-//! * **Event identity across instances.** Sketched, as
-//!   [`identity::EventId`] — the pair `(StoreId, SequencePosition)`.
-//!   Settled since: VT-5 puts `EventId` in `happenstance-core`, which exports
-//!   it. These placeholders are phase 13's to delete; [`identity`] records why
-//!   they are reachable only through their module.
+//! * **Event identity across instances.** Settled: VT-5's pair
+//!   `(StoreId, SequencePosition)` is [`happenstance_core::EventId`], and this
+//!   crate speaks it. The phase-2 placeholders went at phase 17; [`identity`]
+//!   records why they had to.
 //! * **Idempotent ingest.** In the port's contract
-//!   ([`IngestStore::ingest`]) and implemented in [`memory`]. Not yet checked by
-//!   anything, because `happenstance-sync-testkit` does not exist.
+//!   ([`IngestStore::ingest`]), and the write path is the adapter's — see
+//!   [`ingest`]. Not yet checked by a suite, because
+//!   `happenstance-sync-testkit` does not exist.
 //! * **Append conditions across a boundary.** Settled by SY-1 – SY-7: ingest
 //!   never refuses, and a conflict is compensated by an ordinary append. The
 //!   origin's condition travels as [`EventGroup::guard`](peer::EventGroup::guard),
@@ -132,11 +132,9 @@
 //!   produced.
 
 #![doc(html_no_source)]
-// `clippy::todo` is denied workspace-wide. This crate is one of the phase-2
-// skeleton exceptions, scoped here rather than left open in the workspace
-// manifest so that it is visible in review. The phase that implements
-// replication removes both the bodies and this line.
-#![allow(clippy::todo)]
+// No `#![allow(clippy::todo)]`: the last `todo!()` in `src/` was the
+// `MemoryEventStore` ingest impl, which phase 17 deleted rather than finished
+// (see [`ingest`]). The two stand-in peers in `tests/` carry their own.
 
 extern crate alloc;
 
@@ -146,13 +144,10 @@ pub mod memory;
 pub mod peer;
 pub mod wire;
 
-// `EventId`, `StoreId` and `RecordedAt` are deliberately absent from this list.
-// They are phase 4's types (VT-4 – VT-10, ADR-0014), placeheld here only because
-// the sketch cannot be written without an identity, and re-exporting them would
-// put a second `EventId` on the same import path as the settled one. See
-// [`identity`]'s module documentation.
+// `EventId`, `StoreId` and `RecordedAt` are `happenstance_core`'s and are not
+// re-exported: one import path per type, and it is the contract crate's.
 pub use identity::{ReplicatedEvent, Watermark};
-pub use ingest::{IngestStore, Ingested, SendIngestStore};
+pub use ingest::{IngestGroup, IngestStore, Ingested, SendIngestStore};
 pub use memory::{MemoryPeerError, MemoryResume, MemorySyncPeer};
 pub use peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, SyncError,

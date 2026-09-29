@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`d6e42df` on `main` (PR #25, the phase-16 log), plus `lane/p17-kickoff`, which
-opens phase 17. 2026-09-29.
+`acffe1c` on `main` (PR #26, phase 17's kickoff), plus
+`lane/p17-foreign-identity`, lane L1. 2026-09-29.
 
 ## Where things are
 
@@ -37,19 +37,18 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-`lane/p17-kickoff`: ADR-0072, the 17b phase file, the status table, roadmap and
-ledger rows. The approved lane plan is phase 17's session log; each lane is one PR.
+`lane/p17-foreign-identity` (L1), done and gated, awaiting merge:
+- **ADR-0073** is written, and **VT-10 is `[FROZEN]`**. The write path that keeps a foreign `EventId` is the adapter's own row writer, and core is unchanged.
+- The SQLite `IngestStore` spike is `#[cfg(test)]`.
+- Neon's ingest statement is one statement, structural and never executed.
+- `happenstance-sync` is on core's identity types, with `IngestGroup`.
+- SQLite's `append` now prepares its insert with `ON CONFLICT … DO NOTHING`. No behaviour changed; the CHANGELOG says so.
 
 ## Next action
 
-Merge `lane/p17-kickoff`, then start lane L1, **VT-10's foreign-identity spike**,
-on `lane/p17-foreign-identity`. It holds the most uncertainty and breaks nothing
-published:
-- replace `happenstance-sync`'s placeholder identity types with core's;
-- generalise SQLite's private `write_batch` to a local and a foreign origin, with a
-  `#[cfg(test)]` `IngestStore` spike;
-- add a structural one-statement test on Neon, as SY-14 evidence;
-- write VT-10's record, taking ADR-0073.
+After L1 merges, lane L2, on `lane/p17-provided-method-spike`, has two parts:
+- One compile spike: can a provided method returning `impl Future` be added to a `trait_variant` pair without `cargo-semver-checks` reporting a major against `0.3.2`? Test it on `EventStore` (a retention report defaulting to `Unknown`), `ProjectionStore` (`commit_all`) and `Projection` (`on_error`).
+- The `apply`-shape experiment, then ADR-0028 as a refusal with an additive reservation.
 
 ## Waiting on the owner
 

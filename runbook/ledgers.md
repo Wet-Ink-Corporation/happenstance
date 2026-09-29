@@ -17,18 +17,19 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0073.** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0074.** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
 the runner's named `Chunk` (0070) and ES-10's scope (0071). Phase 17 opened with
-0072, which split it at its release and created phase 17b.
+0072, which split it at its release and created phase 17b, and wrote 0073, VT-10's
+foreign-identity write path.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14 and are
 still unwritten, which is why they are out of order with the numbers around them.
 
 | ADR | Phase | The question it answers |
 |---|---|---|
-| **0026** | 13 (published-surface half: 17) | What is a sync *peer* — what may the port assume about a transport it cannot see, and what does ingest promise? (SY-8 – SY-18). Phase 17 must settle the part of this that reaches a published crate: whether `happenstance-core` needs a write path that preserves a foreign `EventId` for `IngestStore` to be implementable (VT-10; `crates/happenstance-sync/src/ingest.rs` holds four `todo!()` bodies blocked on exactly that) |
+| **0026** | 13 (published-surface half: 17) | What is a sync *peer* — what may the port assume about a transport it cannot see, and what does ingest promise? (SY-8 – SY-18). ~~Phase 17 must settle the part of this that reaches a published crate~~ **Published half settled at 17 — ADR-0073**: `happenstance-core` needs no foreign-identity write path; the adapter's own row writer takes one, and VT-10 is frozen. ADR-0026 cites it for that half |
 | **0027** | 13 | How do two logs reconcile — the merge rule, the compensation contract, and whether hub-and-spoke and peer-to-peer are one abstraction or two? (SY-1 – SY-7, SY-19 – SY-31). SY-1 – SY-7 already settle *ingest is unconditional, with compensation*; this ADR records it and settles the rest |
 | **0028** | 14 (decision: 17) | What is a store permitted to forget, and how does it say so? (ES-39, CF-27, SY-32). **The decision moves to phase 17** because one of its two answers adds a method to `EventStore`, which breaks every published adapter, and that is only cheap before 1.0. Phase 14 builds what it decides |
 | **0066** | 16 | What does 1.0 promise? The charter phase 16 owes: which crates, what happens to every non-`[FROZEN]` clause on a published surface, adapter and testkit versioning (CF-32), and the MSRV policy after ADR-0037. **Written** as `what-1-0-promises`; the MSRV half is its own record, ADR-0067, and the per-clause answer is [the 1.0 dispositions](#the-10-dispositions) |
@@ -133,10 +134,10 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 40 `[PROVISIONAL]` clauses
+### The 39 `[PROVISIONAL]` clauses
 
-Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, and its row stays,
-struck, because rule 4 keeps it; `cargo xtask lints` now checks the count in this
+Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066 and VT-10 at phase 17
+by ADR-0073, and their rows stay, struck, because rule 4 keeps it; `cargo xtask lints` now checks the count in this
 heading against §7.2 rather than matching it, so the next freeze changes one number
 here and nothing in the lint.
 
@@ -149,7 +150,7 @@ separate open questions overstated the exposure by that factor.
 | Group | Clauses | Falsified by | Owning phase |
 |---|---|---|---|
 | Identity's queryability and store-assigned time | VT-6, VT-9 | a peer that must dedupe without parsing `metadata`, and a rule that `recorded_at` is non-decreasing with position | 5, exercised 13 |
-| The ingest seam's placement | VT-10 | a real peer needing a foreign identity through `EventStore::append` after all | 13 |
+| The ingest seam's placement | ~~VT-10~~ | ~~a real peer needing a foreign identity through `EventStore::append` after all~~ | **frozen at 17 — ADR-0073.** The SQLite spike runs `IngestStore` through `append`'s own row writer; phase 13 confirms it on two real peers |
 | Const-constructible identifiers | VT-14 | `from_static` failing to move the `?` count in the worked example | 5 |
 | Store limits | VT-21 – VT-24 | a real adapter that cannot honour a stated minimum | 5, tested 8 and 10 |
 | Per-item boundaries on a condition | VT-30 | E2E-04 and E2E-05 still unwritable after phase 4 | 4 |
@@ -230,7 +231,7 @@ followed by the reason the clause is on no surface 1.0 promises. The authority i
 [ADR-0066](../.kb/decisions/0066-what-1-0-promises.md), and this table, not the
 record, is the live copy, because an accepted record's body cannot change and these
 rows will move every time a phase freezes a clause. CF-39 is not here: ADR-0066
-froze it.
+froze it. Nor is VT-10: ADR-0073 froze it at phase 17.
 
 **This is the schedule; the owner columns above are history.** Rule 4 keeps those
 rows, and most of them name phases long `done` — they record who owned a
@@ -255,7 +256,6 @@ says why.
 |---|---|---|
 | VT-6 | freeze-by-13 | Sync-testkit's `restored_peer_does_not_reissue_identities` is the instrument for the marker's harm half. Phase 9 answered the eviction half: Durable Object storage outlives the isolate, so mint-once is available |
 | VT-9 | freeze-by-13 | A sync-testkit rule that ingest preserves `RecordedAt`, with a mutant. ADR-0066 restates the clock falsifier, which no longer discriminates |
-| VT-10 | freeze-by-17 | Settled against a compiling spike, SQLite implementing `IngestStore` beside `append` — the marker's own instrument. The spike decides whether core grows a foreign-identity write path, each adapter does, or neither; phase 13 confirms it |
 | VT-14 | freeze-by-17b | Moved from 17 by ADR-0072, additive. An RTL identifier corpus check (Arabic, Hebrew, Persian, with mixed LTR) comes back empty, with the E11 reproduction added to `experiments/` |
 | VT-21 | freeze-by-13 | SY-18 is where a floor is first compared across a peer set, and phase 13's two real peers (Durable Object, Neon over HTTP) are the tightest targets in the plan |
 | VT-22 | renew-past-1.0: a real domain event that legitimately carries more than 64 tags | The marker's own domain falsifier; the richest scenario event carries 8. A firing is answered by a store's own larger documented limit — every shipped adapter accepts 128 or more — not by raising the floor within 1.x |

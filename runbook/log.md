@@ -10,6 +10,23 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-29 — VT-10 frozen: the foreign-identity write path is the adapter's
+
+*Uncommitted at writing; `lane/p17-foreign-identity`.*
+Phase 17, lane L1.
+
+ADR-0073 answers ADR-0026's published half. `happenstance-core` needs no write
+path that preserves a foreign `EventId`: SQLite's own `write_batch` takes one,
+and VT-10's falsifier did not fire on its named instrument. The spike is
+`#[cfg(test)]` because `happenstance-sync` is unpublished. Neon's single-statement
+ingest is structural evidence for SY-14. `happenstance-sync`'s placeholder
+identity types are gone. Spec citations the edits shifted were repointed across
+the tree.
+
+**Verified.** See phase 17's session log.
+
+---
+
 ## 2026-09-29 — phase 17 opens, split at its release
 
 *Uncommitted at writing; `lane/p17-kickoff`.*

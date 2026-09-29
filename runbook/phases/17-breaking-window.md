@@ -33,7 +33,9 @@ gave to this phase.
       `EventStore`, which breaks all four published adapters) or a written refusal
       stating what a store that has been deleted from may look like. Phase 14 then
       builds the suffix store and the rules against whichever this is.
-- [ ] **ADR-0026's published half — a foreign identity's write path.**
+- [x] **ADR-0026's published half — a foreign identity's write path.** Settled
+      by ADR-0073 against a compiling SQLite spike: the adapter's own row writer,
+      core unchanged, VT-10 frozen.
       `crates/happenstance-sync/src/ingest.rs` holds four `todo!()` bodies
       blocked on `happenstance-core` having no write path that preserves a foreign
       `EventId` (VT-10). Decide whether core grows one, or each adapter does, or
@@ -198,7 +200,8 @@ caused it — a break with no row is one nobody decided.
 
 - [ ] ADR-0028 accepted; ES-39 is no longer `[DEFERRED]` on a surface 1.0
       promises, or is renewed past 1.0 with the disposition phase 16 gave it.
-- [ ] The foreign-identity question is answered against a compiling spike.
+- [x] The foreign-identity question is answered against a compiling spike
+      (ADR-0073).
 - [ ] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
       `happenstance-postgres`, and a record classifies its remedy as additive or
       breaking; a breaking remedy has landed.
@@ -237,3 +240,26 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   port-clause records; the renames and manifest breaks; `Busy`; the `workerd`
   job, then Cloudflare's partition; ES-17; ES-11 on Neon; ADR-0022 §9;
   `ProjectionId`; the codec; the release.
+
+- 2026-09-29 — **L1, VT-10's foreign-identity spike**, on
+  `lane/p17-foreign-identity`. ADR-0073: the write path that keeps a foreign
+  `EventId` is the adapter's own row writer, and `happenstance-core` grows
+  nothing. VT-10's falsifier ran on its named instrument and did not fire:
+  `impl SendIngestStore for SqliteEventStore` (`#[cfg(test)]`, with a path-only
+  dev-dependency on the unpublished `happenstance-sync`) goes through the one
+  `write_batch` `append` calls, and the ingest-only code is a transaction frame, a
+  watermark query and a foreign row's bound values. VT-10 is `[FROZEN]`. Neon
+  builds a whole ingest batch as one statement from its append's own builders,
+  which is SY-14 evidence; it is structural and was not executed. In
+  `happenstance-sync` the placeholder identity types are gone (a `u64`
+  `RecordedAt` fired VT-9's restated falsifier by construction, so phase 13's item
+  was pulled forward), `ingest` takes `IngestGroup`s carrying compensation, and
+  `holds` is dropped for `EventStore::contains_event_id`. SY-2's example is read
+  as an `IngestGroup`. Pinned for phase 13: an unheld event claiming this
+  store's own `StoreId` is ingested, then wedges the local append that reaches
+  its position. Done as a workflow: sync types, the two spikes, then three
+  adversarial reviewers, correctness, falsifier honesty and repo rules, whose seven
+  findings were all fixed. Among them: a saturating origin-position conversion, a
+  Neon ingest statement that first duplicated append's, and a marker test that
+  could not fail. Spec citations shifted by the edits were repointed across the
+  tree, `.kb/_governance` excepted.

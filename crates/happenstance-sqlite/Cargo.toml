@@ -95,6 +95,24 @@ tokio = { workspace = true, features = ["rt"] }
 # spelling that reintroduces the coupling is one word shorter than this one and
 # looks tidier.
 happenstance-testkit = { path = "../happenstance-testkit", features = ["proptest"] }
+# The VT-10 spike: `src/ingest_spike.rs` implements `happenstance-sync`'s
+# `SendIngestStore` for `SqliteEventStore` over the same private row writer
+# `append` uses, which only this crate can reach. Path-only for the testkit's
+# reason above and a harder one: `happenstance-sync` is `publish = false` and its
+# name is unclaimed, so a version requirement could never resolve at publish
+# time, and an optional `sync` feature with a real dependency would make
+# `cargo publish` of this crate fail outright. Cargo strips a versionless
+# dev-dependency from the published manifest, so this one reaches nobody. Phase
+# 13 publishes `happenstance-sync` and turns the spike's `cfg(test)` into a
+# feature.
+#
+# What it costs under `cargo test` and not under `cargo build`: it turns on
+# `happenstance-core`'s `serde` feature, which `happenstance-sync` enables
+# unconditionally. Nothing in `src/` names a serde item, so the two builds see
+# the same contract.
+#
+# `tests/front_page.rs` asserts the spelling, as it does the testkit's.
+happenstance-sync = { path = "../happenstance-sync" }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]

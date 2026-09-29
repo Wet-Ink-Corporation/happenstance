@@ -1120,6 +1120,7 @@ version = "0.3.2"
 dependencies = [
  "futures-core",
  "happenstance-core",
+ "happenstance-sync",
  "happenstance-testkit",
  "rusqlite",
  "thiserror",

@@ -183,4 +183,20 @@ pub enum NeonError<E> {
     /// that was meant to be the cleanup.
     #[error("the batch was begun on a different store instance")]
     ForeignBatch,
+
+    /// A replicated event's origin position does not fit the `bigint` column
+    /// that holds it.
+    ///
+    /// Refused rather than saturated, because on the ingest path a position is
+    /// half an [`EventId`](happenstance_core::EventId): two such events from one
+    /// origin would collapse onto one stored identity and the second would be
+    /// counted as a re-delivery. `#[cfg(test)]` with the rest of the ingest
+    /// spike until phase 13 publishes the port it serves; the enum is
+    /// `#[non_exhaustive]`, so lifting the gate is additive.
+    #[cfg(test)]
+    #[error("origin position {position} does not fit this store's bigint column")]
+    OriginPositionOutOfRange {
+        /// The position the origin assigned.
+        position: u64,
+    },
 }

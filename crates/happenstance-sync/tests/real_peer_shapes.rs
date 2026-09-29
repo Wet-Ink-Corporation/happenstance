@@ -26,18 +26,15 @@
 
 #![allow(clippy::unwrap_used)]
 // Both stand-ins are `todo!()` by construction — the type checker is the
-// instrument here, not the runtime. Scoped to this file for the same reason the
-// crate root scopes it: the phase that implements replication deletes both.
+// instrument here, not the runtime. Scoped to this file, the last in the crate
+// that needs it: the phase that implements replication deletes both.
 #![allow(clippy::todo)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use happenstance_core::{Event, SequencePosition};
-// The three identity types are spelled through `identity::` on purpose: they are
-// phase 4's to define, and this import is one of the sites phase 4 rewrites.
-use happenstance_sync::identity::{EventId, RecordedAt, StoreId};
+use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
 use happenstance_sync::{
     Ack, EventGroup, MemorySyncPeer, PeerLimits, Pulled, PushBatch, ReplicatedEvent, SendSyncPeer,
     SyncPeer,
@@ -316,7 +313,7 @@ fn store(byte: u8) -> StoreId {
 fn replicated(origin: StoreId, position: u64, payload: &'static str) -> ReplicatedEvent {
     ReplicatedEvent::new(
         EventId::new(origin, SequencePosition::new(position).unwrap()),
-        RecordedAt::from_millis(1_700_000_000_000 + position),
+        RecordedAt::from_millis(1_700_000_000_000 + i64::try_from(position).unwrap()),
         Event::new("CourseCapacityChanged", payload).unwrap(),
     )
 }
