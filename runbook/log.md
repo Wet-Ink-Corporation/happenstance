@@ -10,10 +10,27 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-28 — the KB intake wave, by hand
+
+*`lane/phase-15-kb-intake`. Its commit on `main` is recorded here when it
+merges.* Phase 15.
+
+The first intake wave since redkiln retired, written by hand. The six Weigh-In
+decision atoms move into `.kb/decisions/` in the neighbouring non-ADR shape,
+bodies verbatim. Four open questions close as superseded — the query-union
+rule, the testkit's exemption scope, the `0.0.0` reservations and the
+pre-commit-only immutability check — and `es-38-and-gap-read-rules-are-unowned`
+loses its answered half. `global-versus-per-boundary-visibility-invariant` was
+verified and stays open, with phase 16. The orphan `cf-17-cf-14` question is
+indexed, and the stale intake README is gone.
+
+**Verified.** See the phase 15 session log.
+
+---
+
 ## 2026-09-28 — an accepted decision's body cannot change
 
-*`lane/phase-15-kb-lint`. Its commit on `main` is recorded here when it
-merges.* Phase 15.
+*Merged as PR #19, squash `13e4dd8`.* Phase 15.
 
 The owner's answer to `wi-38373d`, built. `cargo xtask lint-kb` fails the gate
 when an atom under `.kb/decisions/` that was accepted at the merge base has a

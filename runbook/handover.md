@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`0d59926` on `main`, plus `lane/phase-15-kb-lint` open as a PR.
+`13e4dd8` on `main`, plus `lane/phase-15-kb-intake` open as a PR.
 2026-09-28.
 
 ## Where things are
@@ -38,19 +38,19 @@ Phase 15 is being finished unattended, one PR per work item, self-merged on gree
 
 ## In flight
 
-Branch `lane/phase-15-kb-lint`, open as a PR: `cargo xtask lint-kb` (`wi-38373d`),
-a gate step that fails when an accepted decision's body changes against the merge
-base. CI's `gate` job checks out full history for it.
+Branch `lane/phase-15-kb-intake`, open as a PR: the KB intake wave, by hand.
 
-Committed and waiting behind it: `lane/phase-15-kb-intake`, the KB intake wave,
-written by hand.
+Committed and waiting behind it: `lane/phase-15-overdue-owners` (every open
+question past its own deadline given an owner in phase 16 or 17) and
+`lane/phase-15-exit` (the adapter pages' registry hedges corrected, then the
+exit gate).
 
-`log.md` now names PR #18's squash, `0d59926`.
+`log.md` now names PR #19's squash, `13e4dd8`.
 
 ## Next action
 
-Merge this PR. Then rebase and open `lane/phase-15-kb-intake`; then phase 15's
-overdue open questions, each given an owner in phase 16 or 17.
+Merge this PR. Then rebase and open `lane/phase-15-overdue-owners`, then
+`lane/phase-15-exit`.
 
 ## Waiting on the owner
 
