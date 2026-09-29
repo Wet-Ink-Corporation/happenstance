@@ -17,8 +17,9 @@ merges.* Phase 15.
 
 The owner's answer to `wi-38373d`, built. `cargo xtask lint-kb` fails the gate
 when an atom under `.kb/decisions/` that was accepted at the merge base has a
-changed body or has gone; frontmatter is free, so a supersession passes, and so
-does a repointed `path:line` citation — the one repair the governance atom
+changed body or has gone. Its frontmatter may change only in the supersession
+keys and two pointer keys, and `accepted` may only become `superseded` with a
+successor named — so a supersession passes, and so does a repointed citation — the one repair the governance atom
 allows that a diff can see. It runs in `cargo xtask ci` and in `affected`, not
 in `lints`, because it starts `git`. CI's `gate` job now checks out at
 `fetch-depth: 0` and names the base in `HS_KB_BASE`; a shallow clone with no

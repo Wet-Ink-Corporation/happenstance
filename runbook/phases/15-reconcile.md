@@ -74,9 +74,11 @@ so they are repaired first.
       Done: the owner chose the lint (`wi-38373d`), and it is built.
       `cargo xtask lint-kb` is a gate step, and `affected` runs it. It fails
       when an atom under `.kb/decisions/` that read `status: accepted` at the
-      merge base has a changed body or has gone. Frontmatter is free, and a
-      repointed `path:line` citation passes as the one repair a diff can
-      recognise. Three two-way calls: where the base comes from (`wi-80cba0`),
+      merge base has a changed body or has gone. In the frontmatter only the
+      supersession keys and two pointer keys may change, and `accepted` may
+      only become `superseded` with a successor named; a repointed `path.ext:N`
+      citation passes as the one body repair a diff can recognise. Three
+      two-way calls: where the base comes from (`wi-80cba0`),
       how much frontmatter it checks (`wi-5f78c4`), and repairs (`wi-5fce24`).
 - [ ] A KB intake wave that closes what is already answered —
       `query-union-rule-is-owed-and-unowned`,
@@ -166,3 +168,13 @@ passing on this one — `a_released_version_with_no_row_is_refused` and
   the lint failing on an edited accepted body and passing a status flip on the
   real tree, `lints`, `lint-constitution`, `spec-trace` and `affected --base
   main`.
+- 2026-09-28 — A read-only review workflow (four reviewers, two refuters per
+  finding; every finding held) found three defects in the lint before it merged,
+  and they are fixed on the same branch. The frontmatter was wholly free, so an
+  accepted atom's `summary` could be rewritten, and a flip to `proposed` freed
+  the body for the next change: now only the supersession and pointer keys may
+  move, and `accepted` exits only to `superseded` with a successor
+  (`wi-5f78c4`, reopened and re-defaulted). The citation carve-out erased any
+  number after a colon, including the ratios ADR-0033 rests on: now it needs a
+  `path.ext:` before the colon. And `affected` on `main` checked only uncommitted
+  edits: it now falls back to `HEAD^` as the gate step does.

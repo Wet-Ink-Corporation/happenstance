@@ -178,11 +178,13 @@ records, and a command run against them re-opens a process nobody is following.
 
   **Accepted decisions are checked; nothing else in `.kb` is.** `cargo xtask
   lint-kb`, a gate step, fails when an atom under `.kb/decisions/` that read
-  `status: accepted` at the merge base has a changed body or has gone. Its
-  frontmatter is free, so a supersession passes. It checks frontmatter shape only
-  as far as it needs to (delimiters and a `status:` key), nothing outside
-  `.kb/decisions/`, and one repair passes: a repointed `path:line` citation, as
-  `kb-governance-referent-not-reasoning-001` allows (`wi-5f78c4`, `wi-5fce24`). CI's
+  `status: accepted` at the base commit has a changed body or has gone. In its
+  frontmatter only `status`, `superseded_by`, `last_reviewed` and the pointer
+  keys `source_paths` and `related` may change, and `accepted` may become only
+  `superseded`, naming its successor, so a supersession passes (`wi-5f78c4`).
+  Nothing outside `.kb/decisions/` is checked, and one body repair passes: a
+  repointed `path.ext:N` citation, as `kb-governance-referent-not-reasoning-001`
+  allows (`wi-5fce24`). CI's
   `gate` job checks out full history so the base is there (`wi-80cba0`), and the
   step fails, rather than skipping, on a clone with no base.
 
