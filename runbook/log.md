@@ -10,10 +10,28 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-28 — phase 15 at its exit, with one criterion waiting on the owner
+
+*`lane/phase-15-exit`. Its commit on `main` is recorded here when it merges.*
+Phase 15.
+
+The last of the unattended session's work. The adapter pages stop hedging on a
+release the registry records. Phase 15's exit criteria are ticked where true:
+five of six. The third — no top-level document contradicting the registry in
+the present tense — waits on `wi-6c9f77`, `CLAUDE.md`'s binding constraint 5,
+which is the owner's to edit. Phase 15 stays `in progress` until it lands.
+
+Merged this session: #18 (`0d59926`), #19 (`13e4dd8`), #20 (`6d35bc6`) and #21
+(`5e60b3d`). The Weigh-In defaults it took are listed in phase 15's session log
+and in the ledger, for `/weigh:in digest`.
+
+**Verified.** The gate, in the slices named in the phase 15 session log.
+
+---
+
 ## 2026-09-28 — every overdue open question has an owner
 
-*`lane/phase-15-overdue-owners`. Its commit on `main` is recorded here when it
-merges.* Phase 15.
+*Merged as PR #21, squash `5e60b3d`.* Phase 15.
 
 Twenty-eight open questions had passed a deadline of their own — `0.2.0`, phase
 12, the `ProjectionStore` freeze or an earlier phase. Each now has an owner in
