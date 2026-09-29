@@ -12,8 +12,7 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ## 2026-09-29 — phase 16 is done: what 1.0 promises
 
-*`lane/phase-16-define-1-0`, one PR, left open for the owner to merge. Its commit
-on `main` is recorded here when it merges.*
+*Merged as PR #24, squash `230065f`.*
 Phase 16.
 
 ADR-0066 is the 1.0 charter: nine crates by name, `happenstance-ladybug`

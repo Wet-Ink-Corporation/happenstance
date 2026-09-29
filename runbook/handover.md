@@ -12,16 +12,17 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`3dcba41` on `main`, plus `lane/phase-16-define-1-0` open as one PR for the
-owner to merge. 2026-09-29.
+`230065f` on `main` (PR #24, phase 16), plus `lane/phase-16-log`, which records
+that merge. 2026-09-29.
 
 ## Where things are
 
 Seven crates are published at `0.3.2`. `EventStore` has been frozen since `0.2.0`,
-and `ProjectionStore` since `0.3.0`. Phases 0–12 and 15 are done, and **phase 16
-is done in this PR**. What remains is sequenced in [`roadmap.md`](roadmap.md):
+and `ProjectionStore` since `0.3.0`. Phases 0–12, 15 and 16 are done. What remains
+is sequenced in [`roadmap.md`](roadmap.md):
 - a breaking window, released as `0.4.0` (17);
-- then sync (13), retention (14) and the typed runner (18);
+- then the typed runner (18), sync (13) and retention (14), in that order. Phase
+  16 moved 18 ahead of 13, because SY-20's rule consumes a declaration 18 builds;
 - and `1.0.0` (21) last.
 
 **1.0 is now defined.** [ADR-0066](../.kb/decisions/0066-what-1-0-promises.md)
@@ -37,29 +38,27 @@ work lives* has the rules.
 
 ## In flight
 
-Branch `lane/phase-16-define-1-0`, one PR, left open for the owner:
-- six records, ADR-0066 – ADR-0071, and seven Weigh-In atoms;
-- the disposition table and its lint;
-- the open questions closed or routed;
-- phase 17's work list;
-- the phase files' new items.
+Nothing but the bookkeeping on `lane/phase-16-log`: PR #24's squash commit in
+`log.md` and phase 16's session log, and this file.
 
 ## Next action
 
-The owner reviews and merges the phase 16 PR, and fills in its squash commit in
-`log.md`. Then start [phase 17](phases/17-breaking-window.md), the breaking window.
+Start [phase 17](phases/17-breaking-window.md), the breaking window, in a fresh
+session. Set its status row to `in progress` in that session's first commit.
 Its heaviest item is the foreign-identity spike (VT-10), so start there. The
 `workerd` sibling job and the minimal-versions job are the other new
 infrastructure it owes.
 
 ## Waiting on the owner
 
-- Merge the phase 16 PR. Your seven calls are recorded as `wi-2798d5`,
-  `wi-d61f21`, `wi-8e5bd4`, `wi-460397`, `wi-1408e8`, `wi-cbc941` and
-  `wi-7899af`.
-- ADR-0066 §5 is the record's own call rather than yours: the semver exemption
-  list, and re-exported driver error payloads being inside the promise. Revise
-  it before merge if you disagree.
+- Merge `lane/phase-16-log`.
+- Phase 17's estimate (5–8 days) predates the work phase 16 added to it: the
+  `workerd` and minimal-versions jobs, ADR-0022 §9's reproduction, ADR-0069's
+  constructor and the VT-6 mint-per-open call. Re-estimate it at the start of
+  phase 17.
+- ADR-0066 §5 (the semver exemptions, and ES-6 sub-question 4) is the record's
+  own call, not yours. It is now accepted, so changing it needs a superseding
+  record before phase 21.
 - Still open from phase 15: the Weigh-In digest (`/weigh:in digest`); the merged
   `lane/*` branches, none deleted; and the untracked `runbook/phase-15-afk-prompt.md`
   and `assets/brand/happenstance-mark.png`.
