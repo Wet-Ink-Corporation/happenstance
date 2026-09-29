@@ -114,8 +114,8 @@ promises, with no clause left without a disposition.
 
 **Session log**
 
-- 2026-09-29 — one session, one branch (`lane/phase-16-define-1-0`), one PR left
-  open for the owner. The work ran in three stages:
+- 2026-09-29 — PR #24 squash-merged by the owner as `230065f`. One session, one
+  branch (`lane/phase-16-define-1-0`). The work ran in three stages:
   - **Survey.** Nine read-only agents inventoried the 53 non-frozen clauses, all
     78 open questions, and the decisions owed.
   - **Adversarial verification.** It ran before anything was written. It
