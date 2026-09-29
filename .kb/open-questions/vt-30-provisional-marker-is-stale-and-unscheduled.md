@@ -24,7 +24,7 @@ related:
   - kb-decision-0012
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/after-opt-scope.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # VT-30's provisional marker names two falsifiers, one built, and no phase schedules lifting it
@@ -102,3 +102,19 @@ exactly this case does not bind here.
 3. Does the Postgres append path's eventual design get asked to weigh
    `happenstance-sqlite`'s statement-per-guard precedent before VT-30's first
    limb is evaluated against it?
+
+## Phase 16 — 2026-09-29
+
+**Clause disposition: VT-30 is `freeze-by-17`** (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`): ADR-0054's
+alias and builder-state questions decided in one pass, and limb 2 retired by a record or by a
+multi-guard benchmark scenario (`runbook/phases/17-breaking-window.md`). Freezing at 16
+was proposed and refuted in the 2026-09-29 verification.
+
+The marker is staler than this atom recorded: it still calls the Postgres adapter unbuilt
+(`spec/SPECIFICATION.md:1893-1897`), and that event store has been real since phase 10b.
+ADR-0054's `after_every_guard` has not landed — `after` and `after_opt` carry no `#[deprecated]`
+(`crates/happenstance-core/src/append.rs:187`, `:201`) — so adding the alias is additive and
+retiring the old names is a break only phase 17 can take. The ledger row naming phase 4
+(`runbook/ledgers.md:154`) is outranked by the disposition row (`runbook/ledgers.md:263`), which
+names phase 17. Sub-questions 1 and 2 go with the freeze; 3 is answered by the Postgres adapter
+existing. **Owner now: phase 17.**

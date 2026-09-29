@@ -40,7 +40,7 @@ source_paths:
   - .kb/_intake/2026-09-09-the-measurement-host-and-its-clock.md
   - ops/host/preflight.sh
   - xtask/src/affected.rs
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-29
 ---
 
 # Two new timed assertions landed outside the testkit and inside the gate; CF-33 and CF-34 do not say whether that is allowed
@@ -158,3 +158,18 @@ clause. Absent that, the next lane that wants a timed assertion of any of these 
 atom's precedents to read and no binding rule to cite. The one event that would force the third
 instance on its own is enrolling the measurement host as a self-hosted runner, which ADR-0064
 already says must arrive as a decision record rather than a settings change.
+
+## Phase 16 — 2026-09-29
+
+**Clause disposition: CF-34 `[PROVISIONAL]` is `renew-past-1.0`** (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`),
+against an instrumented rows-examined fixture plus a record on the scope of CF-33's
+operation-count ban. This atom is that record's input. A freeze at 16 was proposed and refuted on
+2026-09-29. CF-33 is `[FROZEN]` and has no row.
+
+None of the three instances touches a published signature: the I-5 ratio is a test of
+`happenstance-sqlite`, `BenchmarkRecord::report`'s completion assertion sits behind the testkit's
+off-by-default `bench` feature, and `ops/host/preflight.sh` ships in no crate. **Owner now:
+after 1.0**, with the CF-34 renewal. The ratio principle can go into
+`standards/rust/60-what-a-test-must-prove.md` at any time. The drifted anchor stands:
+`ops/host/preflight.sh:11` still cites CF-34 at `:8747`, and the clause is at
+`spec/SPECIFICATION.md:9106`.

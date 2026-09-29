@@ -17,8 +17,11 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0066.** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0072.** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
+Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
+1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
+the runner's named `Chunk` (0070) and ES-10's scope (0071).
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14 and are
 still unwritten, which is why they are out of order with the numbers around them.
 
@@ -27,7 +30,7 @@ still unwritten, which is why they are out of order with the numbers around them
 | **0026** | 13 (published-surface half: 17) | What is a sync *peer* — what may the port assume about a transport it cannot see, and what does ingest promise? (SY-8 – SY-18). Phase 17 must settle the part of this that reaches a published crate: whether `happenstance-core` needs a write path that preserves a foreign `EventId` for `IngestStore` to be implementable (VT-10; `crates/happenstance-sync/src/ingest.rs` holds four `todo!()` bodies blocked on exactly that) |
 | **0027** | 13 | How do two logs reconcile — the merge rule, the compensation contract, and whether hub-and-spoke and peer-to-peer are one abstraction or two? (SY-1 – SY-7, SY-19 – SY-31). SY-1 – SY-7 already settle *ingest is unconditional, with compensation*; this ADR records it and settles the rest |
 | **0028** | 14 (decision: 17) | What is a store permitted to forget, and how does it say so? (ES-39, CF-27, SY-32). **The decision moves to phase 17** because one of its two answers adds a method to `EventStore`, which breaks every published adapter, and that is only cheap before 1.0. Phase 14 builds what it decides |
-| *unnumbered* | 16 | What does 1.0 promise? The charter phase 16 owes: which crates, what happens to every non-`[FROZEN]` clause on a published surface, adapter and testkit versioning (CF-32), and the MSRV policy after ADR-0037 |
+| **0066** | 16 | What does 1.0 promise? The charter phase 16 owes: which crates, what happens to every non-`[FROZEN]` clause on a published surface, adapter and testkit versioning (CF-32), and the MSRV policy after ADR-0037. **Written** as `what-1-0-promises`; the MSRV half is its own record, ADR-0067, and the per-clause answer is [the 1.0 dispositions](#the-10-dispositions) |
 | *unnumbered* | 17 | Is `Projection::apply` synchronous, and may a projection issue a statement into a live batch? (`.kb/open-questions/projection-apply-is-synchronous-against-a-live-store.md`). Owed its own record by the note that froze the port (ADR-0063) and owned by nobody until now |
 | *unnumbered* | 19b | Does the SQLite schema and append-condition SQL get a home that is not an adapter, once a third copy exists? (`references/seeds/sqlite-on-wasm.md`) |
 
@@ -39,17 +42,17 @@ table when an ADR or a clause settles it, and the archive keeps it either way.
 
 | Decision | Phase | Status |
 |---|---|---|
-| `conflicting_position`: a promise every adapter owes, or a hint one may omit | 16 | open — Neon-over-HTTP was the forcing case and now exists; phase 16's clause audit reads it |
-| Is ES-10's global visibility statement what happenstance needs, or would a per-boundary one do | 16 | open — raised by the phase-2 measurement; ADR-0063's single-position `Checkpoint` may have answered it, and phase 16 decides whether it did |
+| ~~`conflicting_position`: a promise every adapter owes, or a hint one may omit~~ | 16 | **settled at 16** — a hint, and already so: ES-25 is `[FROZEN]` and ADR-0012 §8 says it. Neon-over-HTTP was the forcing case |
+| ~~Is ES-10's global visibility statement what happenstance needs, or would a per-boundary one do~~ | 16 | **settled at 16 — ADR-0071**: ES-10 stays global, because ADR-0063 froze a single-position checkpoint (PS-17, PS-20). Raised by the phase-2 measurement |
 | `append`'s ownership of its batch — two builds of the same adapter differing only in ownership (ADR-0012's falsifier item 1, escalated by ADR-0022 §13) | 17 | open — ES-17 stays `[PROVISIONAL]` until measured or renewed; ADR-0055 kept the borrowed batch at `0.2.0` |
-| ADR-0022's falsifiers have fired: supersede, re-open (scoped) or ratify its pragma and runtime-seam sections | 16 | open — forced by phase 12, now past; given an owner by phase 15 (`adr-0022-falsifiers-have-fired`) |
-| Whether the 2026-09-06 `msrv-premise` ratification supersedes ADR-0037, and what the floor is | 16 | open — "`0.2.0` is the only cheap moment" has passed; goes with phase 16's MSRV item (`msrv-ratification-conflicts-with-the-accepted-floor`) |
-| Whether a workerd-class runner enters `cargo xtask ci`, and which platform clauses stay unproven without one | 16 | open — phase 12 made "conformant on Cloudflare" a promise (`no-workerd-class-runner-in-the-gate`) |
-| Who owns reconciling the specification after each phase, and whether `spec-trace` mechanises it | 16 | open — forced by phase 6 and phase 12, both past (`nothing-owns-the-post-phase-reconciliation`) |
-| Which read fault `PostgresFixture` arms, and whether it needs new capability machinery | 16 | open — owed at phase 10's remainder (`postgres-fixture-read-fault-declension-is-owed`) |
-| An infallible pre-validated `Tags` / `Tag` constructor in `happenstance-core` | 16 | open — additive; an ADR owed by ADR-0020, forced by the first API change after `0.1` (`d-1-the-validated-type-has-no-total-path`) |
-| A named `Chunk` type and an observation seam for `run_projection` | 16 | open — due at the `ProjectionStore` freeze, now past; free while `happenstance`'s `unstable-projection` gates the runner, so decided before phase 18 lifts it (`projection-runner-chunk-type-and-observation-seam`) |
-| Whether `remint_identity`'s documented procedure owes an in-process check | 16 | open — first forced at phase 5, now past (`remint-identity-precondition-is-trust-only`) |
+| ADR-0022's falsifiers have fired: supersede, re-open (scoped) or ratify its pragma and runtime-seam sections | 17 | **§8 and §16 settled at 16 — ADR-0068**; §9 (the runtime seam, the captured `Handle`) stays open, owned by phase 17's reproduction, which decides whether its remedy is additive or breaking (`adr-0022-falsifiers-have-fired`, still accepted). Forced by phase 12 |
+| ~~Whether the 2026-09-06 `msrv-premise` ratification supersedes ADR-0037, and what the floor is~~ | 16 | **settled at 16 — ADR-0067**: the floor holds at 1.97.1 and the ratification, never executed, is withdrawn (`msrv-ratification-conflicts-with-the-accepted-floor`) |
+| ~~Whether a workerd-class runner enters `cargo xtask ci`, and which platform clauses stay unproven without one~~ | 16 | **settled at 16 — ADR-0066**: a workerd sibling CI job, not a gate step, lands before 1.0 as phase 17's work (`no-workerd-class-runner-in-the-gate`) |
+| ~~Who owns reconciling the specification after each phase, and whether `spec-trace` mechanises it~~ | 16 | **settled at 16**: the session protocol's step 6 owns it, and each phase file carries an exit line for it (`nothing-owns-the-post-phase-reconciliation`) |
+| ~~Which read fault `PostgresFixture` arms, and whether it needs new capability machinery~~ | 16 | **closed at 16**: answered by `2ed06b4` (`postgres-fixture-read-fault-declension-is-owed`) |
+| ~~An infallible pre-validated `Tags` / `Tag` constructor in `happenstance-core`~~ | 16 | **settled at 16 — ADR-0069**: no infallible `Tags`/`Tag` path is added (the outward face is closed as intended, so ADR-0033 stays closed); `QueryItem` gains a total constructor instead, built in phase 17 (`d-1-the-validated-type-has-no-total-path`) |
+| ~~A named `Chunk` type and an observation seam for `run_projection`~~ | 16 | **settled at 16 — ADR-0070**: a named `Chunk`, which phase 18 builds before it lifts the gate, and no observation seam at 1.0 — one is additive later (`projection-runner-chunk-type-and-observation-seam`) |
+| ~~Whether `remint_identity`'s documented procedure owes an in-process check~~ | 16 | **closed at 16**, with the gap routed to phase 13 (`remint-identity-precondition-is-trust-only`) |
 | Is replication whole-log or scoped | 13 | deferred — SY-27, SY-28 |
 | Idempotent bulk ingest inside one round trip | 13 | deferred — SY-14 |
 | Does a peer declare its own limits | 13 | deferred — SY-18 |
@@ -67,7 +70,8 @@ phase 12's audit of it had nothing behind it.
 
 ### The 12 `[DEFERRED]` clauses
 
-Seventeen rows are listed; four are struck. Two were settled at phase 2 and their
+Sixteen rows are listed; four are struck. (This sentence said seventeen until
+phase 16 counted them.) Two were settled at phase 2 and their
 markers moved in the specification at phase 3; the third, CF-13, was settled at
 phase 3 by running the experiment its own marker named; the fourth, PS-33, was
 **demoted rather than settled** — §7.2 carries it as `NON-NORMATIVE`, so it is not
@@ -128,7 +132,12 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 41 `[PROVISIONAL]` clauses
+### The 40 `[PROVISIONAL]` clauses
+
+Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, and its row stays,
+struck, because rule 4 keeps it; `cargo xtask lints` now checks the count in this
+heading against §7.2 rather than matching it, so the next freeze changes one number
+here and nothing in the lint.
 
 Phase 12 cannot audit "every provisional clause has its falsifier scheduled"
 against prose. Grouped by what falsifies them, because they do not fail
@@ -152,7 +161,7 @@ separate open questions overstated the exposure by that factor.
 | Where a per-peer watermark lives | SY-31 | a peer with no transaction to put it in | 13 |
 | Membership as a port operation | ES-41 | an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip | 9 or 10, whichever adapter lands first. Completeness has an instrument at neither end |
 | Checkpoint visibility after commit | PS-38 | a store answering `checkpoint` from a replica that may lag its own `commit` — the shape a projection store over an eventually-consistent read model has. If real, the obligation narrows to "a subsequent read through the same handle" and every rule downstream gains a handle constraint | 7 — the first projection adapter over storage this workspace does not control |
-| A fixture's fault-injection promise | CF-39 | a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep | 8 and 10. **No adapter has armed a fault yet** |
+| A fixture's fault-injection promise | ~~CF-39~~ | ~~a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep~~ | **frozen at 16 — ADR-0066.** Owned by 8 and 10, whose row read *"no adapter has armed a fault yet"*; three now do — `happenstance-postgres`, `happenstance-neon` and `happenstance-cloudflare` |
 | A fixture's stated capacity ceilings | CF-40 | a real adapter whose ceiling is **not a constant** — a Postgres row whose TOAST threshold moves with the rest of the row, or a KV store whose per-value cap moves with the key — for which a single `Option<usize>` cannot say where the boundary is, and the rule built on it would assert a number the store cannot honour | 9 and 10, **whichever states a varying ceiling first**. Phase 9 has landed and answered the *constant-ceiling* half — `CloudflareFixture` states all three as `Some(…)`, as `SqliteFixture` does — so it added a second constant-ceiling store and left the live half untouched. That half is **phase 10's**: Postgres is where a ceiling that moves with the row first appears |
 | Durability's rule shape; benchmarks are not conformance | CF-17, CF-34 | a store that loses an acknowledged write, and an adapter that scans where it should seek and passes every rule | 8 |
 | **The portfolio's residual exposure** — the clauses §1.3 names as carrying CF-25's risk in their own markers rather than in a preamble. **Four, not five**: ES-10 was lifted at phase 4 and `[FROZEN]` since, and carrying it here is what made this table's count disagree with the specification's | ES-11, ES-12, ES-35, ES-40 | the far-end **adapter** on each axis, and nothing short of it: transport (ES-11, ES-12) by a one-shot-HTTP store; durability (ES-35) by a store that can lose a write to a fault; completeness (ES-40) by a store holding a suffix. A **fixture** instrument does not falsify any of them — CF-26 says so in terms. **ES-11's falsifier has now FIRED, on the adapter its own marker named** (2026-09-08): `happenstance-neon` runs the suite and `read_result_is_stable_under_concurrent_append` fails intermittently — less often over a single HTTP/2 connection than over HTTP/1.1, always in the same direction, and no committed log backs a rate, so none is quoted. Not for the reason the marker anticipated: the read does **not** self-paginate, so ES-12 holds by construction. It fails because a read and an append are two independent requests to a pooled proxy, so ES-11's own sufficiency condition for asynchronous drivers — *"a read spawned at its first poll and an append spawned afterwards land in the same queue in that order"* — is false where there is no shared queue. One-shot HTTP is a third shape and the clause has two. **Owed an ADR**, staged at `.kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md`, and not amended here: check it against the escalation `HANDOVER.md` records as made in error and retracted, which claimed something different and weaker | 10 (ES-11, ES-12), 8 (ES-35), 14 (ES-40) |
@@ -209,6 +218,92 @@ phases 9 and 10 explicitly. Corrected here, and worth leaving on the record:
 a clause written in a different shape from its neighbours is exactly what a
 mechanical read gets wrong, and the anchor discipline the citation checkers
 enforce exists for the same reason.
+
+### The 1.0 dispositions
+
+What `1.0.0` does with every clause that is not `[FROZEN]`: one row per
+`[PROVISIONAL]` or `[DEFERRED]` clause in §7.2, each with exactly one of three
+dispositions — `freeze-by-N`, frozen before 1.0 by phase N; `renew-past-1.0:`
+followed by the falsifier the marker is renewed against; or `outside-1.0:`
+followed by the reason the clause is on no surface 1.0 promises. The authority is
+[ADR-0066](../.kb/decisions/0066-what-1-0-promises.md), and this table, not the
+record, is the live copy, because an accepted record's body cannot change and these
+rows will move every time a phase freezes a clause. CF-39 is not here: ADR-0066
+froze it.
+
+**This is the schedule; the owner columns above are history.** Rule 4 keeps those
+rows, and most of them name phases long `done` — they record who owned a
+falsifier when the row was written, not who owns it now. Read this table for that.
+
+`cargo xtask lints` holds it (`runbook_clause_ledgers_match_the_specification`): the
+set of clauses here must equal §7.2's non-frozen set, each once; every cell must
+parse under the grammar above, and the last two kinds must carry their text; and a
+`freeze-by-N` must name a phase in the [status table](README.md#status) that phase
+21 waits on and that is not `done`. That last condition is the one that fires later
+rather than now — a phase that closes without freezing its clause turns the gate red
+on this row.
+
+**One sequencing hazard, stated so phase 13 does not discover it.** SY-27 and SY-28
+are `freeze-by-13`, and the instrument they need is the same suffix-holding store
+CF-27 names — which [phase 14](phases/14-retention.md) builds, and phase 14 runs
+after 13. Phase 13 either builds that instrument itself, or a filtered peer that
+answers the same question, or these two rows move to 14 in the same commit that
+says why.
+
+| Clause | Disposition | Basis |
+|---|---|---|
+| VT-6 | freeze-by-13 | Sync-testkit's `restored_peer_does_not_reissue_identities` is the instrument for the marker's harm half. Phase 9 answered the eviction half: Durable Object storage outlives the isolate, so mint-once is available |
+| VT-9 | freeze-by-13 | A sync-testkit rule that ingest preserves `RecordedAt`, with a mutant. ADR-0066 restates the clock falsifier, which no longer discriminates |
+| VT-10 | freeze-by-17 | Settled against a compiling spike, SQLite implementing `IngestStore` beside `append` — the marker's own instrument. The spike decides whether core grows a foreign-identity write path, each adapter does, or neither; phase 13 confirms it |
+| VT-14 | freeze-by-17 | An RTL identifier corpus check (Arabic, Hebrew, Persian, with mixed LTR) comes back empty, with the E11 reproduction added to `experiments/` |
+| VT-21 | freeze-by-13 | SY-18 is where a floor is first compared across a peer set, and phase 13's two real peers (Durable Object, Neon over HTTP) are the tightest targets in the plan |
+| VT-22 | renew-past-1.0: a real domain event that legitimately carries more than 64 tags | The marker's own domain falsifier; the richest scenario event carries 8. A firing is answered by a store's own larger documented limit — every shipped adapter accepts 128 or more — not by raising the floor within 1.x |
+| VT-23 | renew-past-1.0: a real decision model that legitimately needs more than 128 items | The marker's own domain falsifier; the largest scenario model uses 4. A firing is answered by the store evaluating more, which every chunking adapter already does with no ceiling |
+| VT-24 | freeze-by-13 | Sync ingest is the first consumer that batches by the floor (E2E-35), and SY-14 is where a group larger than 128 would surface |
+| VT-30 | freeze-by-17 | ADR-0054's alias and builder-state decided in one pass; limb 2 retired by a record or by a multi-guard bench scenario |
+| WF-1 | renew-past-1.0: a DCB implementation publishes a wire-level encoding, or a user needs to read another implementation's log | The format is private and WF-8 versions it, so a bridge is additive: a separate `happenstance-dcb-interop` crate with its own ADR. Phase 13 records the renewal in ADR-0026 |
+| WF-11 | renew-past-1.0: a workerd-class isolate must forward a payload another store accepted, at or above about 36.6 MB under a 128 MiB cap (peak is payload × 11/3) | `serialize_str` makes a human-readable encoder hold the whole payload. The instrument is phase 17's workerd sibling job; phase 13 confirms which encoding the sync transport uses |
+| ES-7 | freeze-by-17 | Frozen in the record that answers `trait-variant-caret-resolves-past-the-locked-gate` and ES-17's ownership, its falsifier restated to cover a consumer's unlocked resolve |
+| ES-11 | freeze-by-17 | A record superseding ADR-0061's choice to keep the marker, now that `happenstance-neon` is in the 1.0 set; settles ES-11 and ES-12 together for the one-shot-HTTP shape |
+| ES-12 | freeze-by-17 | The same record as ES-11. Falsifier: `query_items_share_one_snapshot` red on a one-shot-HTTP adapter |
+| ES-17 | freeze-by-17 | Already on phase 17's work list: take ADR-0055's two-build measurement and act on it, or freeze the borrowed batch by a record |
+| ES-32 | renew-past-1.0: the `experiments/polling-cost` harness, re-run over a round-trip adapter with a stated staleness budget, shows 2N idle reads per interval breaking that budget at realistic N | A tail seam would be an added method, so renewing is additive. Phase 18's fan-out runner (PS-30) is the natural producer of the measurement |
+| ES-35 | renew-past-1.0: an adapter fixture arms a real fault against a real medium — a process killed mid-commit, a disk lying about fsync — and observes what survives | The marker's own fault falsifier. The reopen end is answered by four adapters. The fault end is unbuilt, and CF-39's armed faults do not build it: the Postgres, Neon and Cloudflare fixtures raise an in-store trigger that aborts a batch before it is acknowledged, while ES-35 is falsified only by a medium that loses a write after `append` returned `Ok`. `happenstance-postgres` killing a backend mid-commit is the cheapest candidate |
+| ES-39 | freeze-by-14 | Decided at 17 (ADR-0028: a port surface or a written refusal, any trait change in `0.4.0`); built and frozen at 14 with the CF-27 instrument |
+| ES-40 | freeze-by-14 | Decided at 17 alongside ADR-0028 — if ES-39 takes a third outcome on condition evaluation, this clause's MAY flips, which is breaking; frozen with its rule at 14 against the suffix store |
+| ES-41 | freeze-by-17 | With ADR-0028. The transport half is answered: Neon and Cloudflare answer membership in one read-only round trip over the pair VT-8 already indexes |
+| PS-6 | renew-past-1.0: an adapter that must reserve server state at `begin` and cannot afford the round trip | The original falsifier fired at phase 10b on sqlx's `BEGIN` (ADR-0062) and the port absorbed it. Firing the residual would relax an adapter obligation, not change a signature |
+| PS-9 | freeze-by-17 | Phase 17's `Projection::apply` record decides it with the failure-policy seam's shape; phase 18 confirms it by building PS-27's seam without a generic write |
+| PS-11 | freeze-by-17 | With PS-9; the two fall together by the marker's own text |
+| PS-15 | freeze-by-17 | Decide the foreign-batch refusal on `rollback` (breaking), or narrow the MUST to `commit` and `reset` |
+| PS-16 | freeze-by-18 | A typed-runner rebuild through `reset` against a multi-table or graph read model, with the reset-refusal clause composed |
+| PS-18 | freeze-by-18 | A refusable reset implemented by at least one adapter, a CF-39-shaped clause and a `NoopProtectFixture` mutant. If 18 does not deliver, renew past 1.0 as additive |
+| PS-22 | freeze-by-17 | ADR-0028 states that retention never rewinds a checkpoint over kept rows |
+| PS-23 | freeze-by-17 | Freeze "exactly one", or record that a multi-id atomic commit after 1.0 arrives as an additive defaulted method. Phase 18's fan-out runner is the empirical check |
+| PS-24 | freeze-by-17 | Freeze `Rebuilding` as a kept variant; phase 18 decides whether the typed runner ever emits it. A swap protocol, if needed, is additive |
+| PS-25 | freeze-by-18 | Built before `unstable-projection` lifts. Phase 17 chooses the remedy first, because the digest-in-checkpoint alternative changes the frozen port's `commit` |
+| PS-27 | freeze-by-18 | Phase 18 builds the failure-policy seam and `skip_and_record_is_atomic` with a mutant; phase 17's apply record fixes the seam's shape |
+| PS-30 | freeze-by-18 | With `panicking_apply_rolls_back` and a mutant, if 18 builds the fan-out runner. If it does not, this row becomes `outside-1.0`: a conditional MUST on a runner 1.0 does not ship |
+| PS-38 | freeze-by-18 | Settled with PS-23 against the fan-out runner; phase 17 decides the documented no-lagging-replica obligation |
+| SY-7 | freeze-by-13 | ADR-0027. The falsification test is buildable with `MemorySyncPeer` and two adjudicator configurations |
+| SY-10 | freeze-by-13 | Phase 13's exit criteria already require both topologies to be expressible. Fallback: renew against the marker's own test, since a firing makes the permission redundant, not wrong |
+| SY-14 | freeze-by-13 | Measured against the Neon peer. Phase 17's foreign-identity spike must not foreclose a bounded-round-trip ingest path |
+| SY-18 | freeze-by-13 | Phase 13's work list carries a 128 KiB-capped fixture peer for it (`phases/13-sync.md:118-127`). If that peer is not built, this row is renewed past 1.0 against the Turnstile experiment, which is safe because `PeerLimits` is `#[non_exhaustive]` |
+| SY-20 | freeze-by-13 | Phase 13 lands the rule; phase 18, which ungates `Projection`, carries the convergence declaration it needs |
+| SY-21 | freeze-by-18 | Decided at 17 inside the `Projection::apply` record, built and frozen at 18, with the sync rule landed at 13 |
+| SY-22 | freeze-by-13 | Phase 13 runs the cost-layers test; the declaration's placement is fixed with SY-21 |
+| SY-23 | freeze-by-13 | ADR-0027's merge rule. Fallback: renew against the marker's test, since a firing adds a second order and leaves `EventId`'s derived `Ord` alone |
+| SY-27 | freeze-by-13 | ADR-0027. **Sequencing hazard** — see above: its instrument is CF-27's suffix store, which phase 14 builds after 13 |
+| SY-28 | freeze-by-13 | Immediately after SY-27, and with the same sequencing hazard |
+| SY-29 | freeze-by-13 | Jointly with SY-27, because a peer-supplied `Query` exists on the port only if replication is scoped |
+| SY-30 | freeze-by-13 | Where the two unlike real peers, Durable Object and Neon, push real envelopes |
+| SY-31 | freeze-by-13 | The runner half. The reserved-`ProjectionId` half is phase 17's `projection-id-is-unvalidated`, since reserving `sync/` refuses ids valid today |
+| SY-32 | freeze-by-14 | Surface decided at 17 (ADR-0028), built and frozen at 14, whose exit criteria require it no longer `[DEFERRED]` |
+| CF-14 | renew-past-1.0: phase 19a's REOPEN verdict for memory, IndexedDB or OPFS storage, or a workerd run observing a real Durable Object eviction, cannot be expressed with the one reopen shape | Four adapters express `REOPEN` with one shape. Both instruments that could fire it come after 1.0 (19a) or are not yet built (phase 17's workerd job); freeze jointly with CF-17 |
+| CF-17 | renew-past-1.0: a durable adapter cannot express even a reopen through this contract — the candidates are phase 19a's browser storage and the first workerd-class run observing a real eviction | Cloudflare's `REOPEN` runs over a host shim rather than workerd, so the instrument that could fire it is not yet built |
+| CF-27 | freeze-by-14 | The report shape is decided at 17 (ADR-0028), built and frozen at 14. Phase 13's SY-27 needs the same instrument, so it may have to be built at 13 |
+| CF-34 | renew-past-1.0: a complexity property becomes expressible as a deterministic assertion rather than a timing — an instrumented fixture counting rows examined — and the clause splits | Needs an instrumented rows-examined fixture and a record on the scope of CF-33's operation-count ban (`.kb/open-questions/cf-33-cf-34-scope-outside-the-testkit.md`) |
+| CF-40 | freeze-by-13 | Phase 17 builds ADR-0043's `MetadataLen`; phase 13 decides whether `payload_len` — data plus metadata — is the budget unit |
 
 ### The blocked cases
 

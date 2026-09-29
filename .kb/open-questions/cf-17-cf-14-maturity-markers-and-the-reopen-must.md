@@ -30,7 +30,7 @@ related:
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/stated-only-defects-and-the-reopen-must.md
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # A declaration MUST landed on CF-17's text; its marker and CF-14's did not move with it
@@ -84,3 +84,19 @@ storage surviving an isolate eviction, and `happenstance-neon`'s connectionless 
 has no live handle to invalidate at all and may simply decline the capability. Either answering
 is also the event that would let CF-17's falsifier actually discriminate again, since today's only
 answer (`happenstance-sqlite`) is the adapter the marker's own text says did not force the split.
+
+## Phase 16 — 2026-09-29
+
+**Clause dispositions: CF-17 `[PROVISIONAL]` and CF-14 `[DEFERRED]` are both `renew-past-1.0`**,
+jointly (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`). The falsifier for both: phase 19a's `REOPEN` verdict for
+in-browser storage (memory, IndexedDB, OPFS), or a `workerd`-class run that observes a real Durable
+Object eviction. That answers the first question here: **the declaration MUST is not enough to
+lift CF-17.** Freezing it on the Neon and Postgres declarations
+(`crates/happenstance-neon/tests/support/mod.rs:133`, `crates/happenstance-postgres/tests/support/mod.rs:431`)
+was proposed and refuted on 2026-09-29, because Cloudflare's `REOPEN` is expressed over a
+`node:sqlite` shim rather than over Durable Object storage outliving its isolate.
+
+The marker text is half stale: it still says HS-P0013 and HS-P0014 *"have not answered"*
+(`spec/SPECIFICATION.md:8298-8299`), and Neon has. The renewal edit corrects that. The surface is
+additive either way: `Fixture`'s capability consts are defaulted (ADR-0042). **Owner now:
+phase 19a, or phase 17's `workerd` sibling job, whichever observes first.**

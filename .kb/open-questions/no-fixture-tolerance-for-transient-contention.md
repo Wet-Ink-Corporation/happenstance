@@ -48,7 +48,7 @@ source_paths:
   - crates/happenstance-testkit/src/faulty.rs
   - crates/happenstance-testkit/tests/contended_store_instruments.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-21
+last_reviewed: 2026-09-29
 ---
 
 # A busy store and a broken store are the same Attempt, and the suite cannot tell them apart
@@ -181,3 +181,16 @@ leaves `CONTENDERS` alone, on ADR-0022 §12's grounds. So nothing above is softe
 at all still remains an arm on exactly its original terms**: a suite that tolerates a busy store has
 stopped measuring conformance and started measuring luck. What has changed is that the two live
 arms no longer cost the same to try.
+
+## Phase 16 — 2026-09-29
+
+**Classification: on phase 17's list, though additive at the type level**
+(`runbook/phases/17-breaking-window.md`; `kb-decision-0066`). `AppendError` is
+`#[non_exhaustive]` (`crates/happenstance-core/src/error.rs:213-214`), so adding `Busy` breaks
+no signature, and a defaulted `Fixture` const is additive under ADR-0042. It is decided in the
+window anyway. Adapters would have to reclassify busy refusals they report today as `Store(E)`,
+a behaviour change that belongs in `0.4.0`. And whether 1.0 promises the variant at all is a
+statement about 1.0.
+
+The 2026-09-21 amendment stands: the fixture-side arm can be prototyped with `contend_next` and
+the core arm cannot. **Owner now: phase 17.**

@@ -28,7 +28,7 @@ source_paths:
   - .kb/_intake/2026-09-07-ratifications-discharged-and-what-execution-changed.md
   - Cargo.toml
   - crates/happenstance/src/codec.rs
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # Codec stays unsealed after 0.2.0, and the window in which sealing was free has now closed
@@ -97,3 +97,15 @@ change than the one before it.
    answer that should be written down as a decision atom — closing this
    question in the negative — rather than left permanently open on the
    argument that closing it costs nothing either way?
+
+## Phase 16 — 2026-09-29
+
+**Classification: breaking-if-answered → phase 17** (`runbook/phases/17-breaking-window.md`;
+`kb-decision-0066`). Sealing adds a private supertrait to a public trait on `happenstance`'s
+default surface (`crates/happenstance/src/codec.rs:24`, `:80`), and after 1.0 that is a major.
+So the sealing question is answered in the `0.4.0` window or never. The likeliest answer is
+sub-question 3's, *stays unsealed*, written as a decision. That closes the atom without a code
+change, but it has to be written before 1.0 rather than left open.
+
+Sub-question 1, the `UnknownTag` split, is additive whichever way sealing goes, because
+`CodecError` is `#[non_exhaustive]`, and any phase may take it. **Owner now: phase 17.**

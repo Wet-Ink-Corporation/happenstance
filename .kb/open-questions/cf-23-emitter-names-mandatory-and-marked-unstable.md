@@ -21,7 +21,7 @@ depends_on: []
 related: []
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/emitter-surface-stability.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # CF-23 makes naming an emitter mandatory while every emitter is doc(hidden)
@@ -96,3 +96,17 @@ strongest reason to resolve it before a second adapter of that shape exists.
    `cargo-semver-checks` cannot see it?
 3. Does `__emit_rule_names` belong in whichever set is chosen, given it wraps
    no test and is reachable only by the same route as the other twelve?
+
+## Phase 16 — 2026-09-29
+
+**Kept by phase 16, which decides the policy in `kb-decision-0066`. The renames it implies land
+in phase 17** (`runbook/phases/17-breaking-window.md`). The names are CF-23's only concrete
+parameters, and Cloudflare, having no `#[tokio::test]`, can name only `__emit_wasm`
+(`crates/happenstance-testkit/src/lib.rs:75-88`). So whatever 1.0 says about them binds every
+adapter author. `cargo-semver-checks` cannot see a `#[doc(hidden)]` macro name. That is why
+`__emit_rule_names` and the `__emit_benchmark_*` pair, which this atom flags as misnamed, are
+renamed in the `0.4.0` window or never.
+
+Sub-questions 2 and 3, the pin-the-list instrument and `__emit_rule_names`' membership, go with
+the renames. **Owner now: phase 17**, to execute the policy. The atom closes when the §6.6 text
+and the renames have both landed.

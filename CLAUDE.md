@@ -260,7 +260,11 @@ code around it.
    is a breaking change that needs a decision record rather than a commit message.
    Raising it at phase 2 was a deliberate trade recorded in an ADR, which is what
    the old text asked for; what stays forbidden is moving it in silence, and the bar
-   for moving it at all is higher than it was before `0.2.0`.
+   for moving it at all is higher than it was before `0.2.0`. From `1.0.0` the rule is
+   [ADR-0067](.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)'s. A rise ships
+   only in a minor, only to a stable at least six months old, and always with a
+   CHANGELOG entry. This is needed because a 1.x minor reaches a consumer through
+   `cargo update`, which a 0.x minor never did.
 
    Two things follow that are easy to miss. The MSRV now **equals**
    `rust-toolchain.toml`'s pin, so the `msrv` CI job proves nothing until the two
@@ -415,8 +419,15 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
 - ~~**SQLite driver** (`rusqlite` vs `sqlx`).~~ Settled at phase 2 by building
   both: `happenstance-sqlite` is `rusqlite`, `happenstance-postgres` is `sqlx`,
   and the two are in the tree for different reasons rather than as candidates.
-  The **append-condition SQL strategy** is still open and is ADR-0022's; notes
-  are in `crates/happenstance-sqlite/src/`.
+  ~~The **append-condition SQL strategy**~~ is ADR-0022's as amended by
+  [ADR-0065](.kb/decisions/0065-adr-0022-s11-busy-timeout-is-fifteen-seconds.md)
+  (§11, the busy timeout) and
+  [ADR-0068](.kb/decisions/0068-adr-0022-sections-8-9-16-settled.md) (phase 16):
+  §8 is settled on the correlated `EXISTS` chain seeded by the most selective
+  tag, and the rest is ratified. **§9 alone stays open** — whether the runtime
+  `Handle` a store captures at construction strands a read that outlives its
+  runtime — and its reproduction is phase 17's, because the remedy may change
+  two published adapters' constructors.
 - **Replication semantics.** `SequencePosition` is meaningful only within one
   store, so positions cannot be replicated as-is. Whether ingest re-checks
   append conditions is **no longer open**. SY-1 – SY-6 are frozen: ingest never
@@ -428,12 +439,15 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   first-class, is provisional. What is still open is deferred by clause: whole-log
   or scoped replication (SY-27), bulk-ingest cost (SY-14), peer limits (SY-18)
   and the retention floor (SY-32). Phase 13 builds against all of them.
-- **How a Postgres adapter buys position visibility.** `nextval()` allocates
+- ~~**How a Postgres adapter buys position visibility.**~~ `nextval()` allocates
   outside the transaction, so a Postgres store violates the visibility invariant
-  by construction unless it does something about it. `xid8` +
-  `pg_snapshot_xmin`, transaction-scoped advisory locks and a serialised sequence
-  table each cost something real, and the choice is owed a measurement rather
-  than a preference.
+  by construction unless it does something about it. Settled by
+  [ADR-0024](.kb/decisions/0024-position-visibility-mechanism.md), which chose
+  `xid8` + `pg_snapshot_xmin` on a measurement rather than a preference. The
+  invariant's *scope* is settled too:
+  [ADR-0071](.kb/decisions/0071-es-10-stays-global.md) (phase 16) keeps ES-10
+  global, because ADR-0063 froze a single-position checkpoint, and names what
+  reopens ADR-0024 — the cluster-wide staleness coupling, not throughput.
 - ~~**Whether `happenstance-runtime` is the right name and the right seam.**~~
   Settled and executed: [ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md)
   gave the bare name to the typed layer and renamed the contract to

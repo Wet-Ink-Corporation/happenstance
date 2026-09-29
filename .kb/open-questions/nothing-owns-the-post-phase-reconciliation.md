@@ -2,7 +2,7 @@
 id: kb-open-question-post-phase-reconciliation-001
 title: Nothing owns the specification reconciliation at a phase's exit
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   Phases 4 and 5 were the two largest changes to the contract in the plan, and neither carried an
@@ -20,6 +20,12 @@ summary: >-
   catch, which argues against a gate step replacing the pass and for the pass having an owner; the
   clause-range arithmetic had nothing to close against because the phase's sole ADR states no range
   in any form; and the anchored fraction is 80 of 401, against 69 of 358 at phase 4/5.
+  Resolved 2026-09-29: the reconciliation is owned by process, not by a tool. Step 6 of the session
+  protocol in runbook/README.md makes each phase's own session reconcile the specification against
+  the code before the gate is re-run and the exit criteria are ticked. Phase 16 adds a reconciliation
+  line to every open phase file's exit criteria, which puts the obligation in the file a session
+  actually ticks. Sub-questions 1 and 5 are answered by that. Sub-questions 2 to 4, the mechanised
+  half, are declined rather than owned.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -35,7 +41,9 @@ source_paths:
   - xtask/src/spec_trace.rs
   - references/evaluation/phase-4-5-reconciliation.md
   - .kb/_intake/0034-what-the-phase-8-reconciliation-cost.md
-last_reviewed: 2026-08-20
+  - runbook/README.md
+  - runbook/phases/
+last_reviewed: 2026-09-29
 ---
 
 # Nothing owns the specification reconciliation at a phase's exit
@@ -161,3 +169,36 @@ smuggle that design decision into whoever happened to pick up the ticket.
 ## Owner
 
 Unassigned.
+
+## Closed — 2026-09-29
+
+The owner is each phase's own session. When the runbook was split into a directory (`65253fc`),
+its session protocol gained step 6 (`runbook/README.md:63-64`): *"Reconcile the specification
+against the code the phase just wrote — the prose and citations under the MUSTs, not only the
+MUSTs."* It sits before step 7, which re-runs the gate and ticks the exit criteria, and rule 3 of
+the same file makes the specification win over the runbook. That answers who does the pass. This
+atom's strongest evidence, though, is that a rule written once, far from the phase that has to obey
+it, has the same enforcement record as the rule that already failed. So phase 16 also adds a
+reconciliation line to the exit criteria of every open phase file. The obligation then sits in the
+file a session actually ticks, rather than only in a protocol it is asked to read.
+
+The sub-questions:
+
+1. **Both a checkbox and a protocol step, and not a gate step.** The phase-8 census answers the
+   gate-step half: 14 of its 20 repairs were false prose that no gate step could have caught
+   (`kb-reference-phase-8-spec-reconciliation-001`).
+2. **Declined.** No citation-count baseline is committed, for the reason
+   `kb-playbook-ratchet-gate-landing-001` gives against a count stored beside the list it counts.
+3. **Declined.** Phase and ADR clause ranges stay prose. What would reopen this is a phase whose
+   reconciliation is later found to have missed a clause its ADRs discharged. That miss is the
+   evidence that would justify a `clauses:` key, and none has been recorded since the protocol step
+   landed.
+4. **Moot while 3 is declined.** With no pair of computed numbers, there is no disagreement for
+   anything to act on. The obligation the exit line creates is the human one: a phase does not tick
+   its exit criteria until the reconciliation is done.
+5. **Runbook process, with no ADR.** It changes no contract clause and admits no implementation.
+
+Sub-questions 2 to 4 have no owner, and that is deliberate, not an oversight: each is declined, and
+3 names what would reopen it. The last reader of the whole run is phase 21, which checks the 1.0
+charter clause by clause. The "Owner: Unassigned" section above is superseded by this one. Closed
+by hand in phase 16. No accepted decision was edited.

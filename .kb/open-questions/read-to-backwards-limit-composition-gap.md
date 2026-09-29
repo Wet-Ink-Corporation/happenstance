@@ -25,7 +25,7 @@ related:
   - kb-decision-0022
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/model-only-kind-has-no-members.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # read_to composes with limit going forwards only; the backwards-plus-window-plus-budget case is unwritten on purpose
@@ -79,3 +79,16 @@ SQL strategy already lives in this crate) and `happenstance-postgres` are the tw
 the workspace. An adapter author hand-writing that statement is exactly the person who would reach
 for the ascending-then-resort shape this gap describes, and exactly the person with no rule
 telling them it is wrong.
+
+## Phase 16 — 2026-09-29
+
+**Classification: additive.** A fourteenth read-option rule is a testkit change and moves no
+signature. Under `kb-decision-0066`'s versioning, a new rule that detects violation of an
+already-`[FROZEN]` clause is a testkit **minor** (CF-29 and CF-31 kept); only a new requirement
+needs a clause change, a record and a major. So the gap can be closed after 1.0 without a break,
+provided the composition is already inside a frozen clause's MUST.
+
+The forcing event passed at `0.2.0` — SQLite and Postgres both ship windowed backwards reads — and
+`read_to_composes_with_limit` (`crates/happenstance-testkit/src/suite.rs:1734`) is still the only
+rule on the composition; no separating fourth mutant has been proposed. **Owner now: after 1.0**,
+any testkit minor. It closes when someone searches for that mutant or records the gap accepted.

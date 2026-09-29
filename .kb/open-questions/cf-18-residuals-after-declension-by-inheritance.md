@@ -24,7 +24,7 @@ related:
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/cf-18-observable-skip-reporting.md
   - .kb/_intake/2026-09-07-ratifications-discharged-and-what-execution-changed.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # What declension by inheritance leaves open under CF-18
@@ -92,3 +92,18 @@ without stating declines is the artifact the question is about.
    reread against declension by inheritance?
 3. Who owns the README-disclosure question — the same lane that owns
    `standards/rust/` publication guidance, or a new clause in §6.6?
+
+## Phase 16 — 2026-09-29
+
+**Clause disposition: ES-35 `[PROVISIONAL]` is `renew-past-1.0`** (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`),
+against its own falsifier's unbuilt fault end: an adapter fixture that arms a real fault against a
+real medium — a process killed mid-commit, a disk lying about fsync — and observes what survives a
+reopen. That answers sub-question 2: declension by inheritance does not change what falsifies
+ES-35; the reopen half is answered by four adapters and the fault half is not.
+
+Residuals 1 and 3 are additive, and CF-18 is `[FROZEN]` with no row in the table. Residual 3 has
+moved: `kb-decision-0066` defines *conformant* as *"passes `happenstance-testkit` X.Y"*, stated in
+each adapter's README, so the README is now where the claim lives, and whether it lists declined
+capabilities is a documentation obligation. **Owner now: phase 20** for residuals 1 and 3 — a
+default `cargo test` still prints no `SKIP` line; accepting that, or narrowing CF-18's `Rejects:`
+prose by a frozen-clause repair, is the choice. ES-35's renewal is recorded; it has no phase.

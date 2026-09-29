@@ -2,7 +2,7 @@
 id: kb-open-question-projection-runner-chunk-observation-001
 title: Does chunk get a named type and a default, and does the runner get an observation seam?
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   Two coupled design questions on run_projection's surface
@@ -34,6 +34,13 @@ summary: >-
   because it only anchors citations whose subject it can derive from
   surrounding prose — a test now pins prose additions below the fence, but
   repointing the three citations belongs to spec/SPECIFICATION.md's owner.
+  Resolved 2026-09-29 by kb-decision-0070. Question 1: 1B, a named #[non_exhaustive] Chunk with named
+  constructors and no Default. It is decided now because the parameter sits in run_projection's
+  signature, and phase 18 builds it before lifting unstable-projection. A default waits for the
+  chunk-size measurement, and adding it later is additive. Question 2: 2A at 1.0. Progressed is
+  already #[non_exhaustive], run_projection_observed is additive in any later minor, and tracing is
+  declined at this layer. That departs from this atom's 1C and 2B on one argument: a freeze forces
+  only the half that cannot be added later.
 depends_on: []
 related:
   - kb-decision-0036
@@ -42,9 +49,12 @@ related:
   - kb-playbook-anchoring-citations-001
   - kb-decision-0063
   - kb-open-question-apply-synchronous-live-store-001
+  - kb-decision-0070
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/projection-runner-chunk-and-observation.md
-last_reviewed: 2026-09-07
+  - crates/happenstance/src/runner.rs
+  - crates/happenstance/tests/projection_runner_page.rs
+last_reviewed: 2026-09-29
 ---
 
 # Does chunk get a named type and a default, and does the runner get an observation seam?
@@ -160,3 +170,38 @@ SPECIFICATION.md:5735`'s "logs nothing" is normative or observational —
 owner decides which; and anything about `ProjectionStore` itself, since
 both questions are about the typed layer's `run_projection` surface, not
 the port.
+
+## Closed — 2026-09-29
+
+`kb-decision-0070` decides both questions. It departs from this atom's recommendations on a timing
+rule rather than on any of the analysis above: a freeze forces only the half that cannot be added
+later.
+
+**Question 1: 1B.** `chunk` becomes a named `Chunk`. It is `#[non_exhaustive]`, has a private
+representation, and is built through named constructors, starting with `Chunk::of(NonZeroUsize)`.
+That is the shape `Retry` already has in the same crate. The parameter sits in `run_projection`'s
+signature (`crates/happenstance/src/runner.rs:514-520`, `chunk` at `:519`), and that signature
+becomes published surface the moment phase 18 lifts `unstable-projection`. So the type is decided
+now, and phase 18 builds it before the lift. The fan-out runner phase 18 also builds (PS-30) takes
+the same `Chunk`. Whether the parameter is `Chunk` or `impl Into<Chunk>` is left to phase 18's
+compile. **There is no `Default`.** PS-14 requires the same read model at every chunk size, so a
+default would hide only a cost, and the measurement this atom asked for — wall time, peak memory
+and commit count at {1, 8, 64, 1024, 65536} — still does not exist. Adding `impl Default` later is
+a minor change. That measurement is therefore the one residue of question 1, and it has no phase.
+It is `kb-decision-0070`'s reopen condition, not an obligation.
+
+**Question 2: 2A at 1.0.** The checkpoint is the API. `Progressed` is already `#[non_exhaustive]`
+and can grow fields. `run_projection_observed` (2B) is additive in any later minor, and it waits for
+an operator who needs progress mid-run that polling a second handle cannot give. `tracing` (2C) is
+declined at this layer. That keeps `spec/SPECIFICATION.md:5944`'s "writes nothing anywhere, logs
+nothing" true, so the question in "What this does not settle" — whether that sentence is normative
+or observational — does not need an answer yet.
+
+**The citation trap, re-read.** The three specification sentences this atom found anchored inside
+the doctest fence have since been repointed. They now cite `runner.rs:524` (`spec/SPECIFICATION.md:5944`,
+`:6045`, `:6173`), which is inside `run_projection`'s signature (the function starts at `:514`, and
+`:524` is `C: Codec,`), so they are no longer in the fence, but they are still not on the `pub async
+fn` line. Phase 18 rewrites this signature to take `Chunk`, and the citations drift again unless
+they are repointed in that change. `prose_added_to_this_page_stays_below_the_fence`
+(`crates/happenstance/tests/projection_runner_page.rs:142`) still holds the page's side. Closed by
+hand in phase 16. No accepted decision was edited.

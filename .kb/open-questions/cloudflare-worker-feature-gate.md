@@ -2,7 +2,7 @@
 id: kb-open-question-cloudflare-feature-gate-001
 title: happenstance-cloudflare carries no [features] table, and worker reaches every construction path
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   Two independent remediation briefs each raised the same item and routed it elsewhere rather
@@ -18,19 +18,26 @@ summary: >-
   kb-open-question-worker-async-trait-ban-001, which is settled (kb-decision-0035) and is about
   whether cargo deny's async-trait ban tolerates worker's own dependency graph, not about whether
   happenstance-cloudflare exposes a Cargo feature at all.
+  Resolved 2026-09-29 by kb-decision-0066, the 1.0 charter: no features table, with the reason on the
+  record. worker reaches every construction and error path, so a feature that excluded it would
+  exclude the adapter. Classified additive, which takes it off phase 17's list. After 1.0, a feature
+  that gates only new items is a minor. The only breaking shape would be putting an existing item
+  behind a new default feature, and nothing asks for that.
 depends_on: []
 related:
   - kb-decision-0023
   - kb-decision-0009
   - kb-open-question-worker-async-trait-ban-001
   - kb-open-question-workerd-runner-absent-001
+  - kb-decision-0066
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/adapter-driver-reexport-policy.md
   - .kb/_intake/remediation-2026-09-04-briefs/stringified-throw-visibility.md
   - crates/happenstance-cloudflare/Cargo.toml
   - crates/happenstance-cloudflare/src/sql_storage.rs
   - crates/happenstance-cloudflare/src/js.rs
-last_reviewed: 2026-09-07
+  - crates/happenstance-cloudflare/src/lib.rs
+last_reviewed: 2026-09-29
 ---
 
 # happenstance-cloudflare carries no [features] table, and worker reaches every construction path
@@ -90,3 +97,27 @@ adapter does," this question needs an answer on record rather than a re-derivati
 3. If a features table is ever added, does it follow `happenstance-sqlite`'s precedent
    of gating *store roles* (event store vs. projection store), or does Cloudflare's
    single-role shape mean the axis, if one ever appears, is something else entirely?
+
+## Closed — 2026-09-29
+
+`kb-decision-0066`, the 1.0 charter, answers this the way sub-question 2 proposed: a decision
+saying "no features table, and why", rather than letting the question retire unanswered. The facts
+it rests on still hold at HEAD. `crates/happenstance-cloudflare/Cargo.toml` has no `[features]`
+table, while every other adapter has one (`happenstance-sqlite`'s at `:100`, `happenstance-postgres`'s
+at `:82`, `happenstance-neon`'s at `:115`). `worker.workspace = true` is unconditional at `:102`.
+The crate re-exports `worker` next to `happenstance_core` (`crates/happenstance-cloudflare/src/lib.rs:587`),
+so `worker`'s types sit on the public surface as well as in the signatures this atom listed.
+
+The sub-questions:
+
+1. **No such path exists, and none is planned.** Nothing in the tree or the runbook proposes a
+   construction path that does not link `worker`. The adapter is worker-shaped from end to end.
+2. **A decision, taken in the charter** rather than in a record of its own, because it is one row
+   of the crate set's shape and not a design with alternatives worth a separate record.
+3. **Moot until an axis appears.** If one ever does, a feature that gates only *new* items is
+   additive after 1.0. Gating an *existing* item behind a new default feature would break every
+   consumer on `default-features = false`, and that is the only shape that would need a major.
+
+Phase 16's classification list named this as a candidate breaking question. It is additive,
+because having no features table breaks nobody, so it leaves phase 17's list with this closure.
+Closed by hand in phase 16. No accepted decision was edited.

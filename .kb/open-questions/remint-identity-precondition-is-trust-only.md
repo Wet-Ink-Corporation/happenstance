@@ -2,7 +2,7 @@
 id: kb-open-question-remint-precondition-trust-only-001
 title: VT-6's documented-procedure branch asks a program to trust a document it could check
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   VT-6 requires that a StoreId be minted when a store's persistent state is created and never
@@ -19,16 +19,26 @@ summary: >-
   disagreement with one. Forced by phase 5's identity work and by phase 13, where sync makes a
   duplicated StoreId a peer's problem rather than a local one - a re-minted identity that should not
   have been re-minted is exactly the collision VT-6 spends a clause preventing.
+  Resolved 2026-09-29: the in-process check exists, placed where it can work rather than where this
+  atom looked. Every append re-reads the file's persisted identity inside its own BEGIN IMMEDIATE and
+  refuses a stale handle with IdentityMoved (red in 8900697, green in f719b2a). A guard inside
+  remint_identity cannot work and was not built. An unwarranted re-mint cannot break VT-6's
+  uniqueness MUST. Whether VT-6 obliges every adapter to carry the check stays with the clause, which
+  phase 13 owns. The gap this question sat beside is a new atom,
+  kb-open-question-postgres-neon-store-id-no-restore-001.
 depends_on: []
 related:
   - kb-decision-0014
   - kb-decision-0022
+  - kb-open-question-postgres-neon-store-id-no-restore-001
 source_paths:
   - .kb/_intake/2026-09-03-pre-publication-review.md
   - references/evaluation/review-pre-publication-2026-09-03.md
   - crates/happenstance-sqlite/src/event_store.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-04
+  - crates/happenstance-sqlite/tests/migration.rs
+  - references/adapter-shapes.md
+last_reviewed: 2026-09-29
 ---
 
 # VT-6's documented-procedure branch asks a program to trust a document it could check
@@ -85,3 +95,47 @@ bookkeeping mistake and becomes a peer's problem, because sync deduplicates even
 — the exact case `tests/migration.rs:421` demonstrates is possible today — reissues positions a peer
 has already seen under a new identity, and the peer has no way to know the two `StoreId`s were ever
 the same store.
+
+## Closed — 2026-09-29
+
+**The in-process check exists, and it is not where this question looked for it.** Commit
+`8900697` wrote the failing test first:
+`an_append_through_a_handle_the_file_has_outgrown_is_refused`
+(`crates/happenstance-sqlite/tests/migration.rs:501`). Commit `f719b2a` made it pass. `append_locked`
+(`crates/happenstance-sqlite/src/event_store.rs:680-743`) re-reads the file's persisted identity
+inside the append's own `BEGIN IMMEDIATE`, before any guard is probed. When the handle's identity
+differs, it refuses with `SqliteEventStoreError::IdentityMoved` and names both incarnations. The
+check is one indexed read on a four-row table, under a lock the writer already holds. Both commits
+landed on 2026-09-04, the day this atom was last reviewed, and it was never re-read against them.
+
+This atom's "What is not decided" paragraph looked for the check inside `remint_identity`. The doc
+at `:700-708` records why it cannot go there. A process-wide open-path registry needs a canonical
+path key, and symlinks, hardlinks, `file:` URIs, UNC paths and two paths to one inode all defeat
+one. It also sees nothing when the re-mint happens in another process. The candidates listed above
+— a cached last-known identity, a generation counter, an attestation from whatever did the restore
+— would each be new state carrying its own durability claim, and none of them is needed. The
+persisted row is the thing to check against, and the append is the moment the check matters.
+
+**What the check does not do, and why that is sound.** It does not ask whether a re-mint was
+*warranted*. An unwarranted re-mint cannot violate VT-6's uniqueness MUST
+(`spec/SPECIFICATION.md:840-844`). It mints a new `StoreId`, positions keep rising under
+`AUTOINCREMENT` (`event_store.rs:109`), and no `(StoreId, SequencePosition)` pair is ever issued
+twice. That corrects the claim under "What forces it" above, that such a re-mint "reissues
+positions a peer has already seen under a new identity". Applied to a live file, it reissues
+nothing: its positions carry on from where they were. What a peer does see is one origin changing
+name mid-stream. That is a replication cost and belongs to phase 13; it is not a
+VT-6 violation. The case VT-6 actually fears is the *missing* re-mint after a restore or a copy,
+and no in-process check can see that. VT-6's `Rejects:` paragraph accepts that case explicitly, and
+`references/adapter-shapes.md:395-401` states the operator's procedure.
+
+**Not answered here:** whether VT-6's documented-procedure branch *obliges* every adapter that
+takes it to carry an equivalent check. That is the clause-level form of this question, which
+`f719b2a`'s message briefed and did not answer. VT-6 is `[PROVISIONAL]`, phase 16's disposition
+table gives it to phase 13 to freeze, and phase 13 owns this question along with the clause.
+
+**The gap this question sat beside.** Reading the branch again turned up two published adapters
+that take neither of its arms. `happenstance-postgres` and `happenstance-neon` mint once, detect
+nothing, and document no re-mint. That is its own question,
+`kb-open-question-postgres-neon-store-id-no-restore-001`, and phase 13 owns it.
+
+Closed by hand in phase 16. No accepted decision was edited.

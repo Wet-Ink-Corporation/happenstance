@@ -47,7 +47,7 @@ source_paths:
   - references/evaluation/review-pre-publication-2026-09-03.md
   - crates/happenstance-sqlite/src/event_store.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # A read page is budgeted in rows, and the two costs of that knob pull opposite ways
@@ -149,3 +149,20 @@ before this atom was written. And `PAGE_SIZE`'s doc comment no longer calls itse
 until it is measured"*: the measurement came back and the sentence was deleted, so a sibling brief's
 quotation of it now names text that is not in the tree. The doc names the three measured
 consequences instead, and says the measurement declined to settle the knob.
+
+## Phase 16 — 2026-09-29
+
+**Classification: additive**, and taken off phase 17's list. It goes after 1.0
+(`runbook/phases/17-breaking-window.md`; `kb-decision-0066`). Every fork that remains is
+additive at the type level:
+
+- `ReadOptions` is `#[non_exhaustive]` with `Default` (`crates/happenstance-core/src/query.rs:267-269`),
+  so a budget field breaks no caller.
+- An adapter-local builder, making `PAGE_SIZE` public (`crates/happenstance-sqlite/src/event_store.rs:222`),
+  and deprecating `MAX_PAGE_BYTES_PER_STATEMENT` (`:380`) are all minors.
+
+Under `kb-decision-0066`'s versioning, a **contract-level** caller budget would oblige every
+adapter to honour it. That is a new requirement, and it needs a clause change, a record and a
+major. An adapter-local knob stays a minor. The three residues of the 2026-09-07 section stand:
+the unmeasured 8 MiB value, `PAGE_SIZE`'s visibility, and the per-statement peak. **Owner now:
+after 1.0**, and no phase holds it.

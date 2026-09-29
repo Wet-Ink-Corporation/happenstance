@@ -27,7 +27,7 @@ related:
   - kb-decision-0030
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/empty-decision-outcome.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # What does then(&[]) mean once an empty decision has its own outcome arm, and can decide say "nothing to do" separately from "refused"?
@@ -112,3 +112,16 @@ gates that one.
    (`scope-coverage-helper-and-the-projection-port-gap.md`) inherit a specific
    shape to rationalize against, or does it remain free to add its own
    function independently?
+
+## Phase 16 — 2026-09-29
+
+**Classification: breaking-if-answered → phase 17** (`runbook/phases/17-breaking-window.md`;
+`kb-decision-0066`). Limb 2 is the break. `CommandOutcome` is deliberately not
+`#[non_exhaustive]` (`crates/happenstance/src/command.rs:112-115`), so a third variant breaks it,
+and so does widening the `decide` closure's return type. Limb 1 is a behaviour break on the
+default `happenstance::testing` module if `then(&[])` starts refusing an empty emission.
+
+The likeliest answer adds `then_nothing()`, documents `then(&[])`'s meaning as it stands, and
+declines a separate channel. That closes the atom without a break, but the decline has to be
+recorded before 1.0. **Owner now: phase 17.** Sub-question 3, the scope-coverage helper, waits
+on it.

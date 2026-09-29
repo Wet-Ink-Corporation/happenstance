@@ -27,7 +27,7 @@ related:
   - kb-decision-0012
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/frozen-doc-musts-and-the-adapter-half.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # ES-23 carries two MUSTs on two owners; FROZEN_DOC_MUSTS has a disposition for only one of them
@@ -88,3 +88,17 @@ new adapter author at the obligation or the two existing test targets to copy. T
 already measured (phase 8 to this lane) is the cost of leaving the array as documented; a third and
 fourth adapter repeating it is what raises that cost from "one embarrassing gap, since closed" to
 "a pattern this array reliably misses."
+
+## Phase 16 — 2026-09-29
+
+**Classification: additive** — `xtask` only. ES-23 is `[FROZEN]` and has no row in
+`runbook/ledgers.md`, *The 1.0 dispositions*. The forcing event has passed, and the adapter half was discharged without the array:
+all four published event-store adapters carry their own `# Cancellation` section —
+`crates/happenstance-sqlite/src/event_store.rs:125`, `crates/happenstance-cloudflare/src/event_store.rs:119`,
+`crates/happenstance-postgres/src/event_store.rs:29` and `crates/happenstance-neon/src/event_store.rs:3`.
+`FROZEN_DOC_MUSTS` still has only the port row (`xtask/src/lint_narrative.rs:1426-1431`).
+
+What is left is whether the array's completeness claim owes a third disposition, which is not
+a 1.0 surface question. **Owner now: phase 20**, where the adapter-author pointer this atom's
+cost argument asks for would be written. Phase 21's clause audit reads ES-23 as frozen and met
+either way. Status unchanged: the question asked is about the array, and the array has not moved.

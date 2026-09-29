@@ -40,7 +40,7 @@ source_paths:
   - references/evaluation/phase-7-contract-defects.md
   - xtask/src/spec_trace.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # CF-36's cross-reference now exists, and the thirteen breaches it found take three different repairs
@@ -134,3 +134,19 @@ verified by grep in the tree today. Both briefs behind this atom were written by
 the lane implementing the change and had no two-critic pass; this is what that
 discount buys, and it is the case `kb-decision-0045` and
 `kb-playbook-anchoring-citations-001` exist for.
+
+## Phase 16 — 2026-09-29
+
+**Classification: additive** — specification text and `xtask`; no signature. `CF36_UNDISCHARGED`
+(`xtask/src/spec_trace.rs:1426`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
+clauses. Each group now has an owner, per `runbook/ledgers.md`, *The 1.0 dispositions* and `kb-decision-0066`:
+
+- **The nine SY clauses → phase 13**, which builds `happenstance-sync-testkit`
+  (`runbook/phases/13-sync.md:94`). Sync and its testkit are in 1.0's nine-crate set, so the
+  suite is built rather than qualified, and sub-question 1 need not be answered to empty them.
+- **PS-29, PS-30 → phase 18**, with the runner; PS-30 is `freeze-by-18`
+  (`runbook/phases/18-typed-runner.md:27`).
+- **The VT-21 and WF-9 `Cases:` lines → any phase.** WF-9 is `[FROZEN]` (repair under
+  `kb-playbook-repair-frozen-clause-001`); VT-21 is `[PROVISIONAL]` and `freeze-by-13`.
+
+Sub-question 3 is unchanged. Phase 21's criterion is `CF36_UNDISCHARGED` empty.

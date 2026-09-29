@@ -2,7 +2,7 @@
 id: kb-open-question-msrv-ratification-conflict-001
 title: A 2026-09-06 ratification recommends lowering the MSRV; the accepted decision says the number does not move
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   kb-decision-0037 is accepted, immutable, and titled around the number not moving - 0.2.0
@@ -18,10 +18,17 @@ summary: >-
   where the promise actually binds a consumer; the brief itself names 0.2.0 as the only genuinely
   cheap moment to move the number, because raising a published floor is breaking in practice
   however additive the manifest key claims to be.
+  Resolved 2026-09-29 by kb-decision-0067, on the owner's decision, which amends kb-decision-0037
+  rather than superseding it. The floor holds at 1.97.1. The 2026-09-06 msrv-premise ratification is
+  withdrawn, since it was never executed. After 1.0, a rise ships only in a minor release, only to a
+  stable at least six months old, and always with a CHANGELOG entry, resting on resolver 3's
+  MSRV-aware fallback. The same record corrects the cfg_select! threshold to 1.95, re-measured, and
+  leaves both accepted bodies unedited. Lowering stays available and is not owed.
 depends_on:
   - kb-decision-0037
   - kb-decision-0029
-related: []
+related:
+  - kb-decision-0067
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/msrv-premise.md
   - .kb/_intake/ratifications-2026-09-06-pre-publication.md
@@ -29,7 +36,7 @@ source_paths:
   - Cargo.toml
   - rust-toolchain.toml
   - .github/workflows/ci.yml
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # A 2026-09-06 ratification recommends lowering the MSRV; the accepted decision says the number does not move
@@ -58,3 +65,36 @@ Phase 12, "Publish `0.2.0`," which `RUNBOOK.md` marks `not started`. `msrv-premi
 2. If the ratification stands, does a new atom supersede `kb-decision-0037` at `1.95`, correcting the `cfg_select`/`1.88` error inherited from both `0029` and `0037` in the same change — per this corpus's precedent that a correction is a new atom, never an edit?
 3. If `kb-decision-0037` stands instead, should the ratification record be treated as superseded or withdrawn, so a future reader does not find two live, contradictory answers to the same question?
 4. Either way: what number does phase 12 actually publish at, given `Cargo.toml` and `rust-toolchain.toml` both still read `1.97.1` and nothing in the discharge queue touched either file?
+
+## Closed — 2026-09-29
+
+`kb-decision-0067` answers this on the owner's decision of 2026-09-29, and it is the next record in
+the ADR-0004 → ADR-0029 → ADR-0037 lineage.
+
+1. **The ratification does not supersede `kb-decision-0037`, and it is withdrawn.** It was a batch
+   ratification, reached without individual review and never executed. The one argument it rested
+   on — that `0.2.0` was "the genuinely cheap moment … and the only one" — expired when `0.2.0`
+   shipped at `1.97.1` on 2026-09-10. Seven crates have since been published at that floor through
+   `0.3.2`.
+2. **Moot for the number, and the correction is made.** No atom supersedes `kb-decision-0037` at
+   `1.95`. `kb-decision-0067` amends it, as ADR-0037 amended ADR-0029, so `kb-decision-0037` stays
+   accepted and byte-identical. The same record carries the `cfg_select!` correction this
+   sub-question asked for. The threshold is `1.95`, not `1.88`. It was re-measured on 2026-09-29:
+   the macro does not exist at 1.88, is an unstable library feature from 1.91 to 1.94, and compiles
+   on 1.95.0. Neither ADR-0029's body nor ADR-0037's is edited.
+3. **Withdrawn, on the record.** `kb-decision-0067` names the withdrawal, so a later reader does not
+   find two live answers to the same question.
+4. **`1.97.1`.** `Cargo.toml:26` and `rust-toolchain.toml:2` read that, and the floor holds there
+   through 1.0.
+
+Lowering to `1.95` is not refused. `kb-decision-0067` releases it from being owed and leaves it
+available in any release, once the `msrv` job checks a floor below the pin.
+
+After 1.0 the rule is the one in the summary: a rise ships in a minor, to a stable at least six
+months old, with a CHANGELOG entry. It needs a new footing because ADR-0037's rested on `0.x`: a
+1.x minor reaches consumers through `cargo update`, and a 0.x minor did not. The footing is Cargo's
+MSRV-aware resolver, and `kb-decision-0067` states the promise no wider than that. A consumer on
+resolver 3 stays on the last 1.x minor whose floor they meet. A consumer on resolver 2 is protected
+by their lockfile and by the six-month bound. `kb-decision-0067` leaves per-package floors deferred
+and names what reopens its rule. Neither is this atom's. Closed by hand in phase 16. No accepted
+decision was edited.

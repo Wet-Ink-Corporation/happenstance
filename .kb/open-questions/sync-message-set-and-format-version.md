@@ -25,7 +25,7 @@ source_paths:
   - references/adr/0016-the-wire-format.md
   - crates/happenstance-sync/src/wire.rs
   - crates/happenstance-sync/src/lib.rs
-last_reviewed: 2026-08-10
+last_reviewed: 2026-09-29
 ---
 
 # FORMAT_VERSION = 1 names a message set that does not exist yet
@@ -89,3 +89,16 @@ named, turn out to need from the version field already shipped.
 3. If negotiation wins, is removing the per-message field treated as a breaking wire-format change
    requiring its own ADR, or as an implementation detail ADR-0016 already left open by shipping no
    message set to protect?
+
+## Phase 16 — 2026-09-29
+
+**Classification: additive today, and owed before 1.0.** `happenstance-sync` is `publish = false`
+(`crates/happenstance-sync/Cargo.toml:12`), and `Envelope` and `FORMAT_VERSION`
+(`crates/happenstance-sync/src/wire.rs:66`) live there rather than in core, so answering either
+way breaks nothing published. But `kb-decision-0066`'s nine-crate set puts `happenstance-sync` and
+`happenstance-sync-testkit` inside 1.0. The wire format becomes a promise there, and removing a
+per-message field after that is a format break.
+
+**Owner now: phase 13**, as this atom already said. The work item that puts the format version
+first on the envelope (`runbook/phases/13-sync.md:108-109`) is where sub-question 2 is answered, and
+it has to be answered before phase 13 first publishes the crate.

@@ -2921,16 +2921,38 @@ fn ledger_clauses(cell: &str) -> BTreeSet<String> {
     out
 }
 
+/// Where `word` first appears in `text` as a whole clause-id token.
+///
+/// A clause id's characters are ASCII alphanumerics and `-`, so those are the
+/// characters that may not sit either side of a match. `str::find` is the
+/// implementation this replaces, and it is wrong in a way that only shows on a
+/// cell naming two ranges: in `PS-12 – PS-15, PS-1 – PS-3` it finds `PS-1`
+/// inside `PS-12`, measures the gap from there, sees `2 – PS-15, ` rather than a
+/// dash, and silently declines to expand the second range.
+fn find_word(text: &str, word: &str) -> Option<usize> {
+    let part = |c: char| c.is_ascii_alphanumeric() || c == '-';
+    text.match_indices(word).map(|(at, _)| at).find(|&at| {
+        let before = text[..at].chars().next_back().is_none_or(|c| !part(c));
+        let after = text[at + word.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !part(c));
+        before && after
+    })
+}
+
 /// Whether `first` and `last` are separated by a dash and nothing else.
 ///
 /// `PS-4 – PS-6` is a range; `PS-4, PS-6` is two clauses, and expanding the
 /// second would silently claim PS-5 is covered when the ledger never said so.
+/// Both ids are located as whole tokens — see [`find_word`] for the cell a
+/// substring search misread.
 fn is_range(cell: &str, first: &str, last: &str) -> bool {
-    let Some(start) = cell.find(first) else {
+    let Some(start) = find_word(cell, first) else {
         return false;
     };
     let after = &cell[start + first.len()..];
-    let Some(end) = after.find(last) else {
+    let Some(end) = find_word(after, last) else {
         return false;
     };
     after[..end]
@@ -2938,54 +2960,444 @@ fn is_range(cell: &str, first: &str, last: &str) -> bool {
         .all(|c| c.is_whitespace() || matches!(c, '-' | '–' | '—'))
 }
 
-/// The rows of a `###`-headed ledger table in `RUNBOOK.md`.
+/// One `###`-headed table in the ledgers, read by its header row.
 ///
-/// Returns `(line, clauses cell, owner cell)` for every data row that is not
-/// struck through. A struck row is history the table keeps on purpose — *"a
-/// table that quietly loses a row cannot be checked against anything"* — and
-/// holding it to a current maturity would fail on exactly the rows the table
-/// exists to preserve.
-fn ledger_rows(runbook: &str, heading: &str, clause_col: usize) -> Vec<(usize, String, String)> {
-    let mut rows = Vec::new();
-    let mut inside = false;
-    for (index, line) in runbook.lines().enumerate() {
-        if line.starts_with(heading) {
-            inside = true;
-            continue;
-        }
-        if inside && line.starts_with("### ") {
-            break;
-        }
-        if !inside || !line.starts_with('|') {
-            continue;
-        }
-        let cells: Vec<&str> = line.split('|').collect();
-        if cells.len() <= clause_col + 1 || cells[clause_col].contains("---") {
-            continue;
-        }
-        if cells[clause_col].contains("~~") {
-            continue;
-        }
-        // The header row names the column rather than a clause, and a row whose
-        // clause cell holds no id has nothing for this check to hold. Skipping
-        // it here rather than special-casing `| Clause |` keeps the two tables —
-        // which head their clause column differently — on one code path.
-        if ledger_clauses(cells[clause_col]).is_empty() {
-            continue;
-        }
-        rows.push((
-            index + 1,
-            cells[clause_col].to_owned(),
-            cells
-                .last()
-                .map_or(String::new(), |_| cells[cells.len() - 2].trim().to_owned()),
-        ));
-    }
-    rows
+/// # Why by header, and not by position
+///
+/// The reader this replaces took a row's owner as **the last cell**. That held
+/// while every ledger table ended in its owner column, and it was one appended
+/// column away from reading something else: phase 16's first sketch of the 1.0
+/// dispositions added a column to the provisional ledger, at which point the
+/// owner check — *does the cell contain a digit?* — would have been run against
+/// `renew-past-1.0` and passed on the `1`. A column found by its name either
+/// exists or is reported missing; it cannot quietly become a different column.
+#[derive(Debug)]
+struct LedgerTable {
+    /// The heading line as written, which is where a stated count lives.
+    heading: String,
+    /// 1-based line of the heading.
+    heading_line: usize,
+    /// The header row's cells, markdown reduced to text.
+    header: Vec<String>,
+    /// Every data row after the header and its separator.
+    rows: Vec<LedgerTableRow>,
 }
 
-/// `RUNBOOK.md`'s provisional and deferred ledgers name exactly the clauses
-/// `§7.2` marks that way, and every row of both names an owner.
+/// One data row of a [`LedgerTable`].
+#[derive(Debug)]
+struct LedgerTableRow {
+    /// 1-based line number in the ledgers file.
+    line: usize,
+    /// The cells as written, trimmed; emphasis is left for the caller.
+    cells: Vec<String>,
+}
+
+/// A markdown table row's cells. One leading and one trailing `|` are removed —
+/// not every `|` at either end, which would merge an empty last cell into its
+/// neighbour and shift the count the misalignment check relies on.
+fn table_cells(line: &str) -> Vec<String> {
+    let trimmed = line.trim();
+    let inner = trimmed.strip_prefix('|').unwrap_or(trimmed);
+    let inner = inner.strip_suffix('|').unwrap_or(inner);
+    inner.split('|').map(|c| c.trim().to_owned()).collect()
+}
+
+/// The first table under the first `###` heading `is_heading` accepts.
+///
+/// The table is the first contiguous run of `|`-led lines after the heading and
+/// before the next heading of any level. Prose between the heading and the
+/// table is allowed — every ledger has some.
+fn ledger_table(ledgers: &str, is_heading: impl Fn(&str) -> bool) -> Option<LedgerTable> {
+    let lines: Vec<&str> = ledgers.lines().collect();
+    let start = lines
+        .iter()
+        .position(|l| l.starts_with("### ") && is_heading(l))?;
+
+    let mut run: Vec<(usize, &str)> = Vec::new();
+    for (offset, line) in lines[start + 1..].iter().enumerate() {
+        if line.starts_with('#') {
+            break;
+        }
+        if line.trim_start().starts_with('|') {
+            run.push((start + 2 + offset, line));
+        } else if !run.is_empty() {
+            break;
+        }
+    }
+
+    let (_, header_line) = run.first()?;
+    let header: Vec<String> = table_cells(header_line).iter().map(|c| unmark(c)).collect();
+    let rows = run
+        .iter()
+        .skip(1)
+        .filter(|(_, line)| {
+            !table_cells(line)
+                .iter()
+                .all(|c| !c.is_empty() && c.chars().all(|ch| matches!(ch, '-' | ':')))
+        })
+        .map(|(line, text)| LedgerTableRow {
+            line: *line,
+            cells: table_cells(text),
+        })
+        .collect();
+
+    Some(LedgerTable {
+        heading: lines[start].to_owned(),
+        heading_line: start + 1,
+        header,
+        rows,
+    })
+}
+
+/// The index of the column headed `name`, or a problem saying it is missing.
+fn column(table: &LedgerTable, name: &str) -> std::result::Result<usize, String> {
+    table.header.iter().position(|h| h == name).ok_or_else(|| {
+        format!(
+            "{RUNBOOK_LEDGERS}:{} — the table under `{}` has no `{name}` column (its header \
+             reads `{}`). This check finds columns by name so an added or reordered column \
+             cannot be read in place of the one it means; a renamed one is reported instead.",
+            table.heading_line,
+            table.heading.trim(),
+            table.header.join(" | "),
+        )
+    })
+}
+
+/// `(line, clause cell, value cell)` for every live data row of `table`.
+///
+/// A struck clause cell is history the table keeps on purpose — *"a table that
+/// quietly loses a row cannot be checked against anything"* — and holding it to
+/// a current maturity would fail on exactly the rows the table exists to
+/// preserve. A row whose clause cell names no clause id has nothing for this
+/// check to hold. A row with a different number of cells from its header is a
+/// problem, not a row: its cells no longer sit under the names they are read by.
+fn clause_rows(
+    table: &LedgerTable,
+    clause_col: usize,
+    value_col: usize,
+    problems: &mut Vec<String>,
+) -> Vec<(usize, String, String)> {
+    let mut out = Vec::new();
+    for row in &table.rows {
+        if row.cells.len() != table.header.len() {
+            problems.push(format!(
+                "{RUNBOOK_LEDGERS}:{} — this row has {} cells under a header of {}, so at least \
+                 one of its cells is being read under the wrong column name. A `|` inside a cell \
+                 or a missing one is the usual cause.",
+                row.line,
+                row.cells.len(),
+                table.header.len(),
+            ));
+            continue;
+        }
+        let clause = &row.cells[clause_col];
+        if clause.contains("~~") || ledger_clauses(clause).is_empty() {
+            continue;
+        }
+        out.push((row.line, clause.clone(), row.cells[value_col].clone()));
+    }
+    out
+}
+
+/// What phase 16's disposition table may say about a clause that is not
+/// `[FROZEN]`. ADR-0066 is the authority for the three kinds.
+#[derive(Debug, PartialEq, Eq)]
+enum Disposition {
+    /// `freeze-by-N` — frozen before 1.0, by the phase whose status-table `#`
+    /// cell is `N`. `N` is a token, not an integer: `10a` and `19b` are phases.
+    FreezeBy(String),
+    /// `renew-past-1.0: <falsifier>` — the marker survives 1.0, against the
+    /// falsifier named in the cell.
+    RenewPast(String),
+    /// `outside-1.0: <reason>` — on no surface 1.0 promises.
+    Outside(String),
+}
+
+/// A disposition cell, parsed under the table's grammar.
+///
+/// Emphasis, backticks and link syntax are reduced first ([`unmark`]), so a
+/// falsifier may quote code. Nothing else is forgiven: `freeze by 13`,
+/// `freeze-by-13 or 14` and `renew-past-1.0` with no colon are all refused,
+/// because a cell a reader has to interpret is the paragraph the phase file
+/// said to refuse.
+fn parse_disposition(cell: &str) -> std::result::Result<Disposition, String> {
+    let text = unmark(cell);
+    if let Some(phase) = text.strip_prefix("freeze-by-") {
+        if phase.is_empty() || !phase.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Err(format!(
+                "`{text}` — `freeze-by-` must be followed by one status-table `#` cell and \
+                 nothing else"
+            ));
+        }
+        return Ok(Disposition::FreezeBy(phase.to_owned()));
+    }
+    for (keyword, what) in [
+        ("renew-past-1.0:", "a falsifier"),
+        ("outside-1.0:", "a reason"),
+    ] {
+        if let Some(rest) = text.strip_prefix(keyword) {
+            let rest = rest.trim();
+            if rest.is_empty() {
+                return Err(format!(
+                    "`{text}` — `{keyword}` carries no text. It must name {what}: a renewal \
+                     with no falsifier is a decision nobody wanted to make, which CF-38 already \
+                     refuses in a marker"
+                ));
+            }
+            return Ok(if keyword.starts_with("renew") {
+                Disposition::RenewPast(rest.to_owned())
+            } else {
+                Disposition::Outside(rest.to_owned())
+            });
+        }
+    }
+    Err(format!(
+        "`{text}` — not a disposition. The grammar is exactly `freeze-by-N`, \
+         `renew-past-1.0: <falsifier>` or `outside-1.0: <reason>`"
+    ))
+}
+
+/// The heading of phase 16's per-clause table.
+const DISPOSITIONS_HEADING: &str = "### The 1.0 dispositions";
+
+/// Every problem with the ledgers, held against §7.2 and the status table.
+///
+/// Pure, so each wrong ledger the tests below name can be fed to it directly.
+#[expect(
+    clippy::too_many_lines,
+    reason = "three tables held to one specification read in one pass; split, each part re-reads §7.2"
+)]
+fn clause_ledger_problems(spec: &str, ledgers: &str, status: &[PhaseRow]) -> Vec<String> {
+    let maturities = clause_maturities(spec);
+    if maturities.is_empty() {
+        return vec![format!(
+            "{SPECIFICATION}: §7.2's generated tables yielded no clause at all, so this check \
+             is holding the ledgers against nothing. Either the table's header changed or the \
+             parser is reading the wrong document; both make every assertion below vacuous."
+        )];
+    }
+    let with = |marker: &str| -> BTreeSet<String> {
+        maturities
+            .iter()
+            .filter(|(_, m)| m == marker)
+            .map(|(clause, _)| clause.clone())
+            .collect()
+    };
+
+    let mut problems = Vec::new();
+
+    // ---- The provisional and deferred ledgers --------------------------------
+    for (marker, clause_name) in [("PROVISIONAL", "Clauses"), ("DEFERRED", "Clause")] {
+        let expected = with(marker);
+        let tag = format!("`[{marker}]`");
+        let Some(table) = ledger_table(ledgers, |h| h.starts_with("### The ") && h.contains(&tag))
+        else {
+            problems.push(format!(
+                "{RUNBOOK_LEDGERS} — no ledger table under a `### The N {tag} clauses` heading, \
+                 so the {marker} audit phase 12 owes has nothing behind it. Rename the heading \
+                 back or delete this axis deliberately rather than by omission."
+            ));
+            continue;
+        };
+
+        // The heading's count is checked, not matched. Matching it was the
+        // previous shape — `### The 41 ` spelled into this file — and it meant
+        // the first clause any phase froze turned this lint into "no ledger
+        // table found" until somebody edited the lint as well as the ledger.
+        let stated = table
+            .heading
+            .trim_start_matches("### The ")
+            .split_whitespace()
+            .next()
+            .and_then(|w| w.parse::<usize>().ok());
+        if stated != Some(expected.len()) {
+            problems.push(format!(
+                "{RUNBOOK_LEDGERS}:{} — the heading `{}` does not state §7.2's count of {} \
+                 {tag} clauses. A count in a heading is held to the tool that computes it \
+                 (runbook rule 5), or it is a number nobody re-reads.",
+                table.heading_line,
+                table.heading.trim(),
+                expected.len(),
+            ));
+        }
+
+        let (clause_col, owner_col) =
+            match (column(&table, clause_name), column(&table, "Owning phase")) {
+                (Ok(c), Ok(o)) => (c, o),
+                (c, o) => {
+                    problems.extend(c.err());
+                    problems.extend(o.err());
+                    continue;
+                }
+            };
+
+        let mut named: Vec<String> = Vec::new();
+        for (line, cell, owner) in clause_rows(&table, clause_col, owner_col, &mut problems) {
+            named.extend(ledger_clauses(&cell));
+            // Both tables. The asymmetry this used to carry — provisional rows
+            // checked, deferred rows not — was accidental rather than reasoned,
+            // and an unowned *deferred* row is arguably the worse of the two: a
+            // deferral nobody owns is a decision taken by omission, where an
+            // unowned provisional group is a falsifier merely unscheduled.
+            if !owner.chars().any(|c| c.is_ascii_digit()) {
+                let what = if marker == "PROVISIONAL" {
+                    "this provisional group names no owning phase. A clause whose falsifier is scheduled nowhere is one phase 12's criterion cannot pass"
+                } else {
+                    "this deferred clause names no owning phase. A deferral nobody owns is a decision taken by omission, which is the shape phase 12's criterion exists to refuse"
+                };
+                problems.push(format!(
+                    "{RUNBOOK_LEDGERS}:{line} — {what}, and a blank cell reads as covered."
+                ));
+            }
+        }
+        membership(&table, &tag, &expected, &named, &mut problems);
+    }
+
+    // ---- Phase 16's per-clause 1.0 dispositions ------------------------------
+    let expected: BTreeSet<String> = with("PROVISIONAL")
+        .union(&with("DEFERRED"))
+        .cloned()
+        .collect();
+    let Some(table) = ledger_table(ledgers, |h| h.starts_with(DISPOSITIONS_HEADING)) else {
+        problems.push(format!(
+            "{RUNBOOK_LEDGERS} — no table under `{DISPOSITIONS_HEADING}`. It is the proof \
+             artefact phase 16 owes and the list phase 21's clause audit reads; without it no \
+             non-`[FROZEN]` clause has a disposition this check can see."
+        ));
+        return problems;
+    };
+    let (clause_col, disposition_col) =
+        match (column(&table, "Clause"), column(&table, "Disposition")) {
+            (Ok(c), Ok(d)) => (c, d),
+            (c, d) => {
+                problems.extend(c.err());
+                problems.extend(d.err());
+                return problems;
+            }
+        };
+
+    // A `freeze-by-N` is a promise that phase N freezes the clause before 1.0
+    // ships, so N must be a phase 1.0 waits on. The closure is phase 21's
+    // `Depends on` column followed transitively — the same walk
+    // `runbook_status_matches_the_registry` uses for a milestone — minus 21
+    // itself, which is the audit rather than a phase that freezes anything.
+    let has_21 = status.iter().any(|r| r.number == "21");
+    if !has_21 {
+        problems.push(format!(
+            "{RUNBOOK} — the status table has no phase 21 row, so no `freeze-by-N` can be held \
+             to what 1.0 waits on."
+        ));
+    }
+    let before_one_point_oh: Vec<String> = prerequisites(status, &["21".to_owned()])
+        .into_iter()
+        .filter(|n| n != "21")
+        .collect();
+
+    let mut named: Vec<String> = Vec::new();
+    for (line, cell, disposition) in clause_rows(&table, clause_col, disposition_col, &mut problems)
+    {
+        let clauses = ledger_clauses(&cell);
+        named.extend(clauses.iter().cloned());
+        if clauses.len() != 1 {
+            problems.push(format!(
+                "{RUNBOOK_LEDGERS}:{line} — `{}` names {} clauses in one row. This table is \
+                 per clause, because clauses grouped by falsifier do not share a disposition — \
+                 the grouped rows above are the reason it exists.",
+                cell.trim(),
+                clauses.len(),
+            ));
+        }
+        let who = cell.trim();
+        match parse_disposition(&disposition) {
+            Err(why) => problems.push(format!("{RUNBOOK_LEDGERS}:{line} — {who}: {why}.")),
+            Ok(Disposition::FreezeBy(phase)) => {
+                let Some(row) = status.iter().find(|r| r.number == phase) else {
+                    problems.push(format!(
+                        "{RUNBOOK_LEDGERS}:{line} — {who}: `freeze-by-{phase}` names a phase \
+                         {RUNBOOK}'s status table does not have."
+                    ));
+                    continue;
+                };
+                if has_21 && !before_one_point_oh.contains(&phase) {
+                    problems.push(format!(
+                        "{RUNBOOK_LEDGERS}:{line} — {who}: `freeze-by-{phase}` names a phase \
+                         `1.0.0` does not wait on (phase 21's prerequisites are {}). A freeze \
+                         scheduled after 1.0 is a renewal, and says so as \
+                         `renew-past-1.0: <falsifier>`.",
+                        before_one_point_oh.join(", "),
+                    ));
+                }
+                if row.state == "done" {
+                    problems.push(format!(
+                        "{RUNBOOK_LEDGERS}:{line} — {who}: `freeze-by-{phase}`, and phase \
+                         {phase} is `done` while the clause is still not `[FROZEN]` in \
+                         {SPECIFICATION} §7.2. The phase closed without doing what this row \
+                         promised: freeze the clause, or give it a new disposition."
+                    ));
+                }
+            }
+            Ok(Disposition::RenewPast(_) | Disposition::Outside(_)) => {}
+        }
+    }
+    membership(
+        &table,
+        "`[PROVISIONAL]` or `[DEFERRED]`",
+        &expected,
+        &named,
+        &mut problems,
+    );
+
+    problems
+}
+
+/// Holds a ledger's named clauses to `expected`: each exactly once, none extra.
+///
+/// Exactly once is checked, not assumed. The success message has said *"each
+/// named by exactly one ledger row"* since this lint was written, and the
+/// collection behind it was a set union, so a clause in two rows — two owners,
+/// or two dispositions — passed as one.
+fn membership(
+    table: &LedgerTable,
+    what: &str,
+    expected: &BTreeSet<String>,
+    named: &[String],
+    problems: &mut Vec<String>,
+) {
+    let heading = table.heading.trim();
+    let mut seen = BTreeSet::new();
+    let mut twice = BTreeSet::new();
+    for clause in named {
+        if !seen.insert(clause.clone()) {
+            twice.insert(clause.clone());
+        }
+    }
+    for clause in &twice {
+        problems.push(format!(
+            "{RUNBOOK_LEDGERS} — `{clause}` is named by more than one row of `{heading}`. Two \
+             rows are two answers, and a reader takes whichever one they read first."
+        ));
+    }
+    for clause in expected.difference(&seen) {
+        problems.push(format!(
+            "{RUNBOOK_LEDGERS} — `{clause}` is {what} in {SPECIFICATION} §7.2 and appears in no \
+             row of `{heading}`. That is the shape phase 3 and phase 5 both shipped: a heading \
+             whose count is right and whose rows are short, which an audit reading the table \
+             alone reports as everything owned."
+        ));
+    }
+    for clause in seen.difference(expected) {
+        problems.push(format!(
+            "{RUNBOOK_LEDGERS} — `{heading}` names `{clause}`, which {SPECIFICATION} §7.2 does \
+             not mark {what}. A row that outlives its clause's maturity overstates what is \
+             still open, and the count above it stops meaning anything."
+        ));
+    }
+}
+
+/// `runbook/ledgers.md`'s provisional and deferred ledgers name exactly the
+/// clauses `§7.2` marks that way, every row of both names an owner, and phase
+/// 16's 1.0 disposition table gives every one of them exactly one disposition
+/// that parses and can still be kept.
 ///
 /// # Why this exists as a check rather than as a pass someone does
 ///
@@ -3004,85 +3416,38 @@ fn ledger_rows(runbook: &str, heading: &str, clause_col: usize) -> Vec<(usize, S
 /// run, and the release that publishes those clauses is the one that most needs
 /// it done.
 ///
+/// # The 1.0 dispositions (phase 16, ADR-0066)
+///
+/// Phase 21's clause audit reads one table, and this is what keeps it
+/// mechanical. The table must name every `[PROVISIONAL]` and `[DEFERRED]` clause
+/// in §7.2 exactly once, one clause per row, and nothing else. Each cell is
+/// `freeze-by-N`, `renew-past-1.0: <falsifier>` or `outside-1.0: <reason>`, and
+/// the last two must carry their text. A `freeze-by-N` must name a status-table
+/// phase inside phase 21's prerequisite closure — so a freeze scheduled on
+/// `19a` or `19b`, which 1.0 does not wait on, is refused as a renewal in
+/// disguise — and that phase must not be `done`, because the row is only here
+/// while its clause is still not `[FROZEN]`. That last condition is the one that
+/// fires in the future rather than today: the moment an owning phase closes
+/// without freezing its clause, the gate says so.
+///
 /// # What it does not check
 ///
-/// That an owning phase is the *right* one. The cell must name a number; whether
-/// that number is where the falsifier will actually be built is a judgement, and
-/// a lint that pretended otherwise would be the decorative kind.
+/// That an owning phase is the *right* one, or that a falsifier would falsify
+/// anything. The older tables' owner cells are history — rule 4 keeps them, and
+/// most name phases long `done` — so they are held only to naming a number. The
+/// disposition table is the live schedule, and its phases are held to the
+/// status table; whether the named phase will actually build the instrument is
+/// a judgement, and a lint that pretended otherwise would be the decorative
+/// kind.
 fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
     let root = workspace_root()?;
     let spec = at(&root, SPECIFICATION)?;
-    let runbook = at(&root, RUNBOOK_LEDGERS)?;
+    let ledgers = at(&root, RUNBOOK_LEDGERS)?;
+    let status = phase_rows(&at(&root, RUNBOOK)?)?;
 
-    let maturities = clause_maturities(&spec);
-    if maturities.is_empty() {
-        bail!(
-            "{SPECIFICATION}: §7.2's generated tables yielded no clause at all, so this check \
-             is holding the ledgers against nothing. Either the table's header changed or the \
-             parser is reading the wrong document; both make every assertion below vacuous."
-        );
-    }
-
-    let mut problems = Vec::new();
-
-    for (heading, marker, column) in [
-        ("### The 41 ", "PROVISIONAL", 2usize),
-        ("### The 12 ", "DEFERRED", 1usize),
-    ] {
-        let expected: BTreeSet<String> = maturities
-            .iter()
-            .filter(|(_, m)| m == marker)
-            .map(|(clause, _)| clause.clone())
-            .collect();
-
-        let rows = ledger_rows(&runbook, heading, column);
-        if rows.is_empty() {
-            problems.push(format!(
-                "{RUNBOOK_LEDGERS} — no ledger table found under a heading starting `{heading}`, so the \
-                 {marker} audit phase 12 owes has nothing behind it. Rename the heading back or \
-                 delete this axis deliberately rather than by omission."
-            ));
-            continue;
-        }
-
-        let mut named = BTreeSet::new();
-        for (line, cell, owner) in &rows {
-            named.extend(ledger_clauses(cell));
-            // Both tables. The asymmetry this used to carry — provisional rows
-            // checked, deferred rows not — was accidental rather than reasoned,
-            // and an unowned *deferred* row is arguably the worse of the two: a
-            // deferral nobody owns is a decision taken by omission, where an
-            // unowned provisional group is a falsifier merely unscheduled.
-            if !owner.chars().any(|c| c.is_ascii_digit()) {
-                let what = if marker == "PROVISIONAL" {
-                    "this provisional group names no owning phase. A clause whose falsifier is scheduled nowhere is one phase 12's criterion cannot pass"
-                } else {
-                    "this deferred clause names no owning phase. A deferral nobody owns is a decision taken by omission, which is the shape phase 12's criterion exists to refuse"
-                };
-                problems.push(format!(
-                    "{RUNBOOK_LEDGERS}:{line} — {what}, and a blank cell reads as covered."
-                ));
-            }
-        }
-
-        for clause in expected.difference(&named) {
-            problems.push(format!(
-                "{RUNBOOK_LEDGERS} — `{clause}` is `[{marker}]` in {SPECIFICATION} §7.2 and appears in \
-                 no row of the `{heading}…` ledger. That is the shape phase 3 and phase 5 both \
-                 shipped: a heading whose count is right and whose rows are short, which a \
-                 phase-12 audit reading the table alone reports as everything owned."
-            ));
-        }
-        for clause in named.difference(&expected) {
-            problems.push(format!(
-                "{RUNBOOK_LEDGERS} — the `{heading}…` ledger names `{clause}`, which {SPECIFICATION} \
-                 §7.2 does not mark `[{marker}]`. A row that outlives its clause's maturity \
-                 overstates what is still open, and the count above it stops meaning anything."
-            ));
-        }
-    }
-
+    let problems = clause_ledger_problems(&spec, &ledgers, &status);
     if problems.is_empty() {
+        let maturities = clause_maturities(&spec);
         let provisional = maturities
             .iter()
             .filter(|(_, m)| m == "PROVISIONAL")
@@ -3091,7 +3456,8 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
         println!(
             "runbook_clause_ledgers_match_the_specification: {provisional} provisional and \
              {deferred} deferred clause(s) in §7.2, each named by exactly one ledger row, every \
-             row of both owned"
+             row of both owned, and each with exactly one 1.0 disposition that parses and can \
+             still be kept"
         );
         return Ok(());
     }
@@ -3101,9 +3467,394 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
     }
     bail!(
         "{} clause ledger problem(s). Phase 12's exit criteria audit these tables against \
-         `spec-trace` rather than against prose, and this is what makes that possible.",
+         `spec-trace` rather than against prose, and phase 21's audit reads the 1.0 \
+         dispositions; this is what makes both possible.",
         problems.len()
     )
+}
+
+#[cfg(test)]
+mod clause_ledger_tests {
+    //! Each test is a wrong ledger the check must refuse, written before the
+    //! check was: "a rule that no adapter can fail is decorative" holds for a
+    //! lint as much as for a conformance rule.
+
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    /// A §7.2 in miniature: one frozen clause, two provisional, one deferred.
+    const SPEC: &str = "\
+### 7.2 The table
+
+| Clause | Maturity | Conformance rule | Cases |
+|---|---|---|---|
+| VT-1 | FROZEN | `a` | E2E-01 |
+| VT-2 | PROVISIONAL | `b` | E2E-01 |
+| ES-3 | PROVISIONAL | `c` | E2E-01 |
+| SY-4 | DEFERRED | `d` | E2E-01 |
+";
+
+    /// A status table in miniature. Phase 21 waits on 13, 16 and 17, and 13
+    /// on 12; 19a is a phase 1.0 does not wait on; 12 is done.
+    const STATUS: &str = "\
+## Status
+
+| # | Phase | Depends on | State | Proof artefact |
+|---|---|---|---|---|
+| 12 | Publish | — | done | x |
+| 16 | Define | 12 | in progress | x |
+| 17 | Window | 16 | not started | x |
+| 13 | Sync | 12, 17 | not started | x |
+| 19a | Wasm | 12 | not started | x |
+| 21 | 1.0 | 13, 16, 17 | not started | x |
+";
+
+    const PROVISIONAL: &str = "\
+### The 2 `[PROVISIONAL]` clauses
+
+Prose before the table.
+
+| Group | Clauses | Falsified by | Owning phase |
+|---|---|---|---|
+| Two | VT-2, ES-3 | something | 5 |
+";
+
+    const DEFERRED: &str = "\
+### The 1 `[DEFERRED]` clauses
+
+| Clause | What it defers | Owning phase |
+|---|---|---|
+| ~~PS-9~~ | ~~history~~ | settled at 3 |
+| SY-4 | something | 13 |
+";
+
+    fn dispositions(rows: &[&str]) -> String {
+        let mut out = String::from(
+            "### The 1.0 dispositions\n\n| Clause | Disposition | Basis |\n|---|---|---|\n",
+        );
+        for row in rows {
+            out.push_str(row);
+            out.push('\n');
+        }
+        out
+    }
+
+    const GOOD_ROWS: [&str; 3] = [
+        "| VT-2 | freeze-by-13 | the sync testkit's rule |",
+        "| ES-3 | renew-past-1.0: a real domain event carrying more than 64 tags | own marker |",
+        "| SY-4 | freeze-by-17 | the breaking window |",
+    ];
+
+    fn problems_for(ledgers: &str) -> Vec<String> {
+        clause_ledger_problems(SPEC, ledgers, &phase_rows(STATUS).unwrap())
+    }
+
+    fn with_dispositions(rows: &[&str]) -> Vec<String> {
+        problems_for(&format!(
+            "{PROVISIONAL}\n{DEFERRED}\n{}\n### The blocked cases\n",
+            dispositions(rows)
+        ))
+    }
+
+    fn assert_one(problems: &[String], needle: &str) {
+        assert!(
+            problems.iter().any(|p| p.contains(needle)),
+            "expected a problem containing {needle:?}, got {problems:#?}"
+        );
+    }
+
+    #[test]
+    fn a_correct_ledger_passes() {
+        assert_eq!(with_dispositions(&GOOD_ROWS), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_missing_disposition_row_is_refused() {
+        let problems = with_dispositions(&GOOD_ROWS[..2]);
+        assert_one(&problems, "`SY-4` is `[PROVISIONAL]` or `[DEFERRED]`");
+    }
+
+    #[test]
+    fn a_clause_with_two_dispositions_is_refused() {
+        let mut rows = GOOD_ROWS.to_vec();
+        rows.push("| VT-2 | freeze-by-17 | a second answer |");
+        assert_one(
+            &with_dispositions(&rows),
+            "`VT-2` is named by more than one row",
+        );
+    }
+
+    #[test]
+    fn a_frozen_clause_in_the_disposition_table_is_refused() {
+        let mut rows = GOOD_ROWS.to_vec();
+        rows.push("| VT-1 | freeze-by-17 | already frozen |");
+        assert_one(&with_dispositions(&rows), "names `VT-1`");
+    }
+
+    #[test]
+    fn a_row_naming_two_clauses_is_refused() {
+        let rows = [
+            "| VT-2, ES-3 | freeze-by-13 | grouped |",
+            "| SY-4 | freeze-by-17 | the breaking window |",
+        ];
+        assert_one(&with_dispositions(&rows), "names 2 clauses in one row");
+    }
+
+    #[test]
+    fn an_unknown_phase_is_refused() {
+        let rows = [
+            GOOD_ROWS[0],
+            GOOD_ROWS[1],
+            "| SY-4 | freeze-by-99 | nowhere |",
+        ];
+        assert_one(&with_dispositions(&rows), "`freeze-by-99` names a phase");
+    }
+
+    #[test]
+    fn a_phase_one_point_oh_does_not_wait_on_is_refused() {
+        let rows = [
+            GOOD_ROWS[0],
+            GOOD_ROWS[1],
+            "| SY-4 | freeze-by-19a | after 1.0 |",
+        ];
+        assert_one(
+            &with_dispositions(&rows),
+            "`freeze-by-19a` names a phase `1.0.0` does not wait on",
+        );
+    }
+
+    #[test]
+    fn the_release_itself_is_not_a_freezing_phase() {
+        let rows = [
+            GOOD_ROWS[0],
+            GOOD_ROWS[1],
+            "| SY-4 | freeze-by-21 | at release |",
+        ];
+        assert_one(
+            &with_dispositions(&rows),
+            "`freeze-by-21` names a phase `1.0.0` does not",
+        );
+    }
+
+    #[test]
+    fn a_done_phase_is_refused_while_its_clause_is_still_open() {
+        let rows = [
+            GOOD_ROWS[0],
+            GOOD_ROWS[1],
+            "| SY-4 | freeze-by-12 | too late |",
+        ];
+        let problems = with_dispositions(&rows);
+        assert_one(
+            &problems,
+            "phase 12 is `done` while the clause is still not",
+        );
+    }
+
+    #[test]
+    fn a_renewal_or_exclusion_with_no_text_is_refused() {
+        for cell in [
+            "renew-past-1.0:",
+            "renew-past-1.0:   ",
+            "outside-1.0:",
+            "`renew-past-1.0:` **",
+        ] {
+            let row = format!("| SY-4 | {cell} | empty |");
+            let rows = [GOOD_ROWS[0], GOOD_ROWS[1], row.as_str()];
+            assert_one(&with_dispositions(&rows), "carries no text");
+        }
+    }
+
+    #[test]
+    fn a_cell_outside_the_grammar_is_refused() {
+        for cell in [
+            "",
+            "freeze by 13",
+            "freeze-by-",
+            "freeze-by-13 or 14",
+            "frozen",
+            "renew-past-1.0 against a domain event",
+            "renewed past 1.0: something",
+            "13",
+        ] {
+            let row = format!("| SY-4 | {cell} | bad |");
+            let rows = [GOOD_ROWS[0], GOOD_ROWS[1], row.as_str()];
+            let problems = with_dispositions(&rows);
+            assert!(
+                problems.iter().any(|p| p.contains("SY-4")
+                    && (p.contains("not a disposition") || p.contains("`freeze-by-` must"))),
+                "{cell:?} was accepted: {problems:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_grammar_parses_each_kind() {
+        assert_eq!(
+            parse_disposition("freeze-by-10b"),
+            Ok(Disposition::FreezeBy("10b".to_owned()))
+        );
+        assert_eq!(
+            parse_disposition("renew-past-1.0: a `Busy` store"),
+            Ok(Disposition::RenewPast("a Busy store".to_owned()))
+        );
+        assert_eq!(
+            parse_disposition("outside-1.0: happenstance-ladybug is not promised"),
+            Ok(Disposition::Outside(
+                "happenstance-ladybug is not promised".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn a_missing_disposition_table_is_refused() {
+        let problems = problems_for(&format!("{PROVISIONAL}\n{DEFERRED}\n"));
+        assert_one(&problems, "no table under `### The 1.0 dispositions`");
+    }
+
+    /// The defect this reader replaced: the owner was the last cell. Here the
+    /// last cell is a disposition carrying the digit `1`, and the owner cell is
+    /// empty. Read by position, the row passes; read by name, it is unowned.
+    #[test]
+    fn a_trailing_column_is_not_read_as_the_owner() {
+        let provisional = "\
+### The 2 `[PROVISIONAL]` clauses
+
+| Group | Clauses | Falsified by | Owning phase | Disposition |
+|---|---|---|---|---|
+| Two | VT-2, ES-3 | something | — | renew-past-1.0: x |
+";
+        let problems = problems_for(&format!(
+            "{provisional}\n{DEFERRED}\n{}",
+            dispositions(&GOOD_ROWS)
+        ));
+        assert_one(&problems, "this provisional group names no owning phase");
+    }
+
+    /// The same defect from the other side, on the new table: a trailing
+    /// column holding a disposition that would fail must not be read in place
+    /// of the `Disposition` column, which holds one that passes.
+    #[test]
+    fn a_trailing_column_is_not_read_as_the_disposition() {
+        let table = "\
+### The 1.0 dispositions
+
+| Clause | Disposition | Basis | Note |
+|---|---|---|---|
+| VT-2 | freeze-by-13 | b | freeze-by-12 |
+| ES-3 | renew-past-1.0: a real domain event carrying more than 64 tags | b | frozen |
+| SY-4 | freeze-by-17 | b | freeze-by-99 |
+";
+        let problems = problems_for(&format!("{PROVISIONAL}\n{DEFERRED}\n{table}"));
+        assert_eq!(problems, Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_renamed_column_is_reported_rather_than_guessed() {
+        let table = "\
+### The 1.0 dispositions
+
+| Clause | Verdict | Basis |
+|---|---|---|
+| VT-2 | freeze-by-13 | b |
+";
+        let problems = problems_for(&format!("{PROVISIONAL}\n{DEFERRED}\n{table}"));
+        assert_one(&problems, "has no `Disposition` column");
+    }
+
+    #[test]
+    fn a_misaligned_row_is_reported_rather_than_read() {
+        let mut rows = GOOD_ROWS.to_vec();
+        rows[2] = "| SY-4 | freeze-by-17 | a | stray |";
+        let problems = with_dispositions(&rows);
+        assert_one(&problems, "this row has 4 cells under a header of 3");
+    }
+
+    /// Anchoring the heading on its count meant freezing one clause broke the
+    /// lint as "no table found". Anchored on the marker, the count is checked.
+    #[test]
+    fn a_stale_heading_count_is_reported_and_the_table_still_read() {
+        let provisional = PROVISIONAL.replace("The 2 ", "The 41 ");
+        let problems = problems_for(&format!(
+            "{provisional}\n{DEFERRED}\n{}",
+            dispositions(&GOOD_ROWS)
+        ));
+        assert_one(&problems, "does not state §7.2's count of 2");
+        assert!(
+            !problems.iter().any(|p| p.contains("no ledger table")),
+            "{problems:#?}"
+        );
+    }
+
+    #[test]
+    fn a_clause_in_two_provisional_groups_is_refused() {
+        let provisional = "\
+### The 2 `[PROVISIONAL]` clauses
+
+| Group | Clauses | Falsified by | Owning phase |
+|---|---|---|---|
+| One | VT-2, ES-3 | something | 5 |
+| Two | ES-3 | something else | 8 |
+";
+        let problems = problems_for(&format!(
+            "{provisional}\n{DEFERRED}\n{}",
+            dispositions(&GOOD_ROWS)
+        ));
+        assert_one(&problems, "`ES-3` is named by more than one row");
+    }
+
+    #[test]
+    fn a_struck_row_is_history_and_not_a_clause() {
+        // PS-9 is struck in DEFERRED and is in no maturity set; a live row for
+        // it would be refused, the struck one is not.
+        assert_eq!(with_dispositions(&GOOD_ROWS), Vec::<String>::new());
+        let deferred = DEFERRED.replace("~~PS-9~~", "PS-9");
+        let problems = problems_for(&format!(
+            "{PROVISIONAL}\n{deferred}\n{}",
+            dispositions(&GOOD_ROWS)
+        ));
+        assert_one(&problems, "names `PS-9`");
+    }
+
+    /// `str::find` located `PS-1` inside `PS-12` and declined the second range.
+    #[test]
+    fn a_second_range_whose_first_id_prefixes_an_earlier_one_expands() {
+        let named = ledger_clauses("PS-12 – PS-15, PS-1 – PS-3");
+        for n in [1, 2, 3, 12, 13, 14, 15] {
+            assert!(
+                named.contains(&format!("PS-{n}")),
+                "PS-{n} missing: {named:?}"
+            );
+        }
+        assert!(!named.contains("PS-5"), "{named:?}");
+    }
+
+    #[test]
+    fn a_comma_list_is_not_a_range() {
+        let named = ledger_clauses("PS-4, PS-6");
+        assert!(!named.contains("PS-5"), "{named:?}");
+        assert_eq!(named.len(), 2);
+    }
+
+    /// With no phase 21 row the closure is empty, so every `freeze-by-N` would
+    /// fail as "does not wait on" and bury the real problem. The guard must
+    /// report the missing row once and suppress that flood — two wrong
+    /// implementations, one dropping the report and one dropping the guard.
+    #[test]
+    fn a_status_table_with_no_phase_21_row_is_reported_once() {
+        let without_21 = STATUS.replace("| 21 | 1.0 | 13, 16, 17 | not started | x |\n", "");
+        assert_ne!(without_21, STATUS, "the fixture's phase 21 row moved");
+        let problems = clause_ledger_problems(
+            SPEC,
+            &format!("{PROVISIONAL}\n{DEFERRED}\n{}", dispositions(&GOOD_ROWS)),
+            &phase_rows(&without_21).unwrap(),
+        );
+        assert_one(&problems, "has no phase 21 row");
+        assert!(
+            !problems.iter().any(|p| p.contains("does not wait on")),
+            "the missing row must not also fail every freeze row: {problems:#?}"
+        );
+    }
 }
 
 #[cfg(test)]

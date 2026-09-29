@@ -42,7 +42,7 @@ source_paths:
   - crates/happenstance-testkit/src/contract.rs
   - crates/happenstance-ladybug/tests/projection.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-09
+last_reviewed: 2026-09-29
 ---
 
 # RESET_REFUSAL can be declared and left un-mechanised, and nothing in the tree would notice
@@ -123,3 +123,16 @@ rule, and a `NoopProtectFixture` registered in `tests/projection_mutation_covera
 obligation has a named wrong implementation are all still owed — and the next adapter to declare
 `RESET_REFUSAL` supported will do so with nothing checking it, with no advance warning of which
 adapter that will be.
+
+## Phase 16 — 2026-09-29
+
+**Clause disposition: PS-18 `[DEFERRED]` is `freeze-by-18`** (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`):
+*"a refusable reset implemented by at least one adapter"* (`runbook/phases/18-typed-runner.md:29-30`),
+with the CF-39-shaped clause and the `NoopProtectFixture` mutant this atom specifies. The fallback,
+if phase 18 does not deliver, is renewal past 1.0 — safe, because the clause, rule and mutant are
+all additive and `ResetError::Refused` is already in the frozen port.
+
+That answers the timing half of *What is not decided*: the clause is minted in phase 18, beside
+the first adapter to declare `RESET_REFUSAL` supported, not in a sweep. Still true at `3dcba41`:
+`NoopProtectFixture` appears nowhere in `crates/`, and every projection adapter declines. The
+default-reason-string question rides along unanswered. **Owner now: phase 18.**

@@ -29,7 +29,7 @@ source_paths:
   - crates/happenstance/src/composition.rs
   - crates/happenstance/src/boundary.rs
   - references/adr/0020-fold-query-agreement.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-29
 ---
 
 # Every tuple Boundary is bound to its first member's event type, and no signed-off record says so
@@ -94,3 +94,15 @@ break once the `0.2.0-alpha.1` movement licence is spent (`RUNBOOK.md`'s phase 1
 `0.2.0`). The one item free at any date and worth doing regardless of which option is eventually
 taken is the doc-comment correction on `boundary.rs`'s sealed-trait rationale, because it appreciates
 in cost the longer it stands uncorrected and could be cited to block a genuinely free change.
+
+## Phase 16 — 2026-09-29
+
+**Classification: breaking-if-answered → phase 17** (`runbook/phases/17-breaking-window.md`;
+`kb-decision-0066`). Option A forecloses B and C, so choosing is itself the break, and 1.0 makes
+that choice whether anyone writes it down or not. Taking A in phase 17 is the deliberate
+foreclosure this atom asks for, fenced with a `compile_fail` doctest. D stays additive at its own
+governance price, a superseding atom against `kb-decision-0020`. The bound is unchanged at
+`crates/happenstance/src/composition.rs:30`.
+
+Free at any phase, and still owed: the backwards sealed-trait rationale at
+`crates/happenstance/src/boundary.rs:72-74`. **Owner now: phase 17.**
