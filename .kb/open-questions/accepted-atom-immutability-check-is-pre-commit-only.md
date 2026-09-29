@@ -131,17 +131,19 @@ carve-out question or still needs one beside it.
 The owner chose the third remedy, a CI diff against the merge base (`kb-decision-wi-38373d`),
 and it is built: `cargo xtask lint-kb` (`xtask/src/lint_kb.rs`) is a gate step, and `cargo xtask
 affected` runs it too. It reads the status at the base and compares bodies, so a committed
-reversal fails, and so does a body edit hidden behind a status flip. Frontmatter is free, so a
-supersession passes.
+reversal fails, and so does a body edit hidden behind a status flip. In the frontmatter only the
+supersession keys and the pointer keys `source_paths` and `related` may change, and `accepted` may
+only become `superseded` with a successor named — so a supersession passes, and a flip to
+`proposed` that would free the body for a later change does not.
 
 The carve-out question is answered by mechanism rather than judgement. The one repair
 `kb-governance-referent-not-reasoning-001` allows that a diff can recognise — a drifted
-`path:line` citation repointed in place — passes, because `citation_ranges_resolve` forces it.
+`path.ext:N` citation repointed in place — passes, because `citation_ranges_resolve` forces it.
 Every other body change fails, including a meaning-preserving rename, which is now a gate failure
 that needs its own decision (`wi-5fce24`). The lint does not need to know what a citation *means*,
 only where its numbers are.
 
-Not answered here, and not claimed: frontmatter *shape* (only delimiters and a `status:` key are
-checked — the status vocabulary is `adr-status-vocabulary-exceeds-the-schema`'s), link resolution
+Not answered here, and not claimed: frontmatter *shape* beyond the frozen keys (the status
+vocabulary is `adr-status-vocabulary-exceeds-the-schema`'s), link resolution
 for `related` / `depends_on` / `superseded_by`, and atoms outside `.kb/decisions/`. Phase 16 owns
 the link-resolution gap. Closed by hand in phase 15's intake wave.

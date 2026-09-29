@@ -115,6 +115,11 @@ summary: >-
   is unchanged, since `AppendError` still has no `Busy` variant), and
   kb-open-question-adr-status-vocabulary-001 (a third instance of the drift, now at section rather than
   document grain, plus a first datum toward convention-or-stopgap).
+  The 2026-09-28 pass, written by hand since redkiln's retirement, flipped four questions to
+  Superseded (query-union-rule-unowned, projection-module-exemption-scope, stale-0-0-0-name-
+  reservations, immutability-check-pre-commit), amended es-38-and-gap-read-unowned and global-vs-
+  boundary-visibility without closing them, and indexed cf-17-cf-14-markers, which only domain-
+  map.md had named.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -133,7 +138,7 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-09-intake
   - .kb/_governance/integration-waves/2026-09-11-intake
   - .kb/_governance/integration-waves/2026-09-21-intake
-last_reviewed: 2026-09-21
+last_reviewed: 2026-09-28
 ---
 
 # Open-questions index
@@ -327,7 +332,7 @@ what the question is, not its evidence. The last two were added by the
   (`kb-open-question-cf-17-cf-14-markers-001`) — a declaration MUST landed on PROVISIONAL CF-17's
   text with `NoopReopenFixture` as its wrong implementation, and neither CF-17's marker nor
   DEFERRED CF-14's moved; whether either should is open. Indexed 2026-09-28, in phase 15's intake
-  wave: the atom existed and no map named it.
+  wave: `domain-map.md` named it, and this index did not.
 
 ## Contract ports, conformance, and the ADR corpus (2026-08-10 ADR import)
 
