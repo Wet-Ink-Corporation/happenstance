@@ -89,8 +89,8 @@ fn main() {
 then satisfied by a clippy run, and the failure surfaces at the first Workers
 adapter — as a design that cannot be implemented, not as a red build.
 
-**Evidence.** `xtask/src/main.rs:99 (struct Step)` ·
-`xtask/src/main.rs:1422 (fn wasm_steps() -> Vec)` · `xtask/src/main.rs:1462 (fn steps_named)` ·
+**Evidence.** `xtask/src/main.rs:100 (struct Step)` ·
+`xtask/src/main.rs:1424 (fn wasm_steps() -> Vec)` · `xtask/src/main.rs:1464 (fn steps_named)` ·
 [CONTRIBUTING §The gate](../../CONTRIBUTING.md)
 
 ---
@@ -172,9 +172,9 @@ every probed tool on every runner, so the step is not skipped there — it is
 *failing* there, and a runner that swallows the failure turns the one check that
 arrives without a commit to trigger it into decoration nobody reads.
 
-**Evidence.** `xtask/src/main.rs:142 (probe is not forced to be an invocation of the thing it is probing)` ·
-`xtask/src/main.rs:1519 (let Some(probe) = step.probe)` ·
-`xtask/src/main.rs:1553 (fn is_available)`
+**Evidence.** `xtask/src/main.rs:143 (probe is not forced to be an invocation of the thing it is probing)` ·
+`xtask/src/main.rs:1521 (let Some(probe) = step.probe)` ·
+`xtask/src/main.rs:1555 (fn is_available)`
 
 ---
 
@@ -237,8 +237,8 @@ rustdoc group — was unenforced while a step named "documentation" reported
 success, which is worse than having no step, because the gate's summary said the
 question had been asked.
 
-**Evidence.** `xtask/src/main.rs:113 (is not portable to the Windows this repository is developed on)` · `xtask/src/main.rs:559 (because rustdoc does not read)` ·
-`xtask/src/main.rs:558 (rather than the ambient)`
+**Evidence.** `xtask/src/main.rs:114 (is not portable to the Windows this repository is developed on)` · `xtask/src/main.rs:560 (because rustdoc does not read)` ·
+`xtask/src/main.rs:559 (rather than the ambient)`
 
 ---
 
@@ -312,8 +312,8 @@ contributor's identical command resolves a different graph — so a break lands 
 a run that changed no source at all and is attributed to the commit that happened
 to be under it.
 
-**Evidence.** `xtask/src/main.rs:148 (resolves no dependencies)` ·
-`xtask/src/main.rs:982 (must rewrite the lock file)` ·
+**Evidence.** `xtask/src/main.rs:149 (resolves no dependencies)` ·
+`xtask/src/main.rs:983 (must rewrite the lock file)` ·
 [cargo-hack README](https://raw.githubusercontent.com/taiki-e/cargo-hack/main/README.md) *(checked 2026-08-09, rustc 1.97.1)*
 
 ---
@@ -368,7 +368,7 @@ disagree is a consumer on the old compiler, after publication, when the number
 has stopped being a note and become a promise.
 
 **Evidence.** `Cargo.toml:26 (rust-version = "1.97.1")` · `clippy.toml:1 (msrv = "1.97.1")` ·
-`xtask/src/main.rs:1512 (A let-chain, and the first in the workspace)` ·
+`xtask/src/main.rs:1514 (A let-chain, and the first in the workspace)` ·
 [ADR-0029](../../.kb/decisions/0029-msrv-raised-to-1-97-1.md) ·
 [ADR-0004](../../.kb/decisions/0004-edition-and-msrv.md) ·
 [cargo rust-version resolution](https://doc.rust-lang.org/cargo/reference/resolver.html) *(checked 2026-08-09, rustc 1.97.1)*

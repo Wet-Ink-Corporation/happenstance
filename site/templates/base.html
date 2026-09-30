@@ -1,0 +1,89 @@
+{%- set facts = load_data(path="data/facts.json") -%}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ config.title }}{% endblock title %}</title>
+  <meta name="description" content="{% block description %}{{ config.description }}{% endblock description %}">
+  <link rel="icon" href="{{ get_url(path='brand/favicon.svg') }}" type="image/svg+xml">
+  <link rel="preload" href="{{ get_url(path='fonts/IBMPlexSans-Variable-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <script>
+    {#- Before first paint, so a reader who chose a theme never sees the other one flash.
+        Storage can be absent or throw (private windows, blocked site data); the page
+        then follows the OS preference, which is also the default. #}
+    try { var t = localStorage.getItem("hs-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  {% include "partials/tokens.html" %}
+  <style>
+    @font-face { font-family: "IBM Plex Sans"; src: url("{{ get_url(path='fonts/IBMPlexSans-Variable-latin.woff2') }}") format("woff2"); font-weight: 100 700; font-style: normal; font-display: swap; }
+    @font-face { font-family: "IBM Plex Sans"; src: url("{{ get_url(path='fonts/IBMPlexSans-Variable-latin-italic.woff2') }}") format("woff2"); font-weight: 100 700; font-style: italic; font-display: swap; }
+    @font-face { font-family: "IBM Plex Mono"; src: url("{{ get_url(path='fonts/IBMPlexMono-Regular-latin.woff2') }}") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "IBM Plex Mono"; src: url("{{ get_url(path='fonts/IBMPlexMono-Italic-latin.woff2') }}") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+    @font-face { font-family: "IBM Plex Mono"; src: url("{{ get_url(path='fonts/IBMPlexMono-Medium-latin.woff2') }}") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+    @font-face { font-family: "IBM Plex Mono"; src: url("{{ get_url(path='fonts/IBMPlexMono-SemiBold-latin.woff2') }}") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+  </style>
+  <link rel="stylesheet" href="{{ get_url(path='css/components.css') }}">
+  <link rel="stylesheet" href="{{ get_url(path='css/site.css') }}">
+</head>
+<body class="hs-root">
+  <a class="skip" href="#main">Skip to content</a>
+  {%- block header %}
+  {%- set section_path = current_path | default(value="/") %}
+  <header class="hs-header hs-header--sticky">
+    <div class="hs-header__inner">
+      <a class="hs-header__brand" href="{{ get_url(path='') }}" aria-label="happenstance, home">{{ <logo file="happenstance-lockup-horizontal.svg" class="hs-logo site-lockup" /> }}</a>
+      <span class="hs-chip hs-mono">{{ facts.version }}</span>
+      <nav class="hs-header__nav" aria-label="Primary">
+        <a class="hs-header__link" href="{{ get_url(path='@/guide/_index.md') }}"{% if section_path is starting_with(pat="/guide") %} aria-current="page"{% endif %}>Guide</a>
+        <a class="hs-header__link" href="{{ get_url(path='@/reference.md') }}"{% if section_path is starting_with(pat="/reference") %} aria-current="page"{% endif %}>Reference</a>
+        <a class="hs-header__link" href="{{ get_url(path='api/happenstance/index.html') }}">API</a>
+      </nav>
+      <div class="hs-header__actions">
+        <a class="hs-btn hs-btn--ghost hs-btn--size-sm" href="{{ config.extra.repository }}">GitHub</a>
+        <button class="hs-btn hs-btn--ghost hs-btn--size-icon theme-toggle" type="button" aria-label="Switch between light and dark">{{ <icon name="contrast" /> }}</button>
+      </div>
+      <button class="hs-btn hs-btn--ghost hs-btn--size-icon hs-header__menu" type="button" aria-expanded="false" aria-controls="drawer" aria-label="Open the menu">{{ <icon name="menu" /> }}</button>
+    </div>
+    <nav class="drawer" id="drawer" aria-label="Menu" hidden>
+      <a href="{{ get_url(path='@/guide/_index.md') }}">Guide</a>
+      <a href="{{ get_url(path='@/reference.md') }}">Reference</a>
+      <a href="{{ get_url(path='api/happenstance/index.html') }}">API</a>
+      <a href="{{ config.extra.repository }}">GitHub</a>
+      <button class="drawer__theme theme-toggle" type="button">{{ <icon name="contrast" /> }} Switch light and dark</button>
+    </nav>
+  </header>
+  {%- endblock header %}
+
+  <main id="main">
+  {%- block content %}{% endblock content %}
+  </main>
+
+  <footer class="hs-footer">
+    <div class="hs-footer__inner">
+      <div class="hs-footer__brand">
+        {{ <logo file="happenstance-lockup-horizontal.svg" class="hs-logo footer-lockup" /> }}
+        <p>MIT OR Apache-2.0 · © Wet Ink Corporation. Published <span class="hs-mono">{{ facts.version }}</span>.</p>
+      </div>
+      <div class="hs-footer__col">
+        <span class="hs-label">Learn</span>
+        <a href="{{ get_url(path='@/guide/first-encounter.md') }}">Your first encounter</a>
+        <a href="{{ get_url(path='@/guide/_index.md') }}">The guide</a>
+      </div>
+      <div class="hs-footer__col">
+        <span class="hs-label">Reference</span>
+        <a href="{{ get_url(path='api/happenstance/index.html') }}">API</a>
+        <a href="{{ config.extra.blob }}/spec/SPECIFICATION.md">Specification</a>
+        <a href="{{ config.extra.docs_rs }}">docs.rs</a>
+      </div>
+      <div class="hs-footer__col">
+        <span class="hs-label">Project</span>
+        <a href="{{ config.extra.repository }}">GitHub</a>
+        <a href="{{ config.extra.crates }}">crates.io</a>
+        <a href="{{ config.extra.blob }}/CHANGELOG.md">Changelog</a>
+      </div>
+    </div>
+  </footer>
+  <script src="{{ get_url(path='js/site.js') }}" defer></script>
+</body>
+</html>

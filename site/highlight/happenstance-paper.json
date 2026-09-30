@@ -1,0 +1,27 @@
+{
+  "name": "happenstance-paper",
+  "type": "light",
+  "colors": {
+    "editor.background": "#F9F6EF",
+    "editor.foreground": "#2A211B"
+  },
+  "tokenColors": [
+    { "settings": { "foreground": "#2A211B" } },
+    {
+      "scope": ["keyword", "storage", "storage.type", "storage.modifier", "keyword.control", "keyword.other"],
+      "settings": { "foreground": "#A85B00", "fontStyle": "bold" }
+    },
+    {
+      "scope": ["string", "string.quoted", "punctuation.definition.string"],
+      "settings": { "foreground": "#1B6B3A" }
+    },
+    {
+      "scope": ["comment", "punctuation.definition.comment"],
+      "settings": { "foreground": "#6B625A", "fontStyle": "italic" }
+    },
+    {
+      "scope": ["constant.numeric", "constant.language", "constant.character", "entity.name.type.lifetime", "storage.modifier.lifetime", "punctuation.definition.lifetime"],
+      "settings": { "foreground": "#A3341F" }
+    }
+  ]
+}

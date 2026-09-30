@@ -41,7 +41,7 @@ conditions are not those:
 
 | | ADR-0022 §11's row | `cargo xtask ci` |
 | --- | --- | --- |
-| build | `--release` | **debug** — `xtask/src/main.rs:179-190` passes no `--release` |
+| build | `--release` | **debug** — `xtask/src/main.rs:180-191` passes no `--release` |
 | test parallelism | one target, run alone | libtest's default; three 64-contender rules in one binary overlap |
 | `CONTENDERS` | 64, in an experiment | 64, in `concurrency.rs:238`, for every adapter everywhere |
 

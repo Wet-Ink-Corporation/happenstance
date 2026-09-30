@@ -1,0 +1,86 @@
+name: Pages
+
+# The documentation site: `cargo xtask site` assembles `site/`, `docs/` and a
+# nightly rustdoc build with scraped examples, and Zola builds the result. A pull
+# request builds it, so a guide link that stopped landing or a template that
+# stopped rendering fails there; only `main` deploys.
+#
+# Not part of the gate, and deliberately: scraped examples need nightly, and the
+# gate's own rustdoc steps are the stable, `-D warnings` bar. A red run here fails
+# the site, not a merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "assets/brand/**"
+      - "crates/**"
+      - "examples/**"
+      - "xtask/src/site.rs"
+      - "xtask/src/site/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Read-only by default, as in `ci.yml`. The deploy job raises its own grant,
+# beside the one step that needs it.
+permissions:
+  contents: read
+
+# One deployment at a time, and a newer push never cancels one mid-flight:
+# a half-finished Pages deployment is worse than a late one.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZOLA_VERSION: "0.23.6"
+  # From the release's own asset digest, so a re-pointed download fails here
+  # rather than building the site with whatever it now is.
+  ZOLA_SHA256: "8f5132b3522412d04e395e0b25f6d68613ad272a873e54a2b3ebf664873024a4"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      # `rustup` rather than a second toolchain action, for the reason `ci.yml`
+      # gives: that action makes what it installs the default, and xtask itself
+      # must build on the pinned channel. `cargo +nightly` reaches this one.
+      - name: Install nightly, for scraped examples
+        run: rustup toolchain install nightly --profile minimal
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Install Zola
+        run: |
+          curl -sSfL -o zola.tar.gz "https://github.com/getzola/zola/releases/download/v${ZOLA_VERSION}/zola-v${ZOLA_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${ZOLA_SHA256}  zola.tar.gz" | sha256sum -c -
+          tar -xzf zola.tar.gz -C "$HOME/.cargo/bin" zola
+          zola --version
+      - name: Build the site
+        run: cargo xtask site
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: target/site/public
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The two grants a Pages deployment needs and nothing else: `pages: write`
+    # to publish, `id-token: write` so the deployment can prove which workflow
+    # run produced the artefact.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

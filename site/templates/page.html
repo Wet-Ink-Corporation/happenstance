@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} · happenstance{% endblock title %}
+{% block description %}{{ page.description | default(value=config.description) }}{% endblock description %}
+
+{% block content %}
+<div class="docs">
+  <aside class="docs__nav">{% include "partials/sidebar.html" %}</aside>
+
+  <article class="docs__main prose">
+    <header class="docs__head">
+      {%- if page.extra.need %}
+      <p class="hs-kicker need need--{{ page.extra.need }}">{{ <need_label need={page.extra.need} /> }} · <span class="hs-mono">{{ page.extra.need }}</span></p>
+      {%- endif %}
+      <h1 class="title">{{ page.title }}</h1>
+      {%- if page.description %}
+      <p class="lede">{{ page.description }}</p>
+      {%- endif %}
+    </header>
+
+    {{ page.content | safe }}
+
+    <footer class="docs__foot">
+      {%- if page.extra.source %}
+      <p class="source">This page is <a href="{{ config.extra.blob }}/{{ page.extra.source }}"><code class="hs-inline-code">{{ page.extra.source }}</code></a>. Its Rust examples are compiled by the repository's gate on every change.</p>
+      {%- endif %}
+      {%- if page.lower or page.higher %}
+      <nav class="hs-pager" aria-label="Previous and next">
+        {%- if page.lower %}
+        <a class="hs-pager__item" href="{{ page.lower.permalink }}"><span class="hs-pager__dir">{{ <icon name="chevron-left" class="hs-icon hs-icon--xs" /> }} Previous</span><span class="hs-pager__label">{{ page.lower.title }}</span></a>
+        {%- else %}<span></span>{%- endif %}
+        {%- if page.higher %}
+        <a class="hs-pager__item hs-pager__item--next" href="{{ page.higher.permalink }}"><span class="hs-pager__dir">Next {{ <icon name="chevron-right" class="hs-icon hs-icon--xs" /> }}</span><span class="hs-pager__label">{{ page.higher.title }}</span></a>
+        {%- endif %}
+      </nav>
+      {%- endif %}
+    </footer>
+  </article>
+
+  {%- if page.toc | length > 0 %}
+  <aside class="docs__toc">
+    <nav class="hs-toc" aria-label="On this page">
+      <span class="hs-label hs-toc__title">On this page</span>
+      {%- for h in page.toc %}
+      <a class="hs-toc__link" href="{{ h.permalink | safe }}">{{ h.title }}</a>
+      {%- for c in h.children %}
+      <a class="hs-toc__link hs-toc__link--sub" href="{{ c.permalink | safe }}">{{ c.title }}</a>
+      {%- endfor %}
+      {%- endfor %}
+    </nav>
+  </aside>
+  {%- endif %}
+</div>
+{% endblock content %}

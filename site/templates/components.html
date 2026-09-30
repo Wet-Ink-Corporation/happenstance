@@ -1,0 +1,48 @@
+{#- Shared components. Tera 2 registers a component globally from whichever
+    template defines it, so nothing imports this file; it exists to hold them in
+    one place. Components are hermetic — they see only their arguments. -#}
+
+{#- The brand artwork, inlined so the word takes the surface's `currentColor`.
+    A standalone SVG cannot know the ground it lands on (SD-0002); an inline one
+    inherits it. The files are copied from `assets/brand/` by `cargo xtask site`
+    and never redrawn here. -#}
+{% component logo(file: string, class: string = "hs-logo", label: string = "happenstance") %}
+{%- set svg = load_data(path="static/brand/" ~ file, format="plain") -%}
+{{- svg
+    | replace(from='<svg ', to='<svg class="' ~ class ~ '" focusable="false" ')
+    | replace(from='aria-labelledby="t d"', to=('aria-label="' ~ label ~ '"' if label else 'aria-hidden="true"'))
+    | replace(from='<title id="t">', to='<title>')
+    | replace(from='<desc id="d">', to='<desc>')
+    | replace(from='.wm{fill:#2A211B}', to='.wm{fill:currentColor}')
+    | safe -}}
+{% endcomponent logo %}
+
+{#- Lucide icons at 16px, 1.75 stroke, `currentColor` — the design system's set.
+    Functional only. There is deliberately no sun, star or sparkle here: those
+    compete with the mark (SD-0002). -#}
+{% component icon(name: string, class: string = "hs-icon") %}
+<svg class="{{ class }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+{%- if name == "arrow-right" %}<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+{%- elif name == "chevron-right" %}<path d="m9 18 6-6-6-6"/>
+{%- elif name == "chevron-left" %}<path d="m15 18-6-6 6-6"/>
+{%- elif name == "copy" %}<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+{%- elif name == "menu" %}<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>
+{%- elif name == "contrast" %}<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z"/>
+{%- else %}{{ throw(message="unknown icon: " ~ name) }}
+{%- endif -%}
+</svg>
+{%- endcomponent icon %}
+
+{#- The reader-facing name of a need token. The tokens are the closed set in
+    `standards/pages/10-the-need-set.md`; an unknown one fails the build. -#}
+{% component need_label(need: string) %}
+{%- if need == "tutorial" %}Learn{% elif need == "how-to" %}Do{% elif need == "explanation" %}Understand{% elif need == "orientation" %}Find your way{% else %}{{ throw(message="unknown need: " ~ need) }}{% endif -%}
+{% endcomponent need_label %}
+
+{% component install(command: string) %}
+<div class="hs-install">
+  <span class="hs-install__prompt" aria-hidden="true">❯</span>
+  <code class="hs-install__cmd">{{ command }}</code>
+  <button class="hs-install__copy" type="button" data-copy="{{ command }}" aria-label="Copy the command">{{ <icon name="copy" /> }}</button>
+</div>
+{%- endcomponent install %}

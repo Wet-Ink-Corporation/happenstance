@@ -451,6 +451,12 @@ pub(crate) fn is_inert(path: &str) -> bool {
         // asserts those conditions and is deliberately reachable from nothing
         // that can turn a merge red.
         "ops/",
+        // The documentation site's shell: templates, styles and routing pages.
+        // No member compiles it and no gate step reads it — `cargo xtask site`
+        // is not a gate step, and `.github/workflows/pages.yml` builds the site
+        // on the pull request that changes it. The teaching the site renders
+        // lives in `docs/`, which is deliberately *not* here (see above).
+        "site/",
         ".github/",
         ".bklg/",
         ".kb/",
@@ -1013,6 +1019,24 @@ mod tests {
             "ops/host/host.env",
             "ops/host/happenstance-bench-tuning.service",
             "ops/host/README.md",
+        ] {
+            assert!(is_inert(path), "{path} should be inert");
+            let affected = affected_packages(&changed(&[path]), &members());
+            assert!(affected.is_empty(), "{path} should reach no package");
+        }
+    }
+
+    /// The documentation site's shell is presentation that no member compiles and
+    /// no gate step reads; `.github/workflows/pages.yml` builds it on the pull
+    /// request that changes it. The wrong implementation this rejects is the
+    /// absent entry: a full-workspace gate run for an edit to a stylesheet.
+    #[test]
+    fn the_site_shell_selects_no_package() {
+        for path in [
+            "site/config.toml",
+            "site/templates/base.html",
+            "site/static/css/site.css",
+            "site/content/reference.md",
         ] {
             assert!(is_inert(path), "{path} should be inert");
             let affected = affected_packages(&changed(&[path]), &members());
