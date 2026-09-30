@@ -34,7 +34,7 @@
 //!
 //! **Which rules skip, and how many, is asserted and not described here.**
 //! `assert_reference_projection_declensions`
-//! (`crates/happenstance-testkit/tests/mutation_coverage.rs:3553`) pins this
+//! (`crates/happenstance-testkit/tests/mutation_coverage.rs:3551`) pins this
 //! fixture's skip set by equality, in enumeration order, with each skip's
 //! capability and stated reason. That assertion is the authority; a count
 //! restated in a module doc is a number nothing in the gate reads, and this one

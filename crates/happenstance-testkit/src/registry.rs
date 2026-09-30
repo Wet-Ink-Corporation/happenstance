@@ -56,7 +56,7 @@
 //! is what the tokio and blocking emitters call.
 //! [`RuleOutcome::skip_line`](crate::RuleOutcome::skip_line) is the same line
 //! without a sink, for a harness whose target has no stdout — which is not
-//! hypothetical: it is `wasm32-unknown-unknown`, and `__emit_wasm` is why the
+//! hypothetical: it is `wasm32-unknown-unknown`, and `emit_wasm` is why the
 //! method is public.
 
 use core::future::Future;
@@ -231,9 +231,15 @@ macro_rules! for_each_event_store_rule {
 ///
 /// The caller's crate needs `tokio` with `macros` and `rt` in its
 /// `dev-dependencies`; the attribute resolves in the caller's scope, not here.
-#[doc(hidden)]
+///
+/// The default: an invocation of
+/// [`event_store_conformance!`](crate::event_store_conformance) that names
+/// no emitter uses it, and naming it is
+/// `emit = happenstance_testkit::emit_tokio`.
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_tokio {
+macro_rules! emit_tokio {
     ($($name:ident),* $(,)?) => {
         $(
             #[tokio::test]
@@ -246,14 +252,18 @@ macro_rules! __emit_tokio {
     };
 }
 
-/// Emits one plain `#[test]` per rule, driven by [`block_on`](crate::block_on).
+/// Emits one plain `#[test]` per rule, driven by [`block_on`].
 ///
 /// No runtime, no dependency, one thread. This is the harness that proves the
 /// suite never quietly needs `tokio` — and, because `block_on` imposes no
 /// `Send` bound, that it works against a `!Send` adapter.
-#[doc(hidden)]
+///
+/// Select it by passing `emit = happenstance_testkit::emit_blocking` to
+/// [`event_store_conformance!`](crate::event_store_conformance).
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_blocking {
+macro_rules! emit_blocking {
     ($($name:ident),* $(,)?) => {
         $(
             #[test]
@@ -279,9 +289,13 @@ macro_rules! __emit_blocking {
 /// runner captures, and resolving it through the caller's `wasm_bindgen_test` —
 /// which the `#[wasm_bindgen_test]` attribute above already requires — keeps the
 /// testkit itself free of a `wasm-bindgen` dependency.
-#[doc(hidden)]
+///
+/// Select it by passing `emit = happenstance_testkit::emit_wasm` to
+/// [`event_store_conformance!`](crate::event_store_conformance).
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_wasm {
+macro_rules! emit_wasm {
     ($($name:ident),* $(,)?) => {
         $(
             #[::wasm_bindgen_test::wasm_bindgen_test]
@@ -296,9 +310,14 @@ macro_rules! __emit_wasm {
 }
 
 /// Expands to a `[&str; N]` of the rule names, for meta-tests and docs.
+///
+/// Not an emitter — it wraps no test — and not promised. It is exported only
+/// because `macro_rules!` has no other way to reach another crate's tests, and
+/// its `__` prefix and `#[doc(hidden)]` say so: in this crate `__` means *not
+/// promised*, and no promised name carries it (CF-41, ADR-0076).
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __emit_rule_names {
+macro_rules! __rule_names {
     ($($name:ident),* $(,)?) => { [ $( ::core::stringify!($name) ),* ] };
 }
 
@@ -418,7 +437,7 @@ fn declared_rules() -> Vec<&'static str> {
 #[cfg(test)]
 #[test]
 fn no_orphan_rules() {
-    let registered = crate::for_each_event_store_rule!(crate::__emit_rule_names);
+    let registered = crate::for_each_event_store_rule!(crate::__rule_names);
     let declared = declared_rules();
 
     let orphans: Vec<_> = declared

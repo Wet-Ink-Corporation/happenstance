@@ -119,7 +119,7 @@ The nine crates are `happenstance-core`, `happenstance`, `happenstance-testkit`,
 `happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres`,
 `happenstance-neon`, `happenstance-sync` and `happenstance-sync-testkit`. Sync is
 in the set by D-1. This list is a **promise**, while `PUBLISHABLE`
-(`xtask/src/package.rs:86`) records what **can** ship. The two are reconciled at
+(`xtask/src/package.rs:102`) records what **can** ship. The two are reconciled at
 phase 21, and when they meet the sync crates also join the semver job's package
 list and `SECURITY.md`'s scope. Neither sync name was claimed on crates.io on
 2026-09-29.

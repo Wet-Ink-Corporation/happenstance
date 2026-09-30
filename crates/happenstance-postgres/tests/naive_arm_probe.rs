@@ -32,7 +32,7 @@
 //! Below, the two transactions are driven through raw `sqlx` on the pool, so
 //! "take a position", "commit", and "read" happen in exactly the order written.
 
-#![cfg(all(feature = "naive-arm", not(target_arch = "wasm32")))]
+#![cfg(all(happenstance_naive_arm, not(target_arch = "wasm32")))]
 #![allow(clippy::unwrap_used)]
 
 mod support;

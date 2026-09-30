@@ -1,0 +1,6 @@
+# `PostgresEventStore::new_naive`, the baseline arm, exists only under this cfg
+# since `0.4.0`, when it stopped being the `naive-arm` Cargo feature. Cargo joins
+# `build.rustflags` arrays across config files, so the repository root's
+# `-D warnings` still applies to a build started from this directory.
+[build]
+rustflags = ["--cfg", "happenstance_naive_arm"]

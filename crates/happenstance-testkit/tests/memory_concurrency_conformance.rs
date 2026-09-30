@@ -34,7 +34,7 @@ happenstance_testkit::event_store_concurrency_conformance!(MemoryFixture::new())
 
 happenstance_testkit::event_store_concurrency_conformance!(
     mod_name = dcb_concurrency_conformance_blocking,
-    emit = happenstance_testkit::__emit_concurrency_blocking,
+    emit = happenstance_testkit::emit_concurrency_blocking,
     fixture = MemoryFixture::new()
 );
 
@@ -46,7 +46,7 @@ happenstance_testkit::event_store_concurrency_conformance!(
 /// deciding whether to invoke this family. Told the only wrapper is
 /// `#[tokio::test(flavor = "multi_thread")]`, an adapter with no runtime
 /// concludes that racing costs it a `tokio` dev-dependency with
-/// `rt-multi-thread`. It does not: `__emit_concurrency_blocking` needs nothing,
+/// `rt-multi-thread`. It does not: `emit_concurrency_blocking` needs nothing,
 /// races exactly as hard, and is demonstrated by the second invocation in this
 /// very file. The population that pays is the one the two-flavour design exists
 /// for.
@@ -78,12 +78,12 @@ fn the_concurrency_page_lists_every_emitter_it_ships() {
 
     let shipped: Vec<&str> = PAGE
         .lines()
-        .filter_map(|line| line.trim().strip_prefix("macro_rules! __emit_concurrency_"))
+        .filter_map(|line| line.trim().strip_prefix("macro_rules! emit_concurrency_"))
         .filter_map(|rest| rest.split_whitespace().next())
         .collect();
     assert!(
         !shipped.is_empty(),
-        "no `__emit_concurrency_*` macro was found in `concurrency.rs`, so this \
+        "no `emit_concurrency_*` macro was found in `concurrency.rs`, so this \
          test is reading the wrong file and would pass against a page that \
          listed nothing"
     );
@@ -98,14 +98,14 @@ fn the_concurrency_page_lists_every_emitter_it_ships() {
         .iter()
         .filter_map(|line| line.trim().strip_prefix("//! |"))
         .filter_map(|row| row.split('|').next())
-        .filter_map(|cell| cell.trim().strip_prefix("`__emit_concurrency_"))
+        .filter_map(|cell| cell.trim().strip_prefix("`emit_concurrency_"))
         .filter_map(|rest| rest.split('`').next())
         .collect();
 
     for emitter in &shipped {
         assert!(
             listed.contains(emitter),
-            "`__emit_concurrency_{emitter}` ships and the module page's emitter \
+            "`emit_concurrency_{emitter}` ships and the module page's emitter \
              table does not list it. The table is what an adapter author counts; \
              an emitter missing from it is a cost they are told they must pay \
              and need not."
@@ -115,7 +115,7 @@ fn the_concurrency_page_lists_every_emitter_it_ships() {
         assert!(
             shipped.contains(emitter),
             "the module page's emitter table lists \
-             `__emit_concurrency_{emitter}`, which this file does not define"
+             `emit_concurrency_{emitter}`, which this file does not define"
         );
     }
 

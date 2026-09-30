@@ -89,14 +89,14 @@ futures-core = { workspace = true }
 # `FaultyStore`, for the retry demonstration that needs no database.
 #
 # Deliberately **not** `{ workspace = true }`, and this is NF-006 rather than an
-# oversight. `[workspace.dependencies]` carries a version requirement on this
-# crate, and a dev-dependency carrying a version has to resolve from the
+# oversight. Until ADR-0057 (`0.4.0`) the root's entry carried a version on the
+# testkit, and a dev-dependency carrying a version has to resolve from the
 # registry at publish time — which would make `happenstance-testkit` publish
 # *before* `happenstance`, a coupling CF-32's independent version number exists
 # to avoid. Cargo strips a versionless dev-dependency from the published
 # manifest entirely, so the path-only spelling is what keeps the two crates'
-# release order free. It is a path within this workspace, so no third-party
-# version escapes the single source of truth above.
+# release order free. The root entry is versionless now, so `workspace = true`
+# would be equivalent, and `package-check` refuses a versioned line either way.
 happenstance-testkit = { path = "../happenstance-testkit" }
 
 [features]
@@ -137,9 +137,9 @@ cbor = ["dep:ciborium"]
 # type the word `unstable` before any of them is in their build.
 #
 # It no longer forwards to the contract crate: `happenstance-core`'s
-# `unstable-projection` is retained there as an empty feature so `0.2.0`
-# manifests resolve, and forwarding a feature that turns nothing on would tell
-# a reader the port is gated. `MemoryProjectionStore` needs `memory`, which
+# `unstable-projection` gated nothing from ADR-0063 and was removed in `0.4.0`,
+# so a forward would not resolve — and before that it would have told a reader
+# the port is gated. `MemoryProjectionStore` needs `memory`, which
 # stays a separate switch here for the same reason it is one there — a fixture
 # is not a port.
 #

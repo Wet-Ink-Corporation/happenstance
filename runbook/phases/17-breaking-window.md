@@ -74,8 +74,12 @@ gave to this phase.
       - `no-fixture-tolerance-for-transient-contention` — a `Busy` variant on the
         `#[non_exhaustive]` `AppendError` is additive to add, but whether 1.0
         promises one is decided in this window, not after it.
-      - `cf-23-emitter-names-mandatory-and-marked-unstable` — phase 16 decided
-        the policy (ADR-0066); the renames it implies land here.
+      - ~~`cf-23-emitter-names-mandatory-and-marked-unstable` — phase 16 decided
+        the policy (ADR-0066); the renames it implies land here.~~ **Settled by
+        [ADR-0076](../../.kb/decisions/0076-the-cf-23-emitters-are-public-api.md)**:
+        the ten conformance emitters are un-hidden and renamed without `__`
+        (`emit_tokio` and its siblings), CF-41 `[FROZEN]` pins them, and the
+        question is superseded.
       - `es-6-names-an-unwritable-rule`, sub-question 4 — already decided by
         ADR-0066: driver error payloads re-exported under ADR-0044 are inside the
         promise, under the driver-major limit. What is left is writing that into
@@ -124,25 +128,31 @@ gave to this phase.
       adapter takes mint-per-open, the session log says so and phase 13 builds
       only the additive arms; mint-per-open after this window is a post-1.0
       major.
-- [ ] **Execute ADR-0057 — the testkit version key is dropped.** Accepted and not
-      done: the workspace still declares `happenstance-testkit = { version =
-      "0.3.2", … }` at `Cargo.toml:62`. ADR-0066 states conformance as *"passes
-      `happenstance-testkit` X.Y"*, which is a sentence about how an adapter names
-      the testkit it ran, so the key goes in the breaking release rather than
-      after it.
-- [ ] **Remove `happenstance-core`'s empty `unstable-projection` feature**
-      (`crates/happenstance-core/Cargo.toml:72`). It gates nothing, and ADR-0063
+- [x] **Execute ADR-0057 — the testkit version key is dropped.** Done in lane L4:
+      the workspace entry for `happenstance-testkit` carries no `version`, and
+      `cargo xtask package-check` refuses a publishable crate whose testkit
+      dev-dependency carries one, written or inherited. The item read: ~~Accepted
+      and not done: the workspace still declares `happenstance-testkit = { version =
+      "0.3.2", … }` at the root manifest's testkit line. ADR-0066 states conformance
+      as *"passes `happenstance-testkit` X.Y"*, which is a sentence about how an
+      adapter names the testkit it ran, so the key goes in the breaking release
+      rather than after it.~~
+- [x] **Remove `happenstance-core`'s empty `unstable-projection` feature.** Done in
+      lane L4; the `xtask` test is now `the_retired_projection_feature_is_gone`.
+      The item read: ~~It was declared in `happenstance-core`'s `[features]`. It
+      gates nothing, and ADR-0063
       §2 kept it only because removing a Cargo feature is a break
       (`references/adr/0063-the-projection-port-is-frozen.md:48-56`). ADR-0066
       puts the removal in `0.4.0`, which is why it is not on 1.0's
       semver-exemption list. The `xtask` tests ADR-0063 inverted to hold the name —
       `the_retired_projection_feature_is_still_declared_and_empty` among them —
-      are turned round again to hold its absence, not deleted.
-- [ ] **`happenstance-postgres`'s `naive-arm`**
-      (`crates/happenstance-postgres/Cargo.toml:125`): removed, or declared
-      outside semver in the crate root and on ADR-0066's exemption list. A
-      stranger can turn it on, so 1.0 either promises it or says in writing that
-      it does not.
+      are turned round again to hold its absence, not deleted.~~
+- [x] **`happenstance-postgres`'s `naive-arm`.** Removed as a feature in lane L4:
+      it is the rustc cfg `happenstance_naive_arm`, which no manifest can set, the
+      crate root says it is not API, and CI's live-postgres job runs both targets
+      under it. The item read: ~~removed, or declared outside semver in the crate
+      root and on ADR-0066's exemption list. A stranger can turn it on, so 1.0
+      either promises it or says in writing that it does not.~~
 - [ ] **The ES-11 record, settling ES-11 and ES-12 together.** It supersedes
       ADR-0061's choice to keep ES-11 `[PROVISIONAL]` — a reasonable choice while
       `happenstance-neon` was held out of the release set, and not one that
@@ -222,6 +232,19 @@ gave to this phase.
 **Proof artefact.** `0.4.0` on crates.io, and a table in its changelog entry
 mapping every major finding `cargo-semver-checks` reported to the decision that
 caused it — a break with no row is one nobody decided.
+
+The run that fills the table is `cargo semver-checks check-release --workspace
+--baseline-version 0.3.2 --release-type minor`. The last flag is required, not a
+preference. Once the manifests read `0.4.0`, the tool treats `0.3.2 → 0.4.0` as a
+major bump and skips every lint (`0 checks: 0 pass, 254 skip`). The default
+invocation, and CI's `cargo-semver-checks-action` with default settings, then
+report nothing, and the table would come out empty. Forcing `minor` makes the tool
+report each break as though it were not allowed. The table also carries
+hand-written rows for the breaks the tool does not report: `happenstance-core`'s
+removed `unstable-projection` feature, which the `0.3.2` manifest declares but the
+tool passed over, and the renamed `#[doc(hidden)]` emitters. The tool does report
+`naive-arm` and `PostgresEventStore::new_naive` (`feature_missing`,
+`inherent_method_missing`), and those rows trace to the `naive-arm` item above.
 
 **Exit criteria**
 
@@ -365,3 +388,35 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   `projection-apply-is-synchronous-against-a-live-store` is superseded, and
   `phases/18-typed-runner.md` is restated to build what ADR-0074 decided. Spec
   citations shifted by the edits were repointed across the tree.
+
+- 2026-09-30 — **L4, the surface renames and the manifest breaks**, on
+  `lane/p17-surface-renames`. The first breaking PR, so the workspace, the testkit
+  and the six examples move to `0.4.0`; the changelog heading stays
+  `[Unreleased]`, and the README and install lines wait for the release PR.
+  **Stage 1, manifests.** ADR-0057 is executed: the workspace's testkit entry
+  carries no `version`, and `package-check` gains
+  `testkit_dev_dependencies_are_versionless`, with negative controls built from
+  the old Postgres and Cloudflare lines. `happenstance-core`'s empty
+  `unstable-projection` is removed, and the `xtask` test is turned round to
+  `the_retired_projection_feature_is_gone`. `benchmarks/` asked for it and no
+  longer does. `happenstance-postgres`'s `naive-arm` is now the rustc cfg
+  `happenstance_naive_arm`, declared in `[workspace.lints.rust]`'s check-cfg; the
+  crate root says it is not API, and a new last step in CI's live-postgres job
+  runs both naive-arm targets under it. That step had not run when this was
+  written. **Stage 2, CF-23.**
+  [ADR-0076](../../.kb/decisions/0076-the-cf-23-emitters-are-public-api.md)
+  un-hides the ten conformance emitters and drops their `__` prefix
+  (`emit_tokio` and its siblings), as a hard rename with no aliases.
+  `__emit_rule_names` becomes `__rule_names`. It and the benchmark pair stay
+  hidden and outside the promise. ADR-0076 partly supersedes ADR-0066 §5, whose
+  row on the decision map is annotated. CF-41 is minted `[FROZEN]` in §6.6. Its
+  rule is `the_promised_emitters_are_exactly_the_pinned_list`, which checks
+  against a committed list, with two negative controls. The cf-23 open question is
+  superseded. `happenstance-ladybug`, touched and outside CI, was built with its
+  driver and ran its projection suite locally (42 passed). The `0.4.0` semver trace
+  owes hand-written rows for two changes `cargo-semver-checks` does not report:
+  core's removed `unstable-projection` feature and the hidden emitter names.
+  `naive-arm` and `new_naive` are reported by the tool, but only under
+  `--release-type minor`. At `0.4.0` its default skips every lint, so the proof
+  artefact now names the flag.
+  Citations shifted by both stages were repointed.

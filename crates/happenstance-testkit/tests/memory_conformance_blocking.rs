@@ -14,7 +14,7 @@
 // Not the fixture: `MemoryFixture` compiles for `wasm32` and
 // `memory_conformance_wasm.rs` is the standing proof of it, now that
 // `happenstance-core`'s `memory` feature is an unconditional dependency rather
-// than a native-only dev-dependency. It is the *emitter*: `__emit_blocking`
+// than a native-only dev-dependency. It is the *emitter*: `emit_blocking`
 // emits a plain `#[test]`, and libtest does not exist on
 // `wasm32-unknown-unknown`.
 #![cfg(not(target_arch = "wasm32"))]
@@ -23,6 +23,6 @@ use happenstance_testkit::fixtures::MemoryFixture;
 
 happenstance_testkit::event_store_conformance!(
     mod_name = dcb_conformance_blocking,
-    emit = happenstance_testkit::__emit_blocking,
+    emit = happenstance_testkit::emit_blocking,
     fixture = MemoryFixture::new()
 );

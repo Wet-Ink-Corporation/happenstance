@@ -10,6 +10,23 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-30 — the first breaking PR: 0.4.0 manifests, and the emitters made public
+
+*Uncommitted at writing; `lane/p17-surface-renames`.*
+Phase 17, lane L4.
+
+The workspace and testkit now read `0.4.0`. The lane:
+- executes ADR-0057;
+- removes `happenstance-core`'s empty `unstable-projection`;
+- moves `naive-arm` to a rustc cfg;
+- renames CF-23's ten emitters to `emit_*` as public API (ADR-0076, CF-41 frozen).
+
+Breaks the semver tool cannot see are recorded for the release's hand rows.
+
+**Verified.** See phase 17's session log.
+
+---
+
 ## 2026-09-30 — the apply record and the projection port's 1.0 clauses
 
 *Uncommitted at writing; `lane/p17-apply-record`.*

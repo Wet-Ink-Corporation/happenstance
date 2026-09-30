@@ -77,7 +77,7 @@ experiment), so nothing failed — but an adapter can now be contended inside th
 configuration without being wrong, and the suite has no vocabulary to say that is what happened.
 
 **The defect is three rules, not one classification arm.** `Attempt` is private
-(`concurrency.rs:247`), so a fourth arm costs nothing in semver — but re-spelling it repairs only
+(`concurrency.rs:248`), so a fourth arm costs nothing in semver — but re-spelling it repairs only
 `exactly_one_of_n_contenders_commits`'s `failures.is_empty()` assertion. The other two sites fail on
 a *count*: `positions_are_unique_under_concurrent_appends` asserts `committed.len() == CONTENDERS`,
 because an unconditional append has nothing to be rejected by, and

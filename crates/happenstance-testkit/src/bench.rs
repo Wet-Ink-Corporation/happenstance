@@ -833,6 +833,10 @@ macro_rules! for_each_event_store_benchmark {
 /// `tests/memory_benchmarks.rs` writes one.
 ///
 /// The caller's crate needs `tokio` with `macros` and `rt`.
+///
+/// Hidden and not promised. CF-23 obliges an adapter to name a *conformance*
+/// emitter, and a benchmark is not the bar (CF-34), so this name stays outside
+/// CF-41's promised set and may change in any release (ADR-0076).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __emit_benchmark_tokio {
@@ -854,6 +858,10 @@ macro_rules! __emit_benchmark_tokio {
 /// No runtime, no dependency, one thread — and the contended scenario is just
 /// as contended, because the interleaving is in the scenario rather than in the
 /// runtime.
+///
+/// Hidden and not promised. CF-23 obliges an adapter to name a *conformance*
+/// emitter, and a benchmark is not the bar (CF-34), so this name stays outside
+/// CF-41's promised set and may change in any release (ADR-0076).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __emit_benchmark_blocking {

@@ -29,7 +29,7 @@
 //!
 //! The macro cannot be told to add `#[ignore]`, but it does not have to be: the
 //! emitter is a **parameter**, and [`emit_ignored_tokio`] below is
-//! `__emit_tokio` with one attribute added. That is a whole-invocation gate — it
+//! `emit_tokio` with one attribute added. That is a whole-invocation gate — it
 //! marks every generated test — and is emphatically **not** a `#[cfg]` hiding a
 //! rule out of a macro's expansion, which DR-5 forbids for CF-18's reason: a
 //! rule silently omitted is indistinguishable from a rule that passed.
@@ -56,7 +56,7 @@ use happenstance_testkit::concurrency::CONTENDERS;
 use happenstance_testkit::{Capability, Fixture};
 use support::PostgresFixture;
 
-/// `__emit_tokio`, plus `#[ignore]`.
+/// `emit_tokio`, plus `#[ignore]`.
 ///
 /// The reason string is not decoration: `cargo test -- --ignored --list` prints
 /// it, so the one command an adapter author runs to find out what is gated also

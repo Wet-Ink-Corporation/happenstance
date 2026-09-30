@@ -391,7 +391,7 @@ diverge again; ADR-0029 explains why it is kept rather than deleted.
 Do not settle these silently in passing; they need their own pass and probably
 their own ADR. Two files carry the answers, and they answer different questions.
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) says
-what is **true now** — 201 numbered clauses, each carrying a maturity marker
+what is **true now** — 202 numbered clauses, each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
 naming the conformance rule that checks it and the wrong implementation it
 forbids. `cargo xtask spec-trace` is a gate step precisely so those markers and
@@ -415,8 +415,8 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   issue statements through, on `experiments/apply-shape`'s evidence against a
   live Postgres. Phase 18 builds it; until then the shipped `apply` is still
   synchronous, which is why `happenstance`'s `unstable-projection` still gates
-  the *runner*, while `happenstance-core`'s feature of the same name is retained
-  empty for `0.2.0` manifests and gates nothing until `0.4.0` removes it.
+  the *runner*, while `happenstance-core`'s feature of the same name, retained
+  empty for `0.2.0` manifests after ADR-0063, is removed in `0.4.0`.
 - ~~**SQLite driver** (`rusqlite` vs `sqlx`).~~ Settled at phase 2 by building
   both: `happenstance-sqlite` is `rusqlite`, `happenstance-postgres` is `sqlx`,
   and the two are in the tree for different reasons rather than as candidates.

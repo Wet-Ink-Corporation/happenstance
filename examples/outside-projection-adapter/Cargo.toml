@@ -38,7 +38,7 @@ publish = false
 # again. `crates/happenstance-core/tests/projection_recipe.rs` derives the
 # requirement from the gates `lib.rs` carries, so this line and the recipe go
 # red together rather than one of them being a documented departure.
-happenstance-core = { version = "0.3.0", path = "../../crates/happenstance-core" }
+happenstance-core = { version = "0.4.0", path = "../../crates/happenstance-core" }
 
 # The one flag this crate declares, and it is declared because the published
 # recipe says to declare it (`happenstance_core::ProjectionProbe`'s own rustdoc).
@@ -62,8 +62,12 @@ conformance = ["happenstance-core/conformance"]
 # crate documentation states this pair up front: the suite, and `tokio` with
 # `macros` and `rt` for the default emitter's `#[tokio::test]`, which resolves
 # in *this* crate's scope rather than in the testkit's.
+#
+# `version` beside `path` is deliberate, and it is ADR-0057's recorded
+# exception: every publishable crate reaches the testkit by path alone, and this
+# one stands where a stranger stands, so it declines that convenience too.
 [dev-dependencies]
-happenstance-testkit = { version = "0.3.0", path = "../../crates/happenstance-testkit" }
+happenstance-testkit = { version = "0.4.0", path = "../../crates/happenstance-testkit" }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 # Held to the workspace's own lint bar rather than to rustc's defaults. An

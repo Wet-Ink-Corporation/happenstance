@@ -172,4 +172,4 @@ off-by-default `bench` feature, and `ops/host/preflight.sh` ships in no crate. *
 after 1.0**, with the CF-34 renewal. The ratio principle can go into
 `standards/rust/60-what-a-test-must-prove.md` at any time. The drifted anchor stands:
 `ops/host/preflight.sh:11` still cites CF-34 at `:8747`, and the clause is at
-`spec/SPECIFICATION.md:9313`.
+`spec/SPECIFICATION.md:9345`.

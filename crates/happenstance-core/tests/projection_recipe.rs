@@ -223,8 +223,8 @@ fn the_recipe_names_every_feature_its_own_items_need() {
 /// feature. The `impl ProjectionStore` is unconditional in the adapter's
 /// `src/`, so whatever the port needs the dependency line must carry — and
 /// since ADR-0063 that is nothing. A line that still said `features =
-/// ["unstable-projection"]` would compile, because the feature is retained as
-/// an empty no-op, and would tell an author the port is gated when it is not.
+/// ["unstable-projection"]` compiled until `0.4.0` removed the empty feature,
+/// and told an author the port is gated when it is not; it no longer resolves.
 #[test]
 fn the_dependency_line_carries_what_the_port_needs_and_nothing_else() {
     let recipe = recipe();

@@ -20,7 +20,7 @@
 //! runtime-agnostic adapter — and then makes the decision falsifiable for free.
 //! `projection_store_conformance!` is invoked twice:
 //!
-//! * `blocking` under `happenstance_testkit::__emit_projection_blocking`, which
+//! * `blocking` under `happenstance_testkit::emit_projection_blocking`, which
 //!   expands to a plain `#[test]` driven by the testkit's own `block_on` and
 //!   **needs no runtime at all**;
 //! * `with_tokio` under the default emitter, which expands to `#[tokio::test]`.
@@ -302,13 +302,13 @@ impl ProjectionFixture for LadybugProjectionFixture {
 
 happenstance_testkit::projection_store_conformance!(
     mod_name = blocking,
-    emit = happenstance_testkit::__emit_projection_blocking,
+    emit = happenstance_testkit::emit_projection_blocking,
     fixture = LadybugProjectionFixture::new()
 );
 
 happenstance_testkit::projection_store_conformance!(
     mod_name = with_tokio,
-    emit = happenstance_testkit::__emit_projection_tokio,
+    emit = happenstance_testkit::emit_projection_tokio,
     fixture = LadybugProjectionFixture::new()
 );
 

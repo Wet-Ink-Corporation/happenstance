@@ -3,7 +3,7 @@
 //! # Why not `happenstance_testkit::block_on` for the memory arms
 //!
 //! It would be the cheaper choice and it is the wrong one. `block_on`
-//! (`crates/happenstance-testkit/src/registry.rs:330`) is a fifteen-line park
+//! (`crates/happenstance-testkit/src/registry.rs:349`) is a fifteen-line park
 //! loop with no runtime at all, and it is genuinely faster than driving a future
 //! through tokio. Using it for `MemoryEventStore` and tokio for
 //! `SqliteEventStore` would put the executor difference *inside* the

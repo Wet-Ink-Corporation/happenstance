@@ -16,7 +16,7 @@
 //!
 //! Four exported macros:
 //! [`for_each_projection_store_rule!`](crate::for_each_projection_store_rule),
-//! three `#[doc(hidden)]` emitters, and
+//! three emitters, whose names CF-41 promises, and
 //! [`projection_store_conformance!`](crate::projection_store_conformance) at the
 //! crate root. `happenstance-testkit` carries its own version precisely because
 //! a suite change can turn a passing adapter's CI red, and a macro is the
@@ -24,7 +24,7 @@
 //!
 //! It reuses everything else unchanged: [`Capability`](crate::Capability),
 //! [`RuleOutcome`](crate::RuleOutcome), [`block_on`](crate::block_on) and
-//! `__emit_rule_names`. There is no projection-local skip type and no second
+//! `__rule_names`. There is no projection-local skip type and no second
 //! line shape, because an author reading one CI log must not have to learn two.
 //!
 //! # What a green run here does and does not prove
@@ -1975,9 +1975,15 @@ macro_rules! for_each_projection_store_rule {
 ///
 /// The caller's crate needs `tokio` with `macros` and `rt` in its
 /// `dev-dependencies`; the attribute resolves in the caller's scope, not here.
-#[doc(hidden)]
+///
+/// The default: an invocation of
+/// [`projection_store_conformance!`](crate::projection_store_conformance) that names
+/// no emitter uses it, and naming it is
+/// `emit = happenstance_testkit::emit_projection_tokio`.
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_projection_tokio {
+macro_rules! emit_projection_tokio {
     ($($name:ident),* $(,)?) => {
         $(
             #[tokio::test]
@@ -1996,9 +2002,13 @@ macro_rules! __emit_projection_tokio {
 /// No runtime, no dependency, one thread. This is the harness that proves the
 /// projection family never quietly needs `tokio` — and, because `block_on`
 /// imposes no `Send` bound, that it works against a `!Send` adapter.
-#[doc(hidden)]
+///
+/// Select it by passing `emit = happenstance_testkit::emit_projection_blocking` to
+/// [`projection_store_conformance!`](crate::projection_store_conformance).
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_projection_blocking {
+macro_rules! emit_projection_blocking {
     ($($name:ident),* $(,)?) => {
         $(
             #[test]
@@ -2023,9 +2033,13 @@ macro_rules! __emit_projection_blocking {
 /// it leaves no record on the only target the two-flavour design exists for.
 /// `console_log!` is what the runner captures. An emitter that called `report`
 /// here would compile, run, pass, and discard every stated reason.
-#[doc(hidden)]
+///
+/// Select it by passing `emit = happenstance_testkit::emit_projection_wasm` to
+/// [`projection_store_conformance!`](crate::projection_store_conformance).
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_projection_wasm {
+macro_rules! emit_projection_wasm {
     ($($name:ident),* $(,)?) => {
         $(
             #[::wasm_bindgen_test::wasm_bindgen_test]
@@ -2089,7 +2103,7 @@ fn declared_projection_rules() -> Vec<&'static str> {
 #[cfg(test)]
 #[test]
 fn no_orphan_projection_rules() {
-    let registered = crate::for_each_projection_store_rule!(crate::__emit_rule_names);
+    let registered = crate::for_each_projection_store_rule!(crate::__rule_names);
     let declared = declared_projection_rules();
 
     let orphans: Vec<_> = declared
@@ -2128,7 +2142,7 @@ fn no_orphan_projection_rules() {
 ///
 /// **The set itself is pinned elsewhere, and that is deliberate.**
 /// `assert_reference_projection_declensions`
-/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:3553`) asserts the
+/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:3551`) asserts the
 /// reference fixture's skip set by *equality*, in enumeration order, with each
 /// skip's capability and stated reason. Read that assertion as the authority for
 /// which rules skip and how many: a count restated in prose is a number nothing

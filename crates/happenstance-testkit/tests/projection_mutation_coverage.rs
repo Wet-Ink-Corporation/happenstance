@@ -952,7 +952,7 @@ fn registered_names() -> Vec<&'static str> {
 /// list would make `every_projection_rule_has_a_mutant` go green on the day a
 /// rule is added, which is the day it must go red.
 fn all_projection_rules() -> Vec<&'static str> {
-    happenstance_testkit::for_each_projection_store_rule!(happenstance_testkit::__emit_rule_names)
+    happenstance_testkit::for_each_projection_store_rule!(happenstance_testkit::__rule_names)
         .to_vec()
 }
 
@@ -1354,7 +1354,7 @@ mod projection_mutation_coverage {
     /// family whose only variant skips half the suite — a control over half the
     /// suite, which reads exactly like a control over all of it. The second says
     /// **every projection rule executed against at least one variant**, which is
-    /// the event-store family's shape (`tests/mutation_coverage.rs:3128-3137`)
+    /// the event-store family's shape (`tests/mutation_coverage.rs:3127-3136`)
     /// and could not be met here until a variant declaring
     /// `READS_THROUGH_BATCH = true` was registered: with `NoBatchReadStore`
     /// alone, `batch_reads_reflect_pending_writes` and

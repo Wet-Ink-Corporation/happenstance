@@ -72,58 +72,53 @@
 //!
 //! | Family | Emitter | Wrapper | Adapter needs |
 //! |---|---|---|---|
-//! | event store | `__emit_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
-//! | event store | `__emit_blocking` | `#[test]` + [`block_on`] | nothing |
-//! | event store | `__emit_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
-//! | projection | `__emit_projection_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
-//! | projection | `__emit_projection_blocking` | `#[test]` + [`block_on`] | nothing |
-//! | projection | `__emit_projection_wasm` | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
-//! | model | `__emit_model_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
-//! | model | `__emit_model_blocking` | `#[test]` + [`block_on`] | nothing |
-//! | concurrency | `__emit_concurrency_tokio` (default) | `#[tokio::test(flavor = "multi_thread")]` | `tokio` with `macros`, `rt`, `rt-multi-thread` |
-//! | concurrency | `__emit_concurrency_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | event store | [`emit_tokio!`] (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | event store | [`emit_blocking!`] | `#[test]` + [`block_on`] | nothing |
+//! | event store | [`emit_wasm!`] | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//! | projection | [`emit_projection_tokio!`] (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | projection | [`emit_projection_blocking!`] | `#[test]` + [`block_on`] | nothing |
+//! | projection | [`emit_projection_wasm!`] | `#[wasm_bindgen_test]` | `wasm-bindgen-test` |
+//! | model | `emit_model_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
+//! | model | `emit_model_blocking` | `#[test]` + [`block_on`] | nothing |
+//! | concurrency | `emit_concurrency_tokio` (default) | `#[tokio::test(flavor = "multi_thread")]` | `tokio` with `macros`, `rt`, `rt-multi-thread` |
+//! | concurrency | `emit_concurrency_blocking` | `#[test]` + [`block_on`] | nothing |
 //! | benchmark | `__emit_benchmark_tokio` (default) | `#[tokio::test]` | `tokio` with `macros`, `rt` |
 //! | benchmark | `__emit_benchmark_blocking` | `#[test]` + [`block_on`] | nothing |
 //!
-//! `__emit_rule_names` is the odd one and is listed because it is reachable by
-//! the same route: it wraps no test at all, expanding a rule enumeration to a
-//! `[&str; N]` for a meta-test to read.
+//! The model and concurrency rows are written out rather than linked because
+//! their macros exist only behind the `proptest` feature and off
+//! `wasm32-unknown-unknown` respectively, and a link from this page would break
+//! in the builds that leave them out.
 //!
 //! ```
 //! # macro_rules! ignore { ($($t:tt)*) => {} }
 //! # ignore! {
 //! happenstance_testkit::event_store_conformance!(
 //!     mod_name = dcb_conformance_blocking,
-//!     emit = happenstance_testkit::__emit_blocking,
+//!     emit = happenstance_testkit::emit_blocking,
 //!     fixture = MyFixture::new()
 //! );
 //! # }
 //! ```
 //!
+//! **What is promised, and what `__` means here.** CF-23 requires you to name
+//! an emitter, so the names you may be required to write are public API. Every
+//! conformance emitter in that table — each row but the benchmark pair — is an
+//! ordinary documented macro, and renaming or removing one is a major release
+//! of this crate (CF-41, ADR-0076). A double-underscore prefix means the
+//! opposite, and nothing promised carries one: the benchmark pair stays
+//! `#[doc(hidden)]` because a benchmark is not the bar (CF-34), and so does
+//! `__rule_names`, which wraps no test and exists for this crate's own
+//! meta-tests. Either may change in any release.
+//!
 //! A runtime none of those cover needs no change here: write a `macro_rules!`
 //! that accepts a comma-separated list of identifiers and hand it to
-//! [`for_each_event_store_rule!`] yourself.
-//!
-//! **Every name in that table carries `#[doc(hidden)]`, and you should know what
-//! that costs you before you write one.** The attribute is not a judgement about
-//! whether you may use them — CF-23 requires you to name one, and this crate's
-//! own `happenstance-cloudflare` target does — it is the only tool the language
-//! offers for *"exported because it has to be"*: `macro_rules!` lives in a flat
-//! crate-root textual namespace, so a private helper is unreachable from your
-//! expansion site and there is nothing to hide behind. What it does cost is
-//! visibility in both directions. You will not find these on docs.rs, which is
-//! why they are written out here rather than linked. And `#[doc(hidden)]` is the
-//! marker `cargo-semver-checks` uses to exclude an item, so the one instrument
-//! in this repository that would report a rename of `__emit_wasm` as breaking is
-//! the instrument the attribute switches off.
-//!
-//! Whether these names are a *promise* is an open question rather than a
-//! settled one, and the honest answer is that the crate has not decided: §6.6's
-//! compatibility policy governs rule addition, rule meaning-change and the
-//! version key, and says nothing about the emitters. Until it does, the
-//! recommendation in step 1 of *Writing a projection adapter* is the one that
-//! covers you — pin this crate exactly, and a rename arrives when you choose to
-//! take it rather than on a minor bump you did not read.
+//! [`for_each_event_store_rule!`] yourself. **Start by copying a shipped
+//! emitter's body**, because it has to name what the suite macro defines around
+//! it — a `__conformance_fixture` function and each family's rules under
+//! `$crate::__private` — and those are the suite's internals rather than a
+//! promise: a hand-written emitter is yours to keep in step, and this crate's
+//! changelog says when one of them moves.
 //!
 //! # Where the rule set lives
 //!
@@ -140,8 +135,8 @@
 //! `#[tokio::test]` per projection rule through its own enumeration,
 //! [`for_each_projection_store_rule!`], beside the rules it names. Pick a
 //! harness exactly as you would for the event-store family: the default arm is
-//! tokio, `__emit_projection_blocking` needs no runtime at all, and
-//! `__emit_projection_wasm` routes a skipped rule's stated reason to
+//! tokio, `emit_projection_blocking` needs no runtime at all, and
+//! `emit_projection_wasm` routes a skipped rule's stated reason to
 //! `console_log!` rather than to stdout, which does not exist on
 //! `wasm32-unknown-unknown`. The default module name differs from
 //! `dcb_conformance`, so one file may invoke both suites.
@@ -243,13 +238,13 @@
 //!
 //! ```toml
 //! [dependencies]
-//! happenstance-core = "0.3"
+//! happenstance-core = "0.4"
 //!
 //! [features]
 //! conformance = ["happenstance-core/conformance"]
 //!
 //! [dev-dependencies]
-//! happenstance-testkit = "=0.3.2"
+//! happenstance-testkit = "=0.4.0"
 //! tokio = { version = "1", features = ["macros", "rt"] }
 //! ```
 //!
@@ -283,9 +278,9 @@
 //! The dependency line names no feature, because your `impl ProjectionStore`
 //! needs none: the port and every type it names are unconditional on the
 //! contract crate since ADR-0063. (From `0.2.0` until then the line had to carry
-//! `unstable-projection`, and an adapter written against `0.2.0` that still
-//! does keeps compiling — the feature is retained there, empty, for exactly that
-//! reason.) `conformance` is forwarded from a feature of *your* crate instead,
+//! `unstable-projection`; `0.3` kept that feature, empty, so such a line still
+//! compiled, and `0.4.0` removed it — delete it from the line when you move.)
+//! `conformance` is forwarded from a feature of *your* crate instead,
 //! because the `impl ProjectionProbe` lives in `src/` under
 //! `#[cfg(feature = "conformance")]` and a crate cannot `cfg` on a dependency's
 //! feature.
@@ -599,7 +594,7 @@ mod query_items_is_not_constructible_downstream {}
 /// # ignore! {
 /// happenstance_testkit::event_store_conformance!(
 ///     mod_name = blocking_conformance,
-///     emit = happenstance_testkit::__emit_blocking,
+///     emit = happenstance_testkit::emit_blocking,
 ///     fixture = MemoryFixture::new()
 /// );
 /// # }
@@ -653,7 +648,7 @@ macro_rules! event_store_conformance {
             // `cfg_attr` predicate is stripped before name resolution, so the
             // `::wasm_bindgen_test` path is never resolved on a native build
             // and no native adapter gains a dependency for it. On `wasm32` the
-            // adapter already has that crate, because `__emit_wasm` names it.
+            // adapter already has that crate, because `emit_wasm` names it.
             #[cfg_attr(not(target_arch = "wasm32"), test)]
             #[cfg_attr(target_arch = "wasm32", ::wasm_bindgen_test::wasm_bindgen_test)]
             fn every_declined_capability_is_stated_by_this_fixture() {
@@ -669,14 +664,14 @@ macro_rules! event_store_conformance {
     (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
         $crate::event_store_conformance!(
             mod_name = $mod_name,
-            emit = $crate::__emit_tokio,
+            emit = $crate::emit_tokio,
             fixture = $fixture
         );
     };
     ($fixture:expr) => {
         $crate::event_store_conformance!(
             mod_name = dcb_conformance,
-            emit = $crate::__emit_tokio,
+            emit = $crate::emit_tokio,
             fixture = $fixture
         );
     };
@@ -723,7 +718,7 @@ macro_rules! event_store_conformance {
 /// # ignore! {
 /// happenstance_testkit::projection_store_conformance!(
 ///     mod_name = projection_conformance_blocking,
-///     emit = happenstance_testkit::__emit_projection_blocking,
+///     emit = happenstance_testkit::emit_projection_blocking,
 ///     fixture = MyProjectionFixture::new()
 /// );
 /// # }
@@ -767,14 +762,14 @@ macro_rules! projection_store_conformance {
     (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
         $crate::projection_store_conformance!(
             mod_name = $mod_name,
-            emit = $crate::__emit_projection_tokio,
+            emit = $crate::emit_projection_tokio,
             fixture = $fixture
         );
     };
     ($fixture:expr) => {
         $crate::projection_store_conformance!(
             mod_name = projection_conformance,
-            emit = $crate::__emit_projection_tokio,
+            emit = $crate::emit_projection_tokio,
             fixture = $fixture
         );
     };
@@ -795,8 +790,8 @@ macro_rules! projection_store_conformance {
 ///
 /// Emitter and enumeration *macros* are deliberately absent, and the absence is
 /// mechanical rather than a judgement: `macro_rules!` lives in a flat crate-root
-/// textual namespace, so `$crate::__private::__emit_tokio` does not exist and
-/// cannot be made to. What those names promise is C2-03's open question.
+/// textual namespace, so `$crate::__private::emit_tokio` does not exist and
+/// cannot be made to. Which of those names are promised is CF-41's.
 ///
 /// Each `cfg` here is copied from the module it re-exports rather than written
 /// fresh: `concurrency` is absent on `wasm32-unknown-unknown`, `bench` is behind

@@ -455,7 +455,7 @@ fn no_declared_ceiling_is_below_its_floor() {
 ///
 /// The macro's general arm hoists the fixture expression behind
 /// `async fn __conformance_fixture() -> impl Fixture` and hands the opaque type
-/// to every rule (`crates/happenstance-testkit/src/lib.rs:613-634`). This is
+/// to every rule (`crates/happenstance-testkit/src/lib.rs:608-629`). This is
 /// that obligation, written out: if `CloudflareFixture::new()` does not satisfy
 /// it, the slice-mate's three-line target does not compile.
 #[test]
@@ -814,7 +814,7 @@ mod on_the_object {
     /// [`DecliningFixture`](super::DecliningFixture) is what makes it standing
     /// instead. These are the shipped rules, reached by their real names through
     /// `happenstance_testkit::rules`, and the line asserted here is the same
-    /// `String` `__emit_wasm` would print — so if the format, the reason
+    /// `String` `emit_wasm` would print — so if the format, the reason
     /// plumbing or the emitter breaks, this fails rather than a future adapter's
     /// gate output quietly going blank.
     #[wasm_bindgen_test]
@@ -835,7 +835,7 @@ mod on_the_object {
                  and a skip has a line",
             );
 
-            // The emission itself, through the sink `__emit_wasm` uses. This is
+            // The emission itself, through the sink `emit_wasm` uses. This is
             // the half a human reads in the gate's own scroll.
             console_log!("{line}");
 

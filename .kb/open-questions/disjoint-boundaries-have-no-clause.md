@@ -39,7 +39,7 @@ last_reviewed: 2026-09-07
 ## What is true today
 
 `k_disjoint_boundaries_admit_exactly_k_commits`
-(`crates/happenstance-testkit/src/concurrency.rs:477`) is a live conformance rule that every
+(`crates/happenstance-testkit/src/concurrency.rs:478`) is a live conformance rule that every
 event-store fixture in this workspace runs. It enforces the proposition that commands sharing no
 consistency boundary do not conflict — the independence property Dynamic Consistency Boundary
 exists to provide in the first place. **No clause in `spec/SPECIFICATION.md` states that

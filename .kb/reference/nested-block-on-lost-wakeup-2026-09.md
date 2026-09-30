@@ -7,11 +7,11 @@ authority_tier: note
 summary: >-
   The deterministic reproduction taken 2026-09-03 in experiments/busy-timeout-margin/tests/lost_wakeup.rs
   of a second way a conformance run can stop and name no rule. The testkit's own executor,
-  crates/happenstance-testkit/src/registry.rs:338-342, drives a rule by polling and calling
+  crates/happenstance-testkit/src/registry.rs:357-361, drives a rule by polling and calling
   std::thread::park on Poll::Pending, with no notified flag of its own. std's park and unpark
   carry a single token per thread, so an unpark delivered while the thread is not parked is
   coalesced rather than queued: a second block_on nested inside a rule already driven by one —
-  the shape at crates/happenstance-testkit/src/concurrency.rs:890 calling through to :980 — can
+  the shape at crates/happenstance-testkit/src/concurrency.rs:891 calling through to :980 — can
   consume the token the outer loop was waiting for. Measured over four runs: the baseline
   completes, the nested case without a collision completes, and the nested case with a collision
   hangs past ten seconds. This matters beyond the one call site because CF-33 is [FROZEN] and
@@ -55,7 +55,7 @@ uses, not by observing a failure in CI.
 
 ## The mechanism
 
-`registry.rs:338-342` implements `block_on` as a hand-rolled poll loop: on `Poll::Pending` it calls
+`registry.rs:357-361` implements `block_on` as a hand-rolled poll loop: on `Poll::Pending` it calls
 `std::thread::park()` directly, with no flag of its own recording whether a wakeup already arrived.
 This is a deliberate, documented choice — the comment at the call site says parking rather than
 spinning lets a rule that awaits real I/O make progress without burning a core — and it is exactly
@@ -67,7 +67,7 @@ thread is not currently parked, the token is recorded once; a *second* `unpark` 
 parks again is coalesced into the same single token rather than queued as a second wakeup. That is
 fine for a single, flat poll loop. It stops being fine the moment a second `block_on` runs *nested*
 inside a rule that is itself being driven by an outer `block_on` on the same thread — the shape at
-`concurrency.rs:890` through `:980`, where a rule spawns further polling while already inside the
+`concurrency.rs:891` through `:981`, where a rule spawns further polling while already inside the
 registry's own loop. A wakeup meant for the inner future's waker and one meant for the outer loop's
 waker are, from `park`'s point of view, indistinguishable tokens on the same thread: the inner
 call can consume the token the outer loop needed, and the outer loop then parks with nothing left

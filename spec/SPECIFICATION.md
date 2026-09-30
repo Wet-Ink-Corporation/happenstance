@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 201 clause IDs, of which 194 are normative:
-**150 `[FROZEN]`**, **32 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+As assembled, this document carries 202 clause IDs, of which 195 are normative:
+**151 `[FROZEN]`**, **32 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -402,7 +402,7 @@ unrelated crate wanted replication.
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
 | **`EventStore`** | `crates/happenstance-core/src/store.rs:151-326` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it is the workspace's only adapter instrument to have *failed* a clause rather than passed one. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
-| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` can drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:363-429`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six now run against the suite** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063), and the `unstable-projection` feature survives on the contract crate only as an empty name so that `0.2.0` manifests resolve | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the four buffered stores do not occupy |
+| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` can drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:363-429`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six now run against the suite** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063); the `unstable-projection` feature survived on the contract crate as an empty name, so that `0.2.0` manifests resolved, until `0.4.0` removed it | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the four buffered stores do not occupy |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:140`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point, and it has narrowed to one port. `EventStore` is
@@ -5191,8 +5191,8 @@ portfolio table already convicts for `EventStore`.
 phase 6 through the 0.2.0 release; PS-2's bar was met after 0.2.0 by ADR-0062,
 and ADR-0063 lifted the gate. The falsifier this clause carried — PS-2's bar met
 *before* 0.1 — can no longer fire in either direction. The ID is retained so that
-citations resolve; the feature name is retained on the contract crate, empty, so
-that 0.2.0 manifests resolve.]`
+citations resolve; the feature name stayed on the contract crate, empty, so that
+0.2.0 manifests resolved, until 0.4.0 removed it.]`
 **Rule:** `cargo hack --feature-powerset` in `cargo xtask ci`, which already
 runs; the exemption is a doc obligation, not an adapter obligation.
 **Cases:** none directly; it is what makes E2E-15 through E2E-25 safe to answer
@@ -5212,11 +5212,11 @@ on `crates/happenstance-core/Cargo.toml`, absent from `default`, and mounted on
 `pub mod projection;` and its re-exports in `crates/happenstance-core/src/lib.rs`,
 held there by two tests in `xtask/src/main.rs`. ADR-0063 inverted both: the port
 is mounted unconditionally, `the_port_is_mounted_unconditionally` refuses any
-`cfg` on it, and `the_retired_projection_feature_is_still_declared_and_empty`
-holds the feature name in the manifest as an empty no-op — because removing a
-feature is a breaking change and a `0.2.0` manifest names it. What the typed
-layer still gates behind its own `unstable-projection` is the runner, and that
-is PS-33's territory rather than this clause's.
+`cfg` on it, and the feature name stayed in the manifest as an empty no-op —
+removing a feature is a breaking change, and a `0.2.0` manifest named it — until
+`0.4.0` removed it; `the_retired_projection_feature_is_gone` holds that. The typed
+layer still gates the runner behind its own `unstable-projection`, and that is
+PS-33's territory rather than this clause's.
 
 ---
 
@@ -8738,7 +8738,7 @@ at its boundaries — which is why the alphabet is exported rather than describe
 
 ### 6.4 Runtime independence
 
-`event_store_conformance!` emits `#[tokio::test]` — from `__emit_tokio`, in
+`event_store_conformance!` emits `#[tokio::test]` — from `emit_tokio`, in
 `crates/happenstance-testkit/src/registry.rs`, which is where the attribute is
 still written — and the crate documentation tells adapter authors to add tokio
 to their dev-dependencies (`crates/happenstance-testkit/src/lib.rs:28-29`). That
@@ -8792,7 +8792,7 @@ and `conformance_test!` no longer exists anywhere in the workspace:
 `for_each_event_store_rule!`, in
 `crates/happenstance-testkit/src/registry.rs`, has been the single enumeration
 ever since, `event_store_conformance!`
-(`crates/happenstance-testkit/src/lib.rs:613`) is built by invoking it, and
+(`crates/happenstance-testkit/src/lib.rs:608`) is built by invoking it, and
 `no_orphan_rules` is what now makes the two agree. What the clause forbids from
 here is a second hand-maintained list of the *same* family — reintroducing the
 pair that drifts, under whatever name — which is the arrangement the paragraph
@@ -8820,11 +8820,11 @@ open:
 
 * **The emitters are duplicated, not parameterised.** An emitter is invoked as
   `emitter!(rule_a, rule_b, …)` and the rules' *module path* is baked into its
-  expansion rather than passed, so a second family needs `__emit_model_tokio`
-  and `__emit_model_blocking`. That is duplication of eight lines against a
+  expansion rather than passed, so a second family needs `emit_model_tokio`
+  and `emit_model_blocking`. That is duplication of eight lines against a
   change to a contract three shipped emitters, three in-tree harnesses and CF-23
   all depend on. The alternative that avoids both — re-exporting the model rules
-  into `rules` so `__emit_tokio` resolves them — is refused: it puts an
+  into `rules` so `emit_tokio` resolves them — is refused: it puts an
   unregistered name into the module `no_orphan_rules` scans, in the one blind
   spot that test documents.
 * **It is additive, and its blind spot is measured rather than argued.**
@@ -8917,7 +8917,7 @@ the shipped tokio emitter already drives a `!Send` store, and
 `crates/happenstance-testkit/tests/local_conformance.rs:470-478` — harness **2**,
 the testkit's macro verbatim on the multi-threaded runtime — is the live
 demonstration (ADR-0010:107-112). The citation named harness 1 for a stage, which
-is the runtime-free `__emit_blocking` one whose own comment reads *"No async
+is the runtime-free `emit_blocking` one whose own comment reads *"No async
 runtime is involved at all"*: in range, so `check_citations` was silent, and
 pointing at the harness that proves nothing about tokio. What no tokio attribute can do is exist on a
 target that has no tokio. `[FROZEN]`
@@ -8929,7 +8929,7 @@ Cases: E2E-52, E2E-30.
 Rejects: a runtime attribute emitted from the testkit's own expansion — the
 shape, not a line, because the line moves and the shape is the defect.
 `#[tokio::test]` is still written inside this crate, but only inside
-`__emit_tokio`, which is a *parameter* the adapter selects and can replace;
+`emit_tokio`, which is a *parameter* the adapter selects and can replace;
 what this clause forbids is the version where no such parameter exists and every
 harness gets tokio whether or not the target has one. It is rejected for where it
 cannot run rather than for what it cannot drive; and equally a "fix" that swaps
@@ -9108,7 +9108,7 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` | **Far end yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:552-679`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No. Planned for phase 14, or 13 if SY-27 needs it first** (CF-27). ADR-0028 fixed its report as instrument-local, not a port surface | Fixture first; a device adapter second |
-| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1083`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
+| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1084`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
 Seven axes, and **the adapter column carries three ticks — durability, handle
@@ -9270,6 +9270,38 @@ and forces every adapter to re-run a bar that did not change. The version key is
 statement about what a number means, and these two crates' numbers mean different
 things: the contract's is a promise about types, the testkit's is a promise about
 the bar.
+
+**CF-41.** The conformance emitters CF-23 obliges an adapter to name are public
+API of `happenstance-testkit`: `emit_tokio`, `emit_blocking`, `emit_wasm`,
+`emit_projection_tokio`, `emit_projection_blocking`, `emit_projection_wasm`,
+`emit_model_tokio`, `emit_model_blocking`, `emit_concurrency_tokio` and
+`emit_concurrency_blocking`. Each MUST be exported without `#[doc(hidden)]`, so
+that it renders and a semver check can see it, and renaming or removing one is a
+major release of the testkit; adding one is a minor. A double-underscore prefix
+means *not promised*: a macro the testkit exports whose name starts with `__` MUST carry
+`#[doc(hidden)]`, and no promised name may carry the prefix. The benchmark
+emitters (`__emit_benchmark_tokio`, `__emit_benchmark_blocking`) and
+`__rule_names` are outside the promise — a benchmark is not the bar (CF-34), and
+`__rule_names` wraps no test — and may change in any release. What a
+hand-written emitter must name inside a suite macro's expansion
+(`__conformance_fixture` and `$crate::__private`) is not promised either
+(ADR-0076). `[FROZEN]`
+Rule: `the_promised_emitters_are_exactly_the_pinned_list`, a meta-test in
+`crates/happenstance-testkit/tests/emitter_surface.rs`, which compares the
+exported emitters against a committed list rather than a derived one, and
+fails on a `__` name that is rendered or an unprefixed name that is hidden. Its
+negative controls, `the_rule_refuses_the_hidden_names_that_shipped_before_it`
+and `the_rule_refuses_a_hidden_promise_and_a_rendered_exemption`, hand it the
+shapes below and assert that it refuses them.
+Cases: none — this is a surface obligation with a machine check and no
+behavioural case, which CF-35 permits so long as the clause says so. It does.
+Rejects: the emitters as they shipped through `0.3.2` — every one
+`#[doc(hidden)]` with a `__` prefix, so a `[FROZEN]` clause required an adapter
+to write a name the crate's own convention said could vanish, and
+`cargo-semver-checks`, which skips hidden items, could not report its removal.
+Equally, a rename done as one edit: the definition and every in-tree caller
+change together, so no compile and no derived comparison notices, and only a
+list written down separately does.
 
 ---
 
@@ -9576,8 +9608,8 @@ between them because its *shape* does not wait on a transport but its
 | §3 `EventStore` | `ES` | 42 | 34 | 7 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 38 | 26 | 4 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
-| §6 conformance | `CF` | 40 | 34 | 3 | 2 | 1 |
-| **Total** | | **201** | **150** | **32** | **12** | **7** |
+| §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
+| **Total** | | **202** | **151** | **32** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9811,6 +9843,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-38 | FROZEN | `cargo xtask spec-trace` (new step in `xtask/src/main.rs`'s `REQUIRED` list, `… | *all* |
 | CF-39 | FROZEN | `arming_a_mid_batch_fault_makes_the_append_fail`, `append_is_atomic_under_a_mi… | E2E-07, E2E-39 |
 | CF-40 | PROVISIONAL | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
+| CF-41 | FROZEN | `the_promised_emitters_are_exactly_the_pinned_list`, a meta-test in `crates/ha… | *(none — see clause)* |
 
 <!-- END GENERATED -->
 

@@ -2,7 +2,7 @@
 id: kb-open-question-cf-23-emitter-names-unstable-001
 title: CF-23 makes naming an emitter mandatory while every emitter is doc(hidden)
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   CF-23 is FROZEN and requires the per-test wrapper an adapter's conformance macro invocation
@@ -17,11 +17,20 @@ summary: >-
   page now discloses the contradiction; no clause resolves it. Correction 2 in this corpus applies:
   0.2.0 is live, so the free-to-declare-either-way window the brief assumed has closed, and
   whichever answer is chosen now costs a decision record rather than a documentation edit.
+  Resolved 2026-09-30 by kb-decision-0076, executing the policy kb-decision-0066 set: the ten
+  conformance emitters lose the __ prefix and doc(hidden) and are public API (emit_tokio and its
+  siblings), pinned against a committed list by CF-41's test; __emit_rule_names becomes
+  __rule_names and the benchmark pair stays hidden, both outside the promise; __ now means not
+  promised. Sub-question 1 is answered by a clause, CF-41, in section 6.6; sub-question 2 by the
+  pinned list, which holds whether or not cargo-semver-checks can see a macro; sub-question 3 by
+  leaving __rule_names out of the set.
 depends_on: []
-related: []
+related:
+  - kb-decision-0076
+  - kb-decision-0066
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/emitter-surface-stability.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-09-30
 ---
 
 # CF-23 makes naming an emitter mandatory while every emitter is doc(hidden)
@@ -102,7 +111,7 @@ strongest reason to resolve it before a second adapter of that shape exists.
 **Kept by phase 16, which decides the policy in `kb-decision-0066`. The renames it implies land
 in phase 17** (`runbook/phases/17-breaking-window.md`). The names are CF-23's only concrete
 parameters, and Cloudflare, having no `#[tokio::test]`, can name only `__emit_wasm`
-(`crates/happenstance-testkit/src/lib.rs:75-88`). So whatever 1.0 says about them binds every
+(`crates/happenstance-testkit/src/lib.rs:75-86`). So whatever 1.0 says about them binds every
 adapter author. `cargo-semver-checks` cannot see a `#[doc(hidden)]` macro name. That is why
 `__emit_rule_names` and the `__emit_benchmark_*` pair, which this atom flags as misnamed, are
 renamed in the `0.4.0` window or never.
@@ -110,3 +119,22 @@ renamed in the `0.4.0` window or never.
 Sub-questions 2 and 3, the pin-the-list instrument and `__emit_rule_names`' membership, go with
 the renames. **Owner now: phase 17**, to execute the policy. The atom closes when the §6.6 text
 and the renames have both landed.
+
+## Closed — 2026-09-30
+
+**Superseded by `kb-decision-0076`** (phase 17, lane L4), which carries the renames ADR-0066's
+policy implied. The two readings this atom found published at one commit no longer coexist:
+
+- **The promised names are no longer hidden.** `emit_tokio`, `emit_blocking`, `emit_wasm`,
+  `emit_projection_{tokio,blocking,wasm}`, `emit_model_{tokio,blocking}` and
+  `emit_concurrency_{tokio,blocking}` render on docs.rs, and `cargo-semver-checks` can see them.
+- **§6.6 has a clause.** CF-41 `[FROZEN]` states the set, makes a rename or removal a testkit
+  major, and makes `__` mean *not promised*. Its rule,
+  `the_promised_emitters_are_exactly_the_pinned_list` in
+  `crates/happenstance-testkit/tests/emitter_surface.rs`, compares against a committed list,
+  with two negative controls built from the `0.3.2` shape.
+- **The names this atom flagged as misnamed are settled.** `__emit_rule_names` is `__rule_names`,
+  hidden and outside the set. `__emit_benchmark_tokio` and `__emit_benchmark_blocking` keep their
+  names and stay hidden, because CF-34 says a benchmark is not the bar.
+
+The removed names were hidden, so the `0.4.0` semver trace needs a hand-written row for them.

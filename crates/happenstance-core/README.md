@@ -18,8 +18,8 @@ event store. Storage-agnostic, and built on the
 > from `0.2.0`**. `ProjectionStore` was **not**, at `0.2.0`: it shipped behind
 > the off-by-default `unstable-projection` feature with a written semver
 > exemption. Its freeze condition was met by ADR-0062 and ADR-0063 lifted the
-> gate, so it is **frozen and unconditional from `0.3.0`**; the feature name
-> survives, empty, so a `0.2.0` manifest still resolves.
+> gate, so it is **frozen and unconditional from `0.3.0`**. The feature name
+> survived, empty, until `0.4.0` removed it.
 >
 > See [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md),
 > where every clause carries a maturity marker and, where it is not settled, the

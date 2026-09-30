@@ -20,7 +20,7 @@
 //! # It is the mirror of `no_orphan_rules`, not a fork of it
 //!
 //! `registry::no_orphan_rules` obtains the registered names from
-//! `for_each_event_store_rule!(crate::__emit_rule_names)` and compares them
+//! `for_each_event_store_rule!(crate::__rule_names)` and compares them
 //! against a source scan of `suite.rs`; a rule present in the source and absent
 //! from the enumeration is an orphan. This asks the same question from the other
 //! side: the enumerated names must be **absent** from every harness, because a
@@ -105,7 +105,7 @@ mod projection_harness_parity {
     #[test]
     fn no_harness_lists_a_rule_by_hand() {
         let registered = happenstance_testkit::for_each_projection_store_rule!(
-            happenstance_testkit::__emit_rule_names
+            happenstance_testkit::__rule_names
         );
         assert!(
             !registered.is_empty(),
