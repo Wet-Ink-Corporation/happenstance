@@ -6,7 +6,7 @@
 //! `happenstance-sqlite` — against each other, against raw SQL on the same
 //! file, and against their own history. It lives outside the workspace, it is
 //! invoked by a human typing `./run.sh`, and **no result it produces can turn a
-//! merge red**. That is CF-34 (`spec/SPECIFICATION.md:8767`), whose own
+//! merge red**. That is CF-34 (`spec/SPECIFICATION.md:8849`), whose own
 //! `Rejects:` line is *"a benchmark result gating a merge"*.
 //!
 //! # The five things that are true of every figure here

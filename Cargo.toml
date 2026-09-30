@@ -158,7 +158,7 @@ proptest = "1"
 # doctests from the lib target only, and on 1.97.1 it silently ignores an
 # unmatched error-code annotation, so `compile_fail,E0004` asserts no more than
 # bare `compile_fail` — and a negative control that cannot discriminate is not a
-# negative control (`spec/SPECIFICATION.md:8792`;
+# negative control (`spec/SPECIFICATION.md:8874`;
 # `crates/happenstance-core/src/event.rs:95-106`).
 #
 # Adopted on a measurement, not on taste — the `postcard` note above is the

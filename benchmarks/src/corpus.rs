@@ -69,22 +69,22 @@ use happenstance_core::{Event, EventType, Query, QueryItem, Tag, Tags};
 /// VT-21's `MIN_SUPPORTED_EVENT_DATA_LEN`: 64 KiB.
 ///
 /// The payload size every conformant store must accept
-/// (`spec/SPECIFICATION.md:1527`). `happenstance-sqlite` states a ceiling of
+/// (`spec/SPECIFICATION.md:1530`). `happenstance-sqlite` states a ceiling of
 /// 1 MiB, sixteen times this.
 pub const FLOOR_EVENT_DATA_LEN: usize = 65_536;
 
 /// VT-22's `MIN_SUPPORTED_TAGS_PER_EVENT`: 64 tags.
 ///
-/// `spec/SPECIFICATION.md:1557`, sized as eight times the maximum any of the
+/// `spec/SPECIFICATION.md:1560`, sized as eight times the maximum any of the
 /// six scenarios actually uses, and chosen to keep a 100-event batch inside
 /// SQLite's 32,766 variable ceiling at three parameters per tag.
 pub const FLOOR_TAGS_PER_EVENT: usize = 64;
 
-/// VT-23's `MIN_SUPPORTED_QUERY_ITEMS`: 128 items (`spec/SPECIFICATION.md:1579`).
+/// VT-23's `MIN_SUPPORTED_QUERY_ITEMS`: 128 items (`spec/SPECIFICATION.md:1582`).
 pub const FLOOR_QUERY_ITEMS: usize = 128;
 
 /// VT-24's `MIN_SUPPORTED_EVENTS_PER_BATCH`: 128 events
-/// (`spec/SPECIFICATION.md:1600`).
+/// (`spec/SPECIFICATION.md:1603`).
 pub const FLOOR_EVENTS_PER_BATCH: usize = 128;
 
 /// The event type every corpus here uses, as a compile-time constant.
@@ -452,7 +452,7 @@ pub fn query_matching_one(ordinal: usize) -> Query {
 /// CF-34's own worked case: a two-item query where one item selects a handful
 /// of events and the other selects millions.
 ///
-/// `spec/SPECIFICATION.md:8732-8738` uses exactly this shape to argue that
+/// `spec/SPECIFICATION.md:8814-8820` uses exactly this shape to argue that
 /// complexity is a benchmark and not an assertion — *"an adapter that scans
 /// where it should seek passes every rule that can be written"*. It is the one
 /// workload in this module that exists because a specification clause names it.

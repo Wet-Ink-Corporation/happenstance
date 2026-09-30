@@ -429,7 +429,7 @@ pub(crate) fn is_inert(path: &str) -> bool {
         //
         // Unlike `spec/` and `standards/pages/`, this prefix is *not* half of a
         // pair: no unconditional lint runs over it, and none should. CF-34
-        // (`spec/SPECIFICATION.md:8767`) rejects a benchmark result gating a
+        // (`spec/SPECIFICATION.md:8849`) rejects a benchmark result gating a
         // merge, and a `xtask` step that read this tree on every invocation is
         // one edit away from being one.
         "benchmarks/",

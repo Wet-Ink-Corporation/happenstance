@@ -97,7 +97,7 @@ and `commit_with` absorb it into `CommandError::Boundary`, so the first program 
 this API adds no extra question-mark for it. No `unwrap`, and no edit to the frozen crate: the
 shortfall — `happenstance-core` has no infallible `QueryItem` constructor for pre-validated
 inputs — is logged as defect candidate D-1 for AC-012's log, with VT-18
-(`spec/SPECIFICATION.md:1385-1389`) as its nearest clause subject and a decision record, not a
+(`spec/SPECIFICATION.md:1388-1392`) as its nearest clause subject and a decision record, not a
 line edit, as its route.
 
 The exactly-one-path claim is the contract crate's own words, at

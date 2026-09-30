@@ -594,10 +594,16 @@ editing neither body.
 
 Phase 17's records, written by hand as each of its lanes lands. ADR-0072 is the first: the phase is split
 at its release, and the additive items go to a new phase, 17b.
+ADR-0073 settles VT-10's foreign-identity write path. ADR-0028 is written under the number the
+original queue reserved for it, which is why it sorts first. It takes the retention refusal, with
+an additive reservation, and answers sub-question 3 of `kb-open-question-es-38-and-gap-read-unowned-001`,
+which stays open for sub-question 2.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
+| ADR-0028 | [`kb-decision-0028`](../decisions/0028-what-a-store-may-forget.md) | What a store may forget is decided outside the port, and a report of it can only arrive additively | accepted | 17 | — |
 | ADR-0072 | [`kb-decision-0072`](../decisions/0072-phase-17-is-split-at-the-release.md) | Phase 17 is split at the release — what must ship in 0.4.0, and 17b after it | accepted | 17 | — |
+| ADR-0073 | [`kb-decision-0073`](../decisions/0073-the-foreign-identity-write-path-is-the-adapters.md) | The write path that keeps a foreign identity is the adapter's row writer, and core grows nothing | accepted | 17 | — |
 
 ## Adding a row
 

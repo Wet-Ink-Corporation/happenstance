@@ -1,0 +1,24 @@
+    Building happenstance-core v0.3.2 (current)
+       Built [   0.691s] (current)
+     Parsing happenstance-core v0.3.2 (current)
+      Parsed [   0.007s] (current)
+     Parsing happenstance-core v0.3.2 (baseline, cached)
+      Parsed [   0.006s] (baseline)
+    Checking happenstance-core v0.3.2 -> v0.3.2 (no change; assume minor)
+     Checked [   0.012s] 196 checks: 195 pass, 1 fail, 0 warn, 58 skip
+
+--- failure trait_method_added: pub trait method added ---
+
+Description:
+A non-sealed public trait added a new method without a default implementation, which breaks downstream implementations of the trait
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#trait-new-item-no-default
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/trait_method_added.ron
+
+Failed in:
+  trait method happenstance_core::store::EventStore::control_required in file <worktree>\crates\happenstance-core\src\store.rs:344
+  trait method happenstance_core::EventStore::control_required in file <worktree>\crates\happenstance-core\src\store.rs:344
+  trait method happenstance_core::store::SendEventStore::control_required in file <worktree>\crates\happenstance-core\src\store.rs:344
+  trait method happenstance_core::SendEventStore::control_required in file <worktree>\crates\happenstance-core\src\store.rs:344
+
+     Summary semver requires new major version: 1 major and 0 minor checks failed
+    Finished [   1.427s] happenstance-core

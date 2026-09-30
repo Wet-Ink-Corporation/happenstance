@@ -41,7 +41,7 @@ because SQLite silently ignores a `journal_mode` it cannot honour.
 | Wall clock | about five minutes: 1.7 s conformance, 13 s harness, 48 s tag storage, 220 s contention |
 
 **`synchronous` is this experiment's `fsync`.** `PRAGMA synchronous = OFF` is
-named **by name** in `spec/SPECIFICATION.md:7501-7504` as a wrong implementation
+named **by name** in `spec/SPECIFICATION.md:7583-7586` as a wrong implementation
 that CF-14's reopen rule exists to reject, so a figure produced under it is not
 merely dishonest — it is a figure for a store that fails conformance. The runner
 reads the setting back and **aborts rather than emit a number** under it;

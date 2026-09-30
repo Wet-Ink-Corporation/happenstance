@@ -63,7 +63,7 @@ form the brief names — `references/adr/0062-the-probe-seam-moves-and-the-far-e
 — is not present in this checkout, `ProjectionStore::begin` is still
 synchronous (`fn begin(&self) -> Self::Batch`,
 `crates/happenstance-core/src/projection.rs:460`), and PS-6's MUST at
-`spec/SPECIFICATION.md:5198` is unrewritten. This record states what the lane
+`spec/SPECIFICATION.md:5256` is unrewritten. This record states what the lane
 binds when it lands, mirroring `kb-decision-0037`'s precedent for a decision
 recorded ahead of its code landing on the branch that carries it.
 

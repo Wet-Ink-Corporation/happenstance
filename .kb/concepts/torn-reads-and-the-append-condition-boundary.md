@@ -46,7 +46,7 @@ look.
 
 The condition's boundary is not independent evidence checked against the read. It is **derived
 from the read itself**, and that is what breaks the safety net. `read_decision_model`
-(`store.rs:205-215`) folds the matched events and returns the maximum position it observed
+(`store.rs:215-225`) folds the matched events and returns the maximum position it observed
 alongside the decision state; `AppendCondition::after_opt` consumes exactly that maximum as its
 `after` boundary. The condition the store checks at commit is therefore built entirely out of
 what the read believed it saw.

@@ -85,7 +85,7 @@ remove it.
 **Evidence.** `Cargo.toml:211 (Members opt in with)` · `Cargo.toml:214 (missing_docs)` ·
 `Cargo.toml:227 (missing_errors_doc)` ·
 `crates/happenstance-core/Cargo.toml:103 ([lints])` ·
-`crates/happenstance-core/src/store.rs:258 (AppendError::NoEvents)` ·
+`crates/happenstance-core/src/store.rs:268 (AppendError::NoEvents)` ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)
 
 ---
@@ -321,7 +321,7 @@ trait would have met ES-30. Without it the trade is re-argued by whoever
 remembers it, and in the meantime a blanket body no adapter can override has
 displaced SQLite's `SELECT max(position)` fast path.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:277 (Why this is required rather than provided)` ·
-`crates/happenstance-core/src/store.rs:288 (where Self: Sync)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:287 (Why this is required rather than provided)` ·
+`crates/happenstance-core/src/store.rs:298 (where Self: Sync)` ·
 [SPECIFICATION ES-30](../../spec/SPECIFICATION.md) ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)

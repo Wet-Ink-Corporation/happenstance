@@ -890,7 +890,7 @@ impl<T: SqlTransport> EventStore for NeonEventStore<T> {
     /// retrying; answering `true` makes this briefly disagree with `read`, and
     /// that disagreement resolves itself as the frontier advances.
     ///
-    /// Recorded, not settled. ES-41 stays `[PROVISIONAL]`.
+    /// Recorded, not settled: ES-41 is frozen (ADR-0028), but this reading is phase 13's.
     ///
     /// # Errors
     ///

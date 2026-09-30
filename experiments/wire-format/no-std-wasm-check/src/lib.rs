@@ -2,7 +2,7 @@
 //! build check clean on `wasm32-unknown-unknown`?
 //!
 //! Backs the first half of WF-11's falsifier
-//! (`SPECIFICATION.md:2119-2121`): "falsified if the base64 implementation
+//! (`SPECIFICATION.md:2122-2124`): "falsified if the base64 implementation
 //! cannot be made `no_std`". This crate is the smallest thing that can
 //! answer that: `#![no_std]`, one `alloc` import, `STANDARD.encode` /
 //! `STANDARD.decode`, nothing else.
