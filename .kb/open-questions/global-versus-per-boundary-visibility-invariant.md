@@ -156,9 +156,9 @@ gives the question to phase 16, which decides whether ADR-0063 answered it.
 `kb-decision-0071` answers what the phase-15 re-read above said was still missing: an argument for
 the single-position checkpoint that does not lean on ES-10. ES-10 stays global and `[FROZEN]`. The
 premise is frozen at every seam it touches. `ProjectionStore::commit` takes exactly one
-`position: SequencePosition` (`crates/happenstance-core/src/projection.rs:498-504`), each
+`position: SequencePosition` (`crates/happenstance-core/src/projection.rs:506-512`), each
 `Checkpoint` variant carries one `through`, PS-17 fixes a checkpoint per `(store, ProjectionId)`,
-PS-20 resumes strictly after it (`spec/SPECIFICATION.md:5775`), and ADR-0063 put all of it under
+PS-20 resumes strictly after it (`spec/SPECIFICATION.md:5813`), and ADR-0063 put all of it under
 semver.
 
 The sub-questions:

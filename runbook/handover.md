@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`52aa951` on `main` (PR #27, lane L1: VT-10 frozen), plus
-`lane/p17-provided-method-spike`, lane L2. 2026-09-29.
+`004413a` on `main` (PR #28, lane L2: ADR-0028), plus `lane/p17-apply-record`,
+lane L3. 2026-09-30.
 
 ## Where things are
 
@@ -37,17 +37,27 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-`lane/p17-provided-method-spike` (L2), awaiting merge:
-- **`experiments/provided-method-spike`**: a default-bodied method written in the `-> impl Future` form is additive on a `trait_variant` pair. `cargo-semver-checks` is clean against `0.3.2`, while a required-method control is reported as a major. Two conditions: a default that drops the batch must do it before the future exists, and the typed `Projection` must itself become a `trait_variant` pair for its default to be spawnable.
-- **`experiments/apply-shape`**: an async `apply` with a batch handle works over memory, SQLite and a live Postgres 17.10. Its findings F1–F7 are L3's inputs; F5 is that a server refusal aborts the live transaction, so `Skip` over a live batch needs a SAVEPOINT.
-- **ADR-0028**: deletion stays outside the port through 1.x, and any later report is a provided method that defaults to `Unknown`.
-  - ES-41 and PS-22 are `[FROZEN]`.
-  - ES-37, ES-39, ES-40, SY-32 and CF-27 are rewritten.
-  - Phase 14 is restated.
+`lane/p17-apply-record` (L3) contains records and documentation only, and is awaiting merge:
+- **ADR-0074**: `Projection::apply` becomes async on one trait with a Send variant.
+  - It is handed a `Delivered<E>`, which has a public constructor and no local position, plus a batch it can issue statements through.
+  - SY-21 now forbids the *arrival* position.
+  - `on_error` is a provided method defaulting to Halt. The runner does not issue SAVEPOINTs; phase 18 owes an application-level savepoint test.
+  - It adopts `ProjectionError<R, W, A>`, and PS-25's derived id with an FNV-1a digest.
+  - PS-9 and PS-11 are `[FROZEN]`.
+- **ADR-0075**:
+  - PS-15 is frozen, narrowed to `commit` and `reset`, with `rollback` non-normative (the owner's choice, `wi-ff17f4`).
+  - PS-23 is frozen, with a later `commit_all` additive.
+  - PS-24 is frozen.
+  - PS-38's obligation is documented in the `checkpoint` rustdoc and in Neon's docs.
+- Phase 18 is restated to build what ADR-0074 decided.
 
 ## Next action
 
-After L2 merges, lane L3 is two records only: the `apply` record (ADR-0074) and the port-clauses record (ADR-0075). They take their evidence from `experiments/apply-shape` and `experiments/provided-method-spike`.
+After L3 merges, lane L4 is the first breaking PR, so it bumps the workspace, the testkit and the examples to `0.4.0`. It covers:
+- CF-23's emitter renames, ADR-0076;
+- executing ADR-0057;
+- removing `happenstance-core`'s empty `unstable-projection`;
+- `naive-arm` moved to a rustc cfg.
 
 ## Waiting on the owner
 

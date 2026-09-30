@@ -10,7 +10,7 @@
 //! the adapter is, and that the corpus refuses to build a workload whose
 //! figures would be meaningless.
 //!
-//! Neither file asserts on a duration. CF-34 (`spec/SPECIFICATION.md:8849`)
+//! Neither file asserts on a duration. CF-34 (`spec/SPECIFICATION.md:8937`)
 //! rejects *"a benchmark result gating a merge"*, and its reasoning is that a
 //! threshold nobody can justify becomes a threshold everybody raises. Every
 //! assertion here is on a **count**, a **string** or a **refusal**, all three of
@@ -247,7 +247,7 @@ fn distinct_and_uniform_corpora_differ_in_the_way_the_selectivity_axis_needs() {
 
 /// CONTROL — CF-34's own worked query selects a proper subset.
 ///
-/// `spec/SPECIFICATION.md:8814-8820` uses a mixed two-item query — one item
+/// `spec/SPECIFICATION.md:8902-8908` uses a mixed two-item query — one item
 /// selecting a handful of events, the other selecting millions — as the case no
 /// conformance rule can catch. A version of it that matched everything, or
 /// nothing, would measure the wrong thing entirely.

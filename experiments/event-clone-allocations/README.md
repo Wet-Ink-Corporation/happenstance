@@ -29,7 +29,7 @@ is immutable, so that sentence is repaired by a superseding atom rather than her
 | --- | --- |
 | `crates/happenstance-core/src/event.rs:404-413` | "…leaving one `Box<str>` and one boxed tag slice." |
 | `crates/happenstance-core/src/memory.rs:30-31` | "Cloning is cheap regardless: payloads are `Bytes`, so a snapshot bumps refcounts rather than copying data." |
-| `spec/SPECIFICATION.md:3388-3391` (ES-17, `[PROVISIONAL]`) | "…the remaining cost is one `Box<str>` and one boxed tag slice, bounded by the tag count." |
+| `spec/SPECIFICATION.md:3393-3396` (ES-17, `[PROVISIONAL]`) | "…the remaining cost is one `Box<str>` and one boxed tag slice, bounded by the tag count." |
 | `references/adr/0012-append-shape-and-preconditions.md:173` | "`Bytes` are refcounted, so `event.clone()` bumps a counter rather than copying a payload." |
 
 ES-17 is the clause that decides whether `EventStore::append` takes `&[Event]` or

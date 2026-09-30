@@ -477,6 +477,14 @@ pub trait ProjectionStore {
     /// feeding `through` to [`ReadOptions::from`](crate::ReadOptions::from)
     /// after advancing past it.
     ///
+    /// PS-38, provisional: the answer reflects every commit this store has
+    /// acknowledged, through any handle onto it, and an adapter over replicated
+    /// storage answers from the primary, never from a replica that may lag it —
+    /// a runner that resumes from a stale checkpoint applies again what it
+    /// already committed. No conformance rule can observe a lagging replica in
+    /// process, so this is documented rather than checked, and if PS-38's
+    /// falsifier fires the obligation narrows to reads through the same handle.
+    ///
     /// # Errors
     ///
     /// Returns the adapter's error if the checkpoint cannot be read.

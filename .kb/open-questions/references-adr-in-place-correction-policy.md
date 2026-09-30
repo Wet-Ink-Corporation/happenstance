@@ -73,7 +73,7 @@ allocation, so a clone costs `t + 2` allocations for `t` tags rather than a
 flat two — measured at 66 allocations at the specification's own 64-tag floor
 (VT-22), against `experiments/event-clone-allocations/results/raw/clone.txt`.
 The same stale claim recurs, independently, inside
-`spec/SPECIFICATION.md:3388-3391`'s own rationale prose for clause ES-17 —
+`spec/SPECIFICATION.md:3393-3396`'s own rationale prose for clause ES-17 —
 that is the specification's text, not the ADR's, and is a separate correction
 with a separate owner, but it shows the staleness is not confined to one file.
 

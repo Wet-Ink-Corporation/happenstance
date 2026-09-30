@@ -707,7 +707,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
-  their live lines (`spec/SPECIFICATION.md:9113-9138`, `:9021-9034`), both stale as previously cited.
+  their live lines (`spec/SPECIFICATION.md:9201-9226`, `:9021-9034`), both stale as previously cited.
 - **Open** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the
@@ -832,7 +832,7 @@ the decision and reference atoms this domain also owns.
   (`kb-open-question-seal-the-codec-001`) — whether `Codec` is later sealed, now that `0.2.0` is
   live and the window to do so for free has closed; bundles the `UnknownTag`-split and
   `Boundary::absorb` sub-questions ADR-0049 left undone. Added 2026-09-07.
-- **Open** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
+- **Superseded** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
   (`kb-open-question-apply-synchronous-live-store-001`) — `Projection::apply` is synchronous
   (`crates/happenstance/src/domain.rs:249`) and `run_projection` folds events through it before
   handing the batch to the store, exactly right for a buffered batch and exactly wrong for one that
@@ -842,6 +842,10 @@ the decision and reference atoms this domain also owns.
   whether `apply` moves, to what shape, or whether the runner's gate comes off with it; forced by the
   first application needing a row-writing projection against a live-transaction store through the
   runner, or a decision to publish the runner ungated first. Added 2026-09-11.
+  **Resolved 2026-09-29** by `kb-decision-0074`: `apply` becomes `async` on the one trait, with a
+  `trait_variant`-derived `SendProjection`, handed a position-free `Delivered` event and the batch,
+  on a spike that drove a live `sqlx` transaction; ADR-0063's falsifier did not fire, and phase 18
+  builds it and lifts the runner's gate.
 
 ## Brand identity: the name, the mark, and where it lives
 

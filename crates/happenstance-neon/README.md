@@ -114,6 +114,16 @@ session:
   object rather than a partial result array. That is the atomicity the
   non-interactive batch promises, confirmed rather than assumed.
 
+## Point the projection store at the primary
+
+Give `NeonProjectionStore` a **read-write primary endpoint, never a read
+replica**. Its `checkpoint` must reflect every commit the store has
+acknowledged, through any handle (PS-38). A read replica can lag the primary,
+so it reports an older position, and a runner resuming from it applies events
+again that it already committed. No conformance rule can detect this, because
+the suite runs against one endpoint, so the obligation is documented rather
+than tested.
+
 ## Limits this store enforces
 
 | | |

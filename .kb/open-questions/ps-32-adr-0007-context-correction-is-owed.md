@@ -91,7 +91,7 @@ states its shape at `references/adr/0017-what-a-projection-batch-owns.md:356-361
 it; `ADR-0030` (`kb-decision-0030`) met the same row in its own clause range and its phase-6 clause
 disposition explicitly changes nothing about the correction. This is the third wave in sequence —
 0007's own, ADR-0017's, and now ADR-0030's — to carry the obligation forward unperformed, and
-`spec/SPECIFICATION.md:5768` names this wave's own intake file as the staging note for whichever wave
+`spec/SPECIFICATION.md:5806` names this wave's own intake file as the staging note for whichever wave
 finally writes the superseding atom.
 
 ## What a future wave should carry

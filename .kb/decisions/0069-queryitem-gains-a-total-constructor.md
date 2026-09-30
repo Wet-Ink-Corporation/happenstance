@@ -94,7 +94,7 @@ and it canonicalises (sort and dedup) exactly as `new` does, so equal inputs pro
 through either door. ADR-0020 also refused it as "an unrecorded change to a frozen contract". This
 record is the recording.
 
-**VT-18 is not edited.** VT-18 (`spec/SPECIFICATION.md:1443-1449`, `[FROZEN]`) requires
+**VT-18 is not edited.** VT-18 (`spec/SPECIFICATION.md:1448-1454`, `[FROZEN]`) requires
 constructors to accept values the caller already holds and requires their errors to compose. The
 new constructor extends that courtesy to `QueryItem`. It adds no MUST and moves no marker.
 

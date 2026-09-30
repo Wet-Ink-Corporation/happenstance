@@ -57,7 +57,7 @@ last_reviewed: 2026-09-29
 
 `crates/happenstance-testkit/src/concurrency.rs` declares `pub const CONTENDERS: usize = 64` and
 runs the shipped concurrency rules against that many simultaneous handles onto one fixture. CF-33
-(`spec/SPECIFICATION.md:8822`) is `[FROZEN]`: *"No conformance rule may read a clock, measure
+(`spec/SPECIFICATION.md:8910`) is `[FROZEN]`: *"No conformance rule may read a clock, measure
 elapsed time, or assert an operation count."* The rule exists so a conformance run is deterministic
 and portable — no wall-clock deadline, no watchdog, nothing that varies with the machine — and its
 cost is unavoidable given what it forbids: a store contended for a moment longer than usual and a

@@ -55,7 +55,7 @@ The document contradicts itself about whether *it* is the one deciding this.
 The frontmatter's "Adds" line and the decision-8 prose both say the clause
 lands here — "**Settled at sign-off: it lands here, as CF-40**" — with an
 explicit argument for why the competing home, ADR-0012, is wrong: "What
-`SPECIFICATION.md:6885-6895` assigns is the **`MID_BATCH_FAULT`** clause, it
+`SPECIFICATION.md:6959-6969` assigns is the **`MID_BATCH_FAULT`** clause, it
 assigns it to phase 4 by name, and it names no ADR. ADR-0012 has taken that
 slot as **CF-39**, and CF-39 is about a *boolean* capability... Nothing...
 says a fixture may declare a **number**. Parking this blocker on ADR-0012
