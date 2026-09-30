@@ -37,28 +37,30 @@
 //!
 //! # Running it
 //!
-//! **Not** swept up by the live job, and this header said it was until the
-//! `0.2.0` release pass. That job filters to `--test postgres_conformance`, and
-//! this file, `tests/projection.rs` and `tests/naive_arm_probe.rs` are three
-//! other targets the filter excludes. The projection target has since been given
-//! its own steps; this one and `naive_arm_probe` are still run by hand, because
-//! both need the `naive-arm` feature — the deliberately-broken store no consumer
-//! can reach — and turning that on in a job whose purpose is to certify the real
-//! adapter is a worse trade than running two commands at a release.
+//! Not by the live job's conformance run, which filters to `--test
+//! postgres_conformance`; this header said otherwise until the `0.2.0` release
+//! pass. Since `0.4.0` this target and `tests/naive_arm_probe.rs` have their own
+//! step at the end of that job, because both need the `happenstance_naive_arm`
+//! rustc cfg — the deliberately-broken store no consumer can reach — which was a
+//! Cargo feature until then and is now something only a build's `RUSTFLAGS` can
+//! set. The step builds into its own target directory, so the store the job
+//! certifies is never compiled with the naive arm in it.
 //!
-//! Run it deliberately, naming the target:
+//! To run it by hand, name the target and repeat `-D warnings`: `RUSTFLAGS` in
+//! the environment *replaces* `.cargo/config.toml`'s flags rather than adding to
+//! them, so leaving it out runs laxer than the gate.
 //!
 //! ```console
-//! cargo test -p happenstance-postgres --all-features --test rule_controls -- --ignored --show-output
+//! RUSTFLAGS="-D warnings --cfg happenstance_naive_arm" cargo test -p happenstance-postgres --all-features --test rule_controls -- --ignored --show-output
 //! ```
 
-// The whole target is behind the feature, so a default build does not contain
-// the naive arm at all -- which is the strongest form of "off by default" and
-// what AC-001 asks for. Under `--all-features`, which is what the default gate's
-// clippy and test steps and the live job all run, it compiles; its
-// server-touching tests are `#[ignore]`d on top of that, so the default gate
-// still needs no Docker.
-#![cfg(all(feature = "naive-arm", not(target_arch = "wasm32")))]
+// The whole target is behind the cfg, so a default build does not contain the
+// naive arm at all -- which is the strongest form of "off by default" and what
+// AC-001 asks for ("an off-by-default Cargo feature, or a cfg chosen in its
+// place"). No `--all-features` build reaches it. The live job's two naive-arm
+// steps do: clippy over every target, then `--include-ignored`. The server tests
+// are `#[ignore]`d on top of that, so building under the cfg needs no Docker.
+#![cfg(all(happenstance_naive_arm, not(target_arch = "wasm32")))]
 #![allow(clippy::unwrap_used)]
 
 mod support;
@@ -275,23 +277,23 @@ fn postgres_rule_outcome_column() {
     }
 }
 
-/// The naive arm is unreachable without its feature.
+/// The naive arm is unreachable without its cfg.
 ///
 /// A compile-time claim rather than a runtime one, which is why it is a `const`
 /// block: clippy correctly points out that the assertion has a constant value,
 /// and the fix is to make that explicit rather than to assert it at run time.
-/// The whole target is behind `#![cfg(feature = "naive-arm")]`, so this either
-/// compiles — proving the feature is on — or does not exist at all.
+/// The whole target is behind `#![cfg(happenstance_naive_arm)]`, so this
+/// either compiles — proving the cfg is set — or does not exist at all.
 ///
-/// What it actually buys: `cargo hack --feature-powerset` compiles the
-/// combination that includes the feature, and this is the item that makes that
-/// combination contain something.
+/// What it actually buys: the live job runs this target with
+/// `--include-ignored` and requires this test by name, so a build that lost the
+/// cfg (and so compiled an empty binary) fails there instead of passing empty.
 #[test]
-fn naive_arm_is_reachable_only_under_its_feature() {
+fn naive_arm_is_reachable_only_under_its_cfg() {
     const {
         assert!(
-            cfg!(feature = "naive-arm"),
-            "this target is compiled only with `naive-arm` on"
+            cfg!(happenstance_naive_arm),
+            "this target is compiled only with `happenstance_naive_arm` set"
         );
     }
 }

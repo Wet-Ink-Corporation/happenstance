@@ -74,7 +74,7 @@
 //! into its expansion, not passed. Threading a path through would change a
 //! contract that three shipped emitters, three in-tree harnesses and CF-23 all
 //! depend on, to save eight lines. The alternative anyone tries first —
-//! re-exporting the model rules into [`crate::rules`] so `__emit_tokio` finds
+//! re-exporting the model rules into [`crate::rules`] so `emit_tokio` finds
 //! them — is worse than duplication: it puts an unregistered name into the
 //! module `no_orphan_rules` scans, in the one blind spot that test documents
 //! (it cannot see a `pub use`).
@@ -824,12 +824,18 @@ macro_rules! for_each_model_rule {
 
 /// Emits one `#[tokio::test]` per model rule.
 ///
-/// `__emit_tokio`'s twin, differing only in the module the rules are looked up
-/// in. See this module's documentation for why that is duplicated rather than
-/// parameterised.
-#[doc(hidden)]
+/// [`emit_tokio!`](crate::emit_tokio)'s twin, differing only in the module the
+/// rules are looked up in. The [`model`](crate::model) module's documentation
+/// says why that is duplicated rather than parameterised.
+///
+/// The default: an invocation of
+/// [`event_store_model_conformance!`](crate::event_store_model_conformance) that names
+/// no emitter uses it, and naming it is
+/// `emit = happenstance_testkit::emit_model_tokio`.
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_model_tokio {
+macro_rules! emit_model_tokio {
     ($($name:ident),* $(,)?) => {
         $(
             #[tokio::test]
@@ -844,9 +850,13 @@ macro_rules! __emit_model_tokio {
 
 /// Emits one plain `#[test]` per model rule, driven by
 /// [`block_on`](crate::block_on).
-#[doc(hidden)]
+///
+/// Select it by passing `emit = happenstance_testkit::emit_model_blocking` to
+/// [`event_store_model_conformance!`](crate::event_store_model_conformance).
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_model_blocking {
+macro_rules! emit_model_blocking {
     ($($name:ident),* $(,)?) => {
         $(
             #[test]
@@ -900,14 +910,14 @@ macro_rules! event_store_model_conformance {
     (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
         $crate::event_store_model_conformance!(
             mod_name = $mod_name,
-            emit = $crate::__emit_model_tokio,
+            emit = $crate::emit_model_tokio,
             fixture = $fixture
         );
     };
     ($fixture:expr) => {
         $crate::event_store_model_conformance!(
             mod_name = dcb_model_conformance,
-            emit = $crate::__emit_model_tokio,
+            emit = $crate::emit_model_tokio,
             fixture = $fixture
         );
     };

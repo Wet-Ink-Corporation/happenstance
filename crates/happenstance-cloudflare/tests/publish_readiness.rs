@@ -4,7 +4,7 @@
 //!
 //! `cargo xtask package-check` asserts three *filenames* are inside the packaged
 //! artifact and reads not one word of their contents
-//! (`xtask/src/package.rs:110-161`). That leaves the whole of this crate's front
+//! (`xtask/src/package.rs:126-180`). That leaves the whole of this crate's front
 //! matter — the manifest `description` crates.io prints beside the name, the
 //! README a registry page renders, the rustdoc header docs.rs renders above the
 //! fold — checked by nothing at all.

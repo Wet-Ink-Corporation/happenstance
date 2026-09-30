@@ -298,7 +298,7 @@ went with the `MemoryEventStore` ingest impl, its crate's last `todo!()`. It now
 cites the stand-in peers' test crate, which is still a skeleton and still names
 its own removal.
 
-**Evidence.** `./Cargo.toml:236 (the allow protected nothing)` ·
+**Evidence.** `./Cargo.toml:242 (the allow protected nothing)` ·
 `crates/happenstance-sync/tests/real_peer_shapes.rs:30 (the phase that implements replication deletes both)` ·
 `crates/happenstance-testkit/tests/projection_mutation_coverage.rs:177 (red the day a row uses it)`
 

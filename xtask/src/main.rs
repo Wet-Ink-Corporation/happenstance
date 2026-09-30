@@ -282,7 +282,7 @@ const REQUIRED: &[Step] = &[
         // one no native `cargo test` can reach: `memory_conformance_wasm.rs`
         // and `local_conformance.rs`'s wasm half are both behind
         // `cfg(target_arch = "wasm32")`, so on a native run they compile to
-        // nothing at all. Type-checking them here is what stops `__emit_wasm`
+        // nothing at all. Type-checking them here is what stops `emit_wasm`
         // from rotting into a macro nobody has compiled since the day it was
         // written — the same decorative-check failure the nightly docs step had.
         //
@@ -410,7 +410,7 @@ const REQUIRED: &[Step] = &[
         // Mandatory, and it is the half that makes the step below allowed to
         // carry a probe at all. It needs no runner: it reads the executed
         // targets' own sources and the enumeration each is held to, so an emptied
-        // target, one rewired to `__emit_tokio`, one carrying a hand-written
+        // target, one rewired to `emit_tokio`, one carrying a hand-written
         // wasm32-only rule list, or a row deleted outright fails here on every
         // machine — including the machines where the run below prints
         // `skipped:`. Without this row the pair would be a bare probe-gated
@@ -1573,10 +1573,10 @@ mod tests {
     use crate::{OPTIONAL, REQUIRED, Step, wasm_steps};
 
     /// The feature that gated the projection module and its re-exports from
-    /// phase 6 until ADR-0063 lifted it. It is still declared on the contract
-    /// crate — empty, so a `0.2.0` manifest keeps resolving — and it still gates
-    /// the typed layer's *runner*, whose `Projection::apply` shape is the axis
-    /// ADR-0062 named as the next one.
+    /// phase 6 until ADR-0063 lifted it. The contract crate carried it on,
+    /// empty, so a `0.2.0` manifest kept resolving, and removed it in `0.4.0`
+    /// (ADR-0066 §5). The name still gates the typed layer's *runner*, whose
+    /// `Projection::apply` shape is the axis ADR-0062 named as the next one.
     const GATE: &str = "unstable-projection";
 
     /// The warning policy, spelled once and compared everywhere it appears.
@@ -1719,26 +1719,66 @@ mod tests {
             .unwrap_or("")
     }
 
-    /// The retired feature is still declared — empty, off by default — so a
-    /// manifest written against `0.2.0` resolves. It is the one feature in this
-    /// workspace that is *meant* to gate nothing, and this is where that is
-    /// written down rather than left to look like an oversight.
+    /// Every file under `dir`, recursively, as workspace-relative paths.
+    fn files_under(dir: &str) -> Vec<String> {
+        let root = workspace_root().unwrap();
+        let mut pending = vec![dir.to_owned()];
+        let mut found = Vec::new();
+        while let Some(rel) = pending.pop() {
+            for entry in fs::read_dir(root.join(&rel)).unwrap() {
+                let entry = entry.unwrap();
+                let child = format!("{rel}/{}", entry.file_name().to_string_lossy());
+                if entry.file_type().unwrap().is_dir() {
+                    pending.push(child);
+                } else {
+                    found.push(child);
+                }
+            }
+        }
+        found
+    }
+
+    /// The retired feature is gone from the contract crate (ADR-0066 §5). It
+    /// was carried, empty, from ADR-0063 to `0.4.0` so that a `0.2.0` manifest
+    /// kept resolving; `0.4.0` is the break that was allowed to drop it.
+    ///
+    /// The second half is the one with teeth. A target that still says
+    /// `cfg(feature = "unstable-projection")` fails `unexpected_cfgs` under
+    /// `-D warnings` — or, with that lint allowed, compiles to nothing and
+    /// passes, which is the failure a gate cannot see. So no file under the
+    /// crate's `src/` or `tests/` may name the feature in a `cfg`.
     #[test]
-    fn the_retired_projection_feature_is_still_declared_and_empty() {
+    fn the_retired_projection_feature_is_gone() {
         let manifest = read("crates/happenstance-core/Cargo.toml");
+        let features = manifest
+            .split("\n[features]\n")
+            .nth(1)
+            .and_then(|rest| rest.split("\n[").next())
+            .expect("happenstance-core's manifest has a `[features]` table");
 
         assert!(
-            manifest.contains(&format!("\n{GATE} = []")),
-            "`{GATE}` is not declared as an empty feature in happenstance-core's \
-             `[features]`; removing it breaks every `0.2.0` manifest that names it, \
-             and giving it a body would re-gate something ADR-0063 froze"
+            !features
+                .lines()
+                .any(|line| line.trim_start().starts_with(&format!("{GATE} ="))),
+            "`{GATE}` is declared in happenstance-core's `[features]` again; it was \
+             removed in `0.4.0` (ADR-0066 §5), and giving it back a body would re-gate \
+             something ADR-0063 froze"
         );
-        assert!(
-            !default_features(&manifest).contains(GATE),
-            "`{GATE}` joined the defaults; it gates nothing, and a no-op in the \
-             default set is a feature table telling a story the compiler does not: {}",
-            default_features(&manifest)
-        );
+
+        let gated = format!("feature = \"{GATE}\"");
+        for dir in [
+            "crates/happenstance-core/src",
+            "crates/happenstance-core/tests",
+        ] {
+            for file in files_under(dir) {
+                assert!(
+                    !read(&file).contains(&gated),
+                    "{file} still names `{gated}`, a feature happenstance-core no longer \
+                     declares: under `-D warnings` that is an `unexpected_cfgs` error, and \
+                     with the lint allowed the item it gates silently compiles to nothing"
+                );
+            }
+        }
     }
 
     /// The port is unconditional: no `cfg` on the module and none on its
@@ -1768,9 +1808,11 @@ mod tests {
 
     /// No dependent still forwards the retired feature to the contract crate.
     ///
-    /// The forward compiles — the feature exists and is empty — which is exactly
-    /// why a test is needed: nothing else would notice a manifest telling its
-    /// reader the port is gated.
+    /// Since `0.4.0` a forward no longer resolves — Cargo refuses a feature the
+    /// dependency does not declare — so this is a second line behind Cargo's
+    /// own error, kept because its message says *why* the feature went. It was
+    /// written while the forward still compiled, when nothing else would have
+    /// noticed a manifest telling its reader the port is gated.
     #[test]
     fn no_crate_forwards_the_retired_feature_to_the_contract_crate() {
         for package in DEPENDENTS {

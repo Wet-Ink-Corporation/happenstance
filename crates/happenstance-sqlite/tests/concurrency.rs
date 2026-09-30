@@ -24,7 +24,7 @@
 //! invokes the macro **twice**, once per shipped emitter, as CF-23's
 //! demonstration that the wrapper is a parameter. Copying that verbatim is the
 //! natural move here and it is wrong.
-//! `__emit_concurrency_blocking` generates a plain `#[test]` driven by
+//! `emit_concurrency_blocking` generates a plain `#[test]` driven by
 //! `happenstance_testkit::block_on`, so there is **no tokio runtime anywhere in
 //! that test** — including on the thread that builds the fixture and calls
 //! `connect()`. ADR-0022 §9 captures the runtime handle at construction, so
@@ -185,7 +185,7 @@ fn a_store_with_no_runtime_anywhere_reports_no_runtime() {
 /// busy database returns `SQLITE_BUSY` *immediately* unless a busy handler is
 /// configured — and that error becomes `AppendError::Store`, which
 /// `Attempt::of` maps to `Attempt::Failed`
-/// (`crates/happenstance-testkit/src/concurrency.rs:224-233`). A store that
+/// (`crates/happenstance-testkit/src/concurrency.rs:225-234`). A store that
 /// probes outside its write lock and a store that leaks `SQLITE_BUSY` fail the
 /// *same* rules and look identical in the output. Only one of those is a finding
 /// about `append`.

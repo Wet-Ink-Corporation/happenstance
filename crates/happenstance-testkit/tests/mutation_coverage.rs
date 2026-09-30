@@ -2568,8 +2568,7 @@ fn registered_second_handle() -> Vec<(&'static str, happenstance_testkit::Capabi
 /// This is the universe every membership check in this file is resolved
 /// against. There is no second list of rule names anywhere here, on purpose.
 fn all_rules() -> Vec<&'static str> {
-    happenstance_testkit::for_each_event_store_rule!(happenstance_testkit::__emit_rule_names)
-        .to_vec()
+    happenstance_testkit::for_each_event_store_rule!(happenstance_testkit::__rule_names).to_vec()
 }
 
 /// Every projection rule name, from the projection family's own single
@@ -2580,7 +2579,7 @@ fn all_rules() -> Vec<&'static str> {
 /// list of their own, so a rule added to the family arrives in them without an
 /// edit here.
 fn all_projection_rules() -> Vec<&'static str> {
-    happenstance_testkit::for_each_projection_store_rule!(happenstance_testkit::__emit_rule_names)
+    happenstance_testkit::for_each_projection_store_rule!(happenstance_testkit::__rule_names)
         .to_vec()
 }
 
@@ -3183,8 +3182,7 @@ fn racer_names() -> Vec<&'static str> {
 
 /// Every concurrency rule name, from that family's own single enumeration.
 fn all_concurrency_rules() -> Vec<&'static str> {
-    happenstance_testkit::for_each_concurrency_rule!(happenstance_testkit::__emit_rule_names)
-        .to_vec()
+    happenstance_testkit::for_each_concurrency_rule!(happenstance_testkit::__rule_names).to_vec()
 }
 
 // =====================================================================
@@ -3598,7 +3596,7 @@ mod mutation_coverage {
         // *real* rule has no other mutant, and
         // `mutants_fail_exactly_their_declared_rules` would report it as
         // "declares a rule it does not fail" — true, and pointing at the wrong
-        // thing. The universe comes from `__emit_rule_names`, so there is no
+        // thing. The universe comes from `__rule_names`, so there is no
         // second list of rule names to keep in step.
         for entry in REGISTRY {
             for rule in entry.fails {

@@ -129,7 +129,7 @@ declares the lowest core it works with as an ordinary dependency requirement
 by phase 17, resolves every declared lower bound and builds against it, so a requirement that
 claims more than the adapter needs fails in CI rather than on a consumer's machine. Each adapter
 already re-exports the core it was built against — `pub use happenstance_core;` at
-`crates/happenstance-sqlite/src/lib.rs:148`, `crates/happenstance-postgres/src/lib.rs:215` and
+`crates/happenstance-sqlite/src/lib.rs:148`, `crates/happenstance-postgres/src/lib.rs:228` and
 `crates/happenstance-neon/src/lib.rs:173`, and `pub use {happenstance_core, worker};` at
 `crates/happenstance-cloudflare/src/lib.rs:587` — so a consumer who reaches core through the adapter
 cannot end up holding the second `Event` this atom opens with.
@@ -155,6 +155,7 @@ The sub-questions:
 driver under ADR-0044 takes a major whenever that driver breaks, whatever the core did.
 `happenstance-core`'s own public dependency `futures-core 0.3` is still `0.x`, and the charter
 carries that as an accepted risk. **Owed and not done here:** ADR-0057 dropped the testkit's version
-key from the root manifest, but `Cargo.toml:62` still carries `version = "0.3.2"` on the testkit's
-workspace dependency. Phase 17 executes it. Closed by hand in phase 16. No accepted decision was
+key from the root manifest, but `Cargo.toml:62` still carried `version = "0.3.2"` on the testkit's
+workspace dependency. Phase 17 executed it in its first breaking change (2026-09-30): the key is
+gone, and `cargo xtask package-check` refuses a publishable crate whose testkit line has one. Closed by hand in phase 16. No accepted decision was
 edited.

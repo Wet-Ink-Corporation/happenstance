@@ -9,7 +9,7 @@
 //!
 //! It is also where a *stated reason* would disappear if nobody looked.
 //! `RuleOutcome::report` is a measured no-op on this target, so
-//! `__emit_projection_wasm` calls `skip_line` and hands the string to
+//! `emit_projection_wasm` calls `skip_line` and hands the string to
 //! `console_log!` instead.
 //!
 //! Compiled for `wasm32-unknown-unknown` and **run** with
@@ -33,6 +33,6 @@ use happenstance_testkit::fixtures::MemoryProjectionFixture;
 
 happenstance_testkit::projection_store_conformance!(
     mod_name = projection_conformance_wasm,
-    emit = happenstance_testkit::__emit_projection_wasm,
+    emit = happenstance_testkit::emit_projection_wasm,
     fixture = MemoryProjectionFixture::new()
 );

@@ -217,8 +217,8 @@ pub(crate) struct PostgresFixture {
     /// Whether `connect` hands out the naive arm rather than the shipped one.
     ///
     /// Always `false` except in the negative control, and the field exists at
-    /// all only under that feature.
-    #[cfg(feature = "naive-arm")]
+    /// all only under that control's `happenstance_naive_arm` cfg.
+    #[cfg(happenstance_naive_arm)]
     naive: bool,
     /// This instance's one pool, built on first use.
     ///
@@ -260,7 +260,7 @@ impl PostgresFixture {
         Self {
             schema: format!("hs_{}_{ordinal}", std::process::id()),
             pool: OnceCell::new(),
-            #[cfg(feature = "naive-arm")]
+            #[cfg(happenstance_naive_arm)]
             naive: false,
         }
     }
@@ -271,7 +271,7 @@ impl PostgresFixture {
     /// isolation, same migration, same append path. Only `head` and `read` lose
     /// the frontier predicate, which is the single difference the control is
     /// measuring. See `PostgresEventStore::new_naive`.
-    #[cfg(feature = "naive-arm")]
+    #[cfg(happenstance_naive_arm)]
     pub(crate) fn naive() -> Self {
         Self {
             naive: true,
@@ -502,7 +502,7 @@ impl Fixture for PostgresFixture {
         // two round trips on every handle to re-establish a schema that
         // cannot have gone away.
         let pool = self.pool().await;
-        #[cfg(feature = "naive-arm")]
+        #[cfg(happenstance_naive_arm)]
         if self.naive {
             return PostgresEventStore::new_naive(pool);
         }

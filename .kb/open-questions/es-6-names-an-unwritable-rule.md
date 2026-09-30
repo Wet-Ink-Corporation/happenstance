@@ -73,7 +73,7 @@ last_reviewed: 2026-09-29
 
 ES-6 (`spec/SPECIFICATION.md:2700`) is `[FROZEN]` and its `Rule:` field names
 `store_error_crosses_a_join_handle`, marked **(new)** (`SPECIFICATION.md:2743`). §7.2's generated
-table renders it with `†` (`SPECIFICATION.md:9478`), where the legend defines `†` as "does not
+table renders it with `†` (`SPECIFICATION.md:9510`), where the legend defines `†` as "does not
 exist yet". That identifier occurs as no `fn` anywhere in the workspace. It occurs only in prose:
 twice in `RUNBOOK.md`, once in `.kb/decisions/0008`, three times in `.kb/decisions/0009`, three times in
 comments in `happenstance-cloudflare`, and in the specification itself. One of those comments

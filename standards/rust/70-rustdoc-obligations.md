@@ -83,8 +83,8 @@ first to notice, and by then the version is on crates.io, where a yank does not
 remove it.
 
 **Evidence.** `Cargo.toml:211 (Members opt in with)` · `Cargo.toml:214 (missing_docs)` ·
-`Cargo.toml:227 (missing_errors_doc)` ·
-`crates/happenstance-core/Cargo.toml:103 ([lints])` ·
+`Cargo.toml:233 (missing_errors_doc)` ·
+`crates/happenstance-core/Cargo.toml:96 ([lints])` ·
 `crates/happenstance-core/src/store.rs:268 (AppendError::NoEvents)` ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)
 
@@ -159,7 +159,7 @@ configuration so that the rule is checked where the consumer stands.
 `crates/happenstance-core/src/projection_memory.rs:44 (The probe's name is deliberately not a link)` ·
 `xtask/src/main.rs:909 (no default features)` ·
 `xtask/src/main.rs:938 (documentation (default features))` ·
-`Cargo.toml:245 (broken_intra_doc_links)`
+`Cargo.toml:251 (broken_intra_doc_links)`
 
 ---
 

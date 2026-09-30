@@ -655,11 +655,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   capability, ES-35's `[PROVISIONAL]` marker rests on the same unread mechanism, and whether an
   adapter README must disclose declines is unowned. CF-18 itself stays `[FROZEN]` and untouched.
   Added 2026-09-07.
-- **Open** — [`cf-23-emitter-names-mandatory-and-marked-unstable.md`](../open-questions/cf-23-emitter-names-mandatory-and-marked-unstable.md)
+- **Superseded** — [`cf-23-emitter-names-mandatory-and-marked-unstable.md`](../open-questions/cf-23-emitter-names-mandatory-and-marked-unstable.md)
   (`kb-open-question-cf-23-emitter-names-unstable-001`) — CF-23 requires named emitters while the
   shipped surface marks them `doc(hidden)`; the documentation contradiction already has a fix, the
   policy question (support the names, or declare them unstable) does not, and `cargo-semver-checks`
   cannot see the gap because hidden items are exactly what it excludes. Added 2026-09-07.
+  **Resolved 2026-09-30** by `kb-decision-0076`: the ten conformance emitters are un-hidden and
+  renamed without the `__` prefix (`emit_tokio` and its siblings), CF-41 pins them against a
+  committed list, and `__rule_names` and the benchmark pair stay hidden and unpromised.
 - **Open** — [`cf-25-cf-26-portfolio-check-does-not-exist.md`](../open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md)
   (`kb-open-question-cf-25-cf-26-portfolio-check-001`) — no check in `xtask/src/spec_trace.rs`
   performs the portfolio/axis comparison CF-25 and CF-26 both name (verified: zero occurrences of

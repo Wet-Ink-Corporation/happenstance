@@ -23,8 +23,8 @@ readme = "README.md"
 # per build, and the `-p` doc step and every `cargo hack` combination build this
 # crate on its own.
 # `unstable-projection` is NOT here, and since ADR-0063 it is nowhere: the port
-# it gated is unconditional on the contract crate, and the feature survives
-# there only as an empty name so `0.2.0` manifests resolve. While the port was
+# it gated is unconditional on the contract crate, and `0.4.0` removed the
+# feature there, having carried it empty so `0.2.0` manifests resolved. While the port was
 # gated its absence from this line was the point — held here it would have
 # reached every consumer of this crate whatever features they chose.
 happenstance-core = { workspace = true, features = ["std"] }
@@ -90,9 +90,9 @@ default = ["event-store"]
 # `happenstance-sqlite` makes, for the same reason.
 event-store = []
 # The projection role. It forwarded the contract crate's `unstable-projection`
-# gate until ADR-0063 lifted it; forwarding a feature that now turns nothing on
-# would tell a reader the port is gated, so the list is empty and what the flag
-# gates is this crate's own module.
+# gate until ADR-0063 lifted it; a forward has not resolved since `0.4.0`
+# removed that feature, and before then it would have told a reader the port
+# is gated. The list is empty, and what the flag gates is this crate's module.
 projection-store = []
 # `impl ProjectionProbe for PostgresProjectionStore`, and the probe table it
 # writes through. Off by default, because that table is the *suite's* read model
@@ -111,18 +111,12 @@ projection-store = []
 # one of them. The impl and the probe table are gated on both, so that
 # combination compiles to nothing rather than failing to compile.
 conformance = ["happenstance-core/conformance"]
-# The negative control, and off by default in the strongest sense: no consumer
-# can reach it, and the default build does not contain it.
-#
-# It exposes `PostgresEventStore::new_naive`, which is this adapter with the
-# visibility frontier taken out -- the naive `nextval()` store ES-10 names in its
-# `Rejects:`. It exists so that `nothing_below_an_observed_position_appears_later`
-# can be shown to REJECT something, because a rule no implementation can fail is
-# decorative and this crate's whole reason for existing is that rule.
-#
-# Exercised once by `tests/rule_controls.rs` and recorded. It is deliberately NOT
-# a second deliberately-broken fixture kept alive as a maintained instrument.
-naive-arm = []
+# There is no `naive-arm` feature any more. The negative control it gated —
+# `PostgresEventStore::new_naive`, the naive `nextval()` store ES-10 names in its
+# `Rejects:` — moved behind a rustc cfg in `0.4.0`, set with
+# `RUSTFLAGS="-D warnings --cfg happenstance_naive_arm"`, because a feature is
+# something any manifest can switch on and docs.rs built it. The crate root says
+# why; the root manifest's `[workspace.lints.rust]` declares the cfg.
 
 [lints]
 workspace = true

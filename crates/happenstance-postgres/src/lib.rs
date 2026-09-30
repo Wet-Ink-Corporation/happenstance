@@ -154,6 +154,19 @@
 //!   has to either grow a data licence or the adapter has to take its roots from
 //!   the platform trust store.
 //!
+//! # The naive arm is not API
+//!
+//! This crate carries a deliberately broken store: this adapter with the
+//! visibility frontier taken out, which is the naive `nextval()` store ES-10
+//! names in its `Rejects:`. It exists so that the rule this crate is built to
+//! pass can be shown to reject something. It sits behind a **rustc cfg**,
+//! `happenstance_naive_arm`, set only by a build's own
+//! `RUSTFLAGS="-D warnings --cfg happenstance_naive_arm"`, and not behind a
+//! Cargo feature. Until `0.4.0` it was the `naive-arm` feature, which any
+//! manifest could turn on and docs.rs rendered. A cfg is out of every
+//! manifest's reach and every feature powerset, it is never built by docs.rs,
+//! and nothing under it is covered by this crate's semver promise.
+//!
 //! # Not the Neon adapter
 //!
 //! Neon's serverless driver speaks one-shot HTTP to a `/sql` endpoint: no

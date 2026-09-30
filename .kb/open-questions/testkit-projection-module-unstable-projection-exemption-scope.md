@@ -54,7 +54,7 @@ semver exemption documented on the module. Read literally, the exemption's scope
 crates and the adapters that forward the flag — nothing in ADR-0036's text reaches
 `happenstance-testkit`.
 
-`crates/happenstance-testkit/src/lib.rs:471-476` states, in its own words, that the crate's
+`crates/happenstance-testkit/src/lib.rs:466-471` states, in its own words, that the crate's
 projection module is "Unconditional, unlike its two nearest templates" — meaning `happenstance-core`
 and `happenstance`, the very crates ADR-0036 exempts. `crates/happenstance-testkit/Cargo.toml:49-55`
 turns `unstable-projection` on for `happenstance-core` unconditionally, from inside the testkit's
@@ -97,7 +97,7 @@ feature compiles silently. `crates/happenstance-testkit/Cargo.toml:70` is exactl
 and it is the line this atom's summary cited as evidence. Whether the lane removes it, and whether
 the manifest comment at `Cargo.toml:20-28` that still describes the family as "fenced rather than
 hidden" with "a written semver exemption" is rewritten, is what the third test decides. The
-`lib.rs:471-476` comment stays true under ADR-0063 for a reason unrelated to the exemption: the
+`lib.rs:466-471` comment stays true under ADR-0063 for a reason unrelated to the exemption: the
 module is unconditional so the wasm32 `--tests` step cannot pass while proving nothing.
 
 ## What is not decided

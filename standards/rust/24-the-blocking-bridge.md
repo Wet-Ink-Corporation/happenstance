@@ -132,7 +132,7 @@ exists for is unreachable.
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:33 (turns that from a panic into an)` ·
 `crates/happenstance-sqlite/src/event_store.rs:2320 (None => match Handle::try_current())` ·
 `crates/happenstance-sqlite/src/event_store.rs:1523 (no tokio runtime is available)` ·
-`crates/happenstance-testkit/src/registry.rs:322 (deliberately not bounded on)` ·
+`crates/happenstance-testkit/src/registry.rs:341 (deliberately not bounded on)` ·
 [CF-23](../../spec/SPECIFICATION.md)
 
 ## RS-24-3. Put a `Send + !Sync` connection behind a `Mutex`.

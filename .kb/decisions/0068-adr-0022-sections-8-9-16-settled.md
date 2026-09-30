@@ -204,7 +204,7 @@ its own (`crates/happenstance-postgres/src/read_stream.rs:458-480`).
   probe unions per guard, not per query item (`crates/happenstance-neon/src/event_store.rs:427-457`),
   and stays adapter-private. The merged read path (`b3c8d84`) is the decomposition staying
   adapter-private in SQLite too, which is §10's verdict.
-- **§12** supplied a number. `CONTENDERS` is now 64 (`crates/happenstance-testkit/src/concurrency.rs:247`),
+- **§12** supplied a number. `CONTENDERS` is now 64 (`crates/happenstance-testkit/src/concurrency.rs:248`),
   set by the owner §12 named.
 - **§13 and §14** are non-verdicts whose owners are unchanged:
   `kb-open-question-es-17-two-adapter-measurement-001` and `kb-open-question-cf-40-ownership-001`.

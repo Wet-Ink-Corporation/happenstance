@@ -41,7 +41,6 @@ happenstance-core = { path = "../crates/happenstance-core", features = [
     "std",
     "memory",
     "conformance",
-    "unstable-projection",
 ] }
 # The typed layer, with every codec on: the codec group measures all three
 # against each other and a missing one is a silently absent column.

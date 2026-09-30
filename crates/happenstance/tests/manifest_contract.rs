@@ -210,14 +210,14 @@ fn unstable_projection_is_declared_off_by_default() {
     );
 
     // It does not forward to the contract crate's feature of the same name —
-    // that one gates nothing since ADR-0063 lifted the port's gate, and a
-    // forward of an empty feature would tell a reader the port is gated — and
-    // the manifest says so in a comment, where the next reader looks for it.
+    // that one gated nothing from ADR-0063 until `0.4.0` removed it, and a
+    // forward would now fail to resolve at all — and the manifest says so in a
+    // comment, where the next reader looks for it.
     let forwards = value.contains("happenstance-core/unstable-projection");
     assert!(
         !forwards,
-        "`unstable-projection` forwards to the contract crate, where it has \
-         gated nothing since ADR-0063: {value}"
+        "`unstable-projection` forwards to the contract crate, which has not \
+         declared it since `0.4.0`: {value}"
     );
 
     // The comment block immediately above the declaration, and only that

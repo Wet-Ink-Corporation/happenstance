@@ -25,9 +25,9 @@ not the same as what a user needed to be told.
   exactly.
 - **`ProjectionStore` shipped behind an off-by-default `unstable-projection`
   feature at `0.2.0`** and was exempt from semver. It is not, from `0.3.0`:
-  ADR-0063 lifted the gate on the evidence ADR-0062 produced, and the
-  feature survives on `happenstance-core` only as an empty name so that
-  `0.2.0` manifests resolve. What `happenstance` still holds behind a feature
+  ADR-0063 lifted the gate on the evidence ADR-0062 produced. The feature
+  survived on `happenstance-core` as an empty name, so that `0.2.0` manifests
+  resolved, until `0.4.0` removed it. What `happenstance` still holds behind a feature
   of the same name is the typed **runner**, whose `Projection::apply` shape is
   not yet proved at its far end. See
   [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
@@ -76,6 +76,45 @@ not the same as what a user needed to be told.
   settles that `happenstance-core` needs no foreign-identity write path. The
   ingest half is test-only until `happenstance-sync` publishes.
 
+- **`happenstance-cloudflare`, `happenstance-postgres` and `happenstance-neon`
+  publish without a `happenstance-testkit` dev-dependency in their manifests**,
+  as `happenstance-sqlite` and `happenstance` already did. The workspace's
+  entry for the testkit no longer carries a version
+  ([ADR-0057](.kb/decisions/0057-the-testkit-version-key-is-dropped.md)), and
+  Cargo strips a versionless dev-dependency from the packaged manifest, so an
+  adapter no longer has to wait for a testkit release before it can publish.
+  Nothing a consumer builds changes. `cargo xtask package-check` now refuses a
+  publishable crate whose testkit dev-dependency carries a version, whether
+  written on the line or inherited from the root.
+
+- **BREAKING (`happenstance-testkit`): the conformance emitters are public API,
+  and lose their `__` prefix to say so.** CF-23 requires an adapter to name the
+  per-test wrapper its suite runs under, and until now every name it could write
+  was `#[doc(hidden)]` with a `__` prefix — Rust's declaration that an item is
+  not a promise, and the marker `cargo-semver-checks` uses to skip it. They are
+  now ordinary documented macros that render on docs.rs, and renaming or
+  removing one is a major release of this crate
+  ([ADR-0076](.kb/decisions/0076-the-cf-23-emitters-are-public-api.md), CF-41).
+  **Rename every `emit =` argument**; there are no aliases:
+
+  | Was | Is |
+  |---|---|
+  | `__emit_tokio`, `__emit_blocking`, `__emit_wasm` | `emit_tokio`, `emit_blocking`, `emit_wasm` |
+  | `__emit_projection_tokio`, `_blocking`, `_wasm` | `emit_projection_tokio`, `_blocking`, `_wasm` |
+  | `__emit_model_tokio`, `_blocking` | `emit_model_tokio`, `_blocking` |
+  | `__emit_concurrency_tokio`, `_blocking` | `emit_concurrency_tokio`, `_blocking` |
+  | `__emit_rule_names` | `__rule_names` (still hidden, not promised) |
+
+  An invocation that names no emitter gets the tokio default as before and needs
+  no change. `__emit_benchmark_tokio` and `__emit_benchmark_blocking` keep their
+  names and stay hidden: a benchmark is not the bar (CF-34), so they are outside
+  the promise, as is `__rule_names`. From here a `__` prefix means *not
+  promised*, and no promised name carries one. `tests/emitter_surface.rs` pins
+  the promised set against a committed list, because a rename that moves the
+  definition and every in-tree caller together is invisible to a compile.
+  `cargo-semver-checks` cannot report the old names' removal, since they were
+  hidden, so this entry is the record of it.
+
 ### Added
 
 - **`happenstance-testkit` can produce a *busy* store**, which nothing in this
@@ -116,6 +155,37 @@ not the same as what a user needed to be told.
   resuming from its checkpoint re-applies events it already committed. No
   conformance rule can see this, because the suite runs against one endpoint
   ([ADR-0075](.kb/decisions/0075-the-projection-ports-1-0-clauses.md), PS-38).
+
+### Removed
+
+- **BREAKING (`happenstance-core`): the empty `unstable-projection` feature is
+  gone.** It gated the `ProjectionStore` port from `0.2.0` until
+  [ADR-0063](.kb/decisions/0063-the-projection-port-is-frozen.md) lifted the
+  gate at `0.3.0`, and has turned nothing on since. It stayed declared only so
+  that a `0.2.0` manifest naming it kept resolving, because removing a feature
+  is a breaking change; this is the break
+  [ADR-0066](.kb/decisions/0066-what-1-0-promises.md) §5 scheduled for it.
+  **If your manifest names `happenstance-core/unstable-projection` or puts
+  `"unstable-projection"` in `happenstance-core`'s `features`, delete it** —
+  Cargo now refuses to resolve it, and nothing you use changes when it goes.
+  `happenstance`'s own `unstable-projection`, which gates the typed projection
+  runner, is untouched.
+
+- **BREAKING (`happenstance-postgres`): the `naive-arm` feature is gone, and
+  `PostgresEventStore::new_naive` with it from every feature-selected build.**
+  The constructor builds this adapter with its visibility frontier removed —
+  the naive `nextval()` store ES-10 rejects — and exists only as the negative
+  control that shows `happenstance-postgres`'s visibility rule can fail. As a
+  feature any manifest could turn it on, and docs.rs, which builds every
+  feature, rendered it. It now sits behind a rustc cfg,
+  `--cfg happenstance_naive_arm`, which no manifest can set: build with
+  `RUSTFLAGS="-D warnings --cfg happenstance_naive_arm"` to reach it. It is not
+  API, and nothing under that cfg is covered by semver. CI's live-postgres job
+  runs both targets that use it, `tests/rule_controls.rs` and
+  `tests/naive_arm_probe.rs`, which until now were run by hand at a release. It
+  requires each named test to have run, so a build that lost the cfg cannot
+  pass empty. The same job also runs clippy under the cfg, because the gate's
+  `--all-features` clippy no longer reaches these items.
 
 ## [0.3.2] — 2026-09-20
 

@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`004413a` on `main` (PR #28, lane L2: ADR-0028), plus `lane/p17-apply-record`,
-lane L3. 2026-09-30.
+`be09a7a` on `main` (PR #30, lane L3: ADR-0074, ADR-0075), plus
+`lane/p17-surface-renames`, lane L4. 2026-09-30.
 
 ## Where things are
 
@@ -37,27 +37,20 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-`lane/p17-apply-record` (L3) contains records and documentation only, and is awaiting merge:
-- **ADR-0074**: `Projection::apply` becomes async on one trait with a Send variant.
-  - It is handed a `Delivered<E>`, which has a public constructor and no local position, plus a batch it can issue statements through.
-  - SY-21 now forbids the *arrival* position.
-  - `on_error` is a provided method defaulting to Halt. The runner does not issue SAVEPOINTs; phase 18 owes an application-level savepoint test.
-  - It adopts `ProjectionError<R, W, A>`, and PS-25's derived id with an FNV-1a digest.
-  - PS-9 and PS-11 are `[FROZEN]`.
-- **ADR-0075**:
-  - PS-15 is frozen, narrowed to `commit` and `reset`, with `rollback` non-normative (the owner's choice, `wi-ff17f4`).
-  - PS-23 is frozen, with a later `commit_all` additive.
-  - PS-24 is frozen.
-  - PS-38's obligation is documented in the `checkpoint` rustdoc and in Neon's docs.
-- Phase 18 is restated to build what ADR-0074 decided.
+`lane/p17-surface-renames` (L4) is the first breaking PR, and is awaiting merge. **The manifests now read `0.4.0`**, while the CHANGELOG heading stays `[Unreleased]`. It contains:
+- **ADR-0057 executed**: the testkit carries no version key, and `package-check` enforces that.
+- **`happenstance-core`'s `unstable-projection` removed**, with its xtask test inverted.
+- **`naive-arm` moved to `--cfg happenstance_naive_arm`**, with two new live-postgres CI steps: clippy, and a vacuity-guarded run.
+- **CF-23's emitters renamed to `emit_*` and made public (ADR-0076)**, with CF-41 `[FROZEN]` and pinned by `emitter_surface.rs`.
 
 ## Next action
 
-After L3 merges, lane L4 is the first breaking PR, so it bumps the workspace, the testkit and the examples to `0.4.0`. It covers:
-- CF-23's emitter renames, ADR-0076;
-- executing ADR-0057;
-- removing `happenstance-core`'s empty `unstable-projection`;
-- `naive-arm` moved to a rustc cfg.
+After L4 merges, lane L5 is `AppendError::Busy` (ES-43, ADR-0077):
+- SQLite, Postgres and Neon are reclassified to report `Busy`, and the typed commit loop retries it inside `Retry`.
+- The three concurrency rules get structural floors, and a new rule `a_busy_append_left_nothing_behind` comes with a mutant.
+- ES-6's prose is written.
+
+Docker is up, and `NEON_CONNECTION` is set in CI.
 
 ## Waiting on the owner
 
@@ -97,6 +90,8 @@ record, and the owner.
   `wi-38373d`.
 
 ## Traps
+
+- **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal and the hidden emitter renames.
 
 - **17b is not a breaking window.** An item whose answer turns out to break a
   published crate goes back to phase 17 (ADR-0072's rule), not into a `0.5.0`.

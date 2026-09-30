@@ -93,7 +93,7 @@
 //! **The event-store family runs in full, on this target, inside the gate.**
 //! `crates/happenstance-cloudflare/tests/durable_object_conformance.rs` is three
 //! lines — `happenstance_testkit::event_store_conformance!` with
-//! `emit = happenstance_testkit::__emit_wasm` and a `CloudflareFixture` — and
+//! `emit = happenstance_testkit::emit_wasm` and a `CloudflareFixture` — and
 //! `cargo xtask ci` executes it on `wasm32-unknown-unknown` under
 //! `wasm-bindgen-test-runner`. The rule set is not a claim this file makes: the
 //! macro expands `for_each_event_store_rule!`, which is the one place the list

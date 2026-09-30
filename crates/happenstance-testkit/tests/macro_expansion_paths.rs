@@ -39,12 +39,12 @@
 //!
 //! # What this does not check, stated because a green here is read as coverage
 //!
-//! * **Macro paths.** `$crate::__emit_tokio`, `$crate::for_each_event_store_rule!`
+//! * **Macro paths.** `$crate::emit_tokio`, `$crate::for_each_event_store_rule!`
 //!   and `$crate::event_store_conformance!` are exempt, and the exemption is
 //!   mechanical rather than a preference: `macro_rules!` lives in a flat
 //!   crate-root textual namespace, so a macro is not reachable through a module
-//!   at all. Whether those names are a *promise* is the open question C2-03
-//!   routes to §6.6 and to `HS-S0091`, and nothing here answers it.
+//!   at all. Which of those names are a *promise* is CF-41's answer (§6.6,
+//!   ADR-0076); `tests/emitter_surface.rs` holds it, and nothing here does.
 //! * **Whether a `__private` re-export is the right one.** The check knows that
 //!   a path is routed, not that it resolves to the item the author meant. The
 //!   compiler owns that half and owns it completely.
@@ -79,7 +79,7 @@ const PRIVATE: &str = "$crate::__private::";
 
 /// The prefix of a `$crate::` path this check treats as a macro rather than an
 /// item. See the module docs for why macros cannot be routed through a module.
-const MACRO_PREFIXES: [&str; 2] = ["__emit", "for_each"];
+const MACRO_PREFIXES: [&str; 3] = ["emit_", "__emit_", "for_each"];
 
 /// Primitive type names, so a cast is not read as a qualified path.
 const PRIMITIVES: [&str; 14] = [

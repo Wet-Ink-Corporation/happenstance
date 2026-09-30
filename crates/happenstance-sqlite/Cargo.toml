@@ -80,8 +80,8 @@ tokio = { workspace = true, features = ["rt"] }
 # Deliberately **not** `{ workspace = true }`, and this is U-2 rather than an
 # oversight — the same reasoning `crates/happenstance/Cargo.toml` already
 # carries, arriving one crate late because this one joined the release set after
-# that diagnosis was written. `[workspace.dependencies]` carries a version
-# requirement on the testkit, and a dev-dependency carrying a version has to
+# that diagnosis was written. Until ADR-0057 (`0.4.0`) the root's entry carried
+# a version requirement on the testkit, and a versioned dev-dependency has to
 # resolve from the registry at publish time, which would make
 # `happenstance-testkit` publish *before* `happenstance-sqlite` — a coupling
 # CF-32's independent version number exists to avoid, and one that bites on the
@@ -92,8 +92,8 @@ tokio = { workspace = true, features = ["rt"] }
 # source of truth in the root manifest.
 #
 # `tests/front_page.rs` asserts it, because a comment is not a control: the
-# spelling that reintroduces the coupling is one word shorter than this one and
-# looks tidier.
+# spelling that reintroduced the coupling was one word shorter; the root entry is
+# versionless now, and `package-check` refuses a versioned line either way.
 happenstance-testkit = { path = "../happenstance-testkit", features = ["proptest"] }
 # The VT-10 spike: `src/ingest_spike.rs` implements `happenstance-sync`'s
 # `SendIngestStore` for `SqliteEventStore` over the same private row writer
@@ -130,9 +130,9 @@ event-store = []
 # the one crate a consumer installs to get a store.
 #
 # The port is frozen now (ADR-0063), and this feature forwards nothing to the
-# contract crate any more: `happenstance-core`'s `unstable-projection` is
-# retained there as an empty feature so `0.2.0` manifests resolve, and
-# forwarding a no-op would tell a reader the port is still gated. What the flag
+# contract crate any more: `happenstance-core`'s `unstable-projection` gated
+# nothing from ADR-0063 and was removed in `0.4.0`, so a forward would not
+# resolve — and before that it told a reader the port was still gated. What the flag
 # gates is this crate's own module, and it stays out of `default` because a
 # consumer who wants only the event store should not compile the other role.
 #

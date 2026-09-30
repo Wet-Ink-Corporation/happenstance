@@ -156,8 +156,8 @@ so it costs one flag on a dependency you already have and no new edge in your
 dependency graph.
 
 Pick a harness exactly as you would for the event-store family: the default arm
-is `#[tokio::test]`, `__emit_projection_blocking` needs no runtime at all, and
-`__emit_projection_wasm` routes a skipped rule's stated reason to `console_log!`
+is `#[tokio::test]`, `emit_projection_blocking` needs no runtime at all, and
+`emit_projection_wasm` routes a skipped rule's stated reason to `console_log!`
 rather than to stdout, which does not exist on `wasm32-unknown-unknown`. The
 default module name differs from the event-store family's, so one file may invoke
 both. `fixtures::MemoryProjectionFixture` is the worked example.
@@ -242,6 +242,11 @@ positions in steps of seven from 4,096, is what fails a rule that forgets.
 Adding a rule is a semver-*minor* change that can turn a passing adapter's CI red.
 Treat that as a breaking change in practice and pin this crate exactly. Its
 version is independent of the rest of the workspace for that reason.
+
+The conformance emitters an invocation names — `emit_tokio`, `emit_blocking`,
+`emit_wasm` and their projection, model and concurrency siblings — are public
+API, and renaming or removing one is a major release (CF-41). A macro whose name
+starts with `__` is not promised and may change in any release.
 
 ## Licence
 

@@ -548,17 +548,21 @@ fn dependency_lines<'m>(manifest: &'m str, name: &str) -> Vec<(usize, &'m str)> 
 /// entirely, which is why the path-only spelling is the one that keeps the two
 /// crates' release order free.
 ///
-/// `{ workspace = true }` is the spelling that fails, and it fails invisibly:
-/// `[workspace.dependencies]` carries `version = "0.2.0-alpha.1"` on this crate,
-/// so inheriting it inherits the coupling. `crates/happenstance/Cargo.toml`
-/// spells the identical dependency `{ path = "../happenstance-testkit" }` and
-/// explains why at length; this crate joined the release set after that
-/// diagnosis was written and did not inherit it.
+/// `{ workspace = true }` was the spelling that failed, and it failed
+/// invisibly: `[workspace.dependencies]` carried a version on this crate until
+/// ADR-0057 dropped it, so inheriting the entry inherited the coupling.
+/// `crates/happenstance/Cargo.toml` spells the identical dependency
+/// `{ path = "../happenstance-testkit" }` and explains why at length; this
+/// crate joined the release set after that diagnosis was written and did not
+/// inherit it.
 ///
-/// What this cannot see: whether `[workspace.dependencies]`' own `version` key
-/// is still there. That line is load-bearing for nothing in the workspace, and
-/// moving it would fix this once for every future adapter — a choice this test
-/// deliberately does not make, because it is a check on *this* manifest.
+/// The root entry is versionless now, and `xtask/src/package.rs`'s
+/// `testkit_dev_dependencies_are_versionless` holds every publishable crate to
+/// that — inherited or explicit — so inheriting is no longer the defect it was.
+/// This check stays stricter than the gate on purpose: it is a check on *this*
+/// manifest, it covers `happenstance-sync` too, which the gate does not read,
+/// and a path-only line here does not depend on anyone keeping the root entry
+/// the way it is.
 fn publish_order_problems(manifest: &str, name: &str) -> Vec<String> {
     let lines = dependency_lines(manifest, name);
 
@@ -573,7 +577,8 @@ fn publish_order_problems(manifest: &str, name: &str) -> Vec<String> {
     if line.contains("workspace") {
         problems.push(format!(
             "Cargo.toml:{number} inherits the {name} dependency from \
-             `[workspace.dependencies]`, which carries a version requirement: {line:?}"
+             `[workspace.dependencies]`, where this manifest cannot see whether a version \
+             requirement has come back: {line:?}"
         ));
     }
     if line.contains("version") {

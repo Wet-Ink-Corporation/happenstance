@@ -230,7 +230,7 @@ event in a crate's life that cannot be undone: a yank removes the version from
 the resolver and leaves the page exactly as it is, so the first impression the
 crate makes is a build log, and the fix ships as the *next* version.
 
-**Evidence.** `crates/happenstance-core/Cargo.toml:99 (package.metadata.docs.rs)` ·
+**Evidence.** `crates/happenstance-core/Cargo.toml:92 (package.metadata.docs.rs)` ·
 `crates/happenstance-core/src/lib.rs:104 (feature(doc_cfg))` ·
 `xtask/src/main.rs:1060 (is a cfg nobody sets except docs.rs)` ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*

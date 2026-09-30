@@ -150,14 +150,15 @@
 //!
 //! | Emitter | Wrapper | Adapter needs |
 //! |---|---|---|
-//! | `__emit_concurrency_tokio` (default) | `#[tokio::test(flavor = "multi_thread")]` | `tokio` with `macros`, `rt-multi-thread` |
-//! | `__emit_concurrency_blocking` | `#[test]` + `block_on` | **nothing** |
+//! | `emit_concurrency_tokio` (default) | `#[tokio::test(flavor = "multi_thread")]` | `tokio` with `macros`, `rt-multi-thread` |
+//! | `emit_concurrency_blocking` | `#[test]` + `block_on` | **nothing** |
 //!
 //! **The table is the count**, in the crate root's shape and for its reason:
 //! this paragraph opened with a number that was wrong for as long as its second
 //! row has existed. `the_concurrency_page_lists_every_emitter_it_ships` holds
 //! these rows to this file's `macro_rules!` definitions and refuses a spelled
-//! count here; neither name is a link, for the crate root's reason. The default
+//! count here; neither name is a link, because that check reads each cell as a
+//! bare code span. The default
 //! is `multi_thread` although the parallelism is in [`std::thread::scope`],
 //! because an adapter's futures may need a multi-threaded reactor even when the
 //! contention does not — and the blocking emitter races exactly as hard, which
@@ -1165,9 +1166,15 @@ macro_rules! for_each_concurrency_rule {
 /// only thread is blocked inside a scope cannot drive anything else.
 ///
 /// The caller's crate needs `tokio` with `macros`, `rt` and `rt-multi-thread`.
-#[doc(hidden)]
+///
+/// The default: an invocation of
+/// [`event_store_concurrency_conformance!`](crate::event_store_concurrency_conformance) that names
+/// no emitter uses it, and naming it is
+/// `emit = happenstance_testkit::emit_concurrency_tokio`.
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_concurrency_tokio {
+macro_rules! emit_concurrency_tokio {
     ($($name:ident),* $(,)?) => {
         $(
             #[tokio::test(flavor = "multi_thread")]
@@ -1188,9 +1195,13 @@ macro_rules! __emit_concurrency_tokio {
 /// honest default for an adapter with no runtime at all: the parallelism is in
 /// [`std::thread::scope`], so this emitter races exactly as hard as the tokio
 /// one.
-#[doc(hidden)]
+///
+/// Select it by passing `emit = happenstance_testkit::emit_concurrency_blocking` to
+/// [`event_store_concurrency_conformance!`](crate::event_store_concurrency_conformance).
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_concurrency_blocking {
+macro_rules! emit_concurrency_blocking {
     ($($name:ident),* $(,)?) => {
         $(
             #[test]
@@ -1251,14 +1262,14 @@ macro_rules! event_store_concurrency_conformance {
     (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
         $crate::event_store_concurrency_conformance!(
             mod_name = $mod_name,
-            emit = $crate::__emit_concurrency_tokio,
+            emit = $crate::emit_concurrency_tokio,
             fixture = $fixture
         );
     };
     ($fixture:expr) => {
         $crate::event_store_concurrency_conformance!(
             mod_name = dcb_concurrency_conformance,
-            emit = $crate::__emit_concurrency_tokio,
+            emit = $crate::emit_concurrency_tokio,
             fixture = $fixture
         );
     };

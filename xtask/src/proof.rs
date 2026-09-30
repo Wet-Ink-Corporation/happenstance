@@ -581,7 +581,7 @@ pub(crate) struct WasmUnitTarget {
 ///
 /// It carries the *suite macro* and the *emitter* as well as the enumeration
 /// because both are family-specific: a projection target that invoked
-/// `event_store_conformance!`, or emitted through `__emit_wasm`, would not
+/// `event_store_conformance!`, or emitted through `emit_wasm`, would not
 /// compile, and a guard that looked for the event-store spellings in a
 /// projection source would fail for a reason that is not the reader's.
 pub(crate) struct RuleFamily {
@@ -595,8 +595,8 @@ pub(crate) struct RuleFamily {
     pub(crate) suite: &'static str,
     /// The `wasm32` emitter a target of this family must go through.
     ///
-    /// `__emit_projection_tokio` type-checks for this target and then cannot run
-    /// on it, exactly as `__emit_tokio` does for the event-store family — which
+    /// `emit_projection_tokio` type-checks for this target and then cannot run
+    /// on it, exactly as `emit_tokio` does for the event-store family — which
     /// is the failure CF-23 is about, and it has one spelling per family.
     pub(crate) emitter: &'static str,
 }
@@ -607,7 +607,7 @@ static EVENT_STORE_FAMILY: RuleFamily = RuleFamily {
     source: "crates/happenstance-testkit/src/registry.rs",
     head: "macro_rules! for_each_event_store_rule {",
     suite: "event_store_conformance!",
-    emitter: "__emit_wasm",
+    emitter: "emit_wasm",
 };
 
 /// The projection suite: a second enumeration, in a second file, with its own
@@ -625,7 +625,7 @@ static PROJECTION_FAMILY: RuleFamily = RuleFamily {
     source: "crates/happenstance-testkit/src/projection.rs",
     head: "macro_rules! for_each_projection_store_rule {",
     suite: "projection_store_conformance!",
-    emitter: "__emit_projection_wasm",
+    emitter: "emit_projection_wasm",
 };
 
 /// The rules a wasm32-only subset would reach for first.
@@ -1194,6 +1194,28 @@ fn code_only(source: &str) -> String {
 /// [`unregistered_wasm_harnesses`].
 const HARNESS_DIR: &str = "crates/happenstance-testkit/tests";
 
+/// The last path segment of every `emit = <path>` argument in `code`, when that
+/// segment is spelled like an emitter (`emit_…` or the hidden `__emit_…`).
+fn emitter_arguments(code: &str) -> impl Iterator<Item = String> + '_ {
+    code.match_indices("emit").filter_map(|(at, _)| {
+        let preceded_by_ident = code[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+        let rest = code[at + "emit".len()..].trim_start().strip_prefix('=')?;
+        if preceded_by_ident || rest.starts_with('=') {
+            return None;
+        }
+        let path: String = rest
+            .trim_start()
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | '$'))
+            .collect();
+        let name = path.rsplit("::").next()?.to_owned();
+        (name.starts_with("emit_") || name.starts_with("__emit_")).then_some(name)
+    })
+}
+
 /// Test targets that drive a suite through a `wasm32` emitter and have no row in
 /// [`WASM_TARGETS`].
 ///
@@ -1206,11 +1228,17 @@ const HARNESS_DIR: &str = "crates/happenstance-testkit/tests";
 /// more. This is the check that makes that sentence true rather than hopeful,
 /// and it is why the claim is allowed to be written down at all.
 ///
-/// A harness is `wasm32`-capable if its **code** names an emitter spelled
-/// `__emit…wasm`. Derived from the spelling rather than from the registered
-/// families, because a check that looked only for emitters already in
-/// [`WASM_TARGETS`] could never notice a third family arriving unregistered —
-/// which is the exact shape of the miss it exists to prevent.
+/// A harness is `wasm32`-capable if its **code** hands a suite macro an
+/// emitter spelled `emit…wasm` — `emit = happenstance_testkit::emit_wasm`, or
+/// any family's `…_wasm` sibling. Derived from the spelling rather than from
+/// the registered families, because a check that looked only for emitters
+/// already in [`WASM_TARGETS`] could never notice a third family arriving
+/// unregistered — which is the exact shape of the miss it exists to prevent.
+///
+/// It reads the `emit =` argument rather than every occurrence of the name,
+/// because since ADR-0076 the promised names carry no `__` prefix and appear
+/// in ordinary code — `tests/emitter_surface.rs` holds all of them in a list —
+/// and a harness is one that *passes* an emitter, not one that mentions it.
 ///
 /// # Errors
 ///
@@ -1233,15 +1261,7 @@ fn unregistered_wasm_harnesses() -> Result<Vec<String>> {
         let source =
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let code = code_only(&source);
-        let emits_to_wasm = code
-            .match_indices("__emit")
-            .map(|(at, _)| {
-                code[at..]
-                    .chars()
-                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                    .collect::<String>()
-            })
-            .any(|name| name.ends_with("wasm"));
+        let emits_to_wasm = emitter_arguments(&code).any(|name| name.ends_with("wasm"));
 
         if emits_to_wasm {
             capable.push(
@@ -1762,7 +1782,7 @@ fn first_few(names: &[String]) -> String {
 ///    something to disagree with; see [`MEMORY_WASM_RULES`].
 ///
 /// Then the rules run under `--nocapture`. That flag is not noise: `println!` is
-/// a silent discard on this target, so `__emit_wasm` reports a declined
+/// a silent discard on this target, so `emit_wasm` reports a declined
 /// capability's `SKIP <rule>: <reason>` through `console_log!`, and without the
 /// flag the runner swallows it. It is the target's own idiom for the
 /// `--show-output` the gate's host `tests` step carries — and it is not a
@@ -2074,8 +2094,8 @@ pub(crate) fn wasm_enumeration() -> Result<()> {
         let source = read_source(wasm.source)?;
 
         // The needles are looked for in the *code*, not in the file. A harness
-        // whose module documentation quotes `__emit_wasm` while its expansion
-        // goes through `__emit_tokio` is precisely the target this guard exists
+        // whose module documentation quotes `emit_wasm` while its expansion
+        // goes through `emit_tokio` is precisely the target this guard exists
         // to fail, and a whole-file `contains` passes it on the strength of the
         // prose.
         if source.contains("/*") {
@@ -2920,6 +2940,23 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The scan reads what a harness *passes*, under both spellings, and not
+    /// what a file merely mentions.
+    ///
+    /// The wrong implementation it rejects is the one this replaced, applied to
+    /// ADR-0076's names: every occurrence of `emit_…wasm` counted, so
+    /// `tests/emitter_surface.rs`, which lists the promised names as strings and
+    /// runs nothing, read as a wasm32 harness with no row.
+    #[test]
+    fn the_harness_scan_reads_emit_arguments_only() {
+        let code = "suite!(emit = happenstance_testkit::emit_wasm, fixture = F);\n\
+                    suite!(emit=$crate::__emit_projection_wasm, fixture = F);\n\
+                    const NAMES: [&str; 1] = [\"emit_wasm\"];\n\
+                    let submit = x; if emit == y {}\n";
+        let found: Vec<String> = emitter_arguments(code).collect();
+        assert_eq!(found, ["emit_wasm", "__emit_projection_wasm"]);
     }
 
     #[test]

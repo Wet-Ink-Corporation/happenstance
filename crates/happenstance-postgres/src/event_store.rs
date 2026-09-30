@@ -211,10 +211,10 @@ pub struct PostgresEventStore {
     /// Whether reads carry the visibility frontier.
     ///
     /// Always `Visibility::Frontier` for a store any consumer can build.
-    /// `Visibility::Naive` exists only behind the off-by-default `naive-arm`
-    /// feature, and only so that a conformance rule can be shown to REJECT the
+    /// `Visibility::Naive` exists only under the `happenstance_naive_arm` rustc
+    /// cfg, and only so that a conformance rule can be shown to REJECT the
     /// implementation this adapter deliberately is not. See
-    /// [`new_naive`](Self::new_naive).
+    /// `new_naive`, which exists under the same cfg.
     visibility: Visibility,
 }
 
@@ -231,7 +231,7 @@ pub(crate) enum Visibility {
     /// They do not. `head` is `max(position)` and a read admits every committed
     /// row, which is what `nextval()` allocating outside the transaction makes
     /// wrong.
-    #[cfg(feature = "naive-arm")]
+    #[cfg(happenstance_naive_arm)]
     Naive,
 }
 
@@ -243,7 +243,7 @@ impl Visibility {
             // `TRUE` rather than an empty string so every caller can splice it
             // in without a special case, and so the two arms differ by a value
             // rather than by a branch at each site.
-            #[cfg(feature = "naive-arm")]
+            #[cfg(happenstance_naive_arm)]
             Self::Naive => "TRUE",
         }
     }
@@ -333,14 +333,17 @@ impl PostgresEventStore {
     /// predicate under test is shared, so a rule that fails here is failing on
     /// the mechanism rather than on some unrelated difference.
     ///
-    /// # Why it is behind a feature
+    /// # Why it is behind a rustc cfg
     ///
-    /// Off by default, so no consumer can reach it and the default build does
-    /// not contain it. It is exercised once, by
-    /// `tests/rule_controls.rs`, and recorded — it is not a second
-    /// deliberately-broken fixture kept alive as a maintained instrument.
-    #[cfg(feature = "naive-arm")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "naive-arm")))]
+    /// Not a Cargo feature, since `0.4.0`. A feature is something any manifest
+    /// can switch on, and docs.rs builds with all of them, so the old
+    /// `naive-arm` feature rendered a store that violates ES-10 on the published
+    /// page. A cfg is set only by whoever runs the build —
+    /// `RUSTFLAGS="-D warnings --cfg happenstance_naive_arm"`, the
+    /// `tokio_unstable` idiom — so no consumer reaches it and no default build
+    /// contains it. `tests/rule_controls.rs` and `tests/naive_arm_probe.rs`
+    /// exercise it, and CI's live-postgres job builds and runs both.
+    #[cfg(happenstance_naive_arm)]
     pub fn new_naive(pool: PgPool) -> Self {
         Self {
             visibility: Visibility::Naive,
