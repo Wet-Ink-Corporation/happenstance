@@ -51,7 +51,6 @@ After L2 merges, lane L3 is two records only: the `apply` record (ADR-0074) and 
 
 ## Waiting on the owner
 
-- **Phase 17 exit criterion 1.** ES-39 still reads `[DEFERRED]`, with its phase-14 freeze, and it was not renewed past 1.0. ADR-0028 puts no retention method on a promised surface, so the criterion's intent looks met but its letter is not. The box is unticked, and an amended wording is proposed beside it.
 - Add `NEON_CONNECTION` and the Cloudflare API token as repository secrets before
   lanes L5 (`Busy`), L6a (`workerd`) and L8 (ES-11).
 - Defaults the lanes will take unless overridden before they start:

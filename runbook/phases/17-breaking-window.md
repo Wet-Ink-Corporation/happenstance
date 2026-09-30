@@ -203,17 +203,14 @@ caused it — a break with no row is one nobody decided.
 
 **Exit criteria**
 
-- [ ] ADR-0028 accepted; ES-39 is no longer `[DEFERRED]` on a surface 1.0
-      promises, or is renewed past 1.0 with the disposition phase 16 gave it.
-      **Not ticked: neither literal arm is met, and this is for the owner to
-      rule on.** ADR-0028 is accepted, but ES-39 is a §3 `EventStore` clause, it
-      still reads `[DEFERRED]`, and its `freeze-by-14` stands. *Proposed reading,
-      for the owner to accept or refuse:* the criterion exists so that no
-      breaking retention surface is owed after `0.4.0`, and ADR-0028 decision 3
-      discharges that — any later report is a provided method, additive by the
-      spike — so the ES-39 half has moved to phase 14 and the criterion could be
-      amended to "ADR-0028 accepted; no breaking retention surface is owed in
-      `0.4.0`" and ticked.
+- [x] ADR-0028 accepted, and no breaking retention surface is owed after
+      `0.4.0`: any report of unheld history is a provided method defaulting to
+      `Unknown` (`experiments/provided-method-spike`). ES-39 keeps phase 16's
+      disposition, `freeze-by-14`, and is settled there. *(Amended 2026-09-29
+      by the owner. The original text, "ES-39 is no longer `[DEFERRED]` on a
+      surface 1.0 promises, or is renewed past 1.0 with the disposition phase 16
+      gave it", was written at the runbook split, before phase 16 dispositioned
+      any clause, and anticipated a renewal that phase 16 did not give.)*
 - [x] The foreign-identity question is answered against a compiling spike
       (ADR-0073).
 - [ ] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
@@ -307,3 +304,11 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   answered, and `phases/14-retention.md` is restated, its exit criterion and
   proof artefact included. Exit criterion 1 above is left unticked with a
   proposed reading for the owner.
+
+- 2026-09-29 — **Exit criterion 1 amended and ticked, by the owner's ruling.**
+  Its second arm ("renewed past 1.0 with the disposition phase 16 gave it")
+  predated phase 16's dispositions and assumed a renewal. Phase 16 gave ES-39
+  `freeze-by-14`. The criterion now states what it protected: that no breaking
+  retention surface is owed after `0.4.0`, which ADR-0028 and the
+  provided-method spike discharge. No clause, marker or ledger row moved, and
+  `cargo xtask lints` still holds ES-39 to phase 14.
