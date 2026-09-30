@@ -76,7 +76,7 @@ measures **16.177 ms** — and no arm's number means anything except against it.
 A stall figure quoted without its floor has silently attributed the operating
 system's timer granularity to the adapter.
 
-Nothing here sets `synchronous = OFF`. `spec/SPECIFICATION.md:7501-7504` names it
+Nothing here sets `synchronous = OFF`. `spec/SPECIFICATION.md:7583-7586` names it
 by name as a wrong implementation CF-14's reopen rule rejects, and the settings
 are printed rather than assumed so that a reader can check.
 

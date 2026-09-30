@@ -1,0 +1,282 @@
+   Compiling happenstance-core v0.3.2 (<worktree>\crates\happenstance-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.63s
+     Running unittests src\lib.rs (<target>\debug\deps\happenstance_core-566ff11dca73ec99.exe)
+
+running 95 tests
+test event::tests::option_position_is_niche_optimised ... ok
+test append::tests::after_is_exclusive ... ok
+test append::tests::without_after_any_match_violates ... ok
+test event::tests::builder_sets_tags_and_metadata ... ok
+test identity::tests::recorded_at_round_trips_and_admits_times_before_the_epoch ... ok
+test limits::tests::every_limit_names_its_floor ... ok
+test event::tests::from_static_rejects_a_c1_control - should panic ... ok
+test event::tests::a_map_keyed_by_event_type_is_probed_by_str ... ok
+test event::tests::rejects_invalid_event_types ... ok
+test event::tests::position_next_signals_overflow ... ok
+test identity::tests::event_ids_from_different_stores_at_one_position_are_different ... ok
+test append::tests::non_matching_events_after_the_boundary_are_ignored ... ok
+test limits::tests::the_three_floors_compose_to_a_stated_number ... ok
+test identity::tests::store_id_round_trips_through_bytes ... ok
+test event::tests::from_static_rejects_a_bidirectional_control - should panic ... ok
+test event::tests::from_static_and_new_agree ... ok
+test identity::tests::event_id_keeps_its_halves_distinguishable ... ok
+test event::tests::event_parts_debug_is_bounded_not_the_bytes ... ok
+test identity::tests::store_id_renders_as_thirty_two_hex_characters ... ok
+test identity::tests::store_id_orders_lexicographically_over_its_bytes ... ok
+test limits::tests::the_two_floors_fit_inside_sqlites_parameter_ceiling ... ok
+test event::tests::position_zero_is_unrepresentable ... ok
+test memory::tests::empty_append_is_refused_before_the_condition_is_evaluated ... ok
+test memory::tests::append_assigns_dense_positions_from_one ... ok
+test memory::tests::append_stamps_identity_from_its_own_incarnation ... ok
+test memory::tests::empty_append_is_rejected ... ok
+test memory::tests::backwards_limit_takes_the_highest_matches_not_the_lowest ... ok
+test memory::tests::provided_method_future_is_send_in_generic_code ... ok
+test memory::tests::implements_the_non_send_flavour_too ... ok
+test memory::tests::send_flavour_stream_is_send_in_generic_code ... ok
+test memory::tests::rejected_append_leaves_the_store_untouched ... ok
+test memory::tests::read_takes_the_limit_before_it_clones ... ok
+test memory::tests::spawns_from_generic ... ok
+test memory::tests::structurally_equal_events_get_distinct_identities ... ok
+test memory::tests::tags_filter_with_and_semantics ... ok
+test memory::tests::with_events_matches_append ... ok
+test projection::derived_flavour_doc::the_block_names_both_flavours_in_link_form ... ok
+test projection::tests::checkpoint_names_every_state_and_no_others ... ok
+test projection::derived_flavour_doc::no_paragraph_tells_the_flavours_apart_by_deixis ... ok
+test projection::tests::commit_and_reset_errors_stay_separate ... ok
+test projection::tests::a_non_send_batch_still_implements_the_bare_flavour ... ok
+test projection::tests::begin_is_async_and_fallible_and_a_buffer_resolves_at_first_poll ... ok
+test projection::tests::the_port_is_implementable_with_an_owned_batch ... ok
+test memory::tests::read_limit_is_the_first_n_of_the_unlimited_read ... ok
+test query::tests::empty_query_is_unrepresentable ... ok
+test query::tests::item_combines_type_and_tags_with_and ... ok
+test query::tests::from_item_is_infallible_and_yields_one_item ... ok
+test query::tests::tags_are_and_within_an_item ... ok
+test query::tests::items_are_or_across_a_query ... ok
+test query::tests::to_is_recorded_and_independent_of_from ... ok
+test query::tests::types_are_ord_within_an_item ... ok
+test query::tests::unconstrained_item_is_rejected ... ok
+test query::tests::zero_limit_means_zero_events ... ok
+test store::module_doc::deleting_the_pointer_leaves_the_reader_unstuck ... ok
+test store::module_doc::no_heading_carries_a_single_sentence_body ... ok
+test store::derived_flavour_doc::no_paragraph_tells_the_flavours_apart_by_deixis ... ok
+test store::module_doc::every_search_key_is_a_string_rustc_printed_on_this_page ... ok
+test store::module_doc::every_element_is_persistent_chrome ... ok
+test store::derived_flavour_doc::the_block_names_both_flavours_in_link_form ... ok
+test store::module_doc::one_recessive_pointer_closes_the_section ... ok
+test store::module_doc::the_ambiguity_is_named_in_words_and_not_only_by_the_caret ... ok
+test store::module_doc::the_diagnosis_survives_the_fence_being_deleted ... ok
+test store::module_doc::the_fence_is_rustcs_own_e0034_output ... ok
+test store::module_doc::the_fence_is_uncompiled_plain_text_a_reader_can_paste ... ok
+test store::module_doc::the_heading_ladder_stays_at_four_entries ... ok
+test store::module_doc::the_limit_stated_is_the_narrow_one ... ok
+test store::module_doc::the_page_never_claims_that_nothing_checks_this ... ok
+test store::module_doc::the_pointer_is_recessive_and_the_section_grows_no_appendix ... ok
+test store::module_doc::the_section_composes_in_the_designs_binding_order ... ok
+test store::module_doc::the_search_keys_sit_where_trait_variant_copies_them_to_both_flavours ... ok
+test store::module_doc::the_section_stays_inside_its_density_budget ... ok
+test store::module_doc::the_two_note_lines_and_the_internal_type_name_never_yield ... ok
+test store::tests::error_bound_is_identical_on_both_flavours ... ok
+test tag::tests::a_borrowed_and_an_owned_tag_are_one_value ... ok
+test tag::tests::canonicalisation_is_idempotent ... ok
+test tag::tests::contains_all_handles_interleaved_ordering ... ok
+test tag::tests::contains_all_is_subset_semantics ... ok
+test tag::tests::extend_re_canonicalises ... ok
+test tag::tests::key_value_splits_on_first_colon_only ... ok
+test tag::tests::owned_into_iterator_yields_canonical_order ... ok
+test tag::tests::rejects_invalid_tags ... ok
+test tag::tests::values_of_agrees_with_tag_value_on_an_empty_value ... ok
+test tag::tests::values_of_does_not_match_a_key_that_is_merely_a_prefix ... ok
+test tag::tests::values_of_finds_every_value_under_a_repeated_key ... ok
+test tag::tests::values_of_handles_the_boundaries_of_the_sorted_run ... ok
+test tag::tests::values_of_is_empty_for_an_unused_key ... ok
+test tag::tests::values_of_keeps_a_value_containing_a_colon_whole ... ok
+test validate::tests::accepts_an_ordinary_identifier ... ok
+test validate::tests::accepts_neighbours_of_the_closed_list ... ok
+test validate::tests::accepts_the_format_characters_scripts_need ... ok
+test validate::tests::evaluates_in_a_const_context ... ok
+test validate::tests::finds_an_offender_at_either_end ... ok
+test validate::tests::rejects_all_seven_bidirectional_controls ... ok
+test validate::tests::rejects_c0_del_and_c1_controls ... ok
+test validate::tests::rejects_empty_and_over_long ... ok
+
+test result: ok. 95 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\constructor_ergonomics.rs (<target>\debug\deps\constructor_ergonomics-a94b000eeee351c9.exe)
+
+running 2 tests
+test event_new_accepts_a_held_event_type ... ok
+test command_handler_composes_validation_errors ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\frozen_signatures.rs (<target>\debug\deps\frozen_signatures-a609aeca415cb58b.exe)
+
+running 6 tests
+test identity_does_not_reach_appends_signature ... ok
+test a_caller_still_owns_its_batch_after_appending_it ... ok
+test membership_is_answerable_through_the_port ... ok
+test a_read_stream_can_be_held_in_a_struct_field ... ok
+test a_replay_can_be_spawned_under_the_send_flavour ... ok
+test a_read_stream_can_be_returned_from_a_generic_function ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\probe_live_transaction_shape.rs (<target>\debug\deps\probe_live_transaction_shape-bcb1ad5384bb7841.exe)
+
+running 5 tests
+test answering_from_committed_state_still_compiles_and_is_still_wrong ... ok
+test the_probe_reports_the_pending_write_through_the_batch ... ok
+test a_failed_statement_is_reported_through_the_seam ... ok
+test the_transaction_reads_its_own_uncommitted_writes ... ok
+test the_recorded_seam_is_pinned_to_the_signature_it_describes ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\projection_memory.rs (<target>\debug\deps\projection_memory-bd3b9fa4fa082700.exe)
+
+running 23 tests
+test begin_resolves_at_its_first_poll_without_a_runtime ... ok
+test commit_rejects_a_foreign_batch ... ok
+test reset_clears_rows_and_checkpoint_together ... ok
+test empty_batch_still_advances_the_checkpoint ... ok
+test commit_installs_rows_and_checkpoint_together ... ok
+test dropped_batch_leaves_store_usable ... ok
+test commit_rejects_a_foreign_batch_from_default_stores ... ok
+test probe::probe_delete_all_supports_reset ... ok
+test distinct_projections_advance_independently ... ok
+test probe::probe_read_through_sees_a_pending_write ... ok
+test probe::probe_read_through_layers_pending_over_committed ... ok
+test regressing_position_is_rejected_and_changes_nothing ... ok
+test probe::probe_round_trip_through_the_traits_only ... ok
+test reset_rejects_a_foreign_batch ... ok
+test reset_returns_the_projection_to_never_run ... ok
+test rollback_leaves_both_unchanged ... ok
+test commit_records_the_authority_it_was_given ... ok
+test open_batch_is_invisible_until_commit ... ok
+test reset_rejects_a_foreign_batch_from_default_stores ... ok
+test send_impl_satisfies_the_bare_bound ... ok
+test the_store_and_its_batch_are_send_and_sync ... ok
+test reset_is_scoped_to_one_projection ... ok
+test store_is_reachable_from_the_public_surface ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\projection_probe_round_trip.rs (<target>\debug\deps\projection_probe_round_trip-8ec6014d00212820.exe)
+
+running 4 tests
+test probe_shape_matches_the_specification ... ok
+test all_five_members_are_reachable_generically ... ok
+test writes_are_visible_through_the_trait_alone ... ok
+test the_probe_is_a_supertrait_of_the_bare_flavour ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\projection_recipe.rs (<target>\debug\deps\projection_recipe-25bcae0ace9a9484.exe)
+
+running 3 tests
+test the_port_is_not_gated_and_the_probe_still_is ... ok
+test the_recipe_names_every_feature_its_own_items_need ... ok
+test the_dependency_line_carries_what_the_port_needs_and_nothing_else ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\provided_method_spike.rs (<target>\debug\deps\provided_method_spike-930f44fa4dd3b44e.exe)
+
+running 3 tests
+test bare_flavour_defaults_answer_for_a_not_send_store ... ok
+test bare_flavour_defaults_answer_for_a_send_store ... ok
+test send_flavour_defaults_spawn_from_generic_code_without_sync ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\serialize_is_borrowing.rs (<target>\debug\deps\serialize_is_borrowing-5bfd3780302aa8f3.exe)
+
+running 3 tests
+test the_encoding_is_the_one_that_shipped ... ok
+test no_serialize_impl_copies_what_it_was_handed ... ok
+test the_two_tag_regimes_encode_to_identical_bytes ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\trait_variant_pin.rs (<target>\debug\deps\trait_variant_pin-c1a91b5e4872db4a.exe)
+
+running 1 test
+test the_derivation_still_copies_attributes_at_the_resolved_version ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\wire.rs (<target>\debug\deps\wire-9832fdc354010ebf.exe)
+
+running 19 tests
+test wire::bare_event_postcard_encoding_is_pinned ... ok
+test wire::negative_controls::option_shaped_query_is_indistinguishable_from_none ... ok
+test wire::decode_rejects_a_zero_item_query ... ok
+test wire::option_query_round_trips ... ok
+test wire::store_id_encodes_as_hex_in_json ... ok
+test wire::decode_rejects_a_non_canonical_tag_set ... ok
+test wire::condition_after_is_visible_to_an_ingest_policy ... ok
+test wire::negative_controls::skipped_event_wire_fails_the_postcard_round_trip ... ok
+test wire::payload_is_base64_in_json ... ok
+test wire::decode_rejects_an_unconstrained_query_item ... ok
+test wire::sequenced_event_round_trips ... ok
+test wire::store_id_encodes_as_bytes_in_postcard ... ok
+test wire::query_all_is_unambiguous ... ok
+test wire::empty_object_is_not_a_condition ... ok
+test wire::payload_is_raw_in_postcard ... ok
+test wire::decode_accepts_an_over_capacity_value ... ok
+test wire::negative_controls::length_checked_event_wire_rejects_a_65_kib_payload ... ok
+test wire::round_trips_in_postcard ... ok
+test wire::round_trips_in_json ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+
+   Doc-tests happenstance_core
+
+running 36 tests
+test crates\happenstance-core\src\lib.rs - (line 172) ... ignored
+test crates\happenstance-core\src\lib.rs - (line 146) ... ok
+test crates\happenstance-core\src\append.rs - append::AppendCondition (line 54) ... ok
+test crates\happenstance-core\src\memory.rs - memory::MemoryEventStore (line 40) ... ok
+test crates\happenstance-core\src\append.rs - append::AppendCondition (line 70) ... ok
+test crates\happenstance-core\src\event.rs - event::Event::new (line 341) ... ok
+test crates\happenstance-core\src\event.rs - event::Event (line 306) ... ok
+test crates\happenstance-core\src\append.rs - append::AppendCondition (line 86) ... ok
+test crates\happenstance-core\src\error.rs - error::AppendError (line 197) ... ok
+test crates\happenstance-core\src\event.rs - event::EventType (line 40) ... ok
+test crates\happenstance-core\src\event.rs - event::SequencePosition (line 227) ... ok
+test crates\happenstance-core\src\identity.rs - identity::serde_impls (line 214) ... ok
+test crates\happenstance-core\src\lib.rs - reexported_paths (line 193) ... ok
+test crates\happenstance-core\src\memory.rs - memory::MemoryEventStore::restore (line 150) ... ok
+test crates\happenstance-core\src\lib.rs - reexported_paths (line 202) ... ok
+test crates\happenstance-core\src\event.rs - event::EventType (line 29) ... ok
+test crates\happenstance-core\src\projection.rs - projection (line 104) ... ok
+test crates\happenstance-core\src\projection.rs - projection::ProjectionStore (line 330) ... ok
+test crates\happenstance-core\src\projection.rs - projection::SendProjectionStore (line 330) ... ok
+test crates\happenstance-core\src\event.rs - event::serde_impls (line 575) ... ok
+test crates\happenstance-core\src\projection_memory.rs - projection_memory::MemoryProjectionStore (line 56) ... ok
+test crates\happenstance-core\src\query.rs - query::Query (line 135) ... ok
+test crates\happenstance-core\src\query.rs - query::QueryItem (line 24) ... ok
+test crates\happenstance-core\src\query.rs - query::ReadOptions (line 233) ... ok
+test crates\happenstance-core\src\query.rs - query::ReadOptions (line 250) ... ok
+test crates\happenstance-core\src\query.rs - query::ReadOptions (line 262) ... ok
+test crates\happenstance-core\src\store.rs - store::EventStore (line 116) ... ok
+test crates\happenstance-core\src\store.rs - store::SendEventStore (line 116) ... ok
+test crates\happenstance-core\src\store.rs - store::a_doc_fence_in_an_integration_test_target_is_never_compiled (line 444) ... ok
+test crates\happenstance-core\src\store.rs - store::es_13_the_query_must_outlive_the_stream (line 394) ... ok
+test crates\happenstance-core\src\tag.rs - tag::Tag (line 49) ... ok
+test crates\happenstance-core\src\tag.rs - tag::Tag (line 65) ... ok
+test crates\happenstance-core\src\tag.rs - tag::Tags (line 264) ... ok
+test crates\happenstance-core\src\tag.rs - tag::Tags::contains_all (line 337) ... ok
+test crates\happenstance-core\src\tag.rs - tag::Tags::from_pairs (line 297) ... ok
+test crates\happenstance-core\src\tag.rs - tag::Tags::values_of (line 387) ... ok
+
+test result: ok. 35 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.32s
+
+
+running 2 tests
+test crates\happenstance-core\src\store.rs - store::es_13_the_query_must_outlive_the_stream (line 414) - compile fail ... ok
+test crates\happenstance-core\src\event.rs - event::EventType::from_static (line 95) - compile fail ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+
+all doctests ran in 3.64s; merged doctests compilation took 1.44s

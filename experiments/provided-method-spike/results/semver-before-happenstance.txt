@@ -1,0 +1,10 @@
+    Building happenstance v0.3.2 (current)
+       Built [  10.990s] (current)
+     Parsing happenstance v0.3.2 (current)
+      Parsed [   0.009s] (current)
+     Parsing happenstance v0.3.2 (baseline, cached)
+      Parsed [   0.011s] (baseline)
+    Checking happenstance v0.3.2 -> v0.3.2 (no change; assume minor)
+     Checked [   0.009s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  11.936s] happenstance

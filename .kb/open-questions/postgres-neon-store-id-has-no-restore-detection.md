@@ -45,7 +45,7 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-VT-6 (`spec/SPECIFICATION.md:840-898`, `[PROVISIONAL]`) requires that a store never issue an
+VT-6 (`spec/SPECIFICATION.md:843-901`, `[PROVISIONAL]`) requires that a store never issue an
 `EventId` whose `(StoreId, SequencePosition)` pair it has already issued for a different event
 (`:840-844`). It permits two mechanisms, and it does not leave the choice between them free
 (`:882-888`):

@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`acffe1c` on `main` (PR #26, phase 17's kickoff), plus
-`lane/p17-foreign-identity`, lane L1. 2026-09-29.
+`52aa951` on `main` (PR #27, lane L1: VT-10 frozen), plus
+`lane/p17-provided-method-spike`, lane L2. 2026-09-29.
 
 ## Where things are
 
@@ -37,21 +37,21 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-`lane/p17-foreign-identity` (L1), done and gated, awaiting merge:
-- **ADR-0073** is written, and **VT-10 is `[FROZEN]`**. The write path that keeps a foreign `EventId` is the adapter's own row writer, and core is unchanged.
-- The SQLite `IngestStore` spike is `#[cfg(test)]`.
-- Neon's ingest statement is one statement, structural and never executed.
-- `happenstance-sync` is on core's identity types, with `IngestGroup`.
-- SQLite's `append` now prepares its insert with `ON CONFLICT … DO NOTHING`. No behaviour changed; the CHANGELOG says so.
+`lane/p17-provided-method-spike` (L2), awaiting merge:
+- **`experiments/provided-method-spike`**: a default-bodied method written in the `-> impl Future` form is additive on a `trait_variant` pair. `cargo-semver-checks` is clean against `0.3.2`, while a required-method control is reported as a major. Two conditions: a default that drops the batch must do it before the future exists, and the typed `Projection` must itself become a `trait_variant` pair for its default to be spawnable.
+- **`experiments/apply-shape`**: an async `apply` with a batch handle works over memory, SQLite and a live Postgres 17.10. Its findings F1–F7 are L3's inputs; F5 is that a server refusal aborts the live transaction, so `Skip` over a live batch needs a SAVEPOINT.
+- **ADR-0028**: deletion stays outside the port through 1.x, and any later report is a provided method that defaults to `Unknown`.
+  - ES-41 and PS-22 are `[FROZEN]`.
+  - ES-37, ES-39, ES-40, SY-32 and CF-27 are rewritten.
+  - Phase 14 is restated.
 
 ## Next action
 
-After L1 merges, lane L2, on `lane/p17-provided-method-spike`, has two parts:
-- One compile spike: can a provided method returning `impl Future` be added to a `trait_variant` pair without `cargo-semver-checks` reporting a major against `0.3.2`? Test it on `EventStore` (a retention report defaulting to `Unknown`), `ProjectionStore` (`commit_all`) and `Projection` (`on_error`).
-- The `apply`-shape experiment, then ADR-0028 as a refusal with an additive reservation.
+After L2 merges, lane L3 is two records only: the `apply` record (ADR-0074) and the port-clauses record (ADR-0075). They take their evidence from `experiments/apply-shape` and `experiments/provided-method-spike`.
 
 ## Waiting on the owner
 
+- **Phase 17 exit criterion 1.** ES-39 still reads `[DEFERRED]`, with its phase-14 freeze, and it was not renewed past 1.0. ADR-0028 puts no retention method on a promised surface, so the criterion's intent looks met but its letter is not. The box is unticked, and an amended wording is proposed beside it.
 - Add `NEON_CONNECTION` and the Cloudflare API token as repository secrets before
   lanes L5 (`Busy`), L6a (`workerd`) and L8 (ES-11).
 - Defaults the lanes will take unless overridden before they start:

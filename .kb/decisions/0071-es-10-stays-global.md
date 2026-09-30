@@ -75,7 +75,7 @@ supplies that argument.
   (`crates/happenstance-core/src/projection.rs:498-504`).
 - `Checkpoint::Live` and `Checkpoint::Rebuilding` each carry one `through: SequencePosition`
   (`projection.rs:193-206`).
-- PS-17 fixes a checkpoint per `(store, ProjectionId)` (`spec/SPECIFICATION.md:5624-5626`), and
+- PS-17 fixes a checkpoint per `(store, ProjectionId)` (`spec/SPECIFICATION.md:5682-5684`), and
   PS-20 resumes strictly after that one position (`:5702-5705`). Both are `[FROZEN]`.
 - ADR-0063 put the whole port under semver, `Checkpoint` included
   (`references/adr/0063-the-projection-port-is-frozen.md:25-37`).
@@ -87,7 +87,7 @@ Three reasons stand without citing ES-10.
 
 1. **ES-30's reason is about cost, not visibility.** `head()` is unscoped because "a narrow
    projection's problem is that it cannot advance past events it examined and did not match; the
-   global head is what lets it checkpoint past them" (`spec/SPECIFICATION.md:4213-4216`). That
+   global head is what lets it checkpoint past them" (`spec/SPECIFICATION.md:4217-4220`). That
    sentence is about polling cost. It would be just as true under a per-boundary invariant, and it
    is what makes one global resume point the natural shape.
 2. **A per-boundary checkpoint is an open-ended set.** A projection reading one event type across
@@ -127,7 +127,7 @@ does not take them.
   one answers it first.
 - **Sub-question 3**: whether reopening ES-10 reopens `AppendCondition`'s boundary semantics.
   ADR-0013's own argument says a per-boundary invariant keeps the condition sound. ES-25 and ES-26
-  are built on ES-10 (`spec/SPECIFICATION.md:2948-2951`), though, so a reopening has to re-read
+  are built on ES-10 (`spec/SPECIFICATION.md:2952-2955`), though, so a reopening has to re-read
   them rather than assume they are unaffected.
 - **Sub-question 4**: a hybrid, with a per-boundary checkpoint plus a global watermark. Evaluating
   it on paper is free. Building it is the checkpoint-shape change above.

@@ -1,0 +1,12 @@
+    Building happenstance-core v0.3.2 (current)
+       Built [   8.597s] (current)
+     Parsing happenstance-core v0.3.2 (current)
+      Parsed [   0.007s] (current)
+    Building happenstance-core v0.3.2 (baseline)
+       Built [   0.807s] (baseline)
+     Parsing happenstance-core v0.3.2 (baseline)
+      Parsed [   0.006s] (baseline)
+    Checking happenstance-core v0.3.2 -> v0.3.2 (no change; assume minor)
+     Checked [   0.015s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  11.919s] happenstance-core

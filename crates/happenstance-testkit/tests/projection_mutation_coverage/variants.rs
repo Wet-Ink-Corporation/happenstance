@@ -31,7 +31,7 @@ use crate::harness::ProjectionSubject;
 /// [`READS_THROUGH_BATCH`](happenstance_core::ProjectionProbe::READS_THROUGH_BATCH)
 /// `false` and leaves `probe_read_through` `unimplemented!()`, which is the
 /// specification's own spelling for a member only called when the constant says
-/// so (`spec/SPECIFICATION.md:5026-5027`).
+/// so (`spec/SPECIFICATION.md:5084-5085`).
 ///
 /// # Why it exists, and what would be wrong without it
 ///
@@ -45,7 +45,7 @@ use crate::harness::ProjectionSubject;
 ///
 /// It is **not** the buffering, replay-at-commit conformant variant, which is a
 /// different and larger instrument at the far end of §6's batch-shape axis
-/// (`spec/SPECIFICATION.md:5703-5708`). That one has since landed as
+/// (`spec/SPECIFICATION.md:5761-5766`). That one has since landed as
 /// [`BufferingProjectionStore`](crate::buffering::BufferingProjectionStore), and
 /// it declares `READS_THROUGH_BATCH` **`true`** — so the two are opposite arms of
 /// the same gate rather than duplicates, and neither can be deleted without

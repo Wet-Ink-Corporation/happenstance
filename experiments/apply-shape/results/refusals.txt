@@ -1,0 +1,45 @@
+$ cargo check --manifest-path <repo>/experiments/apply-shape/Cargo.toml --lib --features demonstrate-refusals
+    Checking apply-shape v0.0.0 (<repo>\experiments\apply-shape)
+error[E0599]: no method named `position` found for reference `&Delivered<u8>` in the current scope
+  --> src\demonstrate.rs:13:23
+   |
+13 |     let _ = delivered.position();
+   |                       ^^^^^^^^ method not found in `&Delivered<u8>`
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following traits define an item `position`, perhaps you need to implement one of them:
+           candidate #1: `serde_json::read::Read`
+   = note: the trait `Iterator` defines an item `position`, but is explicitly unimplemented
+
+error[E0277]: the trait bound `EdgeTally: SendProjection` is not satisfied
+   --> src\demonstrate.rs:20:15
+    |
+ 20 |     spawnable(&EdgeTally::new("edge"));
+    |     --------- ^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+    |     |
+    |     required by a bound introduced by this call
+    |
+help: the trait `SendProjection` is not implemented for `EdgeTally`
+   --> src\edge.rs:183:1
+    |
+183 | pub struct EdgeTally {
+    | ^^^^^^^^^^^^^^^^^^^^
+help: this trait has no implementations, consider adding one
+   --> src\shape.rs:175:1
+    |
+175 | / pub trait Projection {
+176 | |     /// The application's own event enum. The runner decodes.
+177 | |     type Event: DomainEvent;
+...   |
+232 | | }
+    | |_^
+note: required by a bound in `spawnable`
+   --> src\demonstrate.rs:19:21
+    |
+ 19 |     fn spawnable<P: SendProjection>(_: &P) {}
+    |                     ^^^^^^^^^^^^^^ required by this bound in `spawnable`
+
+Some errors have detailed explanations: E0277, E0599.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `apply-shape` (lib) due to 2 previous errors
+exit status: 101

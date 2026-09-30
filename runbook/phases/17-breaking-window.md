@@ -28,11 +28,16 @@ gave to this phase.
 
 **Work**
 
-- [ ] **ADR-0028 — what a store may forget, and how it says so.** Either a port
-      surface through which a store reports history it no longer holds (a method on
-      `EventStore`, which breaks all four published adapters) or a written refusal
-      stating what a store that has been deleted from may look like. Phase 14 then
-      builds the suffix store and the rules against whichever this is.
+- [x] **ADR-0028 — what a store may forget, and how it says so.** Settled by
+      [ADR-0028](../../.kb/decisions/0028-what-a-store-may-forget.md): the written
+      refusal, with an additive reservation, on a compiling provided-method spike
+      (`experiments/provided-method-spike/`). Nothing published changes in `0.4.0`.
+      ES-41 and PS-22 are frozen. Phase 14 builds the instrument and freezes the rest.
+      The item read: ~~Either a port surface through which a store reports history
+      it no longer holds (a method on `EventStore`, which breaks all four published
+      adapters) or a written refusal stating what a store that has been deleted from
+      may look like. Phase 14 then builds the suffix store and the rules against
+      whichever this is.~~
 - [x] **ADR-0026's published half — a foreign identity's write path.** Settled
       by ADR-0073 against a compiling SQLite spike: the adapter's own row writer,
       core unchanged, VT-10 frozen.
@@ -162,16 +167,16 @@ gave to this phase.
         is additive under its recommended answer.
       - **ES-11, ES-12** — the ES-11 record above.
       - **ES-17** — the measurement or the freezing record, above.
-      - **ES-41** — with ADR-0028. The transport half is already answered: Neon
+      - ~~**ES-41** — with ADR-0028. The transport half is already answered: Neon
         and Cloudflare each probe membership in one read-only round trip over the
-        pair VT-8 indexes.
+        pair VT-8 indexes.~~ **Frozen by ADR-0028.**
       - **PS-9, PS-11** — together, in the `Projection::apply` record, with the
         failure-policy seam's shape. Phase 18 confirms both by building PS-27's
         seam without a generic write.
       - **PS-15** — decide whether `rollback` refuses a foreign batch (breaking),
         or narrow the MUST to `commit` and `reset`.
-      - **PS-22** — ADR-0028 states that retention never rewinds a checkpoint
-        over kept rows.
+      - ~~**PS-22** — ADR-0028 states that retention never rewinds a checkpoint
+        over kept rows.~~ **Frozen by ADR-0028**, which states it.
       - **PS-23** — freeze *exactly one* id per commit, or record that a multi-id
         atomic commit arrives after 1.0 as an additive defaulted method rather
         than a change to `commit`.
@@ -200,6 +205,15 @@ caused it — a break with no row is one nobody decided.
 
 - [ ] ADR-0028 accepted; ES-39 is no longer `[DEFERRED]` on a surface 1.0
       promises, or is renewed past 1.0 with the disposition phase 16 gave it.
+      **Not ticked: neither literal arm is met, and this is for the owner to
+      rule on.** ADR-0028 is accepted, but ES-39 is a §3 `EventStore` clause, it
+      still reads `[DEFERRED]`, and its `freeze-by-14` stands. *Proposed reading,
+      for the owner to accept or refuse:* the criterion exists so that no
+      breaking retention surface is owed after `0.4.0`, and ADR-0028 decision 3
+      discharges that — any later report is a provided method, additive by the
+      spike — so the ES-39 half has moved to phase 14 and the criterion could be
+      amended to "ADR-0028 accepted; no breaking retention surface is owed in
+      `0.4.0`" and ticked.
 - [x] The foreign-identity question is answered against a compiling spike
       (ADR-0073).
 - [ ] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
@@ -263,3 +277,33 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   Neon ingest statement that first duplicated append's, and a marker test that
   could not fail. Spec citations shifted by the edits were repointed across the
   tree, `.kb/_governance` excepted.
+
+- 2026-09-29 — **L2, the provided-method spike and ADR-0028**, on
+  `lane/p17-provided-method-spike`. The spike (`experiments/provided-method-spike/`)
+  added three provided methods returning `impl Future`, not `async fn`, on a scratch
+  worktree of `52aa951`. `EventStore::history`, defaulting to `Unknown`, passed all
+  three criteria: every implementor compiled, Send and `!Send`, host and wasm32; it
+  spawned from `S: SendEventStore + 'static` with no `Sync`; and `cargo-semver-checks`
+  0.50.0 reported nothing against `0.3.2` for `happenstance-core` or `happenstance`,
+  while a required-method control reported a major `trait_method_added`.
+  `ProjectionStore::commit_all` passed only when the default drops the batch
+  before the future exists. The typed `Projection`, a plain trait, cannot be
+  spawned generically. ADR-0028 therefore takes the refusal with an additive
+  reservation:
+  - deletion stays outside the port through 1.x (ES-37 re-dated);
+  - ES-38 and ES-40's MAY stand, and E2E-47's third outcome is rejected for 1.x;
+  - the floor primitive is rejected;
+  - ES-41 and PS-22 are `[FROZEN]`;
+  - SY-32's floor is narrowed to resumability, CF-27's report is instrument-local,
+    and ES-39 is rewritten and stays `[DEFERRED]` for phase 14.
+
+  ES-41's freeze does **not** fix whether "holds" means held or visible under
+  ES-10's frontier: a first draft froze "held" on the argument that `false` would
+  let ingest duplicate, which `crates/happenstance-sync/src/ingest.rs:97-101`
+  contradicts, and no rule stages the row. The reading is phase 13's work item,
+  and Postgres's and Neon's notes still say "recorded, not settled". Neon meets
+  the marker's narrow transport falsifier to the letter, and ES-41 now says so and
+  why the round trip is accepted. The ES-38 open question's sub-question 3 is
+  answered, and `phases/14-retention.md` is restated, its exit criterion and
+  proof artefact included. Exit criterion 1 above is left unticked with a
+  proposed reading for the owner.

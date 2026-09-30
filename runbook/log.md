@@ -10,6 +10,23 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-29 — ADR-0028: what a store may forget, decided as a refusal
+
+*Uncommitted at writing; `lane/p17-provided-method-spike`.*
+Phase 17, lane L2.
+
+A compile spike showed a default-bodied method is additive on a `trait_variant`
+port: `cargo-semver-checks` is clean against `0.3.2`, and a required-method
+control is flagged major. On that evidence ADR-0028 keeps deletion outside the
+port through 1.x, and reserves a report defaulting to `Unknown` as a later
+additive method. ES-41 and PS-22 are frozen. `experiments/apply-shape` shows an
+async `apply` with a batch handle working against a live Postgres, and it feeds
+L3's record.
+
+**Verified.** See phase 17's session log.
+
+---
+
 ## 2026-09-29 — VT-10 frozen: the foreign-identity write path is the adapter's
 
 *Uncommitted at writing; `lane/p17-foreign-identity`.*

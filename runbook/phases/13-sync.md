@@ -104,6 +104,13 @@ provides the atomicity and the identity that makes it idempotent.
       type, the watermark's plan assertion, and the policy for an event claiming
       this store's own `StoreId` that it does not hold — pinned, not endorsed, by
       `pinned_vt6_breach_an_unheld_own_id_is_ingested_and_wedges_the_append_that_reaches_it`.
+- [ ] **ES-41's held-versus-visible reading.** ADR-0028 froze ES-41 at phase 17
+      and left one reading open: where ES-10's frontier separates a committed row
+      from a visible one, does `contains_event_id` mean held or visible?
+      `happenstance-postgres` and `happenstance-neon` answer held, and record it
+      as unsettled. Settle it, and write a rule that stages a committed row above
+      the frontier, with a wrong implementation that carries the frontier
+      predicate into the probe.
 - [ ] `sync_peer_conformance!` in `happenstance-sync-testkit`, emitted through
       phase 1's registry so it inherits the tokio/blocking/wasm flavours. **The
       suite never decodes a payload** (SY-35) — a suite that parses `data` would

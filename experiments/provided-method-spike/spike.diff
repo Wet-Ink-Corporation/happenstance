@@ -1,0 +1,463 @@
+diff --git a/crates/happenstance-core/src/lib.rs b/crates/happenstance-core/src/lib.rs
+index 792d623..4563d60 100644
+--- a/crates/happenstance-core/src/lib.rs
++++ b/crates/happenstance-core/src/lib.rs
+@@ -142,7 +142,7 @@ pub use limits::{
+     MIN_SUPPORTED_TAGS_PER_EVENT, StoreLimit,
+ };
+ pub use query::{Query, QueryItem, ReadOptions};
+-pub use store::{EventStore, SendEventStore, collect, read_decision_model};
++pub use store::{EventStore, HistoryReport, SendEventStore, collect, read_decision_model};
+ pub use tag::{MAX_TAG_LEN, Tag, Tags};
+ 
+ pub use projection::{
+diff --git a/crates/happenstance-core/src/projection.rs b/crates/happenstance-core/src/projection.rs
+index 9b83199..85941bd 100644
+--- a/crates/happenstance-core/src/projection.rs
++++ b/crates/happenstance-core/src/projection.rs
+@@ -255,6 +255,10 @@ pub enum CommitError<E> {
+         attempted: SequencePosition,
+     },
+ 
++    /// SPIKE: this store does not offer the operation that was asked of it.
++    #[error("this store does not support this operation")]
++    Unsupported,
++
+     /// The adapter failed for its own reasons.
+     #[error(transparent)]
+     Store(E),
+@@ -534,6 +538,31 @@ pub trait ProjectionStore {
+     ///
+     /// Returns the adapter's error if the rollback fails.
+     async fn rollback(&self, batch: Self::Batch) -> Result<(), Self::Error>;
++
++    /// SPIKE (experiments/provided-method-spike): applies `batch` and moves
++    /// every listed checkpoint, as one unit.
++    ///
++    /// Provided, and the default **refuses** with [`CommitError::Unsupported`]:
++    /// a store that has not said it can commit several checkpoints atomically
++    /// must not be assumed to.
++    ///
++    /// # Errors
++    ///
++    /// The default always returns [`CommitError::Unsupported`].
++    fn commit_all(
++        &self,
++        batch: Self::Batch,
++        checkpoints: &[(ProjectionId, SequencePosition)],
++        authority: Authority,
++    ) -> impl Future<Output = Result<(), CommitError<Self::Error>>> {
++        // The batch is dropped here, before the future exists, and not moved
++        // into it: `Self::Batch` carries no `Send` bound, so a future holding
++        // it is not `Send` in the derived flavour (see results/). Dropping a
++        // batch bare is a rollback by the port's own contract.
++        drop(batch);
++        let _ = (checkpoints, authority);
++        async { Err(CommitError::Unsupported) }
++    }
+ }
+ 
+ /// The write seam the projection conformance suite runs through.
+@@ -853,6 +882,9 @@ mod tests {
+             match error {
+                 CommitError::ForeignBatch => "foreign",
+                 CommitError::CheckpointRegression { .. } => "regression",
++                // SPIKE: AC-003's in-crate exhaustive match is the one place
++                // the additive variant is not free.
++                CommitError::Unsupported => "unsupported",
+                 CommitError::Store(_) => "store",
+             }
+         }
+diff --git a/crates/happenstance-core/src/store.rs b/crates/happenstance-core/src/store.rs
+index 945d771..4dcf917 100644
+--- a/crates/happenstance-core/src/store.rs
++++ b/crates/happenstance-core/src/store.rs
+@@ -75,6 +75,8 @@
+ 
+ use alloc::vec::Vec;
+ 
++use core::future::Future;
++
+ use futures_core::Stream;
+ 
+ use crate::append::AppendCondition;
+@@ -321,6 +323,32 @@ pub trait EventStore {
+     ///
+     /// Returns the adapter's error if the lookup fails.
+     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error>;
++
++    /// SPIKE (experiments/provided-method-spike): what this store can say
++    /// about whether its log is whole.
++    ///
++    /// Provided, defaulting to [`HistoryReport::Unknown`]. Spelled
++    /// `fn … -> impl Future` with an `async` block rather than `async fn`,
++    /// because `trait_variant` copies the block into the `Send` flavour and
++    /// strips only the signature's asyncness. The block captures nothing, so
++    /// the future is `Send` with no `Self: Sync` bound.
++    ///
++    /// # Errors
++    ///
++    /// The default never fails; an override returns the adapter's error.
++    fn history(&self) -> impl Future<Output = Result<HistoryReport, Self::Error>> {
++        async { Ok(HistoryReport::Unknown) }
++    }
++}
++
++/// SPIKE: what a store reports about the completeness of its own log.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++#[non_exhaustive]
++pub enum HistoryReport {
++    /// The store does not know whether anything has been removed.
++    Unknown,
++    /// The store vouches that nothing has been removed.
++    Complete,
+ }
+ 
+ // =====================================================================
+diff --git a/crates/happenstance/src/lib.rs b/crates/happenstance/src/lib.rs
+index c9f8641..0cbeddd 100644
+--- a/crates/happenstance/src/lib.rs
++++ b/crates/happenstance/src/lib.rs
+@@ -235,7 +235,7 @@ pub use domain::{DecisionModel, DomainEvent};
+ // finding out from a compiler error instead of from the documentation.
+ #[cfg(feature = "unstable-projection")]
+ #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+-pub use runner::{Progressed, Projection, ProjectionError, run_projection};
++pub use runner::{OnError, Progressed, Projection, ProjectionError, run_projection};
+ 
+ // The contract's surface, mounted here so a reader who installed the facade can
+ // still type the paths the contract's own documentation uses.
+@@ -264,6 +264,8 @@ pub use happenstance_core::{AppendError, ConditionViolated, InvalidEventType};
+ pub use happenstance_core::{Event, EventParts, EventType, MAX_EVENT_TYPE_LEN};
+ pub use happenstance_core::{EventId, RecordedAt, StoreId};
+ pub use happenstance_core::{EventStore, SendEventStore, collect, read_decision_model};
++// SPIKE: the facade re-exports every contract item (contract_surface.rs).
++pub use happenstance_core::HistoryReport;
+ pub use happenstance_core::{InvalidQuery, InvalidTag};
+ pub use happenstance_core::{MAX_TAG_LEN, Tag, Tags};
+ pub use happenstance_core::{
+diff --git a/crates/happenstance/src/runner.rs b/crates/happenstance/src/runner.rs
+index 5ae9f7d..acd15b9 100644
+--- a/crates/happenstance/src/runner.rs
++++ b/crates/happenstance/src/runner.rs
+@@ -97,6 +97,28 @@ pub trait Projection {
+         event: Self::Event,
+         batch: &mut StoreBatch<Self>,
+     ) -> Result<(), StoreError<Self>>;
++
++    /// SPIKE: what the runner should do when this projection fails at `at`.
++    ///
++    /// From `experiments/provided-method-spike`.
++    ///
++    /// Provided, defaulting to [`OnError::Stop`]. This trait is not a
++    /// `trait_variant` pair, so the future carries no `Send` bound and code
++    /// generic over `P: Projection` cannot spawn it.
++    fn on_error(&mut self, at: SequencePosition) -> impl Future<Output = OnError> {
++        let _ = at;
++        async { OnError::Stop }
++    }
++}
++
++/// SPIKE: a projection's answer to its own failure.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++#[non_exhaustive]
++pub enum OnError {
++    /// Stop the run where it failed.
++    Stop,
++    /// Skip the event and continue.
++    Skip,
+ }
+ 
+ /// How far a run got, and how much it applied.
+diff --git a/crates/happenstance-core/tests/provided_method_spike.rs b/crates/happenstance-core/tests/provided_method_spike.rs
+new file mode 100644
+index 0000000..0df9813
+--- /dev/null
++++ b/crates/happenstance-core/tests/provided_method_spike.rs
+@@ -0,0 +1,198 @@
++//! SPIKE (experiments/provided-method-spike): the provided methods compile for
++//! a `!Send` implementor of the bare flavour, answer their defaults, and are
++//! spawnable from code generic over the `Send` flavour with no `Sync` bound.
++#![allow(clippy::unwrap_used, clippy::expect_used, reason = "spike test code")]
++
++use std::cell::Cell;
++use std::rc::Rc;
++
++use happenstance_core::{
++    AppendCondition, AppendError, Authority, Checkpoint, CommitError, Event, EventId, EventStore,
++    HistoryReport, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
++    MemoryProjectionStoreError, MemoryStoreError, ProjectionId, ProjectionStore, Query,
++    ReadOptions, ResetError, SequencePosition, SequencedEvent,
++};
++
++// ---------------------------------------------------------------------------
++// !Send, !Sync implementors of the BARE flavours, written exactly as they were
++// before the spike: required methods only. That they compile is use 1 and 2's
++// first half.
++// ---------------------------------------------------------------------------
++
++struct LocalEvents {
++    inner: MemoryEventStore,
++    _not_send: Rc<Cell<u8>>,
++}
++
++impl EventStore for LocalEvents {
++    type Error = MemoryStoreError;
++
++    fn read(
++        &self,
++        query: &Query,
++        options: ReadOptions,
++    ) -> impl futures_core::Stream<Item = Result<SequencedEvent, Self::Error>> {
++        EventStore::read(&self.inner, query, options)
++    }
++
++    async fn append(
++        &self,
++        events: &[Event],
++        condition: Option<&AppendCondition>,
++    ) -> Result<SequencePosition, AppendError<Self::Error>> {
++        EventStore::append(&self.inner, events, condition).await
++    }
++
++    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
++        EventStore::head(&self.inner).await
++    }
++
++    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
++        EventStore::contains_event_id(&self.inner, id).await
++    }
++}
++
++struct LocalProjections {
++    inner: MemoryProjectionStore,
++    _not_send: Rc<Cell<u8>>,
++}
++
++impl ProjectionStore for LocalProjections {
++    type Error = MemoryProjectionStoreError;
++    type Batch = MemoryProjectionBatch;
++
++    async fn begin(&self) -> Result<Self::Batch, Self::Error> {
++        ProjectionStore::begin(&self.inner).await
++    }
++
++    async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error> {
++        ProjectionStore::checkpoint(&self.inner, id).await
++    }
++
++    async fn commit(
++        &self,
++        batch: Self::Batch,
++        id: &ProjectionId,
++        position: SequencePosition,
++        authority: Authority,
++    ) -> Result<(), CommitError<Self::Error>> {
++        ProjectionStore::commit(&self.inner, batch, id, position, authority).await
++    }
++
++    async fn reset(
++        &self,
++        batch: Self::Batch,
++        id: &ProjectionId,
++    ) -> Result<(), ResetError<Self::Error>> {
++        ProjectionStore::reset(&self.inner, batch, id).await
++    }
++
++    async fn rollback(&self, batch: Self::Batch) -> Result<(), Self::Error> {
++        ProjectionStore::rollback(&self.inner, batch).await
++    }
++}
++
++// ---------------------------------------------------------------------------
++// Generic over the BARE flavour: accepts both the !Send store and the Send one.
++// ---------------------------------------------------------------------------
++
++async fn history_of<S: EventStore>(store: &S) -> HistoryReport {
++    store.history().await.ok().unwrap()
++}
++
++async fn commit_all_of<S: ProjectionStore>(store: &S) -> bool {
++    let batch = store.begin().await.ok().unwrap();
++    let id = ProjectionId::new("spike");
++    matches!(
++        store
++            .commit_all(batch, &[(id, SequencePosition::FIRST)], Authority::Live)
++            .await,
++        Err(CommitError::Unsupported)
++    )
++}
++
++#[tokio::test(flavor = "current_thread")]
++async fn bare_flavour_defaults_answer_for_a_not_send_store() {
++    let events = LocalEvents {
++        inner: MemoryEventStore::new(),
++        _not_send: Rc::new(Cell::new(0)),
++    };
++    assert_eq!(history_of(&events).await, HistoryReport::Unknown);
++
++    let projections = LocalProjections {
++        inner: MemoryProjectionStore::new(),
++        _not_send: Rc::new(Cell::new(0)),
++    };
++    assert!(commit_all_of(&projections).await);
++    // The refused commit_all dropped its batch; the store is still usable and
++    // no checkpoint moved.
++    assert_eq!(
++        projections
++            .checkpoint(&ProjectionId::new("spike"))
++            .await
++            .ok()
++            .unwrap(),
++        Checkpoint::NeverRun
++    );
++}
++
++#[tokio::test(flavor = "current_thread")]
++async fn bare_flavour_defaults_answer_for_a_send_store() {
++    // MemoryEventStore implements SendEventStore; it reaches EventStore
++    // through trait_variant's blanket impl, which forwards to the Send
++    // flavour's copy of the default body.
++    assert_eq!(
++        history_of(&MemoryEventStore::new()).await,
++        HistoryReport::Unknown
++    );
++    assert!(commit_all_of(&MemoryProjectionStore::new()).await);
++}
++
++// ---------------------------------------------------------------------------
++// Generic over the SEND flavour, spawned. Deliberately NO `Sync` bound: the
++// store is moved into the task and borrowed across the await, which is only
++// sound because the default future does not capture `&self`. Compare
++// `memory.rs`'s `Probe::doubled`, whose default does, and needs `Self: Sync`.
++// ---------------------------------------------------------------------------
++
++fn spawn_history<S>(store: S) -> tokio::task::JoinHandle<bool>
++where
++    S: happenstance_core::SendEventStore + 'static,
++{
++    tokio::spawn(async move {
++        let report = happenstance_core::SendEventStore::history(&store).await;
++        // Collapsed before any further await: S::Error carries no Send bound.
++        matches!(report, Ok(HistoryReport::Unknown))
++    })
++}
++
++fn spawn_commit_all<S>(store: S) -> tokio::task::JoinHandle<bool>
++where
++    S: happenstance_core::SendProjectionStore + 'static,
++    S::Batch: Send,
++{
++    tokio::spawn(async move {
++        let Ok(batch) = happenstance_core::SendProjectionStore::begin(&store).await else {
++            return false;
++        };
++        let id = ProjectionId::new("spike");
++        let outcome = happenstance_core::SendProjectionStore::commit_all(
++            &store,
++            batch,
++            &[(id, SequencePosition::FIRST)],
++            Authority::Live,
++        )
++        .await;
++        matches!(outcome, Err(CommitError::Unsupported))
++    })
++}
++
++#[tokio::test(flavor = "current_thread")]
++async fn send_flavour_defaults_spawn_from_generic_code_without_sync() {
++    assert!(spawn_history(MemoryEventStore::new()).await.unwrap());
++    assert!(
++        spawn_commit_all(MemoryProjectionStore::new())
++            .await
++            .unwrap()
++    );
++}
+diff --git a/crates/happenstance/tests/provided_method_spike.rs b/crates/happenstance/tests/provided_method_spike.rs
+new file mode 100644
+index 0000000..a1574e5
+--- /dev/null
++++ b/crates/happenstance/tests/provided_method_spike.rs
+@@ -0,0 +1,82 @@
++//! SPIKE (experiments/provided-method-spike): `Projection::on_error`'s default.
++#![cfg(feature = "unstable-projection")]
++#![allow(clippy::unwrap_used, clippy::expect_used, reason = "spike test code")]
++
++use happenstance::bytes::Bytes;
++use happenstance::{
++    Codec, CodecError, DomainEvent, EventType, MemoryProjectionBatch, MemoryProjectionStore,
++    MemoryProjectionStoreError, OnError, Projection, ProjectionId, SequencePosition, Tags,
++};
++
++const NOTED: EventType = EventType::from_static("Noted");
++
++#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
++struct Noted;
++
++impl DomainEvent for Noted {
++    const EVENT_TYPES: &'static [EventType] = &[NOTED];
++    fn event_type(&self) -> EventType {
++        NOTED
++    }
++    fn tags(&self) -> Tags {
++        Tags::default()
++    }
++    fn encode<C: Codec>(&self, codec: &C) -> Result<Bytes, CodecError> {
++        codec.encode(self)
++    }
++    fn decode<C: Codec>(
++        codec: &C,
++        _event_type: &EventType,
++        data: &Bytes,
++    ) -> Result<Self, CodecError> {
++        codec.decode(data)
++    }
++}
++
++/// An implementor written as before the spike: `on_error` is not mentioned.
++struct Nothing {
++    id: ProjectionId,
++    scope: Tags,
++}
++
++impl Projection for Nothing {
++    type Event = Noted;
++    type Store = MemoryProjectionStore;
++    fn id(&self) -> &ProjectionId {
++        &self.id
++    }
++    fn scope(&self) -> &Tags {
++        &self.scope
++    }
++    fn apply(
++        &mut self,
++        _event: Self::Event,
++        _batch: &mut MemoryProjectionBatch,
++    ) -> Result<(), MemoryProjectionStoreError> {
++        Ok(())
++    }
++}
++
++/// Bare-bound generic caller: the default is callable.
++async fn ask<P: Projection>(projection: &mut P) -> OnError {
++    projection.on_error(SequencePosition::FIRST).await
++}
++
++/// Concrete `P`: the default's future is `Send` by auto-trait leakage, so this
++/// spawns. It proves nothing about generic code; `spike_negative` below does.
++fn spawn_concrete(mut projection: Nothing) -> tokio::task::JoinHandle<OnError> {
++    tokio::spawn(async move { projection.on_error(SequencePosition::FIRST).await })
++}
++
++// The generic-`P` spawn is `provided_method_spike_negative.rs`, a file that is
++// expected not to compile; its transcript is in the experiment's results/.
++
++#[tokio::test(flavor = "current_thread")]
++async fn the_default_answers_stop() {
++    let mut projection = Nothing {
++        id: ProjectionId::new("spike"),
++        scope: Tags::default(),
++    };
++    assert_eq!(ask(&mut projection).await, OnError::Stop);
++    assert_eq!(spawn_concrete(projection).await.unwrap(), OnError::Stop);
++}

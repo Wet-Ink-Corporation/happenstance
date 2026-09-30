@@ -72,7 +72,7 @@ seventeen daggered `PS` clauses — independently reproducing
 The convention's shape has changed with the mechanism, and this is the part a reader of the
 predecessor would get wrong. `spec/SPECIFICATION.md` carries 59 daggers and **none** of them is in
 a clause's `Rule:` line; every one is inside §7.2's generated table or the legend prose defining
-it (`spec/SPECIFICATION.md:9175-9184`). A `†` there is now the checker's own answer — *looked for
+it (`spec/SPECIFICATION.md:9274-9283`). A `†` there is now the checker's own answer — *looked for
 in `suite.rs`, and in the two `wire.rs` files for a `wire::`-qualified name, and not found* —
 rather than an authored claim, and §7.2 deliberately refuses to print one where it could not
 resolve the target, because a dagger there would assert an absence nothing checked.
@@ -103,4 +103,4 @@ That edit and this question are the same pass.
 2. If it does not, is the right removal deleting the column or widening `resolvable` first, so the
    column empties itself rather than being suppressed?
 3. Does anything outside §7.2 still read a dagger as authored input — and if not, is the legend
-   prose at `spec/SPECIFICATION.md:9175-9184` the only remaining edit the retirement needs?
+   prose at `spec/SPECIFICATION.md:9274-9283` the only remaining edit the retirement needs?

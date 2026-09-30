@@ -23,15 +23,16 @@ Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV 
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
 the runner's named `Chunk` (0070) and ES-10's scope (0071). Phase 17 opened with
 0072, which split it at its release and created phase 17b, and wrote 0073, VT-10's
-foreign-identity write path.
-Numbers 0026–0028 were reserved by the original queue for phases 13 and 14 and are
-still unwritten, which is why they are out of order with the numbers around them.
+foreign-identity write path, and 0028, retention, under its reserved number.
+Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
+why they are out of order with the numbers around them. 0026 and 0027 are still
+unwritten.
 
 | ADR | Phase | The question it answers |
 |---|---|---|
 | **0026** | 13 (published-surface half: 17) | What is a sync *peer* — what may the port assume about a transport it cannot see, and what does ingest promise? (SY-8 – SY-18). ~~Phase 17 must settle the part of this that reaches a published crate~~ **Published half settled at 17 — ADR-0073**: `happenstance-core` needs no foreign-identity write path; the adapter's own row writer takes one, and VT-10 is frozen. ADR-0026 cites it for that half |
 | **0027** | 13 | How do two logs reconcile — the merge rule, the compensation contract, and whether hub-and-spoke and peer-to-peer are one abstraction or two? (SY-1 – SY-7, SY-19 – SY-31). SY-1 – SY-7 already settle *ingest is unconditional, with compensation*; this ADR records it and settles the rest |
-| **0028** | 14 (decision: 17) | What is a store permitted to forget, and how does it say so? (ES-39, CF-27, SY-32). **The decision moves to phase 17** because one of its two answers adds a method to `EventStore`, which breaks every published adapter, and that is only cheap before 1.0. Phase 14 builds what it decides |
+| **0028** | 14 (decision: 17) | What is a store permitted to forget, and how does it say so? (ES-39, CF-27, SY-32). ~~**The decision moves to phase 17** because one of its two answers adds a method to `EventStore`, which breaks every published adapter, and that is only cheap before 1.0. Phase 14 builds what it decides~~ **Settled at 17 — [ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md)**: the written refusal with an additive reservation. Deletion stays outside the port through 1.x, and a later report arrives only as a provided method defaulting to `Unknown`, which a compiling spike showed is additive (`experiments/provided-method-spike/`). ES-41 and PS-22 are frozen by it; phase 14 builds the instrument and freezes ES-39, ES-40, SY-32 and CF-27 |
 | **0066** | 16 | What does 1.0 promise? The charter phase 16 owes: which crates, what happens to every non-`[FROZEN]` clause on a published surface, adapter and testkit versioning (CF-32), and the MSRV policy after ADR-0037. **Written** as `what-1-0-promises`; the MSRV half is its own record, ADR-0067, and the per-clause answer is [the 1.0 dispositions](#the-10-dispositions) |
 | *unnumbered* | 17 | Is `Projection::apply` synchronous, and may a projection issue a statement into a live batch? (`.kb/open-questions/projection-apply-is-synchronous-against-a-live-store.md`). Owed its own record by the note that froze the port (ADR-0063) and owned by nobody until now |
 | *unnumbered* | 19b | Does the SQLite schema and append-condition SQL get a home that is not an adapter, once a third copy exists? (`references/seeds/sqlite-on-wasm.md`) |
@@ -59,7 +60,7 @@ table when an ADR or a clause settles it, and the archive keeps it either way.
 | Idempotent bulk ingest inside one round trip | 13 | deferred — SY-14 |
 | Does a peer declare its own limits | 13 | deferred — SY-18 |
 | Where a per-peer watermark lives transactionally | 13 | provisional — SY-31 |
-| What is a store permitted to forget, and how does it say so | 17 → 14 | deferred — ES-39, CF-27, SY-32 |
+| ~~What is a store permitted to forget, and how does it say so~~ | 17 → 14 | **settled at 17 — ADR-0028**: the written refusal, with a provided-method reservation. Phase 14 builds CF-27's instrument and freezes ES-39, ES-40, SY-32 and CF-27 against it |
 | A projection's `Query` changed under its checkpoint | 18 | provisional — PS-25 |
 | Snapshotting decision-model state | after 1.0 | deferred — DCB queries are narrow by construction; revisit if replay cost is measured |
 | `tracing` spans and metrics | after 1.0 | deferred — purely additive, no port change |
@@ -134,10 +135,11 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 39 `[PROVISIONAL]` clauses
+### The 37 `[PROVISIONAL]` clauses
 
-Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066 and VT-10 at phase 17
-by ADR-0073, and their rows stay, struck, because rule 4 keeps it; `cargo xtask lints` now checks the count in this
+Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, VT-10 at phase 17
+by ADR-0073, and ES-41 and PS-22 at phase 17 by ADR-0028. Their rows stay, struck,
+because rule 4 keeps it; `cargo xtask lints` now checks the count in this
 heading against §7.2 rather than matching it, so the next freeze changes one number
 here and nothing in the lint.
 
@@ -158,10 +160,11 @@ separate open questions overstated the exposure by that factor.
 | The `!Send` flavour and `append` ownership | ES-7, ES-17 | the Cloudflare adapter, and `dynosaur` failing to erase a generic `append` | 1 and 4, confirmed 9 |
 | No tail seam at 0.1 | ES-32 | a Durable Object making one cheap enough to reopen | 9 (verdict), post-0.1 — **answered**; the one-paragraph verdict is in phase 9's session log. It answers *this* falsifier only: the clause's own benchmark-shaped one — E2E-32's fan-out runner holding N views within their staleness budget — is untouched and stays phase 7's |
 | The write seam's consumers, the foreign-batch hazard, and `begin`'s round trip | PS-6, PS-9, PS-11, PS-15 | each its own, since ADR-0063 froze PS-4, PS-5 and PS-12 on both ends of the axis passing: a second generic consumer (PS-9, PS-11); a zero-cost instance-naming construction (PS-15); an adapter that must reserve something from its server and cannot afford the round trip (PS-6) | 6, re-tested 11, narrowed 12 |
-| Reset, checkpoint regression, chunked rebuild, query drift | PS-16, PS-22 – PS-25 | a rebuild that skips event 1, or a projection that cannot refuse a reset | 6 |
+| Reset, chunked rebuild, query drift | PS-16, PS-23 – PS-25 | a rebuild that skips event 1, or a projection that cannot refuse a reset. The row read *"PS-16, PS-22 – PS-25"* until PS-22 was frozen; its struck row follows | 6 |
+| Checkpoint regression | ~~PS-22~~ | ~~a legitimate need to move a checkpoint backwards without clearing rows; a compacting store that renumbers~~ | **frozen at 17 — ADR-0028.** ES-38 forbids renumbering, and retention never rewinds a checkpoint over kept rows |
 | Compensation's shape and the merge rule's details | SY-7, SY-10, SY-20 – SY-23, SY-29, SY-30 | two unlike peers that cannot both express it | 13 |
 | Where a per-peer watermark lives | SY-31 | a peer with no transaction to put it in | 13 |
-| Membership as a port operation | ES-41 | an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip | 9 or 10, whichever adapter lands first. Completeness has an instrument at neither end |
+| Membership as a port operation | ~~ES-41~~ | ~~an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip~~ | **frozen at 17 — ADR-0028.** Neon meets the transport wording's letter: its probe is one extra read-only round trip, over the pair VT-8 indexes, and passes live. It is accepted because no required path pays it — ingest deduplicates inside the write (`crates/happenstance-sync/src/ingest.rs:97-101`) — and ADR-0066:160 dispositioned the half as answered. The completeness half is settled by decision: `false` is store-relative. Held-versus-visible under ES-10's frontier is left open, to phase 13 |
 | Checkpoint visibility after commit | PS-38 | a store answering `checkpoint` from a replica that may lag its own `commit` — the shape a projection store over an eventually-consistent read model has. If real, the obligation narrows to "a subsequent read through the same handle" and every rule downstream gains a handle constraint | 7 — the first projection adapter over storage this workspace does not control |
 | A fixture's fault-injection promise | ~~CF-39~~ | ~~a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep~~ | **frozen at 16 — ADR-0066.** Owned by 8 and 10, whose row read *"no adapter has armed a fault yet"*; three now do — `happenstance-postgres`, `happenstance-neon` and `happenstance-cloudflare` |
 | A fixture's stated capacity ceilings | CF-40 | a real adapter whose ceiling is **not a constant** — a Postgres row whose TOAST threshold moves with the rest of the row, or a KV store whose per-value cap moves with the key — for which a single `Option<usize>` cannot say where the boundary is, and the rule built on it would assert a number the store cannot honour | 9 and 10, **whichever states a varying ceiling first**. Phase 9 has landed and answered the *constant-ceiling* half — `CloudflareFixture` states all three as `Some(…)`, as `SqliteFixture` does — so it added a second constant-ceiling store and left the live half untouched. That half is **phase 10's**: Postgres is where a ceiling that moves with the row first appears |
@@ -231,7 +234,8 @@ followed by the reason the clause is on no surface 1.0 promises. The authority i
 [ADR-0066](../.kb/decisions/0066-what-1-0-promises.md), and this table, not the
 record, is the live copy, because an accepted record's body cannot change and these
 rows will move every time a phase freezes a clause. CF-39 is not here: ADR-0066
-froze it. Nor is VT-10: ADR-0073 froze it at phase 17.
+froze it. Nor is VT-10: ADR-0073 froze it at phase 17. Nor are ES-41 and PS-22:
+ADR-0028 froze both at phase 17.
 
 **This is the schedule; the owner columns above are history.** Rule 4 keeps those
 rows, and most of them name phases long `done` — they record who owned a
@@ -270,16 +274,14 @@ says why.
 | ES-17 | freeze-by-17 | Already on phase 17's work list: take ADR-0055's two-build measurement and act on it, or freeze the borrowed batch by a record |
 | ES-32 | renew-past-1.0: the `experiments/polling-cost` harness, re-run over a round-trip adapter with a stated staleness budget, shows 2N idle reads per interval breaking that budget at realistic N | A tail seam would be an added method, so renewing is additive. Phase 18's fan-out runner (PS-30) is the natural producer of the measurement |
 | ES-35 | renew-past-1.0: an adapter fixture arms a real fault against a real medium — a process killed mid-commit, a disk lying about fsync — and observes what survives | The marker's own fault falsifier. The reopen end is answered by four adapters. The fault end is unbuilt, and CF-39's armed faults do not build it: the Postgres, Neon and Cloudflare fixtures raise an in-store trigger that aborts a batch before it is acknowledged, while ES-35 is falsified only by a medium that loses a write after `append` returned `Ok`. `happenstance-postgres` killing a backend mid-commit is the cheapest candidate |
-| ES-39 | freeze-by-14 | Decided at 17 (ADR-0028: a port surface or a written refusal, any trait change in `0.4.0`); built and frozen at 14 with the CF-27 instrument |
-| ES-40 | freeze-by-14 | Decided at 17 alongside ADR-0028 — if ES-39 takes a third outcome on condition evaluation, this clause's MAY flips, which is breaking; frozen with its rule at 14 against the suffix store |
-| ES-41 | freeze-by-17 | With ADR-0028. The transport half is answered: Neon and Cloudflare answer membership in one read-only round trip over the pair VT-8 already indexes |
+| ES-39 | freeze-by-14 | Decided at 17 by ADR-0028: the refusal plus an additive reservation, so no trait change in `0.4.0`. Frozen at 14 against the CF-27 instrument, as the refusal or with a provided method defaulting to `Unknown`. If 14 slips past 1.0 the row may become renew-past-1.0, because firing it is additive |
+| ES-40 | freeze-by-14 | ADR-0028 kept the MAY and rejected a third outcome for 1.x, so nothing flips in `0.4.0`. Frozen with its rule at 14 against the CF-27 instrument |
 | PS-6 | renew-past-1.0: an adapter that must reserve server state at `begin` and cannot afford the round trip | The original falsifier fired at phase 10b on sqlx's `BEGIN` (ADR-0062) and the port absorbed it. Firing the residual would relax an adapter obligation, not change a signature |
 | PS-9 | freeze-by-17 | Phase 17's `Projection::apply` record decides it with the failure-policy seam's shape; phase 18 confirms it by building PS-27's seam without a generic write |
 | PS-11 | freeze-by-17 | With PS-9; the two fall together by the marker's own text |
 | PS-15 | freeze-by-17 | Decide the foreign-batch refusal on `rollback` (breaking), or narrow the MUST to `commit` and `reset` |
 | PS-16 | freeze-by-18 | A typed-runner rebuild through `reset` against a multi-table or graph read model, with the reset-refusal clause composed |
 | PS-18 | freeze-by-18 | A refusable reset implemented by at least one adapter, a CF-39-shaped clause and a `NoopProtectFixture` mutant. If 18 does not deliver, renew past 1.0 as additive |
-| PS-22 | freeze-by-17 | ADR-0028 states that retention never rewinds a checkpoint over kept rows |
 | PS-23 | freeze-by-17 | Freeze "exactly one", or record that a multi-id atomic commit after 1.0 arrives as an additive defaulted method. Phase 18's fan-out runner is the empirical check |
 | PS-24 | freeze-by-17 | Freeze `Rebuilding` as a kept variant; phase 18 decides whether the typed runner ever emits it. A swap protocol, if needed, is additive |
 | PS-25 | freeze-by-18 | Built before `unstable-projection` lifts. Phase 17 chooses the remedy first, because the digest-in-checkpoint alternative changes the frozen port's `commit` |
@@ -299,10 +301,10 @@ says why.
 | SY-29 | freeze-by-13 | Jointly with SY-27, because a peer-supplied `Query` exists on the port only if replication is scoped |
 | SY-30 | freeze-by-13 | Where the two unlike real peers, Durable Object and Neon, push real envelopes |
 | SY-31 | freeze-by-13 | The runner half. The reserved-`ProjectionId` half is phase 17's `projection-id-is-unvalidated`, since reserving `sync/` refuses ids valid today |
-| SY-32 | freeze-by-14 | Surface decided at 17 (ADR-0028), built and frozen at 14, whose exit criteria require it no longer `[DEFERRED]` |
+| SY-32 | freeze-by-14 | Surface decided at 17 by ADR-0028: the scalar floor means resumability, not completeness. Built and frozen at 14, whose exit criteria require it no longer `[DEFERRED]` |
 | CF-14 | renew-past-1.0: phase 19a's REOPEN verdict for memory, IndexedDB or OPFS storage, or a workerd run observing a real Durable Object eviction, cannot be expressed with the one reopen shape | Four adapters express `REOPEN` with one shape. Both instruments that could fire it come after 1.0 (19a) or are not yet built (phase 17's workerd job); freeze jointly with CF-17 |
 | CF-17 | renew-past-1.0: a durable adapter cannot express even a reopen through this contract — the candidates are phase 19a's browser storage and the first workerd-class run observing a real eviction | Cloudflare's `REOPEN` runs over a host shim rather than workerd, so the instrument that could fire it is not yet built |
-| CF-27 | freeze-by-14 | The report shape is decided at 17 (ADR-0028), built and frozen at 14. Phase 13's SY-27 needs the same instrument, so it may have to be built at 13 |
+| CF-27 | freeze-by-14 | The report shape was decided at 17 by ADR-0028: instrument-local, over an arbitrary retained set, with a defaulted-declined removal capability. Built and frozen at 14. Phase 13's SY-27 needs the same instrument, so it may have to be built at 13 |
 | CF-34 | renew-past-1.0: a complexity property becomes expressible as a deterministic assertion rather than a timing — an instrumented fixture counting rows examined — and the clause splits | Needs an instrumented rows-examined fixture and a record on the scope of CF-33's operation-count ban (`.kb/open-questions/cf-33-cf-34-scope-outside-the-testkit.md`) |
 | CF-40 | freeze-by-13 | Phase 17 builds ADR-0043's `MetadataLen`; phase 13 decides whether `payload_len` — data plus metadata — is the budget unit |
 

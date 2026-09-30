@@ -96,7 +96,7 @@ quiet. A declared-conditions host is the other half.
 
 ## The CF-34 boundary
 
-CF-34 (`spec/SPECIFICATION.md:9041`) forbids a benchmark *result* gating a
+CF-34 (`spec/SPECIFICATION.md:9140`) forbids a benchmark *result* gating a
 merge. `preflight.sh` asserts on the *environment* — every value it reads
 comes from sysfs, systemd, or a `--version` check, all available before the
 first sample exists, so it can fail with nothing measured yet. That is what

@@ -45,7 +45,7 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-VT-6 (`spec/SPECIFICATION.md:815`, `[PROVISIONAL]`) requires that a `StoreId` be minted when a
+VT-6 (`spec/SPECIFICATION.md:818`, `[PROVISIONAL]`) requires that a `StoreId` be minted when a
 store's persistent state is created and never derived from anything that survives a restore, and
 forbids a store from ever issuing an `EventId` whose `(StoreId, SequencePosition)` pair it has
 issued before for a different event. ADR-0014 grants an adapter three ways to satisfy that: mint
@@ -118,7 +118,7 @@ persisted row is the thing to check against, and the append is the moment the ch
 
 **What the check does not do, and why that is sound.** It does not ask whether a re-mint was
 *warranted*. An unwarranted re-mint cannot violate VT-6's uniqueness MUST
-(`spec/SPECIFICATION.md:842-846`). It mints a new `StoreId`, positions keep rising under
+(`spec/SPECIFICATION.md:845-849`). It mints a new `StoreId`, positions keep rising under
 `AUTOINCREMENT` (`event_store.rs:109`), and no `(StoreId, SequencePosition)` pair is ever issued
 twice. That corrects the claim under "What forces it" above, that such a re-mint "reissues
 positions a peer has already seen under a new identity". Applied to a live file, it reissues

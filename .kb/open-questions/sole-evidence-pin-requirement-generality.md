@@ -60,7 +60,7 @@ Named for whoever costs this properly: `LosingFixture` (two rules), `DropsMetada
 `UninternedTypeStore`, `NullHeadPagingStore`, `PayloadDedupStore`, `Latin1IdentifierStore`, and
 `InnerJoinTagStore` itself.
 
-CF-1 (`spec/SPECIFICATION.md:7676`) requires every conformance rule to be paired with at least one
+CF-1 (`spec/SPECIFICATION.md:7758`) requires every conformance rule to be paired with at least one
 mutant store that fails it — the obligation these pins exist to keep honest. The hazard the fifteen
 share with the shotgun is structural, not particular to `InnerJoinTagStore`: any rule whose only
 registered evidence is one mutant is one new assertion away from that mutant's coverage becoming an

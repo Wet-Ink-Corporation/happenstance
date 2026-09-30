@@ -1,0 +1,341 @@
+   Compiling happenstance v0.3.2 (<worktree>\crates\happenstance)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.75s
+     Running unittests src\lib.rs (<target>\debug\deps\happenstance-a9dcc1f237fe07c9.exe)
+
+running 42 tests
+test command::tests::decode_failure_names_its_position ... ok
+test command::tests::store_read_failure_chains_to_source ... ok
+test testing::tests::assert_domain_event_accepts_every_declared_variant ... ok
+test command::tests::retry_has_no_default ... ok
+test testing::render::tests::an_unconstrained_query_is_named ... ok
+test command::tests::once_is_one_attempt_and_attempts_is_what_it_says ... ok
+test testing::render::tests::selected_truncates_first_and_the_diagnosis_last ... ok
+test command::tests::first_try_reports_one_attempt ... ok
+test testing::render::tests::the_closing_line_names_the_derived_query ... ok
+test command::tests::encode_failure_names_its_event_type ... ok
+test testing::tests::composed_boundary_folds_both_models ... ok
+test testing::tests::dropping_a_decision_appends_nothing ... ok
+test testing::tests::must_use_message_is_verbatim ... ok
+test testing::tests::nominated_but_undecodable_event_is_an_error ... ok
+test testing::tests::non_nominated_type_is_skipped_not_an_error ... ok
+test testing::tests::refusal_does_not_route_through_when_err ... ok
+test testing::tests::refusal_is_asserted_through_then_refused ... ok
+test testing::render::tests::a_long_event_type_wraps_rather_than_truncating ... ok
+test testing::render::tests::the_four_regions_are_in_order ... ok
+test testing::render::tests::the_empty_state_keeps_its_region ... ok
+test testing::tests::seeded_bytes_are_the_bytes_commit_writes ... ok
+test testing::tests::seeded_then_decided_asserts_emitted_events ... ok
+test tests::a_members_invalid_query_is_the_composites_error ... ok
+test tests::absorb_applies_a_decoded_event_to_the_fold ... ok
+test tests::absorb_returns_unknown_event_type_when_a_nominated_event_cannot_be_decoded ... ok
+test tests::absorb_skips_an_unnominated_event ... ok
+test tests::application_metadata_is_copied_through_untouched ... ok
+test tests::codec_error_carries_a_typed_source ... ok
+test tests::decision_model_is_clone_not_default ... ok
+test tests::every_variant_event_type_is_declared ... ok
+test tests::fold_is_exhaustive_over_domain_enum ... ok
+test tests::nomination_agrees_with_the_derived_query ... ok
+test tests::nothing_in_the_vocabulary_touches_a_store ... ok
+test tests::query_is_a_value_a_test_can_assert_on ... ok
+test tests::query_is_derived_from_event_types_and_scope ... ok
+test tests::scope_returns_the_models_own_tags ... ok
+test tests::shadowing::contract_names_are_not_shadowed ... ok
+test tests::the_framing_region_names_the_codec_that_wrote_it ... ok
+test tests::the_crate_root_page_fits_above_the_fold ... ok
+test tests::unconstrained_boundary_is_an_error_not_query_all ... ok
+test tests::public_identifiers_fit_the_item_table ... ok
+test tests::doc_density_budget_holds ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\boundary_refusal.rs (<target>\debug\deps\boundary_refusal-345886418ef382d4.exe)
+
+running 3 tests
+test without_the_condition_the_same_append_is_accepted ... ok
+test the_after_is_load_bearing_in_its_value_not_in_its_presence ... ok
+test the_guarded_append_is_refused ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\codec_extension_point.rs (<target>\debug\deps\codec_extension_point-511f1d0a46827e21.exe)
+
+running 6 tests
+test behaviour::a_codec_of_your_own_writes_a_tag_no_other_codec_can_read ... ok
+test behaviour::a_codec_that_claims_a_foreign_tag_reads_it ... ok
+test behaviour::an_override_that_forgets_its_own_tag_still_reads_what_it_wrote ... ok
+test the_door_for_a_codec_of_your_own_points_at_the_limit ... ok
+test the_refusal_distinguishes_a_feature_from_a_dead_end ... ok
+test the_unsealed_trait_states_what_a_foreign_tag_costs ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\codec_round_trip.rs (<target>\debug\deps\codec_round_trip-596d97fbc7d816c9.exe)
+
+running 4 tests
+test json_round_trips_under_default_features ... ok
+test cbor_round_trips ... ok
+test postcard_round_trips ... ok
+test payload_crosses_the_port_as_bytes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\codec_tag.rs (<target>\debug\deps\codec_tag-d1765da009bb68ad.exe)
+
+running 4 tests
+test two_encodings_coexist_in_one_store ... ok
+test unknown_tag_is_a_typed_refusal ... ok
+test an_untagged_event_decodes_with_the_codec_in_hand ... ok
+test application_metadata_after_the_region_is_carried_through ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\command_loop.rs (<target>\debug\deps\command_loop-c7bcc41106c80b5b.exe)
+
+running 13 tests
+test refusal_appends_nothing ... ok
+test a_decision_that_emits_nothing_is_a_success ... ok
+test an_event_inside_its_boundary_still_commits ... ok
+test exhausted_carries_the_violation ... ok
+test commit_is_commit_with_json ... ok
+test after_anchor_comes_from_the_read ... ok
+test exhaustion_is_bounded_and_named ... ok
+test an_event_outside_its_boundary_is_refused_and_nothing_is_appended ... ok
+test branching_on_some_is_rejected ... ok
+test retry_refolds_from_pristine_state ... ok
+test threads_append_return_is_rejected ... ok
+test retry_does_not_resubmit_the_previous_batch ... ok
+test retries_when_conflicting_position_is_none ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\composition.rs (<target>\debug\deps\composition-808503caa0b1fd64.exe)
+
+running 8 tests
+test a_narrowing_union_is_rejected ... ok
+test routing_by_arrival_is_rejected ... ok
+test a_tuple_is_a_boundary ... ok
+test composed_query_is_the_union_of_member_queries ... ok
+test each_member_absorbs_only_what_it_nominated ... ok
+test the_seal_holds_for_tuples ... ok
+test the_composed_query_is_inspectable ... ok
+test composing_is_pure_and_a_clone_refolds_identically ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\contract_surface.rs (<target>\debug\deps\contract_surface-70c684755641a487.exe)
+
+running 2 tests
+test the_contract_crate_is_not_glob_re_exported ... ok
+test every_contract_item_arrives_under_the_gate_it_was_written_behind ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\doc_budget.rs (<target>\debug\deps\doc_budget-34d3489544f4b2e8.exe)
+
+running 7 tests
+test every_emitted_path_is_crate_qualified ... ok
+test the_first_fence_is_within_twelve_prose_lines ... ok
+test the_module_doc_stays_under_its_line_budget ... ok
+test first_sentences_fit_the_item_table ... ok
+test doc_fences_stay_within_seventy_two_columns ... ok
+test doc_prose_stays_within_eighty_columns ... ok
+test nothing_shadows_a_contract_name ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests\doc_surface.rs (<target>\debug\deps\doc_surface-13b882e95aefd6df.exe)
+
+running 11 tests
+test new_identifiers_fit_the_item_table ... ok
+test every_gated_item_carries_its_badge ... ok
+test run_projection_states_the_single_writer_obligation ... ok
+test no_second_decode_path ... ok
+test crate_root_renders_the_codec_surface ... ok
+test runner_prints_nothing ... ok
+test crate_root_renders_the_projection_surface ... ok
+test entry_points_state_their_flavour ... ok
+test no_local_projection_store ... ok
+test no_page_claims_an_executed_edge_test ... ok
+test no_contract_name_is_shadowed ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests\docs_composition.rs (<target>\debug\deps\docs_composition-e0716ee10b450840.exe)
+
+running 10 tests
+test committed_is_non_exhaustive_and_must_use ... ok
+test retry_has_no_default ... ok
+test no_planned_heading_survives ... ok
+test landing_page_names_only_the_persistent_four ... ok
+test no_string_payloads_in_command_error ... ok
+test roadmap_bullet_became_a_link ... ok
+test docsrs_metadata_is_present ... ok
+test retry_policy_is_on_commit_itself ... ok
+test density_budget_holds ... ok
+test no_item_shadows_a_core_name ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\domain_tags_page.rs (<target>\debug\deps\domain_tags_page-3a163dd5c1c97aef.exe)
+
+running 2 tests
+test the_page_renders_the_case_where_the_tag_is_not_a_literal ... ok
+test the_total_method_says_what_totality_costs ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\dsl_failure_message.rs (<target>\debug\deps\dsl_failure_message-c032629dc37d05d4.exe)
+
+running 10 tests
+test assert_domain_event_rejects_a_variant_outside_event_types ... ok
+test empty_selection_is_not_an_error ... ok
+test four_regions_render_in_order ... ok
+test then_on_a_refused_decision_panics_naming_the_refusal ... ok
+test assert_domain_event_rejects_variants_permuted_against_event_types ... ok
+test long_event_type_wraps_without_truncating_type_or_position ... ok
+test overflow_truncates_selected_first_and_the_diagnosis_last ... ok
+test panic_location_is_the_callers_line ... ok
+test region_four_names_the_seeded_but_unselected_event ... ok
+test empty_seed_keeps_region_four_and_says_so ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\flavours.rs (<target>\debug\deps\flavours-004e45c47bfedd3a.exe)
+
+running 8 tests
+test chunk_argument_inlines_without_hoisting ... ok
+test the_local_store_is_not_send ... ok
+test the_weak_flavour_store_is_genuinely_not_send ... ok
+test commit_binds_the_weak_flavour ... ok
+test every_entry_point_binds_the_weak_flavour ... ok
+test commit_spawns_from_generic ... ok
+test run_projection_spawns_from_generic ... ok
+test each_module_imports_one_flavour_name ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\manifest_contract.rs (<target>\debug\deps\manifest_contract-967366a9cc485795.exe)
+
+running 7 tests
+test async_trait_is_banned ... ok
+test docs_rs_metadata_is_declared ... ok
+test a_shipped_codec_is_not_a_dev_only_dependency ... ok
+test cbor_is_shipped_or_declined_with_a_reason ... ok
+test unstable_projection_is_declared_off_by_default ... ok
+test features_forward_and_only_add ... ok
+test the_published_pages_do_not_claim_a_parity_the_manifests_deny ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\mounted_at_the_crate_root.rs (<target>\debug\deps\mounted_at_the_crate_root-7af5c9a8784f7497.exe)
+
+running 3 tests
+test every_doc_fence_line_fits_the_column_budget ... ok
+test testing_is_reachable_by_its_public_path ... ok
+test the_crate_root_page_points_at_the_testing_module ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\projection_clauses.rs (<target>\debug\deps\projection_clauses-7f74e33d76bb88f7.exe)
+
+running 5 tests
+test no_skip_and_record_path_is_offered ... FAILED
+test no_fan_out_runner_catches_a_panic ... ok
+test reset_refusal_has_a_mechanism_and_no_adapter ... ok
+test no_checkpoint_pump_exists_in_the_contract_crate ... ok
+test three_ids_are_retained_rather_than_deleted ... ok
+
+failures:
+
+---- no_skip_and_record_path_is_offered stdout ----
+
+thread 'no_skip_and_record_path_is_offered' (46056) panicked at crates\happenstance\tests\projection_clauses.rs:290:9:
+the runner grew `on_error`; PS-27's verdict is now wrong
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    no_skip_and_record_path_is_offered
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+error: test failed, to rerun pass `-p happenstance --test projection_clauses`
+     Running tests\projection_runner.rs (<target>\debug\deps\projection_runner-8196d87163867879.exe)
+
+running 10 tests
+test commits_before_the_stream_ends ... ok
+test a_checkpoint_at_the_last_position_reports_exhausted_key_space ... ok
+test checkpoint_without_rows_is_rejected ... ok
+test apply_receives_decoded_domain_events ... ok
+test derived_query_matches_event_types_and_scope ... ok
+test first_run_starts_from_the_beginning ... ok
+test decode_failure_names_its_position_and_rolls_back ... ok
+test read_model_and_checkpoint_commit_together ... ok
+test resume_advances_past_the_checkpoint ... ok
+test tolerates_gapped_positions ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\projection_runner_page.rs (<target>\debug\deps\projection_runner_page-6aace1e15fee863e.exe)
+
+running 3 tests
+test the_page_says_what_can_be_seen_while_it_runs ... ok
+test prose_added_to_this_page_stays_below_the_fence ... ok
+test the_page_says_what_chunk_trades ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\provided_method_spike.rs (<target>\debug\deps\provided_method_spike-5e864f84fd2d4c93.exe)
+
+running 1 test
+test the_default_answers_stop ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\retry_spelling.rs (<target>\debug\deps\retry_spelling-61941141403f0402.exe)
+
+running 1 test
+test call_sites_use_the_const_spelling_of_retry_attempts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\retry_without_a_database.rs (<target>\debug\deps\retry_without_a_database-c68c8c4296da4251.exe)
+
+running 4 tests
+test an_injected_read_failure_is_not_retried_as_contention ... ok
+test retry_is_bounded ... ok
+test retry_succeeds_after_an_injected_violation ... ok
+test retry_refolds_from_a_pristine_model ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests happenstance
+
+running 13 tests
+test crates\happenstance\src\codec.rs - codec::Codec::reads_tag (line 130) ... ok
+test crates\happenstance\src\codec.rs - codec::Json (line 263) ... ok
+test crates\happenstance\src\composition.rs - composition::(B1,B2) (line 114) ... ok
+test crates\happenstance\src\domain.rs - domain::DecisionModel (line 182) ... ok
+test crates\happenstance\src\lib.rs - reexported_paths (line 338) ... ok
+test crates\happenstance\src\command.rs - command::Retry (line 27) ... ok
+test crates\happenstance\src\domain.rs - domain::DomainEvent::tags (line 114) ... ok
+test crates\happenstance\src\lib.rs - (line 330) ... ok
+test crates\happenstance\src\testing\mod.rs - testing (line 9) ... ok
+test crates\happenstance\src\lib.rs - (line 232) ... ok
+test crates\happenstance\src\runner.rs - runner::run_projection (line 388) ... ok
+test crates\happenstance\src\lib.rs - reexported_paths (line 333) ... ok
+test crates\happenstance\src\testing\mod.rs - testing::assert_domain_event (line 363) ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+
+running 3 tests
+test crates\happenstance\src\command.rs - command::Retry (line 39) - compile fail ... ok
+test crates\happenstance\src\boundary.rs - boundary::Boundary (line 34) - compile fail ... ok
+test crates\happenstance\src\domain.rs - domain::DomainEvent (line 23) - compile fail ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+all doctests ran in 1.85s; merged doctests compilation took 1.31s
+error: 1 target failed:
+    `-p happenstance --test projection_clauses`

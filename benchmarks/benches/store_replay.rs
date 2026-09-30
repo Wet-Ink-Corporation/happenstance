@@ -35,7 +35,7 @@
 //!   `src/bin/allocations.rs` reports the same pair in heap operations, which
 //!   is the reproducible half.
 //! * **`head()` against `backwards().limit(1)`.** ES-30
-//!   (`spec/SPECIFICATION.md:4020`) makes `head` a required method precisely
+//!   (`spec/SPECIFICATION.md:4024`) makes `head` a required method precisely
 //!   because the composed spelling is *"one cheap statement on local SQLite and
 //!   one full HTTP round trip on the adapter with the smallest latency budget in
 //!   the system"*. On SQLite the gap should be small; on the memory store it

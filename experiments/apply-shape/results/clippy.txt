@@ -1,0 +1,4 @@
+$ cargo clippy --manifest-path <repo>/experiments/apply-shape/Cargo.toml --all-targets -- -W clippy::pedantic
+    Checking apply-shape v0.0.0 (<repo>\experiments\apply-shape)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.84s
+exit status: 0

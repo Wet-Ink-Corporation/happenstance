@@ -1,0 +1,4 @@
+$ cargo check --manifest-path <repo>/experiments/apply-shape/Cargo.toml --lib --target wasm32-unknown-unknown --no-default-features
+    Checking apply-shape v0.0.0 (<repo>\experiments\apply-shape)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s
+exit status: 0

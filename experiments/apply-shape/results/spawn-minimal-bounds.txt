@@ -1,0 +1,448 @@
+$ cargo test --manifest-path <repo>/experiments/apply-shape/Cargo.toml --features demonstrate-spawn-minimal-bounds --test spawn --no-run
+   Compiling apply-shape v0.0.0 (<repo>\experiments\apply-shape)
+error[E0277]: `impl Future<Output = Result<Checkpoint, ...>>` cannot be sent between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 |       tokio::spawn(async move {
+    |       ^            ---------- within this `{async block@tests\spawn.rs:39:18: 39:28}`
+    |  _____|
+    | |
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `impl Future<Output = Result<Checkpoint, ...>>` cannot be sent between threads safely
+    |
+    = help: within `{async block@tests\spawn.rs:39:18: 39:28}`, the trait `Send` is not implemented for `impl Future<Output = Result<Checkpoint, ...>>`
+note: `<<P as SendProjection>::Store as ProjectionStore>::checkpoint` is an `async fn` in trait, which does not automatically imply that its future is `Send`
+   --> <repo>\crates\happenstance-core\src\projection.rs:483:5
+    |
+483 |     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, Self::Error>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+    = note: the full name for the type has been written to '<repo>\experiments\apply-shape\target\debug\deps\spawn-e70c7212dedf305b.long-type-14784656907120195962.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: `<<P as SendProjection>::Store as ProjectionStore>::Batch` cannot be sent between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 |       tokio::spawn(async move {
+    |       ^            ---------- within this `{async block@tests\spawn.rs:39:18: 39:28}`
+    |  _____|
+    | |
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `<<P as SendProjection>::Store as ProjectionStore>::Batch` cannot be sent between threads safely
+    |
+    = help: within `{async block@tests\spawn.rs:39:18: 39:28}`, the trait `Send` is not implemented for `<<P as SendProjection>::Store as ProjectionStore>::Batch`
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+help: consider further restricting the associated type
+    |
+ 37 |     <P as SendProjection>::Store: happenstance::SendProjectionStore + Sync + 'static, <<P as SendProjection>::Store as ProjectionStore>::Batch: Send
+    |                                                                                       ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0277]: `impl Future<Output = Result<<... as ProjectionStore>::Batch, ...>>` cannot be sent between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 |       tokio::spawn(async move {
+    |       ^            ---------- within this `{async block@tests\spawn.rs:39:18: 39:28}`
+    |  _____|
+    | |
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `impl Future<Output = Result<<... as ProjectionStore>::Batch, ...>>` cannot be sent between threads safely
+    |
+    = help: within `{async block@tests\spawn.rs:39:18: 39:28}`, the trait `Send` is not implemented for `impl Future<Output = Result<<... as ProjectionStore>::Batch, ...>>`
+note: `<<P as SendProjection>::Store as ProjectionStore>::begin` is an `async fn` in trait, which does not automatically imply that its future is `Send`
+   --> <repo>\crates\happenstance-core\src\projection.rs:470:5
+    |
+470 |     async fn begin(&self) -> Result<Self::Batch, Self::Error>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+    = note: the full name for the type has been written to '<repo>\experiments\apply-shape\target\debug\deps\spawn-e70c7212dedf305b.long-type-5245139607165732704.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: `impl Future<Output = Result<(), <<P as SendProjection>::Store as ProjectionStore>::Error>>` cannot be sent between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 |       tokio::spawn(async move {
+    |       ^            ---------- within this `{async block@tests\spawn.rs:39:18: 39:28}`
+    |  _____|
+    | |
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `impl Future<Output = Result<(), <<P as SendProjection>::Store as ProjectionStore>::Error>>` cannot be sent between threads safely
+    |
+    = help: within `{async block@tests\spawn.rs:39:18: 39:28}`, the trait `Send` is not implemented for `impl Future<Output = Result<(), <<P as SendProjection>::Store as ProjectionStore>::Error>>`
+note: `<<P as SendProjection>::Store as ProjectionStore>::rollback` is an `async fn` in trait, which does not automatically imply that its future is `Send`
+   --> <repo>\crates\happenstance-core\src\projection.rs:536:5
+    |
+536 |     async fn rollback(&self, batch: Self::Batch) -> Result<(), Self::Error>;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+
+error[E0277]: `<S as SendEventStore>::Error` cannot be sent between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 |       tokio::spawn(async move {
+    |       ^            ---------- within this `{async block@tests\spawn.rs:39:18: 39:28}`
+    |  _____|
+    | |
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `<S as SendEventStore>::Error` cannot be sent between threads safely
+    |
+    = help: within `{async block@tests\spawn.rs:39:18: 39:28}`, the trait `Send` is not implemented for `<S as SendEventStore>::Error`
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+help: consider further restricting the associated type
+    |
+ 37 |     <P as SendProjection>::Store: happenstance::SendProjectionStore + Sync + 'static, <S as SendEventStore>::Error: Send
+    |                                                                                       ++++++++++++++++++++++++++++++++++
+
+error[E0277]: `impl Future<Output = Result<(), CommitError<...>>>` cannot be sent between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 |       tokio::spawn(async move {
+    |       ^            ---------- within this `{async block@tests\spawn.rs:39:18: 39:28}`
+    |  _____|
+    | |
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `impl Future<Output = Result<(), CommitError<...>>>` cannot be sent between threads safely
+    |
+    = help: within `{async block@tests\spawn.rs:39:18: 39:28}`, the trait `Send` is not implemented for `impl Future<Output = Result<(), CommitError<...>>>`
+note: `<<P as SendProjection>::Store as ProjectionStore>::commit` is an `async fn` in trait, which does not automatically imply that its future is `Send`
+   --> <repo>\crates\happenstance-core\src\projection.rs:498:5
+    |
+498 | /     async fn commit(
+499 | |         &self,
+500 | |         batch: Self::Batch,
+501 | |         id: &ProjectionId,
+502 | |         position: SequencePosition,
+503 | |         authority: Authority,
+504 | |     ) -> Result<(), CommitError<Self::Error>>;
+    | |______________________________________________^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+    = note: the full name for the type has been written to '<repo>\experiments\apply-shape\target\debug\deps\spawn-e70c7212dedf305b.long-type-12990971916355989183.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: `<P as SendProjection>::Error` cannot be sent between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 |       tokio::spawn(async move {
+    |       ^            ---------- within this `{async block@tests\spawn.rs:39:18: 39:28}`
+    |  _____|
+    | |
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `<P as SendProjection>::Error` cannot be sent between threads safely
+    |
+    = help: within `{async block@tests\spawn.rs:39:18: 39:28}`, the trait `Send` is not implemented for `<P as SendProjection>::Error`
+note: required because it appears within the type `runner::Stopped<<S as SendEventStore>::Error, <P as SendProjection>::Error>`
+   --> src\runner.rs:327:6
+    |
+327 | enum Stopped<R, A> {
+    |      ^^^^^^^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+help: consider further restricting the associated type
+    |
+ 37 |     <P as SendProjection>::Store: happenstance::SendProjectionStore + Sync + 'static, <P as SendProjection>::Error: Send
+    |                                                                                       ++++++++++++++++++++++++++++++++++
+
+error[E0277]: `<P as SendProjection>::Event` cannot be sent between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 |       tokio::spawn(async move {
+    |       ^            ---------- within this `{async block@tests\spawn.rs:39:18: 39:28}`
+    |  _____|
+    | |
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `<P as SendProjection>::Event` cannot be sent between threads safely
+    |
+    = help: within `{async block@tests\spawn.rs:39:18: 39:28}`, the trait `Send` is not implemented for `<P as SendProjection>::Event`
+note: required because it appears within the type `Result<<P as SendProjection>::Event, CodecError>`
+   --> ~\.rustup\toolchains\1.97.1-x86_64-pc-windows-msvc\lib/rustlib/src/rust\library\core\src\result.rs:557:10
+    |
+557 | pub enum Result<T, E> {
+    |          ^^^^^^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:292:1
+    |
+292 | / {
+293 | |     let position = event.position;
+294 | |     let id = event.id;
+...   |
+324 | | }
+    | |_^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+help: consider further restricting the associated type
+    |
+ 37 |     <P as SendProjection>::Store: happenstance::SendProjectionStore + Sync + 'static, <P as SendProjection>::Event: Send
+    |                                                                                       ++++++++++++++++++++++++++++++++++
+
+error[E0277]: `<P as SendProjection>::Error` cannot be shared between threads safely
+   --> tests\spawn.rs:39:5
+    |
+ 39 | /     tokio::spawn(async move {
+ 40 | |         let ran = apply_shape::run(
+ 41 | |             &*events,
+ 42 | |             &*models,
+...   |
+ 49 | |         (projection, ran)
+ 50 | |     })
+    | |______^ `<P as SendProjection>::Error` cannot be shared between threads safely
+    |
+    = help: the trait `Sync` is not implemented for `<P as SendProjection>::Error`
+    = note: required for `&<P as SendProjection>::Error` to implement `Send`
+note: required because it appears within the type `ApplyFailure<'_, <P as SendProjection>::Error>`
+   --> src\shape.rs:138:10
+    |
+138 | pub enum ApplyFailure<'a, A> {
+    |          ^^^^^^^^^^^^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:292:1
+    |
+292 | / {
+293 | |     let position = event.position;
+294 | |     let id = event.id;
+...   |
+324 | | }
+    | |_^
+note: required because it's used within this `async` fn body
+   --> src\runner.rs:164:1
+    |
+164 | / {
+165 | |     let item = QueryItem::new(
+166 | |         P::Event::EVENT_TYPES.iter().cloned(),
+167 | |         projection.scope().clone(),
+...   |
+248 | | }
+    | |_^
+note: required because it's used within this `async` block
+   --> tests\spawn.rs:39:18
+    |
+ 39 |     tokio::spawn(async move {
+    |                  ^^^^^^^^^^
+note: required by a bound in `tokio::spawn`
+   --> ~\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.1\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+help: consider further restricting the associated type
+    |
+ 37 |     <P as SendProjection>::Store: happenstance::SendProjectionStore + Sync + 'static, <P as SendProjection>::Error: Sync
+    |                                                                                       ++++++++++++++++++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `apply-shape` (test "spawn") due to 9 previous errors
+exit status: 101

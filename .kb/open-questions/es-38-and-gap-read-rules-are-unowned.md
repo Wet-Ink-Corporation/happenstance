@@ -9,6 +9,14 @@ summary: >-
   Amended 2026-09-28: the gap-read half is answered — read_from_a_gap_position landed at phase 4
   (d480446), ES-9 defines its behaviour, and FromIsAnOffsetStore and BackwardsIgnoredStore fail
   it. The ES-38 half stays open, owned by phase 14, and its sub-question 3 is unanswered.
+  Amended 2026-09-29 by kb-decision-0028: sub-question 3 is answered. The instrument decision is
+  taken at phase 17, and phase 14 builds rather than decides. It writes
+  positions_are_not_reused_after_removal against CF-27's decorator and against every real adapter,
+  through a new Fixture capability, defaulted to declined, that removes events outside the port.
+  Its named wrong implementation is a SQLite table without AUTOINCREMENT. The rule stays unwritten
+  and phase 14's, which is now a scheduled obligation, not an unowned one.
+  Sub-question 2, whether a frozen clause may name a rule with no owning phase, stays open, so
+  this question does too.
 depends_on: []
 related:
   - kb-decision-0013
@@ -16,13 +24,14 @@ related:
   - kb-open-question-es-6-unwritable-rule-001
   - kb-reference-phase-4-5-spec-reconciliation-001
   - kb-open-question-es-18-byte-identical-conformance-001
+  - kb-decision-0028
 source_paths:
   - .kb/_intake/0013-position-assignment-and-visibility.md
   - .kb/_intake/0011-read-laziness-and-isolation.md
   - references/adr/0013-position-assignment-and-visibility.md
   - spec/SPECIFICATION.md
   - crates/happenstance-testkit/src/suite.rs
-last_reviewed: 2026-09-28
+last_reviewed: 2026-09-29
 ---
 
 # Two frozen clauses name rules that are unwritten and unscheduled
@@ -105,3 +114,28 @@ its owner; `runbook/phases/14-retention.md` carries it as an open work item. Sub
 instrument first or rule first — is still unanswered, and is phase 14's. Sub-question 2 is answered
 in part by mechanism: `spec_trace`'s `UNRESOLVABLE_RULE_NAMES` makes every unwritten rule a clause
 names carry a declared reason, though the reason is a sentence rather than a phase.
+
+## Amended 2026-09-29 — sub-question 3 answered by `kb-decision-0028`
+
+ADR-0028 takes the written refusal for retention and, with it, the instrument decision this
+question left to phase 14. **Sub-question 3 is answered: phase 14 does not need its own instrument
+decision first.** `positions_are_not_reused_after_removal` is written at phase 14 against two
+things:
+
+- **CF-27's completeness instrument.** This is a testkit decorator over any `EventStore`, holding an
+  arbitrary retained set and reporting what it withholds through its own inherent API.
+- **Every real adapter**, through a new `Fixture` capability. The capability is defaulted to
+  declined, on `MID_BATCH_FAULT`'s precedent, and through it a fixture removes events outside the
+  port with a raw `DELETE`. The capability's name is phase 14's.
+
+The rule's named wrong implementation is a SQLite table declared `INTEGER PRIMARY KEY` without
+`AUTOINCREMENT`, which hands the deleted tail's highest rowid out again. Every published adapter
+allocates by `AUTOINCREMENT` or a sequence, so each should pass.
+
+Sub-question 2 stays answered in part by mechanism, as the 2026-09-28 amendment says. The broader
+policy it asks for is not taken here. ES-38's rule is now owned and scheduled rather than unowned,
+which is the gap this question recorded. `runbook/phases/14-retention.md` carries it as a work item.
+
+**This question stays open** for sub-question 2's policy: whether a frozen clause may name a rule
+with no owning phase at all. Amended by hand in phase 17, not closed. No accepted decision was
+edited.

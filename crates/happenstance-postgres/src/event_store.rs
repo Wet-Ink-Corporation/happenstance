@@ -621,9 +621,9 @@ impl SendEventStore for PostgresEventStore {
         // frontier advances. A transient disagreement is cheaper than a
         // permanent duplicate.
         //
-        // This is recorded, not settled. ES-41 stays `[PROVISIONAL]` and the
-        // replication semantics that would settle it belong to the project that
-        // owns ingest, not to this adapter.
+        // This is recorded, not settled. ES-41 was frozen at phase 17 (ADR-0028),
+        // but its marker does not fix this reading, and the replication
+        // semantics that would settle it belong to phase 13, which owns ingest.
         let store = id.store().to_bytes().to_vec();
         let position = as_i64(id.position());
         let pool = self.pool.clone();
