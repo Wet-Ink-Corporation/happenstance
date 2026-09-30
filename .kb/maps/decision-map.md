@@ -597,13 +597,20 @@ at its release, and the additive items go to a new phase, 17b.
 ADR-0073 settles VT-10's foreign-identity write path. ADR-0028 is written under the number the
 original queue reserved for it, which is why it sorts first. It takes the retention refusal, with
 an additive reservation, and answers sub-question 3 of `kb-open-question-es-38-and-gap-read-unowned-001`,
-which stays open for sub-question 2.
+which stays open for sub-question 2. ADR-0074 is the `Projection::apply` record: `apply` becomes
+`async`, on evidence from a spike that drove a live transaction, and PS-9 and PS-11 are frozen. It
+supersedes `kb-open-question-apply-synchronous-live-store-001`. ADR-0075 settles the projection
+port's remaining 1.0 clauses: PS-15 narrowed and frozen, PS-23 and PS-24 frozen, and PS-38's
+obligation documented.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
 | ADR-0028 | [`kb-decision-0028`](../decisions/0028-what-a-store-may-forget.md) | What a store may forget is decided outside the port, and a report of it can only arrive additively | accepted | 17 | — |
 | ADR-0072 | [`kb-decision-0072`](../decisions/0072-phase-17-is-split-at-the-release.md) | Phase 17 is split at the release — what must ship in 0.4.0, and 17b after it | accepted | 17 | — |
 | ADR-0073 | [`kb-decision-0073`](../decisions/0073-the-foreign-identity-write-path-is-the-adapters.md) | The write path that keeps a foreign identity is the adapter's row writer, and core grows nothing | accepted | 17 | — |
+| ADR-0074 | [`kb-decision-0074`](../decisions/0074-projection-apply-is-async.md) | Projection::apply is async, is handed a Delivered event, and fails with the projection's own error | accepted | 17 | — |
+| ADR-0075 | [`kb-decision-0075`](../decisions/0075-the-projection-ports-1-0-clauses.md) | The projection port's 1.0 clauses — PS-15 narrowed and frozen, PS-23 and PS-24 frozen, PS-38 documented | accepted | 17 | — |
+| — | [`kb-decision-wi-ff17f4`](../decisions/wi-ff17f4-ps-15-freeze-after-narrowing-to-commit-and.md) | PS-15 frozen narrowed to commit and reset; rollback non-normative (owner, Weigh-In) | accepted | 17 | — |
 
 ## Adding a row
 

@@ -408,14 +408,15 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   axis — `LivePostgresProjectionStore`, a `sqlx` transaction as the batch,
   passing all seventeen rules against a live server. The invariant — read-model
   write and checkpoint write in one transaction — is documented on the trait
-  and enforced by `commit_is_atomic_with_the_read_model`. What is **still
-  open** is one layer up: `Projection::apply` in the typed layer is synchronous,
-  so an application can push into a buffered batch and cannot issue a statement
-  into a live one. That is why `happenstance`'s `unstable-projection` still
-  gates the *runner*, while `happenstance-core`'s feature of the same name is
-  retained empty for `0.2.0` manifests and gates nothing. Do not resolve the
-  `apply` question in passing; it is the runner's own axis and owed its own
-  record.
+  and enforced by `commit_is_atomic_with_the_read_model`. What was **still
+  open** one layer up is now decided:
+  [ADR-0074](.kb/decisions/0074-projection-apply-is-async.md) makes the typed
+  layer's `Projection::apply` async, handed a `Delivered<E>` and a batch it can
+  issue statements through, on `experiments/apply-shape`'s evidence against a
+  live Postgres. Phase 18 builds it; until then the shipped `apply` is still
+  synchronous, which is why `happenstance`'s `unstable-projection` still gates
+  the *runner*, while `happenstance-core`'s feature of the same name is retained
+  empty for `0.2.0` manifests and gates nothing until `0.4.0` removes it.
 - ~~**SQLite driver** (`rusqlite` vs `sqlx`).~~ Settled at phase 2 by building
   both: `happenstance-sqlite` is `rusqlite`, `happenstance-postgres` is `sqlx`,
   and the two are in the tree for different reasons rather than as candidates.

@@ -22,7 +22,7 @@ summary: >-
   binding. A third instance, 2026-09-09, and the first deliberately unreachable from the gate:
   ops/host/preflight.sh asserts on the measurement host's environment (sysfs, systemd,
   --version) before any sample exists, which is what separates it from a budget and keeps it
-  inside CF-34 (spec/SPECIFICATION.md:9140); nothing in xtask's step table, .redkiln/config.yaml's
+  inside CF-34 (spec/SPECIFICATION.md:9228); nothing in xtask's step table, .redkiln/config.yaml's
   verify: block or CI invokes it, and ops/ is on affected.rs's INERT list. ADR-0064
   (kb-decision-0064) names the residual: registering the host as a self-hosted runner would make
   the preflight reachable from a merge-blocking job, and that is a decision, not a configuration
@@ -47,13 +47,13 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-**CF-33** (`spec/SPECIFICATION.md:9113-9138`, `[FROZEN]`) forbids a conformance rule from
+**CF-33** (`spec/SPECIFICATION.md:9201-9226`, `[FROZEN]`) forbids a conformance rule from
 reading a clock, measuring elapsed time, or asserting an operation count, enforced by a
 `cargo xtask ci` grep over `happenstance-testkit/src` for `std::time`, `Instant`, `elapsed` and
 `sleep`. The scope is deliberate — the clause "constrains conformance rules, which are the
 library's," not `tests/` or an adapter's own crate.
 
-**CF-34** (`spec/SPECIFICATION.md:9140-9153`, `[PROVISIONAL]`) requires performance to be measured
+**CF-34** (`spec/SPECIFICATION.md:9228-9241`, `[PROVISIONAL]`) requires performance to be measured
 by a separate harness that MUST NOT be part of the conformance bar, and rejects "a benchmark
 result gating a merge."
 
@@ -141,7 +141,7 @@ from the other direction: whether the clauses' text should widen to name the pri
 instance is currently arguing from on its own.
 
 A smaller fact worth carrying, because it is exactly the kind of drift the citation scan exists
-to catch and cannot here: `ops/host/preflight.sh:11` cites CF-34 at `spec/SPECIFICATION.md:8849`,
+to catch and cannot here: `ops/host/preflight.sh:11` cites CF-34 at `spec/SPECIFICATION.md:8937`,
 which was true when the script was written and is now `9021`. `ops/` is outside the scan's
 directories, so the anchor will keep drifting silently. The clocksource finding the preflight
 defers to `paired.rs` for is in
@@ -172,4 +172,4 @@ off-by-default `bench` feature, and `ops/host/preflight.sh` ships in no crate. *
 after 1.0**, with the CF-34 renewal. The ratio principle can go into
 `standards/rust/60-what-a-test-must-prove.md` at any time. The drifted anchor stands:
 `ops/host/preflight.sh:11` still cites CF-34 at `:8747`, and the clause is at
-`spec/SPECIFICATION.md:9225`.
+`spec/SPECIFICATION.md:9313`.

@@ -13,7 +13,7 @@ summary: >-
   crates name happenstance-core = { features = ["std", "unstable-projection"] } in their
   dependency table, outside any feature, so unlike happenstance-sqlite's gated forward, changing
   default closes nothing on its own — --no-default-features still enables the core gate in that
-  build. Latent rather than live today, because neither crate is published; spec/SPECIFICATION.md:392
+  build. Latent rather than live today, because neither crate is published; spec/SPECIFICATION.md:393
   is the impl census and this atom does not restate it. Owner: the postgres-and-neon-stores
   project, whose deskeleton work already contemplates shipping happenstance-neon with
   projection-store off by default. Forced before either crate is published, which is when a

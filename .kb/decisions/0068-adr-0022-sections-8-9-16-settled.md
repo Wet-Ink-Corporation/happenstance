@@ -138,7 +138,7 @@ moderately selective pair, cold cache as a first-class column, older SQLite vers
 `tag_cardinality` upsert. The seed's question about the quadratic in `Selectivity::read_for` has
 been answered: it accumulates into a `BTreeSet` (`query_sql.rs:223`, `177dfa0`).
 
-**ES-27.** Its `Rejects:` prose (`spec/SPECIFICATION.md:4079-4084`) quoted the aggregate's "roughly
+**ES-27.** Its `Rejects:` prose (`spec/SPECIFICATION.md:4084-4089`) quoted the aggregate's "roughly
 200x" as the reason the adapter ships these requirements. The clause is `[FROZEN]`, so this record
 authorises the repair, and the replacement text is in the long form's §5. The edit landed in the
 change that lands this record, replacing three lines with three so that no later

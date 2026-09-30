@@ -29,9 +29,9 @@ last_reviewed: 2026-09-07
 `AppendCondition::after_opt` keeps its blanket scope: it rewrites the `after` field of
 *every* guard the builder currently holds, discarding whatever boundary `and_guard` had
 attached to each one. That is not incidental — VT-30 `[PROVISIONAL]`
-(`spec/SPECIFICATION.md:1878-1884`) says `after`/`after_opt` "MUST continue to apply the
+(`spec/SPECIFICATION.md:1908-1914`) says `after`/`after_opt` "MUST continue to apply the
 given boundary to every guard," and a `[PROVISIONAL]` clause binds until the thing that
-would falsify it happens (`spec/SPECIFICATION.md:198-200`). ADR-0012 §9 restates the same
+would falsify it happens (`spec/SPECIFICATION.md:207-210`). ADR-0012 §9 restates the same
 sentence in an accepted, immutable record (`references/adr/0012-append-shape-and-preconditions.md:604-608`).
 So the semantics are not open here; only the spelling and the pinning are.
 

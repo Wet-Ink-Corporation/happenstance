@@ -6,7 +6,7 @@
 //! [`BufferingProjectionStore`](crate::buffering::BufferingProjectionStore),
 //! whose batch is a replayable op journal and which acquires no handle, no
 //! transaction and no lock between `begin` and `commit` — PS-4's shape
-//! (`spec/SPECIFICATION.md:4922-4929`), and the far end of §6's batch-shape axis
+//! (`spec/SPECIFICATION.md:4927-4934`), and the far end of §6's batch-shape axis
 //! (`:5686-5691`).
 //!
 //! **No rule is added, changed, weakened or gated by this file.** It is one
@@ -21,7 +21,7 @@
 //! same rules, one `cargo xtask ci`. What it does **not** buy is PS-2, which is
 //! `[FROZEN]`, asks for two *adapters* at opposite ends of the axis, and names
 //! the two-instrument monoculture in its own `Rejects:` clause
-//! (`spec/SPECIFICATION.md:4833-4848`).
+//! (`spec/SPECIFICATION.md:4838-4853`).
 //!
 //! The tokio harness, so: native only, exactly as `projection_conformance.rs`
 //! is. The store itself reaches for nothing host-only — `core`, `Rc`, `RefCell`

@@ -69,7 +69,7 @@ tell them apart that no adapter is allowed to understand. Project AC-005 require
 this record decides where it lives, whether `EventType` versions, and what happens on decode when
 it does not.
 
-`spec/SPECIFICATION.md:634-636` (`[FROZEN]`, VT-3) has two halves. The first — stores, peers and
+`spec/SPECIFICATION.md:639-641` (`[FROZEN]`, VT-3) has two halves. The first — stores, peers and
 the contract layer must not parse `data` or `metadata` — licenses nothing on its own. The second
 decides the siting: anything a store, a peer, a conformance rule or a query *must* see must be
 carried in `EventType` or `Tags`. The prior question is therefore whether anything below the port

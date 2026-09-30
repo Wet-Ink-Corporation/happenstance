@@ -46,13 +46,18 @@ gave to this phase.
       `EventId` (VT-10). Decide whether core grows one, or each adapter does, or
       `IngestStore` works without one — before 1.0, because the first two touch
       published crates. Settle it against a compiling spike, not an argument.
-- [ ] **`Projection::apply`** — synchronous, asynchronous, or given a batch
-      handle it can issue statements through
+- [x] **`Projection::apply`** — settled by
+      [ADR-0074](../../.kb/decisions/0074-projection-apply-is-async.md) against a
+      compiled and executed spike (`experiments/apply-shape/`): `async`, on the one
+      trait, with a `trait_variant`-derived `SendProjection`, handed a
+      position-free `Delivered` event and the batch. SY-21 is reworded to the
+      *local* position. Phase 18 implements it. The item read: ~~synchronous,
+      asynchronous, or given a batch handle it can issue statements through
       (`.kb/open-questions/projection-apply-is-synchronous-against-a-live-store.md`).
       Phase 18 implements it. The record names SY-21 — a convergent projection is
       handed an `EventId` and never a `SequencePosition` — because
       `apply`'s arguments are that clause's surface, and phase 13, which owns the
-      rule, runs too late to shape a signature this phase decides.
+      rule, runs too late to shape a signature this phase decides.~~
 - [ ] **The breaking open questions phase 16 listed**, each answered in its own
       record or closed with a reason. Phase 16 classified every candidate the
       split named (ADR-0066), and these are the ones whose answer can change a
@@ -170,27 +175,44 @@ gave to this phase.
       - ~~**ES-41** — with ADR-0028. The transport half is already answered: Neon
         and Cloudflare each probe membership in one read-only round trip over the
         pair VT-8 indexes.~~ **Frozen by ADR-0028.**
-      - **PS-9, PS-11** — together, in the `Projection::apply` record, with the
+      - ~~**PS-9, PS-11** — together, in the `Projection::apply` record, with the
         failure-policy seam's shape. Phase 18 confirms both by building PS-27's
-        seam without a generic write.
-      - **PS-15** — decide whether `rollback` refuses a foreign batch (breaking),
-        or narrow the MUST to `commit` and `reset`.
+        seam without a generic write.~~ **Frozen by ADR-0074**, on the spike's
+        three executed legs: a provided `on_error` under `trait_variant`, and a
+        skip row through `SqliteBatch` and a live `LivePostgresBatch` with no
+        bound on `Batch`.
+      - ~~**PS-15** — decide whether `rollback` refuses a foreign batch (breaking),
+        or narrow the MUST to `commit` and `reset`.~~ **Narrowed and frozen by
+        ADR-0075**, by ADR-0066's own narrowing route. The MUST covers `commit`
+        and `reset`; what the clause says of a foreign `rollback` is non-normative.
+        Frozen because no other disposition was valid: its falsifier could fire only
+        as a major, and no phase before 1.0 has an instrument for it.
       - ~~**PS-22** — ADR-0028 states that retention never rewinds a checkpoint
         over kept rows.~~ **Frozen by ADR-0028**, which states it.
-      - **PS-23** — freeze *exactly one* id per commit, or record that a multi-id
+      - ~~**PS-23** — freeze *exactly one* id per commit, or record that a multi-id
         atomic commit arrives after 1.0 as an additive defaulted method rather
-        than a change to `commit`.
-      - **PS-24** — freeze `Authority::Rebuilding` as a kept variant. Phase 18
-        decides whether the typed runner ever emits it.
+        than a change to `commit`.~~ **Frozen by ADR-0075**, both at once: one id
+        per commit is the promise, and a multi-id commit arrives, if ever, as a
+        refusing provided `commit_all` (`experiments/provided-method-spike/`,
+        which compiled it with a `CommitError` variant; ADR-0075 chooses its own
+        error type, not yet compiled).
+      - ~~**PS-24** — freeze `Authority::Rebuilding` as a kept variant. Phase 18
+        decides whether the typed runner ever emits it.~~ **Frozen by ADR-0075**
+        as a kept variant.
 
       And the decisions taken here for clauses another phase freezes: **ES-39,
       ES-40, SY-32 and CF-27** (ADR-0028's shape; phase 14 builds and freezes);
-      **SY-21** (inside the `apply` record, which must name it; phase 18 freezes);
+      **SY-21** (inside the `apply` record, which must name it; phase 18 freezes —
+      **decided by ADR-0074** and reworded to the arrival position);
       **PS-25** (the derived-id remedy or the digest-in-checkpoint one — the
-      second changes the frozen port's `commit`, so the choice is made here);
+      second changes the frozen port's `commit`, so the choice is made here —
+      **ADR-0074 chose the derived id**, with a 64-bit FNV-1a digest and an
+      exposed `checkpoint_id`);
       **CF-40**'s `MetadataLen` build under ADR-0043 moved to 17b with ADR-0072
       (phase 13 then decides the budget unit); and **PS-38**'s documented no-lagging-replica obligation
-      (phase 18 freezes it with PS-23).
+      (phase 18 freezes it with PS-23) — **written by ADR-0075** into
+      `ProjectionStore::checkpoint`'s rustdoc and `happenstance-neon`'s README and
+      constructor.
 - [ ] **Release `0.4.0`.** `cargo-semver-checks` against the `0.3.x` registry
       baseline reports breaks, and each one it reports traces to a decision above.
       `CHANGELOG.md`'s `[Unreleased]` entries — SQLite's fifteen-second busy
@@ -218,7 +240,7 @@ caused it — a break with no row is one nobody decided.
       breaking; a breaking remedy has landed.
 - [ ] The guard-plan `LIST SUBQUERY` assertion (ADR-0068) is in the tree.
       (`QueryItem`'s total constructor moved to 17b with ADR-0072.)
-- [ ] The `apply` record is accepted.
+- [x] The `apply` record is accepted (ADR-0074).
 - [ ] Every open question phase 16 classified as breaking is answered or closed.
 - [ ] `0.4.0` is released and its semver findings are fully traced.
 - [ ] The `workerd` job exists, has been watched failing once, and the SQL-text
@@ -312,3 +334,34 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   retention surface is owed after `0.4.0`, which ADR-0028 and the
   provided-method spike discharge. No clause, marker or ledger row moved, and
   `cargo xtask lints` still holds ES-39 to phase 14.
+
+- 2026-09-29 — **L3, the `apply` record and the port-clauses record**, on
+  `lane/p17-apply-record`. Records, specification, runbook and documentation only;
+  no Rust signature changed. **ADR-0074**: `Projection::apply` becomes `async` on
+  the one trait, handed a `Delivered<E>` with `id()` and no local position, and
+  the batch. The spike (`experiments/apply-shape/`, merged with L2) chose the
+  `Send` mechanism: **`trait_variant`**, because return-type notation is `E0658`
+  on 1.97.1. SY-21 is reworded to the arrival position, `SequencedEvent::position`,
+  because `EventId::position()` is the origin's. The failure-policy seam is a provided
+  `on_error` defaulting to halt. A skip after a server-side failure on a live
+  batch needs a savepoint, which phase 18 owes. PS-9 and PS-11 are frozen: all
+  three legs ran — the provided method compiled, and skip rows were written through
+  `SqliteBatch` and a live `LivePostgresBatch` with no bound on `Batch`. PS-28's
+  `ProjectionError<R, W, A>` and PS-25's derived id are phase 18's to build.
+  **ADR-0075**: PS-15 narrowed to `commit` and `reset` and frozen, PS-23 frozen
+  on the additive `commit_all` route with its own error type, PS-24 frozen as a
+  kept variant, and PS-38's obligation written into `ProjectionStore::checkpoint`
+  and `happenstance-neon`'s README and constructor. PS-15's narrowing is the route
+  ADR-0066 prescribed; the plan's note to keep it provisional was not a valid
+  disposition, because its falsifier fires only as a major and no phase before 1.0
+  has an instrument. A review pass on the same branch then took the rollback
+  sentence out of PS-15's MUST, since no rule checks it; said that the spike
+  compiled `commit_all` with a `CommitError` variant and that the separate error
+  type is ADR-0075's uncompiled choice; marked the `checkpoint` rustdoc as PS-38's
+  provisional reading; recorded the runner-issued savepoint as a PS-9 candidate
+  declined by design; and respelled ADR-0074's trait sketch with explicit
+  projections, because the `StoreBatch<Self>` aliases fail to compile inside a
+  `trait_variant` trait (six `E0277`s, `Self: Sized`). The open question
+  `projection-apply-is-synchronous-against-a-live-store` is superseded, and
+  `phases/18-typed-runner.md` is restated to build what ADR-0074 decided. Spec
+  citations shifted by the edits were repointed across the tree.

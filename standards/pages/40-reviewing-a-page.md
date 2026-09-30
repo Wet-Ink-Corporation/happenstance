@@ -88,5 +88,5 @@ shape of the decorative record this repository has already shipped once, and the
 paraphrase it missed surfaces when the clause it copied is amended.
 
 **Evidence.** `standards/pages/30-citing-the-specification.md:9` (the blind spot
-this procedure is the instrument for) · `spec/SPECIFICATION.md:280` (why a cited
+this procedure is the instrument for) · `spec/SPECIFICATION.md:281` (why a cited
 id survives an amendment and a paraphrase does not)

@@ -105,6 +105,18 @@ not the same as what a user needed to be told.
   a decision — see `.kb/open-questions/adr-0022-falsifiers-have-fired.md` and
   `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`.
 
+- **Point `happenstance-neon`'s projection store at a primary endpoint, never a
+  read replica.** This is documentation only, and nothing in the code changed.
+  `ProjectionStore::checkpoint` now states PS-38's obligation in
+  `happenstance-core`, marked provisional: the checkpoint reflects every commit
+  the store has acknowledged, through any handle onto it, and an adapter over
+  replicated storage answers from the primary. If PS-38's falsifier fires, the
+  obligation narrows to reads through the same handle. `happenstance-neon`'s README and `NeonProjectionStore::new` say what
+  that means for an operator. A read replica can lag its primary, so a runner
+  resuming from its checkpoint re-applies events it already committed. No
+  conformance rule can see this, because the suite runs against one endpoint
+  ([ADR-0075](.kb/decisions/0075-the-projection-ports-1-0-clauses.md), PS-38).
+
 ## [0.3.2] — 2026-09-20
 
 A dependency-advisory release. [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285)

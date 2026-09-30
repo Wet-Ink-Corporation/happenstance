@@ -79,7 +79,7 @@ out when the thing the check never looked at ships.
 
 **Evidence.** `standards/rust/81-checks-that-cannot-be-types.md:11` (a check whose
 limits are undocumented is read as a guarantee — why class 5 exists) ·
-`spec/SPECIFICATION.md:280` (clause ids are stable, so class 2 can be written
+`spec/SPECIFICATION.md:281` (clause ids are stable, so class 2 can be written
 about ids) ·
 `.bklg/docs-that-teach/_discovery/distillation/interaction-patterns.md:484-497`
 (the drift this letter refuses)

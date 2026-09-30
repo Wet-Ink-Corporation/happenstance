@@ -110,7 +110,7 @@ fn push_region(
 
 /// **The ES-17 numerator: what one `Event::clone()` costs, in both regimes.**
 ///
-/// ES-17 (`spec/SPECIFICATION.md:3363`) keeps `append`'s batch borrowed, and its
+/// ES-17 (`spec/SPECIFICATION.md:3368`) keeps `append`'s batch borrowed, and its
 /// `[PROVISIONAL]` marker is falsified by *"a measurement on a real adapter
 /// showing the per-event clone is a material fraction of append cost"*.
 ///

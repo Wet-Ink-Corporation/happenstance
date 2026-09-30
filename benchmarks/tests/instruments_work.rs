@@ -6,7 +6,7 @@
 //! instrument that has quietly stopped working reports zero, or reports a
 //! constant, and both look like findings. Every check here fails when the
 //! *instrument* is broken and never when a number is large, which is the line
-//! CF-34 draws (`spec/SPECIFICATION.md:8849`): a benchmark result may not gate
+//! CF-34 draws (`spec/SPECIFICATION.md:8937`): a benchmark result may not gate
 //! a merge, but a benchmark harness that cannot measure may.
 //!
 //! # This binary installs the counting allocator; the criterion targets do not

@@ -71,9 +71,9 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-ES-6 (`spec/SPECIFICATION.md:2695`) is `[FROZEN]` and its `Rule:` field names
-`store_error_crosses_a_join_handle`, marked **(new)** (`SPECIFICATION.md:2738`). §7.2's generated
-table renders it with `†` (`SPECIFICATION.md:9390`), where the legend defines `†` as "does not
+ES-6 (`spec/SPECIFICATION.md:2700`) is `[FROZEN]` and its `Rule:` field names
+`store_error_crosses_a_join_handle`, marked **(new)** (`SPECIFICATION.md:2743`). §7.2's generated
+table renders it with `†` (`SPECIFICATION.md:9478`), where the legend defines `†` as "does not
 exist yet". That identifier occurs as no `fn` anywhere in the workspace. It occurs only in prose:
 twice in `RUNBOOK.md`, once in `.kb/decisions/0008`, three times in `.kb/decisions/0009`, three times in
 comments in `happenstance-cloudflare`, and in the specification itself. One of those comments
@@ -137,7 +137,7 @@ real gap and not an artifact of one reading.
 One citation in the paragraph above was repaired here rather than by the repoint offered to it, and
 the difference is worth recording because it is the hazard `kb-decision-0045` and
 `kb-playbook-anchoring-citations-001` are about. The `[REOPEN]` lane's brief listed this atom's
-`SPECIFICATION.md:8690` as drifting to `8625`, anchored on the line `nothing. Batch shape's tick is
+`SPECIFICATION.md:8778` as drifting to `8625`, anchored on the line `nothing. Batch shape's tick is
 the *one-sided* one`, and reported the anchor as unique and the repoint as mechanical. Both are
 true and the result is still wrong: that line is §7's batch-shape prose, not §7.2's table row, and
 checking the revision the citation was written against (`76e9424`, 2026-08-19) shows the ES-6 row
@@ -185,7 +185,7 @@ missing rule. The driver re-export pass went looking for a clause governing whet
 adapter re-exports the driver crate whose types appear in its public signatures, and found ES-6 as
 the nearest one — pointing the *other* way, because ES-6 endorses the wrapping, citing
 `SqliteEventStoreError`'s "twelve real variants over `rusqlite::Error`, `JoinError`,
-`TryCurrentError` and the crate's own decode failures" (`spec/SPECIFICATION.md:2706-2708`) as the
+`TryCurrentError` and the crate's own decode failures" (`spec/SPECIFICATION.md:2711-2713`) as the
 instrument that made the clause decidable at all. What ES-6 does not say is whether the *wrapped
 type* is part of the promise the `#[non_exhaustive]` error enum makes. That is not idle: the
 sealing option in that pass — wrap `rusqlite::Error` behind an opaque value enum and stop naming it

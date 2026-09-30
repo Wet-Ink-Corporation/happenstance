@@ -277,7 +277,7 @@ fn tag_count(criterion: &mut Criterion) {
 
 /// What building the batch costs, before any store is reached.
 ///
-/// ES-17 (`spec/SPECIFICATION.md:3363`) keeps `append`'s batch **borrowed**, and
+/// ES-17 (`spec/SPECIFICATION.md:3368`) keeps `append`'s batch **borrowed**, and
 /// its `[PROVISIONAL]` marker is falsified by *"a measurement on a real adapter
 /// showing the per-event clone is a material fraction of append cost"*. That
 /// measurement needs a denominator and a numerator: the append arms above are

@@ -2,7 +2,7 @@
 //!
 //! # Why a history exists at all
 //!
-//! CF-34 (`spec/SPECIFICATION.md:8849`) does not merely forbid a benchmark from
+//! CF-34 (`spec/SPECIFICATION.md:8937`) does not merely forbid a benchmark from
 //! gating a merge; it says what the alternative is:
 //!
 //! > Benchmarks are published per adapter and compared against **that adapter's

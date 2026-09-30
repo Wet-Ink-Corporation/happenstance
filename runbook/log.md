@@ -10,6 +10,21 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-30 — the apply record and the projection port's 1.0 clauses
+
+*Uncommitted at writing; `lane/p17-apply-record`.*
+Phase 17, lane L3.
+
+ADR-0074 decides the typed layer's `apply`: async, handed a position-free
+`Delivered<E>` and a batch to issue statements through, on `experiments/apply-shape`.
+ADR-0075 settles the port's remaining 1.0 clauses. PS-9, PS-11, PS-15, PS-23 and
+PS-24 are frozen. PS-15 was narrowed to `commit` and `reset` by the owner's
+ruling (`wi-ff17f4`), after a walkthrough of the options.
+
+**Verified.** See phase 17's session log.
+
+---
+
 ## 2026-09-29 — ADR-0028: what a store may forget, decided as a refusal
 
 *Uncommitted at writing; `lane/p17-provided-method-spike`.*

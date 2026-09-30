@@ -151,5 +151,5 @@ published: `crates/happenstance-sqlite/src/projection_store.rs:487` and
 `crates/happenstance-postgres/src/projection_store.rs:252`. Option B changes that parameter's type,
 so only `0.4.0` can absorb it. Recording *Option A is final* closes the atom without a break.
 Either record also says whether Neon's `push(SqlStatement)`
-(`crates/happenstance-neon/src/projection_store.rs:181`) owes the same narrowing. Ladybug's
+(`crates/happenstance-neon/src/projection_store.rs:182`) owes the same narrowing. Ladybug's
 `push_raw_cypher` is outside 1.0 under `kb-decision-0066`'s crate set. **Owner now: phase 17.**

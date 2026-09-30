@@ -3744,7 +3744,7 @@ mod tests {
              later reader can see they are being handed to the specification"
         );
         assert!(
-            text.contains("never renumbered") && text.contains("spec/SPECIFICATION.md:280"),
+            text.contains("never renumbered") && text.contains("spec/SPECIFICATION.md:281"),
             "clause ids are stable names, and the atom cites where that is said"
         );
     }
