@@ -113,7 +113,7 @@ evaluates item 1 and the moment it evaluates item 4.
 below it.
 
 **Falsifies:** that `read_decision_model`'s returned position is a sound append
-boundary for a multi-item query (`store.rs:382-392`). If item 1's late arrival is
+boundary for a multi-item query (`store.rs:387-397`). If item 1's late arrival is
 missed while `last` sits above it, `is_violated_by` returns `false` for
 `position <= after` and the boundary is not enforced.
 
@@ -347,7 +347,7 @@ direction that cannot stream is right.
 **THEN** that position is the maximum observed, not the last yielded.
 
 **Falsifies:** that the crate's only read helper generalises. `read_decision_model`
-hardcodes `ReadOptions::new()` (`store.rs:389`) and derives its boundary from
+hardcodes `ReadOptions::new()` (`store.rs:394`) and derives its boundary from
 `events.last()` (`:377`), which on a backwards read is the **oldest** match.
 
 **Rejects:** any `read_decision_model_with(store, query, options)` that copies the
@@ -1494,7 +1494,7 @@ That is the completeness failure, and it needs building explicitly rather than a
 `AppendCondition::new` already makes the position-free form the default
 (`append.rs:65-70`), with `after`/`after_opt` as opt-in builders. **The API already makes
 the replicable shape the easy one**, which is worth recording because the only read helper
-in the crate (`read_decision_model`, `store.rs:382-392`) exists to produce the
+in the crate (`read_decision_model`, `store.rs:387-397`) exists to produce the
 *position-relative* form and has no counterpart for the replicable one. If the sync design
 lands on "conditions must be position-free to replicate", that helper is pointing the
 wrong way, and it belongs in the ADR rather than being inverted silently.

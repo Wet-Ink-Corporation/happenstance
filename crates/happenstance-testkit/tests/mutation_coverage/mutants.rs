@@ -1780,7 +1780,7 @@ impl Defect for ViolationAsStoreErrorStore {
 /// Not because the rules were weak, but because none of them ever built a
 /// two-tag condition. Every `query_tagged` reaching an `AppendCondition` in this
 /// testkit carried exactly one pair, and the four boundaries of
-/// `k_disjoint_boundaries_admit_exactly_k_commits` are disjoint in the only tag
+/// `k_disjoint_boundaries_never_conflict` are disjoint in the only tag
 /// they have — so keying on the first tag and keying on all of them are the same
 /// function over every input the suite offered. The read side had checked the
 /// proposition since the beginning

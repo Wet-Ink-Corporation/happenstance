@@ -247,7 +247,7 @@ impl<T> NeonEventStore<T> {
     /// the population drains in one round.
     ///
     /// **Disjoint boundaries do not drain, and that is what sets this number.**
-    /// `k_disjoint_boundaries_admit_exactly_k_commits` runs twelve contenders
+    /// `k_disjoint_boundaries_never_conflict` runs twelve contenders
     /// over four separate boundaries, and the SSI predicate lock is *not* per
     /// boundary: with a small table the planner takes a sequential scan and the
     /// lock is relation-wide, so every contender conflicts with every other
@@ -288,9 +288,23 @@ impl<T> NeonEventStore<T> {
     /// constant — it is `pub` to be *read*, and the number is the adapter's.
     ///
     /// Exhaustion is not silent: it surfaces as
-    /// `AppendError::Store(NeonError::Sql(…))` carrying SQLSTATE `40001`, which is
+    /// `AppendError::Busy(NeonError::Sql(…))` carrying SQLSTATE `40001`, which is
     /// a named, documented outcome rather than a `ConditionViolated` this adapter
-    /// invented — and it is exactly what the failures at three looked like.
+    /// invented. Until `0.4.0` it was `AppendError::Store`, which is exactly what
+    /// the failures at three looked like; ADR-0077 moved it, because it meets
+    /// all three parts of `Busy`'s contract by the endpoint's guarantee: the
+    /// endpoint *answered*, with a `40001`, so it ran the batch's transaction
+    /// and aborted it whole — nothing was written, and the same call can succeed
+    /// once the conflicting writer has committed.
+    ///
+    /// **Only an answer can be `Busy`.** A round trip that got no answer is
+    /// [`NeonError::Transport`], which may have committed and stays `Store`
+    /// whatever caused it — a timeout looks transient and is exactly the
+    /// ambiguous outcome `Busy`'s contract forbids. And an answer proves
+    /// nothing was written only when it answers the *only* send of its
+    /// request, which is why [`SqlTransport::round_trip`]'s `# Retries` makes
+    /// a transparent re-send of a request that may have reached the endpoint a
+    /// MUST NOT rather than an implementor's choice.
     pub const SERIALISATION_ATTEMPTS: u32 = 8;
 
     /// Builds a store over `transport`.
@@ -794,11 +808,13 @@ impl<T: SqlTransport> EventStore for NeonEventStore<T> {
     /// is evaluated; [`AppendError::ExceedsStoreLimit`] for a batch over one of
     /// this store's stated ceilings, refused before anything reaches the wire;
     /// [`AppendError::ConditionViolated`] when the condition found a matching
-    /// event, which is not an adapter failure; and [`AppendError::Store`] for
-    /// anything the transport or the endpoint reports — including a `40001` that
-    /// survived [`SERIALISATION_ATTEMPTS`](NeonEventStore::SERIALISATION_ATTEMPTS)
-    /// attempts, which is a named outcome rather than a violation this adapter
-    /// invented.
+    /// event, which is not an adapter failure; [`AppendError::Busy`] for a
+    /// `40001` that survived
+    /// [`SERIALISATION_ATTEMPTS`](NeonEventStore::SERIALISATION_ATTEMPTS)
+    /// attempts, each of which the endpoint aborted whole, so nothing was
+    /// written; and [`AppendError::Store`] for anything else the transport or the
+    /// endpoint reports — a round trip that got no answer included, because it
+    /// may have committed.
     async fn append(
         &self,
         events: &[Event],
@@ -815,13 +831,18 @@ impl<T: SqlTransport> EventStore for NeonEventStore<T> {
         let outcome = loop {
             attempt += 1;
             match self.append_once(events, condition).await {
-                Err(NeonError::Sql(sql))
-                    if sql.is_serialization_failure() && attempt < Self::SERIALISATION_ATTEMPTS =>
-                {
+                Err(NeonError::Sql(sql)) if sql.is_serialization_failure() => {
                     // Nothing was committed — the endpoint aborted the whole
                     // batch — so re-running is not a partial retry. The next
                     // attempt reads a log that now contains the winner's rows,
                     // and answers `ConditionViolated` rather than racing again.
+                    //
+                    // And for the same reason, a budget that runs out is
+                    // `Busy` rather than `Store`: every attempt was an answer,
+                    // and every answer said nothing landed.
+                    if attempt >= Self::SERIALISATION_ATTEMPTS {
+                        return Err(AppendError::Busy(NeonError::Sql(sql)));
+                    }
                 }
                 Err(error) => return Err(AppendError::Store(error)),
                 Ok(outcome) => break outcome,
@@ -1567,8 +1588,8 @@ mod tests {
     use crate::migration::MIGRATION_1;
     use crate::transport::{HttpResponse, NullTransport, SqlTransport};
     use happenstance_core::{
-        AppendCondition, Event, EventId, EventStore, Query, QueryItem, ReadOptions, RecordedAt,
-        SequencePosition, SequencedEvent, StoreId, Tags,
+        AppendCondition, AppendError, Event, EventId, EventStore, Query, QueryItem, ReadOptions,
+        RecordedAt, SequencePosition, SequencedEvent, StoreId, Tags,
     };
 
     fn store() -> NeonEventStore<NullTransport> {
@@ -2063,6 +2084,82 @@ mod tests {
             ),
             other => panic!("expected a SQL error, got {other:?}"),
         }
+    }
+
+    /// A transport that answers every round trip with one recorded body, and
+    /// counts them. Never a network, so the retry loop's classification is
+    /// tested here and its *liveness* against a real endpoint only by CI's
+    /// `live-neon` job.
+    struct Scripted {
+        status: u16,
+        body: &'static [u8],
+        round_trips: core::cell::Cell<u32>,
+    }
+
+    impl Scripted {
+        fn answering(status: u16, body: &'static [u8]) -> Self {
+            Self {
+                status,
+                body,
+                round_trips: core::cell::Cell::new(0),
+            }
+        }
+    }
+
+    impl SqlTransport for &Scripted {
+        type Error = std::io::Error;
+
+        fn round_trip(
+            &self,
+            _request: crate::transport::SqlRequest,
+        ) -> impl Future<Output = Result<HttpResponse, Self::Error>> {
+            self.round_trips.set(self.round_trips.get() + 1);
+            core::future::ready(Ok(HttpResponse::new(self.status, self.body)))
+        }
+    }
+
+    async fn conditional(
+        transport: &Scripted,
+    ) -> Result<SequencePosition, AppendError<NeonError<std::io::Error>>> {
+        let store = NeonEventStore::new(transport, NeonConfig::default().with_schema("hs_1"));
+        let event = Event::new("T", b"x".to_vec()).unwrap();
+        let condition = AppendCondition::new(Query::all());
+        store.append(&[event], Some(&condition)).await
+    }
+
+    /// A `40001` on every attempt is `Busy`, carrying the last one, after
+    /// exactly the budget. The wrong implementation this rejects is the one
+    /// shipped until `0.4.0`, which reported the same answer as `Store`.
+    #[tokio::test]
+    async fn a_serialisation_failure_that_outlives_the_budget_is_busy() {
+        let transport = Scripted::answering(400, SERIALISATION_FAILURE);
+        let outcome = conditional(&transport).await;
+        assert_eq!(
+            transport.round_trips.get(),
+            NeonEventStore::<NullTransport>::SERIALISATION_ATTEMPTS,
+            "the budget, and no more"
+        );
+        match outcome {
+            Err(AppendError::Busy(NeonError::Sql(sql))) => assert!(
+                sql.is_serialization_failure(),
+                "the payload is the endpoint's own 40001"
+            ),
+            other => panic!("an exhausted budget must be `Busy`, got {other:?}"),
+        }
+    }
+
+    /// Any other SQL error is an answer too, and still `Store`: `Busy` is the
+    /// one the endpoint's abort vouches for, not every error it renders.
+    #[tokio::test]
+    async fn another_sql_error_is_store_on_the_first_attempt() {
+        const UNIQUE: &[u8] = br#"{"message":"duplicate key value violates unique constraint","code":"23505","detail":null,"hint":null,"severity":"ERROR"}"#;
+        let transport = Scripted::answering(400, UNIQUE);
+        let outcome = conditional(&transport).await;
+        assert_eq!(transport.round_trips.get(), 1);
+        assert!(
+            matches!(outcome, Err(AppendError::Store(NeonError::Sql(ref sql))) if sql.is_unique_violation()),
+            "got {outcome:?}"
+        );
     }
 
     /// A body over the ceiling is refused before it is parsed.

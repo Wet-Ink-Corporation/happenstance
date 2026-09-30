@@ -138,8 +138,8 @@ break. Every published adapter forgets outside the port, where no adapter code r
   (`crates/happenstance-sqlite/src/event_store.rs:285`,
   `crates/happenstance-cloudflare/src/event_store.rs:184`).
 - **Postgres and Neon** allocate from a sequence read explicitly
-  (`crates/happenstance-postgres/src/event_store.rs:941`,
-  `crates/happenstance-neon/src/config.rs:94`).
+  (`crates/happenstance-postgres/src/event_store.rs:990`,
+  `crates/happenstance-neon/src/config.rs:96`).
 - A raw `DELETE`, a Postgres `TRUNCATE` (which fires no row trigger) and a Durable Object's
   `delete_all()` (`worker-0.8.5/src/durable.rs:449`) are all invisible to the adapter.
 
@@ -163,11 +163,11 @@ not already oblige. It had two halves.
 interactive transaction and no cursor for which the membership probe is a whole extra round trip
 it cannot fold into anything else*, naming `happenstance-cloudflare` and `happenstance-neon`.
 **`happenstance-neon` meets that wording's letter:**
-- it probes in one read-only round trip of its own (`crates/happenstance-neon/src/event_store.rs:899`),
+- it probes in one read-only round trip of its own (`crates/happenstance-neon/src/event_store.rs:920`),
   over the `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint (CI run `36638870563`,
   2026-09-29);
-- `happenstance-cloudflare` answers in one statement (`crates/happenstance-cloudflare/src/event_store.rs:1066`),
+- `happenstance-cloudflare` answers in one statement (`crates/happenstance-cloudflare/src/event_store.rs:1084`),
   but that run is on the `node:sqlite` shim, not `workerd`, so the transport evidence rests on Neon.
 
 This record accepts the round trip rather than rewording it away, because no required path pays

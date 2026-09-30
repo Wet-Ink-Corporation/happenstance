@@ -39,7 +39,7 @@ last_reviewed: 2026-09-29
 
 No clause in `spec/SPECIFICATION.md` obliges it. ES-2 is the obvious candidate and is the wrong one: it governs `read`'s *signature* — that the stream comes back at the top level and the method is not `async` — and says nothing about what a store must do with a failure encountered partway through. `cargo xtask spec-trace`'s check 6 exists precisely for this asymmetry: a rule with no clause is treated as seriously as a clause with no rule, because CF-24's discipline runs in both directions. The rule was landed anyway, on the strength of a measurement rather than a preference: `SwallowedReadFaultStore` fails **0 of 89** rules with the fault left unarmed and **22** with it armed by hand — a real hole in the suite's coverage, not a hypothetical one. What could not be done in the same change is write the normative sentence, because minting a specification clause is the specification owner's act and the lane implementing the rule did not hold that role.
 
-The rule is now listed in `xtask/src/spec_trace.rs`'s `UNCLAIMED_PENDING_ADR`, which prints on every green `spec-trace` run — the same disposition mechanism already carrying `k_disjoint_boundaries_admit_exactly_k_commits` (`kb-open-question-disjoint-boundaries-no-clause-001`) and `ops_agree_with_the_model` (`kb-open-question-model-family-rule-no-clause-001`). This is a third entry on a list whose own documentation states it "can only shrink," and it differs in shape from both siblings: the disjoint-boundaries gap is one proposition no clause states, and the model-family gap is several propositions belonging to no single clause; this one is a single, narrow proposition about the `Err` arm of one method, and the sentence needed to close it is not contested — only who is authorised to write it, and when.
+The rule is now listed in `xtask/src/spec_trace.rs`'s `UNCLAIMED_PENDING_ADR`, which prints on every green `spec-trace` run — the same disposition mechanism already carrying `k_disjoint_boundaries_never_conflict` (`kb-open-question-disjoint-boundaries-no-clause-001`) and `ops_agree_with_the_model` (`kb-open-question-model-family-rule-no-clause-001`). This is a third entry on a list whose own documentation states it "can only shrink," and it differs in shape from both siblings: the disjoint-boundaries gap is one proposition no clause states, and the model-family gap is several propositions belonging to no single clause; this one is a single, narrow proposition about the `Err` arm of one method, and the sentence needed to close it is not contested — only who is authorised to write it, and when.
 
 ## What is not decided
 
@@ -67,7 +67,7 @@ That closes `postgres-fixture-read-fault-declension-is-owed`, and it lifts optio
 `[PROVISIONAL]`-at-most this atom assumed — it is the read-side twin of the evidence on which
 `kb-decision-0066` freezes CF-39.
 
-The rule is still the third `UNCLAIMED_PENDING_ADR` entry (`xtask/src/spec_trace.rs:2852`,
+The rule is still the third `UNCLAIMED_PENDING_ADR` entry (`xtask/src/spec_trace.rs:2887`,
 `:2882`); sub-questions 1–3 stay open. **Owner now: phase 21 at the latest**, whose clause audit
 runs against `spec-trace`, which prints the unclaimed count on every green run. The one ADR over
 all three unclaimed entries (sub-question 1) may be taken by any phase before it. Not phase 17's:

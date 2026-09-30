@@ -33,7 +33,7 @@ instead of whatever the laptop was doing.
 package at all.
 
 `preflight.sh` asserts, and the distinction that keeps it inside CF-34 is worth
-stating precisely. CF-34 (`spec/SPECIFICATION.md:8937`) rejects *a benchmark
+stating precisely. CF-34 (`spec/SPECIFICATION.md:9533`) rejects *a benchmark
 result* gating a merge: a threshold on a measured number. Every check in
 `preflight.sh` reads a value out of sysfs, systemd or a `--version` **before the
 first sample exists**; it can fail when nothing has been measured yet, which is

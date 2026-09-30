@@ -14,7 +14,7 @@
 //! has no lib target at all. And on 1.97.1 rustdoc *silently ignores* an
 //! error-code annotation it cannot match, so `compile_fail,E0004` asserts no
 //! more than bare `compile_fail`, which passes on **any** compile error
-//! (`spec/SPECIFICATION.md:8962`; the same warning is written into
+//! (`spec/SPECIFICATION.md:9150`; the same warning is written into
 //! `crates/happenstance-core/src/event.rs:95-106`).
 //!
 //! The consequence is precise and it is the whole reason for the dependency:

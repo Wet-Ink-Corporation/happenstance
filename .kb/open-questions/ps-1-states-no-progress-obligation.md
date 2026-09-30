@@ -53,7 +53,7 @@ last_reviewed: 2026-08-15
 
 ## What is true today
 
-PS-1 (`spec/SPECIFICATION.md:4811`) is `[FROZEN]` and reads: "The read-model write and the
+PS-1 (`spec/SPECIFICATION.md:4999`) is `[FROZEN]` and reads: "The read-model write and the
 checkpoint write MUST become durable together or not at all." §4.11's rule table assigns it three
 rules: `commit_is_atomic_with_the_read_model`, `failed_commit_leaves_both_unchanged`, and
 `commit_advances_the_checkpoint`.
@@ -123,7 +123,7 @@ budget already assumes.
 **One sentence above is refuted.** *What is true today* says (`:48-51`): "That a successful commit
 *advances* anything … is stated by no clause's MUST anywhere in the document." Read literally
 against today's clause text, **PS-23 states it**: "One `commit` advances exactly one
-`ProjectionId`" (`spec/SPECIFICATION.md:5395-5396`). "Exactly one" excludes zero, so a `commit`
+`ProjectionId`" (`spec/SPECIFICATION.md:5583-5584`). "Exactly one" excludes zero, so a `commit`
 that advances nothing violates PS-23's `MUST`. The obligation is not absent — it is **misfiled**,
 twice over. It sits on a clause about fan-out *scope*, whose `Rejects` field names "an adapter with
 a single-row checkpoint table" (`:5327-5329`), which is the "not more than one" reading; progress
@@ -133,7 +133,7 @@ observable instant — so the only normative statement that a commit makes progr
 be rewritten by an unrelated question.
 
 **The finding itself survives.** PS-1's pairing defect reproduces independently from
-`spec/SPECIFICATION.md:4811-4837`: the per-handle backing store the sweep describes satisfies
+`spec/SPECIFICATION.md:4999-5025`: the per-handle backing store the sweep describes satisfies
 PS-1's `MUST` through the "or not at all" arm, passes `commit_is_atomic_with_the_read_model`, and
 fails `commit_advances_the_checkpoint`. What changes is the **candidate repair**. "Add a sentence
 to PS-1" is now one of at least three candidates, alongside minting a clause and splitting PS-23's
@@ -166,7 +166,7 @@ this atom moves to `superseded` rather than `withdrawn`: the question was worth 
 answers it, and a reader arriving here needs sending there.
 
 **Sub-question 1 is answered: a clause of its own.** PS-38 is minted `[PROVISIONAL]` in §4.7
-(`spec/SPECIFICATION.md:5542-5544`) — *a successful `commit(batch, id, position, authority)` MUST
+(`spec/SPECIFICATION.md:5730-5732`) — *a successful `commit(batch, id, position, authority)` MUST
 advance `id`'s checkpoint to `position`, and a `ProjectionId` no successful `commit` has named MUST
 read as `Checkpoint::NeverRun`*. PS-1's own `MUST` is **byte-identical** across it (`:4755-4757`),
 which is what makes this a repair rather than a widening: no implementation gains or loses
@@ -180,7 +180,7 @@ rewrite it.
 
 **Sub-question 2 is answered: yes, and independently of where the prose lives.**
 `commit_advances_the_checkpoint` now reads against `PS-1, PS-38` in §4.11's table
-(`spec/SPECIFICATION.md:5991`) — the progress half rests on PS-38, the coupling half still on PS-1
+(`spec/SPECIFICATION.md:6179`) — the progress half rests on PS-38, the coupling half still on PS-1
 (`:4758-4759`). `fresh_projection_has_no_checkpoint` moves the same way, to `PS-19, PS-38`
 (`:5845`), and renders `†` because it is still unwritten. Of the three further rules the amendment
 named, PS-21 and PS-22 now have a clause to cite; **PS-8 does not** — its row is recorded in its own
@@ -190,7 +190,7 @@ clause and routed to ADR-0017's range, not repaired here.
 `kb-decision-0017` and `kb-decision-0018` and names `kb-decision-0019` as related, but settles none
 of them; the PS-29 row ADR-0019 met inside its own range stays with ADR-0019's typed-layer deferral.
 The 2026-08-13 correction above travels with the repair and is *stated* in PS-1's clause rather than
-edited into it (`spec/SPECIFICATION.md:4840-4847`), which is the same discipline that kept the
+edited into it (`spec/SPECIFICATION.md:5028-5035`), which is the same discipline that kept the
 sentence refuted-in-place here.
 
 **What is open is PS-38's, not this atom's.** PS-38 is provisional against a store answering

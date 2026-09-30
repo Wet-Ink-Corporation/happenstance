@@ -139,7 +139,7 @@ Two consequences follow, and neither is settled here. Section 8 item 1 makes
 most-selective-tag-first probing a **requirement** and `tag_cardinality` a requirement with it; on
 the shape that ships that ordering is measured 38.1x–44.0x *backwards* across two runs, because the
 chained subquery is uncorrelated and the shipped sort materialises the larger set. And ES-27's
-`Rejects:` prose (`spec/SPECIFICATION.md:3925-3928`) quotes the aggregate's "roughly 200x" to
+`Rejects:` prose (`spec/SPECIFICATION.md:3985-3988`) quotes the aggregate's "roughly 200x" to
 justify the chain — repairing that number is a **`[FROZEN]` clause edit**, which CLAUDE.md routes
 through a new decision rather than a documentation sweep, and the honest repair states the
 order-of-magnitude gap rather than pinning another warm-cache one-host multiple that will rot the
@@ -181,7 +181,7 @@ sections 4, 6, 7, 9, 10, 12 and 15 stand, and therefore carries `supersedes: nul
 irony is worth leaving on the record rather than tidying away: the sentence that found the right
 instrument pointed it at the wrong section, because it was written about section 8.
 
-`crates/happenstance-sqlite/src/connection.rs:112`'s `BUSY_TIMEOUT_MS` is now `15_000`, decided on a
+`crates/happenstance-sqlite/src/connection.rs:120`'s `BUSY_TIMEOUT_MS` is now `15_000`, decided on a
 measurement of *this adapter's own* concurrency target rather than the experiment's candidate —
 `kb-reference-busy-timeout-adapter-cap-sweep-001`, which closes the first caveat the margin page
 still carries. At `--test-threads=1`, 5,000 ms went red in 7 launches of 8 and 15,000 ms in 0 of 16.
@@ -194,7 +194,7 @@ original never had for as long as it existed.
 contention-tolerance question section 11's firing raises, versus who owns section 9's runtime-seam
 correction. The first half has an owner: `kb-open-question-testkit-contention-tolerance-001`, and
 the instrument it was blocked on now exists — `FaultyStore::contend_next`
-(`crates/happenstance-testkit/src/faulty.rs:333`), with
+(`crates/happenstance-testkit/src/faulty.rs:336`), with
 `crates/happenstance-testkit/tests/contended_store_instruments.rs` showing both affected rules
 reject a merely-contended store. Raising the cap lowers the rate at which a contended store is
 mistaken for a broken one; it cannot remove it, because CF-33 is `[FROZEN]` and denies a rule the
@@ -209,7 +209,7 @@ remedy.
 **Sections 8 and 16 stand, and the repair is a decision rather than a documentation sweep.** The
 falsifier still cannot fire as written, and the repair path still runs through a `[FROZEN]` clause:
 ES-27's `Rejects:` prose quoting the aggregate's "roughly 200x". That citation has drifted — it now
-reads at `spec/SPECIFICATION.md:4084-4089`, with the figure itself on `:4065`, not the
+reads at `spec/SPECIFICATION.md:4272-4277`, with the figure itself on `:4065`, not the
 `:3902-3905` the paragraph above cites. Repoint by the anchor rather than the offset, which moves
 every wave.
 
@@ -239,7 +239,7 @@ most-selective-first is a 2.0x–2.2x *win* rather than the
 ordering requirement and `tag_cardinality`, and changes the reason for them to the correlation.
 §16's falsifier for §8 goes with those items, and is replaced by one that has an instrument that can
 fire it: a `LIST SUBQUERY` in the multi-tag guard's plan, or least-selective-first measuring
-cheaper on the correlated chain. ES-27's "roughly 200x" (`spec/SPECIFICATION.md:4084-4089`) is a
+cheaper on the correlated chain. ES-27's "roughly 200x" (`spec/SPECIFICATION.md:4272-4277`) is a
 `[FROZEN]` clause's prose, and `kb-decision-0068` authorises its replacement text. Sections 1–7,
 10 and 12–15 are ratified, with each falsifier's state recorded against it.
 

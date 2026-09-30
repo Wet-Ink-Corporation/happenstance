@@ -71,19 +71,25 @@ gave to this phase.
         the sync runner's reservation is decided here, not at phase 13.
       - `es-17-two-adapter-measurement-is-unscheduled` — take ADR-0055's restated
         measurement and act on it, or freeze `&[Event]` by a record. ES-17 below.
-      - `no-fixture-tolerance-for-transient-contention` — a `Busy` variant on the
+      - ~~`no-fixture-tolerance-for-transient-contention` — a `Busy` variant on the
         `#[non_exhaustive]` `AppendError` is additive to add, but whether 1.0
-        promises one is decided in this window, not after it.
+        promises one is decided in this window, not after it.~~ **Settled by
+        [ADR-0077](../../.kb/decisions/0077-appenderror-busy.md)** in lane L5:
+        `AppendError::Busy` is promised, the typed loop retries it inside
+        `Retry`, SQLite, Postgres and Neon report it, and ES-43 is `[FROZEN]`
+        with its freeze condition met. The question is superseded.
       - ~~`cf-23-emitter-names-mandatory-and-marked-unstable` — phase 16 decided
         the policy (ADR-0066); the renames it implies land here.~~ **Settled by
         [ADR-0076](../../.kb/decisions/0076-the-cf-23-emitters-are-public-api.md)**:
         the ten conformance emitters are un-hidden and renamed without `__`
         (`emit_tokio` and its siblings), CF-41 `[FROZEN]` pins them, and the
         question is superseded.
-      - `es-6-names-an-unwritable-rule`, sub-question 4 — already decided by
+      - ~~`es-6-names-an-unwritable-rule`, sub-question 4 — already decided by
         ADR-0066: driver error payloads re-exported under ADR-0044 are inside the
         promise, under the driver-major limit. What is left is writing that into
-        ES-6's prose.
+        ES-6's prose.~~ **Written** in lane L5: ES-6's payload paragraph states the
+        promise for `Store(E)` and `Busy(E)` alike, with its census. Sub-questions
+        1–3 stay open in the atom, and are not this window's.
 
       **Not here, and on purpose.** Three of the split's candidates were
       classified additive. `read-page-budget-is-unspecified` goes after 1.0.
@@ -420,3 +426,41 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   `--release-type minor`. At `0.4.0` its default skips every lint, so the proof
   artefact now names the flag.
   Citations shifted by both stages were repointed.
+
+- 2026-09-30 — **L5, `AppendError::Busy`**, on `lane/p17-busy`. Three stages.
+  **Stage 1, the contract.**
+  [ADR-0077](../../.kb/decisions/0077-appenderror-busy.md) records the owner's two
+  decisions: 1.0 promises `AppendError::Busy(E)`, and `happenstance`'s commit loop
+  retries it inside the same `Retry` bound. The loop re-decides rather than
+  re-sending, and `CommandError::Exhausted.source` becomes `AppendError<E>`.
+  `Busy` renders its own message, `is_busy()` and a `map_store` arm come with it,
+  and `FaultyStore::contend_next` moves to `Busy(Contended)`. ES-43 is minted
+  after ES-25, and ES-6's payload paragraph is written.
+  **Stage 2, the testkit.** `a_busy_append_left_nothing_behind` joins the
+  concurrency family, with `BusyAfterWriteStore` as its mutant, which also fails
+  four more rules. The re-spelling reached five racing rules, not three, under
+  structural floors, and `k_disjoint` gained a floor of its own: a boundary with no
+  winner rejected nobody. `CONTENDERS` stays 64.
+  **Stage 3, the adapters.** SQLite reports `Busy` for a `SQLITE_BUSY` or
+  `SQLITE_LOCKED` from `BEGIN IMMEDIATE`, and for nothing later. Postgres reports
+  it for the last `40001` of an exhausted budget; a deadlock and a lost `COMMIT`
+  stay `Store`. Neon reports it for the last `40001` after
+  `SERIALISATION_ATTEMPTS`; a transport failure stays `Store`. Cloudflare
+  documents why it never reports `Busy`.
+  **Verified.** SQLite:
+  - a held write lock under a 50 ms timeout is `Busy`, writes nothing, then lands;
+    the old `store_error` mapping fails that test;
+  - the concurrency family runs in-crate under a 1 ms timeout, green in eleven
+    runs; a throwaway count saw about 260 real `Busy` answers per run, 61 of 64 in
+    the new rule;
+  - the whole crate passes.
+  Postgres:
+  - the retry loop is split out and tested offline, with a scripted `SQLSTATE`:
+    exhaustion is `Busy` after exactly eight attempts, and `40P01` returns at once;
+  - the event-store and concurrency suites passed 108 of 108 against a
+    `postgres:17.10` container at `--test-threads=1`, as CI runs them. A parallel
+    local run exhausts the fixture's pool, so it is not a finding.
+  Neon: a scripted transport shows exhaustion is `Busy`, and `23505` is `Store`
+  on the first attempt. Its live half is CI's `live-neon` job, because
+  `NEON_CONNECTION` is not available locally. ES-43's freeze condition is met, so
+  it stays `[FROZEN]` and no ledger row is owed.

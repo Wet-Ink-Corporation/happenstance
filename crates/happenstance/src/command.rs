@@ -7,8 +7,8 @@ use core::num::NonZeroU32;
 
 use happenstance_core::bytes::Bytes;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventStore, EventType, InvalidQuery,
-    Query, SequencePosition, Tags, read_decision_model,
+    AppendCondition, AppendError, Event, EventStore, EventType, InvalidQuery, Query,
+    SequencePosition, Tags, read_decision_model,
 };
 
 use crate::boundary::Boundary;
@@ -175,7 +175,10 @@ pub enum CommandError<E: core::error::Error + 'static, D: core::error::Error + '
 
     /// The store failed the append for its own reasons.
     ///
-    /// Only a violated condition routes to a retry; everything else is this.
+    /// A violated condition and a busy refusal route to a retry; everything
+    /// else is this, and is never retried. That includes an append whose
+    /// outcome the store could not vouch for: it may have landed, so taking the
+    /// decision again could apply it twice.
     /// A message plus `#[source]` rather than `#[error(transparent)]`, because
     /// transparent forwards the *inner* error's source and would drop the
     /// `AppendError` itself out of the chain a caller reports from.
@@ -254,15 +257,28 @@ pub enum CommandError<E: core::error::Error + 'static, D: core::error::Error + '
 
     /// Every attempt was contended.
     ///
-    /// A distinct outcome from a store failure and from a refusal. The last
-    /// violation travels along, hint and all, so nothing is swallowed.
+    /// A distinct outcome from a store failure and from a refusal. Contended
+    /// means one of two answers from the store, attempt by attempt: the
+    /// condition was violated, or the store was busy and wrote nothing. The
+    /// last one travels along, so nothing is swallowed. It is always
+    /// [`AppendError::ConditionViolated`] or [`AppendError::Busy`], and
+    /// [`AppendError::is_busy`] says which.
+    ///
+    /// The whole [`AppendError`] rather than a
+    /// [`ConditionViolated`](crate::ConditionViolated), because a busy store's
+    /// refusal carries the adapter's own error. Narrowing it to a violation
+    /// would drop exactly the diagnostic an operator needs to tell a hot
+    /// boundary from a store that is under-provisioned.
     #[error("the boundary was contended on all {attempts} attempts")]
     Exhausted {
         /// The bound that was reached.
         attempts: u32,
-        /// The last violation, carried for reporting.
+        /// The last attempt's refusal, carried for reporting.
+        ///
+        /// A violated condition, hint and all, or a busy refusal carrying the
+        /// adapter's error.
         #[source]
-        source: ConditionViolated,
+        source: AppendError<E>,
     },
 }
 
@@ -286,6 +302,18 @@ pub enum CommandError<E: core::error::Error + 'static, D: core::error::Error + '
 /// re-uses a stale fold, never re-submits the previous attempt's events, and
 /// never mutates your value. The bound is `retry`, it is a required argument,
 /// and running out is [`CommandError::Exhausted`] rather than a hang.
+///
+/// **A busy refusal takes the same path, inside the same bound.**
+/// [`AppendError::Busy`] means the store refused before the batch took any
+/// effect, so the attempt wrote nothing and deciding again is safe. The loop
+/// re-reads and re-decides rather than re-submitting the refused batch. A
+/// verbatim resubmission would also be safe, because the condition still guards
+/// it, but it would make this loop two policies to save one read. And a store
+/// busy enough to refuse is one where other writers are landing, so the fresh
+/// read is the one likely to spare the next attempt a violation. There is no
+/// backoff between attempts, for either answer: an adapter that reports `Busy`
+/// has already waited out its own bound. Every other append error is returned
+/// at once, never retried.
 ///
 /// **This is not the retry-safety of a verbatim resubmission, and collapsing
 /// the two is a lost update.** Re-sending the *same* events under the *same*
@@ -317,7 +345,8 @@ pub enum CommandError<E: core::error::Error + 'static, D: core::error::Error + '
 ///   boundary it was decided on. Nothing is appended.
 /// * [`CommandError::Append`] if the store fails the append for its own
 ///   reasons.
-/// * [`CommandError::Exhausted`] if every attempt was contended.
+/// * [`CommandError::Exhausted`] if every attempt was contended: its condition
+///   was violated, or the store was busy and wrote nothing.
 ///
 /// A decision that produces no events is **not** in this list: it is
 /// [`CommandOutcome::Nothing`], which is a success.
@@ -361,10 +390,11 @@ where
 /// collapsed to a control decision before the next read's await, so nothing
 /// unbounded is alive across a suspension point.
 ///
-/// On a violated condition it re-derives the query, re-reads the store, folds
-/// a **fresh clone** of the boundary you handed it and calls your closure
-/// again — never re-using a stale fold, never re-submitting the previous
-/// attempt's events, and never mutating your value. The bound is `retry`, and
+/// On a violated condition, or a busy refusal that wrote nothing, it
+/// re-derives the query, re-reads the store, folds a **fresh clone** of the
+/// boundary you handed it and calls your closure again — never re-using a
+/// stale fold, never re-submitting the previous attempt's events, and never
+/// mutating your value. The bound is `retry`, and
 /// running out is [`CommandError::Exhausted`] rather than a hang. **That is not
 /// the retry-safety of a verbatim resubmission, and collapsing the two is a
 /// lost update.** Every attempt's condition is anchored on that attempt's own
@@ -451,13 +481,17 @@ where
                 // point would make the whole future `!Send` — and every
                 // single-threaded test would still pass. `tests/flavours.rs` is
                 // what rejects that shape.
-                if !err.is_condition_violated() {
+                // Two answers mean "decide again", and they share one bound:
+                // a violated condition, and a busy refusal that wrote nothing
+                // (ES-43). Anything else may have landed, or will never land,
+                // and is not this loop's to retry.
+                if !(err.is_condition_violated() || err.is_busy()) {
                     return Err(CommandError::Append(err));
                 }
                 if attempts >= retry.limit() {
                     return Err(CommandError::Exhausted {
                         attempts,
-                        source: violation(err),
+                        source: err,
                     });
                 }
             }
@@ -514,18 +548,6 @@ where
         );
     }
     Ok(batch)
-}
-
-/// The violation inside an error the predicate has already answered for.
-fn violation<E>(err: AppendError<E>) -> ConditionViolated {
-    match err {
-        AppendError::ConditionViolated(violation) => violation,
-        // Unreachable: every caller asks the predicate first. Spelled as the
-        // violation that names no conflict rather than as an `unwrap`, because
-        // a contention signal must not become a process failure inside
-        // somebody else's request handler.
-        _ => ConditionViolated::unspecified(),
-    }
 }
 
 #[cfg(test)]

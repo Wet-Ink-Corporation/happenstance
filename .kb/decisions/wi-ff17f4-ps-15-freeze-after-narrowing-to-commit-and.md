@@ -66,7 +66,7 @@ Leave the marker and move the row to phase 18.
 
 ## Evidence
 
-- `spec/SPECIFICATION.md:5640`: PS-15 — commit and reset MUST reject a batch begun on a different instance ... [FROZEN] — narrowed and frozen by ADR-0075
+- `spec/SPECIFICATION.md:5828`: PS-15 — commit and reset MUST reject a batch begun on a different instance ... [FROZEN] — narrowed and frozen by ADR-0075
 - `references/adr/0066-what-1-0-promises.md:164`: ADR-0066 assigned PS-15 freeze-by-17, with 'the MUST narrows to commit and reset' as a route
 - `crates/happenstance-core/src/projection.rs:544`: rollback returns Result<(), Self::Error> and cannot carry the port-level ForeignBatch variant
 - `.kb/decisions/0066-what-1-0-promises.md:148`: renew-past-1.0 allowed only where the falsifier firing would be additive or would relax an obligation

@@ -32,7 +32,7 @@ summary: >-
   the decision it supported, and that the honest record of an expired reason is a new atom rather
   than a repaired one - a decision whose stated reason has been quietly updated can no longer
   explain why it was taken. A fifth instance, 2026-09-08, and the smallest: kb-decision-0058
-  cited crates/happenstance-sqlite/src/event_store.rs:1229-1296, line 1229 was blank, and at
+  cited crates/happenstance-sqlite/src/event_store.rs:1256-1323, line 1229 was blank, and at
   4e13ee2 its three ranges were repointed to the constructs they always named with not one word
   of reasoning moved - a line number is a referent, and repairing it changes nothing the atom
   asserts. It is the first instance in which the rule collided with the check that enforces it:

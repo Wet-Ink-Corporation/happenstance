@@ -3,7 +3,7 @@
 //! Every store in `mutants.rs` is `Rc`-backed and driven on one thread, which
 //! that file's own closing note calls out as the set's largest uncovered axis:
 //! *a store whose defect appears only under genuine parallelism, a lost update
-//! between two OS threads, still cannot be expressed.* These five can be. They
+//! between two OS threads, still cannot be expressed.* These six can be. They
 //! are `Arc`/`Mutex` stores implementing [`SendEventStore`], and each is wrong in
 //! exactly one way that no sequential rule in the suite can see.
 //!
@@ -79,8 +79,8 @@ const SETTLE_YIELDS: usize = 512;
 
 /// One backing store, shared by every handle of one fixture.
 ///
-/// All five stores share one state type even though none uses every field. The
-/// alternative — a state struct per store — buys nothing but five more
+/// All six stores share one state type even though none uses every field. The
+/// alternative — a state struct per store — buys nothing but six more
 /// constructors, and the fields are named for what they are so that a store
 /// which ignores one is obviously ignoring it.
 #[derive(Debug, Default)]
@@ -101,6 +101,11 @@ pub(crate) struct Shared {
     /// Completed reads, so a writer can wait for a reader rather than for a
     /// clock.
     reads: AtomicU64,
+    /// How many appends have **written**, counted under the log's lock so the
+    /// ordinal follows commit order. `BusyAfterWriteStore` lies on the odd
+    /// ones, which makes which batches it lies about a property of the order
+    /// they committed in rather than of the scheduler.
+    writes: AtomicUsize,
 }
 
 impl Shared {
@@ -348,7 +353,7 @@ impl SendEventStore for LockedStore {
 racing_fixture!(LockedFixture, LockedStore, "LockedStore");
 
 // =====================================================================
-// The five defects
+// The six defects
 // =====================================================================
 
 /// The condition is probed, the transaction is not held, and the rows are
@@ -379,7 +384,7 @@ racing_fixture!(LockedFixture, LockedStore, "LockedStore");
 /// There is deliberately **no `REGISTRY` row** for this store: `fails` would be
 /// empty, because it fails no sequential rule by construction, and
 /// `mutant_registry_is_exhaustive` rejects that. See the comment on its `RACERS`
-/// row, and `crates/happenstance-testkit/README.md:187-190`, which is where that
+/// row, and `crates/happenstance-testkit/README.md:194-197`, which is where that
 /// rule is stated in prose — a concurrency rule's wrong store goes in
 /// `racers.rs` and `RACERS` precisely because it can have no `REGISTRY` row.
 #[derive(Debug)]
@@ -464,7 +469,7 @@ racing_fixture!(RacingProbeFixture, RacingProbeStore, "RacingProbeStore");
 /// state of a busy store with many independent entities, reported to every one
 /// of them as contention.
 ///
-/// This is the store that makes `k_disjoint_boundaries_admit_exactly_k_commits`
+/// This is the store that makes `k_disjoint_boundaries_never_conflict`
 /// worth having rather than being a restatement of
 /// `exactly_one_of_n_contenders_commits`: it passes the second, because one
 /// winner out of eight on **one** boundary is exactly what it produces.
@@ -786,3 +791,70 @@ impl SendEventStore for RowAtATimeStore {
 }
 
 racing_fixture!(RowAtATimeFixture, RowAtATimeStore, "RowAtATimeStore");
+
+/// The batch is written, and then the caller is told it was **busy**.
+///
+/// ES-43 lets a store refuse an append as `AppendError::Busy` only when the
+/// batch took no effect. This store breaks exactly that: every second append
+/// that writes is answered `Busy(DeadlineElapsed)` after its rows are committed.
+/// The rows are correct, the positions are correct, and the log is correct at
+/// rest. What is wrong is the answer, and the caller that believes it runs the
+/// command again, so an unconditional append lands twice.
+///
+/// The adapter shape is a deadline around the whole append, such as
+/// `tokio::time::timeout(append)` or a driver's statement timeout, that fires
+/// after `COMMIT` was sent and is classified as a transient refusal. The same
+/// defect appears when an adapter reclassifies every `SQLITE_BUSY` as `Busy`
+/// without asking whether the rows were already written. ES-43 requires an
+/// outcome the store cannot vouch for to stay `Store`.
+///
+/// Which appends lie is fixed by commit order, not by the scheduler. The
+/// ordinal is taken under the log's lock, and only appends that wrote are
+/// counted. So in every rule the first contender to commit after the setup
+/// append is the one it lies to, and the verdict is the same on every run.
+#[derive(Debug)]
+pub(crate) struct BusyAfterWriteStore(Arc<Shared>);
+
+impl SendEventStore for BusyAfterWriteStore {
+    type Error = LogError;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> + Send {
+        self.0.snapshot(query, options)
+    }
+
+    async fn append(
+        &self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        let (last, ordinal) = {
+            let mut log = self.0.log();
+            let last = correct::commit(&mut log, events, condition, dense)?;
+            (last, self.0.writes.fetch_add(1, Ordering::AcqRel))
+        };
+
+        // THE DEFECT: the batch is committed, and the answer says otherwise.
+        if ordinal % 2 == 1 {
+            return Err(AppendError::Busy(LogError::DeadlineElapsed));
+        }
+        Ok(last)
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        Ok(self.0.committed_head())
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        Ok(self.0.holds(id))
+    }
+}
+
+racing_fixture!(
+    BusyAfterWriteFixture,
+    BusyAfterWriteStore,
+    "BusyAfterWriteStore"
+);

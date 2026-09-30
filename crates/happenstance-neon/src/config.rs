@@ -74,8 +74,10 @@ pub struct NeonConfig {
     /// default. At `ReadCommitted` a conditional insert can miss a conflict a
     /// concurrent transaction committed after this one took its snapshot, and
     /// with no interactive transaction there is no second look to catch it. The
-    /// price is SQLSTATE `40001` aborts under contention, which the caller sees
-    /// as [`NeonSqlError::is_serialization_failure`](crate::NeonSqlError::is_serialization_failure).
+    /// price is SQLSTATE `40001` aborts under contention. The event store
+    /// retries them, and one that outlives its budget reaches the caller as
+    /// `AppendError::Busy` carrying a
+    /// [`NeonSqlError::is_serialization_failure`](crate::NeonSqlError::is_serialization_failure).
     ///
     /// It applies only to a request carrying **two or more** statements, because
     /// that is the only form the endpoint honours the header on — measured, and

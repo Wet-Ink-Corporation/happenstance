@@ -75,7 +75,9 @@
 //! backoff — so a writer already losing a serialisation fight can pay several
 //! round trips and a fraction of a second of waiting before it gets its answer.
 //! That is retry inside the adapter and is invisible to the caller as anything
-//! but latency. The constant's own doc block records that its value was adopted
+//! but latency — until the budget runs out, when the last `40001` arrives as
+//! `AppendError::Busy`: nothing was written, and deciding again is safe. The
+//! constant's own doc block records that its value was adopted
 //! from the Neon lane rather than measured here, and that a re-measurement is
 //! owed.
 //!

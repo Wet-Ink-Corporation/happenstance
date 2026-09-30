@@ -604,7 +604,9 @@ port's remaining 1.0 clauses: PS-15 narrowed and frozen, PS-23 and PS-24 frozen,
 obligation documented. ADR-0076 makes the conformance emitters CF-23 obliges public API, un-hidden
 and without their `__` prefix, and mints CF-41 to pin them. It partly supersedes ADR-0066 at §5's
 `#[doc(hidden)]` exemption only, the ADR-0065 shape, so `kb-decision-0066` stays accepted and its
-row gains the annotation.
+row gains the annotation. ADR-0077 promises `AppendError::Busy` at 1.0, has the typed commit loop
+retry it inside the same `Retry` bound, mints ES-43, and supersedes
+`kb-open-question-testkit-contention-tolerance-001` with the per-error arm.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -614,6 +616,8 @@ row gains the annotation.
 | ADR-0074 | [`kb-decision-0074`](../decisions/0074-projection-apply-is-async.md) | Projection::apply is async, is handed a Delivered event, and fails with the projection's own error | accepted | 17 | — |
 | ADR-0075 | [`kb-decision-0075`](../decisions/0075-the-projection-ports-1-0-clauses.md) | The projection port's 1.0 clauses — PS-15 narrowed and frozen, PS-23 and PS-24 frozen, PS-38 documented | accepted | 17 | — |
 | ADR-0076 | [`kb-decision-0076`](../decisions/0076-the-cf-23-emitters-are-public-api.md) | The emitters CF-23 obliges are public API — un-hidden, renamed without the prefix, and pinned by CF-41 | accepted | 17 | partly supersedes `kb-decision-0066` |
+| ADR-0077 | [`kb-decision-0077`](../decisions/0077-appenderror-busy.md) | A busy store is not a broken one — AppendError::Busy is promised, and the typed loop retries it | accepted | 17 | — |
+| — | [`kb-decision-wi-2ab1f3`](../decisions/wi-2ab1f3-does-dcb-independence-extend-to-busy-may-a.md) | DCB independence is a promise about conflict, not liveness; `Busy` allowed; rule renamed (owner, Weigh-In) | accepted | 17 | — |
 | — | [`kb-decision-wi-ff17f4`](../decisions/wi-ff17f4-ps-15-freeze-after-narrowing-to-commit-and.md) | PS-15 frozen narrowed to commit and reset; rollback non-normative (owner, Weigh-In) | accepted | 17 | — |
 
 ## Adding a row

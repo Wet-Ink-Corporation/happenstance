@@ -30,7 +30,7 @@ last_reviewed: 2026-09-07
 
 `SqliteEventStore::append`, `head` and `contains_event_id` keep running inline, under a
 blocking `std::sync::Mutex`, on whatever thread polls them
-(`crates/happenstance-sqlite/src/event_store.rs:1396-1431`, `:1447-1462`, `:1474-1490`).
+(`crates/happenstance-sqlite/src/event_store.rs:1423-1458`, `:1447-1462`, `:1474-1490`).
 They are **not** routed through `in_blocking_task`, the `spawn_blocking` seam
 `SqliteProjectionStore::commit` already uses (`projection_store.rs:342-361`), even though
 the projection store's own module doc calls a crate answering the same question two ways
@@ -49,7 +49,7 @@ shows the same pattern: 717.545 ms shipped against 41.573 ms through the seam.
 "every statement runs on a blocking task"; only the read path's deferred `spawn_blocking`
 is true today, and the sentence is corrected to say so. And the crate gains the
 `# Cancellation` section ES-23 `[FROZEN]` requires and does not have
-(`spec/SPECIFICATION.md:3659-3683` names "Rule: none," so no gate check catches its
+(`spec/SPECIFICATION.md:3717-3743` names "Rule: none," so no gate check catches its
 absence): today's true answer is that a dropped `append` future provably commits nothing,
 because `append` contains no `.await` anywhere in its body — the same omission that causes
 the stall is this adapter's current ES-23 answer.
@@ -59,7 +59,7 @@ it first looked.** `spawn_blocking` demands `'static`, and `SendEventStore::appe
 `events: &[Event]` and `condition: Option<&AppendCondition>` by borrow — unlike
 `ProjectionStore::commit`, which takes its batch by value — so the seam can only be entered
 by cloning the batch first, unconditionally, including on the rejection path. ES-17's own
-stated ground for the borrow (`spec/SPECIFICATION.md:3396-3397`) is that "a rejected append
+stated ground for the borrow (`spec/SPECIFICATION.md:3452-3453`) is that "a rejected append
 clones nothing," and rejection is the routine outcome under contention; routing through the
 seam breaks that ground on this adapter specifically. Worse, it flips this adapter's ES-23
 answer from "provably committed nothing" to "may have committed, caller told nothing" — the

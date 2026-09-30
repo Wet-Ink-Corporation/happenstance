@@ -11,12 +11,12 @@ summary: >-
   std::thread::park on Poll::Pending, with no notified flag of its own. std's park and unpark
   carry a single token per thread, so an unpark delivered while the thread is not parked is
   coalesced rather than queued: a second block_on nested inside a rule already driven by one —
-  the shape at crates/happenstance-testkit/src/concurrency.rs:891 calling through to :980 — can
+  the shape at crates/happenstance-testkit/src/concurrency.rs:1137 calling through to :1228 — can
   consume the token the outer loop was waiting for. Measured over four runs: the baseline
   completes, the nested case without a collision completes, and the nested case with a collision
   hangs past ten seconds. This matters beyond the one call site because CF-33 is [FROZEN] and
   forbids a conformance rule a clock, a watchdog or an elapsed-time assertion, so a hang produces
-  a stopped CI job that names no rule at all. spec/SPECIFICATION.md:4325-4345 already records one
+  a stopped CI job that names no rule at all. spec/SPECIFICATION.md:4513-4533 already records one
   mechanism with that signature — an adapter holding an exclusive resource across its append's
   suspension point, where the read blocks on what the suspended append still holds. This is a
   second, and it lives in the suite rather than in an adapter.
@@ -67,7 +67,7 @@ thread is not currently parked, the token is recorded once; a *second* `unpark` 
 parks again is coalesced into the same single token rather than queued as a second wakeup. That is
 fine for a single, flat poll loop. It stops being fine the moment a second `block_on` runs *nested*
 inside a rule that is itself being driven by an outer `block_on` on the same thread — the shape at
-`concurrency.rs:891` through `:981`, where a rule spawns further polling while already inside the
+`concurrency.rs:1137` through `:1229`, where a rule spawns further polling while already inside the
 registry's own loop. A wakeup meant for the inner future's waker and one meant for the outer loop's
 waker are, from `park`'s point of view, indistinguishable tokens on the same thread: the inner
 call can consume the token the outer loop needed, and the outer loop then parks with nothing left
@@ -86,7 +86,7 @@ CF-33 is `[FROZEN]`: no conformance rule may read a clock, measure elapsed time,
 watchdog. That constraint exists so a rule's outcome is a message about the store, not a timing
 artefact — but its cost is that a genuine hang inside the suite produces a stopped CI job that
 names no rule at all, because nothing in the design is permitted to say "this took too long."
-`spec/SPECIFICATION.md:4325-4345` already documents one mechanism with exactly that signature: an
+`spec/SPECIFICATION.md:4513-4533` already documents one mechanism with exactly that signature: an
 adapter holding an exclusive resource across its `append`'s suspension point, so a concurrent
 `read` blocks on what the suspended `append` still holds and the executor parks forever. This atom
 records a second mechanism with the same observable shape — a hung run, no rule named — except

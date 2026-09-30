@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`be09a7a` on `main` (PR #30, lane L3: ADR-0074, ADR-0075), plus
-`lane/p17-surface-renames`, lane L4. 2026-09-30.
+`18e6a32` on `main` (PR #31, lane L4: `0.4.0` manifests, public emitters),
+plus `lane/p17-busy`, lane L5. 2026-09-30.
 
 ## Where things are
 
@@ -37,20 +37,20 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-`lane/p17-surface-renames` (L4) is the first breaking PR, and is awaiting merge. **The manifests now read `0.4.0`**, while the CHANGELOG heading stays `[Unreleased]`. It contains:
-- **ADR-0057 executed**: the testkit carries no version key, and `package-check` enforces that.
-- **`happenstance-core`'s `unstable-projection` removed**, with its xtask test inverted.
-- **`naive-arm` moved to `--cfg happenstance_naive_arm`**, with two new live-postgres CI steps: clippy, and a vacuity-guarded run.
-- **CF-23's emitters renamed to `emit_*` and made public (ADR-0076)**, with CF-41 `[FROZEN]` and pinned by `emitter_surface.rs`.
+`lane/p17-busy` (L5), `AppendError::Busy`:
+- **The promise:** ES-43 is `[FROZEN]` and recorded in ADR-0077. The typed loop re-decides on `Busy` inside `Retry`, and `CommandError::Exhausted.source` is now `AppendError<E>`.
+- **Adapters:**
+  - SQLite reports `Busy` only from `BEGIN IMMEDIATE`.
+  - Postgres and Neon report `Busy` on the last `40001` after their retry budget. Neon's transport contract forbids a re-send that may have reached the endpoint.
+- **Testkit:**
+  - Five concurrency rules are re-spelled per error.
+  - A new rule, `a_busy_append_left_nothing_behind`, has a `BusyAfterWriteStore` mutant.
+  - `contend_next` now refuses as `Busy`.
+- **ES-6's payload prose** is written.
 
 ## Next action
 
-After L4 merges, lane L5 is `AppendError::Busy` (ES-43, ADR-0077):
-- SQLite, Postgres and Neon are reclassified to report `Busy`, and the typed commit loop retries it inside `Retry`.
-- The three concurrency rules get structural floors, and a new rule `a_busy_append_left_nothing_behind` comes with a mutant.
-- ES-6's prose is written.
-
-Docker is up, and `NEON_CONNECTION` is set in CI.
+Settle the `k_disjoint` question below, run the gate, and open L5's PR. After that comes L6a, the `workerd` job, landed red on purpose, with a deployed-Durable-Object leg using the Cloudflare token.
 
 ## Waiting on the owner
 

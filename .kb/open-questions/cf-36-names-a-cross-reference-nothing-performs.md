@@ -47,7 +47,7 @@ last_reviewed: 2026-09-29
 
 ## What changed
 
-CF-36 (`spec/SPECIFICATION.md:9187-9198`) is `[FROZEN]` and its `Rule:` line
+CF-36 (`spec/SPECIFICATION.md:9375-9386`) is `[FROZEN]` and its `Rule:` line
 claims `cargo xtask spec-trace` cross-references each case's level marker
 (`E2E-CASES.md:19-28`). It did not: at `9b06836`, `grep -c "Level"
 xtask/src/spec_trace.rs` returned `0` against 58 `- **Level:**` markers, so a
@@ -122,7 +122,7 @@ cannot. Group 2 is cheaper than that deadline and named above.
 
 ## The citation this pass repointed, and the one it refused
 
-This atom cited `SPECIFICATION.md:8801-8812`, correct when written (CF-36 began
+This atom cited `SPECIFICATION.md:8989-9000`, correct when written (CF-36 began
 at 8611 at `2abb99f`) and stale since. The
 `stated-only-defects-and-the-reopen-must` brief offered `8648`. **That repoint
 was not applied.** Its anchor sentence — *"is recorded as what is still missing
@@ -138,7 +138,7 @@ discount buys, and it is the case `kb-decision-0045` and
 ## Phase 16 — 2026-09-29
 
 **Classification: additive** — specification text and `xtask`; no signature. `CF36_UNDISCHARGED`
-(`xtask/src/spec_trace.rs:1426`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
+(`xtask/src/spec_trace.rs:1435`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
 clauses. Each group now has an owner, per `runbook/ledgers.md`, *The 1.0 dispositions* and `kb-decision-0066`:
 
 - **The nine SY clauses → phase 13**, which builds `happenstance-sync-testkit`

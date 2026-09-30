@@ -508,8 +508,12 @@ impl SendEventStore for PostgresEventStore {
     /// condition is evaluated; [`AppendError::ExceedsStoreLimit`] for a batch
     /// over one of this store's stated ceilings, refused before anything reaches
     /// the wire; [`AppendError::ConditionViolated`] when the condition found a
-    /// matching event, which is not an adapter failure; and
-    /// [`AppendError::Store`] for anything the driver or this adapter reports.
+    /// matching event, which is not an adapter failure;
+    /// [`AppendError::Busy`] for a serialisation failure (`40001`) that outlived
+    /// this store's own retry budget, which aborted every attempt whole and so
+    /// wrote nothing; and [`AppendError::Store`] for anything else the driver or
+    /// this adapter reports, a deadlock (`40P01`) and a connection lost around
+    /// `COMMIT` included.
     async fn append(
         &self,
         events: &[Event],
@@ -555,6 +559,10 @@ impl SendEventStore for PostgresEventStore {
             AppendOutcome::Violated(at) => Err(AppendError::ConditionViolated(
                 at.map_or_else(ConditionViolated::unspecified, ConditionViolated::at),
             )),
+            // A `40001` the retry budget did not absorb. Every attempt was
+            // aborted whole by the server, so nothing was written — which is
+            // what lets this be `Busy` rather than `Store`.
+            AppendOutcome::Busy(error) => Err(AppendError::Busy(error)),
         }
     }
 
@@ -662,7 +670,7 @@ impl SendEventStore for PostgresEventStore {
 /// the table, and it is deliberately named in prose rather than linked, because
 /// `happenstance-neon` is not a dependency of this crate and no adapter may
 /// depend on another:
-/// `k_disjoint_boundaries_admit_exactly_k_commits` runs twelve contenders over
+/// `k_disjoint_boundaries_never_conflict` runs twelve contenders over
 /// **four separate boundaries**, and the SSI predicate lock is *not* per
 /// boundary — with a small table the planner takes a sequential scan and the
 /// lock is relation-wide, so every contender conflicts with every other whatever
@@ -698,6 +706,25 @@ impl SendEventStore for PostgresEventStore {
 /// `40001`. When it is needed the cost is now eight round trips *plus* the waits,
 /// which [`BACKOFF_CAP`] bounds at roughly a quarter of a second in the worst
 /// case, paid only by a writer already losing a serialisation fight.
+///
+/// # What exhaustion reports
+///
+/// The last `40001`, as [`AppendError::Busy`] (ADR-0077). Until `0.4.0` it was
+/// `AppendError::Store`, which is how CI's failure above read as
+/// `Failed("postgres rejected the work")`. It is `Busy` because it meets all
+/// three parts of that variant's contract, and meets them by the server's
+/// guarantee rather than by inference: Postgres aborts a serialisation failure's
+/// transaction whole, so no attempt wrote anything; and the same call can
+/// succeed once the conflicting writer has committed. That holds for a `40001`
+/// raised at `COMMIT` too, because the server answered — an append whose
+/// `COMMIT` got *no* answer is a different failure and stays `Store`.
+///
+/// A deadlock, `40P01`, is not retried and is not reclassified: it stays
+/// `Store`, as it was. The server aborts a deadlock victim whole too, so the
+/// no-effect half would hold; what is missing is any evidence this append can
+/// deadlock at all, and a variant promised at 1.0 is not widened to cover a
+/// code nothing has observed. If one is observed, it is a lock-order question
+/// to answer first and a classification to add second.
 const SERIALISATION_ATTEMPTS: u32 = 8;
 
 /// Postgres's `serialization_failure`.
@@ -709,6 +736,9 @@ enum AppendOutcome {
     Committed(SequencePosition),
     /// A guard matched. The position is a hint, not a promise.
     Violated(Option<SequencePosition>),
+    /// Every attempt was a `40001`; the value is the last one. Nothing was
+    /// written.
+    Busy(PostgresEventStoreError),
 }
 
 /// Runs one append: condition and insert on one snapshot, in one transaction.
@@ -745,17 +775,36 @@ async fn append_in_transaction(
     recorded_at: RecordedAt,
     store_id: StoreId,
 ) -> Result<AppendOutcome, PostgresEventStoreError> {
-    let mut attempt = 0;
+    retry_serialisation(|| append_once(pool, events, condition, recorded_at, store_id)).await
+}
+
+/// Runs `attempt` until it stops failing with a `40001`, at most
+/// [`SERIALISATION_ATTEMPTS`] times, and reports an exhausted budget as
+/// [`AppendOutcome::Busy`].
+///
+/// Separate from [`append_in_transaction`] only so the budget and the
+/// classification can be tested without a server: forcing eight consecutive
+/// `40001`s from a live Postgres is a race, and a test of which arm exhaustion
+/// lands in should not be one.
+async fn retry_serialisation<F, A>(mut attempt: F) -> Result<AppendOutcome, PostgresEventStoreError>
+where
+    F: FnMut() -> A,
+    A: Future<Output = Result<AppendOutcome, PostgresEventStoreError>>,
+{
+    let mut attempts = 0;
     loop {
-        attempt += 1;
-        match append_once(pool, events, condition, recorded_at, store_id).await {
-            Err(error) if is_serialisation_failure(&error) && attempt < SERIALISATION_ATTEMPTS => {
+        attempts += 1;
+        match attempt().await {
+            Err(error) if is_serialisation_failure(&error) => {
+                if attempts >= SERIALISATION_ATTEMPTS {
+                    return Ok(AppendOutcome::Busy(error));
+                }
                 // Nothing was committed — Postgres aborted the whole
                 // transaction — so re-running is not a partial retry. The next
                 // attempt reads a log that now contains the winner's rows.
                 //
                 // Waiting first, and it is the half this loop was missing.
-                tokio::time::sleep(backoff(attempt)).await;
+                tokio::time::sleep(backoff(attempts)).await;
             }
             other => return other,
         }
@@ -781,7 +830,7 @@ const BACKOFF_CAP: Duration = Duration::from_millis(64);
 /// and it is only half the story; the other half is that attempts have to be
 /// **spread out**, and nothing here was spreading them.
 ///
-/// `k_disjoint_boundaries_admit_exactly_k_commits` races twelve contenders over
+/// `k_disjoint_boundaries_never_conflict` races twelve contenders over
 /// four boundaries. The SSI predicate lock is relation-wide on a small table, so
 /// all twelve conflict with each other whatever boundary they are racing. With no
 /// wait, every loser re-enters at once and collides with every other loser — a
@@ -1025,8 +1074,11 @@ fn now() -> RecordedAt {
 
 #[cfg(test)]
 mod tests {
-    use super::PostgresEventStore;
-    use happenstance_core::EventStore;
+    use super::{
+        AppendOutcome, PostgresEventStore, PostgresEventStoreError, SERIALISATION_ATTEMPTS,
+        SERIALIZATION_FAILURE, is_serialisation_failure, retry_serialisation,
+    };
+    use happenstance_core::{EventStore, SequencePosition};
 
     /// Constraint 4: generic code binds the *bare* flavour, and a `Send`
     /// implementer must satisfy it. Instantiating the bound at this concrete
@@ -1043,5 +1095,108 @@ mod tests {
     fn store_is_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<PostgresEventStore>();
+    }
+
+    /// A server error carrying nothing but a `SQLSTATE`, which is all the retry
+    /// loop reads. `sqlx` offers no public constructor for a real one, and its
+    /// `DatabaseError` trait is public precisely so a driver-shaped error can be
+    /// supplied from outside.
+    #[derive(Debug)]
+    struct Sqlstate(&'static str);
+
+    impl core::fmt::Display for Sqlstate {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "scripted SQLSTATE {}", self.0)
+        }
+    }
+
+    impl std::error::Error for Sqlstate {}
+
+    impl sqlx::error::DatabaseError for Sqlstate {
+        fn message(&self) -> &'static str {
+            "scripted"
+        }
+
+        fn code(&self) -> Option<std::borrow::Cow<'_, str>> {
+            Some(std::borrow::Cow::Borrowed(self.0))
+        }
+
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            sqlx::error::ErrorKind::Other
+        }
+    }
+
+    fn server(code: &'static str) -> PostgresEventStoreError {
+        PostgresEventStoreError::Driver(sqlx::Error::Database(Box::new(Sqlstate(code))))
+    }
+
+    /// Runs the retry loop over a script: `failures` answers of `code`, then a
+    /// commit. Returns what the loop reported and how many attempts it made.
+    async fn scripted(
+        code: &'static str,
+        failures: u32,
+    ) -> (Result<AppendOutcome, PostgresEventStoreError>, u32) {
+        let calls = core::cell::Cell::new(0_u32);
+        let outcome = retry_serialisation(|| {
+            calls.set(calls.get() + 1);
+            let call = calls.get();
+            async move {
+                if call <= failures {
+                    Err(server(code))
+                } else {
+                    Ok(AppendOutcome::Committed(SequencePosition::FIRST))
+                }
+            }
+        })
+        .await;
+        (outcome, calls.get())
+    }
+
+    /// An exhausted budget is `Busy`, carrying the last `40001`, after exactly
+    /// the budget. The wrong implementation this rejects is the one shipped
+    /// until `0.4.0`: the last `40001` returned as an error, which `append`
+    /// reports as `Store`.
+    #[tokio::test]
+    async fn a_serialisation_failure_that_outlives_the_budget_is_busy() {
+        let (outcome, calls) = scripted(SERIALIZATION_FAILURE, u32::MAX).await;
+        assert_eq!(calls, SERIALISATION_ATTEMPTS, "the budget, and no more");
+        match outcome {
+            Ok(AppendOutcome::Busy(error)) => assert!(
+                is_serialisation_failure(&error),
+                "the payload is the last 40001: {error:?}"
+            ),
+            Ok(_) => panic!("an exhausted budget must be `Busy`, got an outcome"),
+            Err(error) => panic!("an exhausted budget must be `Busy`, got {error:?}"),
+        }
+    }
+
+    /// A `40001` inside the budget is absorbed, and never reaches the caller.
+    #[tokio::test]
+    async fn a_serialisation_failure_inside_the_budget_is_retried() {
+        let (outcome, calls) = scripted(SERIALIZATION_FAILURE, SERIALISATION_ATTEMPTS - 1).await;
+        assert_eq!(calls, SERIALISATION_ATTEMPTS);
+        assert!(matches!(outcome, Ok(AppendOutcome::Committed(_))));
+    }
+
+    /// Any other `SQLSTATE` — a deadlock is the nearest — is neither retried
+    /// nor reclassified: it returns on the first attempt, as an error, which
+    /// `append` reports as `Store`.
+    #[tokio::test]
+    async fn another_sqlstate_is_returned_at_once_and_not_as_busy() {
+        let (outcome, calls) = scripted("40P01", u32::MAX).await;
+        assert_eq!(calls, 1);
+        assert!(matches!(outcome, Err(ref error) if !is_serialisation_failure(error)));
     }
 }

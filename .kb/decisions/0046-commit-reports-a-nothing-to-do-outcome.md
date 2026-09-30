@@ -70,7 +70,7 @@ first credited with.
 
 ## What this leaves unresolved on purpose
 
-`error.rs:222-223`'s premise for treating an empty append as a caller bug was "there is no
+`error.rs:232-233`'s premise for treating an empty append as a caller bug was "there is no
 position an adapter could honestly return" — a constraint on the **store port**, where every
 success carries a `SequencePosition`. This decision lifts exactly that constraint one layer up,
 giving the typed layer's outcome an arm that carries no position, without touching the

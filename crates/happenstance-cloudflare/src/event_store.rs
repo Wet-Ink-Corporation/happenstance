@@ -882,6 +882,24 @@ impl CloudflareEventStore {
 /// *before* `Self::Error` is constructed. That is load bearing for ES-6 — see
 /// the crate documentation's third finding — and adding a variant here would
 /// look like the fix and be the defect.
+///
+/// # Why this store never reports `AppendError::Busy`
+///
+/// [`AppendError::Busy`] is the refusal a store makes when another writer holds
+/// what it needs — a lock not acquired in time, a serialisation fight lost past
+/// a retry budget. A Durable Object has no other writer to lose to: it is a
+/// single-threaded actor with exclusive ownership of its storage, and `append`
+/// awaits nothing between the probe and the insert, so no second append can
+/// begin until this one has finished. There is nothing here to be busy *with*,
+/// which is the case `Busy`'s own documentation names for `MemoryEventStore`.
+///
+/// So every append failure this type carries arrives as
+/// [`AppendError::Store`], and none is ever reclassified. A thrown storage
+/// error is not evidence of contention — the runtime serialises before storage
+/// is reached — and `Busy` may be claimed only where the store knows nothing
+/// was written, which a thrown `INSERT` does not tell this adapter. The one
+/// case that is known is already its own variant:
+/// [`PartialBatch`](Self::PartialBatch) is the opposite claim.
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum CloudflareEventStoreError {

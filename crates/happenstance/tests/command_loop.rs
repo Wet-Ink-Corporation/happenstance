@@ -489,8 +489,12 @@ async fn exhausted_carries_the_violation() {
         panic!("expected Exhausted, got {err:?}");
     };
     assert_eq!(*attempts, 2);
-    // Carried for reporting, never consulted for control flow.
-    assert_eq!(source.conflicting_position, None);
+    // Carried for reporting, never consulted for control flow. The last
+    // refusal travels whole, so a violation is still a violation, hint and all.
+    assert!(
+        matches!(source, AppendError::ConditionViolated(violation) if violation.conflicting_position.is_none()),
+        "expected the last violation, got {source:?}"
+    );
     assert!(
         core::error::Error::source(&err).is_some(),
         "the violation is not reachable through the error chain"

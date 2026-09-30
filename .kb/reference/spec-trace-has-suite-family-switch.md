@@ -43,7 +43,7 @@ last_reviewed: 2026-08-15
 
 `cargo xtask spec-trace`'s check 4 — does every conformance rule a clause cites actually exist —
 does not run against every clause family uniformly. It runs only against families `has_suite`
-admits (`xtask/src/spec_trace.rs:2544-2549`):
+admits (`xtask/src/spec_trace.rs:2553-2558`):
 
 ```rust
 fn has_suite(clause_id: &str) -> bool {
@@ -66,14 +66,14 @@ written — and `cargo xtask spec-trace` would report no problem, because `PS` s
 `has_suite` checked. The exclusion was written for a true reason: the projection suite
 (`crates/happenstance-testkit/src/projection.rs`) did not exist yet, and checking `PS` citations
 against a suite that could never define them would report every one of them as a false positive,
-"noise indistinguishable from a real typo" (`xtask/src/spec_trace.rs:2497-2499`). The suite was
+"noise indistinguishable from a real typo" (`xtask/src/spec_trace.rs:2506-2508`). The suite was
 then written, and the exclusion was not removed — it outlived its own justification by two slices
 before this workspace noticed.
 
 ## What holds the fix
 
 `spec_trace::tests::the_projection_family_is_checked_against_its_suite`
-(`xtask/src/spec_trace.rs:3520-3527`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
+(`xtask/src/spec_trace.rs:3534-3541`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
 directly, so a future regression — narrowing the prefix list back to exclude `PS` — fails the build
 rather than silently reopening the blind spot. The companion test,
 `the_replication_family_still_abstains_and_the_rest_do_not` (`:2378-2394`), asserts the reverse for

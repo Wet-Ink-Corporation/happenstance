@@ -11,18 +11,27 @@
 //! `ConditionViolated::conflicting_position` being `Some` works against every
 //! store an author can reach today and stops working in production; here it
 //! stops working in a test that runs in a millisecond.
+//!
+//! The same holds for a **busy** store. `FaultyStore::contend_next` refuses an
+//! append as `AppendError::Busy` without reaching the inner store, which is the
+//! refusal SQLite gives after its busy timeout and PostgreSQL after a
+//! serialisation failure outlasts the adapter's budget, and which no in-process
+//! store gives at all. The loop retries it inside the same bound (ES-43).
 
 #![cfg(all(feature = "memory", feature = "json"))]
 #![allow(clippy::unwrap_used)]
 
+use core::cell::Cell;
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use futures_core::Stream;
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Codec, CodecError, CommandError, DecisionModel, DomainEvent, EventType, Json, Retry, Tags,
-    commit_with,
+    AppendCondition, AppendError, Codec, CodecError, CommandError, DecisionModel, DomainEvent,
+    Event, EventId, EventStore, EventType, Json, Query, ReadOptions, Retry, SequencePosition,
+    SequencedEvent, Tags, commit_with,
 };
-use happenstance_testkit::fixtures::MemoryFixture;
+use happenstance_testkit::fixtures::{MemoryFixture, MemoryHandle};
 use happenstance_testkit::{FaultyStore, FaultyStoreError, Fixture};
 
 const SUBSCRIBED: EventType = EventType::from_static("StudentSubscribed");
@@ -80,7 +89,7 @@ fn course() -> Course {
 }
 
 /// One `MemoryEventStore` behind one handle, wrapped and armed.
-async fn armed(violations: u32) -> FaultyStore<happenstance_testkit::fixtures::MemoryHandle> {
+async fn armed(violations: u32) -> FaultyStore<MemoryHandle> {
     let fixture = MemoryFixture::new();
     FaultyStore::new(fixture.connect().await).violate_next(violations)
 }
@@ -193,4 +202,136 @@ async fn an_injected_read_failure_is_not_retried_as_contention() {
              and must not be retried as one: {other:?}"
         ),
     }
+}
+
+// ---------------------------------------------------------------------------
+// ES-43 — a busy refusal is retried inside the same bound, and nothing else is
+// ---------------------------------------------------------------------------
+
+/// One `MemoryEventStore` behind one handle, told to be busy `n` times.
+async fn busy(n: u32) -> FaultyStore<MemoryHandle> {
+    let fixture = MemoryFixture::new();
+    FaultyStore::new(fixture.connect().await).contend_next(n)
+}
+
+#[tokio::test]
+async fn a_busy_refusal_is_re_decided_and_the_attempts_say_so() {
+    let store = busy(2).await;
+    let retry = Retry::attempts(3.try_into().unwrap());
+
+    let decisions = AtomicU32::new(0);
+    let done = commit_with(&store, course(), &Json, retry, |_: &Course| {
+        decisions.fetch_add(1, Ordering::Relaxed);
+        Ok::<_, core::convert::Infallible>(vec![Subscribed])
+    })
+    .await
+    .expect("two busy refusals fit inside a bound of three")
+    .committed()
+    .expect("the decision produced events, so the command committed");
+
+    assert_eq!(
+        done.attempts, 3,
+        "two busy refusals, then success, and `attempts` is the proof the retry ran"
+    );
+    assert_eq!(
+        decisions.load(Ordering::Relaxed),
+        3,
+        "a busy retry takes the decision again from a fresh read, as a \
+         violation does, rather than re-submitting the refused batch"
+    );
+}
+
+#[tokio::test]
+async fn busy_on_every_attempt_is_exhausted_and_carries_the_busy_refusal() {
+    let store = busy(9).await;
+    let retry = Retry::attempts(3.try_into().unwrap());
+
+    let err = commit_with(&store, course(), &Json, retry, |_: &Course| {
+        Ok::<_, core::convert::Infallible>(vec![Subscribed])
+    })
+    .await
+    .expect_err("every attempt was refused as busy");
+
+    let CommandError::Exhausted { attempts, source } = &err else {
+        panic!("a busy store that never frees up must exhaust the bound, got {err:?}");
+    };
+    assert_eq!(
+        *attempts, 3,
+        "the bound the caller passed is the bound the loop honoured"
+    );
+    assert!(
+        matches!(source, AppendError::Busy(FaultyStoreError::Contended)),
+        "the last refusal travels whole, adapter error and all; got {source:?}"
+    );
+    assert!(
+        core::error::Error::source(&err).is_some(),
+        "the busy refusal is not reachable through the error chain"
+    );
+}
+
+/// A store whose every append fails for its own reasons.
+///
+/// `FaultyStore` has no arm for this, and that is on purpose: its arms model
+/// answers a conformant store gives. This is the other answer, the one a caller
+/// may not retry, and the loop has to be seen *not* retrying it.
+struct BrokenAppends {
+    inner: FaultyStore<MemoryHandle>,
+    appends: Cell<u32>,
+}
+
+impl EventStore for BrokenAppends {
+    type Error = <FaultyStore<MemoryHandle> as EventStore>::Error;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        EventStore::read(&self.inner, query, options)
+    }
+
+    async fn append(
+        &self,
+        _events: &[Event],
+        _condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        self.appends.set(self.appends.get() + 1);
+        Err(AppendError::Store(FaultyStoreError::Injected))
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        EventStore::head(&self.inner).await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        EventStore::contains_event_id(&self.inner, id).await
+    }
+}
+
+#[tokio::test]
+async fn a_store_failure_is_still_not_retried() {
+    let fixture = MemoryFixture::new();
+    let store = BrokenAppends {
+        inner: FaultyStore::new(fixture.connect().await),
+        appends: Cell::new(0),
+    };
+    let retry = Retry::attempts(3.try_into().unwrap());
+
+    let outcome = commit_with(&store, course(), &Json, retry, |_: &Course| {
+        Ok::<_, core::convert::Infallible>(vec![Subscribed])
+    })
+    .await;
+
+    match outcome {
+        Err(CommandError::Append(AppendError::Store(FaultyStoreError::Injected))) => {}
+        other => panic!(
+            "a store failure may have written, so it is returned rather than \
+             retried as though it were busy: {other:?}"
+        ),
+    }
+    assert_eq!(
+        store.appends.get(),
+        1,
+        "the loop retried a `Store` error, which is the lost update ES-43 exists to prevent"
+    );
 }
