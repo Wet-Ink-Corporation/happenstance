@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`18e6a32` on `main` (PR #31, lane L4: `0.4.0` manifests, public emitters),
-plus `lane/p17-busy`, lane L5. 2026-09-30.
+`159ed70` on `main` (PR #32, lane L5: `AppendError::Busy`), plus
+`lane/p17-retire-ladybug`. 2026-09-30.
 
 ## Where things are
 
@@ -37,20 +37,14 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-`lane/p17-busy` (L5), `AppendError::Busy`:
-- **The promise:** ES-43 is `[FROZEN]` and recorded in ADR-0077. The typed loop re-decides on `Busy` inside `Retry`, and `CommandError::Exhausted.source` is now `AppendError<E>`.
-- **Adapters:**
-  - SQLite reports `Busy` only from `BEGIN IMMEDIATE`.
-  - Postgres and Neon report `Busy` on the last `40001` after their retry budget. Neon's transport contract forbids a re-send that may have reached the endpoint.
-- **Testkit:**
-  - Five concurrency rules are re-spelled per error.
-  - A new rule, `a_busy_append_left_nothing_behind`, has a `BusyAfterWriteStore` mutant.
-  - `contend_next` now refuses as `Busy`.
-- **ES-6's payload prose** is written.
+- `lane/p17-retire-ladybug`: **`happenstance-ladybug` is retired** (ADR-0078, the owner's call `wi-630032`).
+  - It is excluded from the workspace, and the directory is kept as a frozen record because its files are cited by line.
+  - The gate's ladybug steps, its CI job and `lbug`'s dependency graph are gone.
+- PR #29 (phase 22, the documentation site): `main` has been merged into it, and it merges once CI is green.
 
 ## Next action
 
-Settle the `k_disjoint` question below, run the gate, and open L5's PR. After that comes L6a, the `workerd` job, landed red on purpose, with a deployed-Durable-Object leg using the Cloudflare token.
+Lane L6a is the `workerd` CI job, landed red on purpose. It has a local leg and a deployed-Durable-Object leg using the Cloudflare token. The secret's name needs confirming: `CLOUDFLARE_API_TOKEN` unless the owner says otherwise.
 
 ## Waiting on the owner
 
