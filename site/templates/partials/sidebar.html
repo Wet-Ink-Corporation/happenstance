@@ -1,0 +1,28 @@
+{#- The guide's navigation, grouped by the need each page declares.
+
+    The grouping is not curated: a page lands in the group its own
+    `> **Answers:**` line names, which the gate has already checked against the
+    closed set. So a page cannot sit in the wrong group without declaring the
+    wrong need, and that is a defect band 00 of `standards/pages/` already names. -#}
+{%- set guide = get_section(path="guide/_index.md") -%}
+<nav class="hs-sidebar" aria-label="Guide">
+  <div class="hs-sidebar__section">
+    <a class="hs-sidebar__link" href="{{ guide.permalink }}"{% if current_path == guide.path %} aria-current="page"{% endif %}>Overview</a>
+  </div>
+  {%- for need in ["tutorial", "orientation", "explanation", "how-to"] %}
+  {%- set members = [p for p in guide.pages if p.extra.need == need] %}
+  {%- if members | length > 0 %}
+  <div class="hs-sidebar__section">
+    <span class="hs-label hs-sidebar__title">{{ <need_label need={need} /> }}</span>
+    {%- for p in members %}
+    <a class="hs-sidebar__link" href="{{ p.permalink }}"{% if current_path == p.path %} aria-current="page"{% endif %}>{{ p.title }}</a>
+    {%- endfor %}
+  </div>
+  {%- endif %}
+  {%- endfor %}
+  <div class="hs-sidebar__section">
+    <span class="hs-label hs-sidebar__title">Reference</span>
+    <a class="hs-sidebar__link" href="{{ get_url(path='@/reference.md') }}">What is checked, and where</a>
+    <a class="hs-sidebar__link" href="{{ get_url(path='api/happenstance/index.html') }}">API</a>
+  </div>
+</nav>

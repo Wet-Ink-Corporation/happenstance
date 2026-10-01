@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Page not found · happenstance{% endblock title %}
+{% block content %}
+<div class="lost prose">
+  <p class="hs-kicker">404</p>
+  <h1 class="title">There is no page at this address</h1>
+  <p class="lede">It may have moved when the guide was reorganised. The <a href="{{ get_url(path='@/guide/_index.md') }}">guide</a> lists every page, and the <a href="{{ get_url(path='api/happenstance/index.html') }}">API</a> documents every public item.</p>
+</div>
+{% endblock content %}

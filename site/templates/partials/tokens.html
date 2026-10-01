@@ -1,0 +1,21 @@
+{#- The design system's tokens, as CSS custom properties.
+
+    Read from `brand/tokens.json`, vendored verbatim from the design system, so
+    re-syncing the brand is copying one file. An alias `{sun}` becomes
+    `var(--sun)` and the browser resolves it. Paper is the first theme and the
+    default; Night applies under the OS preference unless the reader chose
+    Paper, and whenever the reader chose Night. -#}
+{%- set tokens = load_data(path="brand/tokens.json") -%}
+{%- set dark -%}
+{%- for t in tokens.color.tokens %}{% if t.value is map and t.value.dark is defined %}{% set v = t.value.dark %}--{{ t.name }}:{% if v is starting_with(pat="{") %}var(--{{ v | trim_start(pat="{") | trim_end(pat="}") }}){% else %}{{ v | safe }}{% endif %};{% endif %}{% endfor -%}
+{%- for t in tokens.shadow.tokens %}{% if t.value is map and t.value.dark is defined %}--{{ t.name }}:{{ t.value.dark | safe }};{% endif %}{% endfor -%}
+{%- endset -%}
+<style>
+:root{color-scheme:light;
+{%- for t in tokens.color.tokens %}{% set v = t.value.light if t.value is map else t.value %}--{{ t.name }}:{% if v is starting_with(pat="{") %}var(--{{ v | trim_start(pat="{") | trim_end(pat="}") }}){% else %}{{ v | safe }}{% endif %};{% endfor -%}
+{%- for family in ["spacing", "radius", "zIndex"] %}{% for t in tokens[family].tokens %}--{{ t.name | replace(from=".", to="\\.") }}:{{ t.value }};{% endfor %}{% endfor -%}
+{%- for t in tokens.shadow.tokens %}--{{ t.name }}:{{ (t.value.light if t.value is map else t.value) | safe }};{% endfor -%}
+--font-sans:{{ tokens.type.families.sans | safe }};--font-mono:{{ tokens.type.families.mono | safe }};}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;{{ dark | safe }}}}
+:root[data-theme="dark"]{color-scheme:dark;{{ dark | safe }}}
+</style>

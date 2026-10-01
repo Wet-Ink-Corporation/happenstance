@@ -93,6 +93,7 @@ mod narrative_doctests;
 mod package;
 mod proof;
 mod reserve;
+mod site;
 mod spec_trace;
 
 /// A step in the CI gate.
@@ -1268,6 +1269,7 @@ fn main() -> ExitCode {
         // nothing here a checker could rewrite, so the surface is safe to invoke
         // at any time and nothing needs undoing.
         Some("narrative") => lint_narrative::run(),
+        Some("site") => site::run(std::env::args_os().skip(2)),
         Some("lints") => run_steps(lint_steps()),
         Some("lint-clock") => lints::no_clock(),
         Some("lint-testkit-version") => lints::testkit_version(),

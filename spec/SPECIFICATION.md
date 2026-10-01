@@ -8892,7 +8892,7 @@ semantics of a race without ever running one.
 
 **CF-20.** The fixture trait MUST be defined without a `Send` bound and MUST NOT
 be `trait_variant`-derived. `[FROZEN]`
-Rule: the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:192-283`), extended
+Rule: the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:193-284`), extended
 to build the testkit for `wasm32-unknown-unknown`.
 Cases: E2E-52, E2E-30.
 Rejects: a fixture trait carrying `Self: Send`, which would make the suite
@@ -10011,7 +10011,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-17 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-07 |
 | CF-18 | FROZEN | `mutation_coverage::capability_skips_are_reported` — a meta-test in `crates/ha… | E2E-07, E2E-08 |
 | CF-19 | FROZEN | `two_handles_observe_each_others_appends` | E2E-08 |
-| CF-20 | FROZEN | the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:192-283`), extended to… | E2E-52, E2E-30 |
+| CF-20 | FROZEN | the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:193-284`), extended to… | E2E-52, E2E-30 |
 | CF-21 | FROZEN | a doctest in `fixtures` constructing a strategy, which fails to compile if the… | E2E-32 |
 | CF-22 | FROZEN | `registry::no_orphan_rules`, at the foot of `crates/happenstance-testkit/src/r… | E2E-52, E2E-30, E2E-09 |
 | CF-23 | FROZEN | the wasm32 steps of `cargo xtask ci`, which compile a `wasm-bindgen-test` harn… | E2E-52, E2E-30 |

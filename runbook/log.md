@@ -58,6 +58,34 @@ ruling (`wi-ff17f4`), after a walkthrough of the options.
 
 ---
 
+## 2026-09-29 — phase 22 opened: the documentation site
+
+*Uncommitted, on `lane/docs-site`, in a worktree beside the phase-16 work.*
+Phase 22.
+
+The owner widened HS-I0007's scope to a branded site on GitHub Pages and settled
+four things with it: `docs/` stays as the checked source, Zola builds the site,
+scraped examples go on the site's API build only, and the work is tracked as its
+own phase. Built:
+- `site/`;
+- `cargo xtask site`;
+- `pages.yml`;
+- scraping opt-ins on the seven examples.
+
+Verified, by name:
+- `cargo xtask affected --base origin/main` exit 0, and `cargo xtask lints` exit 0;
+- a nightly build with *Examples found in repository* on
+  `happenstance::read_decision_model`;
+- the site seen in a browser, in both themes and at 375 px.
+
+Withdrawn after building: the rustdoc logo attribute, which moved lines
+`standards/rust/` cites by number. Not done: the new how-to pages and the
+prior-model page, which waits on the owner. The handover is not rewritten here,
+because it is `main`'s and phase 16's lane is writing it; this lane's state is
+in [`phases/22-docs-site.md`](phases/22-docs-site.md).
+
+---
+
 ## 2026-09-29 — ADR-0028: what a store may forget, decided as a refusal
 
 *Uncommitted at writing; `lane/p17-provided-method-spike`.*

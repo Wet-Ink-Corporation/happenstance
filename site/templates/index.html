@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}happenstance — event sourcing for Rust, with the boundary drawn per decision{% endblock title %}
+
+{% block content %}
+{%- set facts = load_data(path="data/facts.json") -%}
+{%- set refusal = load_data(path="data/snippets/refusal.rs", format="plain") -%}
+{%- set refusal_out = load_data(path="data/snippets/refusal.out", format="plain") -%}
+
+<section class="hs-hero" aria-labelledby="hero-title">
+  <div class="hs-hero__inner">
+    <div class="hs-hero__copy">
+      <p class="hs-kicker hs-kicker--inverse">Event sourcing for Rust</p>
+      <h1 class="hs-hero__title" id="hero-title">The boundary is not declared in advance.</h1>
+      <p class="hs-hero__lede">A storage-agnostic, DCB-compliant event store. Each decision reads the events it depends on, and its write is refused if anything matching that read has landed since — so the consistency boundary is whatever the decision actually read.</p>
+      <div class="hs-hero__actions">
+        <a class="hs-btn hs-btn--sun hs-btn--size-lg" href="{{ get_url(path='@/guide/first-encounter.md') }}">Watch a write get refused {{ <icon name="arrow-right" /> }}</a>
+        {{ <install command={config.extra.install} /> }}
+      </div>
+    </div>
+    <div class="hs-hero__aside hero-mark">
+      {{ <logo file="happenstance-mark.svg" label="" class="hs-logo hs-hero__mark" /> }}
+    </div>
+  </div>
+</section>
+
+<div class="page-shell">
+
+  <section class="story" aria-labelledby="story-title">
+    <p class="hs-kicker">One rule, three answers</p>
+    <h2 class="display" id="story-title">A decision that spans two things</h2>
+
+    <div class="story__beats">
+      <article class="beat">
+        <div class="hs-section-heading">
+          <h3 class="hs-section-heading__title"><span class="hs-num">01</span>The rule</h3>
+          <div class="hs-rulebar"></div>
+        </div>
+        <p>A course holds thirty seats. A student takes at most five courses. Subscribing one student to one course has to respect both limits — and the two limits are about different things.</p>
+      </article>
+      <article class="beat">
+        <div class="hs-section-heading">
+          <h3 class="hs-section-heading__title"><span class="hs-num">02</span>The answer you know</h3>
+          <div class="hs-rulebar"></div>
+        </div>
+        <p>Classical event sourcing asks you to choose the boundary when the schema is written: a <code class="hs-inline-code">Course</code> aggregate or a <code class="hs-inline-code">Student</code> aggregate. Choose either, and the other limit needs a read model and a saga. The boundary was fixed before anyone knew which decisions it would have to hold.</p>
+      </article>
+      <article class="beat">
+        <div class="hs-section-heading">
+          <h3 class="hs-section-heading__title"><span class="hs-num">03</span>The answer here</h3>
+          <div class="hs-rulebar"></div>
+        </div>
+        <p>A dynamic consistency boundary is drawn per decision. The handler reads exactly the events this decision rests on — the seats taken on this course, the courses this student holds — and appends on condition that nothing matching that read has appeared since. <strong>The boundary is deliberate, but not pre-declared.</strong></p>
+      </article>
+    </div>
+
+    <figure class="proof-code">
+      <div class="hs-code">
+        <div class="hs-code__bar">
+          <span class="hs-code__title">docs/first-encounter.md · step 3</span>
+          <button class="hs-code__copy" type="button" data-copy-from="refusal-code" aria-label="Copy the program">{{ <icon name="copy" /> }}</button>
+        </div>
+        <div class="hs-code__body" id="refusal-code">{{ ("```rust
+" ~ refusal ~ "```
+") | markdown | safe }}</div>
+      </div>
+      <div class="hs-term" role="group" aria-label="What the program prints">
+        <div class="hs-term__bar"><span></span><span></span><span></span><em>cargo run</em></div>
+        <div class="hs-term__body"><span class="hs-term__line--ok">{{ refusal_out | trim }}</span></div>
+      </div>
+      <figcaption>Another writer lands a seat between the read and the write, so the store refuses the append. This program is copied from the tutorial, and the repository's gate compiles and runs it on every change; <a href="{{ get_url(path='@/guide/first-encounter.md') }}#try-it-wrong-then-put-it-back">remove the condition and watch it fail</a>.</figcaption>
+    </figure>
+  </section>
+
+  <section class="paths" aria-labelledby="paths-title">
+    <p class="hs-kicker">Choose your path</p>
+    <h2 class="display" id="paths-title">Start from the question you arrived with</h2>
+    <div class="grid grid--4">
+      <a class="hs-card hs-feature hs-feature--link" href="{{ get_url(path='@/guide/first-encounter.md') }}">
+        <span class="hs-label">Application author</span>
+        <span class="hs-feature__title">I have a rule that spans two things</span>
+        <span class="hs-feature__body">Three runnable programs that end with a write the library refuses, then the worked example, then your own invariant in this library's terms.</span>
+      </a>
+      <a class="hs-card hs-feature hs-feature--link" href="{{ get_url(path='@/reference.md') }}">
+        <span class="hs-label">Evaluator</span>
+        <span class="hs-feature__title">I have twenty minutes to decide</span>
+        <span class="hs-feature__body">What is claimed, the instrument that checks each claim, and which surfaces are frozen and which are still moving.</span>
+      </a>
+      <a class="hs-card hs-feature hs-feature--link" href="{{ get_url(path='@/reference.md') }}#where-it-runs">
+        <span class="hs-label">Edge developer</span>
+        <span class="hs-feature__title">My runtime is not <code class="hs-inline-code">Send</code></span>
+        <span class="hs-feature__body">A Durable Object on <code class="hs-inline-code">wasm32</code>, and Postgres over one-shot HTTP with no connection to hold — both running the same conformance suite.</span>
+      </a>
+      <a class="hs-card hs-feature hs-feature--link" href="{{ get_url(path='@/guide/adapter-reading-order.md') }}">
+        <span class="hs-label">Adapter author</span>
+        <span class="hs-feature__title">I am bringing my own storage</span>
+        <span class="hs-feature__body">The order to read what already exists, and the suite that decides whether your adapter is one.</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="proof" aria-labelledby="proof-title">
+    <p class="hs-kicker">Checked, not claimed</p>
+    <h2 class="display" id="proof-title">Every claim names what would falsify it</h2>
+    <div class="grid grid--3">
+      <div class="hs-card hs-feature">
+        <code class="hs-inline-code">event_store_conformance!</code>
+        <div>
+          <div class="hs-feature__title">A published conformance suite</div>
+          <p class="hs-feature__body">An adapter that has not passed <code class="hs-inline-code">happenstance-testkit</code> is not an adapter. Each rule is paired with a wrong store that fails it, so no rule is decorative.</p>
+        </div>
+      </div>
+      <div class="hs-card hs-feature">
+        <code class="hs-inline-code">ES-25</code>
+        <div>
+          <div class="hs-feature__title">A specification in numbered clauses</div>
+          <p class="hs-feature__body">Each clause carries a maturity marker — frozen, provisional or deferred — and names the conformance rule that checks it. The tutorial above cites one.</p>
+        </div>
+      </div>
+      <div class="hs-card hs-feature">
+        <code class="hs-inline-code">cargo xtask ci</code>
+        <div>
+          <div class="hs-feature__title">Documentation the gate compiles</div>
+          <p class="hs-feature__body">Every Rust example in this guide is compiled against the real crates, and run, before a change merges. A page that stopped being true fails the build, not the reader.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="status" aria-labelledby="status-title">
+    <h2 class="visually-hidden" id="status-title">Status</h2>
+    <div class="hs-callout hs-callout--note" role="note">
+      <div class="hs-callout__body"><strong>Early, and worth being precise about.</strong> <code class="hs-inline-code">{{ facts.version }}</code> is published. <code class="hs-inline-code">EventStore</code> has been frozen since <code class="hs-inline-code">0.2.0</code> and <code class="hs-inline-code">ProjectionStore</code> since <code class="hs-inline-code">0.3.0</code>; the rest of the road to <code class="hs-inline-code">1.0</code> is <a href="{{ config.extra.blob }}/runbook/README.md">in the runbook</a>, phase by phase.</div>
+    </div>
+  </section>
+
+  <section class="name" aria-labelledby="name-title">
+    <h2 class="heading" id="name-title">About the name</h2>
+    <p>In everyday use the word means <em>chance</em>, and that is not the sense meant here. The sense meant is the one in <em>as it happened</em>: a DCB boundary is not fixed when the schema is written — it is whatever the handler's query matched. The handler designs that query on purpose; what it does not do is inherit a boundary someone drew earlier.</p>
+  </section>
+
+</div>
+{% endblock content %}

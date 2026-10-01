@@ -7,6 +7,16 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+# The key below shows this program's calls beside the items they call, in the
+# documentation site's API section (`cargo xtask site`, nightly
+# `-Zrustdoc-scrape-examples`). Cargo scrapes only `[[example]]` targets unless a
+# target opts in, and an auto-discovered target has nowhere to put the key, so
+# the target cargo already discovers is written out.
+[[bin]]
+name = "course-subscriptions"
+path = "src/main.rs"
+doc-scrape-examples = true
+
 [dependencies]
 # The crate a user actually installs. It was `happenstance-core` until phase 7,
 # which meant the example exercised the crate *adapter* authors pin rather than

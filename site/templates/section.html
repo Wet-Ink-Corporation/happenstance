@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}{{ section.title }} · happenstance{% endblock title %}
+{% block description %}{{ section.description | default(value=config.description) }}{% endblock description %}
+
+{% block content %}
+<div class="docs">
+  <aside class="docs__nav">{% include "partials/sidebar.html" %}</aside>
+
+  <article class="docs__main prose">
+    <header class="docs__head">
+      <p class="hs-kicker">The guide</p>
+      <h1 class="title">{{ section.title }}</h1>
+      {%- if section.description %}<p class="lede">{{ section.description }}</p>{% endif %}
+    </header>
+
+    {{ section.content | safe }}
+
+    {%- for need in ["tutorial", "orientation", "explanation", "how-to"] %}
+    {%- set members = [p for p in section.pages if p.extra.need == need] %}
+    {%- if members | length > 0 %}
+    <h2 id="{{ need }}">{{ <need_label need={need} /> }}</h2>
+    <ul class="page-list">
+      {%- for p in members %}
+      <li><a href="{{ p.permalink }}">{{ p.title }}</a><span>{{ p.description }}</span></li>
+      {%- endfor %}
+    </ul>
+    {%- endif %}
+    {%- endfor %}
+  </article>
+</div>
+{% endblock content %}

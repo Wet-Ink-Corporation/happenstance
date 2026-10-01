@@ -21,10 +21,14 @@ publish = false
 [lib]
 name = "tickets_over_http"
 path = "src/lib.rs"
+# Its calls into the library are shown beside the items they call, in the
+# documentation site's API section (`cargo xtask site`).
+doc-scrape-examples = true
 
 [[bin]]
 name = "tickets-over-http"
 path = "src/main.rs"
+doc-scrape-examples = true
 
 [dependencies]
 # `unstable-projection` because the runner is one, and the name is the promise:

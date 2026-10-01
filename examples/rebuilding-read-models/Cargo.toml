@@ -7,6 +7,16 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+# The key below shows this program's calls beside the items they call, in the
+# documentation site's API section (`cargo xtask site`, nightly
+# `-Zrustdoc-scrape-examples`). Cargo scrapes only `[[example]]` targets unless a
+# target opts in, and an auto-discovered target has nowhere to put the key, so
+# the target cargo already discovers is written out.
+[[bin]]
+name = "rebuilding-read-models"
+path = "src/main.rs"
+doc-scrape-examples = true
+
 # Long-hand for the two happenstance crates, for the reason
 # `transfers-on-sqlite` gives: this package models *a consuming application's*
 # manifest, and part of what it demonstrates is what the projection half costs

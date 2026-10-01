@@ -106,6 +106,7 @@ handover is rewritten whole each time, so a stale one is visibly stale — its
 | 19a | [SQLite on `wasm32` — skeleton](phases/19-sqlite-on-wasm.md) | 15 | not started | a skeleton building for `wasm32` in the gate, with a verdict on driver, storage and CI |
 | 19b | [SQLite on `wasm32` — the adapter](phases/19-sqlite-on-wasm.md) | 17, 19a | not started | both conformance suites green on `wasm32`, in the gate |
 | 20 | [Documentation that teaches](phases/20-docs-that-teach.md) | 15 | in progress | the docs initiative's Definition of Done, re-observed from a clean checkout |
+| 22 | [The documentation site](phases/22-docs-site.md) | 15 | in progress | the site deployed from `main`, with scraped examples in its API and its guide rendered from the gate-compiled `docs/` |
 | 21 | [`1.0.0`](phases/21-one-point-oh.md) | 13, 14, 16, 17, 17b, 18, 20 | not started | the promised crates at `1.0.0`, and the clause audit clean |
 
 State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in place.

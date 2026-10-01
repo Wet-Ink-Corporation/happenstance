@@ -88,6 +88,10 @@ references/                      evidence kept for citation, binding nothing.
                                    storage begins. self-contained HTML and its source.
   seeds/                           raw material for future planning. problem and vision only.
 docs/                            user documentation. nothing else.
+site/                            the documentation site's shell: Zola templates, the design
+                                 system's tokens and components, routing pages. presentation
+                                 only; its guide is docs/, rendered by `cargo xtask site`, and
+                                 .github/workflows/pages.yml deploys it. phase 22.
 runbook/                         the plan of record, and how far it has got. start a
                                  session at runbook/handover.md, then the status table in
                                  runbook/README.md. one file per open phase; the roadmap
@@ -343,6 +347,7 @@ cargo test --workspace --all-features
 cargo run -p course-subscriptions        # the worked example
 cargo xtask wasm                        # just the wasm32 check
 cargo xtask spec-trace                  # just the specification's cross-references
+cargo xtask site --no-api --serve       # the documentation site, locally (needs zola)
 ```
 
 `affected` is the scoped gate for a change in progress and `ci --fast` the bar for

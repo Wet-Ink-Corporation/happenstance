@@ -1,0 +1,52 @@
+# The happenstance documentation site.
+#
+# This directory is presentation only. The teaching lives in `docs/`, where the
+# gate compiles it; `cargo xtask site` copies those pages in beside this tree and
+# builds the whole thing under `target/site/`. Nothing here is built by `zola`
+# on its own, because the guide section does not exist until xtask writes it.
+
+base_url = "https://wet-ink-corporation.github.io/happenstance"
+title = "happenstance"
+description = "A storage-agnostic, DCB-compliant event sourcing library for Rust."
+default_language = "en"
+
+compile_sass = false
+minify_html = false
+build_search_index = false
+generate_feeds = false
+generate_sitemap = true
+generate_robots_txt = true
+
+[markdown]
+smart_punctuation = false
+insert_anchor_links = "none"
+external_links_no_referrer = false
+
+[markdown.highlighting]
+# A fence in a language the highlighter does not know is a typo, not a style.
+error_on_missing_language = true
+style = "inline"
+light_theme = "happenstance-paper"
+dark_theme = "happenstance-night"
+extra_themes = ["highlight/happenstance-paper.json", "highlight/happenstance-night.json"]
+# Zola would pin each block to `color-scheme: light dark`, which follows the OS
+# and ignores the reader's toggle. Off, a block inherits the root's scheme, so
+# its `light-dark()` colours follow whichever theme the page is in.
+add_color_scheme = false
+
+[link_checker]
+internal_level = "error"
+# External links are checked by nothing here: a build that reaches the network
+# fails on an aeroplane and goes green when a registry is down.
+external_level = "warn"
+
+
+[extra]
+repository = "https://github.com/Wet-Ink-Corporation/happenstance"
+blob = "https://github.com/Wet-Ink-Corporation/happenstance/blob/main"
+crates = "https://crates.io/crates/happenstance"
+docs_rs = "https://docs.rs/happenstance"
+install = "cargo add happenstance"
+# The version is not written here: `cargo xtask site` reads it from the workspace
+# manifest into `data/facts.json`, so the site cannot claim a release the
+# manifest does not.

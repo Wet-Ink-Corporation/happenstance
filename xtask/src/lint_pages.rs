@@ -182,7 +182,7 @@ const NEED_SET_ATOM: &str = "10-the-need-set.md";
 ///
 /// Named once, here, for the reason [`crate::lint_narrative::STEP`] is: `REQUIRED`
 /// and `lint_steps()` both depend on it by value and `steps_named` panics on a
-/// mismatch (`xtask/src/main.rs:816-826`). The *value* is pinned by the
+/// mismatch (`xtask/src/main.rs:817-827`). The *value* is pinned by the
 /// signed-off design (`_design.md`, `## Surfaces`, sign-off condition 2) and
 /// changing it is a design amendment, not an edit.
 pub(crate) const STEP: &str = "every page declares one need";
@@ -308,13 +308,20 @@ impl Atom {
 /// clause that does not end in `?` is reported at its own line as a malformed
 /// declaration, because sending the author to the wrong repair is worse than
 /// sending them to none.
+///
+/// `pub(crate)` for one reader: [`crate::site`] renders the token as the page's
+/// section and the question as its lede, and takes both from here rather than
+/// parsing the line a second way.
 #[derive(Debug)]
-struct Declaration {
+pub(crate) struct Declaration {
     /// 1-based line of the `> **Answers:**` line itself.
-    line: usize,
+    pub(crate) line: usize,
     /// The token between backticks, when the line matches the settled grammar.
-    token: Option<String>,
-    /// Which part of the grammar failed, when it does not.
+    pub(crate) token: Option<String>,
+    /// The question after ` — `, trimmed, when the line matches the grammar.
+    pub(crate) question: Option<String>,
+    /// Which part of the grammar failed, when it does not. Private: only this
+    /// lint reports a malformed line, and the site reads well-formed ones only.
     malformed: Option<String>,
 }
 
@@ -394,7 +401,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
 /// matters, and belongs there by subject. But `xtask/src/affected.rs`'s
 /// `exported_lints` scans `lints.rs` for the exact shape `pub(crate) fn
 /// NAME() -> Result<()> {` and requires `affected::run`'s unconditional block
-/// to call each one it finds by name (`xtask/src/affected.rs:1016-1071`) —
+/// to call each one it finds by name (`xtask/src/affected.rs:1040-1095`) —
 /// the invariant that catches a lint wired into `REQUIRED` and forgotten in
 /// the story grain. This check already runs in the story grain: `run` above
 /// is called unconditionally by `affected::run`
@@ -1989,7 +1996,7 @@ fn is_markdown(name: &str) -> bool {
 /// blind spot rather than a silent one: a second declaration hidden inside a
 /// fence is invisible here, and the instrument for it is band 40's non-author
 /// walk.
-fn declarations(text: &str) -> Vec<Declaration> {
+pub(crate) fn declarations(text: &str) -> Vec<Declaration> {
     let mut out = Vec::new();
     let mut fenced = false;
     for (index, line) in text.lines().enumerate() {
@@ -2020,6 +2027,7 @@ fn declaration(line: usize, after: &str) -> Declaration {
     let malformed = |why: &str| Declaration {
         line,
         token: None,
+        question: None,
         malformed: Some(why.to_owned()),
     };
 
@@ -2041,6 +2049,7 @@ fn declaration(line: usize, after: &str) -> Declaration {
     Declaration {
         line,
         token: Some(token.to_owned()),
+        question: Some(question.trim().to_owned()),
         malformed: None,
     }
 }
@@ -4408,6 +4417,19 @@ mod tests {
         );
         assert_eq!(found[0].token.as_deref(), Some("explanation"));
         assert!(found[0].malformed.is_none());
+    }
+
+    /// The question travels with the token, because the site renders it as the
+    /// page's lede and must not parse the line a second way to get it.
+    #[test]
+    fn a_well_formed_declaration_carries_its_question() {
+        let found = declarations("# T\n\n> **Answers:** `how-to` — How do I do the thing?\n");
+        assert_eq!(found[0].question.as_deref(), Some("How do I do the thing?"));
+        let malformed = declarations("# T\n\n> **Answers:** how-to — How?\n");
+        assert_eq!(
+            malformed[0].question, None,
+            "a malformed line yields no question"
+        );
     }
 
     #[test]

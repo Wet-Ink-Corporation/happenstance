@@ -1,0 +1,27 @@
+{
+  "name": "happenstance-night",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#231C17",
+    "editor.foreground": "#E8DFD5"
+  },
+  "tokenColors": [
+    { "settings": { "foreground": "#E8DFD5" } },
+    {
+      "scope": ["keyword", "storage", "storage.type", "storage.modifier", "keyword.control", "keyword.other"],
+      "settings": { "foreground": "#FFB627", "fontStyle": "bold" }
+    },
+    {
+      "scope": ["string", "string.quoted", "punctuation.definition.string"],
+      "settings": { "foreground": "#7FBF7F" }
+    },
+    {
+      "scope": ["comment", "punctuation.definition.comment"],
+      "settings": { "foreground": "#9A8E83", "fontStyle": "italic" }
+    },
+    {
+      "scope": ["constant.numeric", "constant.language", "constant.character", "entity.name.type.lifetime", "storage.modifier.lifetime", "punctuation.definition.lifetime"],
+      "settings": { "foreground": "#E08700" }
+    }
+  ]
+}

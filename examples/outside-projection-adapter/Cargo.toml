@@ -7,6 +7,14 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+# Its calls into the contract are shown beside the items they call, in the
+# documentation site's API section (`cargo xtask site`, nightly
+# `-Zrustdoc-scrape-examples`). Cargo scrapes a library only when it opts in.
+# This changes nothing a stranger's crate would see: it is documentation
+# metadata, not a dependency or a feature.
+[lib]
+doc-scrape-examples = true
+
 # Deliberately **not** `workspace = true`, and this is the one manifest in the
 # repository where that is the right call. The crate exists to model what an
 # outside author's manifest looks like, and the claim under test is a claim

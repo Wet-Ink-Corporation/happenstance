@@ -164,7 +164,7 @@ compiled, run, green, and carrying an artefact nothing compiles.
 | `xtask/src/proof.rs:1726` | the runner-free enumeration "cannot claim … that any individual rule is not `#[ignore]`d. Those need the runner, and `wasm_run` is where they are checked" |
 | `xtask/src/proof.rs:2050` | a unit test's own message: a target in no `ARTEFACTS` row can have its names "renamed, `#[ignore]`d or emptied in silence" |
 | `xtask/src/proof.rs:2408` | the `--list` assertion "is what makes a deleted, renamed, `#[ignore]`d or `cfg`-ed-away probe fail the gate rather than pass it" |
-| `xtask/src/main.rs:403` | quoted above |
+| `xtask/src/main.rs:404` | quoted above |
 | `standards/rust/81-checks-that-cannot-be-types.md:322-323` (**RS-81-4**) | **Rejects.** "A proof artefact truncated to its `#![cfg(…)]` attributes, or whose meta-tests have been renamed or marked `#[ignore]`." |
 
 The atom is the one that matters most, because a constitution atom sits above
