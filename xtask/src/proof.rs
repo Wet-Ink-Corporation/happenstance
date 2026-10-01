@@ -1660,7 +1660,7 @@ fn check(artefact: &Artefact) -> Result<()> {
 /// declared only under `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]`,
 /// and a Cargo feature is not target-scoped, so `--all-features` sets it on this
 /// target too. The two existing `wasm32` steps pass no feature flags for exactly
-/// this reason (`main.rs:231-243`), and this matches them — which is also what
+/// this reason (`main.rs:245-286`), and this matches them — which is also what
 /// keeps their build artifacts shared rather than rebuilt (NF-001).
 fn wasm_cargo_args(wasm: &WasmTarget) -> [&'static str; 8] {
     [

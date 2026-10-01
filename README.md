@@ -18,7 +18,7 @@ it.
 > real file on disk, across the event-store, projection, concurrency and model
 > families; a Cloudflare Durable Object on `wasm32`; a live PostgreSQL 17.10,
 > including the concurrency family at 64 contenders; a live Neon endpoint over
-> one-shot HTTP; and LadybugDB for the projection role alone. **Seven crates are
+> one-shot HTTP; and, until its adapter was retired at phase 17, LadybugDB for the projection role alone. **Seven crates are
 > in the `0.3.2` release set**, which is the set the manifests and
 > `xtask/src/package.rs`'s `PUBLISHABLE` agree on.
 >
@@ -32,7 +32,7 @@ it.
 > names.
 >
 > What it is not is production mileage — see the note under [status](#status),
-> which is narrower than the ticks suggest. Ladybug and replication come next, and
+> which is narrower than the ticks suggest. Replication comes next (Ladybug was retired at phase 17), and
 > the ambition is the whole list rather than the seven that ship here.
 
 ---
@@ -139,7 +139,7 @@ checkpoint until the runner has caught up, and `200` after.
 A ✅ below means **passing its suite**. The seven rows that also say *in the
 `0.3.2` release set* are on crates.io at `0.3.2`; the manifests and
 `xtask/src/package.rs`'s `PUBLISHABLE` are what name them. `happenstance-ladybug`
-passes its suite and is not published, for the reason its row gives.
+is retired and outside the workspace, for the reason its row gives.
 
 | Crate | Role | Status |
 |---|---|---|
@@ -150,7 +150,7 @@ passes its suite and is not published, for the reason its row gives.
 | [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ in the `0.3.2` release set; passes the suite on `wasm32` — read the note below |
 | [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.3.2` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
 | [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.3.2` release set; passes its suites against a live endpoint, with one open clause question its README names |
-| [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ✅ passes the projection suite against the real driver; **cannot** be published — `lbug` does not render on docs.rs |
+| [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ⛔ **retired** at phase 17 ([ADR-0078](.kb/decisions/0078-happenstance-ladybug-is-retired.md)) and excluded from the workspace, kept as a frozen record. It passed the projection suite against the real driver at phase 11 and was never published — `lbug` does not render on docs.rs |
 | [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
 
 Read the ✅ rows narrowly. **"Passes the suite" is the only claim being made** —
@@ -265,7 +265,7 @@ the weaker one and accepts either. CI builds `happenstance-core` for
 `wasm32-unknown-unknown` on every commit so this stays true.
 
 **Adapters are separate crates, not feature flags.** `rusqlite` bundles a C
-library; LadybugDB's `lbug` compiles C++ through `cmake`; Postgres needs a
+library; LadybugDB's `lbug`, the retired graph adapter's driver, compiled C++ through `cmake`; Postgres needs a
 network and a container to test against. Nobody who wants one should pay for the
 other, and a third-party adapter is a first-class citizen rather than a fork.
 

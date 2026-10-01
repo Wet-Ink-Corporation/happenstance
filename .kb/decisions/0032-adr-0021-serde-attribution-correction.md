@@ -106,7 +106,7 @@ stay honest about it.
 
 One instrument note that belongs with the second ground, because the obvious reading is wrong: both
 `--no-default-features` steps in `cargo xtask ci` are scoped `-p happenstance-core`
-(`xtask/src/main.rs:217-224` and `:532-544`), and the framing region is `happenstance`'s, so neither
+(`xtask/src/main.rs:245-259` and `:532-544`), and the framing region is `happenstance`'s, so neither
 step ever builds it. The no-dependency property holds through the workspace-wide
 `cargo hack check --workspace --feature-powerset --no-dev-deps` step (`:605-615`) and the `wasm32`
 powerset (`:623-652`), both behind a `cargo hack` probe.

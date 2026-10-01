@@ -143,14 +143,6 @@ pub(crate) struct Member {
 /// changed (including a `base` that does not resolve to a commit — a gate that
 /// cannot tell what changed must not report green), when a member manifest
 /// declares no package name, or when any check it runs fails.
-/// The one package this command compiles at its default features rather than at
-/// `--all-features`.
-///
-/// Named as a constant because it is used three times in one function and a
-/// typo in any of them is a silent widening rather than an error: the package
-/// would simply stay in the `--all-features` selection.
-const LADYBUG: &str = "happenstance-ladybug";
-
 pub(crate) fn run(base: Option<&str>) -> Result<()> {
     let base = base.unwrap_or("main");
     let root = workspace_root()?;
@@ -237,54 +229,10 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     // let an unaffected package drift out of format between releases.
     run_step("formatting", "cargo", &["fmt", "--all", "--check"])?;
 
-    // `happenstance-ladybug` is held out of the two `--all-features` steps
-    // below, and it is `xtask/src/main.rs`'s four exclusions at the story grain
-    // rather than a second decision (ADR-0025 §9). `--all-features` turns on
-    // this workspace's only dependency that arrives as a 1.44 GB static archive
-    // and needs an OpenSSL toolchain, and a command whose whole promise is
-    // "only what this diff could break, in the time a story allows" cannot pay
-    // that -- least of all on a diff that touched the adapter, which is exactly
-    // when this command is reached.
-    //
-    // It is held out rather than dropped: the step below compiles it at its
-    // default features, which is the configuration a consumer who did not ask
-    // for LadybugDB gets, and the driver's own coverage is `cargo xtask ci`'s
-    // probed conformance step. Reporting green over a package nothing compiled
-    // is the failure this module's documentation is about.
-    let ladybug_affected = affected.iter().any(|name| name == LADYBUG);
     let selection: Vec<String> = affected
         .iter()
-        .filter(|name| name.as_str() != LADYBUG)
         .flat_map(|name| ["-p".to_owned(), name.clone()])
         .collect();
-
-    if ladybug_affected {
-        run_step(
-            "clippy (happenstance-ladybug, without its driver)",
-            "cargo",
-            &[
-                "clippy",
-                "--locked",
-                "-p",
-                LADYBUG,
-                "--all-targets",
-                "--",
-                "-D",
-                "warnings",
-            ],
-        )?;
-    }
-
-    // Every affected package may have been this one, in which case the two
-    // steps below would run `cargo clippy --locked --all-targets
-    // --all-features` with no `-p` at all -- which is the *whole workspace*,
-    // driver included. The empty check is what stops a narrowing from becoming
-    // a widening.
-    if selection.is_empty() {
-        println!("\nno package left to compile at `--all-features`");
-        println!("\naffected gate passed");
-        return Ok(());
-    }
 
     let mut clippy = vec!["clippy".to_owned(), "--locked".to_owned()];
     clippy.extend(selection.iter().cloned());
@@ -462,6 +410,11 @@ pub(crate) fn is_inert(path: &str) -> bool {
         ".kb/",
         ".redkiln/",
         ".idea/",
+        // Retired by ADR-0078 and excluded from the workspace, so no package
+        // compiles it; kept in the tree as a frozen record because its files are
+        // cited by line. Without this prefix an edit to that record would match
+        // no member and widen the gate to the whole workspace.
+        "crates/happenstance-ladybug/",
         "CHANGELOG.md",
         "CLAUDE.md",
         "CONTRIBUTING.md",
@@ -529,10 +482,22 @@ fn dependent_map(members: &[Member]) -> BTreeMap<String, Vec<String>> {
 ///
 /// # Errors
 ///
-/// When a member root cannot be read, or when a manifest carries no
+/// When the workspace manifest or a member root cannot be read, or when a manifest carries no
 /// `name` key inside its `[package]` table.
 fn members(root: &Path) -> Result<Vec<Member>> {
-    assert_covers_manifest(root)?;
+    let manifest = root.join("Cargo.toml");
+    let text = fs::read_to_string(&manifest)
+        .with_context(|| format!("failed to read {}", manifest.display()))?;
+    assert_covers_manifest(&text)?;
+
+    // A directory the manifest's `exclude` key names is not a member, however
+    // it is laid out: `happenstance-ladybug` still sits under `crates/` as a
+    // frozen record (ADR-0078), `-p` on it is an error from cargo, and its
+    // manifest is not read at all.
+    let excluded: Vec<PathBuf> = declared_excludes(&text)
+        .iter()
+        .map(|rel| root.join(rel))
+        .collect();
 
     let mut members = Vec::new();
 
@@ -549,7 +514,7 @@ fn members(root: &Path) -> Result<Vec<Member>> {
         for child in dir {
             let child = child.with_context(|| format!("failed to walk `{entry}`"))?;
             let child = child.path();
-            if child.join("Cargo.toml").is_file() {
+            if child.join("Cargo.toml").is_file() && !excluded.contains(&child) {
                 members.push(member_at(root, &child)?);
             }
         }
@@ -580,15 +545,11 @@ fn members(root: &Path) -> Result<Vec<Member>> {
 ///
 /// # Errors
 ///
-/// When the workspace manifest cannot be read, when it declares no `members`
-/// key, or when a declared root is not covered.
-fn assert_covers_manifest(root: &Path) -> Result<()> {
-    let manifest = root.join("Cargo.toml");
-    let text = fs::read_to_string(&manifest)
-        .with_context(|| format!("failed to read {}", manifest.display()))?;
-
+/// When the workspace manifest, passed as `text`, declares no `members` key, or
+/// when a declared root is not covered.
+fn assert_covers_manifest(text: &str) -> Result<()> {
     let declared =
-        declared_member_roots(&text).context("the workspace manifest declares no `members` key")?;
+        declared_member_roots(text).context("the workspace manifest declares no `members` key")?;
 
     let missing = uncovered(&declared);
 
@@ -658,6 +619,68 @@ fn declared_member_roots(manifest: &str) -> Option<BTreeSet<String>> {
             .map(|entry| entry.split('/').next().unwrap_or(entry).to_owned())
             .collect(),
     )
+}
+
+/// The paths the workspace manifest's `exclude` key names, as written.
+///
+/// Read textually, for the reason [`declared_member_roots`] is: `xtask` takes no
+/// TOML dependency. Only the `[workspace]` table is searched, and the key only at
+/// the start of a line: an `exclude` under another table, a comment, or a value
+/// that merely contains the word is not taken for it, and a manifest with no
+/// workspace `exclude` key excludes nothing.
+fn declared_excludes(manifest: &str) -> BTreeSet<String> {
+    // The rest of the table from the key on, not the rest of its line: the
+    // array may be spread over several lines, which is valid TOML.
+    let table = workspace_table(manifest);
+    let mut offset = 0;
+    let mut found = None;
+    for line in table.split_inclusive('\n') {
+        let indent = line.len() - line.trim_start().len();
+        if line.trim_start().starts_with("exclude") {
+            found = table.get(offset + indent + "exclude".len()..);
+            break;
+        }
+        offset += line.len();
+    }
+    let Some(after) = found else {
+        return BTreeSet::new();
+    };
+    let Some(after) = after.trim_start().strip_prefix('=') else {
+        return BTreeSet::new();
+    };
+    let body = after
+        .find('[')
+        .zip(after.find(']'))
+        .and_then(|(open, close)| after.get(open + 1..close))
+        .unwrap_or("");
+
+    body.split(',')
+        .map(|entry| entry.trim().trim_matches('"').trim_matches('\''))
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| entry.trim_end_matches('/').to_owned())
+        .collect()
+}
+
+/// The body of the manifest's `[workspace]` table: the lines after its header,
+/// up to the next table header of any kind. Empty when there is no such header.
+///
+/// `[workspace.package]` and `[workspace.metadata.*]` are different tables, so
+/// the header must match exactly rather than by prefix.
+fn workspace_table(manifest: &str) -> &str {
+    let mut offset = 0;
+    let mut start = None;
+    for line in manifest.split_inclusive('\n') {
+        let header = line.trim();
+        match start {
+            None if header == "[workspace]" => start = Some(offset + line.len()),
+            Some(from) if header.starts_with('[') => {
+                return manifest.get(from..offset).unwrap_or("");
+            }
+            _ => {}
+        }
+        offset += line.len();
+    }
+    start.and_then(|from| manifest.get(from..)).unwrap_or("")
 }
 
 /// The member whose manifest sits in `dir`.
@@ -1084,6 +1107,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn excludes_are_read_off_the_exclude_key_and_nothing_else() {
+        let manifest = "[workspace]\nmembers = [\"crates/*\"]\n# the exclude below\nexclude = [\"crates/old\", \"crates/older/\"]\n";
+        let excluded = declared_excludes(manifest);
+        assert_eq!(
+            excluded,
+            ["crates/old", "crates/older"]
+                .iter()
+                .map(|r| (*r).to_owned())
+                .collect()
+        );
+        assert!(declared_excludes("[workspace]\nmembers = [\"crates/*\"]\n").is_empty());
+    }
+
+    /// The narrowing defect: an `exclude` key in some other table, read as the
+    /// workspace's, would drop members from the affected gate in silence. Only the
+    /// key under the `[workspace]` header counts, wherever the other one sits.
+    #[test]
+    fn an_exclude_key_outside_the_workspace_table_is_not_read() {
+        let before = "[workspace.metadata.tool]\nexclude = [\"crates/core\"]\n\n[workspace]\nmembers = [\"crates/*\"]\n";
+        assert!(declared_excludes(before).is_empty());
+        let after = "[workspace]\nmembers = [\"crates/*\"]\n\n[package.metadata.tool]\nexclude = [\"crates/core\"]\n";
+        assert!(declared_excludes(after).is_empty());
+        let both = "[workspace.metadata.tool]\nexclude = [\"crates/core\"]\n\n[workspace]\nexclude = [\"crates/old\"]\n";
+        assert_eq!(
+            declared_excludes(both),
+            ["crates/old"].iter().map(|r| (*r).to_owned()).collect()
+        );
+    }
+
     /// The wrong implementation the manifest check exists to reject: a member
     /// root added to `Cargo.toml` and not to [`MEMBER_ROOTS`], whose only symptom
     /// in production would be a gate that quietly got slower.
@@ -1113,7 +1166,8 @@ mod tests {
     #[test]
     fn the_real_manifest_is_covered() {
         let root = workspace_root().unwrap();
-        assert_covers_manifest(&root).unwrap();
+        let text = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+        assert_covers_manifest(&text).unwrap();
     }
 
     #[test]
@@ -1141,6 +1195,25 @@ mod tests {
             members.iter().map(|m| &m.name).collect::<Vec<_>>()
         );
         assert!(members.iter().all(|m| !m.name.is_empty()));
+    }
+
+    /// The retired crate's directory is still under `crates/`, and the member
+    /// scan must not take it for a member (ADR-0078). Selecting it would hand
+    /// cargo a `-p` it rejects, and a change to the frozen record must select
+    /// nothing rather than widen to the whole workspace.
+    #[test]
+    fn the_retired_ladybug_crate_is_not_a_member() {
+        let root = workspace_root().unwrap();
+        let members = super::members(&root).unwrap();
+        assert!(
+            members.iter().all(|m| m.name != "happenstance-ladybug"),
+            "happenstance-ladybug is excluded from the workspace and must not be scanned as a member"
+        );
+        let picked = affected_packages(
+            &changed(&["crates/happenstance-ladybug/src/lib.rs"]),
+            &members,
+        );
+        assert!(picked.is_empty(), "the frozen record selected {picked:?}");
     }
 
     /// A change to the contract crate must reach the testkit, or the gate would

@@ -9,7 +9,7 @@
 //!
 //! This crate defines *what* an event store is and nothing about *how* one is
 //! built. It holds no I/O, opens no connections, and takes no opinion on
-//! serialisation. Everything else in the happenstance ecosystem — SQLite, Ladybug,
+//! serialisation. Everything else in the happenstance ecosystem — SQLite, Postgres,
 //! replication — depends on it, so it is deliberately the smallest and most
 //! stable crate in the workspace.
 //!

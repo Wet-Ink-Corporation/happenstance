@@ -25,11 +25,11 @@ note() { printf '00-system: %s\n' "$*"; }
 
 PACKAGES=(
   build-essential pkg-config
-  # `lbug`'s driver links against OpenSSL, and this is the host that could run
-  # the LadybugDB conformance suite — the one adapter in the workspace whose
-  # conformance has never been observed by a second machine.
-  libssl-dev
-  cmake clang lld
+  # `libssl-dev` and `cmake` were here for `lbug`, LadybugDB's driver, which
+  # links OpenSSL and builds its C++ core with CMake. ADR-0078 retired
+  # `happenstance-ladybug` and took `lbug` out of every lock file in the tree,
+  # so nothing this host builds needs either any more.
+  clang lld
   git curl jq unzip ca-certificates
   postgresql-client
   # `wasm-bindgen-test-runner` executes the wasm32 conformance rules under Node,

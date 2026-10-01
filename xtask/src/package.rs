@@ -138,13 +138,13 @@ const PUBLISHABLE: &[&str] = &[
     // a provisional clause is one a published crate may fail to satisfy, which
     // is what provisional means, and the crate root says so.
     //
-    // `happenstance-ladybug` is NOT here and is finished. `lbug` cannot render
-    // on docs.rs — its build script returns early under `DOCS_RS` before
-    // emitting the `cargo:rustc-env` lines its own `lib.rs` requires — and
-    // rendering is this project's bar for a published crate. That is a second
-    // meaning of `publish = false`, distinct from unfinished
-    // (`happenstance-sync`). There was a third — finished, and held out of this
-    // release — and these two rows are what emptied it.
+    // `happenstance-ladybug` is NOT here and is retired (ADR-0078): excluded
+    // from the workspace at phase 17, so `cargo metadata --no-deps` no longer
+    // lists it and [`reconcile`] cannot see it. Before that it was finished and
+    // unpublishable — `lbug` does not render on docs.rs, which is this project's
+    // bar for a published crate — a second meaning of `publish = false` beside
+    // unfinished (`happenstance-sync`). There was a third — finished, and held
+    // out of this release — and these two rows are what emptied it.
     //
     // Do not put a double-quoted phrase in a comment inside this array.
     // [`scan_publishable`] reads it by pulling quoted strings out of the block,

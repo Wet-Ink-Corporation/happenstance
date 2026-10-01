@@ -33,16 +33,16 @@ pass.
 >   live Neon endpoint over one-shot HTTP, and it ships naming one rule it does
 >   not pass, with the reason on its own front page.
 > - **`happenstance-ladybug`** — the projection family only, against the real
->   LadybugDB driver. It is `publish = false` and will stay so: `lbug` does not
->   render on docs.rs, which is this project's bar for a published crate, so
->   following that name to the registry finds nothing.
+>   LadybugDB driver, from phase 11 until it was **retired** at phase 17. It was
+>   never published — `lbug` does not render on docs.rs, this project's bar for a
+>   published crate — so that name on the registry is only a `0.0.0` reservation.
 >
 > The `ProjectionStore`
 > suite is all seventeen rules the specification names, each with a wrong
 > store in this crate's `tests/` that fails it — and the port it checks is
-> frozen since ADR-0063. Five adapters over storage this workspace does not
+> frozen since ADR-0063. Four adapters over storage this workspace does not
 > fully control clear it, and since ADR-0062 they stand at both ends of the
-> batch-shape axis PS-2 asks for — four owned, buffered write sets and one
+> batch-shape axis PS-2 asks for — three owned, buffered write sets and one
 > `sqlx` transaction. A projection rule appearing or changing is a minor bump
 > here exactly as an event-store rule is.
 > Several axes of the instrument

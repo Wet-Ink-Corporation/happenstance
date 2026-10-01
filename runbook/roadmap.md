@@ -26,7 +26,8 @@ What is not finished:
   `Projection::apply` is synchronous and nothing owns that question; there is no
   failure-policy seam (PS-27) and no fan-out runner (PS-30).
 - **`happenstance-ladybug`** is finished and cannot publish until `lbug` builds
-  on docs.rs.
+  on docs.rs. *Since phase 17 it is retired (ADR-0078): excluded from the
+  workspace and kept as a frozen record.*
 - **Nothing defines 1.0.** No document in the repository states what it
   promises; `HS-I0006`'s charter names it an explicit non-goal
   (`.bklg/from-contract-to-published-library/initiative.md:170`), and `SECURITY.md`
@@ -111,7 +112,8 @@ with a decision atom in `.kb/decisions/` (staged in `.kb/_intake/` until phase 1
     today, plus `happenstance-sync` and `happenstance-sync-testkit` by D-1.
     Ladybug keeps its own `0.x` line: `lbug` still does not build on docs.rs, and
     the route of rendering it without its `driver` feature is recorded, not
-    measured.
+    measured. *Overtaken at phase 17: the crate is retired (ADR-0078), and that
+    line will not be cut.*
   - **`workerd` before 1.0** (`wi-d61f21`). `happenstance-cloudflare`'s 1.0 claim is
     conformance on the real runtime, not on the `node:sqlite` shim it passes
     today. So phase 17 grows a `workerd` sibling job, and the SQL-text wall and

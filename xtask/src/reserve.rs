@@ -107,6 +107,9 @@ const RESERVABLE: &[Reservable] = &[
         blurb: "the Neon event store and projection store adapters, reaching PostgreSQL over one-shot HTTP with no interactive transaction",
         phase: 10,
     },
+    // Retired by ADR-0078 and kept: the name was reserved at `0.0.0` and that
+    // reservation stands, unyanked. The row stays so the record of what was
+    // claimed matches the registry; the crate is outside the workspace.
     Reservable {
         name: "happenstance-ladybug",
         description: "LadybugDB graph projection store adapter for happenstance.",

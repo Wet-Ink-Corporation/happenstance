@@ -464,3 +464,12 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   on the first attempt. Its live half is CI's `live-neon` job, because
   `NEON_CONNECTION` is not available locally. ES-43's freeze condition is met, so
   it stays `[FROZEN]` and no ledger row is owed.
+- 2026-09-30 — **`happenstance-ladybug` retired**, on the owner's call
+  (`wi-630032`): "too many issues". [ADR-0078](../../.kb/decisions/0078-happenstance-ladybug-is-retired.md)
+  excludes it from the workspace and keeps the directory as a frozen record,
+  because its files are cited by line. `lbug` left `Cargo.lock`. The gate lost its
+  two Ladybug steps, the `ladybug-configured` subcommand and four `--exclude`
+  arguments. `affected` now honours the manifest's `exclude` key and treats the
+  frozen directory as inert. CI lost the frozen `ladybug` job and the `msrv` job's
+  `--exclude`. Citations into `xtask/src/main.rs`, `xtask/src/affected.rs` and
+  `ci.yml` were repointed. Spec, CLAUDE.md and README edits keep their line counts. Verified: `cargo check --workspace --all-features --all-targets`, `cargo test -p xtask`, xtask clippy `-D warnings`, fmt, the `-D warnings` workspace doc build, `lints`, `lint-kb`, `lint-constitution`, `spec-trace`, `lint-workflows`, and the temper gate green. The full `cargo xtask ci` was not run.

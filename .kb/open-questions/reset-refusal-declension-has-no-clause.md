@@ -36,13 +36,14 @@ related:
   - kb-decision-0012
   - kb-decision-0025
   - kb-reference-ladybug-driver-probes-001
+  - kb-decision-0078
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/projection-declension-obligations.md
   - .kb/_intake/2026-09-08-adr-0025-ladybug-projection-adapter.md
   - crates/happenstance-testkit/src/contract.rs
   - crates/happenstance-ladybug/tests/projection.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-09-30
 ---
 
 # RESET_REFUSAL can be declared and left un-mechanised, and nothing in the tree would notice
@@ -136,3 +137,13 @@ That answers the timing half of *What is not decided*: the clause is minted in p
 the first adapter to declare `RESET_REFUSAL` supported, not in a sweep. Still true at `3dcba41`:
 `NoopProtectFixture` appears nowhere in `crates/`, and every projection adapter declines. The
 default-reason-string question rides along unanswered. **Owner now: phase 18.**
+
+## Amendment — 2026-09-30
+
+`happenstance-ladybug` is retired (`kb-decision-0078`): excluded from the workspace and kept in
+the tree as a frozen record, so it no longer invokes `projection_store_conformance!`. Three
+storage adapters remain — `happenstance-sqlite`, `happenstance-postgres` and `happenstance-neon` —
+and all three still decline `RESET_REFUSAL`. Where the sections above say "four" and call
+Ladybug's decline "the pattern", read them as history: the finding is unchanged, the population
+that could be lying is still empty, and Ladybug's decline survives only as a cited argument, not
+as a running adapter.

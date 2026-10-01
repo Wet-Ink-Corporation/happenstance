@@ -5,7 +5,7 @@ promises phase 16 wrote down. ADR-0066 names nine: `happenstance-core`,
 `happenstance`, `happenstance-testkit`, `happenstance-sqlite`,
 `happenstance-cloudflare`, `happenstance-postgres`, `happenstance-neon`,
 `happenstance-sync` and `happenstance-sync-testkit`. `happenstance-ladybug` is
-outside 1.0 and keeps its own `0.x` line.
+outside 1.0, and since phase 17 retired (ADR-0078), so it has no `0.x` line to keep.
 
 **Why here.** Last, by definition. Its dependency row is 13, 14, 16, 17, 18 and
 20: sync is inside 1.0 by D-1, so replication and retention are proved before the

@@ -90,7 +90,7 @@ handover is rewritten whole each time, so a stale one is visibly stale — its
 | 9 | [Cloudflare Durable Object](../RUNBOOK.md#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green on `wasm32` against a `node:sqlite` `DurableObjectState` shim — not `workerd`, whose run is phase 17's sibling job (ADR-0066) — with a real `worker::Error`-carrying error type |
 | 10a | [Postgres event store](../RUNBOOK.md#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | done | the concurrency macro green on a store that does not serialise its writers, with the visibility cost measured |
 | 10b | [Postgres projections, and Neon](../RUNBOOK.md#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | done | no `todo!()` left on either crate; Neon's capability declines stated; `LivePostgresProjectionStore` passing all seventeen rules |
-| 11 | [Ladybug projection store](../RUNBOOK.md#phase-11--ladybug-projection-store) | 6 | done | the projection suite green on a non-SQL batch against the real driver. Finished, and cannot publish: `lbug` does not build on docs.rs |
+| 11 | [Ladybug projection store](../RUNBOOK.md#phase-11--ladybug-projection-store) | 6 | done | the projection suite green on a non-SQL batch against the real driver. Finished, and cannot publish: `lbug` does not build on docs.rs. Retired at phase 17, ADR-0078 |
 | 12 | [Publish `0.2.0`](../RUNBOOK.md#phase-12--publish-020) | 7, 8, 10a | done | seven crates on crates.io and rendering on docs.rs; `cargo-semver-checks` against a registry baseline |
 | — | **`0.2.0`** | 12 | — | released 2026-09-10 — seven crates |
 | — | **`0.3.0`** | 10b, 12 | — | released 2026-09-11 — the projection port frozen (ADR-0063) |

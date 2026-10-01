@@ -34,9 +34,10 @@ related:
   - kb-decision-0036
   - kb-decision-0017
   - kb-open-question-projection-batch-no-apply-001
+  - kb-decision-0078
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/projection-batch-sql-seam.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-09-30
 ---
 
 # Is &'static str the projection batch's final SQL seam, or does a minted Statement type follow?
@@ -153,3 +154,10 @@ so only `0.4.0` can absorb it. Recording *Option A is final* closes the atom wit
 Either record also says whether Neon's `push(SqlStatement)`
 (`crates/happenstance-neon/src/projection_store.rs:182`) owes the same narrowing. Ladybug's
 `push_raw_cypher` is outside 1.0 under `kb-decision-0066`'s crate set. **Owner now: phase 17.**
+
+## Amendment — 2026-09-30
+
+`happenstance-ladybug` is retired (`kb-decision-0078`) and is no longer a workspace member, so
+its leg of this question is moot: whether `LadybugProjectionStore`'s write vocabulary owes the
+narrowing, and the note on `push_raw_cypher`, no longer bind anything. What phase 17 still owes is
+the SQLite and Postgres `push` signature and Neon's `push(SqlStatement)`.

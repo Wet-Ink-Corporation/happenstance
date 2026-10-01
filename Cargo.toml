@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "examples/*", "xtask"]
-
+exclude = ["crates/happenstance-ladybug"] # retired, ADR-0078; a frozen record, cited by line
 [workspace.package]
 # The number `happenstance`, `happenstance-core`, `happenstance-sqlite` and
 # `happenstance-cloudflare` all inherit. `happenstance-testkit` does not — see
