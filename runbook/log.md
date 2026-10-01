@@ -10,6 +10,19 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-30 — happenstance-ladybug retired
+
+*Uncommitted at writing; `lane/p17-retire-ladybug`.*
+Phase 17.
+
+The owner abandoned `happenstance-ladybug` (`wi-630032`). ADR-0078 excludes it from
+the workspace and keeps the directory as a frozen record, because its files are cited
+by line. `lbug` left `Cargo.lock`, and the gate's Ladybug steps and CI job are gone.
+
+**Verified.** See phase 17's session log.
+
+---
+
 ## 2026-09-30 — `AppendError::Busy`: a busy store is not a broken one
 
 *Uncommitted at writing; `lane/p17-busy`.*

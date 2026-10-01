@@ -36,7 +36,7 @@ D-3 — Delete the merged branches.
 
 Seven branches read as unmerged work in every stock-take, and six of them are not.
 
-Raised by an agent (scan) as a question and captured by Weigh-In as `wi-b9b9ab`. Anchor: `runbook/roadmap.md:102`.
+Raised by an agent (scan) as a question and captured by Weigh-In as `wi-b9b9ab`. Anchor: `runbook/roadmap.md:103`.
 
 ## Decision drivers
 

@@ -315,6 +315,14 @@ not the same as what a user needed to be told.
   pass empty. The same job also runs clippy under the cfg, because the gate's
   `--all-features` clippy no longer reaches these items.
 
+- **`happenstance-ladybug` is retired** ([ADR-0078](.kb/decisions/0078-happenstance-ladybug-is-retired.md)).
+  Informational only: the crate was never published, so no manifest can name a
+  version of it. The owner abandoned it at phase 17. It is excluded from the
+  workspace and its directory is kept as a frozen record, because its files are
+  cited by line. `lbug` and its build graph leave `Cargo.lock`, and the gate's two
+  Ladybug steps and the `ladybug-configured` subcommand are gone. The `0.0.0`
+  name reservation on crates.io stands and is not yanked.
+
 ## [0.3.2] — 2026-09-20
 
 A dependency-advisory release. [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285)

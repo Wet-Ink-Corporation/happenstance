@@ -754,7 +754,7 @@ unwinding is available; that too is undocumented and depended on.)
 
 - **From:** Norvant (fourteen Postgres views and six Ladybug views under one control tower)
 - **Level:** integration
-- **Spans:** `happenstance-core`, ⚠ `happenstance-ladybug`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, ⚠ `happenstance-ladybug` (retired at phase 17, ADR-0078), ⚠ e2e crate
 
 **GIVEN** projections targeting two different `ProjectionStore` types.
 **WHEN** they are held in one collection and driven by one supervisor.

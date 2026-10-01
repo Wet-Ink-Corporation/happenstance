@@ -1,4 +1,4 @@
-//! LadybugDB projection store adapter for happenstance.
+//! LadybugDB projection store adapter for happenstance. **Retired at phase 17 (ADR-0078)**: abandoned by the owner, excluded from the workspace, and kept unchanged below as a frozen record, because its lines are cited by number.
 //!
 //! # Status: an adapter, behind an off-by-default feature
 //!

@@ -763,7 +763,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `happenstance-neon`, `happenstance-ladybug`, the last new at ADR-0025) now invoke
   `projection_store_conformance!`, and all four decline `RESET_REFUSAL`, so the population is still
   empty and the family still has no named wrong implementation; the cost of leaving it open no longer
-  has a first-adapter deadline behind it.
+  has a first-adapter deadline behind it. Amended 2026-09-30: `happenstance-ladybug` is retired (`kb-decision-0078`); three adapters remain and all three decline.
 - **Superseded** — [`testkit-projection-module-unstable-projection-exemption-scope.md`](../open-questions/testkit-projection-module-unstable-projection-exemption-scope.md)
   (`kb-open-question-projection-module-exemption-scope-001`) — ADR-0036's unstable-projection
   exemption text names only `happenstance-core` and `happenstance`; `happenstance-testkit`'s

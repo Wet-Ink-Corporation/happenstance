@@ -32,9 +32,9 @@ crates/happenstance/             the typed layer. today a facade over the contra
 crates/happenstance-testkit/     conformance suite. the bar every adapter must clear.
 crates/happenstance-sqlite/      the first adapter. event store + projection store.
 crates/happenstance-cloudflare/  the second adapter. the workspace's only !Send store. wasm32.
-crates/happenstance-ladybug/     graph projection store only. real and conformant at
-                                 phase 11, on the real driver. publish = false, and here
-                                 that means CANNOT: `lbug` does not render on docs.rs.
+crates/happenstance-ladybug/     RETIRED at phase 17 (ADR-0078) and excluded from the
+                                 workspace. was the graph projection store, conformant at
+                                 phase 11. kept as a frozen record: its files are cited by line.
 crates/happenstance-postgres/    the store that does not serialise its writers. both roles
                                  real and conformant at phase 10b. published from `0.2.0`,
                                  by the release-set decision recorded at `e597c34`. carries
@@ -137,20 +137,20 @@ own root rather than this paragraph for which side of the line it is on — a co
 in a file that loads on every task is a count nobody re-reads, which this file
 already says one section down and has now been wrong about twice.
 
-**Two kinds of `publish = false` live in this workspace and they are not the same
-fact.** `happenstance-sync` is unfinished. `happenstance-ladybug` is finished and
-**cannot** be published: `lbug`'s build script returns early under `DOCS_RS` before
-emitting the `cargo:rustc-env` lines its own `lib.rs` requires, so an undefined
-`env!` makes the docs.rs build a compile error — and rendering on docs.rs is phase
-12's bar for a published crate. The manifests look identical; each crate root says
-which it means.
+**Two kinds of `publish = false` were in this workspace, and one is left.**
+`happenstance-sync` is unfinished. `happenstance-ladybug` was finished and **could
+not** be published — `lbug` does not render on docs.rs, phase 12's bar for a
+published crate — and is now **retired** (ADR-0078, phase 17): excluded from the
+workspace, its directory kept as a frozen record because the specification, the
+ADRs and the constitution cite its files by line. Its manifest keeps the key with a
+comment saying why, and each crate root says which it means.
 
 There was a **third** kind until `e597c34` — finished, and held out of this release
 — and it had two members, `happenstance-postgres` and `happenstance-neon`. That
 category is now empty, and it is recorded here rather than deleted because the two
 crate roots argued from it for a while after it stopped being true. `grep -n
-'^publish' crates/*/Cargo.toml` is the answer that cannot go stale, and it returns
-exactly two lines.
+'^publish' crates/*/Cargo.toml` is the answer that cannot go stale: it returns two
+lines, and one of them is the retired crate outside the workspace.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.

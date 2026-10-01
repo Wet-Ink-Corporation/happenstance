@@ -325,7 +325,7 @@ skeleton's `todo!()` bodies mean no call site exists anywhere else, and a
 signature that holds for the owned batch and not the borrowing one ships as a
 green test named `both_batch_shapes_satisfy_the_same_generic_code`.
 
-**Evidence.** `crates/happenstance-ladybug/tests/port_shape.rs:126 (const _: () = {)` ·
-`crates/happenstance-ladybug/tests/port_shape.rs:123 (Instantiating a generic function)` ·
+**Evidence.** `crates/happenstance-postgres/tests/port_shape.rs:125 (const _: () = {)` ·
+`crates/happenstance-postgres/tests/port_shape.rs:122 (Instantiating a generic function)` ·
 `crates/happenstance-core/src/validate.rs:179 (const VERDICT: bool)` ·
 `crates/happenstance-core/src/validate.rs:174 (clippy::assertions_on_constants)`

@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-publish = false
+publish = false # RETIRED (ADR-0078): abandoned at phase 17, outside the workspace, kept as a frozen record
 
 [dependencies]
 # No projection feature: the port this crate's whole subject implements is

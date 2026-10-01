@@ -182,7 +182,7 @@ const NEED_SET_ATOM: &str = "10-the-need-set.md";
 ///
 /// Named once, here, for the reason [`crate::lint_narrative::STEP`] is: `REQUIRED`
 /// and `lint_steps()` both depend on it by value and `steps_named` panics on a
-/// mismatch (`xtask/src/main.rs:817-827`). The *value* is pinned by the
+/// mismatch (`xtask/src/main.rs:751-761`). The *value* is pinned by the
 /// signed-off design (`_design.md`, `## Surfaces`, sign-off condition 2) and
 /// changing it is a design amendment, not an edit.
 pub(crate) const STEP: &str = "every page declares one need";
@@ -401,11 +401,11 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
 /// matters, and belongs there by subject. But `xtask/src/affected.rs`'s
 /// `exported_lints` scans `lints.rs` for the exact shape `pub(crate) fn
 /// NAME() -> Result<()> {` and requires `affected::run`'s unconditional block
-/// to call each one it finds by name (`xtask/src/affected.rs:1040-1095`) —
+/// to call each one it finds by name (`xtask/src/affected.rs:1033-1102`) —
 /// the invariant that catches a lint wired into `REQUIRED` and forgotten in
 /// the story grain. This check already runs in the story grain: `run` above
 /// is called unconditionally by `affected::run`
-/// (`xtask/src/affected.rs:183`), and `run` calls this. Giving it that same
+/// (`xtask/src/affected.rs:175`), and `run` calls this. Giving it that same
 /// shape in `lints.rs` would trip the scanner over reachability it cannot see
 /// through a name match, and `xtask/src/affected.rs` is not a path this
 /// change owns. So the entry point stays here, where `run` already reaches

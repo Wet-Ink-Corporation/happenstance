@@ -68,7 +68,7 @@ Advance the six projects with approved reviews to closeout; close the rest of HS
 ## Evidence
 
 - `.bklg/from-contract-to-published-library/initiative.md:170`: A 1.0 release, or any post-1.0 semver commitment [is out of scope]
-- `runbook/roadmap.md:96`: 84 sit at report over work that shipped in v0.2.0, and roughly thirty at plan are finished on main
+- `runbook/roadmap.md:97`: 84 sit at report over work that shipped in v0.2.0, and roughly thirty at plan are finished on main
 
 ## Decision outcome
 

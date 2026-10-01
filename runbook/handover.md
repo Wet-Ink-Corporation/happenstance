@@ -75,6 +75,8 @@ Settled, with the record that settled it. Re-opening one needs a new decision
 record, and the owner.
 
 - Phase 17 is split at the release; 17b holds the additive half — ADR-0072.
+- `happenstance-ladybug` is retired: excluded from the workspace, kept as a frozen
+  record — ADR-0078, `wi-630032`.
 - What 1.0 promises: nine crates, ladybug outside, versioning, `workerd` before
   1.0, soak, support window and licence — ADR-0066 and its seven `wi-*` atoms.
 - The MSRV holds at 1.97.1, and after 1.0 a rise is bounded — ADR-0067.

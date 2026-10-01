@@ -66,7 +66,7 @@ option this decision exists to foreclose — contradicts a binding `[PROVISIONAL
 its restatement in `kb-decision-0012`, and it is precisely the edit the new pin tests are
 written to reject. **A hard rename** (`after_every_guard`, breaking) was declined in favour
 of the deprecated alias: it spends a break for a warning rather than a compile error, and
-the workspace's own precedent against deprecated arms (`CHANGELOG.md:1783-1786`) rested on
+the workspace's own precedent against deprecated arms (`CHANGELOG.md:1791-1794`) rested on
 a premise — nothing yet published — that has since expired, which argues for reconsidering
 the taste, not for repeating the refusal. **Reshaping `AppendCondition` so the blanket
 setter is unreachable after any guard is added** (a builder-state change making the

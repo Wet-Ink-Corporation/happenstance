@@ -69,7 +69,7 @@
 //!   `=== tests ===` at index 2: `cargo test --locked --workspace
 //!   --all-features` compiles the **lib** target's doctests, and this file is
 //!   that target's doctest root. `run_steps` bails at the first non-zero status
-//!   (`xtask/src/main.rs:964`), so neither of the tree's own banners prints at
+//!   (`xtask/src/main.rs:898`), so neither of the tree's own banners prints at
 //!   all. What the two compile steps' ordering decides is narrower than it
 //!   reads: which of *those two* a failure is attributed to, in a run that
 //!   reached them. So the instrument that tells a reader which corpus broke is

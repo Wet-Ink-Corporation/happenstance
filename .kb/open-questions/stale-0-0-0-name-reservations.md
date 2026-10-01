@@ -124,7 +124,7 @@ footprint on each crate's release history.
 The next registry-dependent decision this ambiguity recurs in — a third brief
 having to write the same "why a live `0.0.0` doesn't count" argument a third
 time is this repository's own named symptom of a missing check, per
-`xtask/src/main.rs:626-636`'s argument about a finding raised three times. Or
+`xtask/src/main.rs:560-570`'s argument about a finding raised three times. Or
 phase 12's publication of `0.2.0` (`RUNBOOK.md:4681`), which is the natural
 moment to either yank the reservations as superseded by the real release or
 decide deliberately to leave them standing.

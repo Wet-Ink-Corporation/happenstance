@@ -1648,14 +1648,14 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
 /// [`stale_publication_claims`]: the *check* itself — the
 /// `Result<()>`-returning entry point — lives in `xtask/src/lint_pages.rs`
 /// rather than here, deliberately. `exported_lints`
-/// (`xtask/src/affected.rs:1040-1047`) scans this file for exactly the shape
+/// (`xtask/src/affected.rs:1033-1040`) scans this file for exactly the shape
 /// `pub(crate) fn NAME() -> Result<()> {` and requires `affected::run`'s
 /// unconditional block to call each one it finds by name — the invariant
 /// that catches a lint wired into `REQUIRED` and forgotten in the story
 /// grain. A seventh entry point of that shape here would trip the same check
 /// for the wrong reason: it already runs in the story grain, transitively,
 /// because `affected::run` calls `lint_pages::run` unconditionally
-/// (`xtask/src/affected.rs:183`) and `lint_pages::run` calls this check.
+/// (`xtask/src/affected.rs:175`) and `lint_pages::run` calls this check.
 /// `xtask/src/affected.rs` is not a path this change owns, so the fix is to
 /// keep the checked shape out of this file rather than teach a name-matching
 /// scanner about an indirection it cannot see through.
@@ -1663,7 +1663,7 @@ pub(crate) const TESTKIT_LIB: &str = "crates/happenstance-testkit/src/lib.rs";
 
 /// The claim C2-07 is named for. `happenstance-testkit` has been on
 /// crates.io at `0.2.0-alpha.1` since `448e1ac` (2026-08-16, recorded at
-/// `CHANGELOG.md:389`), so a reader meeting this sentence on the rendered
+/// `CHANGELOG.md:397`), so a reader meeting this sentence on the rendered
 /// page meets a claim the registry already contradicted the day it shipped.
 pub(crate) const STALE_NOTHING_PUBLISHED: &str = "nothing in this workspace is published yet";
 
@@ -1741,7 +1741,7 @@ pub(crate) fn stale_publication_claims(
     if lib.contains(STALE_NOTHING_PUBLISHED) {
         problems.push(format!(
             "{TESTKIT_LIB} — claims `{STALE_NOTHING_PUBLISHED}`, but happenstance-testkit has \
-             been on crates.io at 0.2.0-alpha.1 since 448e1ac (2026-08-16, CHANGELOG.md:389). \
+             been on crates.io at 0.2.0-alpha.1 since 448e1ac (2026-08-16, CHANGELOG.md:397). \
              Ground the `factory =` justification in {FACTORY_INTRODUCED} and {FACTORY_REMOVED} \
              instead (C2-07)."
         ));
@@ -2639,7 +2639,7 @@ fn citations_in_line(line: &str, written_at: usize, out: &mut Vec<Citation>) {
 /// middle of a chained call — both legitimate citations already in this
 /// tree, and both would have needed a fix this change does not own to reach
 /// green. This function does not catch V-6's *other* citation
-/// (`main.rs:341`, a bare `match event {`) for the same reason: `match` is
+/// (`main.rs:321`, a bare `match event {`) for the same reason: `match` is
 /// too common a legitimate citation target to blacklist safely.
 fn looks_mid_construct(line: &str) -> bool {
     let t = line.trim_start();

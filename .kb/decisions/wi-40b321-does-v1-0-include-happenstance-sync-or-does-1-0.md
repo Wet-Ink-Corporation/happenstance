@@ -61,7 +61,7 @@ Raised by an agent (marker) as a question and captured by Weigh-In as `wi-40b321
 
 ## Evidence
 
-- `runbook/roadmap.md:77`: Solo, the 1.0 path without sync is about 17–26 working days… With sync inside 1.0 it is about 34–43
+- `runbook/roadmap.md:78`: Solo, the 1.0 path without sync is about 17–26 working days… With sync inside 1.0 it is about 34–43
 - `.bklg/from-contract-to-published-library/initiative.md:173`: Publishing happenstance-sync or a happenstance-sync-testkit to the registry [is out of scope for] this release train.
 - `crates/happenstance-sync/src/ingest.rs:215`: four todo!() bodies, blocked on core having no write path that keeps a foreign EventId
 
