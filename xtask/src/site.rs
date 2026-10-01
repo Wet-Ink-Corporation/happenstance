@@ -248,11 +248,11 @@ fn write_data(root: &Path, data: &Path) -> Result<()> {
 
 /// The nightly workspace rustdoc build with scraped examples, copied to `api`.
 ///
-/// `happenstance-ladybug` is left out for the reason the gate leaves it out —
-/// its driver is a 1.44 GB archive (ADR-0025 §9) — and `happenstance-cloudflare`
-/// because it builds only for `wasm32`; the reference page links docs.rs for
-/// it. `xtask` is tooling, not API. A separate target directory keeps this
-/// build's nightly artefacts out of the stable gate's fingerprints.
+/// `happenstance-cloudflare` is left out because it builds only for `wasm32`;
+/// the reference page links docs.rs for it. `xtask` is tooling, not API. A
+/// separate target directory keeps this build's nightly artefacts out of the
+/// stable gate's fingerprints. (`happenstance-ladybug` is retired and outside
+/// the workspace, ADR-0078, so `--workspace` no longer reaches it.)
 fn build_api(root: &Path, api: &Path) -> Result<()> {
     let target = root.join("target").join("site-doc");
     say("building the API with scraped examples (nightly)")?;
@@ -264,8 +264,6 @@ fn build_api(root: &Path, api: &Path) -> Result<()> {
             "-Zrustdoc-scrape-examples",
             "--locked",
             "--workspace",
-            "--exclude",
-            "happenstance-ladybug",
             "--exclude",
             "happenstance-cloudflare",
             "--exclude",

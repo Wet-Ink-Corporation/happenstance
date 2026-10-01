@@ -485,15 +485,15 @@ fn dependent_map(members: &[Member]) -> BTreeMap<String, Vec<String>> {
 /// When the workspace manifest or a member root cannot be read, or when a manifest carries no
 /// `name` key inside its `[package]` table.
 fn members(root: &Path) -> Result<Vec<Member>> {
-    assert_covers_manifest(root)?;
+    let manifest = root.join("Cargo.toml");
+    let text = fs::read_to_string(&manifest)
+        .with_context(|| format!("failed to read {}", manifest.display()))?;
+    assert_covers_manifest(&text)?;
 
     // A directory the manifest's `exclude` key names is not a member, however
     // it is laid out: `happenstance-ladybug` still sits under `crates/` as a
     // frozen record (ADR-0078), `-p` on it is an error from cargo, and its
     // manifest is not read at all.
-    let manifest = root.join("Cargo.toml");
-    let text = fs::read_to_string(&manifest)
-        .with_context(|| format!("failed to read {}", manifest.display()))?;
     let excluded: Vec<PathBuf> = declared_excludes(&text)
         .iter()
         .map(|rel| root.join(rel))
@@ -545,15 +545,11 @@ fn members(root: &Path) -> Result<Vec<Member>> {
 ///
 /// # Errors
 ///
-/// When the workspace manifest cannot be read, when it declares no `members`
-/// key, or when a declared root is not covered.
-fn assert_covers_manifest(root: &Path) -> Result<()> {
-    let manifest = root.join("Cargo.toml");
-    let text = fs::read_to_string(&manifest)
-        .with_context(|| format!("failed to read {}", manifest.display()))?;
-
+/// When the workspace manifest, passed as `text`, declares no `members` key, or
+/// when a declared root is not covered.
+fn assert_covers_manifest(text: &str) -> Result<()> {
     let declared =
-        declared_member_roots(&text).context("the workspace manifest declares no `members` key")?;
+        declared_member_roots(text).context("the workspace manifest declares no `members` key")?;
 
     let missing = uncovered(&declared);
 
@@ -628,15 +624,27 @@ fn declared_member_roots(manifest: &str) -> Option<BTreeSet<String>> {
 /// The paths the workspace manifest's `exclude` key names, as written.
 ///
 /// Read textually, for the reason [`declared_member_roots`] is: `xtask` takes no
-/// TOML dependency. The key is matched only at the start of a line, so a comment
-/// or a value that merely contains the word is not taken for it, and a manifest
-/// with no `exclude` key excludes nothing.
+/// TOML dependency. Only the `[workspace]` table is searched, and the key only at
+/// the start of a line: an `exclude` under another table, a comment, or a value
+/// that merely contains the word is not taken for it, and a manifest with no
+/// workspace `exclude` key excludes nothing.
 fn declared_excludes(manifest: &str) -> BTreeSet<String> {
-    const KEY: &str = "\nexclude";
-    let Some(at) = manifest.find(KEY) else {
+    // The rest of the table from the key on, not the rest of its line: the
+    // array may be spread over several lines, which is valid TOML.
+    let table = workspace_table(manifest);
+    let mut offset = 0;
+    let mut found = None;
+    for line in table.split_inclusive('\n') {
+        let indent = line.len() - line.trim_start().len();
+        if line.trim_start().starts_with("exclude") {
+            found = table.get(offset + indent + "exclude".len()..);
+            break;
+        }
+        offset += line.len();
+    }
+    let Some(after) = found else {
         return BTreeSet::new();
     };
-    let after = manifest.get(at + KEY.len()..).unwrap_or("");
     let Some(after) = after.trim_start().strip_prefix('=') else {
         return BTreeSet::new();
     };
@@ -651,6 +659,28 @@ fn declared_excludes(manifest: &str) -> BTreeSet<String> {
         .filter(|entry| !entry.is_empty())
         .map(|entry| entry.trim_end_matches('/').to_owned())
         .collect()
+}
+
+/// The body of the manifest's `[workspace]` table: the lines after its header,
+/// up to the next table header of any kind. Empty when there is no such header.
+///
+/// `[workspace.package]` and `[workspace.metadata.*]` are different tables, so
+/// the header must match exactly rather than by prefix.
+fn workspace_table(manifest: &str) -> &str {
+    let mut offset = 0;
+    let mut start = None;
+    for line in manifest.split_inclusive('\n') {
+        let header = line.trim();
+        match start {
+            None if header == "[workspace]" => start = Some(offset + line.len()),
+            Some(from) if header.starts_with('[') => {
+                return manifest.get(from..offset).unwrap_or("");
+            }
+            _ => {}
+        }
+        offset += line.len();
+    }
+    start.and_then(|from| manifest.get(from..)).unwrap_or("")
 }
 
 /// The member whose manifest sits in `dir`.
@@ -1091,6 +1121,22 @@ mod tests {
         assert!(declared_excludes("[workspace]\nmembers = [\"crates/*\"]\n").is_empty());
     }
 
+    /// The narrowing defect: an `exclude` key in some other table, read as the
+    /// workspace's, would drop members from the affected gate in silence. Only the
+    /// key under the `[workspace]` header counts, wherever the other one sits.
+    #[test]
+    fn an_exclude_key_outside_the_workspace_table_is_not_read() {
+        let before = "[workspace.metadata.tool]\nexclude = [\"crates/core\"]\n\n[workspace]\nmembers = [\"crates/*\"]\n";
+        assert!(declared_excludes(before).is_empty());
+        let after = "[workspace]\nmembers = [\"crates/*\"]\n\n[package.metadata.tool]\nexclude = [\"crates/core\"]\n";
+        assert!(declared_excludes(after).is_empty());
+        let both = "[workspace.metadata.tool]\nexclude = [\"crates/core\"]\n\n[workspace]\nexclude = [\"crates/old\"]\n";
+        assert_eq!(
+            declared_excludes(both),
+            ["crates/old"].iter().map(|r| (*r).to_owned()).collect()
+        );
+    }
+
     /// The wrong implementation the manifest check exists to reject: a member
     /// root added to `Cargo.toml` and not to [`MEMBER_ROOTS`], whose only symptom
     /// in production would be a gate that quietly got slower.
@@ -1120,7 +1166,8 @@ mod tests {
     #[test]
     fn the_real_manifest_is_covered() {
         let root = workspace_root().unwrap();
-        assert_covers_manifest(&root).unwrap();
+        let text = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+        assert_covers_manifest(&text).unwrap();
     }
 
     #[test]

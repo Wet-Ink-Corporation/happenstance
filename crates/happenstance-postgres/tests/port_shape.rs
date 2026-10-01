@@ -92,12 +92,12 @@ mod send_flavour {
     ///
     /// # Why this is still able to fail
     ///
-    /// Delete `S::Batch: Send` and the `const _` block below stops compiling:
+    /// Delete `S::Batch: Send` and this function itself stops compiling:
     /// `tokio::spawn` requires the generated future to be `Send`, the future
     /// holds `S::Batch` across `yield_now().await`, and nothing else in the
     /// bound set proves it. Delete `Error: Send` and the task's `Output` fails
-    /// the same way. Neither is decoration and neither is implied by
-    /// `SendProjectionStore`.
+    /// the same way. The `const _` block below proves the concrete stores meet
+    /// these bounds; neither bound is implied by `SendProjectionStore`.
     ///
     /// The handle is returned rather than dropped, so the spawned task has an
     /// owner; nothing calls this function, so no task is ever spawned.
