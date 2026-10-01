@@ -40,7 +40,7 @@
 //!
 //! # The durability settings are enforced, not assumed
 //!
-//! `spec/SPECIFICATION.md:7481-7484` names `PRAGMA synchronous = OFF` **by
+//! `spec/SPECIFICATION.md:7859-7862` names `PRAGMA synchronous = OFF` **by
 //! name** as a wrong implementation CF-14's reopen rule exists to reject. A
 //! figure produced under it is a figure for a store that cannot ship, so
 //! [`Durability::read_back`] reads `journal_mode` and `synchronous` off the live

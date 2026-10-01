@@ -218,7 +218,10 @@ what the question is, not its evidence. The last two were added by the
   closes. Amended 2026-09-07: ADR-0050 (`kb-decision-0050`) narrows
   `StringifiedThrow` to `pub(crate)`, endorsing ES-6's wrapped-driver-error shape without settling
   whether the wrapped type is part of the promise; two stale spec citations on this atom were
-  repointed to their live lines in the same pass.
+  repointed to their live lines in the same pass. Amended 2026-09-30: sub-question 4 is written
+  into ES-6's prose under `kb-decision-0066` §4/§5 — payloads are inside an adapter's 1.0 promise,
+  with the census by crate and `Busy(E)` named beside `Store(E)` (`kb-decision-0077`);
+  sub-questions 1–3 stay open with no phase.
 - **Open** — [`es-7-and-vt-9-provisional-markers.md`](../open-questions/es-7-and-vt-9-provisional-markers.md)
   (`kb-open-question-provisional-falsifiers-001`) — ES-7 and VT-9 are
   `[PROVISIONAL]` and each names a falsifier that no longer discriminates.
@@ -416,6 +419,10 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   neither.
   Amended 2026-09-28: the gap-read half is answered (`read_from_a_gap_position`, `d480446`); the
   ES-38 half stays open with phase 14.
+  Amended 2026-09-29 by `kb-decision-0028`: sub-question 3 is answered. Phase 14 writes
+  ES-38's rule against CF-27's instrument and, through a defaulted-declined `Fixture` removal
+  capability, against every real adapter. No further instrument decision is owed. It stays open
+  for sub-question 2: whether a frozen clause may name a rule with no owning phase.
 - **Open** — [`projection-id-is-unvalidated.md`](../open-questions/projection-id-is-unvalidated.md)
   (`kb-open-question-projection-id-unvalidated-001`) — `ProjectionId::new` is
   infallible and unvalidated; ADR-0015 declined to validate it, on the
@@ -544,7 +551,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   Added 2026-09-04. **Partly answered 2026-09-07** by `kb-decision-0053`: the row-and-byte shape
   (`MAX_PAGE_BYTES_PER_STATEMENT`) lands for `0.2.0`; a caller-stated budget (Option B) is
   explicitly not taken, so the question stays open on that half.
-- **Open** — [`no-fixture-tolerance-for-transient-contention.md`](../open-questions/no-fixture-tolerance-for-transient-contention.md)
+- **Superseded** — [`no-fixture-tolerance-for-transient-contention.md`](../open-questions/no-fixture-tolerance-for-transient-contention.md)
   (`kb-open-question-testkit-contention-tolerance-001`) — CF-33 forbids a
   conformance rule a clock, an elapsed-time measurement or an
   operation-count assertion, which guarantees a momentarily-busy store and a
@@ -557,11 +564,16 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   rather than `Attempt::Failed`; `CONTENDERS` has already moved once after publication,
   unversioned (8 to 64), so a lowering to 8 would be a revert to the published value. Amended
   2026-09-21: the blocking instrument now exists (`FaultyStore::contend_next`,
-  `crates/happenstance-testkit/src/faulty.rs:333`) and discriminates a merely-contended store from
+  `crates/happenstance-testkit/src/faulty.rs:336`) and discriminates a merely-contended store from
   a broken one at the fixture-arm grain; `kb-decision-0065` lowers the observed red rate (0 in 16
   vs. 7 in 8 at `--test-threads=1`) but the classifier-level conflation stands unchanged, since
   `AppendError::is_condition_violated` is the only signal the port offers and answers `false` for a
   busy store exactly as for a broken one.
+  **Resolved 2026-09-30** by `kb-decision-0077`, with the per-error arm: `AppendError::Busy(E)` is
+  promised at 1.0 (refused before any effect, nothing written, safe to re-run; an ambiguous outcome
+  stays `Store(E)`), the typed commit loop retries it inside the same `Retry` bound, and ES-43
+  holds it with `a_busy_append_left_nothing_behind` and the three concurrency rules re-spelled per
+  error. The fixture-side tolerance is rejected.
 - **Superseded** — [`remint-identity-precondition-is-trust-only.md`](../open-questions/remint-identity-precondition-is-trust-only.md)
   (`kb-open-question-remint-precondition-trust-only-001`) —
   `SqliteEventStore::remint_identity`'s own test runs same-file,
@@ -651,11 +663,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   capability, ES-35's `[PROVISIONAL]` marker rests on the same unread mechanism, and whether an
   adapter README must disclose declines is unowned. CF-18 itself stays `[FROZEN]` and untouched.
   Added 2026-09-07.
-- **Open** — [`cf-23-emitter-names-mandatory-and-marked-unstable.md`](../open-questions/cf-23-emitter-names-mandatory-and-marked-unstable.md)
+- **Superseded** — [`cf-23-emitter-names-mandatory-and-marked-unstable.md`](../open-questions/cf-23-emitter-names-mandatory-and-marked-unstable.md)
   (`kb-open-question-cf-23-emitter-names-unstable-001`) — CF-23 requires named emitters while the
   shipped surface marks them `doc(hidden)`; the documentation contradiction already has a fix, the
   policy question (support the names, or declare them unstable) does not, and `cargo-semver-checks`
   cannot see the gap because hidden items are exactly what it excludes. Added 2026-09-07.
+  **Resolved 2026-09-30** by `kb-decision-0076`: the ten conformance emitters are un-hidden and
+  renamed without the `__` prefix (`emit_tokio` and its siblings), CF-41 pins them against a
+  committed list, and `__rule_names` and the benchmark pair stay hidden and unpromised.
 - **Open** — [`cf-25-cf-26-portfolio-check-does-not-exist.md`](../open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md)
   (`kb-open-question-cf-25-cf-26-portfolio-check-001`) — no check in `xtask/src/spec_trace.rs`
   performs the portfolio/axis comparison CF-25 and CF-26 both name (verified: zero occurrences of
@@ -703,7 +718,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
-  their live lines (`spec/SPECIFICATION.md:8994-9019`, `:9021-9034`), both stale as previously cited.
+  their live lines (`spec/SPECIFICATION.md:9389-9414`, `:9021-9034`), both stale as previously cited.
 - **Open** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the
@@ -828,7 +843,7 @@ the decision and reference atoms this domain also owns.
   (`kb-open-question-seal-the-codec-001`) — whether `Codec` is later sealed, now that `0.2.0` is
   live and the window to do so for free has closed; bundles the `UnknownTag`-split and
   `Boundary::absorb` sub-questions ADR-0049 left undone. Added 2026-09-07.
-- **Open** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
+- **Superseded** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
   (`kb-open-question-apply-synchronous-live-store-001`) — `Projection::apply` is synchronous
   (`crates/happenstance/src/domain.rs:249`) and `run_projection` folds events through it before
   handing the batch to the store, exactly right for a buffered batch and exactly wrong for one that
@@ -838,6 +853,10 @@ the decision and reference atoms this domain also owns.
   whether `apply` moves, to what shape, or whether the runner's gate comes off with it; forced by the
   first application needing a row-writing projection against a live-transaction store through the
   runner, or a decision to publish the runner ungated first. Added 2026-09-11.
+  **Resolved 2026-09-29** by `kb-decision-0074`: `apply` becomes `async` on the one trait, with a
+  `trait_variant`-derived `SendProjection`, handed a position-free `Delivered` event and the batch,
+  on a spike that drove a live `sqlx` transaction; ADR-0063's falsifier did not fire, and phase 18
+  builds it and lifts the runner's gate.
 
 ## Brand identity: the name, the mark, and where it lives
 

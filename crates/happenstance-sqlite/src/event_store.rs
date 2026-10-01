@@ -653,11 +653,19 @@ impl SqliteEventStore {
     /// cannot tell "this will never fit here, park it and tell a human" from
     /// "the disk is full, retry" has to guess, and a sync runner that guesses
     /// wrong drops an event permanently.
-    fn check_ceilings(events: &[Event]) -> Result<(), AppendError<SqliteEventStoreError>> {
-        if events.len() > Self::MAX_EVENTS_PER_BATCH {
+    ///
+    /// `len` is the number of events the transaction will write, and `events`
+    /// yields them. Two arguments rather than one slice because an ingest's
+    /// events are spread across its groups and are not one slice anywhere; an
+    /// append passes `events.len()` and `events`.
+    fn check_ceilings<'e>(
+        len: usize,
+        events: impl IntoIterator<Item = &'e Event>,
+    ) -> Result<(), AppendError<SqliteEventStoreError>> {
+        if len > Self::MAX_EVENTS_PER_BATCH {
             return Err(AppendError::ExceedsStoreLimit {
                 limit: happenstance_core::StoreLimit::EventsPerBatch,
-                len: events.len(),
+                len,
             });
         }
         for event in events {
@@ -730,18 +738,11 @@ impl SqliteEventStore {
     ) -> Result<SequencePosition, AppendError<SqliteEventStoreError>> {
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-            .map_err(store_error)?;
+            .map_err(begin_error)?;
 
         // First, and before the guards: a condition evaluated against a file
         // this handle no longer speaks for answers a question nobody asked.
-        let persisted = read_identity(&transaction).map_err(AppendError::Store)?;
-        if persisted != store_id {
-            drop(transaction);
-            return Err(AppendError::Store(SqliteEventStoreError::IdentityMoved {
-                handle: store_id,
-                persisted,
-            }));
-        }
+        check_identity(&transaction, store_id)?;
 
         if let Some(condition) = condition
             && let Some(conflict) = evaluate(&transaction, condition).map_err(store_error)?
@@ -752,9 +753,176 @@ impl SqliteEventStore {
             )));
         }
 
-        let last = write_batch(&transaction, store_id, events, recorded_at).map_err(store_error)?;
+        let rows: Vec<NewRow<'_>> = events
+            .iter()
+            .map(|event| NewRow {
+                event,
+                origin: Origin::Local { recorded_at },
+            })
+            .collect();
+        let (_, last) = write_batch(&transaction, store_id, &rows).map_err(store_error)?;
+        // Every row of an append is local and none is ever skipped, so `None`
+        // means the batch was empty — which step 1 of `append` has already
+        // refused. Spelled as the decode of position zero because that is what
+        // this line did before the writer was shared with ingest.
+        let last = last.ok_or(AppendError::Store(SqliteEventStoreError::InvalidPosition(
+            0,
+        )))?;
         transaction.commit().map_err(store_error)?;
         Ok(last)
+    }
+
+    /// Everything an ingest does inside its one `BEGIN IMMEDIATE`: the
+    /// replication counterpart of [`append_locked`](Self::append_locked), over
+    /// the **same** row writer.
+    ///
+    /// In order: the incarnation checked, exactly as an append checks it; then,
+    /// per group, the foreign rows written with their origin identity and
+    /// recorded time, deduplicated inside the insert against the origin pair's
+    /// `UNIQUE` constraint (VT-8); then the group's compensation, as ordinary
+    /// local rows, **only if** at least one foreign row of that group went in
+    /// (SY-11); then commit. The whole call is one transaction, which is
+    /// stronger than the per-group atomicity the port asks for and costs nothing
+    /// here, because this adapter serialises its writers anyway.
+    ///
+    /// What is absent is the point: **no condition is evaluated** (SY-1). An
+    /// ingest records a decision another store already took.
+    ///
+    /// `#[cfg(test)]` because the trait it serves is `happenstance-sync`'s,
+    /// which is not published; see `src/ingest_spike.rs`. Phase 13 turns the
+    /// gate into a feature.
+    #[cfg(test)]
+    fn ingest_locked(
+        connection: &mut Connection,
+        store_id: StoreId,
+        groups: &[happenstance_sync::IngestGroup<'_>],
+        recorded_at: RecordedAt,
+    ) -> Result<happenstance_sync::Ingested, AppendError<SqliteEventStoreError>> {
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(begin_error)?;
+        check_identity(&transaction, store_id)?;
+
+        let mut ingested = happenstance_sync::Ingested::default();
+        for group in groups {
+            let foreign: Vec<NewRow<'_>> = group
+                .events
+                .iter()
+                .map(|replicated| NewRow {
+                    event: &replicated.event,
+                    origin: Origin::Foreign {
+                        id: replicated.id,
+                        recorded_at: replicated.recorded_at,
+                    },
+                })
+                .collect();
+            let (inserted, _) =
+                write_batch(&transaction, store_id, &foreign).map_err(store_error)?;
+            ingested.appended += inserted;
+            ingested.skipped += foreign.len() - inserted;
+
+            if inserted > 0 && !group.compensation.is_empty() {
+                let compensation: Vec<NewRow<'_>> = group
+                    .compensation
+                    .iter()
+                    .map(|event| NewRow {
+                        event,
+                        origin: Origin::Local { recorded_at },
+                    })
+                    .collect();
+                let (written, _) =
+                    write_batch(&transaction, store_id, &compensation).map_err(store_error)?;
+                ingested.compensated += written;
+            }
+        }
+
+        transaction.commit().map_err(store_error)?;
+        Ok(ingested)
+    }
+
+    /// An ingest through this handle: the ceilings, one stamp for the
+    /// compensation, the connection, then [`ingest_locked`](Self::ingest_locked)
+    /// — `append`'s steps 2 to 4 in `append`'s order.
+    ///
+    /// The ceilings are checked against the **worst case**, every compensation
+    /// event written, because they are checked before the transaction opens and
+    /// whether a group's compensation lands is only known inside it. The event
+    /// count is the whole call's, because the whole call is one transaction:
+    /// [`MAX_EVENTS_PER_BATCH`](Self::MAX_EVENTS_PER_BATCH) bounds lock hold
+    /// time, and a runner chunks its pulled batch to it.
+    ///
+    /// # Errors
+    ///
+    /// `AppendError::ExceedsStoreLimit` for a capacity refusal, and
+    /// `AppendError::Store` for everything else. Neither `NoEvents` nor
+    /// `ConditionViolated` is produced: an empty ingest is a pull that found
+    /// nothing, and no condition is evaluated.
+    #[cfg(test)]
+    pub(crate) fn ingest_groups(
+        &self,
+        groups: &[happenstance_sync::IngestGroup<'_>],
+    ) -> Result<happenstance_sync::Ingested, AppendError<SqliteEventStoreError>> {
+        let len = groups
+            .iter()
+            .map(|group| group.events.len() + group.compensation.len())
+            .sum();
+        Self::check_ceilings(
+            len,
+            groups.iter().flat_map(|group| {
+                group
+                    .events
+                    .iter()
+                    .map(|replicated| &replicated.event)
+                    .chain(group.compensation)
+            }),
+        )?;
+
+        let recorded_at = now();
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| AppendError::Store(SqliteEventStoreError::ConnectionPoisoned))?;
+        Self::ingest_locked(&mut connection, self.store_id, groups, recorded_at)
+    }
+
+    /// The highest origin position held from each origin store, this store's
+    /// own included, derived from the log.
+    ///
+    /// One `GROUP BY` on the leading column of the `UNIQUE (origin_store,
+    /// origin_position)` index, which is what lets the index serve it. The spike
+    /// does not assert that plan the way `plan_tests` asserts the read path's;
+    /// phase 13 owes that check if the watermark reaches a hot path. Nothing is
+    /// cached: a counter kept beside the log is a counter that can drift from
+    /// it.
+    ///
+    /// # Errors
+    ///
+    /// The connection was poisoned, the driver failed, or a stored origin is not
+    /// one the contract can represent.
+    #[cfg(test)]
+    pub(crate) fn origin_watermark(
+        &self,
+    ) -> Result<happenstance_sync::Watermark, SqliteEventStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
+        let mut statement = connection.prepare(
+            "SELECT origin_store, max(origin_position) FROM event \
+             WHERE origin_store IS NOT NULL GROUP BY origin_store",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut watermark = happenstance_sync::Watermark::new();
+        while let Some(row) = rows.next()? {
+            let store: Vec<u8> = row.get(0)?;
+            let highest: i64 = row.get(1)?;
+            let bytes: [u8; 16] = store
+                .as_slice()
+                .try_into()
+                .map_err(|_| SqliteEventStoreError::MalformedIdentity { len: store.len() })?;
+            watermark.advance(StoreId::from_bytes(bytes), position_from_row(highest)?);
+        }
+        Ok(watermark)
     }
 
     /// Applies the schema in the module documentation, and returns the
@@ -901,6 +1069,33 @@ fn store_error(error: impl Into<SqliteEventStoreError>) -> AppendError<SqliteEve
     AppendError::Store(error.into())
 }
 
+/// Classifies a failed `BEGIN IMMEDIATE`: [`AppendError::Busy`] when the write
+/// lock was not acquired, [`AppendError::Store`] for anything else.
+///
+/// # Why here, and only here
+///
+/// `SQLITE_BUSY` or `SQLITE_LOCKED` from `BEGIN IMMEDIATE` means the busy
+/// handler waited out [`BUSY_TIMEOUT_MS`](crate::connection::BUSY_TIMEOUT_MS)
+/// and the lock went elsewhere. No statement of this append has run, so nothing
+/// was written, and the same call can succeed once the holder lets go — which
+/// is all three parts of `Busy`'s contract, known rather than inferred.
+///
+/// Every later failure stays `Store`, including a busy code, and that is a
+/// choice rather than an oversight. Under WAL, once `BEGIN IMMEDIATE` holds the
+/// write lock nothing after it waits on another writer, so a busy code there is
+/// not the contention this variant names; and a failure at or after the first
+/// inserted row is one this function would have to prove rolled back, which the
+/// contract makes the adapter's burden. `AppendError::Busy`'s rule is that a
+/// store that cannot tell is not busy, and one call site is the whole of what
+/// this store can tell.
+fn begin_error(error: rusqlite::Error) -> AppendError<SqliteEventStoreError> {
+    if crate::connection::is_busy(&error) {
+        AppendError::Busy(error.into())
+    } else {
+        store_error(error)
+    }
+}
+
 /// The position violating a guard of `condition`, if one exists.
 ///
 /// **One `SELECT max(position)` per guard statement**, which is ADR-0022's
@@ -1016,11 +1211,85 @@ fn evaluate(
     Ok(None)
 }
 
-/// Writes every row of the batch, and returns the position of its last event.
+/// Checks the file's persisted incarnation against the one this handle stamps
+/// with, inside the write transaction. See
+/// [`append_locked`](SqliteEventStore::append_locked) for why it is re-read
+/// rather than trusted from construction; an ingest asks it for the same reason.
+///
+/// # Errors
+///
+/// `AppendError::Store` carrying `IdentityMoved` when the two differ, or the
+/// driver's failure to read the row.
+fn check_identity(
+    connection: &Connection,
+    store_id: StoreId,
+) -> Result<(), AppendError<SqliteEventStoreError>> {
+    let persisted = read_identity(connection).map_err(AppendError::Store)?;
+    if persisted != store_id {
+        return Err(AppendError::Store(SqliteEventStoreError::IdentityMoved {
+            handle: store_id,
+            persisted,
+        }));
+    }
+    Ok(())
+}
+
+/// One row for [`write_batch`]: the event, and where its identity comes from.
+struct NewRow<'a> {
+    event: &'a Event,
+    origin: Origin,
+}
+
+/// Where a row's [`EventId`] and [`RecordedAt`] come from.
+///
+/// The one fact that separates an append's row from an ingest's, and the only
+/// thing the shared writer branches on.
+#[derive(Clone, Copy)]
+enum Origin {
+    /// Minted here. The identity is this store's incarnation and the position
+    /// the row is given, known only once the row exists, so it is stamped after
+    /// the inserts through the `origin_position IS NULL` marker.
+    Local {
+        /// The one stamp the whole write shares.
+        recorded_at: RecordedAt,
+    },
+    /// Minted by another store, and carried here unchanged: the identity and
+    /// recorded time its origin gave it, written with the row, never restamped.
+    ///
+    /// `#[cfg(test)]` with everything else ingest-only, until phase 13 publishes
+    /// the trait it serves; see `src/ingest_spike.rs`.
+    #[cfg(test)]
+    Foreign {
+        /// The origin's identity for this event.
+        id: EventId,
+        /// When the origin accepted it.
+        recorded_at: RecordedAt,
+    },
+}
+
+/// Writes every row of the batch, and returns how many rows went in and the
+/// position of the last of them.
+///
+/// **The one row writer, for append and ingest alike**, and one `INSERT`
+/// statement inside it. Every row goes in under `ON CONFLICT (origin_store,
+/// origin_position) DO NOTHING`. A local row binds its origin `NULL`, which
+/// never conflicts, and is stamped afterwards; a foreign row binds the origin
+/// its peer gave it, and one already held is a skip rather than an error —
+/// decided by the insert against the `UNIQUE` constraint (VT-8), never by a
+/// lookup ahead of it. Everything after the inserts is shared and runs over the
+/// rows that went in: the tag rows, the cardinality, the stamp.
+///
+/// The conflict clause names its target rather than being `INSERT OR IGNORE`,
+/// and that is not a style choice: `OR IGNORE` ignores *every* constraint, so a
+/// `NOT NULL` or `CHECK` violation on a foreign row would be counted as a
+/// re-delivery and the event silently dropped. The target limits the silence to
+/// the one constraint whose violation means "already held".
 ///
 /// The `event` rows go in one at a time so that each one's assigned position is
 /// read from `last_insert_rowid()` rather than inferred: `AUTOINCREMENT` permits
-/// gaps and nothing may assume `+ 1`. The `event_tag` rows are where the
+/// gaps and nothing may assume `+ 1`. That is also why a skip is read from the
+/// statement's change count and not from the rowid, which a `DO NOTHING` leaves
+/// where the previous insert put it. The `event_tag` rows are where the
 /// parameter pressure actually is — at the declared ceilings a single multi-row
 /// statement would bind 98,304 of SQLite's 32,766 — so they are batched into
 /// statements sized from the budget, and the buffer is bounded by the chunk
@@ -1032,29 +1301,72 @@ fn evaluate(
 fn write_batch(
     connection: &Connection,
     store_id: StoreId,
-    events: &[Event],
-    recorded_at: RecordedAt,
-) -> Result<SequencePosition, SqliteEventStoreError> {
-    let mut positions = Vec::with_capacity(events.len());
+    rows: &[NewRow<'_>],
+) -> Result<(usize, Option<SequencePosition>), SqliteEventStoreError> {
+    let mut written: Vec<(&Event, i64)> = Vec::with_capacity(rows.len());
+    let mut first_local: Option<i64> = None;
     {
+        // One statement for every row, local or foreign. A local row binds its
+        // origin as `NULL`, and SQLite's `UNIQUE` treats NULLs as distinct, so
+        // the conflict clause can never fire for it: an append's rows all land,
+        // exactly as they did before the clause was there. Only the values
+        // bound differ between the two kinds of row — not the statement, the
+        // columns or the order they are bound in.
         let mut insert = connection.prepare(
-            "INSERT INTO event (event_type, data, metadata, tags, recorded_at) \
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO event (event_type, data, metadata, tags, \
+             origin_store, origin_position, recorded_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT (origin_store, origin_position) DO NOTHING",
         )?;
-        for event in events {
-            insert.execute(rusqlite::params![
+        for row in rows {
+            let event = row.event;
+            let (origin_store, origin_position, recorded_at): (
+                Option<[u8; 16]>,
+                Option<i64>,
+                RecordedAt,
+            ) = match row.origin {
+                Origin::Local { recorded_at } => (None, None, recorded_at),
+                // Converted exactly, never through `as_i64`: that helper
+                // saturates, which is harmless for a query bound and not for an
+                // identity. Two events from one origin past `i64::MAX` would both
+                // be written at `i64::MAX`, and the second would be counted as a
+                // re-delivery — the silent drop the conflict target exists to
+                // rule out. Refusing here rolls the whole ingest back.
+                #[cfg(test)]
+                Origin::Foreign { id, recorded_at } => (
+                    Some(id.store().to_bytes()),
+                    Some(i64::try_from(id.position().get()).map_err(|_| {
+                        SqliteEventStoreError::OriginPositionOutOfRange {
+                            position: id.position(),
+                        }
+                    })?),
+                    recorded_at,
+                ),
+            };
+            let changed = insert.execute(rusqlite::params![
                 event.event_type().as_str(),
                 &event.data()[..],
                 event.metadata().map(|metadata| &metadata[..]),
                 crate::row::encode_tags(event.tags()),
+                origin_store.as_ref().map(|bytes| &bytes[..]),
+                origin_position,
                 recorded_at.as_millis(),
             ])?;
-            positions.push(connection.last_insert_rowid());
+            // Held already: a skip, and nothing below — no tag row, no
+            // cardinality, no stamp — may count it.
+            if changed == 0 {
+                continue;
+            }
+            let position = connection.last_insert_rowid();
+            if origin_position.is_none() && first_local.is_none() {
+                first_local = Some(position);
+            }
+            written.push((event, position));
         }
     }
 
-    write_tag_rows(connection, events, &positions)?;
-    bump_cardinality(connection, events)?;
+    write_tag_rows(connection, &written)?;
+    bump_cardinality(connection, &written)?;
 
     // One statement at the end of the batch rather than a value bound per row:
     // a locally appended event's identity is *this store's incarnation paired
@@ -1078,8 +1390,16 @@ fn write_batch(
     // The marker stays beside the bound rather than being replaced by it. A
     // replication ingest writes rows carrying *another* store's origin, and one
     // landing inside this positional range must not be restamped under this
-    // incarnation.
-    if let Some(&first) = positions.first() {
+    // incarnation. No caller builds that batch today — `ingest_locked` writes a
+    // group's foreign rows and its compensation in separate calls — so the
+    // marker is defence for a writer that takes a mixed batch, and
+    // `a_mixed_batch_does_not_restamp_its_foreign_rows` calls this function with
+    // one directly, because that is the only arrangement that can fail without it.
+    //
+    // The bound is the first *local* row this call wrote. For an append that is
+    // every row's first, as it always was; for an ingest's foreign rows there is
+    // none and the statement does not run.
+    if let Some(first) = first_local {
         connection.execute(
             "UPDATE event SET origin_store = ?, origin_position = position \
              WHERE position >= ? AND origin_position IS NULL",
@@ -1092,25 +1412,27 @@ fn write_batch(
     // rowid — and absolutising it would acknowledge the write at a position no
     // row holds and the next honest append will. Refusing inside the
     // transaction is what makes that a rollback rather than a forged receipt.
-    let last = positions.last().copied().unwrap_or_default();
-    position_from_row(last)
+    let last = written
+        .last()
+        .map(|&(_, position)| position_from_row(position))
+        .transpose()?;
+    Ok((written.len(), last))
 }
 
 /// Inserts every `(tag, position, event_type)` row, chunked to the parameter
 /// budget.
-fn write_tag_rows(
-    connection: &Connection,
-    events: &[Event],
-    positions: &[i64],
-) -> rusqlite::Result<()> {
+///
+/// `written` is the rows that went in, each beside the position it was given;
+/// a skipped foreign row is not in it, so it gets no tag row.
+fn write_tag_rows(connection: &Connection, written: &[(&Event, i64)]) -> rusqlite::Result<()> {
     let rows_per_statement = (PARAMETER_BUDGET / TAG_ROW_PARAMETERS).max(1);
     let mut buffer: Vec<Value> = Vec::with_capacity(rows_per_statement * TAG_ROW_PARAMETERS);
     let mut buffered = 0usize;
 
-    for (event, position) in events.iter().zip(positions) {
+    for &(event, position) in written {
         for tag in event.tags() {
             buffer.push(Value::Text(tag.as_str().to_owned()));
-            buffer.push(Value::Integer(*position));
+            buffer.push(Value::Integer(position));
             buffer.push(Value::Text(event.event_type().as_str().to_owned()));
             buffered += 1;
             if buffered == rows_per_statement {
@@ -1140,13 +1462,14 @@ fn flush_tag_rows(connection: &Connection, buffer: &[Value], rows: usize) -> rus
 ///
 /// Migration 1 creates the table; this is what writes to it. A table created and
 /// never updated silently restores the plan the schema amendment was made to
-/// avoid, and nothing in the conformance suite would notice.
-fn bump_cardinality(connection: &Connection, events: &[Event]) -> rusqlite::Result<()> {
+/// avoid, and nothing in the conformance suite would notice. Counted over the
+/// rows that went in, so a re-delivered event does not count its tags twice.
+fn bump_cardinality(connection: &Connection, written: &[(&Event, i64)]) -> rusqlite::Result<()> {
     let mut statement = connection.prepare(
         "INSERT INTO tag_cardinality (tag, events) VALUES (?, 1) \
          ON CONFLICT(tag) DO UPDATE SET events = events + 1",
     )?;
-    for event in events {
+    for &(event, _) in written {
         for tag in event.tags() {
             statement.execute([tag.as_str()])?;
         }
@@ -1202,6 +1525,12 @@ fn read_identity(connection: &Connection) -> Result<StoreId, SqliteEventStoreErr
 #[non_exhaustive]
 pub enum SqliteEventStoreError {
     /// The driver failed: I/O, `SQLITE_BUSY`, a constraint, a bad statement.
+    ///
+    /// On an append this arrives in one of two arms. A `SQLITE_BUSY` or
+    /// `SQLITE_LOCKED` from `BEGIN IMMEDIATE` — the write lock not acquired
+    /// within the busy timeout, before anything was written — is carried by
+    /// [`AppendError::Busy`]; every other driver failure, a busy code raised
+    /// later included, by [`AppendError::Store`].
     #[error("SQLite failed: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
@@ -1325,6 +1654,21 @@ pub enum SqliteEventStoreError {
     /// The canonical tag column of a stored row is not UTF-8.
     #[error("a stored tag column is not valid UTF-8")]
     CorruptTags,
+
+    /// A replicated event's origin position does not fit SQLite's `INTEGER`.
+    ///
+    /// Refused rather than saturated, because on the ingest path a position is
+    /// half an [`EventId`]: two such events from one origin would collapse onto
+    /// one stored identity and the second would be counted as a re-delivery.
+    /// `#[cfg(test)]` with the rest of the ingest spike until phase 13 publishes
+    /// the port it serves; the enum is `#[non_exhaustive]`, so lifting the gate
+    /// is additive.
+    #[cfg(test)]
+    #[error("origin position {position} does not fit SQLite's INTEGER column")]
+    OriginPositionOutOfRange {
+        /// The position the origin assigned.
+        position: SequencePosition,
+    },
 }
 
 impl SendEventStore for SqliteEventStore {
@@ -1389,9 +1733,13 @@ impl SendEventStore for SqliteEventStore {
     ///   will never fit here* from *the disk is full, retry*;
     /// * a guard of the condition matched an event strictly after its boundary,
     ///   in which case the transaction rolls back and the file is unchanged;
-    /// * the driver failed — including `SQLITE_BUSY` after the configured busy
-    ///   timeout has genuinely elapsed, which is contention reported honestly
-    ///   rather than a condition violation;
+    /// * the write lock was not acquired before the configured busy timeout
+    ///   elapsed — `SQLITE_BUSY` or `SQLITE_LOCKED` from `BEGIN IMMEDIATE` —
+    ///   which is reported as [`AppendError::Busy`]: contention, before any
+    ///   statement of this append ran, so nothing was written and deciding again
+    ///   is safe. It is neither a condition violation nor a store failure;
+    /// * the driver failed in any other way, a busy code raised after
+    ///   `BEGIN IMMEDIATE` succeeded included, which is [`AppendError::Store`];
     /// * another thread panicked while holding this store's connection.
     async fn append(
         &self,
@@ -1411,7 +1759,7 @@ impl SendEventStore for SqliteEventStore {
         // A caller must be able to learn a value will never fit *here* without
         // the store having to try, which is what keeps a quarantine path open
         // for a sync runner.
-        Self::check_ceilings(events)?;
+        Self::check_ceilings(events.len(), events)?;
 
         let recorded_at = now();
         let mut connection = self
@@ -2309,6 +2657,152 @@ mod tests {
         );
         assert!(pages > 1, "the fixture must take more than one page");
     }
+
+    /// The `origin_position IS NULL` marker in `write_batch`'s stamp, pinned by
+    /// the one batch shape that needs it: a local row, then a foreign row.
+    ///
+    /// The stamp is bounded by the batch's first local position, and here the
+    /// foreign row sits above that bound, so only the marker keeps it from being
+    /// restamped under this store's incarnation. No caller builds this batch
+    /// today — an ingest writes foreign rows and compensation in separate calls
+    /// — which is why every test through the port passes with the marker
+    /// deleted, and why this one calls the writer directly.
+    #[test]
+    fn a_mixed_batch_does_not_restamp_its_foreign_rows() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        let own = SqliteEventStore::migrate(&mut connection).unwrap();
+        let peer = StoreId::from_bytes([0x5E; 16]);
+        let foreign = EventId::new(peer, SequencePosition::new(42).unwrap());
+        let local = Event::new("Local", b"l".to_vec()).unwrap();
+        let replicated = Event::new("Replicated", b"r".to_vec()).unwrap();
+        let rows = [
+            NewRow {
+                event: &local,
+                origin: Origin::Local {
+                    recorded_at: RecordedAt::from_millis(1),
+                },
+            },
+            NewRow {
+                event: &replicated,
+                origin: Origin::Foreign {
+                    id: foreign,
+                    recorded_at: RecordedAt::from_millis(2),
+                },
+            },
+        ];
+
+        let (written, _) = write_batch(&connection, own, &rows).unwrap();
+        assert_eq!(written, 2);
+
+        let origins: Vec<(String, Vec<u8>, i64, i64)> = connection
+            .prepare("SELECT event_type, origin_store, origin_position, position FROM event")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        for (kind, store, origin_position, position) in origins {
+            if kind == "Local" {
+                assert_eq!(store, own.to_bytes(), "the local row went unstamped");
+                assert_eq!(origin_position, position);
+            } else {
+                assert_eq!(
+                    store,
+                    peer.to_bytes(),
+                    "the foreign row was restamped under this store"
+                );
+                assert_eq!(origin_position, 42);
+            }
+        }
+    }
+
+    /// A file of its own, so a second connection can hold its write lock.
+    /// Removed on drop, after the store and the holder that used it, because
+    /// Windows will not unlink an open file.
+    struct LockedFile(std::path::PathBuf);
+
+    impl LockedFile {
+        fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+            let mut path = std::env::temp_dir();
+            path.push(format!(
+                "happenstance-sqlite-busy-{}-{}.db",
+                std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ));
+            let file = Self(path);
+            file.remove();
+            file
+        }
+
+        fn remove(&self) {
+            for suffix in ["", "-wal", "-shm"] {
+                let mut path = self.0.clone().into_os_string();
+                path.push(suffix);
+                let _ = std::fs::remove_file(std::path::PathBuf::from(path));
+            }
+        }
+    }
+
+    impl Drop for LockedFile {
+        fn drop(&mut self) {
+            self.remove();
+        }
+    }
+
+    /// A write lock held by another connection past the busy timeout is
+    /// [`AppendError::Busy`], nothing is written, and the same append lands
+    /// once the lock is released — all three parts of the variant's contract,
+    /// on the one path `begin_error` classifies.
+    ///
+    /// The timeout is lowered on this handle's connection rather than waited
+    /// out: fifty milliseconds is the same code path as fifteen seconds, and the
+    /// test is about which arm the refusal arrives in, not how long it took.
+    /// A wrong implementation this rejects is the one this crate shipped until
+    /// `0.4.0` — `store_error` at `BEGIN IMMEDIATE` — which reports the same
+    /// refusal as `Store`.
+    #[tokio::test]
+    async fn a_write_lock_held_elsewhere_is_busy_and_writes_nothing() {
+        let file = LockedFile::new();
+        let store = SqliteEventStore::open(&file.0).unwrap();
+        store
+            .connection
+            .lock()
+            .unwrap()
+            .busy_timeout(core::time::Duration::from_millis(50))
+            .unwrap();
+        let holder = Connection::open(&file.0).unwrap();
+        holder.execute_batch("BEGIN IMMEDIATE").unwrap();
+
+        let event = Event::new("Blocked", b"b".to_vec()).unwrap();
+        let refused = store.append(core::slice::from_ref(&event), None).await;
+        assert!(refused.as_ref().is_err_and(AppendError::is_busy));
+        match refused {
+            Err(AppendError::Busy(SqliteEventStoreError::Sqlite(driver))) => assert!(
+                crate::connection::is_busy(&driver),
+                "the payload is the driver's own busy code: {driver}"
+            ),
+            other => panic!("a write lock held elsewhere must be `Busy`, got {other:?}"),
+        }
+
+        holder.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(
+            store.head().await.unwrap(),
+            None,
+            "a busy refusal must have written nothing"
+        );
+        let landed = store.append(&[event], None).await.unwrap();
+        assert_eq!(
+            store.head().await.unwrap(),
+            Some(landed),
+            "the same append succeeds once the holder lets go"
+        );
+
+        drop(holder);
+        drop(store);
+    }
 }
 
 #[cfg(test)]
@@ -2528,5 +3022,162 @@ mod plan_tests {
             }),
             "the arm's window did not reach the index:\n{rendered}"
         );
+    }
+}
+
+#[cfg(test)]
+mod busy_conformance {
+    //! The concurrency family against a store that is **really** busy.
+    //!
+    //! `tests/concurrency.rs` runs the family at the shipped
+    //! [`BUSY_TIMEOUT_MS`](crate::connection::BUSY_TIMEOUT_MS), where fifteen
+    //! seconds absorbs 64 contenders and no contender is ever refused — so it
+    //! proves the rules pass and says nothing about how they treat a
+    //! [`AppendError::Busy`] this adapter produced. This fixture lowers each
+    //! handle's timeout to one millisecond after opening it, which turns the
+    //! same race into one where most losers of the write lock are refused as
+    //! `Busy` at `BEGIN IMMEDIATE`. Every rule must still pass: ES-43's
+    //! `a_busy_append_left_nothing_behind` checks each refused contender wrote
+    //! nothing, and the other five accept `Busy` under their floors.
+    //!
+    //! **That the refusals really happen was measured, not assumed**, with a
+    //! throwaway count in `begin_error` that is not left in the tree: 258–262
+    //! `Busy` answers across the six rules in each of three runs, and 61 of the
+    //! 64 contenders in `a_busy_append_left_nothing_behind` alone. Ten further
+    //! runs of the family were green. The count is not asserted, because CF-33
+    //! denies a rule an operation count and a test here that demanded one would
+    //! be timing-dependent. The deterministic half is
+    //! `every_handle_the_impatient_fixture_connects_is_refused_as_busy`, below,
+    //! which holds the two facts the count rests on: this fixture's handles
+    //! carry the one-millisecond bound, and such a handle is refused as `Busy`
+    //! by a write lock held elsewhere.
+    //!
+    //! In `src/` rather than `tests/` because lowering the timeout reaches the
+    //! store's private connection, and a public knob for it would be a knob an
+    //! application could turn the wrong way.
+    //!
+    //! One millisecond rather than zero: with no handler at all, a WAL
+    //! *reader* can be refused on the wal-index lock too, and the reader rule
+    //! would then report a failed read — a verdict about the fixture, not the
+    //! store. One millisecond keeps the handler present, which is the shipped
+    //! shape, and only shortens its bound.
+
+    #![allow(clippy::unwrap_used)]
+
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use happenstance_testkit::{Capability, Fixture};
+
+    use super::SqliteEventStore;
+
+    /// One temporary file, and each `connect` a new impatient connection onto
+    /// it.
+    struct ImpatientFixture(PathBuf);
+
+    impl ImpatientFixture {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(1);
+            let mut path = std::env::temp_dir();
+            path.push(format!(
+                "happenstance-sqlite-impatient-{}-{}.db",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let fixture = Self(path);
+            fixture.remove();
+            fixture
+        }
+
+        fn remove(&self) {
+            for suffix in ["", "-wal", "-shm"] {
+                let mut path = self.0.clone().into_os_string();
+                path.push(suffix);
+                let _ = std::fs::remove_file(PathBuf::from(path));
+            }
+        }
+    }
+
+    impl Drop for ImpatientFixture {
+        fn drop(&mut self) {
+            self.remove();
+        }
+    }
+
+    impl Fixture for ImpatientFixture {
+        type Store = SqliteEventStore;
+
+        const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+
+        const REOPEN: Capability = Capability::declined(
+            "this fixture exists to make appends busy; durability across a \
+             reopen is tests/conformance.rs's, at the shipped timeout",
+        );
+
+        async fn connect(&self) -> Self::Store {
+            let store = SqliteEventStore::open(&self.0).unwrap();
+            store
+                .connection
+                .lock()
+                .unwrap()
+                .busy_timeout(core::time::Duration::from_millis(1))
+                .unwrap();
+            store
+        }
+    }
+
+    happenstance_testkit::event_store_concurrency_conformance!(
+        mod_name = impatient,
+        fixture = ImpatientFixture::new()
+    );
+
+    /// **The fixture above really is impatient, and that is what makes its
+    /// run a run against `Busy`.**
+    ///
+    /// The family's pass says nothing on its own: against a handle that kept
+    /// the shipped fifteen-second timeout, `a_busy_append_left_nothing_behind`
+    /// sees no refusal and passes on its anchor. The count of refusals is not
+    /// asserted, for the module doc's CF-33 reason. What is asserted instead
+    /// are the two facts the count rests on, neither of which depends on how
+    /// the race is scheduled: every handle the fixture connects reads its busy
+    /// timeout back as one millisecond, and such a handle, meeting a write lock
+    /// held elsewhere, is refused as `Busy` and writes nothing.
+    ///
+    /// The wrong implementations this rejects are a `connect` that stopped
+    /// lowering the timeout, or lowered it on a different connection than the
+    /// one the store appends through, and a `begin_error` that stopped
+    /// mapping the refusal to `Busy`.
+    #[tokio::test]
+    async fn every_handle_the_impatient_fixture_connects_is_refused_as_busy() {
+        use happenstance_core::{AppendError, Event, EventStore};
+
+        let fixture = ImpatientFixture::new();
+        let store = fixture.connect().await;
+        let timeout: i64 = store
+            .connection
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(timeout, 1, "the fixture's handle must carry its 1 ms bound");
+
+        let holder = rusqlite::Connection::open(&fixture.0).unwrap();
+        holder.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let event = Event::new("Blocked", b"b".to_vec()).unwrap();
+        let refused = store.append(core::slice::from_ref(&event), None).await;
+        assert!(
+            refused.as_ref().is_err_and(AppendError::is_busy),
+            "an impatient handle meeting a held write lock must be refused as \
+             `Busy`, got {refused:?}"
+        );
+        holder.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(
+            store.head().await.unwrap(),
+            None,
+            "and the refusal must have written nothing"
+        );
+
+        drop(holder);
+        drop(store);
     }
 }

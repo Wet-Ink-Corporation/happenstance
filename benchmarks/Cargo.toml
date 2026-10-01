@@ -5,7 +5,7 @@
 #
 # Three reasons, and each is sufficient on its own.
 #
-# 1. **CF-34** (`spec/SPECIFICATION.md:8747`): performance MUST be measured by a
+# 1. **CF-34** (`spec/SPECIFICATION.md:9125`): performance MUST be measured by a
 #    separate harness which is not part of the conformance bar. A crate cargo
 #    cannot see from the root manifest is a crate no gate step can start
 #    depending on by accident.
@@ -41,7 +41,6 @@ happenstance-core = { path = "../crates/happenstance-core", features = [
     "std",
     "memory",
     "conformance",
-    "unstable-projection",
 ] }
 # The typed layer, with every codec on: the codec group measures all three
 # against each other and a missing one is a silently absent column.

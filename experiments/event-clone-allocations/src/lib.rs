@@ -8,7 +8,7 @@
 //! * `crates/happenstance-core/src/memory.rs:30-31` — "Cloning is cheap
 //!   regardless: payloads are `Bytes`, so a snapshot bumps refcounts rather than
 //!   copying data";
-//! * `spec/SPECIFICATION.md:3370-3373` (ES-17, `[PROVISIONAL]`) — the same
+//! * `spec/SPECIFICATION.md:3449-3452` (ES-17, `[PROVISIONAL]`) — the same
 //!   sentence, in the clause that owns `append`'s ownership decision;
 //! * `references/adr/0012-append-shape-and-preconditions.md:173` — "`Bytes` are
 //!   refcounted, so `event.clone()` bumps a counter rather than copying a

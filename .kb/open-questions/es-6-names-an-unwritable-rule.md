@@ -31,12 +31,18 @@ summary: >-
   says nothing about whether the wrapped type is part of the promise, which is the fact a sealing
   option depended on and ADR-0044 did not supply. And the §7.2 citation is repointed to the live
   table row rather than by the intake's mechanical offer, which was anchored on the wrong line.
+  Updated 2026-09-30: sub-question 4 is written into ES-6's prose under ADR-0066 sections 4 and 5,
+  with the payload census by crate, Busy(E) named beside Store(E) (kb-decision-0077), and the
+  non-re-exported tokio payloads stated as a mechanical consequence. Sub-questions 1 to 3 stay
+  open with no phase, not blocking 1.0.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
   - kb-playbook-repair-frozen-clause-001
   - kb-decision-0008
   - kb-decision-0009
+  - kb-decision-0066
+  - kb-decision-0077
   - kb-reference-port-traits-compiled-findings-001
   - kb-open-question-es-38-and-gap-read-unowned-001
   - kb-open-question-cf-36-unperformed-cross-reference-001
@@ -71,9 +77,9 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-ES-6 (`spec/SPECIFICATION.md:2677`) is `[FROZEN]` and its `Rule:` field names
-`store_error_crosses_a_join_handle`, marked **(new)** (`SPECIFICATION.md:2720`). §7.2's generated
-table renders it with `†` (`SPECIFICATION.md:9271`), where the legend defines `†` as "does not
+ES-6 (`spec/SPECIFICATION.md:2703`) is `[FROZEN]` and its `Rule:` field names
+`store_error_crosses_a_join_handle`, marked **(new)** (`SPECIFICATION.md:2746`). §7.2's generated
+table renders it with `†` (`SPECIFICATION.md:9698`), where the legend defines `†` as "does not
 exist yet". That identifier occurs as no `fn` anywhere in the workspace. It occurs only in prose:
 twice in `RUNBOOK.md`, once in `.kb/decisions/0008`, three times in `.kb/decisions/0009`, three times in
 comments in `happenstance-cloudflare`, and in the specification itself. One of those comments
@@ -137,7 +143,7 @@ real gap and not an artifact of one reading.
 One citation in the paragraph above was repaired here rather than by the repoint offered to it, and
 the difference is worth recording because it is the hazard `kb-decision-0045` and
 `kb-playbook-anchoring-citations-001` are about. The `[REOPEN]` lane's brief listed this atom's
-`SPECIFICATION.md:8588` as drifting to `8625`, anchored on the line `nothing. Batch shape's tick is
+`SPECIFICATION.md:8966` as drifting to `8625`, anchored on the line `nothing. Batch shape's tick is
 the *one-sided* one`, and reported the anchor as unique and the repoint as mechanical. Both are
 true and the result is still wrong: that line is §7's batch-shape prose, not §7.2's table row, and
 checking the revision the citation was written against (`76e9424`, 2026-08-19) shows the ES-6 row
@@ -185,14 +191,14 @@ missing rule. The driver re-export pass went looking for a clause governing whet
 adapter re-exports the driver crate whose types appear in its public signatures, and found ES-6 as
 the nearest one — pointing the *other* way, because ES-6 endorses the wrapping, citing
 `SqliteEventStoreError`'s "twelve real variants over `rusqlite::Error`, `JoinError`,
-`TryCurrentError` and the crate's own decode failures" (`spec/SPECIFICATION.md:2688-2690`) as the
+`TryCurrentError` and the crate's own decode failures" (`spec/SPECIFICATION.md:2714-2716`) as the
 instrument that made the clause decidable at all. What ES-6 does not say is whether the *wrapped
 type* is part of the promise the `#[non_exhaustive]` error enum makes. That is not idle: the
 sealing option in that pass — wrap `rusqlite::Error` behind an opaque value enum and stop naming it
 publicly — depended entirely on the answer, and `kb-decision-0044` settled the re-export question
 without supplying it, so the option was ruled out on cost-of-delay rather than on ES-6's meaning.
 `#[non_exhaustive]` protects the *addition* of variants, not the *change* of a variant's payload
-(`crates/happenstance-sqlite/src/event_store.rs:1202`), which is why the question has a semver
+(`crates/happenstance-sqlite/src/event_store.rs:1229`), which is why the question has a semver
 consequence and not only a documentation one.
 
 ## What forces it
@@ -232,7 +238,7 @@ Whether the dagger convention survives at all, now that the guard it switched is
 ## Phase 16 — 2026-09-29
 
 **Sub-question 4 is answered by `kb-decision-0066`.** Driver error payloads re-exported under
-ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1206`,
+ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1535`,
 are **inside** the 1.0 promise, with a named limit: an adapter's major follows the breaking
 version of the driver it re-exports. That rules out the sealing option `kb-decision-0044` left
 open. Writing the answer into ES-6's prose is phase 17's
@@ -244,3 +250,24 @@ unwritten and still a `Scheduled` entry in `UNRESOLVABLE_RULE_NAMES` (`xtask/src
 for every adapter, and a testkit rule can land in any minor. Whether an unresolvable entry must
 carry an owning phase is `xtask` policy. **Owner now: phase 17** for the prose; sub-questions 1–3
 stay open with no phase, not blocking 1.0.
+
+## Phase 17 — 2026-09-30
+
+**Sub-question 4 is written into ES-6's prose** (phase 17, lane L5), under the authority of
+`kb-decision-0066` §4 and §5. No new record was needed. The marker stays `[FROZEN]`, and the
+paragraph narrows what an adapter may change at a minor release. It states:
+
+- the payload types a published adapter's error variants carry are part of its 1.0 promise;
+- `#[non_exhaustive]` protects adding a variant, not changing a payload;
+- a payload change forced by a re-exported driver's breaking release is that adapter's major.
+
+It gives the census by crate: `rusqlite`, `sqlx`, `worker` through `JsThrow`, and `serde_json`. It
+names `AppendError::Busy(E)` beside `Store(E)`, because `kb-decision-0077` added a second variant
+that carries the same payloads. It says plainly that three of the four drivers are `0.x`, so their
+minors force adapter majors. And it states, as a mechanical consequence rather than a new promise,
+that the non-re-exported `tokio` payloads (`JoinError`, `TryCurrentError`) are in the public
+signature too. The stale `event_store.rs` range ES-6 cited for `SqliteEventStoreError` was
+repointed in the same edit, and `js.rs:168-173` was re-verified.
+
+Sub-questions 1 to 3 are unchanged: `store_error_crosses_a_join_handle` is still unwritten and
+declared `Scheduled`, and they stay open with no phase, not blocking 1.0.

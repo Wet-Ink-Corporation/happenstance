@@ -241,7 +241,10 @@ impl HttpResponse {
 /// One round trip to a SQL-over-HTTP endpoint.
 ///
 /// Implementors own the TLS stack, the credentials and the retry policy. This
-/// crate owns the SQL and the decoding, and nothing else.
+/// crate owns the SQL and the decoding, and nothing else. The retry policy is
+/// bounded by one obligation, stated on [`round_trip`](Self::round_trip)'s
+/// `# Retries`: a request that may have reached the endpoint is never sent
+/// twice behind the adapter's back.
 pub trait SqlTransport {
     /// How the transport fails before an HTTP answer exists: DNS, TLS, a
     /// rejected `fetch`, a timeout.
@@ -258,6 +261,26 @@ pub trait SqlTransport {
     /// # Errors
     ///
     /// Returns [`Self::Error`] only when no HTTP response was obtained.
+    ///
+    /// # Retries
+    ///
+    /// An implementor **MUST NOT** transparently re-send a request that may
+    /// have reached the endpoint. A retry inside this method is allowed only
+    /// when the earlier send provably never left the process — a DNS or
+    /// connect failure. Any other failure of a send, a timeout or a connection
+    /// reset after the request was written included, MUST surface as
+    /// [`Self::Error`], which `NeonEventStore::append` reports as
+    /// `AppendError::Store`.
+    ///
+    /// ES-43 leans on this. The adapter reports an exhausted run of `40001`
+    /// answers as `AppendError::Busy`, a promise that nothing was written, and
+    /// that holds only if every answer it read is the answer to the *only*
+    /// send of its request. A transport that re-sent a request whose first
+    /// send committed and whose response was lost would hand the adapter the
+    /// second send's `40001`, and an append that landed would be reported as
+    /// one that did not — which a caller re-running an unconditional append
+    /// would then write twice.
+    ///
     /// # Cancellation, and what this adapter does NOT assume
     ///
     /// This adapter makes **no assumption that dropping the returned future

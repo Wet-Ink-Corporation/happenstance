@@ -18,7 +18,7 @@ by run N+1. `RESULTS_SUFFIX` (`run.sh:66`) fixes that. This is the first
 measurement of the thing.
 
 **Nothing here is a threshold and nothing here gates anything.** CF-34
-(`spec/SPECIFICATION.md:8747`). The numbers are printed and a human reads them.
+(`spec/SPECIFICATION.md:9125`). The numbers are printed and a human reads them.
 
 ## What was run
 

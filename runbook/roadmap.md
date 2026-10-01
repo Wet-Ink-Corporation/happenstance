@@ -53,6 +53,7 @@ to phase 17 for the same reason; the rest of ADR-0026 stays phase 13's.
 ```
 12 ─▶ 15 ─▶ 16 ─▶ 17 [0.4.0] ─▶ 18 ─▶ 13 ─▶ 14 ─▶ 21 [1.0.0]
                    │                             ▲
+                   ├─▶ 17b ──────────────────────┤   the additive half (ADR-0072), alongside 18
                    └─▶ 19b                       │   SQLite on wasm32; a candidate spoke for 13
                                                  │
 off the path, and free to run alongside it:      │
@@ -63,7 +64,8 @@ off the path, and free to run alongside it:      │
 |---|---|---|---|
 | 15 | [Reconcile the record](phases/15-reconcile.md) | Every plan-of-record document stopped between 2026-09-07 and 09-11 and four releases went out after. A plan read off a stale table sends somebody to build what is built — which has happened here once already, and held a release for it. | 2–3 |
 | 16 | [Define 1.0](phases/16-define-1-0.md) | Nothing else can be sequenced against a target nobody has written down. | 2 |
-| 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | The last cheap place to break a published signature. | 5–8 |
+| 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | The last cheap place to break a published signature. | ~~5–8~~ 25–30 |
+| 17b | [After the window](phases/17b-after-the-window.md) | Phase 17's additive half, split off at the release by ADR-0072 so `0.4.0` does not wait on work that needs no window. Before 21, because three freezes ride it. | 8–10 |
 | 18 | [The typed runner leaves its gate](phases/18-typed-runner.md) | An application author's runner is the one piece of the typed layer still marked unstable. Before 13, because it builds the convergence declaration sync's SY-20 rule is written against, while 13's rule for SY-21 exercises what this phase freezes. | 5–8 |
 | 13 | [`happenstance-sync`](phases/13-sync.md) | After 17, because 17 may change the core surface a peer is built against, and after 18, whose convergence declaration SY-20's rule consumes. Inside 1.0 (D-1). | 12 |
 | 14 | [Retention and completeness](phases/14-retention.md) | Builds what 17 decided about forgetting. | 5 |
@@ -72,7 +74,8 @@ off the path, and free to run alongside it:      │
 | 20 | [Documentation that teaches](phases/20-docs-that-teach.md) | 1.0 is a promise to a reader who is not the author. Planned in `.bklg/docs-that-teach/`, tracked here. | to be estimated |
 | 21 | [`1.0.0`](phases/21-one-point-oh.md) | Last, by definition. | 3–5, plus a soak |
 
-**Solo, the 1.0 path is about 34–43 working days**: 15, 16, 17, 18, 13, 14 and 21.
+**Solo, the 1.0 path is about 62–75 working days**: 15, 16, 17, 17b, 18, 13, 14 and
+21. It was 34–43 until phase 17 was re-estimated at its start (ADR-0072).
 Sync is inside 1.0 (D-1 below), so 13 and 14 are on the path rather than beside it;
 without them it would have been 17–26. Phases 19a and 20 run alongside and are not
 counted. Every figure is an estimate carried into a repository whose own history

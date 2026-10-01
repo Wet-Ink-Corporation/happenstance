@@ -60,7 +60,7 @@
 //!
 //! The reference harness invokes **both** shipped emitters, as CF-23's
 //! demonstration that the wrapper is still a parameter. Copying that is wrong
-//! here for a mechanical reason: `__emit_model_blocking` drives the rule under
+//! here for a mechanical reason: `emit_model_blocking` drives the rule under
 //! the testkit's own `block_on` with **no tokio runtime anywhere**, and this
 //! adapter's read stream defers a `spawn_blocking` into `poll_next` — a hop that
 //! resolves through the handle captured at construction and, failing that,

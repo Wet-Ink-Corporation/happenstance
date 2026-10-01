@@ -40,7 +40,7 @@ doc-scrape-examples = true
 # set carries `memory` and an application that has chosen a durable store has no
 # use for `MemoryEventStore` in its binary. Turning it off is what a consumer
 # would do, and doing it here is what keeps this manifest an honest model of one.
-happenstance = { version = "0.3.0", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.4.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
   "unstable-projection",

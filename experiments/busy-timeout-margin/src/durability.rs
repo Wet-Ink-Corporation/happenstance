@@ -5,7 +5,7 @@
 //! a figure under `fsync=off`, because what these mechanisms charge for is the
 //! length of an interval held across a durable commit. The SQLite analogue is
 //! exact — and here it is a *correctness* constraint as well as an honesty one:
-//! `spec/SPECIFICATION.md:7481-7484` names `PRAGMA synchronous = OFF` by name as
+//! `spec/SPECIFICATION.md:7859-7862` names `PRAGMA synchronous = OFF` by name as
 //! a wrong implementation CF-14's reopen rule rejects, so a figure produced
 //! under it is a figure for a store that fails conformance.
 //!
@@ -119,7 +119,7 @@ pub struct Durability {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error(
     "refusing to measure under `synchronous = {}` with `journal_mode = {}`: \
-     spec/SPECIFICATION.md:7481-7484 names `PRAGMA synchronous = OFF` as a wrong \
+     spec/SPECIFICATION.md:7859-7862 names `PRAGMA synchronous = OFF` as a wrong \
      implementation CF-14's reopen rule rejects, so a number produced here is a \
      number for a store that cannot ship — and a caveat attached to a table is \
      how a caveat becomes a citation",

@@ -1,0 +1,78 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root and adopting this crate as a member —
+# the same trick `experiments/wire-format/Cargo.toml` documents. No entry in the
+# root `members` list changes, no `crates/**` manifest gains a dependency, and
+# this never runs under `cargo xtask ci`.
+#
+# What it is: a compile-and-run spike for the phase-17 apply record (lane L2,
+# feeding L3's ADR). It declares the PROPOSED `Projection` trait — async `apply`,
+# a `Delivered<E>` envelope, `type Error`, a provided `on_error` — inside this
+# crate, and drives it over three projection stores at the two ends of PS-2's
+# batch-shape axis. `crates/happenstance` is not edited; nothing published moves.
+#
+# The lockfile that resolves beside this manifest is this crate's own. The
+# workspace `Cargo.lock` is untouched.
+[workspace]
+
+[package]
+name = "apply-shape"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[features]
+# `native` carries the two database adapters. It is a feature rather than a
+# target cfg so the wasm32 check can say exactly what it excludes:
+# `cargo check --lib --target wasm32-unknown-unknown --no-default-features`
+# builds the proposed trait, the runner and the `!Send` edge store, and nothing
+# that links a C library or a socket.
+default = ["native"]
+native = ["dep:happenstance-sqlite", "dep:happenstance-postgres"]
+# Compiles the two calls the `compile_fail` doctests refuse — `.position()` on a
+# `Delivered<E>`, and a `!Send` projection offered to `SendProjection` — so the
+# E0599 and E0277 they claim can be read as a real transcript rather than taken
+# on the doctests' word (RS-62-1: rustdoc does not check the code it is given).
+# Never on by default; the build is expected to FAIL with it.
+demonstrate-refusals = []
+# Builds `tests/shipped_spawn.rs`'s second spawner, which writes the store as
+# `P::Store` on the SHIPPED `happenstance::Projection`. Expected to FAIL with
+# E0277s: F1's evidence that the cause is the item bound, not `trait_variant`.
+demonstrate-shipped-f1 = []
+# The two weakened spawners in `tests/spawn.rs` (README §3). Each is expected to
+# FAIL; `run.sh` writes their transcripts. They were hand edits of
+# `tests/common/mod.rs` until the transcripts had to be re-run against the final
+# source, and a feature is what makes that re-run reproducible.
+demonstrate-spawn-minimal-bounds = []
+demonstrate-spawn-store-as-projection = []
+
+[dependencies]
+# The typed layer, by path, for `DomainEvent`, `Codec`, `Json` and the port
+# re-exports. `unstable-projection` is on so the SHIPPED runner's items are in
+# the graph beside the proposed ones — the experiment names neither, but a
+# reader diffing the two traits should be able to build both from one manifest.
+happenstance = { path = "../../crates/happenstance", default-features = false, features = [
+    "std",
+    "memory",
+    "json",
+    "unstable-projection",
+] }
+happenstance-core = { path = "../../crates/happenstance-core", default-features = false, features = [
+    "std",
+    "memory",
+] }
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", default-features = false, features = [
+    "projection-store",
+], optional = true }
+happenstance-postgres = { path = "../../crates/happenstance-postgres", default-features = false, features = [
+    "projection-store",
+], optional = true }
+# The derivation under test. The same version the workspace pins, so the
+# provided-method finding is a finding about 0.1.3 and not about a newer macro.
+trait-variant = "=0.1.3"
+futures-core = { version = "0.3", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

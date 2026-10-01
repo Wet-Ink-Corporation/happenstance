@@ -10,6 +10,54 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-30 — `AppendError::Busy`: a busy store is not a broken one
+
+*Uncommitted at writing; `lane/p17-busy`.*
+Phase 17, lane L5.
+
+ADR-0077 promises `AppendError::Busy` at 1.0, and `happenstance`'s commit loop
+retries it inside `Retry`. ES-43 is `[FROZEN]`, and its rule,
+`a_busy_append_left_nothing_behind`, has a mutant. Five concurrency rules accept
+`Busy` under structural floors. SQLite, Postgres and Neon report `Busy` only where
+nothing was written, and Cloudflare documents that it never does. ES-6's payload
+prose is written.
+
+**Verified.** See phase 17's session log. Neon's live half is CI's.
+
+---
+
+## 2026-09-30 — the first breaking PR: 0.4.0 manifests, and the emitters made public
+
+*Uncommitted at writing; `lane/p17-surface-renames`.*
+Phase 17, lane L4.
+
+The workspace and testkit now read `0.4.0`. The lane:
+- executes ADR-0057;
+- removes `happenstance-core`'s empty `unstable-projection`;
+- moves `naive-arm` to a rustc cfg;
+- renames CF-23's ten emitters to `emit_*` as public API (ADR-0076, CF-41 frozen).
+
+Breaks the semver tool cannot see are recorded for the release's hand rows.
+
+**Verified.** See phase 17's session log.
+
+---
+
+## 2026-09-30 — the apply record and the projection port's 1.0 clauses
+
+*Uncommitted at writing; `lane/p17-apply-record`.*
+Phase 17, lane L3.
+
+ADR-0074 decides the typed layer's `apply`: async, handed a position-free
+`Delivered<E>` and a batch to issue statements through, on `experiments/apply-shape`.
+ADR-0075 settles the port's remaining 1.0 clauses. PS-9, PS-11, PS-15, PS-23 and
+PS-24 are frozen. PS-15 was narrowed to `commit` and `reset` by the owner's
+ruling (`wi-ff17f4`), after a walkthrough of the options.
+
+**Verified.** See phase 17's session log.
+
+---
+
 ## 2026-09-29 — phase 22 opened: the documentation site
 
 *Uncommitted, on `lane/docs-site`, in a worktree beside the phase-16 work.*
@@ -36,10 +84,63 @@ prior-model page, which waits on the owner. The handover is not rewritten here,
 because it is `main`'s and phase 16's lane is writing it; this lane's state is
 in [`phases/22-docs-site.md`](phases/22-docs-site.md).
 
+---
+
+## 2026-09-29 — ADR-0028: what a store may forget, decided as a refusal
+
+*Uncommitted at writing; `lane/p17-provided-method-spike`.*
+Phase 17, lane L2.
+
+A compile spike showed a default-bodied method is additive on a `trait_variant`
+port: `cargo-semver-checks` is clean against `0.3.2`, and a required-method
+control is flagged major. On that evidence ADR-0028 keeps deletion outside the
+port through 1.x, and reserves a report defaulting to `Unknown` as a later
+additive method. ES-41 and PS-22 are frozen. `experiments/apply-shape` shows an
+async `apply` with a batch handle working against a live Postgres, and it feeds
+L3's record.
+
+**Verified.** See phase 17's session log.
+
+---
+
+## 2026-09-29 — VT-10 frozen: the foreign-identity write path is the adapter's
+
+*Uncommitted at writing; `lane/p17-foreign-identity`.*
+Phase 17, lane L1.
+
+ADR-0073 answers ADR-0026's published half. `happenstance-core` needs no write
+path that preserves a foreign `EventId`: SQLite's own `write_batch` takes one,
+and VT-10's falsifier did not fire on its named instrument. The spike is
+`#[cfg(test)]` because `happenstance-sync` is unpublished. Neon's single-statement
+ingest is structural evidence for SY-14. `happenstance-sync`'s placeholder
+identity types are gone. Spec citations the edits shifted were repointed across
+the tree.
+
+**Verified.** See phase 17's session log.
+
+---
+
+## 2026-09-29 — phase 17 opens, split at its release
+
+*Uncommitted at writing; `lane/p17-kickoff`.*
+Phase 17.
+
+The handover asked for a re-estimate at the start of phase 17. A read-only
+research pass, one reader per cluster of work items and a sequencing synthesis,
+put the phase at about 275 hours against its 5–8 days. The owner split it
+(ADR-0072): phase 17 keeps what breaks or changes behaviour on a published crate,
+plus the `workerd` job, and ends at `0.4.0`. A new phase, 17b, takes the additive
+items, and phase 21 waits on it. VT-14, VT-30 and ES-7 moved to `freeze-by-17b`.
+The status table, roadmap and ledgers carry the split. The owner also chose to
+spike ES-11's fence on Neon, and to promise `AppendError::Busy`.
+
+**Verified.** See phase 17's session log.
+
+---
+
 ## 2026-09-29 — phase 16 is done: what 1.0 promises
 
-*`lane/phase-16-define-1-0`, one PR, left open for the owner to merge. Its commit
-on `main` is recorded here when it merges.*
+*Merged as PR #24, squash `230065f`.*
 Phase 16.
 
 ADR-0066 is the 1.0 charter: nine crates by name, `happenstance-ladybug`

@@ -2,7 +2,7 @@
 id: kb-open-question-apply-synchronous-live-store-001
 title: Projection::apply is synchronous, so the runner cannot drive the live store the port was frozen against
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   At 86a410c, Projection::apply(&mut self, event: Self::Event) is synchronous
@@ -29,8 +29,16 @@ summary: >-
   those answers. The runner gate "no longer forwarding to the contract crate"
   is the ADR-0063 brief's statement about the lane; at 86a410c
   crates/happenstance/Cargo.toml:142 still forwards.
+  Resolved 2026-09-29 by kb-decision-0074: apply becomes async on the one trait, declared with
+  trait_variant's SendProjection flavour, handed a position-free Delivered event and the batch.
+  Sub-question 1 is answered yes, sub-question 2 by keeping the batch-handle parameter and making
+  it awaitable, and sub-question 3 no: ADR-0063's falsifier did not fire, because the port already
+  hands out &mut Self::Batch and the live batch's statement path is an inherent async method. The
+  evidence is experiments/apply-shape, which drove a live sqlx transaction against PostgreSQL
+  17.10. The runner's gate comes off at phase 18, which builds the record.
 depends_on: []
 related:
+  - kb-decision-0074
   - kb-decision-0062
   - kb-decision-0063
   - kb-decision-0060
@@ -45,6 +53,7 @@ source_paths:
   - crates/happenstance/src/domain.rs
   - crates/happenstance/src/runner.rs
   - crates/happenstance/Cargo.toml
+  - experiments/apply-shape/README.md
 last_reviewed: 2026-09-29
 ---
 
@@ -152,3 +161,31 @@ already takes `batch: &mut StoreBatch<Self>` and returns `Result`, so the batch-
 landed and only sync-versus-async is open. The stale claim in its own section is resolved:
 `crates/happenstance/Cargo.toml:148` no longer forwards to core. `kb-decision-0070` settles the
 adjacent `Chunk` question. **Owner now: phase 17 decides, phase 18 builds.**
+
+## Closed — 2026-09-29
+
+`kb-decision-0074` answers the question, on a compiled and executed spike
+(`experiments/apply-shape/`) rather than an argument. The body above is kept as the state of
+knowledge on the day it was open.
+
+1. **Does `apply` need to change? Yes.** Phase 18's exit criterion asks for a projection that
+   writes into a live batch against a real database, and a synchronous `apply` cannot await a
+   statement. Staging rows for `commit` to issue would rebuild the buffered store on top of a
+   live one.
+2. **What does it become?** `async fn apply(&mut self, event: Delivered<Self::Event>, batch:
+   &mut StoreBatch<Self>) -> Result<(), Self::Error>`, on the one trait, with a `SendProjection`
+   flavour derived by `trait_variant`. Return-type notation is `E0658` on 1.97.1. The batch-handle
+   parameter this atom's phase-16 note found already landed is kept; what changed is that `apply`
+   can await through it. The alternative, a second `LiveProjection` trait and runner, lost on the
+   number of names an application meets.
+3. **Does ADR-0063's falsifier fire? No.** No `ProjectionStore` signature moved. The live batch's
+   statement path is `LivePostgresBatch::execute`, a published inherent `async fn`, used as it is.
+
+**The runner's gate** comes off at phase 18, which builds the record, or ships in `1.0.0` if the
+removal has to wait for a breaking release (`runbook/phases/18-typed-runner.md`).
+
+**What this atom's "does not settle" section asked is now answered.** A mid-`apply` statement
+failure on a live batch is carried by the projection's own error type (`ProjectionError<R, W, A>`,
+PS-28). A server-side refusal aborts the live transaction, so a skip after one needs a savepoint,
+which the record assigns to phase 18.
+

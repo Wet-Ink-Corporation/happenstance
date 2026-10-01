@@ -25,9 +25,9 @@ not the same as what a user needed to be told.
   exactly.
 - **`ProjectionStore` shipped behind an off-by-default `unstable-projection`
   feature at `0.2.0`** and was exempt from semver. It is not, from `0.3.0`:
-  ADR-0063 lifted the gate on the evidence ADR-0062 produced, and the
-  feature survives on `happenstance-core` only as an empty name so that
-  `0.2.0` manifests resolve. What `happenstance` still holds behind a feature
+  ADR-0063 lifted the gate on the evidence ADR-0062 produced. The feature
+  survived on `happenstance-core` as an empty name, so that `0.2.0` manifests
+  resolved, until `0.4.0` removed it. What `happenstance` still holds behind a feature
   of the same name is the typed **runner**, whose `Projection::apply` shape is
   not yet proved at its far end. See
   [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
@@ -59,20 +59,201 @@ not the same as what a user needed to be told.
   the cap stays finite. CF-33 forbids the suite a watchdog, so an unbounded
   handler remains rejected and this stays the only liveness bound in the system.
 
-  It does **not** fix the underlying conflation: a contended store and a broken
-  store are still the same `Attempt`, and no value of this constant can change
-  that. See `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`,
-  whose instrument is the `contend_next` entry below.
+  It does **not** fix the underlying conflation, and no value of this constant
+  could. What fixed it is the channel: a `BEGIN IMMEDIATE` that outlasts the
+  timeout is now `AppendError::Busy`, which the concurrency family accepts under
+  its floors (the adapter entry below, and
+  [ADR-0077](.kb/decisions/0077-appenderror-busy.md), which closed
+  `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`).
+
+- **`happenstance-sqlite`'s `append` shares its row writer with replication
+  ingest, and behaves as it did.** The one `INSERT` it prepares now carries
+  `ON CONFLICT (origin_store, origin_position) DO NOTHING`. An appended row
+  binds its origin `NULL`, which SQLite's `UNIQUE` treats as distinct, so the
+  clause cannot fire for it: every row lands and is stamped exactly as before,
+  and the conformance suite, the concurrency family and both query-plan
+  assertions pass unchanged. It is there because the same writer now takes a
+  row carrying another store's identity, which is how
+  [ADR-0073](.kb/decisions/0073-the-foreign-identity-write-path-is-the-adapters.md)
+  settles that `happenstance-core` needs no foreign-identity write path. The
+  ingest half is test-only until `happenstance-sync` publishes.
+
+- **`happenstance-cloudflare`, `happenstance-postgres` and `happenstance-neon`
+  publish without a `happenstance-testkit` dev-dependency in their manifests**,
+  as `happenstance-sqlite` and `happenstance` already did. The workspace's
+  entry for the testkit no longer carries a version
+  ([ADR-0057](.kb/decisions/0057-the-testkit-version-key-is-dropped.md)), and
+  Cargo strips a versionless dev-dependency from the packaged manifest, so an
+  adapter no longer has to wait for a testkit release before it can publish.
+  Nothing a consumer builds changes. `cargo xtask package-check` now refuses a
+  publishable crate whose testkit dev-dependency carries a version, whether
+  written on the line or inherited from the root.
+
+- **BREAKING (`happenstance-testkit`): the conformance emitters are public API,
+  and lose their `__` prefix to say so.** CF-23 requires an adapter to name the
+  per-test wrapper its suite runs under, and until now every name it could write
+  was `#[doc(hidden)]` with a `__` prefix — Rust's declaration that an item is
+  not a promise, and the marker `cargo-semver-checks` uses to skip it. They are
+  now ordinary documented macros that render on docs.rs, and renaming or
+  removing one is a major release of this crate
+  ([ADR-0076](.kb/decisions/0076-the-cf-23-emitters-are-public-api.md), CF-41).
+  **Rename every `emit =` argument**; there are no aliases:
+
+  | Was | Is |
+  |---|---|
+  | `__emit_tokio`, `__emit_blocking`, `__emit_wasm` | `emit_tokio`, `emit_blocking`, `emit_wasm` |
+  | `__emit_projection_tokio`, `_blocking`, `_wasm` | `emit_projection_tokio`, `_blocking`, `_wasm` |
+  | `__emit_model_tokio`, `_blocking` | `emit_model_tokio`, `_blocking` |
+  | `__emit_concurrency_tokio`, `_blocking` | `emit_concurrency_tokio`, `_blocking` |
+  | `__emit_rule_names` | `__rule_names` (still hidden, not promised) |
+
+  An invocation that names no emitter gets the tokio default as before and needs
+  no change. `__emit_benchmark_tokio` and `__emit_benchmark_blocking` keep their
+  names and stay hidden: a benchmark is not the bar (CF-34), so they are outside
+  the promise, as is `__rule_names`. From here a `__` prefix means *not
+  promised*, and no promised name carries one. `tests/emitter_surface.rs` pins
+  the promised set against a committed list, because a rename that moves the
+  definition and every in-tree caller together is invisible to a compile.
+  `cargo-semver-checks` cannot report the old names' removal, since they were
+  hidden, so this entry is the record of it.
+
+- **BREAKING (`happenstance`): `commit` and `commit_with` retry a busy store,
+  inside the same `Retry` bound.** An append answered
+  `AppendError::Busy` (below) was returned at once as `CommandError::Append`.
+  It is now retried as a violated condition is: the loop reads again, folds a
+  fresh model and calls your closure again, within the bound you passed. A busy
+  refusal wrote nothing, so deciding again is safe. Every other append error is
+  still returned at once, and an outcome a store cannot vouch for stays
+  `AppendError::Store`, which is never retried
+  ([ADR-0077](.kb/decisions/0077-appenderror-busy.md), ES-43).
+
+  **`CommandError::Exhausted`'s `source` is now `AppendError<E>`, was
+  `ConditionViolated`.** It carries the last attempt's refusal whole, so an
+  exhausted busy store keeps the adapter error that says why it was busy. If you
+  read `source.conflicting_position`, match
+  `AppendError::ConditionViolated(violation)` first. A pattern that names only
+  `attempts` and `..` is unaffected.
+
+- **BREAKING (`happenstance-testkit`): the concurrency family accepts a busy
+  contender.** Until now, every racing rule failed on any answer other than a
+  commit or a violated condition. A store that was only contended, one that
+  timed out on a lock or ran out of serialisation retries, therefore failed
+  the suite exactly as a broken one did. ES-43 gives that refusal its own
+  variant, `AppendError::Busy`, and all five racing rules now read each
+  contender per error: `exactly_one_of_n_contenders_commits`,
+  `k_disjoint_boundaries_never_conflict`,
+  `positions_are_unique_under_concurrent_appends`,
+  `append_returns_the_callers_own_last_position` and
+  `a_concurrent_reader_never_sees_a_partial_batch`. A `Busy` contender counts
+  as neither a win nor a failure. A `Store` answer still fails every one of
+  them.
+
+  **One of the five is narrowed, not only re-spelled.**
+  `k_disjoint_boundaries_never_conflict` no longer requires every
+  boundary to elect a winner. A disjoint contender refused as `Busy` passes
+  it, so a store that refuses commands sharing no consistency boundary, a
+  global lock or an SSI false positive, is conformant to it as long as it
+  reports the refusal as `Busy`. Live PostgreSQL does exactly that. The rule
+  still fails a `ConditionViolated` on a boundary nothing had committed to, and
+  a boundary with two winners. It is **renamed** from
+  `k_disjoint_boundaries_admit_exactly_k_commits` to say what it checks: the
+  owner decided independence is a promise about conflict, not liveness.
+
+  **Each rule keeps a structural floor, so this is not a tolerance.** At least
+  one contender must commit, because a store where everybody is busy has made
+  no progress. A boundary with no winner must have rejected nobody, because a
+  violation needs a matching event to have landed. The store must hold every
+  committed batch and nothing more. No floor names a share of the contenders,
+  which CF-34 forbids, and `CONTENDERS` stays 64. Every named wrong
+  implementation the five rules rejected is still rejected at the same
+  assertion. `exactly_one_of_n_contenders_commits` now makes that check as two
+  assertions, at most one winner and at least one, so the two opposite defects
+  have two messages. Changing what a rule accepts is a major release of this
+  crate under CF-31, so the change is marked here
+  ([ADR-0077](.kb/decisions/0077-appenderror-busy.md)).
+
+- **BREAKING (`happenstance-sqlite`, `happenstance-postgres`,
+  `happenstance-neon`): a busy refusal arrives as `AppendError::Busy`, was
+  `AppendError::Store`.** Each adapter moves exactly the refusal it can vouch
+  wrote nothing, and nothing else:
+
+  - `happenstance-sqlite`: a `SQLITE_BUSY` or `SQLITE_LOCKED` from
+    `BEGIN IMMEDIATE`, once the 15 s busy timeout has run out. No statement of
+    the append has run at that point. A busy code raised after the write lock
+    was taken stays `Store`.
+  - `happenstance-postgres`: the last `40001` of a conditional append that
+    outlived the adapter's eight-attempt retry budget. The server aborts each
+    attempt whole. A deadlock (`40P01`) is not retried and stays `Store`, and so
+    does a connection lost around `COMMIT`.
+  - `happenstance-neon`: the last `40001` after `SERIALISATION_ATTEMPTS`. Only
+    an *answer* from the endpoint can be `Busy`; a round trip that got none is
+    `NeonError::Transport`, may have committed, and stays `Store`. That rests
+    on an obligation `SqlTransport::round_trip` now states under `# Retries`:
+    an implementor MUST NOT transparently re-send a request that may have
+    reached the endpoint, and retries only when the earlier send provably
+    never left the process. A transport that re-sent after a lost response
+    must now surface its error instead, or an append that landed could be
+    reported as `Busy`.
+
+  `happenstance-cloudflare` is unchanged and documents why: a Durable Object is
+  a single-threaded actor with no second writer to be busy behind, so it never
+  reports `Busy`.
+
+  **This compiles unchanged and stops matching.** A caller who wrote
+  `Err(AppendError::Store(e)) if e.is_serialization_failure()` (Neon),
+  the `sqlx` `40001` check on `PostgresEventStoreError::Driver` (Postgres), or a
+  match on `SqliteEventStoreError::Sqlite` carrying `DatabaseBusy` (SQLite) no
+  longer sees those refusals there. Match `AppendError::Busy(_)`, or ask
+  `is_busy()`, which is the same question for every adapter. The payload is the
+  same adapter error it was. `happenstance`'s command loop now retries these
+  inside its `Retry` bound, per the entry above
+  ([ADR-0077](.kb/decisions/0077-appenderror-busy.md), ES-43).
 
 ### Added
+
+- **`happenstance-testkit`: `a_busy_append_left_nothing_behind`, the
+  concurrency family's sixth rule.** It holds ES-43's no-effect half: an
+  append answered `AppendError::Busy` left nothing in the store. It races
+  `CONTENDERS` appends, each carrying a tag only it writes, reads back the tag
+  of every contender that was told `Busy`, and requires that nothing is found.
+  Committed contenders must read back whole, so a store whose reads return
+  nothing cannot pass by answering `Busy`. The defect it rejects is
+  `BusyAfterWriteStore`: it commits the batch and then answers `Busy`. That is
+  what an adapter does when a deadline around its append fires after `COMMIT`
+  was sent, or when it reclassifies every `SQLITE_BUSY` without asking whether
+  the rows were already written. A caller that believes the answer runs the
+  command again, and an unconditional append lands twice. The rule observes the
+  `Busy` answers a store happens to give, because no portable way exists to
+  force one. Against a store that never reports `Busy` it passes on its anchor,
+  which is what ES-43 asks. Its deterministic arm is
+  `tests/contended_store_instruments.rs`, which uses `contend_next` to make the
+  refusals certain. An adapter crate that invokes
+  `event_store_concurrency_conformance!` runs it with no change to the
+  invocation.
+
+- **`happenstance-core`: `AppendError::Busy(E)` and `AppendError::is_busy()`.**
+  A store refused the append for a transient reason, before the batch took any
+  effect: nothing was written, and re-running the decision is safe. `SQLITE_BUSY`
+  after a busy timeout and a serialisation failure after an adapter's retry
+  budget are different driver errors with that one meaning, and until now they
+  reached a caller as `AppendError::Store`, the same value as a store that had
+  broken. An outcome a store cannot vouch for — a lost commit acknowledgement, a
+  connection dropped after `COMMIT` — stays `Store`, because it may have
+  written. The payload is the adapter's own error, as in `Store`. `map_store`
+  maps it and keeps the variant. `AppendError` is `#[non_exhaustive]`, so the
+  variant is additive at the type level
+  ([ADR-0077](.kb/decisions/0077-appenderror-busy.md), ES-43).
 
 - **`happenstance-testkit` can produce a *busy* store**, which nothing in this
   workspace could before. `FaultyStore::contend_next(n)` and its `Send` sibling
   refuse the next `n` appends as
-  `AppendError::Store(FaultyStoreError::Contended)` — a **transient** refusal on
-  the adapter's own error channel, spent once consumed, never reaching the inner
-  store. `FaultyStoreError` gains the `Contended` variant; it is
-  `#[non_exhaustive]`, so that is additive rather than breaking.
+  `AppendError::Busy(FaultyStoreError::Contended)` — a **transient** refusal,
+  spent once consumed, that never reaches the inner store, so it keeps every
+  promise `Busy` makes. `FaultyStoreError` gains the `Contended` variant; it is
+  `#[non_exhaustive]`, so that is additive rather than breaking. Built first on
+  the `AppendError::Store` channel, it moved to `Busy` in the same release that
+  added the variant, before either shipped
+  ([ADR-0077](.kb/decisions/0077-appenderror-busy.md)).
 
   It exists because the suite has a blind spot that stopped being hypothetical.
   `experiments/busy-timeout-margin` recorded `busy > 0` at the shipped
@@ -83,15 +264,56 @@ not the same as what a user needed to be told.
   the same failed attempt. Both remedies the open questions weigh were blocked
   on an instrument that could produce the first, and this is that instrument.
 
-  `tests/contended_store_instruments.rs` drives it, and **pins today's
-  behaviour rather than changing it**: two concurrency rules
-  (`positions_are_unique_under_concurrent_appends`,
-  `append_returns_the_callers_own_last_position`) reject a store that is merely
-  busy, each on a different assertion, which is why a tolerance would be a
-  change to what those rules assert rather than one arm on a private enum.
-  Nothing in the suite's behaviour moves here. What the question is now owed is
-  a decision — see `.kb/open-questions/adr-0022-falsifiers-have-fired.md` and
-  `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`.
+  `tests/contended_store_instruments.rs` drives it. It was written to pin the
+  behaviour of the time: two concurrency rules rejected a store that was merely
+  busy, each on a different assertion. That question has since been decided
+  (ADR-0077), and the file now pins the opposite. Every rule of the concurrency
+  family must pass against a store armed this way, and must fail when every
+  contender is refused. The entry above, under Changed, on the concurrency
+  rules records the change.
+
+- **Point `happenstance-neon`'s projection store at a primary endpoint, never a
+  read replica.** This is documentation only, and nothing in the code changed.
+  `ProjectionStore::checkpoint` now states PS-38's obligation in
+  `happenstance-core`, marked provisional: the checkpoint reflects every commit
+  the store has acknowledged, through any handle onto it, and an adapter over
+  replicated storage answers from the primary. If PS-38's falsifier fires, the
+  obligation narrows to reads through the same handle. `happenstance-neon`'s README and `NeonProjectionStore::new` say what
+  that means for an operator. A read replica can lag its primary, so a runner
+  resuming from its checkpoint re-applies events it already committed. No
+  conformance rule can see this, because the suite runs against one endpoint
+  ([ADR-0075](.kb/decisions/0075-the-projection-ports-1-0-clauses.md), PS-38).
+
+### Removed
+
+- **BREAKING (`happenstance-core`): the empty `unstable-projection` feature is
+  gone.** It gated the `ProjectionStore` port from `0.2.0` until
+  [ADR-0063](.kb/decisions/0063-the-projection-port-is-frozen.md) lifted the
+  gate at `0.3.0`, and has turned nothing on since. It stayed declared only so
+  that a `0.2.0` manifest naming it kept resolving, because removing a feature
+  is a breaking change; this is the break
+  [ADR-0066](.kb/decisions/0066-what-1-0-promises.md) §5 scheduled for it.
+  **If your manifest names `happenstance-core/unstable-projection` or puts
+  `"unstable-projection"` in `happenstance-core`'s `features`, delete it** —
+  Cargo now refuses to resolve it, and nothing you use changes when it goes.
+  `happenstance`'s own `unstable-projection`, which gates the typed projection
+  runner, is untouched.
+
+- **BREAKING (`happenstance-postgres`): the `naive-arm` feature is gone, and
+  `PostgresEventStore::new_naive` with it from every feature-selected build.**
+  The constructor builds this adapter with its visibility frontier removed —
+  the naive `nextval()` store ES-10 rejects — and exists only as the negative
+  control that shows `happenstance-postgres`'s visibility rule can fail. As a
+  feature any manifest could turn it on, and docs.rs, which builds every
+  feature, rendered it. It now sits behind a rustc cfg,
+  `--cfg happenstance_naive_arm`, which no manifest can set: build with
+  `RUSTFLAGS="-D warnings --cfg happenstance_naive_arm"` to reach it. It is not
+  API, and nothing under that cfg is covered by semver. CI's live-postgres job
+  runs both targets that use it, `tests/rule_controls.rs` and
+  `tests/naive_arm_probe.rs`, which until now were run by hand at a release. It
+  requires each named test to have run, so a build that lost the cfg cannot
+  pass empty. The same job also runs clippy under the cfg, because the gate's
+  `--all-features` clippy no longer reaches these items.
 
 ## [0.3.2] — 2026-09-20
 

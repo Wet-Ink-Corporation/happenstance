@@ -69,7 +69,7 @@ tell them apart that no adapter is allowed to understand. Project AC-005 require
 this record decides where it lives, whether `EventType` versions, and what happens on decode when
 it does not.
 
-`spec/SPECIFICATION.md:631-633` (`[FROZEN]`, VT-3) has two halves. The first — stores, peers and
+`spec/SPECIFICATION.md:639-641` (`[FROZEN]`, VT-3) has two halves. The first — stores, peers and
 the contract layer must not parse `data` or `metadata` — licenses nothing on its own. The second
 decides the siting: anything a store, a peer, a conformance rule or a query *must* see must be
 carried in `EventType` or `Tags`. The prior question is therefore whether anything below the port
@@ -102,7 +102,7 @@ No read-path hook is added to `EventStore`. The strategy that earns that is deco
 `DomainEvent::decode(codec, event_type, data) -> Result<Self, CodecError>` already receives the
 event type and the raw bytes, so an older payload shape is handled inside the typed layer with no
 port change. `EventStore` is `[FROZEN]` with exactly four required methods —
-`read` (`crates/happenstance-core/src/store.rs:119`), `append` (`:213`), `head` (`:248`),
+`read` (`crates/happenstance-core/src/store.rs:129`), `append` (`:213`), `head` (`:248`),
 `contains_event_id` (`:268`) — and no hook; `read_decision_model` is a free function at `:321`, not
 a fifth trait method, a citation `_design.md`, `_decomposition.md` and the story spec all get
 wrong. The strategy's own falsifier is an upcast needing information from outside the event being

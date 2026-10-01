@@ -75,7 +75,9 @@
 //! backoff — so a writer already losing a serialisation fight can pay several
 //! round trips and a fraction of a second of waiting before it gets its answer.
 //! That is retry inside the adapter and is invisible to the caller as anything
-//! but latency. The constant's own doc block records that its value was adopted
+//! but latency — until the budget runs out, when the last `40001` arrives as
+//! `AppendError::Busy`: nothing was written, and deciding again is safe. The
+//! constant's own doc block records that its value was adopted
 //! from the Neon lane rather than measured here, and that a re-measurement is
 //! owed.
 //!
@@ -153,6 +155,19 @@
 //!   connects to RDS or Neon does, and that is the point at which the allowlist
 //!   has to either grow a data licence or the adapter has to take its roots from
 //!   the platform trust store.
+//!
+//! # The naive arm is not API
+//!
+//! This crate carries a deliberately broken store: this adapter with the
+//! visibility frontier taken out, which is the naive `nextval()` store ES-10
+//! names in its `Rejects:`. It exists so that the rule this crate is built to
+//! pass can be shown to reject something. It sits behind a **rustc cfg**,
+//! `happenstance_naive_arm`, set only by a build's own
+//! `RUSTFLAGS="-D warnings --cfg happenstance_naive_arm"`, and not behind a
+//! Cargo feature. Until `0.4.0` it was the `naive-arm` feature, which any
+//! manifest could turn on and docs.rs rendered. A cfg is out of every
+//! manifest's reach and every feature powerset, it is never built by docs.rs,
+//! and nothing under it is covered by this crate's semver promise.
 //!
 //! # Not the Neon adapter
 //!

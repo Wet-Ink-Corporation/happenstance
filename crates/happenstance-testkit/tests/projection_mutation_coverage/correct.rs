@@ -95,7 +95,7 @@ pub(crate) enum MutantError {
     ///
     /// What a pooled adapter answers after a `Drop` that returned its connection
     /// to nothing — the defect a reviewer's probe actually found
-    /// (`spec/SPECIFICATION.md:4898-4910`).
+    /// (`spec/SPECIFICATION.md:5164-5176`).
     Busy,
 
     /// The commit named a position nothing in the batch applied.
@@ -392,7 +392,7 @@ pub(crate) trait Defect: 'static + Sized {
     /// projection the store has never seen has never run. It is a step because
     /// the natural wrong answer — `.unwrap_or(Checkpoint::Live { through: FIRST })`
     /// — is the one the specification itself names
-    /// (`spec/SPECIFICATION.md:5232-5243`), and a store that resolves it that way
+    /// (`spec/SPECIFICATION.md:5498-5509`), and a store that resolves it that way
     /// still satisfies PS-19's MUST verbatim so long as `reset` records an
     /// explicit `NeverRun`. Which [`reset_writes`](Self::reset_writes) does, one
     /// step below, precisely so that *what an unseen id reads* and *what a reset

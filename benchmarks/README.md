@@ -43,7 +43,7 @@ table, the same trick every crate under `experiments/` uses — it appears in no
 `verify:` command and no `cargo xtask ci` step, and it adds no dependency to any
 workspace manifest. `Cargo.lock` at the repository root is untouched.
 
-CF-34 (`spec/SPECIFICATION.md:8747`) is why:
+CF-34 (`spec/SPECIFICATION.md:9533`) is why:
 
 > Performance MUST be measured by a separate harness, and that harness MUST NOT
 > be part of the conformance bar. An adapter that is slow is conformant.
@@ -85,7 +85,7 @@ supported them (`references/evaluation/ARCHITECTURAL-EVALUATION.md:830`,
 That gap costs decisions, not just positioning:
 
 * **Four `[PROVISIONAL]` clauses name the absent measurement as their blocker** —
-  ES-17 (`spec/SPECIFICATION.md:3345`, the borrowed batch), ES-32 (`:4087`, the
+  ES-17 (`spec/SPECIFICATION.md:3424`, the borrowed batch), ES-32 (`:4087`, the
   polling seam), PS-30 (`:5464`), and the append-condition guard collapse
   (`:1821`).
 * **The repository publishes figures it cannot reproduce.**

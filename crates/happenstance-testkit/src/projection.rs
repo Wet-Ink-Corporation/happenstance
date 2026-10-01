@@ -16,7 +16,7 @@
 //!
 //! Four exported macros:
 //! [`for_each_projection_store_rule!`](crate::for_each_projection_store_rule),
-//! three `#[doc(hidden)]` emitters, and
+//! three emitters, whose names CF-41 promises, and
 //! [`projection_store_conformance!`](crate::projection_store_conformance) at the
 //! crate root. `happenstance-testkit` carries its own version precisely because
 //! a suite change can turn a passing adapter's CI red, and a macro is the
@@ -24,7 +24,7 @@
 //!
 //! It reuses everything else unchanged: [`Capability`](crate::Capability),
 //! [`RuleOutcome`](crate::RuleOutcome), [`block_on`](crate::block_on) and
-//! `__emit_rule_names`. There is no projection-local skip type and no second
+//! `__rule_names`. There is no projection-local skip type and no second
 //! line shape, because an author reading one CI log must not have to learn two.
 //!
 //! # What a green run here does and does not prove
@@ -44,7 +44,7 @@
 //! Every rule §4.11 assigns to an adapter's own suite is now written; what is
 //! still owed is the **six runner-dependent** ones, which CF-36 moves to the
 //! workspace e2e crate because they need a runner rather than a store
-//! (`spec/SPECIFICATION.md:5696-5705`). A store that passes everything here has
+//! (`spec/SPECIFICATION.md:5995-6004`). A store that passes everything here has
 //! not been observed under replay.
 //!
 //! The seventeenth landed last and did not land quietly.
@@ -97,7 +97,7 @@
 //!
 //! One stale sentence, named here because it cannot be repaired here. PS-1's
 //! **Rejects:** prose says *"Today no rule can fail it"*
-//! (`spec/SPECIFICATION.md:4756-4758`), which stopped being true when
+//! (`spec/SPECIFICATION.md:5022-5024`), which stopped being true when
 //! `CheckpointOnlyStore` landed and is further from true now. PS-1 is
 //! `[FROZEN]`, so the repair is a new decision atom under the repair-frozen-clause
 //! discipline rather than a line edit, and it belongs to
@@ -818,7 +818,7 @@ pub mod rules {
     /// **Rejects:** `PooledConnectionStore` — an adapter whose `begin` checks out
     /// a pooled connection that `Drop` returns to nothing. A reviewer's probe
     /// already found exactly this: the store answered `Busy` forever afterwards
-    /// (`spec/SPECIFICATION.md:4898-4910`). Two further stores fail it at the
+    /// (`spec/SPECIFICATION.md:5164-5176`). Two further stores fail it at the
     /// second row for unrelated reasons — `CheckpointOnlyStore`, which applies no
     /// rows at all, and `UncommittedTransactionStore`, which makes nothing
     /// durable — and their registry rows say so.
@@ -947,7 +947,7 @@ pub mod rules {
     ///
     /// **Rejects:** `ValidatingCommitStore` — an adapter that validates
     /// `position` against what the batch wrote, which the specification names for
-    /// this rule (`spec/SPECIFICATION.md:5682-5687`). It is the sharper hazard
+    /// this rule (`spec/SPECIFICATION.md:5981-5986`). It is the sharper hazard
     /// rather than a capability gap: validating is a *reasonable* reading of
     /// "advances `id`'s checkpoint to `position`", it would be equally conformant
     /// without this rule, and it makes a narrow projection re-scan the same range
@@ -1477,7 +1477,7 @@ pub mod rules {
     ///
     /// **PS-38's second sentence**, which is the clause this rule is written
     /// against: *"a `ProjectionId` no successful `commit` has named MUST read as
-    /// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5448-5464`). §4.11 lists
+    /// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5731-5747`). §4.11 lists
     /// the rule against PS-19 as well, because it is the same distinction that
     /// clause is about — *never run* told apart from *committed at the first
     /// position* — asked before any `reset` has happened; but PS-19's own MUST
@@ -1494,7 +1494,7 @@ pub mod rules {
     /// The specification names that shape by name, because it is the natural one
     /// rather than a contrivance: an adapter whose `reset` writes an explicit
     /// `NeverRun` row satisfies PS-19's MUST verbatim and still answers `Live`
-    /// for an id nobody has ever committed (`spec/SPECIFICATION.md:5300-5316`).
+    /// for an id nobody has ever committed (`spec/SPECIFICATION.md:5566-5582`).
     /// PS-38 is what makes that store non-conformant rather than merely
     /// surprising, and its `Rejects` field names the wider version of the same
     /// defect — a store whose backing state lives per *handle* rather than per
@@ -1507,7 +1507,7 @@ pub mod rules {
     /// writes, so a rule written that way cannot tell the two mutants of this
     /// family apart and both walk free. [`Checkpoint`] is a three-variant enum
     /// precisely so this assertion can be made without naming a position
-    /// (`spec/SPECIFICATION.md:4643-4658`).
+    /// (`spec/SPECIFICATION.md:4908-4924`).
     ///
     /// # Why it spells no capability gate at all
     ///
@@ -1563,7 +1563,7 @@ pub mod rules {
     /// violation and the exact value the defective store writes, so a rule
     /// written that way could not tell the two apart. [`Checkpoint`] is a
     /// three-variant enum precisely so this assertion can be made without naming
-    /// a position (`spec/SPECIFICATION.md:4643-4658`). The **consequence** half
+    /// a position (`spec/SPECIFICATION.md:4908-4924`). The **consequence** half
     /// derives a resume point from each under the port's own rule — in one
     /// private helper shared by both arms, so the derivation is stated once —
     /// and asserts the event at the store's first position is applied in the
@@ -1975,9 +1975,15 @@ macro_rules! for_each_projection_store_rule {
 ///
 /// The caller's crate needs `tokio` with `macros` and `rt` in its
 /// `dev-dependencies`; the attribute resolves in the caller's scope, not here.
-#[doc(hidden)]
+///
+/// The default: an invocation of
+/// [`projection_store_conformance!`](crate::projection_store_conformance) that names
+/// no emitter uses it, and naming it is
+/// `emit = happenstance_testkit::emit_projection_tokio`.
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_projection_tokio {
+macro_rules! emit_projection_tokio {
     ($($name:ident),* $(,)?) => {
         $(
             #[tokio::test]
@@ -1996,9 +2002,13 @@ macro_rules! __emit_projection_tokio {
 /// No runtime, no dependency, one thread. This is the harness that proves the
 /// projection family never quietly needs `tokio` — and, because `block_on`
 /// imposes no `Send` bound, that it works against a `!Send` adapter.
-#[doc(hidden)]
+///
+/// Select it by passing `emit = happenstance_testkit::emit_projection_blocking` to
+/// [`projection_store_conformance!`](crate::projection_store_conformance).
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_projection_blocking {
+macro_rules! emit_projection_blocking {
     ($($name:ident),* $(,)?) => {
         $(
             #[test]
@@ -2023,9 +2033,13 @@ macro_rules! __emit_projection_blocking {
 /// it leaves no record on the only target the two-flavour design exists for.
 /// `console_log!` is what the runner captures. An emitter that called `report`
 /// here would compile, run, pass, and discard every stated reason.
-#[doc(hidden)]
+///
+/// Select it by passing `emit = happenstance_testkit::emit_projection_wasm` to
+/// [`projection_store_conformance!`](crate::projection_store_conformance).
+/// The name is promised (CF-41): renaming or removing it is a major release of
+/// this crate.
 #[macro_export]
-macro_rules! __emit_projection_wasm {
+macro_rules! emit_projection_wasm {
     ($($name:ident),* $(,)?) => {
         $(
             #[::wasm_bindgen_test::wasm_bindgen_test]
@@ -2089,7 +2103,7 @@ fn declared_projection_rules() -> Vec<&'static str> {
 #[cfg(test)]
 #[test]
 fn no_orphan_projection_rules() {
-    let registered = crate::for_each_projection_store_rule!(crate::__emit_rule_names);
+    let registered = crate::for_each_projection_store_rule!(crate::__rule_names);
     let declared = declared_projection_rules();
 
     let orphans: Vec<_> = declared
@@ -2128,7 +2142,7 @@ fn no_orphan_projection_rules() {
 ///
 /// **The set itself is pinned elsewhere, and that is deliberate.**
 /// `assert_reference_projection_declensions`
-/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:3553`) asserts the
+/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:3593`) asserts the
 /// reference fixture's skip set by *equality*, in enumeration order, with each
 /// skip's capability and stated reason. Read that assertion as the authority for
 /// which rules skip and how many: a count restated in prose is a number nothing

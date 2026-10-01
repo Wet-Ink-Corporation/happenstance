@@ -102,7 +102,7 @@
 //!
 //! Runtime-agnosticism is falsified rather than asserted:
 //! `tests/projection.rs` mounts the conformance suite **twice**, once under
-//! `happenstance_testkit::__emit_projection_blocking`, which needs no runtime at
+//! `happenstance_testkit::emit_projection_blocking`, which needs no runtime at
 //! all. A store that reached for `spawn_blocking` panics under the first mount.
 //!
 //! Claim that narrowly. The tokio emitter expands to `#[tokio::test]`, which is a

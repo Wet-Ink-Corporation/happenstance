@@ -152,8 +152,9 @@ impl NeonWriteBatch {
     /// back has to be said out loud, because the type looks usable and is not.
     /// A batch carries the identity of the store that began it, and
     /// [`ProjectionStore::begin`] is the only way to obtain that identity. So a
-    /// batch from here is stamped with a private sentinel, which every `commit`, `reset`
-    /// and `rollback` rejects as [`CommitError::ForeignBatch`].
+    /// batch from here is stamped with a private sentinel, which `commit` rejects as
+    /// [`CommitError::ForeignBatch`], `reset` as [`ResetError::ForeignBatch`], and
+    /// `rollback` as its own [`NeonError::ForeignBatch`].
     ///
     /// The alternative was to stamp it with the *next* real identity, which
     /// would make it accepted by no store and rejected by all of them with a
@@ -224,6 +225,14 @@ pub struct NeonProjectionStore<T> {
 
 impl<T> NeonProjectionStore<T> {
     /// Builds a projection store over `transport`.
+    ///
+    /// Point `transport` at a **read-write primary endpoint, never a read
+    /// replica**. A replica may lag the primary's commits, so `checkpoint`
+    /// could report a position behind a commit this store has already
+    /// acknowledged. A runner resuming from it applies those events again,
+    /// and a caller reads a checkpoint it just advanced as behind.
+    /// `ProjectionStore::checkpoint` forbids that (PS-38), and nothing in the
+    /// conformance suite can detect it.
     ///
     /// **No longer `const`**, and the reason is the stamp above: an identity that
     /// distinguishes two store instances cannot be a compile-time constant,

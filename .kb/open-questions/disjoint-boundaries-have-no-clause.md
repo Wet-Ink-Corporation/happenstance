@@ -5,7 +5,7 @@ kind: open_question
 status: accepted
 authority_tier: note
 summary: >-
-  k_disjoint_boundaries_admit_exactly_k_commits is a live conformance rule enforcing the
+  k_disjoint_boundaries_never_conflict is a live conformance rule enforcing the
   independence proposition Dynamic Consistency Boundary exists for — commands sharing no
   consistency boundary do not conflict — and no clause in spec/SPECIFICATION.md states it; the
   word "disjoint" occurs zero times, verified by grep on 2026-08-10 and again on 2026-09-07.
@@ -13,7 +13,10 @@ summary: >-
   does not assert the positive proposition, so attaching there would claim a FROZEN clause
   contains something it does not. Settled by an ADR that widens ES-25 or mints a clause. Owner
   unassigned; held meanwhile in UNCLAIMED_PENDING_ADR, which prints it on every green gate run
-  and now carries three entries rather than two.
+  and now carries three entries rather than two. Since kb-decision-0077 the rule enforces the
+  proposition narrowed: disjoint contenders are never told ConditionViolated, no boundary elects
+  two winners and at least one commits, but a Busy refusal (ES-43) passes, so the owed clause
+  must also decide whether independence extends to Busy.
 depends_on: []
 related:
   - kb-reference-phase-4-5-spec-reconciliation-001
@@ -25,21 +28,22 @@ related:
   - kb-decision-0045
   - kb-playbook-anchoring-citations-001
   - kb-reference-intake-citation-drift-census-001
+  - kb-decision-0077
 source_paths:
   - .kb/_intake/gaps-owed-a-decision.md
   - .kb/_intake/remediation-2026-09-04-briefs/sole-evidence-pins-and-moved-file-citations.md
   - crates/happenstance-testkit/src/concurrency.rs
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-30
 ---
 
 # The DCB independence proposition is enforced by a rule and stated by no clause
 
 ## What is true today
 
-`k_disjoint_boundaries_admit_exactly_k_commits`
-(`crates/happenstance-testkit/src/concurrency.rs:477`) is a live conformance rule that every
+`k_disjoint_boundaries_never_conflict`
+(`crates/happenstance-testkit/src/concurrency.rs:551`) is a live conformance rule that every
 event-store fixture in this workspace runs. It enforces the proposition that commands sharing no
 consistency boundary do not conflict — the independence property Dynamic Consistency Boundary
 exists to provide in the first place. **No clause in `spec/SPECIFICATION.md` states that
@@ -55,8 +59,25 @@ because no automated check could ever see it: `cargo xtask spec-trace` verifies 
 exists and that a clause's citations resolve, not that the clause's prose actually says what the
 rule tests.
 
+## What the rule enforces since ADR-0077
+
+The rule no longer asserts that *k* disjoint commands all commit. ES-43 gave a transient refusal
+its own channel, `AppendError::Busy`, and the concurrency family was re-spelled to read each
+contender per error. On this rule that means: no boundary elects two winners, a boundary with no
+winner told nobody `ConditionViolated`, and at least one contender across all boundaries commits.
+A store that refuses disjoint contenders as `Busy` — a global lock, or an SSI false positive
+across disjoint boundaries — passes. ES-43's first sentence admits that, and live PostgreSQL does
+it: a review run of `a_busy_append_left_nothing_behind`, whose contenders each guard a tag only
+they write, drew 23 `Busy` answers out of 64. Holding the stronger reading would have made the
+PostgreSQL adapter non-conformant.
+
+So the proposition this record says no clause states is now enforced in a narrower form than the
+one it describes above. Whichever ADR settles this record must also say whether independence
+extends to `Busy`, that is, whether a store may refuse commands that share nothing as long as it
+reports the refusal as transient. ADR-0077 records the narrowing and leaves that question here.
+
 This is one of **three** entries held in `UNCLAIMED_PENDING_ADR`
-(`xtask/src/spec_trace.rs:2836-2883`), a list that prints on every green `cargo xtask spec-trace`
+(`xtask/src/spec_trace.rs:2845-2897`), a list that prints on every green `cargo xtask spec-trace`
 run. It was two when this record was written — this gap and the model-family gap
 (`kb-open-question-model-family-rule-no-clause-001`) — and the read-fault gap
 (`kb-open-question-read-fault-rule-no-clause-001`) has since joined them. The list has a mechanism
@@ -93,7 +114,7 @@ than by whichever engineer next needs a place to hang a citation.
 
 Nothing forces it today beyond the standing pressure of `UNCLAIMED_PENDING_ADR` printing on every
 gate run. It becomes urgent the first time someone needs to cite spec authority for
-`k_disjoint_boundaries_admit_exactly_k_commits` — in a review, in a new adapter's documentation, or
+`k_disjoint_boundaries_never_conflict` — in a review, in a new adapter's documentation, or
 in an ADR for a different port — and finds there is nothing to cite. It is also the sharpest of the
 six gaps this pass found: it is the library's central claim, tested exhaustively and stated
 nowhere.
@@ -107,3 +128,7 @@ nowhere.
    the append-condition family, or as its own top-level property alongside the model-family gap?
 3. Does resolving this gap change how `UNCLAIMED_PENDING_ADR` reports the remaining entries (the
    model-family rule and the read-fault rule), given the three are related but distinct in shape?
+4. ~~Does independence extend to `Busy`?~~ **Answered at phase 17 by the owner
+   (`kb-decision-wi-2ab1f3`):** no. Independence is a promise about conflict, not liveness, so the
+   clause states the form the rule now checks, and the rule is renamed
+   `k_disjoint_boundaries_never_conflict`.

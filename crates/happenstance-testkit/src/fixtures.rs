@@ -505,7 +505,7 @@ impl ProjectionFixture for MemoryProjectionFixture {
     // is not the only one; `RESET_REFUSAL` above is declined too, so a reference
     // run prints two. The set is pinned by equality, in enumeration order and
     // with each stated reason, at `assert_reference_projection_declensions`
-    // (`crates/happenstance-testkit/tests/mutation_coverage.rs:3553`) — read that
+    // (`crates/happenstance-testkit/tests/mutation_coverage.rs:3593`) — read that
     // assertion for how many and which, rather than a count written here that
     // nothing in the gate reads.
     const COMMIT_FAULT: Capability = Capability::declined(

@@ -82,19 +82,19 @@
 //! * **`serde`** — `Serialize`/`Deserialize` for the wire types. Off by
 //!   default so the contract crate carries no serialisation opinion; enabled by
 //!   replication adapters that need one.
-//! * **`unstable-projection`** — **retired, and gates nothing.** From `0.2.0`
-//!   to ADR-0063 it held the `ProjectionStore` port out of the semver promise,
-//!   for the reason the [`projection`] module header records. The port is
-//!   unconditional now, and frozen. The feature is still declared, empty, so a
-//!   manifest written against `0.2.0` keeps resolving — removing a feature is a
-//!   breaking change and this one was never worth a major.
+//! * **`unstable-projection`** — **removed in `0.4.0`.** From `0.2.0` to
+//!   ADR-0063 it held the `ProjectionStore` port out of the semver promise, for
+//!   the reason the [`projection`] module header records; from ADR-0063 to
+//!   `0.4.0` it was declared empty, so a `0.2.0` manifest kept resolving. The
+//!   port is unconditional and frozen, and a manifest that still names the
+//!   feature fails to resolve — the break `0.4.0` was the release to make.
 //! * **`conformance`** — `ProjectionProbe`, the write seam the projection
 //!   conformance suite drives an adapter's read model through. For adapter
 //!   authors running that suite against their own store; nothing in the runtime
 //!   path needs it. Off by default, pulls in no dependency, and implies no other
-//!   feature — not `std`, not `memory`, and since ADR-0063 not
-//!   `unstable-projection` either, because the module it lives in is no longer
-//!   gated.
+//!   feature — not `std` and not `memory`. It implied `unstable-projection`
+//!   until ADR-0063, because the module it lives in was gated then; it is
+//!   not gated now, and that feature is gone.
 //!
 //!   The name is deliberately not a link here: a link into a `cfg`-gated item is
 //!   a hard error when the feature is off, and `cargo doc --no-default-features`
@@ -117,8 +117,8 @@ mod validate;
 pub mod store;
 
 // Unconditional since ADR-0063. It sat behind `unstable-projection` from
-// phase 6 to the lift, and the two `xtask` tests that held it there now hold
-// the opposite: no `cfg` on this line, and none on the re-exports below.
+// phase 6 to the lift, and the `xtask` tests that held it there now hold the
+// opposite: no `cfg` on this line, none on the re-exports below, no feature.
 pub mod projection;
 
 #[cfg(feature = "memory")]

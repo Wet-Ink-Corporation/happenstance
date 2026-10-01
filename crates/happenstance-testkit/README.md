@@ -111,13 +111,20 @@ from 4,096.
 happenstance_testkit::event_store_concurrency_conformance!(MyFixture::new());
 ```
 
-A third, **additive**, and **opt-in** family. It starts eight contenders on real
-OS threads against one backing store and checks five things the sequential rules
-structurally cannot: exactly one winner among eight handlers that decided from
-one snapshot; four *disjoint* consistency boundaries admitting exactly four
-commits; positions unique under concurrent appends; `append` returning the
-caller's own last position rather than the store's head; and a reader that never
+A third, **additive**, and **opt-in** family. It starts `CONTENDERS` (64)
+contenders on real OS threads against one backing store and checks six things
+the sequential rules structurally cannot: exactly one winner among handlers that
+decided from one snapshot; four *disjoint* consistency boundaries admitting
+exactly four commits; positions unique under concurrent appends; `append`
+returning the caller's own last position rather than the store's head; an append
+answered `AppendError::Busy` having left nothing behind; and a reader that never
 sees a batch part-written.
+
+A contender your store refuses as `AppendError::Busy` is a legitimate answer
+under contention, not a failure. It counts as neither a win nor a loss, over a
+floor of at least one commit per race. A refusal reported as
+`AppendError::Store` still fails, so report a transient refusal that wrote
+nothing as `Busy`, and an outcome you cannot vouch for as `Store` (ES-43).
 
 Invoke it only if your handle is `Send` — the bound is
 `F::Store: EventStore + Send`, and a `!Send` adapter is not expected to run it.
@@ -156,8 +163,8 @@ so it costs one flag on a dependency you already have and no new edge in your
 dependency graph.
 
 Pick a harness exactly as you would for the event-store family: the default arm
-is `#[tokio::test]`, `__emit_projection_blocking` needs no runtime at all, and
-`__emit_projection_wasm` routes a skipped rule's stated reason to `console_log!`
+is `#[tokio::test]`, `emit_projection_blocking` needs no runtime at all, and
+`emit_projection_wasm` routes a skipped rule's stated reason to `console_log!`
 rather than to stdout, which does not exist on `wasm32-unknown-unknown`. The
 default module name differs from the event-store family's, so one file may invoke
 both. `fixtures::MemoryProjectionFixture` is the worked example.
@@ -242,6 +249,11 @@ positions in steps of seven from 4,096, is what fails a rule that forgets.
 Adding a rule is a semver-*minor* change that can turn a passing adapter's CI red.
 Treat that as a breaking change in practice and pin this crate exactly. Its
 version is independent of the rest of the workspace for that reason.
+
+The conformance emitters an invocation names — `emit_tokio`, `emit_blocking`,
+`emit_wasm` and their projection, model and concurrency siblings — are public
+API, and renaming or removing one is a major release (CF-41). A macro whose name
+starts with `__` is not promised and may change in any release.
 
 ## Licence
 

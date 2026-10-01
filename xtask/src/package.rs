@@ -66,6 +66,22 @@
 //! process launch on a step that already launches three, and `--no-deps` skips
 //! dependency resolution, so it is the cheapest thing here by a wide margin.
 //!
+//! # Why the testkit's dev-dependency is read here too
+//!
+//! ADR-0057's second half. A dev-dependency that carries a version requirement
+//! has to resolve from the registry when its crate is packaged, so an adapter
+//! that dev-depends on `happenstance-testkit` *with* a version cannot be
+//! published until that testkit version is live — for a dependency no consumer
+//! of the adapter ever sees. Cargo strips a versionless dev-dependency from the
+//! packaged manifest entirely, which is what frees the release order.
+//!
+//! The root `[workspace.dependencies]` entry lost its `version` key in the same
+//! change that wrote [`testkit_dev_dependencies_are_versionless`], and the two
+//! halves need each other: an inheriting line is only versionless while the
+//! root entry is, and the root entry is only enough while nobody writes an
+//! explicit version on a per-crate line. The step reads both, so it is the
+//! *next* adapter — the one nobody remembers to check — that it catches.
+//!
 //! # Why `--allow-dirty`
 //!
 //! The gate must run on an uncommitted tree — that is the only tree anyone runs
@@ -151,10 +167,13 @@ const REQUIRED_FILES: &[&str] = &["LICENSE-MIT", "LICENSE-APACHE", "README.md"];
 /// # Errors
 ///
 /// Returns an error if [`PUBLISHABLE`] no longer matches what the manifests say
-/// is publishable, if `cargo metadata` or `cargo package --list` cannot be run
-/// or fails, or if any crate's artifact is missing one of [`REQUIRED_FILES`].
+/// is publishable, if a publishable crate's testkit dev-dependency carries a
+/// version requirement ([`testkit_dev_dependencies_are_versionless`]), if
+/// `cargo metadata` or `cargo package --list` cannot be run or fails, or if any
+/// crate's artifact is missing one of [`REQUIRED_FILES`].
 pub(crate) fn run() -> Result<()> {
     reconcile(&publishable_members()?)?;
+    testkit_dev_dependencies_are_versionless()?;
 
     let mut missing: Vec<String> = Vec::new();
 
@@ -268,6 +287,233 @@ fn reconcile(derived: &BTreeSet<String>) -> Result<()> {
         PUBLISHABLE.join(", ")
     );
     Ok(())
+}
+
+/// The crate whose dev-dependency lines [`testkit_dev_dependencies_are_versionless`]
+/// reads.
+const TESTKIT: &str = "happenstance-testkit";
+
+/// The workspace manifest, relative to the workspace root.
+const WORKSPACE_MANIFEST: &str = "Cargo.toml";
+
+/// ADR-0057: every publishable crate reaches `happenstance-testkit` by path and
+/// with no version requirement, whether it spells the line itself or inherits
+/// the root `[workspace.dependencies]` entry.
+///
+/// Reads [`PUBLISHABLE`] rather than the derived set, which is safe only
+/// because [`run`] calls it after [`reconcile`] has proved the two agree. Each
+/// crate's manifest is `crates/<name>/Cargo.toml`, which is where every member
+/// of the set lives; a name with no manifest there is an error rather than a
+/// skip, so a crate moved elsewhere cannot leave this step passing over nothing.
+///
+/// # Errors
+///
+/// Returns an error if a manifest cannot be read, or if
+/// [`testkit_line_problems`] reports anything for any publishable crate.
+fn testkit_dev_dependencies_are_versionless() -> Result<()> {
+    let root = crate::spec_trace::workspace_root()?;
+    let read = |rel: &str| {
+        std::fs::read_to_string(root.join(rel)).with_context(|| format!("reading {rel}"))
+    };
+
+    let workspace = read(WORKSPACE_MANIFEST)?;
+    let mut problems = Vec::new();
+    for name in PUBLISHABLE {
+        let rel = format!("crates/{name}/Cargo.toml");
+        problems.extend(testkit_line_problems(&rel, &read(&rel)?, &workspace));
+    }
+
+    if !problems.is_empty() {
+        for problem in &problems {
+            println!("  {problem}");
+        }
+        bail!(
+            "{} testkit dev-dependency line(s) carry a version requirement (ADR-0057). A \
+             versioned dev-dependency must resolve from the registry at `cargo package`, so the \
+             crate cannot publish until that testkit version is live — for a dependency no \
+             consumer of it ever sees. Reach the testkit by `path` alone, or inherit a root entry \
+             that carries no `version`.",
+            problems.len()
+        );
+    }
+
+    println!(
+        "no publishable crate's {TESTKIT} dev-dependency carries a version requirement (ADR-0057)"
+    );
+    Ok(())
+}
+
+/// Everything wrong with how `manifest` (at `rel`) spells its
+/// `happenstance-testkit` dependency, resolving an inherited line against
+/// `workspace`'s root entry. Empty when the crate has no such line, which is
+/// the testkit's own case.
+///
+/// # The subset of TOML this models
+///
+/// The key must open a line, spelled `happenstance-testkit = …` (a bare string
+/// or an inline table, which may run over several lines until its braces close)
+/// or dotted, `happenstance-testkit.key = …`, on as many lines as it takes. A
+/// `#` comment is removed before anything is read, so the manifests' prose,
+/// which names the testkit and its version while explaining how it is spelled,
+/// is never mistaken for a key.
+///
+/// # What this does not verify
+///
+/// * **The table spelling**, `[dev-dependencies.happenstance-testkit]`, and a
+///   **renamed** dependency, `testkit = { package = "happenstance-testkit", … }`.
+///   Both are reported as unmodelled rather than passed, because a check that
+///   approves syntax it cannot read is the decorative kind. A quoted key,
+///   `"happenstance-testkit" = …`, is read like the bare one.
+/// * **A `#` inside a string value.** No dependency line in this workspace
+///   carries one; one that did would be cut short at it.
+/// * **Which section the line is in.** Every section is read, so a non-dev
+///   dependency on the testkit is held to the same rule — which it would fail
+///   `cargo package` on anyway, being unversioned.
+fn testkit_line_problems(rel: &str, manifest: &str, workspace: &str) -> Vec<String> {
+    let entry = match dependency_entry(manifest, TESTKIT) {
+        Ok(Some(entry)) => entry,
+        Ok(None) => return Vec::new(),
+        Err(problem) => return vec![format!("{rel} — {problem} (ADR-0057).")],
+    };
+
+    let mut problems = Vec::new();
+    if entry.names_key("workspace") {
+        match dependency_entry(workspace, TESTKIT) {
+            Ok(Some(root)) if root.carries_version() => problems.push(format!(
+                "{rel}:{} inherits {TESTKIT} from {WORKSPACE_MANIFEST}:{}, which carries a \
+                 version requirement (ADR-0057).",
+                entry.line, root.line
+            )),
+            Ok(Some(root)) if !root.names_key("path") => problems.push(format!(
+                "{rel}:{} inherits {TESTKIT} from {WORKSPACE_MANIFEST}:{}, which does not reach \
+                 it by `path` (ADR-0057).",
+                entry.line, root.line
+            )),
+            Ok(Some(_)) => {}
+            Ok(None) => problems.push(format!(
+                "{rel}:{} inherits {TESTKIT}, and {WORKSPACE_MANIFEST} declares no such entry \
+                 (ADR-0057).",
+                entry.line
+            )),
+            Err(problem) => problems.push(format!("{WORKSPACE_MANIFEST} — {problem} (ADR-0057).")),
+        }
+        if entry.names_key("version") {
+            problems.push(format!(
+                "{rel}:{} states a version requirement beside `workspace = true` (ADR-0057).",
+                entry.line
+            ));
+        }
+        return problems;
+    }
+
+    if entry.carries_version() {
+        problems.push(format!(
+            "{rel}:{} states a version requirement on {TESTKIT} (ADR-0057).",
+            entry.line
+        ));
+    }
+    if !entry.names_key("path") {
+        problems.push(format!(
+            "{rel}:{} does not reach {TESTKIT} by `path`, so Cargo cannot strip it from the \
+             packaged manifest (ADR-0057).",
+            entry.line
+        ));
+    }
+    problems
+}
+
+/// One dependency's declaration, gathered from however many lines it spans.
+#[derive(Debug)]
+struct DependencyEntry {
+    /// The 1-based line the declaration opens on.
+    line: usize,
+    /// The value, as `key = value` pairs for a dotted or inline-table spelling
+    /// or as the bare string for `name = "…"`, comments removed.
+    body: String,
+}
+
+impl DependencyEntry {
+    /// Whether `key` appears as a key — a whole word followed by `=` — rather
+    /// than as a substring of a value or of another key.
+    fn names_key(&self, key: &str) -> bool {
+        let bytes = self.body.as_bytes();
+        self.body.match_indices(key).any(|(at, _)| {
+            let before = at
+                .checked_sub(1)
+                .and_then(|i| bytes.get(i))
+                .is_none_or(|b| !(b.is_ascii_alphanumeric() || *b == b'-' || *b == b'_'));
+            let after = self.body[at + key.len()..].trim_start().starts_with('=');
+            before && after
+        })
+    }
+
+    /// Whether this declaration asks the registry for a version: a `version`
+    /// key, or the bare-string spelling, which is nothing but a version.
+    fn carries_version(&self) -> bool {
+        self.names_key("version") || self.body.trim_start().starts_with('"')
+    }
+}
+
+/// `text` with its `#` comment removed.
+fn uncommented(text: &str) -> &str {
+    text.split_once('#').map_or(text, |(code, _)| code)
+}
+
+/// The declaration of dependency `name` in `manifest`, `None` when there is
+/// none, or a description of a spelling this does not model.
+///
+/// See [`testkit_line_problems`] for the subset of TOML read and its limits.
+fn dependency_entry(manifest: &str, name: &str) -> Result<Option<DependencyEntry>, String> {
+    let lines: Vec<&str> = manifest.lines().map(uncommented).collect();
+    let mut first = None;
+    let mut body = String::new();
+    let mut index = 0;
+
+    while index < lines.len() {
+        let line = lines[index].trim();
+        index += 1;
+        let opened = index;
+
+        if line.starts_with('[') && line.trim_end_matches(']').ends_with(&format!(".{name}")) {
+            return Err(format!(
+                "declares {name} as a table (`{line}`), a spelling this check does not read"
+            ));
+        }
+        let unspaced: String = line.chars().filter(|c| !c.is_whitespace()).collect();
+        if unspaced.contains(&format!("package=\"{name}\"")) {
+            return Err(format!(
+                "renames {name} (`{line}`), a spelling this check does not read"
+            ));
+        }
+        let quoted = format!("\"{name}\"");
+        let Some(rest) = line
+            .strip_prefix(quoted.as_str())
+            .or_else(|| line.strip_prefix(name))
+        else {
+            continue;
+        };
+        let value = if let Some(dotted) = rest.strip_prefix('.') {
+            dotted.to_owned()
+        } else if let Some(value) = rest.trim_start().strip_prefix('=') {
+            // An inline table may run on until its braces balance.
+            let mut value = value.to_owned();
+            let depth = |text: &str| text.matches('{').count().cmp(&text.matches('}').count());
+            while depth(&value).is_gt() && index < lines.len() {
+                value.push(' ');
+                value.push_str(lines[index].trim());
+                index += 1;
+            }
+            value
+        } else {
+            continue;
+        };
+
+        first.get_or_insert(opened);
+        body.push_str(value.trim());
+        body.push(' ');
+    }
+
+    Ok(first.map(|line| DependencyEntry { line, body }))
 }
 
 /// The workspace members Cargo would publish, according to Cargo.
@@ -497,6 +743,151 @@ mod tests {
         );
         assert!(!found.contains("decoy"), "that is workspace metadata");
         assert_eq!(found.len(), 2);
+    }
+
+    /// A root `[workspace.dependencies]` shaped like this workspace's after
+    /// ADR-0057, with the prose that names the testkit's version in a comment.
+    const ROOT_PATH_ONLY: &str = "[workspace.dependencies]\n\
+        # happenstance-testkit = { version = \"0.2.0\" } was the old spelling\n\
+        happenstance-testkit = { path = \"crates/happenstance-testkit\" }\n";
+
+    /// The same root as it stood before ADR-0057 was executed.
+    const ROOT_VERSIONED: &str = "[workspace.dependencies]\n\
+        happenstance-testkit = { version = \"0.3.2\", path = \"crates/happenstance-testkit\" }\n";
+
+    fn problems(manifest: &str, root: &str) -> Vec<String> {
+        testkit_line_problems("crates/adapter/Cargo.toml", manifest, root)
+    }
+
+    /// The four spellings this workspace uses today pass against the root it
+    /// has today, and a manifest that never names the testkit has nothing to say.
+    #[test]
+    fn the_spellings_this_workspace_uses_are_versionless() {
+        for good in [
+            "[dev-dependencies]\nhappenstance-testkit.workspace = true\n",
+            "[dev-dependencies]\nhappenstance-testkit = { workspace = true, features = [\"proptest\"] }\n",
+            "[dev-dependencies]\nhappenstance-testkit = { path = \"../happenstance-testkit\", features = [\"proptest\"] }\n",
+            "[dev-dependencies]\nhappenstance-testkit = {\n    workspace = true,\n    features = [\"proptest\"],\n}\n",
+            "[package]\nname = \"happenstance-testkit\"\n# happenstance-testkit = \"0.3\" in prose\n",
+        ] {
+            assert_eq!(
+                problems(good, ROOT_PATH_ONLY),
+                Vec::<String>::new(),
+                "{good}"
+            );
+        }
+    }
+
+    /// RS-81-5's negative control: each spelling that reintroduces the
+    /// publish-order coupling is refused. The first two are
+    /// `happenstance-postgres`'s and `happenstance-cloudflare`'s lines as they
+    /// stood before ADR-0057, against the root as it stood then.
+    #[test]
+    fn every_spelling_that_carries_a_version_is_refused() {
+        for (wrong, root) in [
+            (
+                "[dev-dependencies]\nhappenstance-testkit = { workspace = true, features = [\"proptest\"] }\n",
+                ROOT_VERSIONED,
+            ),
+            (
+                "[dev-dependencies]\nhappenstance-testkit.workspace = true\n",
+                ROOT_VERSIONED,
+            ),
+            (
+                "[dev-dependencies]\nhappenstance-testkit = { version = \"0.4.0\", path = \"../happenstance-testkit\" }\n",
+                ROOT_PATH_ONLY,
+            ),
+            (
+                "[dev-dependencies]\nhappenstance-testkit = \"=0.4.0\"\n",
+                ROOT_PATH_ONLY,
+            ),
+            (
+                "[dev-dependencies]\nhappenstance-testkit = {\n    path = \"../happenstance-testkit\",\n    version = \"0.4\",\n}\n",
+                ROOT_PATH_ONLY,
+            ),
+            (
+                "[dev-dependencies]\nhappenstance-testkit.path = \"../happenstance-testkit\"\nhappenstance-testkit.version = \"0.4\"\n",
+                ROOT_PATH_ONLY,
+            ),
+            (
+                "[dev-dependencies]\nhappenstance-testkit = { workspace = true, version = \"0.4\" }\n",
+                ROOT_PATH_ONLY,
+            ),
+        ] {
+            assert!(!problems(wrong, root).is_empty(), "accepted: {wrong}");
+        }
+    }
+
+    /// A line with neither a path nor a version is not versionless in the
+    /// sense that matters — Cargo would look for it on the registry — and an
+    /// inherited line with no root entry to inherit from is refused, not passed.
+    #[test]
+    fn a_line_that_reaches_the_testkit_by_no_path_is_refused() {
+        let unreachable =
+            "[dev-dependencies]\nhappenstance-testkit = { features = [\"proptest\"] }\n";
+        assert!(!problems(unreachable, ROOT_PATH_ONLY).is_empty());
+
+        let inherits = "[dev-dependencies]\nhappenstance-testkit.workspace = true\n";
+        assert!(!problems(inherits, "[workspace.dependencies]\n").is_empty());
+    }
+
+    /// The documented blind spot, asserted: the table spelling is reported as
+    /// unmodelled, never passed.
+    #[test]
+    fn the_table_spelling_is_reported_rather_than_passed() {
+        let table = "[dev-dependencies.happenstance-testkit]\npath = \"../happenstance-testkit\"\n";
+        let found = problems(table, ROOT_PATH_ONLY);
+        assert!(
+            found.iter().any(|p| p.contains("does not read")),
+            "{found:?}"
+        );
+    }
+
+    /// A renamed dependency hides the testkit behind another key, so it is
+    /// reported rather than read as "no testkit here".
+    #[test]
+    fn a_renamed_testkit_is_reported_rather_than_passed() {
+        for renamed in [
+            "[dev-dependencies]
+testkit = { package = \"happenstance-testkit\", version = \"0.4\", path = \"../happenstance-testkit\" }
+",
+            "[dev-dependencies]
+testkit = { path = \"../happenstance-testkit\",
+  package = \"happenstance-testkit\" }
+",
+        ] {
+            let found = problems(renamed, ROOT_PATH_ONLY);
+            assert!(
+                found.iter().any(|p| p.contains("renames")),
+                "{renamed:?}: {found:?}"
+            );
+        }
+    }
+
+    /// A quoted key is the same key, so a versioned one is refused like the
+    /// bare spelling.
+    #[test]
+    fn a_quoted_key_is_read_like_the_bare_one() {
+        let quoted = "[dev-dependencies]
+\"happenstance-testkit\" = { version = \"0.4\", path = \"../happenstance-testkit\" }
+";
+        let found = problems(quoted, ROOT_PATH_ONLY);
+        assert!(
+            found.iter().any(|p| p.contains("Cargo.toml:2")),
+            "{found:?}"
+        );
+    }
+
+    /// The failure names the line, so the message is actionable.
+    #[test]
+    fn a_refusal_names_the_line_it_refused() {
+        let manifest =
+            "[package]\nname = \"adapter\"\n\n[dev-dependencies]\nhappenstance-testkit = \"0.4\"\n";
+        let found = problems(manifest, ROOT_PATH_ONLY);
+        assert!(
+            found.iter().any(|p| p.contains("Cargo.toml:5")),
+            "{found:?}"
+        );
     }
 
     /// A schema change must stop the gate rather than be guessed at.

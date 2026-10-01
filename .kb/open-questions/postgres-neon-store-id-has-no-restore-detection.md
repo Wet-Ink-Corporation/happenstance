@@ -45,7 +45,7 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-VT-6 (`spec/SPECIFICATION.md:838-896`, `[PROVISIONAL]`) requires that a store never issue an
+VT-6 (`spec/SPECIFICATION.md:848-906`, `[PROVISIONAL]`) requires that a store never issue an
 `EventId` whose `(StoreId, SequencePosition)` pair it has already issued for a different event
 (`:840-844`). It permits two mechanisms, and it does not leave the choice between them free
 (`:882-888`):
@@ -73,7 +73,7 @@ earns it:
   `happenstance-ladybug` together as **undecided**, "Skeletons. Each owes this row before it can
   claim to have passed the suite" (`:385`). Three of those four are now published, conformant
   adapters. Cloudflare's answer does exist in code — `store_id_is_not_reminted_per_handle`
-  (`crates/happenstance-cloudflare/src/event_store.rs:2096`), because Durable Object storage
+  (`crates/happenstance-cloudflare/src/event_store.rs:2114`), because Durable Object storage
   outlives the isolate — but it is not in the table either.
 
 **How the identity is read differs, and the difference matters to any re-mint.**
@@ -83,7 +83,7 @@ open across a re-mint would keep stamping the retired identity. That is the stal
 `happenstance-sqlite` closed in `f719b2a` by re-reading the identity inside the append
 (`crates/happenstance-sqlite/src/event_store.rs:680-743`). `NeonEventStore` has no cache. Its
 append reads `store_id` inside the same `INSERT … SELECT` statement
-(`crates/happenstance-neon/src/event_store.rs:515`), so a re-mint would be seen by the next append.
+(`crates/happenstance-neon/src/event_store.rs:529`), so a re-mint would be seen by the next append.
 
 ## Why a clone is not an edge case here
 

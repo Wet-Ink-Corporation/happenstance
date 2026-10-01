@@ -35,7 +35,7 @@ and the day the clause is amended the page becomes a second answer that nothing
 updates — found by the next reader who trusts the page over the specification.
 
 **Evidence.** `standards/rust/README.md:32-36` (the same test, one tree over: an
-atom never restates a clause's content) · `spec/SPECIFICATION.md:278-280` (clause
+atom never restates a clause's content) · `spec/SPECIFICATION.md:279-281` (clause
 ids and the traceability obligation)
 
 ## RP-30-2. Cite the clause id; never restate the clause.
@@ -82,11 +82,11 @@ sentence is the specification's rather than the page's.
 link whose visible text is "here". Each of the four either rots or hides the
 authority.
 
-**Rejects.** A page citing `spec/SPECIFICATION.md:1462`. It resolves on the day
+**Rejects.** A page citing `spec/SPECIFICATION.md:1487`. It resolves on the day
 it is written and points at an unrelated clause the next time the file grows,
 and the reader who follows it reads the wrong rule with no way to tell — the
 failure mode stable ids exist to remove.
 
-**Evidence.** `spec/SPECIFICATION.md:280` (clause ids are stable and are never
+**Evidence.** `spec/SPECIFICATION.md:281` (clause ids are stable and are never
 renumbered) · `standards/rust/README.md:23-29` (a clause outranks this tree, so
 a citation is a hand-off upward)

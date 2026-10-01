@@ -292,11 +292,14 @@ The crate-level half of the Evidence line moved for the same reason and on the
 same day. It cited `happenstance-ladybug`'s `#![allow(clippy::todo)]`, whose
 comment named phase 11 as the phase that would remove it; phase 11 landed the
 driver, and the allow went with the last `todo!()`. A citation that survives the
-line it points at would be the defect this rule is about, so it moves to
-`happenstance-sync`, which is still a skeleton and still names its own removal.
+line it points at would be the defect this rule is about, so it moved to
+`happenstance-sync`'s crate root — and moved again at phase 17, when that allow
+went with the `MemoryEventStore` ingest impl, its crate's last `todo!()`. It now
+cites the stand-in peers' test crate, which is still a skeleton and still names
+its own removal.
 
-**Evidence.** `./Cargo.toml:236 (the allow protected nothing)` ·
-`crates/happenstance-sync/src/lib.rs:138 (removes both the bodies and this line)` ·
+**Evidence.** `./Cargo.toml:242 (the allow protected nothing)` ·
+`crates/happenstance-sync/tests/real_peer_shapes.rs:30 (the phase that implements replication deletes both)` ·
 `crates/happenstance-testkit/tests/projection_mutation_coverage.rs:177 (red the day a row uses it)`
 
 ---
@@ -373,7 +376,7 @@ transaction, no cursor, one round trip per operation, a hard 64 MiB response cap
 the far end of the transport axis. The limits are found by whoever writes the
 bodies, against a port already frozen on the strength of their absence.
 
-**Evidence.** `crates/happenstance-neon/src/event_store.rs:1144 (It compiles, and that is the finding)` ·
+**Evidence.** `crates/happenstance-neon/src/event_store.rs:1441 (It compiles, and that is the finding)` ·
 `crates/happenstance-neon/src/lib.rs:90 (would therefore rank this crate)` ·
 `references/adapter-shapes.md:207 (limits that are not type errors)` ·
 [adapter-shapes §3](../../references/adapter-shapes.md)

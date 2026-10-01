@@ -6,7 +6,7 @@ status: accepted
 authority_tier: note
 summary: >-
   kb-decision-0006 is accepted and holds that happenstance re-exports the contract and
-  feature-gates the adapters; today it does neither in that stated form. crates/happenstance/src/lib.rs:242
+  feature-gates the adapters; today it does neither in that stated form. crates/happenstance/src/lib.rs:243
   is pub use happenstance_core::*, a glob of items rather than a re-export of the crate - there is
   no happenstance::happenstance_core path, though the glob does carry core's own re-exports through,
   so happenstance::bytes::Bytes already resolves. And crates/happenstance/Cargo.toml carries no
@@ -50,7 +50,7 @@ happenstance_core"` over the workspace returns exactly one non-test hit:
 ```rust
 pub use happenstance_core::*;
 ```
-— `crates/happenstance/src/lib.rs:242`
+— `crates/happenstance/src/lib.rs:243`
 
 `pub use happenstance_core;` — the form that would give a caller
 `happenstance::happenstance_core::SomeType` and let them write generic code

@@ -93,7 +93,7 @@ that already exists.
 
 **Derived** — what `spec_trace` does: the specification's citation idiom already places a
 backticked identifier beside the citation, so the anchor is derived from the surrounding prose at
-no per-site cost (`fn subject_before`, `xtask/src/spec_trace.rs:2997-3043`). Coverage went from
+no per-site cost (`fn subject_before`, `xtask/src/spec_trace.rs:3011-3057`). Coverage went from
 84 parsed to 358 checked with no edits to the 358 sites. Neither spelling is universally right;
 explicit buys certainty at authoring cost, derived buys free coverage with a lower ceiling.
 
@@ -109,7 +109,7 @@ reaching back far enough always finds *some* identifier belonging to the previou
 Three refinements did the work:
 
 - **Reach back at most one line**, and only the span immediately before the citation
-  (`xtask/src/spec_trace.rs:2988-2990`) — the document wraps at 80 columns, so a one-line
+  (`xtask/src/spec_trace.rs:3002-3004`) — the document wraps at 80 columns, so a one-line
   reach-back is necessary and two is already a guess.
 - **Decline `.md` targets entirely** — a citation into Markdown supports a passage, not a
   definition site, and anchoring them produced a third of the check's first-run false reports.

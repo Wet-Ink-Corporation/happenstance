@@ -104,13 +104,16 @@ pub enum FaultyStoreError<E> {
     /// # Which channel it arrives on, and why that is the whole instrument
     ///
     /// It reaches a caller as
-    /// [`AppendError::Store`]`(FaultyStoreError::Contended)` — the adapter's
-    /// own failure channel — and **not** as
-    /// [`AppendError::ConditionViolated`]. That is what makes it the input the
-    /// conformance suite cannot currently classify:
-    /// [`AppendError::is_condition_violated`] answers `false`, exactly as it
-    /// would for a store that had genuinely broken, so a busy store and a
-    /// broken store arrive as the same value.
+    /// [`AppendError::Busy`]`(FaultyStoreError::Contended)`: the contract's
+    /// transient-refusal channel (ES-43), with this variant as the adapter's
+    /// own payload, exactly as a real adapter carries its driver's error there.
+    /// [`AppendError::is_busy`] answers `true` and
+    /// [`AppendError::is_condition_violated`] answers `false`.
+    ///
+    /// Until `Busy` existed it arrived as [`AppendError::Store`], the channel
+    /// a caller cannot tell from a real breakage, and that conflation was what
+    /// this variant was built to make testable. It moved in the same release
+    /// that minted the channel, before either shipped.
     ///
     /// Routing it through `ConditionViolated` instead would be a fixture
     /// telling a lie a real store never tells: no condition was evaluated,
@@ -210,8 +213,8 @@ where
 /// Three inputs can be armed, and they are not interchangeable.
 /// [`violate_next`](Self::violate_next) produces the DCB *rejection* signal,
 /// [`fail_next_read`](Self::fail_next_read) a mid-stream read failure, and
-/// [`contend_next`](Self::contend_next) a **transient** refusal on the store's
-/// own error channel — the busy store, which no in-process store in this
+/// [`contend_next`](Self::contend_next) a **transient** refusal,
+/// [`AppendError::Busy`]: the busy store, which no in-process store in this
 /// workspace can otherwise be.
 ///
 /// Use [`SendFaultyStore`] where the inner store implements
@@ -322,8 +325,8 @@ impl<S: EventStore> FaultyStore<S> {
         self
     }
 
-    /// Refuses the next `n` appends as **contended**, on the store's own error
-    /// channel.
+    /// Refuses the next `n` appends as **busy**, through
+    /// [`AppendError::Busy`].
     ///
     /// See [`SendFaultyStore::contend_next`] for what this is for and why the
     /// count is exact under a race; this flavour differs only in the bound.
@@ -367,8 +370,8 @@ impl<S: SendEventStore> SendFaultyStore<S> {
         self
     }
 
-    /// Refuses the next `n` appends as **contended**, on the store's own error
-    /// channel.
+    /// Refuses the next `n` appends as **busy**, through
+    /// [`AppendError::Busy`].
     ///
     /// The inner store is never called for a refused append, so nothing is
     /// written, no position is allocated and the head does not move. Each
@@ -377,9 +380,11 @@ impl<S: SendEventStore> SendFaultyStore<S> {
     /// poisoned fixture. `n = 0` arms nothing and is legal.
     ///
     /// The refusal arrives as
-    /// [`AppendError::Store`]`(`[`FaultyStoreError::Contended`]`)`. Read that
-    /// variant's page before using this: the channel is not an implementation
-    /// detail, it is the entire instrument.
+    /// [`AppendError::Busy`]`(`[`FaultyStoreError::Contended`]`)`, which keeps
+    /// every promise ES-43 makes of that variant: nothing was written, and
+    /// re-running the decision is safe. Read that variant's page before using
+    /// this: the channel is not an implementation detail, it is the entire
+    /// instrument.
     ///
     /// # Why this exists
     ///
@@ -390,10 +395,13 @@ impl<S: SendEventStore> SendFaultyStore<S> {
     /// for it were gated on an instrument that did not exist.
     ///
     /// **Rejects: a conformance rule that treats a transient refusal as
-    /// non-conformance.** Two of the concurrency family's rules require *every*
-    /// contender to commit, so one refusal reddens them —
-    /// `tests/contended_store_instruments.rs` drives exactly that and pins the
-    /// behaviour as it stands today.
+    /// non-conformance.** Before ES-43, two of the concurrency family's rules
+    /// required *every* contender to commit, so one refusal reddened them. Every
+    /// rule of that family now reads a `Busy` contender as neither a win nor a
+    /// failure, over a structural floor of at least one commit.
+    /// `tests/contended_store_instruments.rs` drives each rule against this
+    /// arming and requires it to pass, and it drives the floor to fail against
+    /// an arming that refuses everybody.
     ///
     /// # It is exact under a race, not approximate
     ///
@@ -412,14 +420,16 @@ impl<S: SendEventStore> SendFaultyStore<S> {
     /// let store = SendFaultyStore::new(MemoryEventStore::new()).contend_next(1);
     /// let seat = Event::new("Seated", &b"{}"[..])?;
     ///
-    /// // The first caller is refused on the store channel, not as a violation.
+    /// // The first caller is refused as busy, not as a violation.
     /// let refused = block_on(SendEventStore::append(&store, &[seat.clone()], None));
     /// assert!(matches!(
     ///     refused,
-    ///     Err(AppendError::Store(FaultyStoreError::Contended))
+    ///     Err(AppendError::Busy(FaultyStoreError::Contended))
     /// ));
-    /// // And a contended store is not a conflicted one.
-    /// assert!(!refused.unwrap_err().is_condition_violated());
+    /// // And a busy store is not a conflicted one.
+    /// let refused = refused.unwrap_err();
+    /// assert!(refused.is_busy());
+    /// assert!(!refused.is_condition_violated());
     ///
     /// // The arming is spent, so the retry lands.
     /// assert!(block_on(SendEventStore::append(&store, &[seat], None)).is_ok());
@@ -549,11 +559,12 @@ fn injected_violation<E>() -> AppendError<E> {
 
 /// The injected contention, spelled once for both flavours.
 ///
-/// `AppendError::Store` rather than `ConditionViolated`, and the return type
-/// pins it: this is the adapter's own failure channel, which is the one a
-/// caller cannot tell a transient refusal from a real breakage on.
+/// `AppendError::Busy` rather than `ConditionViolated`, because no condition
+/// was evaluated, and rather than `Store`, because the inner store was never
+/// called: nothing was written, which is exactly what `Busy` promises (ES-43).
+/// The return type pins the payload to this wrapper's own `Contended`.
 fn injected_contention<E>() -> AppendError<FaultyStoreError<E>> {
-    AppendError::Store(FaultyStoreError::Contended)
+    AppendError::Busy(FaultyStoreError::Contended)
 }
 
 /// Whether an armed contention was consumed, spelled once for both flavours.

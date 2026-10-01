@@ -22,7 +22,7 @@ own items.
 ```rust
 # fn main() {
 let names = happenstance_testkit::for_each_event_store_rule!(
-    happenstance_testkit::__emit_rule_names
+    happenstance_testkit::__rule_names
 );
 assert!(names.contains(&"append_is_atomic"));
 # }
@@ -30,11 +30,11 @@ assert!(names.contains(&"append_is_atomic"));
 
 **Not** — the same emitter named bare, as it is written inside the testkit. There
 is no error code; the first line is
-``error: cannot find macro `__emit_rule_names` in this scope``:
+``error: cannot find macro `__rule_names` in this scope``:
 
 ```rust,compile_fail
 # fn main() {
-let names = happenstance_testkit::for_each_event_store_rule!(__emit_rule_names);
+let names = happenstance_testkit::for_each_event_store_rule!(__rule_names);
 # let _ = names;
 # }
 ```
@@ -45,7 +45,7 @@ defining crate and resolve it — the failure only appears in the first adapter
 crate outside the workspace, months later, and reads as though the adapter did
 something wrong.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:666 (for_each_event_store_rule!($emit))` ·
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:661 (for_each_event_store_rule!($emit))` ·
 `crates/happenstance-testkit/src/registry.rs:82 (bare name resolves in *your* scope)` ·
 [SPECIFICATION CF-23](../../spec/SPECIFICATION.md) *(why the emitter is a
 parameter at all)*
@@ -84,13 +84,13 @@ let list = for_each!(names);
 
 **Rejects.** A registry macro that is fine everywhere it is first used — every
 harness invokes it in item position — and then refuses the one call the meta-test
-needs, `let registered = for_each_event_store_rule!(__emit_rule_names);`. The
+needs, `let registered = for_each_event_store_rule!(__rule_names);`. The
 author reads the diagnostic as a problem with the *callback*, rewrites the
 emitter, and arrives at "a macro cannot return a value", which is false.
 
 **Evidence.** `crates/happenstance-testkit/src/registry.rs:95 (captured as raw token trees)` ·
 `crates/happenstance-testkit/src/registry.rs:101 (meta-test below needs)` ·
-`crates/happenstance-testkit/src/registry.rs:421 (for_each_event_store_rule!(crate::__emit_rule_names))`
+`crates/happenstance-testkit/src/registry.rs:440 (for_each_event_store_rule!(crate::__rule_names))`
 
 ## RS-41-3. Order arms most-literal-first; the first arm that matches is the one that expands.
 
@@ -142,11 +142,11 @@ general arm's expansion happens to type-check anyway, or an
 macro expansion they did not write, naming a binding they never declared. Nothing
 anywhere points at the arm order that caused it.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:616 (macro_rules! event_store_conformance)`
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:611 (macro_rules! event_store_conformance)`
 *(the comment there attributes the order to never having to back out of
 `fixture = $fixture:expr`; measured on 1.97.1 that arm backs out either way —
 the order is load-bearing for the reason above, not that one)* ·
-`crates/happenstance-testkit/src/lib.rs:678 (mod_name = dcb_conformance,)` ·
+`crates/happenstance-testkit/src/lib.rs:673 (mod_name = dcb_conformance,)` ·
 [Reference — macros by example, transcription](https://doc.rust-lang.org/reference/macros-by-example.html)
 *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -192,9 +192,9 @@ backing store, so `two_fixture_instances_observe_none_of_each_others_appends`
 cannot be written at all — and the isolation defect it exists to catch becomes
 untestable rather than undetected.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:637 (__conformance_fixture() -> impl $crate::__private::Fixture)` ·
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:632 (__conformance_fixture() -> impl $crate::__private::Fixture)` ·
 `crates/happenstance-testkit/src/registry.rs:40 (which it could not know)` ·
-`crates/happenstance-testkit/src/concurrency.rs:1244 (impl $crate::__private::ConcurrentFixture)`
+`crates/happenstance-testkit/src/concurrency.rs:1502 (impl $crate::__private::ConcurrentFixture)`
 
 ## RS-41-5. Enforce a caller-side obligation with `#[must_use = "…"]`, and write the consequence into the message.
 

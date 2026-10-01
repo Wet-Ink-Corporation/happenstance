@@ -1,0 +1,7 @@
+    Checking happenstance-core v0.3.2 (<worktree>\crates\happenstance-core)
+    Checking ppv-lite86 v0.2.21
+    Checking rand_chacha v0.9.0
+    Checking happenstance-testkit v0.3.2 (<worktree>\crates\happenstance-testkit)
+    Checking happenstance v0.3.2 (<worktree>\crates\happenstance)
+    Checking proptest v1.11.0
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.20s

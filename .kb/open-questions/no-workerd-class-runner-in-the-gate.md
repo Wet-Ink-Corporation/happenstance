@@ -147,7 +147,7 @@ and phase 17 builds what it decides.
 1. **A separate CI job, and it lands before 1.0.** ADR-0023's objection was that a separate job
    cannot satisfy "in the same run as the rest of the gate". That objection now has a precedent
    against it in this repository. `live-postgres` and `live-neon` are sibling jobs, "never a step
-   inside" the gate (`.github/workflows/ci.yml:398-412`, `:805`), and they carry each database
+   inside" the gate (`.github/workflows/ci.yml:398-412`, `:873`), and they carry each database
    adapter's conformance claim. A `workerd` job takes the same shape. `cargo xtask ci` keeps its
    single-command, Windows-capable, Node-free property. And "conformant on Cloudflare" becomes a
    claim about the real runtime rather than about the `node:sqlite` shim, which is what the charter

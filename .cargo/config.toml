@@ -16,7 +16,7 @@ xtask = "run --package xtask --"
 # claim was false in the place it mattered.
 #
 # What that cost, concretely: `happenstance-core` shipped a dead private method
-# for as long as `unstable-projection` has existed without `conformance`. The
+# for as long as `unstable-projection` had existed without `conformance`. The
 # local gate went green over it every time; it surfaced only when a new example
 # resolved that feature combination and someone typed `-D warnings` by hand.
 #

@@ -52,9 +52,9 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use happenstance_core::AppendCondition;
+use happenstance_core::{AppendCondition, EventId};
 
-use crate::identity::{EventId, ReplicatedEvent, Watermark};
+use crate::identity::{ReplicatedEvent, Watermark};
 
 /// One peer relationship.
 ///
@@ -293,11 +293,11 @@ pub struct PeerLimits {
     pub max_batch_bytes: usize,
     /// Largest number of events in one [`push`](SyncPeer::push).
     pub max_batch_events: usize,
-    /// The oldest event this peer still retains, if it has pruned anything.
+    /// The lowest resume point this peer can still satisfy, if it has pruned.
     ///
     /// A resume token pointing below this can never be satisfied, and a runner
-    /// that keeps retrying it is a runner that never converges. `None` means
-    /// nothing has been pruned.
+    /// that keeps retrying it never converges. It says nothing about whether
+    /// everything above it is retained (SY-32, ADR-0028). `None`: no pruning.
     pub retention_floor: Option<EventId>,
 }
 
@@ -396,7 +396,7 @@ pub enum SyncError {
     /// Not retryable. The gap has to be closed by a full re-seed or accepted.
     #[error("resume token is below the peer's retention floor at {floor}")]
     BelowRetentionFloor {
-        /// The oldest event the peer still holds.
+        /// The lowest resume point the peer can still satisfy.
         floor: EventId,
     },
     /// The batch exceeds what the peer declared it can accept.

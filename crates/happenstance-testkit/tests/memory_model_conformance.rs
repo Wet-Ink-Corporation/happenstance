@@ -32,6 +32,6 @@ happenstance_testkit::event_store_model_conformance!(MemoryFixture::new());
 
 happenstance_testkit::event_store_model_conformance!(
     mod_name = dcb_model_conformance_blocking,
-    emit = happenstance_testkit::__emit_model_blocking,
+    emit = happenstance_testkit::emit_model_blocking,
     fixture = MemoryFixture::new()
 );

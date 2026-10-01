@@ -125,7 +125,7 @@ demonstrate. The gate is green, the atom looks proved, and the constraint it
 documents has been unchecked since phase 0.
 
 **Evidence.** `xtask/src/constitution.rs:22 (cfg(doctest))` ·
-`spec/SPECIFICATION.md:6262 (rustdoc on stable 1.97.1)` ·
+`spec/SPECIFICATION.md:6610 (rustdoc on stable 1.97.1)` ·
 [rustdoc unstable features](https://doc.rust-lang.org/rustdoc/unstable-features.html#error-numbers-for-compile_fail-doctests)
 *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -224,6 +224,6 @@ an adapter by the next agent that loads it because a compiled example is exactly
 what agents trust most.
 
 **Evidence.** `xtask/src/constitution.rs:27 (Doctests also do not receive the workspace)` ·
-`Cargo.toml:233 (unwrap_used = "deny")` ·
+`Cargo.toml:239 (unwrap_used = "deny")` ·
 [rust-clippy#1599](https://github.com/rust-lang/rust-clippy/issues/1599)
 *(checked 2026-08-09, rustc 1.97.1)*

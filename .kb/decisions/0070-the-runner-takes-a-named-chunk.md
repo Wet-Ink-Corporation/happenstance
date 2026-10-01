@@ -80,7 +80,7 @@ Phase 18 chooses and records the choice in its session log.
 
 **3. No `Default` until it is measured.** `Retry` refuses a default because a hidden default would
 hide a *semantic* worst case, namely how many times a command re-runs. That argument does not
-carry over here: PS-14 (`spec/SPECIFICATION.md:5499`) requires the same read model at every chunk
+carry over here: PS-14 (`spec/SPECIFICATION.md:5782`) requires the same read model at every chunk
 size, so a default for `Chunk` would hide only a cost. A cost is exactly what a measurement should
 choose, and the measurement does not exist. `experiments/polling-cost` fixes the chunk at 1024
 (`experiments/polling-cost/README.md:37`), and `examples/rebuilding-read-models` runs two sizes to
@@ -98,7 +98,7 @@ a break. A `run_projection_observed` entry point taking a callback, the plain-do
 `commit`/`commit_with` already uses, is additive in any later minor. `tracing` spans are declined
 at this layer. They would be the workspace's first `tracing` dependency, which is a larger decision
 than the runner's own surface, and they would falsify the specification's sentence that the runner
-"writes nothing anywhere, logs nothing" (`spec/SPECIFICATION.md:5944`).
+"writes nothing anywhere, logs nothing" (`spec/SPECIFICATION.md:6292`).
 
 ## Where this departs from the open question
 

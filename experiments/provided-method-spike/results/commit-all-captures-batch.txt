@@ -1,0 +1,26 @@
+    Checking happenstance-core v0.3.2 (<worktree>\crates\happenstance-core)
+error: future cannot be sent between threads safely
+   --> crates\happenstance-core\src\projection.rs:429:44
+    |
+429 |   #[trait_variant::make(SendProjectionStore: Send)]
+    |  ____________________________________________^
+430 | | pub trait ProjectionStore {
+431 | |     /// How this adapter fails.
+432 | |     type Error: core::error::Error + 'static;
+...   |
+556 | |         authority: Authority,
+557 | |     ) -> impl Future<Output = Result<(), CommitError<Self::Error>>> {
+    | |_____________^ future created by async block is not `Send`
+    |
+    = help: within `{async block@crates\happenstance-core\src\projection.rs:559:9: 559:19}`, the trait `Send` is not implemented for `<Self as SendProjectionStore>::Batch`
+note: captured value is not `Send`
+   --> crates\happenstance-core\src\projection.rs:560:18
+    |
+560 |             drop(batch);
+    |                  ^^^^^ has type `<Self as SendProjectionStore>::Batch` which is not `Send`
+help: consider further restricting the associated type
+    |
+429 | #[trait_variant::make(SendProjectionStore: Send where <Self as SendProjectionStore>::Batch: Send)]
+    |                                                 ++++++++++++++++++++++++++++++++++++++++++++++++
+
+error: could not compile `happenstance-core` (lib) due to 1 previous error

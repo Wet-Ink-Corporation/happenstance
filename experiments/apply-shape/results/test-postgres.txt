@@ -1,0 +1,13 @@
+$ cargo test --manifest-path <repo>/experiments/apply-shape/Cargo.toml --test postgres -- --ignored --test-threads=1 --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running tests\postgres.rs (experiments\apply-shape\target\debug\deps\postgres-6c215e02a81e9bf4.exe)
+
+running 3 tests
+test a_server_side_failure_leaves_nothing_for_on_error_to_write_into ... ok
+test apply_awaits_statements_through_a_live_transaction ... ok
+test records_the_server_version ... server: PostgreSQL 17.10 (Debian 17.10-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+exit status: 0

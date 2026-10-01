@@ -63,6 +63,6 @@ use support::CloudflareFixture;
 
 happenstance_testkit::event_store_conformance!(
     mod_name = dcb_conformance_wasm,
-    emit = happenstance_testkit::__emit_wasm,
+    emit = happenstance_testkit::emit_wasm,
     fixture = CloudflareFixture::new()
 );

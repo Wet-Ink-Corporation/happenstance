@@ -606,6 +606,74 @@ jobs:
           fi
           echo "no conformance failures"
 
+      # THE NAIVE ARM, UNDER ITS CFG.
+      #
+      # `tests/rule_controls.rs` and `tests/naive_arm_probe.rs` build the naive
+      # `nextval()` store ES-10 rejects, and since `0.4.0` it sits behind the
+      # `happenstance_naive_arm` rustc cfg rather than the `naive-arm` Cargo
+      # feature. Until then `--all-features` compiled both targets in the gate's
+      # clippy and test steps; nothing does now but this step, so without it a
+      # refactor of `event_store.rs` could break the control silently.
+      #
+      # `-D warnings` is repeated because a step's `RUSTFLAGS` REPLACES the
+      # job's, and `CARGO_TARGET_DIR` is its own so the store the steps above
+      # certify is never compiled with the naive arm in it. Last in the job, so
+      # a failure here can never be mistaken for the real adapter's.
+      #
+      # Clippy first, because the gate's `--all-features` clippy used to reach
+      # these items and no longer does. It needs no server.
+      - name: Clippy over the naive arm, under its cfg
+        env:
+          RUSTFLAGS: -D warnings --cfg happenstance_naive_arm
+          CARGO_TARGET_DIR: target/naive-arm
+        run: cargo clippy -p happenstance-postgres --all-features --all-targets -- -D warnings
+
+      # `--include-ignored`, not `--ignored`, so the one test that needs no
+      # server, `naive_arm_is_reachable_only_under_its_cfg`, runs too, and its
+      # `cfg!` assertion proves the flag reached the build. Both files are
+      # `#![cfg]`'d whole. A build that lost the cfg (through a job-level
+      # `CARGO_ENCODED_RUSTFLAGS`, which outranks `RUSTFLAGS`, or a typo)
+      # compiles two empty binaries, and each prints `test result: ok. 0 passed`.
+      # So counting `ok` lines is not enough. The check below mirrors the
+      # projection trio: the list first, then nothing ignored, and executed
+      # equal to listed, and it also requires the named tests.
+      - name: The rule controls and the naive-arm probe, under their cfg
+        env:
+          RUSTFLAGS: -D warnings --cfg happenstance_naive_arm
+          CARGO_TARGET_DIR: target/naive-arm
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-postgres --all-features \
+            --test rule_controls --test naive_arm_probe \
+            -- --include-ignored --list | tee naive-list.txt
+          cargo test -p happenstance-postgres --all-features \
+            --test rule_controls --test naive_arm_probe \
+            -- --include-ignored --show-output --test-threads=1 | tee naive-run.txt
+
+          expected=$(grep -c ': test$' naive-list.txt)
+          results=$(grep -cE '^test result:' naive-run.txt)
+          sum() { grep -E '^test result:' naive-run.txt | grep -oE "[0-9]+ $1" \
+            | awk '{ s += $1 } END { print s + 0 }'; }
+          passed=$(sum passed); failed=$(sum failed); ignored=$(sum ignored)
+          echo "targets $results; expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$results" -ne 2 ] || [ "$expected" -eq 0 ]; then
+            echo "::error::expected two targets with tests in them under the naive-arm cfg"
+            exit 1
+          fi
+          if [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+          for name in naive_arm_is_reachable_only_under_its_cfg \
+                      cf_13_does_not_yet_reject_the_naive_arm \
+                      the_naive_arm_admits_a_position_beneath_one_already_observed; do
+            if ! grep -qE "^test ${name} \.\.\. ok$" naive-run.txt; then
+              echo "::error::\`${name}\` did not run and pass"
+              exit 1
+            fi
+          done
+
   # The LadybugDB projection conformance run. `live-postgres`'s third sibling,
   # with the structural difference that decides its whole shape: it needs neither
   # a daemon nor a credential — it needs a **1.44 GB static archive and an
@@ -1036,7 +1104,38 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
+      # Whether the version the workspace declares is already on crates.io.
+      # Inside a breaking window the base commit and this pull request both read
+      # the next, unreleased version, so the step below compares two states no
+      # consumer can install and every break it reports is "against nothing" --
+      # the reason postgres and neon were once kept out of its package list. Until
+      # that version is published the step is advisory: its findings still show on
+      # the pull request that introduced them, which is what the release's trace
+      # table is built from, but they do not block. Once the version is on
+      # crates.io this probe answers `true` and the step blocks again, with no
+      # edit here. A probe that cannot reach crates.io answers `true`, so an
+      # outage never quietly relaxes the check.
+      - name: is the declared version published
+        id: published
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          if [ -z "$version" ]; then
+            echo "::error::no version under [workspace.package] in Cargo.toml"
+            exit 1
+          fi
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --user-agent "happenstance-ci (https://github.com/Wet-Ink-Corporation/happenstance)" \
+            "https://crates.io/api/v1/crates/happenstance-core/$version" || echo 000)
+          if [ "$status" = "404" ]; then
+            echo "happenstance-core $version is not on crates.io; the base-commit check is advisory"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "happenstance-core $version: crates.io answered $status; the base-commit check blocks"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: semver against the base commit
+        continue-on-error: ${{ steps.published.outputs.published == 'false' }}
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
           # Compare against the commit this pull request branched from. This
           # catches a break introduced *by this pull request*. It cannot see a

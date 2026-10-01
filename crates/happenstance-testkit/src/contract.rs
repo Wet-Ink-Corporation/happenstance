@@ -1221,7 +1221,7 @@ impl RuleOutcome {
     /// This is the target-independent half of reporting, and it is public
     /// because *where* a line goes is a property of the harness rather than of
     /// the rule. [`report`](Self::report) writes it to stdout, which is right on
-    /// every target that has one; `__emit_wasm` routes it to `console.log`,
+    /// every target that has one; `emit_wasm` routes it to `console.log`,
     /// because `wasm32-unknown-unknown` does not (see [`report`](Self::report)).
     /// A caller-supplied emitter for a runtime the testkit has never heard of —
     /// CF-23's extension point — picks its own sink from here.

@@ -66,8 +66,8 @@ pump has acquired no caller but the typed one when phase 7 exits, collapse it up
 this decision.* Phase 7 is the typed layer, and it has exited — `happenstance::Projection` and
 `happenstance::run_projection` landed behind `unstable-projection` in `crates/happenstance/src/runner.rs`.
 The falsifier fired in a stronger form than it names: `happenstance-core` publishes exactly two
-module-level free functions in the entire crate — `collect` at `store.rs:285` and
-`read_decision_model` at `store.rs:321` — and neither is a checkpoint pump. There is no pump function
+module-level free functions in the entire crate — `collect` at `store.rs:290` and
+`read_decision_model` at `store.rs:326` — and neither is a checkpoint pump. There is no pump function
 in the contract crate at all. The pump was allocated by ADR-0007, three phases passed, and it was
 never written, because at every point the thing an application actually needed was the typed runner
 driving the port directly.

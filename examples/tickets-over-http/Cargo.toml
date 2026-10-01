@@ -37,7 +37,7 @@ doc-scrape-examples = true
 #
 # `default-features = false` drops `memory`: two processes cannot share a
 # `Vec` behind an `RwLock`, which is the whole reason this example exists.
-happenstance = { version = "0.3.0", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.4.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
   "unstable-projection",

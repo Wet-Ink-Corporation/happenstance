@@ -1,0 +1,23 @@
+### cargo check --locked -p happenstance-core --target wasm32-unknown-unknown --no-default-features --features std
+    Checking happenstance-core v0.3.2 (<worktree>\crates\happenstance-core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.71s
+### exit=0
+### cargo check --locked -p happenstance-core --target wasm32-unknown-unknown
+    Checking happenstance-core v0.3.2 (<worktree>\crates\happenstance-core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.54s
+### exit=0
+### cargo check --locked -p happenstance-testkit --tests --target wasm32-unknown-unknown
+    Checking happenstance-core v0.3.2 (<worktree>\crates\happenstance-core)
+    Checking happenstance-testkit v0.3.2 (<worktree>\crates\happenstance-testkit)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.49s
+### exit=0
+### cargo check --locked -p happenstance-cloudflare --tests --target wasm32-unknown-unknown
+    Checking happenstance-core v0.3.2 (<worktree>\crates\happenstance-core)
+    Checking happenstance-testkit v0.3.2 (<worktree>\crates\happenstance-testkit)
+    Checking happenstance-cloudflare v0.3.2 (<worktree>\crates\happenstance-cloudflare)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.41s
+### exit=0
+### cargo check --locked -p happenstance-neon --target wasm32-unknown-unknown
+    Checking happenstance-neon v0.3.2 (<worktree>\crates\happenstance-neon)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.57s
+### exit=0

@@ -475,7 +475,7 @@ fn the_store_is_not_send() {
 #[cfg(not(target_arch = "wasm32"))]
 happenstance_testkit::event_store_conformance!(
     mod_name = local_blocking,
-    emit = happenstance_testkit::__emit_blocking,
+    emit = happenstance_testkit::emit_blocking,
     fixture = LocalFixture::new()
 );
 
@@ -543,6 +543,6 @@ mod local_current_thread {
 #[cfg(target_arch = "wasm32")]
 happenstance_testkit::event_store_conformance!(
     mod_name = local_wasm,
-    emit = happenstance_testkit::__emit_wasm,
+    emit = happenstance_testkit::emit_wasm,
     fixture = LocalFixture::new()
 );

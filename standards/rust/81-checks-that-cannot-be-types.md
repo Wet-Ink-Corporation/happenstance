@@ -405,5 +405,5 @@ cannot be replaced by reading `crates/*/Cargo.toml` either — the workspace
 members are globs, so a member added under a new path is invisible to precisely
 the check that exists to notice new publishable members.
 
-**Evidence.** `xtask/src/package.rs:86 (PUBLISHABLE)` ·
-`xtask/src/package.rs:225 (fn reconcile)` · `xtask/src/package.rs:36 (The derivation is the fact)`
+**Evidence.** `xtask/src/package.rs:102 (PUBLISHABLE)` ·
+`xtask/src/package.rs:244 (fn reconcile)` · `xtask/src/package.rs:36 (The derivation is the fact)`

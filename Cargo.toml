@@ -21,7 +21,7 @@ members = ["crates/*", "examples/*", "xtask"]
 # it shipped behind an off-by-default `unstable-projection` feature with a
 # written exemption — and is from the next release, ADR-0063 having lifted the
 # gate once adapters at both ends of the batch-shape axis had passed its suite.
-version = "0.3.2"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
@@ -51,15 +51,15 @@ categories = ["database", "data-structures"]
 # so the permissive choice at this level would silently pull `memory` (and its
 # `std` requirement) into every adapter.
 #
-# The three requirement strings move with the version above, and this is the
-# highest-cost line in the file to get wrong: a requirement naming a version
-# that was never released resolves fine from the path while the workspace is
-# intact and fails only on the *second* `cargo publish` — after
-# `happenstance-core` is live and unremovable. They moved off `0.2.0-alpha.1`
-# in the same commit as the version, which is the only order that is ever green.
-happenstance-core = { version = "0.3.2", path = "crates/happenstance-core", default-features = false }
-happenstance = { version = "0.3.2", path = "crates/happenstance", default-features = false }
-happenstance-testkit = { version = "0.3.2", path = "crates/happenstance-testkit" }
+# The two requirement strings move with the version above, and this is the
+# highest-cost line in the file to get wrong: a version never released resolves
+# from the path here and fails only on the *second* `cargo publish`, after
+# `happenstance-core` is live. The testkit carries no version at all (ADR-0057):
+# every use of it is a dev-dependency, and a versionless one is stripped from the
+# packaged manifest. `cargo xtask package-check` keeps it that way.
+happenstance-core = { version = "0.4.0", path = "crates/happenstance-core", default-features = false }
+happenstance = { version = "0.4.0", path = "crates/happenstance", default-features = false }
+happenstance-testkit = { path = "crates/happenstance-testkit" }
 
 # --- external ---
 # WF-11's payload encoding, and pinned to `0.22` rather than to the newer `0.23`
@@ -158,7 +158,7 @@ proptest = "1"
 # doctests from the lib target only, and on 1.97.1 it silently ignores an
 # unmatched error-code annotation, so `compile_fail,E0004` asserts no more than
 # bare `compile_fail` — and a negative control that cannot discriminate is not a
-# negative control (`spec/SPECIFICATION.md:8772`;
+# negative control (`spec/SPECIFICATION.md:9150`;
 # `crates/happenstance-core/src/event.rs:95-106`).
 #
 # Adopted on a measurement, not on taste — the `postcard` note above is the
@@ -215,6 +215,12 @@ missing_docs = "warn"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 unused_qualifications = "warn"
+# `happenstance_naive_arm` is `happenstance-postgres`'s negative control, set only
+# by `RUSTFLAGS="-D warnings --cfg happenstance_naive_arm"` — a rustc cfg rather
+# than a Cargo feature since `0.4.0`, so no manifest can switch it on and docs.rs
+# never builds it. Declared here so the name is expected; here and not in that
+# crate because `[lints] workspace = true` admits no per-crate key beside it.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(happenstance_naive_arm)"] }
 
 [workspace.lints.clippy]
 # `priority = -1` lets the specific allows below override the group.

@@ -106,6 +106,16 @@ use crate::query::{Query, ReadOptions};
 /// feature provides. It is not linked because this item exists without that
 /// feature and the link would not resolve (D13).
 ///
+/// # Deletion is outside the port
+///
+/// This port has no delete, truncate, compact, redact or tombstone method, and
+/// no 1.x release adds one. A store that has lost events by some means outside
+/// the port still owes every promise about the events it holds. It never
+/// reuses a position, and [`Query::all`] means every event it holds
+/// (specification ES-38). What a condition over removed history does is on
+/// [`AppendCondition`]: it passes vacuously (ES-40). Nothing here reports what
+/// a store no longer holds.
+///
 /// # Writing generic code over a store
 ///
 /// Bound on [`EventStore`], not [`SendEventStore`], unless you need to cross a
@@ -264,7 +274,12 @@ pub trait EventStore {
     /// * [`AppendError::ConditionViolated`] when the store already holds an
     ///   event matching `condition`. This is routine under contention: rebuild
     ///   the decision model and retry.
-    /// * [`AppendError::Store`] for adapter-specific failures.
+    /// * [`AppendError::Busy`] when the store refused for a transient reason
+    ///   before the batch took any effect. Nothing was written, so taking the
+    ///   decision again is safe. An adapter that cannot vouch for that reports
+    ///   `Store` instead.
+    /// * [`AppendError::Store`] for adapter-specific failures, including any
+    ///   outcome the adapter cannot vouch for.
     async fn append(
         &self,
         events: &[Event],
@@ -316,6 +331,9 @@ pub trait EventStore {
     /// can answer without an index at all: if the identifier's store half is not
     /// its own incarnation the answer is `false`, and if it is, the question
     /// reduces to whether that position exists.
+    ///
+    /// `false` means this store does not hold the event. It does not say
+    /// whether the store never held it or no longer does.
     ///
     /// # Errors
     ///

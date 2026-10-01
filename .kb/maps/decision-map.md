@@ -583,12 +583,42 @@ editing neither body.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0066 | [`kb-decision-0066`](../decisions/0066-what-1-0-promises.md) | What 1.0 promises — nine crates, one disposition per unfrozen clause, and CF-39 frozen | accepted | 16 | — |
+| ADR-0066 | [`kb-decision-0066`](../decisions/0066-what-1-0-promises.md) | What 1.0 promises — nine crates, one disposition per unfrozen clause, and CF-39 frozen | accepted (partly superseded) | 16 | partly superseded by `kb-decision-0076` (§5's `#[doc(hidden)]` exemption, where it reached a promised emitter) |
 | ADR-0067 | [`kb-decision-0067`](../decisions/0067-msrv-after-1-0-rises-are-bounded.md) | The MSRV holds at 1.97.1 into 1.0, and after 1.0 a rise is bounded | accepted | 16 | amends `kb-decision-0037` |
 | ADR-0068 | [`kb-decision-0068`](../decisions/0068-adr-0022-sections-8-9-16-settled.md) | ADR-0022 §8 and §16 are superseded in part, §9 is not decided here, and the rest is ratified | accepted | 16 | partly supersedes `kb-decision-0022` |
 | ADR-0069 | [`kb-decision-0069`](../decisions/0069-queryitem-gains-a-total-constructor.md) | QueryItem gains a total constructor, and the outward face of D-1 is closed as intended | accepted | 16 | — |
 | ADR-0070 | [`kb-decision-0070`](../decisions/0070-the-runner-takes-a-named-chunk.md) | The runner takes a named Chunk, and gets no observation seam at 1.0 | accepted | 16 | — |
 | ADR-0071 | [`kb-decision-0071`](../decisions/0071-es-10-stays-global.md) | ES-10 stays global, because the frozen checkpoint is one position | accepted | 16 | — |
+
+## 2026-09-29: the breaking window, written by hand (phase 17)
+
+Phase 17's records, written by hand as each of its lanes lands. ADR-0072 is the first: the phase is split
+at its release, and the additive items go to a new phase, 17b.
+ADR-0073 settles VT-10's foreign-identity write path. ADR-0028 is written under the number the
+original queue reserved for it, which is why it sorts first. It takes the retention refusal, with
+an additive reservation, and answers sub-question 3 of `kb-open-question-es-38-and-gap-read-unowned-001`,
+which stays open for sub-question 2. ADR-0074 is the `Projection::apply` record: `apply` becomes
+`async`, on evidence from a spike that drove a live transaction, and PS-9 and PS-11 are frozen. It
+supersedes `kb-open-question-apply-synchronous-live-store-001`. ADR-0075 settles the projection
+port's remaining 1.0 clauses: PS-15 narrowed and frozen, PS-23 and PS-24 frozen, and PS-38's
+obligation documented. ADR-0076 makes the conformance emitters CF-23 obliges public API, un-hidden
+and without their `__` prefix, and mints CF-41 to pin them. It partly supersedes ADR-0066 at §5's
+`#[doc(hidden)]` exemption only, the ADR-0065 shape, so `kb-decision-0066` stays accepted and its
+row gains the annotation. ADR-0077 promises `AppendError::Busy` at 1.0, has the typed commit loop
+retry it inside the same `Retry` bound, mints ES-43, and supersedes
+`kb-open-question-testkit-contention-tolerance-001` with the per-error arm.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0028 | [`kb-decision-0028`](../decisions/0028-what-a-store-may-forget.md) | What a store may forget is decided outside the port, and a report of it can only arrive additively | accepted | 17 | — |
+| ADR-0072 | [`kb-decision-0072`](../decisions/0072-phase-17-is-split-at-the-release.md) | Phase 17 is split at the release — what must ship in 0.4.0, and 17b after it | accepted | 17 | — |
+| ADR-0073 | [`kb-decision-0073`](../decisions/0073-the-foreign-identity-write-path-is-the-adapters.md) | The write path that keeps a foreign identity is the adapter's row writer, and core grows nothing | accepted | 17 | — |
+| ADR-0074 | [`kb-decision-0074`](../decisions/0074-projection-apply-is-async.md) | Projection::apply is async, is handed a Delivered event, and fails with the projection's own error | accepted | 17 | — |
+| ADR-0075 | [`kb-decision-0075`](../decisions/0075-the-projection-ports-1-0-clauses.md) | The projection port's 1.0 clauses — PS-15 narrowed and frozen, PS-23 and PS-24 frozen, PS-38 documented | accepted | 17 | — |
+| ADR-0076 | [`kb-decision-0076`](../decisions/0076-the-cf-23-emitters-are-public-api.md) | The emitters CF-23 obliges are public API — un-hidden, renamed without the prefix, and pinned by CF-41 | accepted | 17 | partly supersedes `kb-decision-0066` |
+| ADR-0077 | [`kb-decision-0077`](../decisions/0077-appenderror-busy.md) | A busy store is not a broken one — AppendError::Busy is promised, and the typed loop retries it | accepted | 17 | — |
+| — | [`kb-decision-wi-2ab1f3`](../decisions/wi-2ab1f3-does-dcb-independence-extend-to-busy-may-a.md) | DCB independence is a promise about conflict, not liveness; `Busy` allowed; rule renamed (owner, Weigh-In) | accepted | 17 | — |
+| — | [`kb-decision-wi-ff17f4`](../decisions/wi-ff17f4-ps-15-freeze-after-narrowing-to-commit-and.md) | PS-15 frozen narrowed to commit and reset; rollback non-normative (owner, Weigh-In) | accepted | 17 | — |
 
 ## Adding a row
 
