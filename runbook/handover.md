@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`159ed70` on `main` (PR #32, lane L5: `AppendError::Busy`), plus
+`09854b3` on `main` (PR #29, phase 22: the documentation site), plus
 `lane/p17-retire-ladybug`. 2026-09-30.
 
 ## Where things are
@@ -40,7 +40,7 @@ Object leg, and Docker for testcontainers Postgres are available.
 - `lane/p17-retire-ladybug`: **`happenstance-ladybug` is retired** (ADR-0078, the owner's call `wi-630032`).
   - It is excluded from the workspace, and the directory is kept as a frozen record because its files are cited by line.
   - The gate's ladybug steps, its CI job and `lbug`'s dependency graph are gone.
-- PR #29 (phase 22, the documentation site): `main` has been merged into it, and it merges once CI is green.
+- PR #29 (phase 22, the documentation site) merged as `09854b3`, after `main` was merged into it.
 
 ## Next action
 
