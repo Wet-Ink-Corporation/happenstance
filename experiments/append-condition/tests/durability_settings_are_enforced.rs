@@ -6,7 +6,7 @@
 //! mechanisms charge for is the length of an interval held across a durable
 //! commit. The SQLite analogue is `PRAGMA synchronous = OFF`, and here it is a
 //! *correctness* constraint as well as an honesty one:
-//! `spec/SPECIFICATION.md:7671-7674` names that pragma **by name** as a wrong
+//! `spec/SPECIFICATION.md:7859-7862` names that pragma **by name** as a wrong
 //! implementation CF-14's reopen rule exists to reject. A figure produced under
 //! it is a figure for a store that cannot ship.
 //!

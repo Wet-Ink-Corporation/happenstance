@@ -96,7 +96,7 @@ that is accepted-but-provisional. Same word, two different objects — a clause 
 metadata inside `SPECIFICATION.md` that lifts by a marker edit at a named phase, an ADR status is
 a KB frontmatter value with only five legal spellings.
 
-**ES-7** (`spec/SPECIFICATION.md:2708`) says a downstream crate may implement the bare
+**ES-7** (`spec/SPECIFICATION.md:2711`) says a downstream crate may implement the bare
 `EventStore` flavour directly without colliding with the blanket impl `trait_variant` emits. Its
 marker reads: `[PROVISIONAL — falsified by error[E0119]: conflicting implementations on a
 downstream impl EventStore for LocalType. The named test is the !Send reference store, which
@@ -179,7 +179,7 @@ Phases 10b and 11 added two instances, and they are not repetitions of the two a
 VT-9's conditions had already occurred harmlessly; these two name conditions that nothing the port
 admits can meet at all.
 
-**PS-4** (`spec/SPECIFICATION.md:5226-5235`) is `[PROVISIONAL]` and its falsifier has two limbs.
+**PS-4** (`spec/SPECIFICATION.md:5414-5423`) is `[PROVISIONAL]` and its falsifier has two limbs.
 The Cypher-level limb — graph mutations that cannot be expressed as a replayable statement list —
 did not fire against LadybugDB, which is an ordinary negative result: a transaction gives
 read-your-own-writes within itself, so a deferred write set answers it. The Rust-level limb — a
@@ -258,7 +258,7 @@ and the typed layer's axis, not this port's.
 
 **What this section does not change.** ES-7 and VT-9 are untouched — neither record names them,
 and their falsifiers are as decorative as they were. Both records are staged from a lane: at this
-worktree's `86a410c`, `spec/SPECIFICATION.md:5261` still reads *"`begin` MUST be neither `async`
+worktree's `86a410c`, `spec/SPECIFICATION.md:5449` still reads *"`begin` MUST be neither `async`
 nor fallible"* and the census still reads 138/46/12/5, so this section states what the lane binds
 when it lands rather than what `HEAD` shows.
 
@@ -325,5 +325,5 @@ its falsifier restated to cover an unlocked resolve (`runbook/phases/17-breaking
 VT-9 freezes at phase 13 on a sync-testkit rule that ingest preserves `RecordedAt`, with a mutant;
 `kb-decision-0066` restates its clock falsifier, which this atom showed no longer discriminates.
 The PS-4 limb is `kb-open-question-apply-synchronous-live-store-001`'s, in phase 17's `apply`
-record. Citation drift: ES-7 is now `spec/SPECIFICATION.md:2783`, VT-9 `:958`. **Owners now:
+record. Citation drift: ES-7 is now `spec/SPECIFICATION.md:2839`, VT-9 `:958`. **Owners now:
 phase 17 (ES-7, PS-4's limb), phase 13 (VT-9).**

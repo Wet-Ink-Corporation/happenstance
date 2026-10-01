@@ -68,7 +68,7 @@ and `ProjectionError` make no semver promise, so a named `Chunk` type or
 an additive observation entry point are both free to add later. It buys
 **nothing on the page** — a doc comment is not semver-gated, and whoever
 runs the function today is not protected by a future exemption. It also
-does not touch `spec/SPECIFICATION.md:5846`'s normative-reading assertion
+does not touch `spec/SPECIFICATION.md:6034`'s normative-reading assertion
 that the runner "writes nothing anywhere, logs nothing," which an
 observation seam would have to be reconciled against, in a different
 file than this one.
@@ -165,7 +165,7 @@ that must happen before the freeze rather than at it.
 
 Whether `Progressed` grows fields (its own doc comment reserves that for a
 later observability pass, which 2B could be); whether `spec/
-SPECIFICATION.md:5846`'s "logs nothing" is normative or observational —
+SPECIFICATION.md:6034`'s "logs nothing" is normative or observational —
 2C would contradict it, 2B arguably would not, and the specification's
 owner decides which; and anything about `ProjectionStore` itself, since
 both questions are about the typed layer's `run_projection` surface, not
@@ -193,12 +193,12 @@ It is `kb-decision-0070`'s reopen condition, not an obligation.
 **Question 2: 2A at 1.0.** The checkpoint is the API. `Progressed` is already `#[non_exhaustive]`
 and can grow fields. `run_projection_observed` (2B) is additive in any later minor, and it waits for
 an operator who needs progress mid-run that polling a second handle cannot give. `tracing` (2C) is
-declined at this layer. That keeps `spec/SPECIFICATION.md:6104`'s "writes nothing anywhere, logs
+declined at this layer. That keeps `spec/SPECIFICATION.md:6292`'s "writes nothing anywhere, logs
 nothing" true, so the question in "What this does not settle" — whether that sentence is normative
 or observational — does not need an answer yet.
 
 **The citation trap, re-read.** The three specification sentences this atom found anchored inside
-the doctest fence have since been repointed. They now cite `runner.rs:524` (`spec/SPECIFICATION.md:6104`,
+the doctest fence have since been repointed. They now cite `runner.rs:524` (`spec/SPECIFICATION.md:6292`,
 `:6045`, `:6173`), which is inside `run_projection`'s signature (the function starts at `:514`, and
 `:524` is `C: Codec,`), so they are no longer in the fence, but they are still not on the `pub async
 fn` line. Phase 18 rewrites this signature to take `Chunk`, and the citations drift again unless

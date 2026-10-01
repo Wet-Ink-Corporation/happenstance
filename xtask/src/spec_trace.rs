@@ -2851,14 +2851,19 @@ fn collect_cases(doc: &str) -> BTreeSet<String> {
 /// disagree with the array beneath it.
 const UNCLAIMED_PENDING_ADR: [(&str, &str); 3] = [
     (
-        "k_disjoint_boundaries_admit_exactly_k_commits",
+        "k_disjoint_boundaries_never_conflict",
         "the central DCB independence proposition — that commands sharing no \
          consistency boundary do not conflict — is enforced by this rule and \
-         stated by no clause. The word \"disjoint\" does not appear in the \
-         specification. ES-25's *only if* half forbids the false-positive \
-         direction and does not say this, so claiming it there would assert \
-         that a FROZEN clause contains a proposition it does not. Owed: an ADR, \
-         either widening ES-25 or minting a clause",
+         stated by no clause. No clause's normative text uses the word \
+         \"disjoint\"; ES-43's rationale does, and binds nothing. ES-25's \
+         *only if* half forbids the false-positive direction and does not \
+         say this, so claiming it there would assert \
+         that a FROZEN clause contains a proposition it does not. Since \
+         ADR-0077 the rule enforces it narrowed: disjoint contenders are never \
+         told ConditionViolated and at least one commits, but a Busy refusal \
+         (ES-43) passes, and the owner ruled at phase 17 that independence is a \
+         promise about conflict, not liveness (wi-2ab1f3). Owed: an ADR, either \
+         widening ES-25 or minting a clause, in that form",
     ),
     (
         "ops_agree_with_the_model",
@@ -3314,7 +3319,7 @@ mod tests {
 
     /// The only test that touches the real tree, and it touches it through the
     /// existing helpers rather than around them. `ES-1` and `VT-1` are declared
-    /// at `spec/SPECIFICATION.md:2556` and `:626`.
+    /// at `spec/SPECIFICATION.md:2559` and `:626`.
     #[test]
     fn clause_ids_reads_the_pinned_specification() {
         let ids = clause_ids(&workspace_root().unwrap())

@@ -2940,7 +2940,7 @@ struct Racer {
     /// [`Declared::expect`]'s twin, and this family needs it more rather than
     /// less. Two of the five rules carry several assertions, and two different
     /// stores fail
-    /// `k_disjoint_boundaries_admit_exactly_k_commits` for *opposite* reasons —
+    /// `k_disjoint_boundaries_never_conflict` for *opposite* reasons —
     /// `RacingProbeStore` elects too many winners, `GlobalVersionStore` elects
     /// none. Without the pin, either could quietly start failing the other's
     /// assertion and the table would stay green while both provenance
@@ -3011,7 +3011,7 @@ const RACERS: &[Racer] = &[
     // `mutant_registry_is_exhaustive` rejects a `Declared` whose `fails` list is
     // empty, and a probe-then-insert store fails *no* sequential rule — that is
     // the entire content of the defect. A concurrency rule's wrong store belongs
-    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:187-190` says
+    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:194-197` says
     // so in prose where the harness says it in code
     // (`mutant_registry_is_exhaustive`, below). Recorded on the row rather than
     // in a commit message because "add a `BEGIN DEFERRED` row to `REGISTRY`" is
@@ -3022,7 +3022,7 @@ const RACERS: &[Racer] = &[
         name: "RacingProbeStore",
         fails: &[
             "exactly_one_of_n_contenders_commits",
-            "k_disjoint_boundaries_admit_exactly_k_commits",
+            "k_disjoint_boundaries_never_conflict",
         ],
         provenance: "`BEGIN DEFERRED` — or no `BEGIN` at all — then `SELECT 1 FROM events \
              WHERE …`, then `INSERT`, with nothing holding a write lock across the \
@@ -3040,7 +3040,7 @@ const RACERS: &[Racer] = &[
         expect: &[
             ("exactly_one_of_n_contenders_commits", "may commit"),
             (
-                "k_disjoint_boundaries_admit_exactly_k_commits",
+                "k_disjoint_boundaries_never_conflict",
                 "must elect at most one winner",
             ),
         ],
@@ -3048,7 +3048,7 @@ const RACERS: &[Racer] = &[
     Racer {
         kind: RacerKind::Racing,
         name: "GlobalVersionStore",
-        fails: &["k_disjoint_boundaries_admit_exactly_k_commits"],
+        fails: &["k_disjoint_boundaries_never_conflict"],
         provenance: "optimistic concurrency control on a single version number: a Durable \
              Object with one `version` key, `UPDATE … WHERE version = ?`, or a \
              `SERIALIZABLE` adapter mapping `40001 serialization_failure` onto \
@@ -3056,10 +3056,7 @@ const RACERS: &[Racer] = &[
              contending with every other",
         // The opposite side of the same rule, which is why the pin exists: this
         // store elects *no* winner on the boundaries it never touched.
-        expect: &[(
-            "k_disjoint_boundaries_admit_exactly_k_commits",
-            "elected no winner",
-        )],
+        expect: &[("k_disjoint_boundaries_never_conflict", "elected no winner")],
     },
     Racer {
         kind: RacerKind::Racing,
@@ -3104,6 +3101,50 @@ const RACERS: &[Racer] = &[
             "part-written",
         )],
     },
+    // ES-43's mutant, and the only row here whose defect is in the *answer*
+    // rather than in the log. It is wrong in one way and five rules see it,
+    // because every rule that reconciles what it was told with what the store
+    // holds finds a batch nobody acknowledged. Only
+    // `append_returns_the_callers_own_last_position` passes it: that rule skips
+    // a busy contender, having no returned position to check. The headline is
+    // `a_busy_append_left_nothing_behind`, the one rule that asks the
+    // question by name. The others are anchors that happen to reconcile.
+    Racer {
+        kind: RacerKind::Racing,
+        name: "BusyAfterWriteStore",
+        fails: &[
+            "exactly_one_of_n_contenders_commits",
+            "k_disjoint_boundaries_never_conflict",
+            "positions_are_unique_under_concurrent_appends",
+            "a_busy_append_left_nothing_behind",
+            "a_concurrent_reader_never_sees_a_partial_batch",
+        ],
+        provenance: "a deadline around the whole append — `tokio::time::timeout(append)` or \
+             a driver's statement timeout — that fires after `COMMIT` was sent and \
+             is classified as `AppendError::Busy`, or an adapter that reclassifies \
+             every `SQLITE_BUSY` as `Busy` without asking whether its rows were \
+             already written. The batch is committed and the caller is told it \
+             took no effect, so an unconditional retry writes it twice. ES-43 \
+             requires an outcome the store cannot vouch for to stay `Store`",
+        expect: &[
+            // The winner was told `Busy` and the rest were rejected by its
+            // batch: no winner, which is the floor, not the ceiling.
+            (
+                "exactly_one_of_n_contenders_commits",
+                "no contender committed",
+            ),
+            ("k_disjoint_boundaries_never_conflict", "elected no winner"),
+            (
+                "positions_are_unique_under_concurrent_appends",
+                "nothing more",
+            ),
+            ("a_busy_append_left_nothing_behind", "was refused as `Busy`"),
+            (
+                "a_concurrent_reader_never_sees_a_partial_batch",
+                "and nothing more",
+            ),
+        ],
+    },
 ];
 
 /// Hands every racing fixture type to `$callback`.
@@ -3119,6 +3160,7 @@ macro_rules! for_each_racer {
             crate::racers::RacingSequenceFixture,
             crate::racers::GlobalHeadFixture,
             crate::racers::RowAtATimeFixture,
+            crate::racers::BusyAfterWriteFixture,
         }
     };
 }
@@ -5068,7 +5110,7 @@ mod mutation_coverage {
                 .iter()
                 .any(|row| row.kind == RacerKind::ConformantControl),
             "no conformant control is registered for the concurrency family, so \
-             its five rules have only ever been passed by stores registered as \
+             its six rules have only ever been passed by stores registered as \
              defective — which is the vacuity of CF-5 reintroduced in the one \
              family whose rules are macro-emitted and have no `REGISTRY` row to \
              fall back on"

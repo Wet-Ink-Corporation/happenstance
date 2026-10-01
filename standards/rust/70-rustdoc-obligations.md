@@ -321,7 +321,7 @@ trait would have met ES-30. Without it the trade is re-argued by whoever
 remembers it, and in the meantime a blanket body no adapter can override has
 displaced SQLite's `SELECT max(position)` fast path.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:287 (Why this is required rather than provided)` ·
-`crates/happenstance-core/src/store.rs:298 (where Self: Sync)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:292 (Why this is required rather than provided)` ·
+`crates/happenstance-core/src/store.rs:303 (where Self: Sync)` ·
 [SPECIFICATION ES-30](../../spec/SPECIFICATION.md) ·
 [CONTRIBUTING §Style](../../CONTRIBUTING.md)

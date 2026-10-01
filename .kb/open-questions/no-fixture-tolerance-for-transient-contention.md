@@ -2,7 +2,7 @@
 id: kb-open-question-testkit-contention-tolerance-001
 title: A busy store and a broken store are the same Attempt, and the suite cannot tell them apart
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   CF-33 is [FROZEN] and forbids a conformance rule a clock, an elapsed-time measurement or an
@@ -24,9 +24,19 @@ summary: >-
   the other way. Both live arms are gated by the same instrument, which does not exist. Forced by
   the first adapter whose conformance run fails on contention rather than on conformance, and by
   whoever next proposes changing CONTENDERS.
+  Resolved 2026-09-30 by kb-decision-0077, with the per-error arm: AppendError::Busy(E) is added
+  to happenstance-core and promised at 1.0, meaning refused before any effect, nothing written,
+  safe to re-run, with an ambiguous outcome kept as Store(E). The typed commit loop retries it
+  inside the same Retry bound. contend_next now refuses as Busy. Five concurrency rules are
+  re-spelled per error with structural floors (at least one commit, unique positions among the
+  commits, and a boundary with no winner rejected nobody), which narrows what
+  k_disjoint_boundaries_never_conflict enforces: a Busy refusal between disjoint
+  boundaries now passes it. a_busy_append_left_nothing_behind with the BusyAfterWriteStore mutant holds the
+  no-effect half, as ES-43. The fixture-side tolerance is rejected, and CONTENDERS stays 64.
 depends_on:
   - kb-decision-0042
 related:
+  - kb-decision-0077
   - kb-decision-0034
   - kb-decision-0022
   - kb-decision-0010
@@ -48,7 +58,7 @@ source_paths:
   - crates/happenstance-testkit/src/faulty.rs
   - crates/happenstance-testkit/tests/contended_store_instruments.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-09-30
 ---
 
 # A busy store and a broken store are the same Attempt, and the suite cannot tell them apart
@@ -57,7 +67,7 @@ last_reviewed: 2026-09-29
 
 `crates/happenstance-testkit/src/concurrency.rs` declares `pub const CONTENDERS: usize = 64` and
 runs the shipped concurrency rules against that many simultaneous handles onto one fixture. CF-33
-(`spec/SPECIFICATION.md:8910`) is `[FROZEN]`: *"No conformance rule may read a clock, measure
+(`spec/SPECIFICATION.md:9098`) is `[FROZEN]`: *"No conformance rule may read a clock, measure
 elapsed time, or assert an operation count."* The rule exists so a conformance run is deterministic
 and portable — no wall-clock deadline, no watchdog, nothing that varies with the machine — and its
 cost is unavoidable given what it forbids: a store contended for a moment longer than usual and a
@@ -77,7 +87,7 @@ experiment), so nothing failed — but an adapter can now be contended inside th
 configuration without being wrong, and the suite has no vocabulary to say that is what happened.
 
 **The defect is three rules, not one classification arm.** `Attempt` is private
-(`concurrency.rs:248`), so a fourth arm costs nothing in semver — but re-spelling it repairs only
+(`concurrency.rs:280`), so a fourth arm costs nothing in semver — but re-spelling it repairs only
 `exactly_one_of_n_contenders_commits`'s `failures.is_empty()` assertion. The other two sites fail on
 a *count*: `positions_are_unique_under_concurrent_appends` asserts `committed.len() == CONTENDERS`,
 because an unconditional append has nothing to be rejected by, and
@@ -139,7 +149,7 @@ artefacts and the status table in the same commit or recreate the discrepancy th
 ## Amended 2026-09-21 — the instrument exists, and it has already told the two arms apart
 
 **The missing instrument was built to the paragraph above almost word for word, and it was not a
-neutral tool.** `SendFaultyStore::contend_next` (`crates/happenstance-testkit/src/faulty.rs:429`,
+neutral tool.** `SendFaultyStore::contend_next` (`crates/happenstance-testkit/src/faulty.rs:439`,
 and `FaultyStore::contend_next` at `:333`) is the decorator this atom specified: it wraps
 `MemoryEventStore`, refuses the next *n* appends as
 `AppendError::Store(FaultyStoreError::Contended)` (`:556`), and lets the rest through. So the
@@ -149,8 +159,8 @@ this section records is that the same paragraph's second claim — that the inst
 
 **The result is asymmetric, and it is the finding.**
 `a_retry_loop_gated_on_the_dcb_signal_never_retries_a_busy_store`
-(`crates/happenstance-testkit/tests/contended_store_instruments.rs:290`) drives two identically
-armed contended stores, one per retry strategy. Gated on `AppendError::is_condition_violated` (`happenstance-core/src/error.rs:253`) —
+(`crates/happenstance-testkit/tests/contended_store_instruments.rs:335`) drives two identically
+armed contended stores, one per retry strategy. Gated on `AppendError::is_condition_violated` (`happenstance-core/src/error.rs:310`) —
 the *only* classifier the port offers a caller — the loop retries zero times and is left holding a
 refusal it cannot name, because that predicate answers `false` for a busy store exactly as it does
 for a broken one. Gated on the store channel instead, the loop retries once and lands. The
@@ -186,7 +196,7 @@ arms no longer cost the same to try.
 
 **Classification: on phase 17's list, though additive at the type level**
 (`runbook/phases/17-breaking-window.md`; `kb-decision-0066`). `AppendError` is
-`#[non_exhaustive]` (`crates/happenstance-core/src/error.rs:213-214`), so adding `Busy` breaks
+`#[non_exhaustive]` (`crates/happenstance-core/src/error.rs:223-224`), so adding `Busy` breaks
 no signature, and a defaulted `Fixture` const is additive under ADR-0042. It is decided in the
 window anyway. Adapters would have to reclassify busy refusals they report today as `Store(E)`,
 a behaviour change that belongs in `0.4.0`. And whether 1.0 promises the variant at all is a
@@ -194,3 +204,38 @@ statement about 1.0.
 
 The 2026-09-21 amendment stands: the fixture-side arm can be prototyped with `contend_next` and
 the core arm cannot. **Owner now: phase 17.**
+
+## Closed — 2026-09-30
+
+**Superseded by `kb-decision-0077`** (phase 17, lane L5), which takes the per-error arm. The
+2026-09-21 amendment found that the per-error arm could not be built in the testkit until
+`happenstance-core` offered something to match on. `AppendError::Busy(E)` is that thing:
+
+- **The classifier conflation is gone at the port.** `AppendError::Busy` means *refused before
+  any effect, nothing written, safe to re-run*, and `is_busy()` asks it. An outcome an adapter
+  cannot vouch for, such as a lost commit acknowledgement, stays `Store(E)`, so the new variant
+  cannot be used to launder an unknown outcome into a retry.
+- **The instrument moved with it.** `contend_next` now refuses as
+  `AppendError::Busy(FaultyStoreError::Contended)`. It is unreleased, so the move is free.
+  `a_retry_loop_gated_on_the_dcb_signal_never_retries_a_busy_store` shows both halves: a loop
+  asking only `is_condition_violated` still stalls, and one that also asks `is_busy` gets through.
+- **The three rules change what they assert, and this is not a tolerance.** Each contender
+  commits, or is `ConditionViolated` where a condition exists, or is `Busy`. At least one commits,
+  and positions are unique among the commits. A `Store` answer still fails. The new rule
+  `a_busy_append_left_nothing_behind`, whose mutant is `BusyAfterWriteStore`, reads a busy
+  contender's unique tag back and finds nothing. The floor and that rule are what separate this
+  from the *measuring luck* the 2026-09-21 amendment warned against. `CONTENDERS` stays 64.
+  When the rules were re-spelled, the count of three proved short. Two more racing rules
+  failed on any refusal as well: `k_disjoint_boundaries_never_conflict` and
+  `a_concurrent_reader_never_sees_a_partial_batch`. All five now read each contender per
+  error. The first also gained a per-boundary floor: a boundary with no winner must have
+  rejected nobody. ES-43's prose records this. The same re-spelling **narrows** the
+  independence proposition that rule enforces: a store that refuses disjoint contenders as
+  `Busy` now passes it, which ES-43 admits and live PostgreSQL does. ADR-0077 records the
+  narrowing, and `kb-open-question-disjoint-boundaries-no-clause-001` carries the question
+  forward.
+- **Three adapters reclassify**: SQLite's pre-write `BUSY` and `LOCKED`, Postgres's `40001` after
+  its budget, and Neon's `40001` after `SERIALISATION_ATTEMPTS`. Cloudflare never emits `Busy`.
+
+`two_rules_reject_a_store_that_is_merely_contended`, which this atom said would be *deleted or
+inverted* by whichever remedy was chosen, is inverted in the same lane. ES-43 is the clause.

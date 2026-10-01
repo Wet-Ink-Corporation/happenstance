@@ -194,7 +194,7 @@ untestable rather than undetected.
 
 **Evidence.** `crates/happenstance-testkit/src/lib.rs:632 (__conformance_fixture() -> impl $crate::__private::Fixture)` ·
 `crates/happenstance-testkit/src/registry.rs:40 (which it could not know)` ·
-`crates/happenstance-testkit/src/concurrency.rs:1255 (impl $crate::__private::ConcurrentFixture)`
+`crates/happenstance-testkit/src/concurrency.rs:1502 (impl $crate::__private::ConcurrentFixture)`
 
 ## RS-41-5. Enforce a caller-side obligation with `#[must_use = "…"]`, and write the consequence into the message.
 

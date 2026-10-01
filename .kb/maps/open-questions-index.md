@@ -218,7 +218,10 @@ what the question is, not its evidence. The last two were added by the
   closes. Amended 2026-09-07: ADR-0050 (`kb-decision-0050`) narrows
   `StringifiedThrow` to `pub(crate)`, endorsing ES-6's wrapped-driver-error shape without settling
   whether the wrapped type is part of the promise; two stale spec citations on this atom were
-  repointed to their live lines in the same pass.
+  repointed to their live lines in the same pass. Amended 2026-09-30: sub-question 4 is written
+  into ES-6's prose under `kb-decision-0066` §4/§5 — payloads are inside an adapter's 1.0 promise,
+  with the census by crate and `Busy(E)` named beside `Store(E)` (`kb-decision-0077`);
+  sub-questions 1–3 stay open with no phase.
 - **Open** — [`es-7-and-vt-9-provisional-markers.md`](../open-questions/es-7-and-vt-9-provisional-markers.md)
   (`kb-open-question-provisional-falsifiers-001`) — ES-7 and VT-9 are
   `[PROVISIONAL]` and each names a falsifier that no longer discriminates.
@@ -548,7 +551,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   Added 2026-09-04. **Partly answered 2026-09-07** by `kb-decision-0053`: the row-and-byte shape
   (`MAX_PAGE_BYTES_PER_STATEMENT`) lands for `0.2.0`; a caller-stated budget (Option B) is
   explicitly not taken, so the question stays open on that half.
-- **Open** — [`no-fixture-tolerance-for-transient-contention.md`](../open-questions/no-fixture-tolerance-for-transient-contention.md)
+- **Superseded** — [`no-fixture-tolerance-for-transient-contention.md`](../open-questions/no-fixture-tolerance-for-transient-contention.md)
   (`kb-open-question-testkit-contention-tolerance-001`) — CF-33 forbids a
   conformance rule a clock, an elapsed-time measurement or an
   operation-count assertion, which guarantees a momentarily-busy store and a
@@ -561,11 +564,16 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   rather than `Attempt::Failed`; `CONTENDERS` has already moved once after publication,
   unversioned (8 to 64), so a lowering to 8 would be a revert to the published value. Amended
   2026-09-21: the blocking instrument now exists (`FaultyStore::contend_next`,
-  `crates/happenstance-testkit/src/faulty.rs:333`) and discriminates a merely-contended store from
+  `crates/happenstance-testkit/src/faulty.rs:336`) and discriminates a merely-contended store from
   a broken one at the fixture-arm grain; `kb-decision-0065` lowers the observed red rate (0 in 16
   vs. 7 in 8 at `--test-threads=1`) but the classifier-level conflation stands unchanged, since
   `AppendError::is_condition_violated` is the only signal the port offers and answers `false` for a
   busy store exactly as for a broken one.
+  **Resolved 2026-09-30** by `kb-decision-0077`, with the per-error arm: `AppendError::Busy(E)` is
+  promised at 1.0 (refused before any effect, nothing written, safe to re-run; an ambiguous outcome
+  stays `Store(E)`), the typed commit loop retries it inside the same `Retry` bound, and ES-43
+  holds it with `a_busy_append_left_nothing_behind` and the three concurrency rules re-spelled per
+  error. The fixture-side tolerance is rejected.
 - **Superseded** — [`remint-identity-precondition-is-trust-only.md`](../open-questions/remint-identity-precondition-is-trust-only.md)
   (`kb-open-question-remint-precondition-trust-only-001`) —
   `SqliteEventStore::remint_identity`'s own test runs same-file,
@@ -710,7 +718,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
-  their live lines (`spec/SPECIFICATION.md:9201-9226`, `:9021-9034`), both stale as previously cited.
+  their live lines (`spec/SPECIFICATION.md:9389-9414`, `:9021-9034`), both stale as previously cited.
 - **Open** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the

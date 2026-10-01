@@ -61,9 +61,9 @@ against logs of tens of events. The buffering is invisible until the first
 production backfill loads a million-event replay into memory, which is the
 outcome returning a stream at all exists to prevent.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1825 (needs no pin)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1862 (needs no pin)` ·
 `crates/happenstance-postgres/src/read_stream.rs:350 (the design above, and it is what makes every field)` ·
-`crates/happenstance-neon/src/event_store.rs:1379 (Every field is)` ·
+`crates/happenstance-neon/src/event_store.rs:1400 (Every field is)` ·
 `crates/happenstance-testkit/src/registry.rs:327 (the alternative — hand-writing a)` ·
 [ES-42](../../spec/SPECIFICATION.md)
 
@@ -121,7 +121,7 @@ deliver — ends the stream mid-replay. A truncated read is indistinguishable fr
 a legitimately short one, so the consumer rebuilds a decision model from half a
 log and appends against it.
 
-**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:2294 (std::mem::replace(&mut this.state)` ·
+**Evidence.** `crates/happenstance-sqlite/src/event_store.rs:2331 (std::mem::replace(&mut this.state)` ·
 `crates/happenstance-postgres/src/read_stream.rs:355 (Taking the state by value)` ·
 [ES-11](../../spec/SPECIFICATION.md) *(no visible event may be omitted)*
 

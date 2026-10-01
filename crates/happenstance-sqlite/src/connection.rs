@@ -71,7 +71,9 @@ pub const SYNCHRONOUS: i64 = 1;
 /// row, so what fails is **liveness**, in the one place CF-33 guarantees the
 /// suite cannot diagnose it: `SQLITE_BUSY` → `AppendError::Store` →
 /// `Attempt::Failed` → a red rule telling an adapter author their store is
-/// wrong when nothing about it is.
+/// wrong when nothing about it is. That chain was true when this value was
+/// chosen; ADR-0077 has since cut its second link, and the section below says
+/// what that changed.
 ///
 /// Fifteen was then measured rather than reasoned, on **this** adapter rather
 /// than on the experiment's candidate — which is what closes that experiment's
@@ -98,17 +100,23 @@ pub const SYNCHRONOUS: i64 = 1;
 /// fewer cores measured *better*, by about 450x from twenty cores to one, so a
 /// smaller CI runner sits in the safer regime rather than the riskier one.
 ///
-/// # What this does **not** fix
+/// # What this does **not** fix, and what did
 ///
-/// A store that is momentarily contended and a store that is wrong still
-/// arrive as the same failed `Attempt`. Raising the cap lowers the *rate* at
-/// which that conflation bites; it does not remove it, and it cannot — CF-33
-/// is `[FROZEN]` and denies a rule the clock that would tell them apart. That
-/// question is the testkit's, not this constant's, and it is owed its own
-/// decision:
-/// `.kb/open-questions/no-fixture-tolerance-for-transient-contention.md`. The
-/// instrument it was blocked on now exists —
-/// `happenstance_testkit::FaultyStore::contend_next`.
+/// Raising the cap lowered the *rate* at which a momentarily contended store
+/// and a wrong one arrived as the same failed `Attempt`; it could not remove
+/// the conflation, because CF-33 is `[FROZEN]` and denies a rule the clock that
+/// would tell them apart. The channel did: ADR-0077 added
+/// `AppendError::Busy`, and a `BEGIN IMMEDIATE` that runs out this timeout now
+/// reports through it — see `begin_error` in the event store — so the
+/// concurrency rules accept the refusal as legitimate, under structural floors,
+/// rather than failing the adapter for it.
+///
+/// **The value still matters, and for the same reason it was raised.** A busy
+/// contender is not a commit: the rules still require at least one commit and a
+/// store where every contender is busy has made no progress, and an application
+/// retrying `Busy` pays for every one it receives. Fifteen seconds keeps
+/// `Busy` for a writer genuinely stuck behind another rather than for one
+/// that merely queued behind 63 others.
 pub const BUSY_TIMEOUT_MS: u64 = 15_000;
 
 /// Opens (creating if absent) the database at `path` and configures it.
@@ -205,7 +213,11 @@ fn attempt_wal(connection: &Connection) -> rusqlite::Result<()> {
 }
 
 /// Whether `error` is the driver saying the database was locked.
-fn is_busy(error: &rusqlite::Error) -> bool {
+///
+/// Shared with the event store, which asks it of `BEGIN IMMEDIATE` and of
+/// nothing later: that is where an append learns it did not get the write lock,
+/// and the only place this crate can say the batch took no effect.
+pub(crate) fn is_busy(error: &rusqlite::Error) -> bool {
     matches!(
         error,
         rusqlite::Error::SqliteFailure(failure, _)

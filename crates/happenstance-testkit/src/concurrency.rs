@@ -135,6 +135,29 @@
 //! `spawns_from_generic` hit and solved the same way — it collapses to a
 //! `usize` — and it is the line that relaxes if ES-6 is ever settled.
 //!
+//! # A busy refusal is an answer, and each rule has a floor under it
+//!
+//! Until ADR-0077 every rule here read any answer other than a commit or a
+//! violated condition as a failure. That made a store that was merely
+//! contended, one that timed out on a lock or ran out of serialisation
+//! retries, look exactly like a broken one. ES-43 gave that refusal a channel
+//! of its own, [`AppendError::Busy`], which promises that nothing was written.
+//! So every rule now reads each contender **per error**. A commit is a win,
+//! `ConditionViolated` is a loss where a condition exists, and `Busy` is
+//! neither. Anything else, `Store` included, still fails the rule.
+//!
+//! What stops that from being a tolerance is that each rule's **floor is
+//! structural**, not a fraction. At least one contender commits, because a store
+//! where everybody is busy has made no progress. A boundary with no winner has
+//! rejected nobody, because a violation needs a matching event to have landed.
+//! Every committed batch is in the store, and nothing else is. None of those
+//! reads a clock or counts operations, so CF-33 has nothing to object to. And
+//! none says what share of contenders may be busy, which is what CF-34's
+//! `Rejects:` forbids. The half ES-43 adds, that a `Busy` answer left
+//! nothing behind, is
+//! [`a_busy_append_left_nothing_behind`](rules::a_busy_append_left_nothing_behind)'s,
+//! and `BusyAfterWriteStore` in the proof artefact is the store it rejects.
+//!
 //! # This family carries its own enumeration and its own emitter
 //!
 //! CF-22 requires one enumeration per rule *family*.
@@ -232,14 +255,14 @@ where
 /// every one of thirty races with no file-descriptor or connection ceiling
 /// reached, exactly one winner per race at both counts, and `busy = 0` and
 /// `failed = 0` throughout. **The cost is wall time and it is one order of
-/// magnitude** — roughly 10x to 20x per race — which for a five-rule family is
-/// the difference between a fraction of a second and a handful of seconds per
-/// adapter per CI run.
+/// magnitude** — roughly 10x to 20x per race — which for what was then a
+/// five-rule family is the difference between a fraction of a second and a
+/// handful of seconds per adapter per CI run.
 ///
 /// The cost is also **workspace-wide**, and that is the part worth stating here
 /// rather than in a commit message: this constant is what
 /// `crates/happenstance-testkit/tests/memory_concurrency_conformance.rs`, the
-/// five racing stores behind
+/// racing stores behind
 /// `mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim`,
 /// and every future fixture in any adapter crate run at. A fixture whose backing
 /// store cannot open sixty-five handles onto one medium now deadlocks where it
@@ -259,6 +282,10 @@ enum Attempt {
     Committed(SequencePosition),
     /// The store reported `ConditionViolated`, which is the DCB retry signal.
     Rejected,
+    /// The store refused the append as `Busy`: a transient refusal that, by
+    /// ES-43, wrote nothing. A legitimate answer under contention, and never a
+    /// commit, so every rule's floor counts it as neither a win nor a failure.
+    Busy,
     /// Anything else: a store error, or an empty batch the rule did not send.
     Failed(String),
 }
@@ -270,6 +297,7 @@ impl Attempt {
         match result {
             Ok(position) => Self::Committed(position),
             Err(AppendError::ConditionViolated(_)) => Self::Rejected,
+            Err(AppendError::Busy(_)) => Self::Busy,
             Err(other) => Self::Failed(format!("{other}")),
         }
     }
@@ -280,6 +308,19 @@ impl Attempt {
             Self::Committed(position) => Some(*position),
             _ => None,
         }
+    }
+
+    /// Whether the store refused this attempt as `Busy`.
+    const fn is_busy(&self) -> bool {
+        matches!(self, Self::Busy)
+    }
+
+    /// Whether this attempt is anything an **unconditional** append may answer
+    /// under contention: a commit, or a `Busy` refusal (ES-43). A violated
+    /// condition is not on the list, because there was no condition to
+    /// violate.
+    const fn is_unconditional_outcome(&self) -> bool {
+        matches!(self, Self::Committed(_) | Self::Busy)
     }
 }
 
@@ -353,7 +394,7 @@ where
 pub mod rules {
     // Every rule panics on failure — that is what a test does, and a `# Panics`
     // section on each of them would say "panics when the adapter is
-    // non-conformant" five times over.
+    // non-conformant" six times over.
     #![allow(clippy::missing_panics_doc)]
 
     use core::sync::atomic::{AtomicBool, Ordering};
@@ -363,7 +404,9 @@ pub mod rules {
     };
 
     use super::{Attempt, CONTENDERS, append_ok, connect_many, race, read_ok, sorted_positions};
-    use crate::fixtures::{condition_after, event, query_of, query_of_types, tagged_event};
+    use crate::fixtures::{
+        condition, condition_after, event, query_of, query_of_types, tagged_event,
+    };
     use crate::{Fixture, RuleOutcome};
 
     /// Of `CONTENDERS` handlers that decided from one snapshot, exactly one
@@ -418,20 +461,32 @@ pub mod rules {
             .collect();
         assert!(
             failures.is_empty(),
-            "a contender must either commit or be told `ConditionViolated`; \
-             anything else is a store failure under contention rather than the \
-             concurrency signal. Got {failures:?}"
+            "a contender must commit, be told `ConditionViolated`, or be refused \
+             as `Busy` (ES-43); anything else is a store failure under \
+             contention rather than a signal a caller can act on. Got \
+             {failures:?}"
         );
 
         let committed: Vec<SequencePosition> =
             attempts.iter().filter_map(Attempt::position).collect();
-        assert_eq!(
-            committed.len(),
-            1,
-            "exactly one of {CONTENDERS} handlers that decided from the same \
+        // Two assertions rather than one `assert_eq!(committed.len(), 1)`, for
+        // `k_disjoint_boundaries_never_conflict`'s reason: too many
+        // winners and none at all are opposite defects, and the proof artefact
+        // pins a different store to each.
+        assert!(
+            committed.len() <= 1,
+            "at most one of {CONTENDERS} handlers that decided from the same \
              snapshot may commit — more than one means the consistency boundary \
-             is not enforced under contention, none means the store rejected a \
-             decision nothing had invalidated. Attempts: {attempts:?}"
+             is not enforced under contention. Attempts: {attempts:?}"
+        );
+        assert!(
+            !committed.is_empty(),
+            "no contender committed, out of {CONTENDERS}. Neither answer the \
+             rest were given is possible without a winner: `ConditionViolated` \
+             needs a matching event to have landed, and a store that answers \
+             `Busy` to every contender has made no progress. Either the store \
+             rejected a decision nothing had invalidated, or it wrote a batch \
+             and told its caller otherwise. Attempts: {attempts:?}"
         );
 
         let observer = fixture.connect().await;
@@ -449,8 +504,9 @@ pub mod rules {
     /// Contenders on *different* consistency boundaries do not conflict.
     ///
     /// `BOUNDARIES` disjoint queries, `PER_BOUNDARY` contenders each, all
-    /// racing at once: every boundary must elect exactly one winner, so exactly
-    /// `BOUNDARIES` batches land.
+    /// racing at once: against a store that refuses nobody, every boundary
+    /// elects exactly one winner, so exactly `BOUNDARIES` batches land. A
+    /// `Busy` refusal loosens that to at most one; see the last section.
     ///
     /// # Why this is the shape of the runbook's "K seats" and not its letter
     ///
@@ -475,9 +531,24 @@ pub mod rules {
     ///
     /// The false-negative direction is checked in the same breath: a store that
     /// let two contenders onto one boundary fails the per-boundary count.
-    pub async fn k_disjoint_boundaries_admit_exactly_k_commits<F>(
-        open: impl AsyncFn() -> F,
-    ) -> RuleOutcome
+    ///
+    /// # What the name promises
+    ///
+    /// Since ADR-0077 the rule holds *at most* one winner per boundary and
+    /// *at least* one across all of them, not exactly `BOUNDARIES`. A contender
+    /// refused as [`AppendError::Busy`](happenstance_core::AppendError::Busy)
+    /// is neither a win nor a loss, so a
+    /// boundary whose every contender was busy passes with no winner — and a
+    /// store that refuses disjoint contenders as `Busy`, a global lock or an
+    /// SSI false positive included, passes the rule. ES-43 admits that, and
+    /// live PostgreSQL does it. What the rule rejects is a *conflict*:
+    /// `ConditionViolated` on a boundary nothing had committed to, which is
+    /// `SpuriousConflictStore` and `GlobalVersionStore`. Independence is a
+    /// promise about conflict, not liveness — `Busy` wrote nothing and the
+    /// typed loop retries it — which the owner decided at phase 17, and the
+    /// rule was renamed from `k_disjoint_boundaries_admit_exactly_k_commits`
+    /// to say so.
+    pub async fn k_disjoint_boundaries_never_conflict<F>(open: impl AsyncFn() -> F) -> RuleOutcome
     where
         F: Fixture,
         F::Store: EventStore + Send,
@@ -537,54 +608,72 @@ pub mod rules {
             .collect();
         assert!(
             failures.is_empty(),
-            "a contender must either commit or be told `ConditionViolated`. Got \
-             {failures:?}"
+            "a contender must commit, be told `ConditionViolated`, or be refused \
+             as `Busy` (ES-43). Got {failures:?}"
+        );
+        assert!(
+            attempts.iter().any(|attempt| attempt.position().is_some()),
+            "no contender committed on any of {BOUNDARIES} boundaries, so the \
+             store made no progress at all. All attempts: {attempts:?}"
         );
 
         let observer = fixture.connect().await;
         for (seat, query) in queries.iter().enumerate() {
-            let won: Vec<&Attempt> = attempts
+            // Winners and rejections on this boundary, counted in one pass.
+            let (won, rejected) = attempts
                 .iter()
                 .enumerate()
-                .filter(|(index, attempt)| {
-                    index % BOUNDARIES == seat && attempt.position().is_some()
-                })
-                .map(|(_, attempt)| attempt)
-                .collect();
-            // Two assertions rather than one `assert_eq!(won.len(), 1)`, and the
+                .filter(|(index, _)| index % BOUNDARIES == seat)
+                .fold(
+                    (0_usize, 0_usize),
+                    |(won, rejected), (_, attempt)| match attempt {
+                        Attempt::Committed(_) => (won + 1, rejected),
+                        Attempt::Rejected => (won, rejected + 1),
+                        Attempt::Busy | Attempt::Failed(_) => (won, rejected),
+                    },
+                );
+            // Two assertions rather than one `assert_eq!(won, 1)`, and the
             // split is what makes the two failures nameable. Zero winners and
             // two winners are opposite defects — an over-broad conflict check
             // and an under-enforced condition — and a single message describing
             // both is a message that identifies neither. The proof artefact
             // pins each store to the one it is supposed to trip, which it could
             // not do while they shared a string.
+            //
+            // The floor is per boundary and structural: a boundary may end with
+            // no winner only if every contender on it was refused as `Busy`,
+            // which wrote nothing (ES-43). A `ConditionViolated` needs a
+            // matching event above the boundary, and only this boundary's own
+            // winner could have written one.
             assert!(
-                !won.is_empty(),
+                won > 0 || rejected == 0,
                 "boundary {seat} of {BOUNDARIES} elected no winner out of \
-                 {PER_BOUNDARY} contenders. Nothing had invalidated any of \
-                 them: their conditions name a query no other boundary writes \
-                 to. A store that answers `ConditionViolated` here is reporting \
-                 a conflict between commands that share nothing — a global \
-                 version check, or a serialisation failure mapped onto the DCB \
-                 retry signal. All attempts: {attempts:?}"
+                 {PER_BOUNDARY} contenders, and told {rejected} of them \
+                 `ConditionViolated`. Nothing on it had committed, and nothing \
+                 else could have invalidated them: their conditions name a \
+                 query no other boundary writes to. A store that answers \
+                 `ConditionViolated` here is reporting a conflict between \
+                 commands that share nothing — a global version check, or a \
+                 serialisation failure mapped onto the DCB retry signal — or it \
+                 wrote this boundary's batch and told its caller otherwise. All \
+                 attempts: {attempts:?}"
             );
-            assert_eq!(
-                won.len(),
-                1,
+            assert!(
+                won <= 1,
                 "boundary {seat} of {BOUNDARIES} must elect at most one winner \
-                 out of {PER_BOUNDARY} contenders, and elected {}. All of them \
-                 decided from the same snapshot and all of them named the same \
-                 query, so the condition did not hold under contention. All \
-                 attempts: {attempts:?}",
-                won.len()
+                 out of {PER_BOUNDARY} contenders, and elected {won}. All of \
+                 them decided from the same snapshot and all of them named the \
+                 same query, so the condition did not hold under contention. \
+                 All attempts: {attempts:?}"
             );
 
             let landed = read_ok(&observer, query, ReadOptions::new()).await;
             assert_eq!(
                 landed.len(),
-                1,
-                "and boundary {seat} must hold exactly the one batch it \
-                 acknowledged"
+                won,
+                "and boundary {seat} must hold exactly the batch it \
+                 acknowledged, and nothing when every contender on it was \
+                 refused as `Busy`"
             );
         }
 
@@ -623,13 +712,23 @@ pub mod rules {
             crate::block_on(async { Attempt::of(store.append(&batch, None).await) })
         });
 
+        let unexpected: Vec<&Attempt> = attempts
+            .iter()
+            .filter(|attempt| !attempt.is_unconditional_outcome())
+            .collect();
+        assert!(
+            unexpected.is_empty(),
+            "an unconditional append has nothing to be rejected by, so every \
+             contender must commit or be refused as `Busy` (ES-43). Got \
+             {unexpected:?}"
+        );
         let committed: Vec<SequencePosition> =
             attempts.iter().filter_map(Attempt::position).collect();
-        assert_eq!(
-            committed.len(),
-            CONTENDERS,
-            "an unconditional append has nothing to be rejected by, so every \
-             contender must commit. Attempts: {attempts:?}"
+        assert!(
+            !committed.is_empty(),
+            "no contender committed, out of {CONTENDERS}: every one was refused \
+             as `Busy`, and a store that makes no progress under contention has \
+             not shown it can assign a position at all. Attempts: {attempts:?}"
         );
 
         // Nothing here asserts that the *returned* positions are distinct, and
@@ -646,8 +745,11 @@ pub mod rules {
         let all = read_ok(&observer, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
-            CONTENDERS * BATCH,
-            "every event of every contender's batch must be in the store"
+            committed.len() * BATCH,
+            "the store must hold every event of every committed batch and \
+             nothing more: {} of {CONTENDERS} contenders committed a batch of \
+             {BATCH}, and a `Busy` refusal wrote nothing (ES-43)",
+            committed.len()
         );
 
         let mut positions = sorted_positions(&all);
@@ -703,10 +805,26 @@ pub mod rules {
             crate::block_on(async { Attempt::of(store.append(&batches[index], None).await) })
         });
 
+        assert!(
+            attempts.iter().any(|attempt| attempt.position().is_some()),
+            "no contender committed, out of {CONTENDERS}, so there is no \
+             returned position to check. Attempts: {attempts:?}"
+        );
+
         let observer = fixture.connect().await;
         for (index, writer) in writers.iter().enumerate() {
-            let Some(returned) = attempts[index].position() else {
-                panic!("contender {index} did not commit an unconditional append: {attempts:?}");
+            let returned = match &attempts[index] {
+                Attempt::Committed(returned) => *returned,
+                // Told nothing, so there is no returned position to check. What
+                // a busy contender left behind is
+                // `a_busy_append_left_nothing_behind`'s question, and it reads
+                // the tag this rule would have read.
+                Attempt::Busy => continue,
+                other => panic!(
+                    "contender {index} did not commit an unconditional append \
+                     and was not refused as `Busy`: {other:?}. All attempts: \
+                     {attempts:?}"
+                ),
             };
 
             let mine = read_ok(
@@ -731,6 +849,116 @@ pub mod rules {
                  the caller a checkpoint that skips somebody else's batch",
                 sorted_positions(&mine)
             );
+        }
+
+        RuleOutcome::Ran
+    }
+
+    /// An append answered `Busy` left nothing in the store.
+    ///
+    /// ES-43's no-effect half, and the half no other rule can see. A refusal
+    /// that wrote nothing and a refusal that wrote the batch return the same
+    /// value, so the only way to tell them apart is to read back what the
+    /// refused contender would have written. Each contender here appends a
+    /// batch carrying a tag of its own, so that read names exactly one caller's
+    /// events and nobody else's.
+    ///
+    /// The defect is `BusyAfterWriteStore` in the proof artefact. It commits
+    /// the batch and then answers `Busy`, which is what an adapter does when it
+    /// treats a client-side deadline that fired after `COMMIT` was sent as a
+    /// transient refusal, or reclassifies a `SQLITE_BUSY` without asking whether
+    /// the rows were already written. A caller that believes the answer re-runs
+    /// the command, and an unconditional append lands twice.
+    ///
+    /// # It observes, and does not force
+    ///
+    /// No portable way exists to make a store answer `Busy`, and ES-43 never
+    /// obliges one to. So this rule races [`CONTENDERS`] contenders and checks
+    /// every `Busy` answer it happens to get. Against a store that never
+    /// reports `Busy` it passes on its anchor alone, and that is what ES-43
+    /// asks of such a store. The deterministic arm lives in the testkit's own
+    /// `tests/contended_store_instruments.rs`, where `contend_next` makes
+    /// refusals certain.
+    ///
+    /// Each append is *conditional*, on a query only that contender writes to.
+    /// Such a condition can never legitimately be violated. It is here because
+    /// a store that retries serialisation failures only runs that path for a
+    /// conditional append, and that path is where a `Busy` is most likely to
+    /// come from.
+    ///
+    /// The committed contenders are read back too, and that anchor is not
+    /// decoration. Without it a store whose reads return nothing would pass the
+    /// `Busy` half vacuously, because an empty answer is exactly what that half
+    /// asks for.
+    pub async fn a_busy_append_left_nothing_behind<F>(open: impl AsyncFn() -> F) -> RuleOutcome
+    where
+        F: Fixture,
+        F::Store: EventStore + Send,
+    {
+        /// Events per contender. Two, so that a store which wrote part of a
+        /// batch before refusing is caught as surely as one that wrote all of it.
+        const BATCH: usize = 2;
+
+        let fixture = open().await;
+        let writers: Vec<String> = (0..CONTENDERS).map(|index| format!("b{index}")).collect();
+        let queries: Vec<Query> = writers
+            .iter()
+            .map(|writer| query_of(&["Written"], &[("writer", writer.as_str())]))
+            .collect();
+        let guards: Vec<_> = queries
+            .iter()
+            .map(|query| condition(query.clone()))
+            .collect();
+        let batches: Vec<Vec<_>> = writers
+            .iter()
+            .map(|writer| {
+                (0..BATCH)
+                    .map(|_| tagged_event("Written", &[("writer", writer.as_str())]))
+                    .collect()
+            })
+            .collect();
+
+        let stores = connect_many(&fixture, CONTENDERS).await;
+        let attempts = race(stores, |index, store| {
+            crate::block_on(async {
+                Attempt::of(store.append(&batches[index], Some(&guards[index])).await)
+            })
+        });
+
+        assert!(
+            attempts.iter().any(|attempt| attempt.position().is_some()),
+            "no contender committed, out of {CONTENDERS}, so the anchor below \
+             has nothing to read and a store whose reads return nothing would \
+             pass. Attempts: {attempts:?}"
+        );
+
+        let observer = fixture.connect().await;
+        for (index, query) in queries.iter().enumerate() {
+            let mine = read_ok(&observer, query, ReadOptions::new()).await;
+            match &attempts[index] {
+                Attempt::Busy => assert!(
+                    mine.is_empty(),
+                    "contender {index} was refused as `Busy`, and {} of its \
+                     events are in the store at {:?}. `Busy` promises that the \
+                     batch took no effect (ES-43), and a caller that believes it \
+                     runs the command again. An outcome the store cannot vouch \
+                     for must be reported as `Store`",
+                    mine.len(),
+                    sorted_positions(&mine)
+                ),
+                Attempt::Committed(_) => assert_eq!(
+                    mine.len(),
+                    BATCH,
+                    "contender {index} committed, so its batch must be in the \
+                     store whole"
+                ),
+                // A violated condition, or a store error. Neither is this
+                // rule's to judge: no other contender writes to this query, so a
+                // violation is a spurious conflict, which is
+                // `k_disjoint_boundaries_never_conflict`'s defect, and
+                // an ambiguous `Store` answer is allowed to have written.
+                Attempt::Rejected | Attempt::Failed(_) => {}
+            }
         }
 
         RuleOutcome::Ran
@@ -809,16 +1037,28 @@ pub mod rules {
             panic!("connect_many returned nothing for {WRITERS} writers and a reader");
         };
 
-        let (committed, sightings) =
+        // One attempt per batch, in `types` order: writer-major, round-minor,
+        // which is the order `observe_while_writing` joins them in.
+        let (attempts, sightings) =
             observe_while_writing(stores, reading, &batches, &types, ROUNDS, BATCH);
-        let failures: Vec<&Attempt> = committed
+        let failures: Vec<&Attempt> = attempts
             .iter()
-            .filter(|attempt| attempt.position().is_none())
+            .filter(|attempt| !attempt.is_unconditional_outcome())
             .collect();
         assert!(
             failures.is_empty(),
-            "an unconditional append has nothing to be rejected by. Got \
-             {failures:?}"
+            "an unconditional append has nothing to be rejected by, so each one \
+             must commit or be refused as `Busy` (ES-43). Got {failures:?}"
+        );
+        let committed = attempts
+            .iter()
+            .filter(|attempt| attempt.position().is_some())
+            .count();
+        assert!(
+            committed > 0,
+            "no batch committed, out of {}: every append was refused as `Busy`, \
+             so there was never a batch in flight to be caught part-written",
+            attempts.len()
         );
 
         // The read-failure half, and it comes first because a run whose reads
@@ -857,11 +1097,17 @@ pub mod rules {
         let all = read_ok(&observer, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
-            WRITERS * ROUNDS * BATCH,
+            committed * BATCH,
             "every event of every acknowledged batch must still be there once \
-             the writers have finished"
+             the writers have finished, and nothing more: {committed} of {} \
+             batches committed, and a `Busy` refusal wrote nothing (ES-43)",
+            attempts.len()
         );
-        for name in &types {
+        for (name, attempt) in types.iter().zip(&attempts) {
+            // A busy batch is `a_busy_append_left_nothing_behind`'s question.
+            if attempt.is_busy() {
+                continue;
+            }
             let found = read_ok(
                 &observer,
                 &query_of_types(&[name.as_str()]),
@@ -1005,7 +1251,7 @@ pub mod rules {
     /// What one pass of the reader saw, with the two defects kept apart.
     ///
     /// Two fields rather than one `Vec<String>`, in the shape
-    /// `k_disjoint_boundaries_admit_exactly_k_commits` uses 260 lines above and
+    /// `k_disjoint_boundaries_never_conflict` uses 260 lines above and
     /// for its stated reason: a single message describing two defects is a
     /// message that identifies neither. A batch seen half-written is ES-18. A
     /// read that fails outright is a defect this rule is entitled to name — the
@@ -1150,9 +1396,10 @@ macro_rules! for_each_concurrency_rule {
     ($($callback:tt)+) => {
         $($callback)+! {
             exactly_one_of_n_contenders_commits,
-            k_disjoint_boundaries_admit_exactly_k_commits,
+            k_disjoint_boundaries_never_conflict,
             positions_are_unique_under_concurrent_appends,
             append_returns_the_callers_own_last_position,
+            a_busy_append_left_nothing_behind,
             a_concurrent_reader_never_sees_a_partial_batch,
         }
     };

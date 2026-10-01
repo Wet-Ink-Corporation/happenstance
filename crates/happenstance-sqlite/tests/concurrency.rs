@@ -183,12 +183,16 @@ fn a_store_with_no_runtime_anywhere_reports_no_runtime() {
 ///
 /// With `CONTENDERS + 1` connections on one file, `BEGIN IMMEDIATE` against a
 /// busy database returns `SQLITE_BUSY` *immediately* unless a busy handler is
-/// configured — and that error becomes `AppendError::Store`, which
-/// `Attempt::of` maps to `Attempt::Failed`
-/// (`crates/happenstance-testkit/src/concurrency.rs:225-234`). A store that
-/// probes outside its write lock and a store that leaks `SQLITE_BUSY` fail the
-/// *same* rules and look identical in the output. Only one of those is a finding
-/// about `append`.
+/// configured. Since ADR-0077 that refusal arrives as `AppendError::Busy`, which
+/// the family accepts under its floors rather than failing — so a missing
+/// handler no longer turns this target red by itself. It turns it into a race
+/// that most contenders lose by refusal instead of by queueing, which is not
+/// what an application opening this crate gets, and a family green over that
+/// race says less about `append` than one green over the shipped setting.
+/// Before ADR-0077 the same refusal was `AppendError::Store`, and a store that
+/// probes outside its write lock and a store that leaks `SQLITE_BUSY` failed
+/// the *same* rules and looked identical in the output; the crate's own
+/// `busy_conformance` fixture is where the lowered timeout is run on purpose.
 ///
 /// `schema-migration-and-identity` already landed the timeout on the first
 /// connection. What is new under contention is that the second, third and Nth

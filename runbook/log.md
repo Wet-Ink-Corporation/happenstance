@@ -10,6 +10,22 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-09-30 — `AppendError::Busy`: a busy store is not a broken one
+
+*Uncommitted at writing; `lane/p17-busy`.*
+Phase 17, lane L5.
+
+ADR-0077 promises `AppendError::Busy` at 1.0, and `happenstance`'s commit loop
+retries it inside `Retry`. ES-43 is `[FROZEN]`, and its rule,
+`a_busy_append_left_nothing_behind`, has a mutant. Five concurrency rules accept
+`Busy` under structural floors. SQLite, Postgres and Neon report `Busy` only where
+nothing was written, and Cloudflare documents that it never does. ES-6's payload
+prose is written.
+
+**Verified.** See phase 17's session log. Neon's live half is CI's.
+
+---
+
 ## 2026-09-30 — the first breaking PR: 0.4.0 manifests, and the emitters made public
 
 *Uncommitted at writing; `lane/p17-surface-renames`.*

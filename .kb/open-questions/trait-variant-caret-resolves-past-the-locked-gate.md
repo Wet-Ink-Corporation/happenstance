@@ -100,7 +100,7 @@ written in phase 17**, with ES-7's falsifier restated to cover a consumer's unlo
 (its ES-7 row). So the owner is phase 17 even though nothing here breaks.
 
 Unchanged at `3dcba41`: the caret is still `trait-variant = "0.1.3"` (`Cargo.toml:151`), and the
-unscoped *"the gate builds `--locked`"* sentence is still at `crates/happenstance-core/src/store.rs:1189-1191`.
+unscoped *"the gate builds `--locked`"* sentence is still at `crates/happenstance-core/src/store.rs:1194-1196`.
 The minimal-versions job `kb-decision-0066` sends to phase 17 tests declared **lower** bounds. It
 does not observe a floating upper resolve, so this atom's second question is still open.
 **Owner now: phase 17.**

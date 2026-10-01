@@ -169,6 +169,14 @@ pub(crate) enum LogError {
     /// store falling over rather than by the rule's own assertion, which is the
     /// substitution CF-2 forbids.
     NullHead,
+    /// The caller's deadline elapsed before the append's answer arrived.
+    ///
+    /// `BusyAfterWriteStore`'s payload in `racers.rs`, and unproducible by a
+    /// correct store here for the reason the store exists: a deadline that fires
+    /// after `COMMIT` was sent has an *unknown* outcome, and ES-43 requires that
+    /// to be reported as `Store`. The defect is carrying it as `Busy`, which
+    /// needs a payload to carry.
+    DeadlineElapsed,
 }
 
 impl core::fmt::Display for LogError {
@@ -186,6 +194,9 @@ impl core::fmt::Display for LogError {
             Self::TooManyParameters => f.write_str("too many SQL variables"),
             Self::NullHead => {
                 f.write_str("max(position) returned NULL: the paging window has no upper bound")
+            }
+            Self::DeadlineElapsed => {
+                f.write_str("the deadline elapsed before the append was acknowledged")
             }
         }
     }

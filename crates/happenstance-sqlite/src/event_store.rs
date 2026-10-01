@@ -738,7 +738,7 @@ impl SqliteEventStore {
     ) -> Result<SequencePosition, AppendError<SqliteEventStoreError>> {
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-            .map_err(store_error)?;
+            .map_err(begin_error)?;
 
         // First, and before the guards: a condition evaluated against a file
         // this handle no longer speaks for answers a question nobody asked.
@@ -800,7 +800,7 @@ impl SqliteEventStore {
     ) -> Result<happenstance_sync::Ingested, AppendError<SqliteEventStoreError>> {
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-            .map_err(store_error)?;
+            .map_err(begin_error)?;
         check_identity(&transaction, store_id)?;
 
         let mut ingested = happenstance_sync::Ingested::default();
@@ -1067,6 +1067,33 @@ pub(crate) fn position_from_row(stored: i64) -> Result<SequencePosition, SqliteE
 /// Wraps an adapter failure as the port's store-error arm.
 fn store_error(error: impl Into<SqliteEventStoreError>) -> AppendError<SqliteEventStoreError> {
     AppendError::Store(error.into())
+}
+
+/// Classifies a failed `BEGIN IMMEDIATE`: [`AppendError::Busy`] when the write
+/// lock was not acquired, [`AppendError::Store`] for anything else.
+///
+/// # Why here, and only here
+///
+/// `SQLITE_BUSY` or `SQLITE_LOCKED` from `BEGIN IMMEDIATE` means the busy
+/// handler waited out [`BUSY_TIMEOUT_MS`](crate::connection::BUSY_TIMEOUT_MS)
+/// and the lock went elsewhere. No statement of this append has run, so nothing
+/// was written, and the same call can succeed once the holder lets go — which
+/// is all three parts of `Busy`'s contract, known rather than inferred.
+///
+/// Every later failure stays `Store`, including a busy code, and that is a
+/// choice rather than an oversight. Under WAL, once `BEGIN IMMEDIATE` holds the
+/// write lock nothing after it waits on another writer, so a busy code there is
+/// not the contention this variant names; and a failure at or after the first
+/// inserted row is one this function would have to prove rolled back, which the
+/// contract makes the adapter's burden. `AppendError::Busy`'s rule is that a
+/// store that cannot tell is not busy, and one call site is the whole of what
+/// this store can tell.
+fn begin_error(error: rusqlite::Error) -> AppendError<SqliteEventStoreError> {
+    if crate::connection::is_busy(&error) {
+        AppendError::Busy(error.into())
+    } else {
+        store_error(error)
+    }
 }
 
 /// The position violating a guard of `condition`, if one exists.
@@ -1498,6 +1525,12 @@ fn read_identity(connection: &Connection) -> Result<StoreId, SqliteEventStoreErr
 #[non_exhaustive]
 pub enum SqliteEventStoreError {
     /// The driver failed: I/O, `SQLITE_BUSY`, a constraint, a bad statement.
+    ///
+    /// On an append this arrives in one of two arms. A `SQLITE_BUSY` or
+    /// `SQLITE_LOCKED` from `BEGIN IMMEDIATE` — the write lock not acquired
+    /// within the busy timeout, before anything was written — is carried by
+    /// [`AppendError::Busy`]; every other driver failure, a busy code raised
+    /// later included, by [`AppendError::Store`].
     #[error("SQLite failed: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
@@ -1700,9 +1733,13 @@ impl SendEventStore for SqliteEventStore {
     ///   will never fit here* from *the disk is full, retry*;
     /// * a guard of the condition matched an event strictly after its boundary,
     ///   in which case the transaction rolls back and the file is unchanged;
-    /// * the driver failed — including `SQLITE_BUSY` after the configured busy
-    ///   timeout has genuinely elapsed, which is contention reported honestly
-    ///   rather than a condition violation;
+    /// * the write lock was not acquired before the configured busy timeout
+    ///   elapsed — `SQLITE_BUSY` or `SQLITE_LOCKED` from `BEGIN IMMEDIATE` —
+    ///   which is reported as [`AppendError::Busy`]: contention, before any
+    ///   statement of this append ran, so nothing was written and deciding again
+    ///   is safe. It is neither a condition violation nor a store failure;
+    /// * the driver failed in any other way, a busy code raised after
+    ///   `BEGIN IMMEDIATE` succeeded included, which is [`AppendError::Store`];
     /// * another thread panicked while holding this store's connection.
     async fn append(
         &self,
@@ -2680,6 +2717,92 @@ mod tests {
             }
         }
     }
+
+    /// A file of its own, so a second connection can hold its write lock.
+    /// Removed on drop, after the store and the holder that used it, because
+    /// Windows will not unlink an open file.
+    struct LockedFile(std::path::PathBuf);
+
+    impl LockedFile {
+        fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+            let mut path = std::env::temp_dir();
+            path.push(format!(
+                "happenstance-sqlite-busy-{}-{}.db",
+                std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ));
+            let file = Self(path);
+            file.remove();
+            file
+        }
+
+        fn remove(&self) {
+            for suffix in ["", "-wal", "-shm"] {
+                let mut path = self.0.clone().into_os_string();
+                path.push(suffix);
+                let _ = std::fs::remove_file(std::path::PathBuf::from(path));
+            }
+        }
+    }
+
+    impl Drop for LockedFile {
+        fn drop(&mut self) {
+            self.remove();
+        }
+    }
+
+    /// A write lock held by another connection past the busy timeout is
+    /// [`AppendError::Busy`], nothing is written, and the same append lands
+    /// once the lock is released — all three parts of the variant's contract,
+    /// on the one path `begin_error` classifies.
+    ///
+    /// The timeout is lowered on this handle's connection rather than waited
+    /// out: fifty milliseconds is the same code path as fifteen seconds, and the
+    /// test is about which arm the refusal arrives in, not how long it took.
+    /// A wrong implementation this rejects is the one this crate shipped until
+    /// `0.4.0` — `store_error` at `BEGIN IMMEDIATE` — which reports the same
+    /// refusal as `Store`.
+    #[tokio::test]
+    async fn a_write_lock_held_elsewhere_is_busy_and_writes_nothing() {
+        let file = LockedFile::new();
+        let store = SqliteEventStore::open(&file.0).unwrap();
+        store
+            .connection
+            .lock()
+            .unwrap()
+            .busy_timeout(core::time::Duration::from_millis(50))
+            .unwrap();
+        let holder = Connection::open(&file.0).unwrap();
+        holder.execute_batch("BEGIN IMMEDIATE").unwrap();
+
+        let event = Event::new("Blocked", b"b".to_vec()).unwrap();
+        let refused = store.append(core::slice::from_ref(&event), None).await;
+        assert!(refused.as_ref().is_err_and(AppendError::is_busy));
+        match refused {
+            Err(AppendError::Busy(SqliteEventStoreError::Sqlite(driver))) => assert!(
+                crate::connection::is_busy(&driver),
+                "the payload is the driver's own busy code: {driver}"
+            ),
+            other => panic!("a write lock held elsewhere must be `Busy`, got {other:?}"),
+        }
+
+        holder.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(
+            store.head().await.unwrap(),
+            None,
+            "a busy refusal must have written nothing"
+        );
+        let landed = store.append(&[event], None).await.unwrap();
+        assert_eq!(
+            store.head().await.unwrap(),
+            Some(landed),
+            "the same append succeeds once the holder lets go"
+        );
+
+        drop(holder);
+        drop(store);
+    }
 }
 
 #[cfg(test)]
@@ -2899,5 +3022,162 @@ mod plan_tests {
             }),
             "the arm's window did not reach the index:\n{rendered}"
         );
+    }
+}
+
+#[cfg(test)]
+mod busy_conformance {
+    //! The concurrency family against a store that is **really** busy.
+    //!
+    //! `tests/concurrency.rs` runs the family at the shipped
+    //! [`BUSY_TIMEOUT_MS`](crate::connection::BUSY_TIMEOUT_MS), where fifteen
+    //! seconds absorbs 64 contenders and no contender is ever refused — so it
+    //! proves the rules pass and says nothing about how they treat a
+    //! [`AppendError::Busy`] this adapter produced. This fixture lowers each
+    //! handle's timeout to one millisecond after opening it, which turns the
+    //! same race into one where most losers of the write lock are refused as
+    //! `Busy` at `BEGIN IMMEDIATE`. Every rule must still pass: ES-43's
+    //! `a_busy_append_left_nothing_behind` checks each refused contender wrote
+    //! nothing, and the other five accept `Busy` under their floors.
+    //!
+    //! **That the refusals really happen was measured, not assumed**, with a
+    //! throwaway count in `begin_error` that is not left in the tree: 258–262
+    //! `Busy` answers across the six rules in each of three runs, and 61 of the
+    //! 64 contenders in `a_busy_append_left_nothing_behind` alone. Ten further
+    //! runs of the family were green. The count is not asserted, because CF-33
+    //! denies a rule an operation count and a test here that demanded one would
+    //! be timing-dependent. The deterministic half is
+    //! `every_handle_the_impatient_fixture_connects_is_refused_as_busy`, below,
+    //! which holds the two facts the count rests on: this fixture's handles
+    //! carry the one-millisecond bound, and such a handle is refused as `Busy`
+    //! by a write lock held elsewhere.
+    //!
+    //! In `src/` rather than `tests/` because lowering the timeout reaches the
+    //! store's private connection, and a public knob for it would be a knob an
+    //! application could turn the wrong way.
+    //!
+    //! One millisecond rather than zero: with no handler at all, a WAL
+    //! *reader* can be refused on the wal-index lock too, and the reader rule
+    //! would then report a failed read — a verdict about the fixture, not the
+    //! store. One millisecond keeps the handler present, which is the shipped
+    //! shape, and only shortens its bound.
+
+    #![allow(clippy::unwrap_used)]
+
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use happenstance_testkit::{Capability, Fixture};
+
+    use super::SqliteEventStore;
+
+    /// One temporary file, and each `connect` a new impatient connection onto
+    /// it.
+    struct ImpatientFixture(PathBuf);
+
+    impl ImpatientFixture {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(1);
+            let mut path = std::env::temp_dir();
+            path.push(format!(
+                "happenstance-sqlite-impatient-{}-{}.db",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let fixture = Self(path);
+            fixture.remove();
+            fixture
+        }
+
+        fn remove(&self) {
+            for suffix in ["", "-wal", "-shm"] {
+                let mut path = self.0.clone().into_os_string();
+                path.push(suffix);
+                let _ = std::fs::remove_file(PathBuf::from(path));
+            }
+        }
+    }
+
+    impl Drop for ImpatientFixture {
+        fn drop(&mut self) {
+            self.remove();
+        }
+    }
+
+    impl Fixture for ImpatientFixture {
+        type Store = SqliteEventStore;
+
+        const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+
+        const REOPEN: Capability = Capability::declined(
+            "this fixture exists to make appends busy; durability across a \
+             reopen is tests/conformance.rs's, at the shipped timeout",
+        );
+
+        async fn connect(&self) -> Self::Store {
+            let store = SqliteEventStore::open(&self.0).unwrap();
+            store
+                .connection
+                .lock()
+                .unwrap()
+                .busy_timeout(core::time::Duration::from_millis(1))
+                .unwrap();
+            store
+        }
+    }
+
+    happenstance_testkit::event_store_concurrency_conformance!(
+        mod_name = impatient,
+        fixture = ImpatientFixture::new()
+    );
+
+    /// **The fixture above really is impatient, and that is what makes its
+    /// run a run against `Busy`.**
+    ///
+    /// The family's pass says nothing on its own: against a handle that kept
+    /// the shipped fifteen-second timeout, `a_busy_append_left_nothing_behind`
+    /// sees no refusal and passes on its anchor. The count of refusals is not
+    /// asserted, for the module doc's CF-33 reason. What is asserted instead
+    /// are the two facts the count rests on, neither of which depends on how
+    /// the race is scheduled: every handle the fixture connects reads its busy
+    /// timeout back as one millisecond, and such a handle, meeting a write lock
+    /// held elsewhere, is refused as `Busy` and writes nothing.
+    ///
+    /// The wrong implementations this rejects are a `connect` that stopped
+    /// lowering the timeout, or lowered it on a different connection than the
+    /// one the store appends through, and a `begin_error` that stopped
+    /// mapping the refusal to `Busy`.
+    #[tokio::test]
+    async fn every_handle_the_impatient_fixture_connects_is_refused_as_busy() {
+        use happenstance_core::{AppendError, Event, EventStore};
+
+        let fixture = ImpatientFixture::new();
+        let store = fixture.connect().await;
+        let timeout: i64 = store
+            .connection
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(timeout, 1, "the fixture's handle must carry its 1 ms bound");
+
+        let holder = rusqlite::Connection::open(&fixture.0).unwrap();
+        holder.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let event = Event::new("Blocked", b"b".to_vec()).unwrap();
+        let refused = store.append(core::slice::from_ref(&event), None).await;
+        assert!(
+            refused.as_ref().is_err_and(AppendError::is_busy),
+            "an impatient handle meeting a held write lock must be refused as \
+             `Busy`, got {refused:?}"
+        );
+        holder.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(
+            store.head().await.unwrap(),
+            None,
+            "and the refusal must have written nothing"
+        );
+
+        drop(holder);
+        drop(store);
     }
 }

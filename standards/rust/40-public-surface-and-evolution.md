@@ -62,8 +62,8 @@ never heard of — and the `semver` CI job did not warn, because it diffs the pu
 request against its own base SHA and the break is inside the diff only if
 somebody bothered to look at the job's output.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:313 (async fn head)` ·
-`.github/workflows/ci.yml:1117 (baseline-rev: ${{ github.event.pull_request.base.sha }})` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:318 (async fn head)` ·
+`.github/workflows/ci.yml:1148 (baseline-rev: ${{ github.event.pull_request.base.sha }})` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
 [cargo-semver-checks 0.50](https://github.com/obi1kenobi/cargo-semver-checks) —
@@ -119,8 +119,8 @@ permanently locked out of using it — the SQLite author discovers this while
 profiling a projection runner that is doing a full table scan per poll, and the
 only fix is a breaking change to a trait somebody else's crates implement.
 
-**Evidence.** `crates/happenstance-core/src/store.rs:287 (Why this is required rather than provided)` ·
-`crates/happenstance-core/src/store.rs:313 (async fn head)` ·
+**Evidence.** `crates/happenstance-core/src/store.rs:292 (Why this is required rather than provided)` ·
+`crates/happenstance-core/src/store.rs:318 (async fn head)` ·
 [adapter-shapes §2.2](../../references/adapter-shapes.md) *(the `E0119` row)* ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
 

@@ -274,7 +274,12 @@ pub trait EventStore {
     /// * [`AppendError::ConditionViolated`] when the store already holds an
     ///   event matching `condition`. This is routine under contention: rebuild
     ///   the decision model and retry.
-    /// * [`AppendError::Store`] for adapter-specific failures.
+    /// * [`AppendError::Busy`] when the store refused for a transient reason
+    ///   before the batch took any effect. Nothing was written, so taking the
+    ///   decision again is safe. An adapter that cannot vouch for that reports
+    ///   `Store` instead.
+    /// * [`AppendError::Store`] for adapter-specific failures, including any
+    ///   outcome the adapter cannot vouch for.
     async fn append(
         &self,
         events: &[Event],

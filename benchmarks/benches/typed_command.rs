@@ -2,7 +2,7 @@
 //!
 //! # What `commit` actually does, per attempt
 //!
-//! `crates/happenstance/src/command.rs:280-310`, in order: clone the boundary,
+//! `crates/happenstance/src/command.rs:296-338`, in order: clone the boundary,
 //! derive its query, `read_decision_model` — which **collects the whole matched
 //! set into a `Vec`** — decode *every* matched event into the application's
 //! enum, fold them, call the caller's `decide`, encode what comes back, and

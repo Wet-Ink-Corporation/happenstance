@@ -1,6 +1,6 @@
 //! The control, forced to fire.
 //!
-//! A control that cannot fire is decorative. `spec/SPECIFICATION.md:7671-7674`
+//! A control that cannot fire is decorative. `spec/SPECIFICATION.md:7859-7862`
 //! names `PRAGMA synchronous = OFF` **by name** as a wrong implementation CF-14's
 //! reopen rule exists to reject, so a figure produced under it is a figure for a
 //! store that fails conformance — and the runner must abort rather than emit one

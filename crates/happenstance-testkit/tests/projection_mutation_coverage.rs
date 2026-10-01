@@ -283,7 +283,7 @@ struct Declared {
 ///   which is a statement about this registry and not about the port. The six
 ///   runner-dependent rules CF-36 moves to the workspace e2e crate have no store
 ///   to be wrong in, so nothing here says anything about them
-///   (`spec/SPECIFICATION.md:5807-5816`).
+///   (`spec/SPECIFICATION.md:5995-6004`).
 /// * **A fixture whose `arm_commit_fault` does nothing.** `PartialCommitStore`
 ///   is a wrong *store*; the wrong *fixture* — one that declares `COMMIT_FAULT`
 ///   and arms nothing, so `failed_commit_leaves_both_unchanged` passes over a
@@ -461,7 +461,7 @@ const REGISTRY: &[Declared] = &[
                      return it, so only the path nobody writes a test for leaks — and the \
                      store answers `Busy` for ever after. This is not hypothetical: a \
                      reviewer's probe found exactly this store, which is why PS-7 carries \
-                     a second half at all (`spec/SPECIFICATION.md:4976-4988`)",
+                     a second half at all (`spec/SPECIFICATION.md:5164-5176`)",
         mode: FailureMode::Assertion,
         expect: &[("dropped_batch_leaves_store_usable", "commit should succeed")],
     },
@@ -515,7 +515,7 @@ const REGISTRY: &[Declared] = &[
         ],
         provenance: "an adapter that validates `position` against what the batch wrote — \
                      named by the specification itself for this rule \
-                     (`spec/SPECIFICATION.md:5793-5798`). The point of registering it is \
+                     (`spec/SPECIFICATION.md:5981-5986`). The point of registering it is \
                      that the misreading is *reasonable*: \"advances `id`'s checkpoint to \
                      `position`\" reads like a claim about applied work, and without \
                      PS-21's rule this store would be exactly as conformant as the oracle. \
@@ -731,7 +731,7 @@ const REGISTRY: &[Declared] = &[
                      `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is what an author \
                      writes when the position column is `NOT NULL DEFAULT 1`. The specification \
                      names this shape itself and names it as the natural one rather than a \
-                     contrivance (`spec/SPECIFICATION.md:5378-5394`): paired with a `reset` that \
+                     contrivance (`spec/SPECIFICATION.md:5566-5582`): paired with a `reset` that \
                      records an explicit `NeverRun`, it satisfies PS-19's MUST verbatim and \
                      still tells a runner that a read model nobody has ever built is \
                      authoritative. PS-38's second sentence is the MUST it violates, and it is a \
@@ -800,7 +800,7 @@ const REGISTRY: &[Declared] = &[
                      `commit` and is dropped, so every checkpoint claims the rows are \
                      authoritative. It is the obvious reading of the port and the only one \
                      `Option<SequencePosition>` could express before `Checkpoint` had three \
-                     variants (`spec/SPECIFICATION.md:5438-5446`). A reader asking whether the \
+                     variants (`spec/SPECIFICATION.md:5626-5634`). A reader asking whether the \
                      rows in front of it can be trusted is told yes over a half-built read model. \
                      It preserves `NeverRun` for an id it has never seen, because its defect is \
                      that `Rebuilding` is unrepresentable rather than that a missing row reads \
@@ -877,7 +877,7 @@ const REGISTRY: &[Declared] = &[
                      (`references/adapter-shapes.md`). PS-4 names the shape and permits it \
                      outright — PS-1 *\"is satisfiable by opening the transaction inside \
                      `commit` around a buffered write set\"* \
-                     (`spec/SPECIFICATION.md:4927-4934`) — and §4.11 assigns the projection \
+                     (`spec/SPECIFICATION.md:5115-5122`) — and §4.11 assigns the projection \
                      family's CF-5 variant to exactly it (`:5686-5691`). It is the far end of \
                      §6's batch-shape axis from the reference store's materialised delta, and \
                      the reason a green projection run is evidence about the port rather than \
@@ -1354,7 +1354,7 @@ mod projection_mutation_coverage {
     /// family whose only variant skips half the suite — a control over half the
     /// suite, which reads exactly like a control over all of it. The second says
     /// **every projection rule executed against at least one variant**, which is
-    /// the event-store family's shape (`tests/mutation_coverage.rs:3127-3136`)
+    /// the event-store family's shape (`tests/mutation_coverage.rs:3175-3184`)
     /// and could not be met here until a variant declaring
     /// `READS_THROUGH_BATCH = true` was registered: with `NoBatchReadStore`
     /// alone, `batch_reads_reflect_pending_writes` and

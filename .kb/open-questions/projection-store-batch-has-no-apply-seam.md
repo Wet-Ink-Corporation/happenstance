@@ -119,7 +119,7 @@ implementable only by stores that outlive every batch (`references/adapter-shape
 `crates/happenstance-ladybug/src/live_handle.rs:36-66`). No write vocabulary lands on `Batch` at
 all: the seam is split by consumer, with a `ProjectionProbe: ProjectionStore` in the contract
 crate behind `feature = "conformance"`, bare flavour only, because an adapter's `tests/` is a
-third crate where the orphan rule rejects the impl (`spec/SPECIFICATION.md:5093-5109`). The
+third crate where the orphan rule rejects the impl (`spec/SPECIFICATION.md:5281-5297`). The
 question's premise — that some vocabulary must write into a batch generically — is what the
 decision declines. ADR-0008's GAT-across-a-suspension-point finding did not pick the winner; two
 driver-independent compiler transcripts did.

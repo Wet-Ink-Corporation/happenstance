@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 202 clause IDs, of which 195 are normative:
-**151 `[FROZEN]`**, **32 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+As assembled, this document carries 203 clause IDs, of which 196 are normative:
+**152 `[FROZEN]`**, **32 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -401,7 +401,7 @@ unrelated crate wanted replication.
 
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
-| **`EventStore`** | `crates/happenstance-core/src/store.rs:151-326` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it is the workspace's only adapter instrument to have *failed* a clause rather than passed one. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
+| **`EventStore`** | `crates/happenstance-core/src/store.rs:151-331` | Four methods; 89 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it is the workspace's only adapter instrument to have *failed* a clause rather than passed one. Four `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-11, ES-12, ES-35, ES-40) — ES-10 was the fifth until phase 4 froze it, and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
 | **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug`, a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:388-608`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` can drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:363-429`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:529-679`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six now run against the suite** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063); the `unstable-projection` feature survived on the contract crate as an empty name, so that `0.2.0` manifests resolved, until `0.4.0` removed it | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the four buffered stores do not occupy |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:140`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
@@ -1038,7 +1038,7 @@ adapter is the instrument* — was run on that instrument and did not fire.
 `happenstance-sync` publishes) goes through the same private `write_batch` that
 `append` calls — one `INSERT` statement for a local row and a foreign one — and
 what is ingest-only is a transaction frame, a watermark query and the values a
-foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1274`). Neon,
+foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1301`). Neon,
 at the far end of the transport axis, builds a whole ingest batch as one
 statement from the builders its `append` uses; that half is structural and was
 not executed. So **the write path is the adapter's**, and `happenstance-core`
@@ -1110,7 +1110,10 @@ Sequentially the read of the counter and the write that consumes it are
 adjacent, so neither rule above can separate a store that allocates atomically
 from one that reads its head, suspends, and then allocates from the value it
 read; that is `RacingSequenceStore`, the in-process form of a
-`SELECT max(position)` taken outside the transaction that will use it.
+`SELECT max(position)` taken outside the transaction that will use it. Since
+ADR-0077 it reads each contender per error: a contender refused as `Busy`
+(ES-43) is neither a commit nor a failure, at least one must commit, and the
+uniqueness is asserted among the commits.
 `Cases:` E2E-10, E2E-46
 `Rejects:` an adapter that reuses a position after a delete, and one that packs
 positions into a dense range on compaction. Both are natural first cuts on a
@@ -1692,11 +1695,11 @@ switch on. `AppendError`'s three variants as this clause was written contained n
 "refused, park this" and PRESSURE-TEST §5.4 named the gap.
 
 **Discharged at phase 4.** `AppendError::ExceedsStoreLimit { limit, len }` is in
-the tree (`error.rs:227-244`), `StoreLimit` is the `#[non_exhaustive]` enum
+the tree (`error.rs:237-254`), `StoreLimit` is the `#[non_exhaustive]` enum
 naming which limit was exceeded (`limits.rs:52-61`), and the variant is carried
-through `map_store` (`error.rs:268`). `AppendError` was already
-`#[non_exhaustive]` (`error.rs:213`) and its documentation already told callers a
-wildcard arm is required (`error.rs:210-211`), so the variant landed additively,
+through `map_store` (`error.rs:359`). `AppendError` was already
+`#[non_exhaustive]` (`error.rs:223`) and its documentation already told callers a
+wildcard arm is required (`error.rs:220-221`), so the variant landed additively,
 as predicted.
 
 ---
@@ -2726,7 +2729,7 @@ could apply to the derived flavour alone. Whatever ES-6 settles applies to
 
 **[FROZEN]**
 
-`type Error: core::error::Error + 'static` (`store.rs:159`) carries no `Send` or
+`type Error: core::error::Error + 'static` (`store.rs:166`) carries no `Send` or
 `Sync` bound, so an adapter error holding a value that is not thread-safe
 satisfies it, and a spawned handler's error cannot cross a `JoinHandle` — which
 is E2E-53's failure. Whether that trade was the right one could not be settled
@@ -2734,9 +2737,9 @@ while nothing in the tree could fail the bound, and for a long time nothing
 could: `MemoryStoreError` is uninhabited (`memory.rs:284-291`) and
 `SqliteEventStoreError` *was* a single placeholder variant. Phase 2 built errors
 that can, and phase 8 built the rest of them: `SqliteEventStoreError` is now
-twelve real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
-the crate's own decode failures
-(`crates/happenstance-sqlite/src/event_store.rs:1011-1104`), and
+fourteen real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
+the crate's own decode and identity failures
+(`crates/happenstance-sqlite/src/event_store.rs:1526-1672`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
 `SqlError::Thrown` carries a `JsThrow`, whose payload is an `Rc<worker::Error>`
 (`crates/happenstance-cloudflare/src/js.rs:168-173`).
@@ -2764,6 +2767,59 @@ for** (`references/adr/0009-error-send-sync.md:117-126`). Nothing is left to tim
 against publication. The bound would have been semver-visible and one-way; a
 marker declared downstream is additive, and needs nothing from the contract
 crate.
+
+**What an adapter's error promises at 1.0 is its payloads, not only its
+variants.** Written in at phase 17 under the authority of
+[ADR-0066](../.kb/decisions/0066-what-1-0-promises.md) §4 and §5, which decided
+it; the marker above does not move. The payload types a published adapter's
+error variants carry are part of that adapter's 1.0 promise. `#[non_exhaustive]`
+protects *adding* a variant and nothing else: a caller who matched
+`Sqlite(e)` and called a method on `e` compiled against `rusqlite`'s type, and a
+change to that type breaks them however many variants the enum declares. So a
+payload change forced by a re-exported driver's breaking release is that
+adapter's major (ADR-0044, ADR-0066 §4), and it is not an exemption. The
+payloads in scope, by crate:
+
+- **`happenstance-sqlite`** — `Sqlite(rusqlite::Error)` on both
+  `SqliteEventStoreError` and `SqliteProjectionStoreError`
+  (`crates/happenstance-sqlite/src/event_store.rs:1535`,
+  `crates/happenstance-sqlite/src/projection_store.rs:546`), with
+  `pub use rusqlite` (`crates/happenstance-sqlite/src/lib.rs:148`).
+- **`happenstance-postgres`** — `Driver(sqlx::Error)` on both
+  `PostgresEventStoreError` and `PostgresProjectionStoreError`
+  (`crates/happenstance-postgres/src/error.rs:39`, `:141`), with `pub use sqlx`
+  (`crates/happenstance-postgres/src/lib.rs:218`).
+- **`happenstance-cloudflare`** — `SqlError::Thrown(JsThrow)`
+  (`crates/happenstance-cloudflare/src/sql_storage.rs:139`), where `JsThrow`
+  holds an `Rc<worker::Error>` and is built by a public
+  `JsThrow::from_error(worker::Error)`
+  (`crates/happenstance-cloudflare/src/js.rs:168-173`, `:188`), with
+  `pub use worker` (`crates/happenstance-cloudflare/src/lib.rs:587`).
+- **`happenstance-neon`** — `NeonError::MalformedResponse(serde_json::Error)`
+  (`crates/happenstance-neon/src/error.rs:104`), with `pub use serde_json`
+  (`crates/happenstance-neon/src/lib.rs:175`).
+
+An event-store error reaches a caller through `AppendError::Store(E)`, and
+since ES-43 through `AppendError::Busy(E)` as well. `Busy` carries the same
+adapter error `Store` does, so what it carries is promised on the same terms. A
+projection-store error reaches its caller through its own port's `Result`s, and
+the payload promise is the same. Three of the four
+drivers — `rusqlite`, `sqlx` and `worker` — are `0.x`, so each of their minor
+releases is a breaking release and an adapter major follows it. That is the
+limit ADR-0066 accepted, stated here so that this paragraph is not read as a
+stability promise about them.
+
+One more consequence follows mechanically from the same reasoning, and it is
+stated as that rather than as a separate promise. A payload from a crate this
+workspace does **not** re-export is in the public signature just the same:
+`tokio::task::JoinError` (`crates/happenstance-postgres/src/error.rs:106`,
+`crates/happenstance-sqlite/src/event_store.rs:1549`,
+`crates/happenstance-sqlite/src/projection_store.rs:558`) and
+`tokio::runtime::TryCurrentError`
+(`crates/happenstance-sqlite/src/event_store.rs:1557`,
+`crates/happenstance-sqlite/src/projection_store.rs:562`) sit in public variants,
+so a `tokio` release that changed either would force an adapter major too.
+`tokio` is `1.x`, so that happens only at its own major.
 
 - **Rule:** `store_error_crosses_a_join_handle` **(new)**, in a rule group whose
   bound is the marker rather than `SendEventStore` — the bare flavour cannot be
@@ -2799,7 +2855,7 @@ rather than the breadth: `LocalMemoryEventStore`
 `impl EventStore for` in a genuinely downstream crate, sitting beside the
 blanket impl without `error[E0119]` and passing every rule natively and on
 `wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:992`) and
+(`crates/happenstance-cloudflare/src/event_store.rs:1010`) and
 `happenstance-neon`'s two (`crates/happenstance-neon/src/event_store.rs:168`,
 `:405`) are skeletons and
 widen the evidence without adding to it. ADR-0001's provisional marker was
@@ -3044,7 +3100,7 @@ orders and truncates under the read lock at call time) and `happenstance-sqlite`
 (which does not: `read` is not `async` and may legally be called with no runtime
 in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
 its ceiling is sampled there — `Ceiling::Unsampled` at
-`crates/happenstance-sqlite/src/event_store.rs:1337` is the state the first poll
+`crates/happenstance-sqlite/src/event_store.rs:1364` is the state the first poll
 resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
 to the call site: the store captures a `tokio::runtime::Handle` at construction
 and falls back to `Handle::try_current`, so the lazy spawn has a runtime to hop
@@ -3569,6 +3625,8 @@ the store byte-identical.
   separate a store that applies a batch as one unit from one that applies it row
   by row and gets to the end. `RowAtATimeStore` is that store — every row lands,
   it is correct at rest, and it is wrong for exactly as long as the loop runs.
+  Since ADR-0077 a batch refused as `Busy` (ES-43) is neither committed nor a
+  failure, and the post-hoc count is of the committed batches.
 - **Cases:** E2E-39, E2E-48, E2E-07.
 - **Rejects:** a per-row conditional `INSERT ... SELECT ... WHERE NOT EXISTS`,
   which can write the first event of a batch and refuse the second; and
@@ -3678,7 +3736,9 @@ ascending.
   `INSERT …; SELECT max(position)` — what an adapter writes when its driver
   cannot `RETURNING` on a multi-row insert — is indistinguishable from
   `INSERT … RETURNING position` until a second writer exists. That is
-  the `Rejects:` shape below, named by the rule that catches it.
+  the `Rejects:` shape below, named by the rule that catches it. Since ADR-0077
+  a contender refused as `Busy` (ES-43) is skipped rather than failed, having
+  been told no position, and at least one contender must commit.
 - **Cases:** E2E-13, E2E-23.
 - **Rejects:** an adapter that returns the store head rather than its own batch's
   last position — identical on a quiescent store and wrong under a second writer
@@ -3698,7 +3758,7 @@ needs it" — and had to be corrected. **That correction landed in `3c704d3`.** 
 `append` doc no longer offers the returned position for a follow-up condition; it
 states the refusal and points at the read instead (`store.rs:189-197`). The
 obligation stands over every future edit to that doc: the sound `after` comes
-from a read — `read_decision_model` (`store.rs:530-540`) — which is what the DCB
+from a read — `read_decision_model` (`store.rs:535-545`) — which is what the DCB
 loop already does.
 
 #### ES-20 — An empty batch is refused, and refused first
@@ -3807,8 +3867,8 @@ which of the two it does.
 The honest paragraph, since silence is what the pressure test calls the single
 most under-specified thing in the repository. At the edge, dropping the future is
 the *normal* termination path: a client disconnect, a CPU limit, a Durable Object
-eviction, a pod eviction. `AppendError` has four variants and none means "the
-outcome is unknown" (`error.rs:212-249`) — and adding one would not help, because
+eviction, a pod eviction. `AppendError` has five variants and none means "the
+outcome is unknown" (`error.rs:222-306`) — and adding one would not help, because
 a dropped future produces no `Result` at all. There is nowhere for the value to
 go. So the contract's statement is not an error variant; it is a documented
 absence of a promise, plus ES-22 bounding what the absence can cost, plus the
@@ -3950,7 +4010,11 @@ reported as `AppendError::ConditionViolated`, never as `AppendError::Store`. A
   to this clause for the same reason: with one caller at a time the probe and the
   insert are adjacent, so the sequential rule cannot separate an atomic
   check-and-write from a probe followed by an insert. `RacingProbeStore` is the
-  store that passes every sequential rule and fails this one.
+  store that passes every sequential rule and fails this one. Since ADR-0077 it
+  reads each contender per error: a contender refused as `Busy` (ES-43) is
+  neither a winner nor a loser, and the winner is still exactly one, now as two
+  assertions: at most one, which `RacingProbeStore` fails, and at least one,
+  which `BusyAfterWriteStore` fails.
 - **Cases:** E2E-08, E2E-55, E2E-39.
 - **Rejects:** an adapter that folds the violation into its own error type, which
   destroys the caller's only means of telling "retry the decision" from "something
@@ -3974,6 +4038,130 @@ depend on it. This is why idempotent bulk ingest cannot be built out of one
 condition over many identities: one already-seen event rejects the batch and names
 at most one culprit, so recovery is a serial peel (E2E-36).
 
+#### ES-43 — A busy refusal wrote nothing, and says so
+
+An `append` MAY be refused for a transient reason: a lock the store could not
+take within its own bound, or a serialisation failure its own retry budget did
+not absorb. Such a refusal MUST be reported as `AppendError::Busy`, never as
+`AppendError::Store`, and MUST be reported only when the batch took no effect:
+no event of it is in the store, and none appears later. An outcome the store
+cannot vouch for — a lost commit acknowledgement, a connection dropped after
+`COMMIT` was sent, a timeout whose effect is unknown — MUST be reported as
+`AppendError::Store`, however transient its cause. A store is never obliged to
+report `Busy`.
+
+**[FROZEN]**
+
+Frozen on landing by [ADR-0077](../.kb/decisions/0077-appenderror-busy.md), on
+the condition that record states: the rule below ran against the reference
+store, `happenstance-sqlite` and a live PostgreSQL in the lane that minted the
+clause, and its mutant fails it. It did. Against `happenstance-sqlite` it ran
+twice: at the shipped busy timeout, where no contender is refused, and through
+the crate's own `busy_conformance` fixture, which lowers the timeout to one
+millisecond so the refusals really happen — a throwaway count found 61 of the
+64 contenders answered `Busy` in this rule, and the family green around them.
+The count is not asserted, because it depends on how the race is scheduled;
+`every_handle_the_impatient_fixture_connects_is_refused_as_busy` holds the two
+facts it rests on, that the fixture's handles carry the lowered bound and that
+such a handle meeting a held write lock is refused as `Busy`.
+Against PostgreSQL 17.10 in a container it ran with the rest of the event-store
+and concurrency suites, 108 of 108. `happenstance-neon`'s reclassification is
+held offline by a scripted transport, and live only by CI's `live-neon` job.
+
+- **Rule:** `a_busy_append_left_nothing_behind`, in the concurrency family —
+  race contenders, each appending a batch of events carrying its own unique tag
+  under a condition only it writes to, and for every contender answered `Busy`,
+  read its tag back and assert that nothing matches; every contender that
+  committed must read back whole, the anchor that keeps an empty read from
+  passing. It checks the no-effect half, which no other rule names, because a
+  refusal that wrote and a refusal that did not return the same value. It
+  *observes* rather than forces: no portable way exists to make a store answer
+  `Busy`, and this clause never obliges one to, so against a store that never
+  does it passes on its anchor. The deterministic arm is described below the
+  bullets. The reporting half is held by the concurrency family's
+  `positions_are_unique_under_concurrent_appends`,
+  `append_returns_the_callers_own_last_position` and
+  `exactly_one_of_n_contenders_commits`, re-spelled per error in the same lane
+  with the family's other two racing rules: each contender commits, or is
+  `ConditionViolated` where a condition exists, or is `Busy`; at least one
+  commits, because a store where every contender is busy has made no progress;
+  and the store holds every committed batch and nothing more. A contender
+  answered `Store` fails every one of them, which is what makes misreporting a
+  busy refusal as a failure visible. The floors are structural rather than a
+  share of the contenders, so CF-34's `Rejects:` is not engaged, and
+  `CONTENDERS` stays 64.
+- **Cases:** E2E-08, E2E-07.
+- **Rejects:** `BusyAfterWriteStore`, which commits the batch and then answers
+  `Busy`. A caller that believes the answer re-runs an unconditional append and
+  writes it twice; `a_busy_append_left_nothing_behind` reads the first copy back.
+  Four more rules of the family reject it as anchors, because each reconciles
+  what it was told against what the store holds and finds a batch nobody
+  acknowledged; only `append_returns_the_callers_own_last_position`, which has
+  no returned position to check for a busy contender, passes it. The
+  model is a deadline around the whole append that fires after `COMMIT` was sent
+  and is classified as `Busy`. The
+  SQLite shape of the same defect is a busy code classified as `Busy` after a
+  write whose rollback the adapter has not proved — a `SQLITE_BUSY` raised
+  inside the batch's inserts, where a rollback-journal database must escalate
+  its lock to spill, reclassified along with the ones returned before the write
+  lock was held. A `SQLITE_BUSY` at `COMMIT` itself is not this defect: SQLite
+  leaves the transaction open and uncommitted, and `rusqlite` rolls it back when
+  the transaction is dropped. `happenstance-sqlite` still reports that one as
+  `Store`, which is conservative rather than required. And an adapter that keeps reporting its busy refusals as
+  `Store` — every adapter in the workspace until this clause, which is the
+  conflation it removes: a generic caller asking `is_condition_violated()` got
+  `false` for a busy store exactly as for a broken one.
+
+**The re-spelling reached five rules, not three.** The brief that scoped this
+clause counted three concurrency rules that failed on a busy contender. Two
+more did: `k_disjoint_boundaries_never_conflict`, which no clause
+claims yet (§7.4 records the ADR it is owed), and
+`a_concurrent_reader_never_sees_a_partial_batch`, which is ES-18's. Both read
+each contender per error now. The first gained a floor of its own: a boundary
+with no winner must have rejected nobody, because a violation needs a matching
+event to have landed and only that boundary's own winner could write one.
+`GlobalVersionStore` still fails it at that assertion.
+
+That re-spelling **narrows** what `k_disjoint_boundaries_never_conflict`
+enforces, and it is recorded here rather than left to its name. Before ES-43
+the rule held that commands sharing no consistency boundary all commit. It now
+holds that they are never told `ConditionViolated` on each other's account, that
+none of their boundaries elects two winners, and that at least one of them
+commits. A store that refuses a disjoint contender as `Busy` passes it, a global
+lock or an SSI false positive across disjoint boundaries included, and this
+clause's first sentence is what admits that: a serialisation failure the store's
+own budget did not absorb MAY be refused as `Busy`, whichever boundaries the
+conflicting transactions named. The observation that made the narrowing a
+choice rather than a technicality is live PostgreSQL's: in one review run
+`a_busy_append_left_nothing_behind`, whose 64 contenders each guard a tag only
+they write, drew 23 `Busy` answers — refusals between commands that share no
+boundary. ADR-0077 records the narrowing, and the clause the independence
+proposition is still owed (§7.4) inherits the question of whether independence
+extends to `Busy`. The deterministic arm is
+the testkit's `every_concurrency_rule_accepts_a_store_that_is_merely_busy`, in
+`crates/happenstance-testkit/tests/contended_store_instruments.rs`. It drives
+every rule of the family against `FaultyStore::contend_next`, which makes the
+`Busy` refusals certain, and requires each rule to pass and the refusals to have
+been spent inside it. `a_store_that_is_busy_for_every_contender_has_made_no_progress`
+drives every rule of the family against a store that refuses every contender, and
+requires each to fail on its own floor, so no floor can be deleted in silence.
+
+The payload is the adapter's own error, carried as `Store` carries it, and ES-6's
+payload promise covers it on the same terms. `happenstance-cloudflare` never
+reports `Busy`: a Durable Object is a single-threaded actor, and nothing in it
+can hold the store against its own writer. `MemoryEventStore` never does either,
+for the same reason one level down.
+
+**Why this landed before 1.0 rather than after it.** Adding the variant is
+additive, because `AppendError` is `#[non_exhaustive]`. Moving an adapter's
+refusal from `Store(e)` to `Busy(e)` is not: a caller who wrote
+`Store(e) if e.is_serialization_failure()` compiles unchanged afterwards and
+silently stops matching. Inside the `0.4.0` window that break is paid once, with
+a changelog entry; after 1.0 it would be a major for three adapters. The retry a
+`Busy` answer invites is the caller's. The typed layer's command loop takes it,
+inside the same `Retry` bound as a violated condition, by reading and deciding
+again (ADR-0077); the port itself retries nothing.
+
 #### ES-26 — The AC3 boundary: `after` is exclusive, `from` is inclusive
 
 `AppendCondition::after` MUST be **exclusive**: an event at exactly `after` MUST
@@ -3992,7 +4180,7 @@ rather than a contradiction — underspecified upstream, settled here.
 
 The pairing that falls out is exact and requires no arithmetic:
 `read_decision_model` returns the maximum position observed and
-`AppendCondition::after_opt` consumes it (`store.rs:530-540`, `append.rs:191-212`).
+`AppendCondition::after_opt` consumes it (`store.rs:535-545`, `append.rs:191-212`).
 The pairing that does *not* fall out is the checkpoint resume path, where
 `ProjectionStore::checkpoint` returns an inclusive-consumed position and
 `ReadOptions::from` is inclusive, so the caller must advance by hand through
@@ -4205,9 +4393,9 @@ is a method the port does not have. The cost of "required" is seven impls
 today, four of them skeletons — `happenstance-sqlite` was the fifth until phase
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
-`crates/happenstance-sqlite/src/event_store.rs:1106`,
+`crates/happenstance-sqlite/src/event_store.rs:1133`,
 `crates/happenstance-postgres/src/event_store.rs:121`,
-`crates/happenstance-cloudflare/src/event_store.rs:992` and
+`crates/happenstance-cloudflare/src/event_store.rs:1010` and
 `crates/happenstance-neon/src/event_store.rs:168`, `:405`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
@@ -4680,7 +4868,7 @@ had two halves.
   anything else — `happenstance-cloudflare` at phase 9 and `happenstance-neon` at
   phase 10, whichever lands first.* **`happenstance-neon` meets that wording's
   letter.** Its probe is one read-only round trip of its own
-  (`crates/happenstance-neon/src/event_store.rs:899`), over the
+  (`crates/happenstance-neon/src/event_store.rs:920`), over the
   `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint. The
   freeze does not reword that away. It accepts the round trip, because no required
@@ -6323,7 +6511,7 @@ checkpoint invariant living one crate above the port that states it.
 **Verdict, taken at the typed layer's phase exit: the falsifier fired, and the
 pump collapses upward.** The count was taken over the tree rather than
 remembered. `happenstance-core` publishes exactly two free functions — `collect`
-(`crates/happenstance-core/src/store.rs:501`) and `read_decision_model`
+(`crates/happenstance-core/src/store.rs:506`) and `read_decision_model`
 (`:537`) — and **neither is a checkpoint pump; there is no pump function in the
 contract crate at all.** So the caller count is not zero over a function that
 exists, it is unavailable over a function that never landed, and both readings
@@ -9064,8 +9252,8 @@ the suite tell the two apart through an `EventStore` method, which is the report
 ADR-0028 refused.
 Why the instrument is needed: a 90-day prune happens entirely outside the port —
 `EventStore` has four methods and none deletes (`read` at `store.rs:184-188`,
-`append` at `store.rs:278-282`, `head` at `store.rs:313`, `contains_event_id` at
-`store.rs:336`) — and afterwards the store passes every rule unchanged, including
+`append` at `store.rs:283-287`, `head` at `store.rs:318`, `contains_event_id` at
+`store.rs:341`) — and afterwards the store passes every rule unchanged, including
 `query_all_matches_every_event`, whose contract is store-relative by wording. A
 holed log and a young log are the same value, and under the refusal that silence
 is the specified 1.x behaviour, not a defect this rule rejects. Four of the six
@@ -9108,7 +9296,7 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` | **Far end yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:552-679`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No. Planned for phase 14, or 13 if SY-27 needs it first** (CF-27). ADR-0028 fixed its report as instrument-local, not a port surface | Fixture first; a device adapter second |
-| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1084`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
+| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1330`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
 Seven axes, and **the adapter column carries three ticks — durability, handle
@@ -9605,11 +9793,11 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|---|---|---|
 | §2.1–§2.6 value types | `VT` | 34 | 25 | 8 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 42 | 34 | 7 | 1 | 0 |
+| §3 `EventStore` | `ES` | 43 | 35 | 7 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 38 | 26 | 4 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **202** | **151** | **32** | **12** | **7** |
+| **Total** | | **203** | **152** | **32** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9715,6 +9903,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` † | E2E-47, E2E-56, E2E-44 |
 | ES-41 | FROZEN | `contains_event_id_reports_membership` | E2E-32, E2E-34, E2E-36 |
 | ES-42 | FROZEN | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |
+| ES-43 | FROZEN | `a_busy_append_left_nothing_behind`, `positions_are_unique_under_concurrent_ap… | E2E-08, E2E-07 |
 
 #### `PS` — the `ProjectionStore` port (§4)
 

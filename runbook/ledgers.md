@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0077.** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0078.** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
@@ -27,6 +27,8 @@ foreign-identity write path, and 0028, retention, under its reserved number. The
 0074, the `Projection::apply` record, and 0075, the projection port's 1.0 clauses.
 Lane L4 wrote 0076: the conformance emitters CF-23 obliges are public API, un-hidden and
 renamed without their `__` prefix, and CF-41, minted `[FROZEN]`, pins them.
+Lane L5 wrote 0077: `AppendError::Busy` is promised at 1.0, the typed commit loop retries it
+inside the same `Retry` bound, and ES-43 is minted.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.

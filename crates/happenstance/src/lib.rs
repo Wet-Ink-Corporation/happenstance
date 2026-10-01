@@ -101,9 +101,10 @@
 //!   one query — put them in a tuple, which is a [`Boundary`] too — is what
 //!   makes a dynamic consistency boundary *dynamic*.
 //! * [**The command loop**][command-loop] — read, decide, append, retry on
-//!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated),
-//!   bounded by a [`Retry`] you pass in and re-deciding from a pristine model
-//!   on every attempt. Its own page carries the policy.
+//!   [`ConditionViolated`](happenstance_core::AppendError::ConditionViolated)
+//!   or [`Busy`](happenstance_core::AppendError::Busy), bounded by a
+//!   [`Retry`] you pass in and re-deciding from a pristine model on every
+//!   attempt. Its own page carries the policy.
 //! * [**The typed projection runner**][projection-runner] — decoded events into
 //!   a read model, in chunks, with the rows and the checkpoint moving in one
 //!   commit. Behind `unstable-projection` — not for the port beneath it, which
