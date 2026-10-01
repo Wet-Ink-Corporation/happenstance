@@ -1104,7 +1104,38 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
+      # Whether the version the workspace declares is already on crates.io.
+      # Inside a breaking window the base commit and this pull request both read
+      # the next, unreleased version, so the step below compares two states no
+      # consumer can install and every break it reports is "against nothing" --
+      # the reason postgres and neon were once kept out of its package list. Until
+      # that version is published the step is advisory: its findings still show on
+      # the pull request that introduced them, which is what the release's trace
+      # table is built from, but they do not block. Once the version is on
+      # crates.io this probe answers `true` and the step blocks again, with no
+      # edit here. A probe that cannot reach crates.io answers `true`, so an
+      # outage never quietly relaxes the check.
+      - name: is the declared version published
+        id: published
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          if [ -z "$version" ]; then
+            echo "::error::no version under [workspace.package] in Cargo.toml"
+            exit 1
+          fi
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --user-agent "happenstance-ci (https://github.com/Wet-Ink-Corporation/happenstance)" \
+            "https://crates.io/api/v1/crates/happenstance-core/$version" || echo 000)
+          if [ "$status" = "404" ]; then
+            echo "happenstance-core $version is not on crates.io; the base-commit check is advisory"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "happenstance-core $version: crates.io answered $status; the base-commit check blocks"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: semver against the base commit
+        continue-on-error: ${{ steps.published.outputs.published == 'false' }}
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
           # Compare against the commit this pull request branched from. This
           # catches a break introduced *by this pull request*. It cannot see a

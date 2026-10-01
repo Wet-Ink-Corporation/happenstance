@@ -2861,9 +2861,9 @@ const UNCLAIMED_PENDING_ADR: [(&str, &str); 3] = [
          that a FROZEN clause contains a proposition it does not. Since \
          ADR-0077 the rule enforces it narrowed: disjoint contenders are never \
          told ConditionViolated and at least one commits, but a Busy refusal \
-         (ES-43) passes, so the owed clause must also say whether independence \
-         extends to Busy. Owed: an ADR, either widening ES-25 or minting a \
-         clause",
+         (ES-43) passes, and the owner ruled at phase 17 that independence is a \
+         promise about conflict, not liveness (wi-2ab1f3). Owed: an ADR, either \
+         widening ES-25 or minting a clause, in that form",
     ),
     (
         "ops_agree_with_the_model",
