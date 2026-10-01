@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`09854b3` on `main` (PR #29, phase 22: the documentation site), plus
-`lane/p17-retire-ladybug`. 2026-09-30.
+`9d99339` on `main` (PR #33: `happenstance-ladybug` retired, ADR-0078), plus
+`lane/p17-workerd`, which opens lane L6a with this file. 2026-10-01.
 
 ## Where things are
 
@@ -37,31 +37,34 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-- `lane/p17-retire-ladybug`: **`happenstance-ladybug` is retired** (ADR-0078, the owner's call `wi-630032`).
-  - It is excluded from the workspace, and the directory is kept as a frozen record because its files are cited by line.
-  - The gate's ladybug steps, its CI job and `lbug`'s dependency graph are gone.
-- PR #29 (phase 22, the documentation site) merged as `09854b3`, after `main` was merged into it.
+Nothing merged is pending. Phase 17 lanes are merged through L5: L0 to L5 are PRs #26–#28 and #30–#32. `happenstance-ladybug` was retired by PR #33 (ADR-0078). Phase 22's documentation site merged as #29.
 
 ## Next action
 
-Lane L6a is the `workerd` CI job, landed red on purpose. It has a local leg and a deployed-Durable-Object leg using the Cloudflare token. The secret's name needs confirming: `CLOUDFLARE_API_TOKEN` unless the owner says otherwise.
+**Lane L6a: the `workerd` CI job, landed red on purpose**, on `lane/p17-workerd`. Read the plan's L6a section first (`C:/Users/ryanm/.claude/plans/ultracode-runbook-phases-17-breaking-win-sequential-puppy.md`), then the research brief's `ci-jobs` item. The brief is in the kickoff workflow's journal; phase 17's session log says where. The lane:
+- adds a `harness/workerd` crate (publish = false, a workspace member) holding a real `#[durable_object]` class and a `dispatch` emitter under CF-23's public names (`emit_*`, ADR-0076);
+- runs the conformance rules through `@cloudflare/vitest-pool-workers`, with a committed lockfile, as a sibling job shaped like `live-neon`;
+- adds a **deployed-Durable-Object leg** using the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets. Both are set; the token is account-owned and verified active, but its Workers permissions are unverified, and the first deploy will show whether they are enough;
+- must **fail on today's code**, on VT-23's 128-arm UNION (`COMPOUND_SELECT`), and records that run's URL;
+- measures the SQL-length, compound-term, parameter and depth walls, locally and deployed, into `experiments/durable-object-limits`.
+
+Two-instance rules need a namespaced constructor on `CloudflareEventStore`, which becomes a 1.0 promise; flag it in the PR. L6b, a separate PR, then lowers Cloudflare's partition constants from the measurement.
 
 ## Waiting on the owner
 
-- Add `NEON_CONNECTION` and the Cloudflare API token as repository secrets before
-  lanes L5 (`Busy`), L6a (`workerd`) and L8 (ES-11).
+- **A follow-up PR is owed for PR #33's review** (`wi-13bd3b`):
+  - `declared_excludes` fails open and matches its key by prefix (`xtask/src/affected.rs:639`);
+  - a stale `xtask/src/main.rs:89-103` citation in `lint_narrative.rs` and `narrative_doctests.rs`, which should be `:131-144`;
+  - no test for a multi-line `exclude` array;
+  - one doc paragraph is stale.
 - Defaults the lanes will take unless overridden before they start:
   - `trait-variant` keeps its caret (17b);
-  - `apply` is async on one trait;
   - PS-25's digest is a hand-written FNV-1a;
   - `ProjectionId` refuses the full ADR-0015 set, with a generic reserved prefix;
   - Neon's `push` narrowing rides `0.4.0`;
   - VT-30 is a deprecated alias;
   - the new CI jobs are not required checks.
-- The `workerd` job's two-instance rules need a namespaced constructor on
-  `CloudflareEventStore`, which becomes a 1.0 promise. It is flagged in lane L6a's PR.
-- Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the
-  untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
+- Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open
 
@@ -86,6 +89,17 @@ record, and the owner.
   `wi-38373d`.
 
 ## Traps
+
+- **Memory is tight on this machine.** Run cargo with `CARGO_BUILD_JOBS=2`. Background gate runs get stopped when the session idles, so run the temper gate in the foreground. Never stop a gate mid-run: `cargo hack --no-dev-deps` strips dev-dependencies, so restore with `git checkout -- '*Cargo.toml' Cargo.lock`.
+- **Spec and source edits shift `path:N` citations tree-wide.**
+  - Snapshot the file first, then map old line numbers to new with difflib and repoint once. The scratchpad scripts `specmap2.py` and its siblings did this.
+  - Never repoint inside historical quotes: `SESSION-DECISIONS-*`, `RUNBOOK.md`, `references/`, `.kb/_governance`, experiment results, and released CHANGELOG sections.
+  - An accepted atom's frontmatter `summary` must not change, even for a citation.
+- **Rebasing over a lane that repointed the same citations:** take `main`'s version of each file whose diff is citation-only, recompute the shift from `main`'s copies, and apply it once. Hand-fix ranges whose endpoints fell in deleted text.
+- **Git Bash mangles `rev:path`.** Set `MSYS_NO_PATHCONV=1` for `git show REV:path`.
+- **A hook refuses shell edits whose command text mentions a `.rs` path,** even in markdown. Use the Edit tool.
+- **Live Neon flakes on the ES-11/ES-12 race** (`query_items_share_one_snapshot`, `read_result_is_stable_under_concurrent_append`) until L8 lands its fence. Re-run it; don't chase it.
+- **The CI base-commit semver step is advisory** while `0.4.0` is unpublished (a crates.io probe). The release trace comes from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`.
 
 - **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal and the hidden emitter renames.
 
