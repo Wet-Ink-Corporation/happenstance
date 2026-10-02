@@ -526,3 +526,11 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   **8,388,637 B**, the newer workerd's limit rather than the documented 2 MB.
   CF-40's metadata ceiling (17b) is carved from it.
   `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt`.
+- 2026-10-02 — **L6a: both legs red for the one intended reason.** Run
+  36967951105
+  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36967951105/job/110715683682).
+  Local: 97 collected and executed, 96 passed. Deployed: 96 executed, 95 passed,
+  no platform retry needed. The only failure on both legs is VT-23's
+  `store_evaluates_a_query_at_the_guaranteed_minimum_item_count`. The row walls
+  reproduced: 2,199,995 B local, 8,388,637 B deployed. Still owed: the vacuity
+  control on a throwaway branch.
