@@ -58,10 +58,14 @@ pub struct TableNamespace(String);
 impl TableNamespace {
     /// The longest namespace accepted, in bytes.
     ///
-    /// Generous for a tenant key and far from SQLite's identifier limits; it is
-    /// a bound so that a namespace cannot dominate the statement length a
-    /// Durable Object caps.
-    pub const MAX_LEN: usize = 32;
+    /// Long enough for a UUID tenant key mapped into the alphabet (37 bytes),
+    /// and a bound so that a namespace cannot dominate the statement length a
+    /// Durable Object caps. A query names the tag table once per tag term, so
+    /// the prefix's cost scales with the terms in one statement, which the
+    /// parameter cap bounds: at `workerd`'s 100 parameters that is about 6.4 KB
+    /// of the 100,000 bytes it allows. Raising this later is additive; lowering
+    /// it is not.
+    pub const MAX_LEN: usize = 64;
 
     /// Validates `name` as a namespace.
     ///
@@ -484,6 +488,18 @@ mod tests {
         assert_eq!(
             TableNamespace::new(&longest).map(|namespace| namespace.as_str().len()),
             Ok(TableNamespace::MAX_LEN)
+        );
+    }
+
+    /// The common tenant key: a UUID, hyphens mapped to `_` and a letter in
+    /// front because a UUID may start with a digit. 37 bytes.
+    #[test]
+    fn a_mapped_uuid_fits() {
+        let tenant = "t6f1c2d3e_4b5a_4c6d_8e7f_9a0b1c2d3e4f";
+        assert_eq!(tenant.len(), 37);
+        assert_eq!(
+            TableNamespace::new(tenant).map(|namespace| namespace.as_str().to_owned()),
+            Ok(tenant.to_owned())
         );
     }
 

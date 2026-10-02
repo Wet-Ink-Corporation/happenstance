@@ -219,7 +219,7 @@ not the same as what a user needed to be told.
   sequence, and not the incarnation, so an `EventId` minted in one is never a
   member of another. `TableNamespace::new` validates the name, because it is
   spliced into SQL as part of an identifier: lowercase ASCII letters, digits
-  and `_`, a letter first, at most 32 bytes, and not beginning `sqlite`.
+  and `_`, a letter first, at most 64 bytes, and not beginning `sqlite`.
   `InvalidTableNamespace` names the rule a string breaks. `new` renders exactly
   the statements it always has. It exists first for the `workerd` harness,
   whose rules open two isolated stores inside one object, and it is a feature
