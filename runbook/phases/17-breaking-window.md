@@ -492,8 +492,16 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   - the adapter evaluates at most **5 query items** and **45 tags in one item**.
   **Red, locally:** 96 of 97 pass. The failure is
   `store_evaluates_a_query_at_the_guaranteed_minimum_item_count`: 128 parameters
-  against 100. The CI run's URL, and the deployed leg's numbers, are recorded
-  below when the PR runs. L6b fixes the rendering and the constants.
+  against 100. L6b fixes the rendering and the constants.
+  **The red run, in CI** (PR #34,
+  https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36957404625/job/110683349880):
+  97 collected and 97 executed, 96 passed. The same single failure for the same
+  reason; the CI walls match local workerd 1.20260815.1. **The deployed leg did not
+  run.** `wrangler deploy` was refused with `Authentication error [code: 10000]`,
+  and then `Cannot use the access token from location: 172.212.163.227
+  [code: 9109]`: the token carries an IP filter that excludes GitHub's runners, and
+  its Workers permissions are still unverified. That is the owner's to fix. Still
+  owed: the deployed measurement, and the vacuity control on a throwaway branch.
   **Verified:** `cargo xtask ci` green before review, the temper gate green after
   it, `cargo xtask wasm`, `lints`, `lint-kb`, and three literal-table-name mutants
   each caught by the namespace tests. Findings worth carrying:

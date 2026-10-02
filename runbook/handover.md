@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`9d99339` on `main` (PR #33: `happenstance-ladybug` retired, ADR-0078), plus
-`lane/p17-workerd`, which opens lane L6a with this file. 2026-10-01.
+`lane/p17-workerd` at its L6a commit plus this rewrite, open as PR #34, on `9d99339`
+(`main`). 2026-10-01.
 
 ## Where things are
 
@@ -37,18 +37,40 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-Nothing merged is pending. Phase 17 lanes are merged through L5: L0 to L5 are PRs #26–#28 and #30–#32. `happenstance-ladybug` was retired by PR #33 (ADR-0078). Phase 22's documentation site merged as #29.
+**PR #34: lane L6a, the `workerd` job, red on purpose. Not merged.**
+- `harness/workerd` runs every event-store rule in a real Durable Object.
+- `CloudflareEventStore::namespaced` and `TableNamespace` are new public API, a
+  1.0 promise, flagged in the PR.
+- The `ci.yml` `workerd` job has a local leg and a deployed leg.
+- The local leg is red in CI as intended
+  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36957404625/job/110683349880):
+  97 executed and 96 passed. The failure is VT-23's 128-item rule, against
+  workerd's 100-parameter and 5-compound-term limits.
+- Walls: `experiments/durable-object-limits` (README table and `results/`). The
+  adapter serves at most 5 query items and 45 tags in one item.
+- The temper review is approved. `cargo xtask ci` is green.
+
+Phase 17 lanes L0 to L5 are merged (PRs #26–#28, #30–#32), ladybug retired (#33),
+and the docs site landed (#29).
 
 ## Next action
 
-**Lane L6a: the `workerd` CI job, landed red on purpose**, on `lane/p17-workerd`. Read the plan's L6a section first (`C:/Users/ryanm/.claude/plans/ultracode-runbook-phases-17-breaking-win-sequential-puppy.md`), then the research brief's `ci-jobs` item. The brief is in the kickoff workflow's journal; phase 17's session log says where. The lane:
-- adds a `harness/workerd` crate (publish = false, a workspace member) holding a real `#[durable_object]` class and a `dispatch` emitter under CF-23's public names (`emit_*`, ADR-0076);
-- runs the conformance rules through `@cloudflare/vitest-pool-workers`, with a committed lockfile, as a sibling job shaped like `live-neon`;
-- adds a **deployed-Durable-Object leg** using the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets. Both are set; the token is account-owned and verified active, but its Workers permissions are unverified, and the first deploy will show whether they are enough;
-- must **fail on today's code**, on VT-23's 128-arm UNION (`COMPOUND_SELECT`), and records that run's URL;
-- measures the SQL-length, compound-term, parameter and depth walls, locally and deployed, into `experiments/durable-object-limits`.
-
-Two-instance rules need a namespaced constructor on `CloudflareEventStore`, which becomes a 1.0 promise; flag it in the PR. L6b, a separate PR, then lowers Cloudflare's partition constants from the measurement.
+1. **The owner fixes the Cloudflare token.** `wrangler deploy` in CI was refused
+   with `Authentication error [code: 10000]`, then `Cannot use the access token
+   from location: 172.212.163.227 [code: 9109]`. The token's IP filter excludes
+   GitHub's runners. Drop the filter, or allow GitHub's ranges. Also confirm it
+   carries *Workers Scripts: Edit* on the account. Then re-run the job on PR #34.
+   The deployed leg prints its walls; record them in the experiment README and in
+   phase 17's session log. The row wall is the open number: 2,199,995 B on workerd
+   1.20260815.1 and 8,388,637 B on 1.20261001.1.
+2. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
+   throwaway branch and watch the job go red with `no such rule`.
+3. **Merge #34 red, then L6b** (a separate PR):
+   - render with `json_each` so an item binds constant parameters;
+   - set `MAX_QUERY_ARMS_PER_STATEMENT` ≤ 5 and the parameter budget under 100;
+   - write ADR-0083;
+   - record the green run;
+   - update the WF-11, CF-14 and CF-17 ledger bases.
 
 ## Waiting on the owner
 
@@ -63,7 +85,8 @@ Two-instance rules need a namespaced constructor on `CloudflareEventStore`, whic
   - `ProjectionId` refuses the full ADR-0015 set, with a generic reserved prefix;
   - Neon's `push` narrowing rides `0.4.0`;
   - VT-30 is a deprecated alias;
-  - the new CI jobs are not required checks.
+  - the new CI jobs are not required checks (the `workerd` job is not one).
+- The Cloudflare token's IP filter (Next action 1).
 - Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open
@@ -91,6 +114,9 @@ record, and the owner.
 ## Traps
 
 - **Memory is tight on this machine.** Run cargo with `CARGO_BUILD_JOBS=2`. Background gate runs get stopped when the session idles, so run the temper gate in the foreground. Never stop a gate mid-run: `cargo hack --no-dev-deps` strips dev-dependencies, so restore with `git checkout -- '*Cargo.toml' Cargo.lock`.
+- **The `workerd` harness runs whatever is in `harness/workerd/build/`.** Re-run
+  `npm run build` (that is, `worker-build --release`) after any Rust change, or vitest
+  tests the old wasm. `worker-build` is `cargo install worker-build --version 0.8.5`.
 - **Spec and source edits shift `path:N` citations tree-wide.**
   - Snapshot the file first, then map old line numbers to new with difflib and repoint once. The scratchpad scripts `specmap2.py` and its siblings did this.
   - Never repoint inside historical quotes: `SESSION-DECISIONS-*`, `RUNBOOK.md`, `references/`, `.kb/_governance`, experiment results, and released CHANGELOG sections.
