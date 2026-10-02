@@ -62,9 +62,11 @@ generates rebuilds the instance on the next call.
 
 ### The token
 
-On a deployed Worker the router refuses every request unless the `HARNESS_TOKEN`
-secret is set and the request sends it as a bearer token. The CI job generates a
-new token for each run and deletes the Worker at the end.
+On a deployed Worker the router refuses every request unless `HARNESS_TOKEN` is
+set and the request sends it as a bearer token. The CI job mints a new token for
+each run and passes it with `wrangler deploy --var`, so the code and the token
+arrive in one deploy. A `wrangler secret put` after the deploy did not reach the
+Worker within a minute on the first run. The job deletes the Worker at the end.
 
 ## What it discharges, and what it does not
 

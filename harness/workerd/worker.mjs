@@ -31,7 +31,7 @@ export class ConformanceObject {
 // `/do/<object>/<route>`, forwarded to the object named `<object>`.
 //
 // Only the deployed leg comes through here; the local runner reaches the
-// binding directly. It refuses everything unless the `HARNESS_TOKEN` secret is
+// binding directly. It refuses everything unless `HARNESS_TOKEN` (a var or a secret) is
 // set and the request carries it as a bearer token: an open harness would be a
 // public endpoint for running arbitrary-width SQL against a billed account.
 export default {
