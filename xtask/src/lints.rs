@@ -1648,14 +1648,14 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
 /// [`stale_publication_claims`]: the *check* itself — the
 /// `Result<()>`-returning entry point — lives in `xtask/src/lint_pages.rs`
 /// rather than here, deliberately. `exported_lints`
-/// (`xtask/src/affected.rs:1278-1286`) scans this file for exactly the shape
+/// (`xtask/src/affected.rs:1279-1287`) scans this file for exactly the shape
 /// `pub(crate) fn NAME() -> Result<()> {` and requires `affected::run`'s
 /// unconditional block to call each one it finds by name — the invariant
 /// that catches a lint wired into `REQUIRED` and forgotten in the story
 /// grain. A seventh entry point of that shape here would trip the same check
 /// for the wrong reason: it already runs in the story grain, transitively,
 /// because `affected::run` calls `lint_pages::run` unconditionally
-/// (`xtask/src/affected.rs:188`) and `lint_pages::run` calls this check.
+/// (`xtask/src/affected.rs:189`) and `lint_pages::run` calls this check.
 /// `xtask/src/affected.rs` is not a path this change owns, so the fix is to
 /// keep the checked shape out of this file rather than teach a name-matching
 /// scanner about an indirection it cannot see through.
@@ -1663,7 +1663,7 @@ pub(crate) const TESTKIT_LIB: &str = "crates/happenstance-testkit/src/lib.rs";
 
 /// The claim C2-07 is named for. `happenstance-testkit` has been on
 /// crates.io at `0.2.0-alpha.1` since `448e1ac` (2026-08-16, recorded at
-/// `CHANGELOG.md:2295`), so a reader meeting this sentence on the rendered
+/// `CHANGELOG.md:2310`), so a reader meeting this sentence on the rendered
 /// page meets a claim the registry already contradicted the day it shipped.
 pub(crate) const STALE_NOTHING_PUBLISHED: &str = "nothing in this workspace is published yet";
 
@@ -1741,7 +1741,7 @@ pub(crate) fn stale_publication_claims(
     if lib.contains(STALE_NOTHING_PUBLISHED) {
         problems.push(format!(
             "{TESTKIT_LIB} — claims `{STALE_NOTHING_PUBLISHED}`, but happenstance-testkit has \
-             been on crates.io at 0.2.0-alpha.1 since 448e1ac (2026-08-16, CHANGELOG.md:2295). \
+             been on crates.io at 0.2.0-alpha.1 since 448e1ac (2026-08-16, CHANGELOG.md:2310). \
              Ground the `factory =` justification in {FACTORY_INTRODUCED} and {FACTORY_REMOVED} \
              instead (C2-07)."
         ));

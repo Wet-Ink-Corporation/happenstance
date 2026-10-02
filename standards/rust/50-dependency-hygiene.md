@@ -125,7 +125,7 @@ mentions.
 
 **Evidence.** `Cargo.toml:91 (ffi-sqlite-wasm-rs)` ·
 `Cargo.toml:102 (RUSTSEC-2023-0089)` ·
-`.github/workflows/ci.yml:1011 (cargo deny check advisories)` ·
+`.github/workflows/ci.yml:1187 (cargo deny check advisories)` ·
 [RUSTSEC-2023-0089](https://rustsec.org/advisories/RUSTSEC-2023-0089.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-4. A licence rejection is a dependency choice, and the offender is rarely the crate you expect.
@@ -229,6 +229,6 @@ reasoning for the state you are leaving is what a reviewer checks the change
 against.
 
 **Evidence.** `crates/happenstance-cloudflare/Cargo.toml:44 (was deliberately absent)` ·
-`crates/happenstance-cloudflare/src/lib.rs:602 (exists to run four assertions)` ·
+`crates/happenstance-cloudflare/src/lib.rs:604 (exists to run four assertions)` ·
 `crates/happenstance-cloudflare/src/sql_storage.rs:5 (Four properties are load-bearing)` ·
 `xtask/Cargo.toml:17 (Deliberately absent)`

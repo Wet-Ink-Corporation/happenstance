@@ -73,6 +73,11 @@ examples/tickets-over-http/      two processes over one file. an HTTP API and a 
                                  runner, contended over real sockets, with read-your-writes
                                  answered by 202 until the view catches up. one image, three
                                  roles, and the only lib target under examples/.
+harness/workerd/                 🔬 the runtime instrument. a real Durable Object that runs
+                                 every event-store rule under workerd — locally, and on an
+                                 object deployed to Cloudflare — and measures the platform's
+                                 SQLite walls. the `workerd` CI job, a sibling of gate.
+                                 an npm lockfile lives here. never published. phase 17.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
 spec/                            SPECIFICATION.md — every clause that is true now.
                                  E2E-CASES.md — the cases stated as observable behaviour.

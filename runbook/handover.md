@@ -53,7 +53,7 @@ Two-instance rules need a namespaced constructor on `CloudflareEventStore`, whic
 ## Waiting on the owner
 
 - **A follow-up PR is owed for PR #33's review** (`wi-13bd3b`):
-  - `declared_excludes` fails open and matches its key by prefix (`xtask/src/affected.rs:639`);
+  - `declared_excludes` fails open and matches its key by prefix (`xtask/src/affected.rs:640`);
   - a stale `xtask/src/main.rs:89-103` citation in `lint_narrative.rs` and `narrative_doctests.rs`, which should be `:131-144`;
   - no test for a multi-line `exclude` array;
   - one doc paragraph is stale.

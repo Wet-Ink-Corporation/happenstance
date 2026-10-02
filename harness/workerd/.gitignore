@@ -1,0 +1,10 @@
+# worker-build output, rebuilt on every run.
+/build/
+/node_modules/
+# Local wrangler state and secrets.
+/.wrangler/
+/.dev.vars
+# The deployed leg's reports; CI uploads them, nothing commits them.
+/deployed-walls.txt
+/deployed-failures.json
+/vitest-*.json

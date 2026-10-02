@@ -473,3 +473,31 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   frozen directory as inert. CI lost the frozen `ladybug` job and the `msrv` job's
   `--exclude`. Citations into `xtask/src/main.rs`, `xtask/src/affected.rs` and
   `ci.yml` were repointed. Spec, CLAUDE.md and README edits keep their line counts. Verified: `cargo check --workspace --all-features --all-targets`, `cargo test -p xtask`, xtask clippy `-D warnings`, fmt, the `-D warnings` workspace doc build, `lints`, `lint-kb`, `lint-constitution`, `spec-trace`, `lint-workflows`, and the temper gate green. The full `cargo xtask ci` was not run.
+- 2026-10-01 — **Lane L6a: the `workerd` job, landed red on purpose.**
+  `harness/workerd` is a new workspace member and is never published. It holds a
+  real `#[durable_object]` class that runs one conformance rule by name. The
+  dispatch emitter expands `for_each_event_store_rule!` into a `match`, and the
+  runner's names come from the same enumeration through `__rule_names`, so a
+  dropped rule fails as `no such rule`. Two rules open two isolated stores, and a
+  Durable Object has one database. So `happenstance-cloudflare` gains
+  `CloudflareEventStore::namespaced` and `TableNamespace`: additive, owner-approved
+  in the phase plan, and **a 1.0 promise, flagged in the PR**. The `workerd` CI job
+  has a local leg (`@cloudflare/vitest-pool-workers`, lockfile committed) and a
+  deployed leg (`CLOUDFLARE_API_TOKEN`).
+  **Measured locally** (`experiments/durable-object-limits`):
+  - compound `SELECT` 5, bound parameters 100, statement 100,000 B, expression
+    depth 100, on workerd 1.20260815.1 and 1.20261001.1;
+  - the row wall is 2,199,995 B on the first and 8,388,637 B on the second, so
+    the deployed leg settles it;
+  - the adapter evaluates at most **5 query items** and **45 tags in one item**.
+  **Red, locally:** 96 of 97 pass. The failure is
+  `store_evaluates_a_query_at_the_guaranteed_minimum_item_count`: 128 parameters
+  against 100. The CI run's URL, and the deployed leg's numbers, are recorded
+  below when the PR runs. L6b fixes the rendering and the constants.
+  **Verified:** `cargo xtask ci` green before review, the temper gate green after
+  it, `cargo xtask wasm`, `lints`, `lint-kb`, and three literal-table-name mutants
+  each caught by the namespace tests. Findings worth carrying:
+  - a panicking rule traps the wasm instance, so the harness relays the panic to
+    JavaScript;
+  - the Worker's entry point is JavaScript, because a Rust entry point dies with
+    the trap.

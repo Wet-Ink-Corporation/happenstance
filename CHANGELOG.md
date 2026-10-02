@@ -211,6 +211,21 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-cloudflare`: several logs in one Durable Object.**
+  `CloudflareEventStore::namespaced(sql, &namespace)` keeps a log in its own
+  tables, `{namespace}_event`, `{namespace}_event_tag` and
+  `{namespace}_store_meta`, beside the unprefixed log `new` keeps. Two stores
+  under different namespaces share nothing: not a row, not the position
+  sequence, and not the incarnation, so an `EventId` minted in one is never a
+  member of another. `TableNamespace::new` validates the name, because it is
+  spliced into SQL as part of an identifier: lowercase ASCII letters, digits
+  and `_`, a letter first, at most 32 bytes, and not beginning `sqlite`.
+  `InvalidTableNamespace` names the rule a string breaks. `new` renders exactly
+  the statements it always has. It exists first for the `workerd` harness,
+  whose rules open two isolated stores inside one object, and it is a feature
+  rather than a test hook so that the harness runs the store a consumer builds.
+  From `1.0` it is a promise.
+
 - **`happenstance-testkit`: `a_busy_append_left_nothing_behind`, the
   concurrency family's sixth rule.** It holds ES-43's no-effect half: an
   append answered `AppendError::Busy` left nothing in the store. It races

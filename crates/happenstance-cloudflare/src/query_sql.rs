@@ -71,6 +71,7 @@
 
 use happenstance_core::{Query, QueryItem};
 
+use crate::namespace::Tables;
 use crate::sql_storage::SqlValue;
 
 /// One `SELECT position …` statement per chunk, bounded by **both** of SQLite's
@@ -100,6 +101,7 @@ use crate::sql_storage::SqlValue;
 /// that needs 32,766 tags on a single query item, against a store that accepts
 /// 1,024 on an event.
 pub(crate) fn chunks(
+    tables: &Tables,
     query: &Query,
     max_arms: usize,
     max_parameters: usize,
@@ -109,12 +111,12 @@ pub(crate) fn chunks(
         // tag index, and that is the definition rather than an optimisation:
         // `all` matches every event *including an untagged one*, and an untagged
         // event has no row in `event_tag` at all.
-        None => vec![("SELECT position FROM event".to_owned(), Vec::new())],
+        None => vec![(format!("SELECT position FROM {}", tables.event), Vec::new())],
         Some(items) => partition(items, max_arms.max(1), max_parameters.max(1))
             .into_iter()
             .map(|chunk| {
                 let mut bindings = Vec::new();
-                let sql = arms(chunk, &mut bindings);
+                let sql = arms(tables, chunk, &mut bindings);
                 (sql, bindings)
             })
             .collect(),
@@ -182,17 +184,17 @@ fn item_parameters(item: &QueryItem) -> usize {
 /// `UNION` and not `UNION ALL`: an event matching two items of one query is one
 /// event, and de-duplicating here is what makes that true by construction rather
 /// than by a `DISTINCT` bolted on by whichever caller remembered.
-fn arms(items: &[QueryItem], bindings: &mut Vec<SqlValue>) -> String {
+fn arms(tables: &Tables, items: &[QueryItem], bindings: &mut Vec<SqlValue>) -> String {
     if items.is_empty() {
         // `Query::from_items` refuses an empty list, so this is unreachable
         // through the public builders — but a `SELECT` with no arms is a syntax
         // error rather than an empty result, so the case is spelled rather than
         // assumed.
-        return "SELECT position FROM event WHERE 0".to_owned();
+        return format!("SELECT position FROM {} WHERE 0", tables.event);
     }
     items
         .iter()
-        .map(|item| item_sql(item, bindings))
+        .map(|item| item_sql(tables, item, bindings))
         .collect::<Vec<_>>()
         .join(" UNION ")
 }
@@ -203,7 +205,7 @@ fn arms(items: &[QueryItem], bindings: &mut Vec<SqlValue>) -> String {
 /// AND, with **superset** matching: an event matches when it carries *at least*
 /// the item's tags, which is why the extra tags become `position IN (…)`
 /// intersections rather than an equality on a tag set.
-fn item_sql(item: &QueryItem, bindings: &mut Vec<SqlValue>) -> String {
+fn item_sql(tables: &Tables, item: &QueryItem, bindings: &mut Vec<SqlValue>) -> String {
     let tags = distinct_tags(item);
     let types = item.types();
 
@@ -212,13 +214,14 @@ fn item_sql(item: &QueryItem, bindings: &mut Vec<SqlValue>) -> String {
             // Unconstructible through the public builders — `QueryItem::new`
             // refuses an item constraining nothing — and cheaper to spell than
             // to reason about.
-            return "SELECT position FROM event".to_owned();
+            return format!("SELECT position FROM {}", tables.event);
         }
         for event_type in types {
             bindings.push(SqlValue::Text(event_type.as_str().to_owned()));
         }
         return format!(
-            "SELECT position FROM event WHERE event_type IN ({})",
+            "SELECT position FROM {} WHERE event_type IN ({})",
+            tables.event,
             placeholders(types.len())
         );
     }
@@ -226,7 +229,7 @@ fn item_sql(item: &QueryItem, bindings: &mut Vec<SqlValue>) -> String {
     // The seed carries the type constraint, because every `event_tag` row for
     // one position also carries that position's own type — which is the whole
     // point of the covering column.
-    let mut sql = String::from("SELECT position FROM event_tag WHERE tag = ?");
+    let mut sql = format!("SELECT position FROM {} WHERE tag = ?", tables.event_tag);
     bindings.push(SqlValue::Text(tags[0].clone()));
     if !types.is_empty() {
         for event_type in types {
@@ -238,7 +241,9 @@ fn item_sql(item: &QueryItem, bindings: &mut Vec<SqlValue>) -> String {
     }
     for tag in &tags[1..] {
         bindings.push(SqlValue::Text(tag.clone()));
-        sql.push_str(" AND position IN (SELECT position FROM event_tag WHERE tag = ?)");
+        sql.push_str(" AND position IN (SELECT position FROM ");
+        sql.push_str(&tables.event_tag);
+        sql.push_str(" WHERE tag = ?)");
     }
     sql
 }
@@ -315,6 +320,7 @@ mod tests {
     /// defect assert today exactly what they asserted when they were red.
     fn plan(query: &Query) -> Vec<(String, Vec<SqlValue>)> {
         chunks(
+            &Tables::UNPREFIXED,
             query,
             CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
             CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,

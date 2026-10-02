@@ -62,7 +62,7 @@ floor).
 `MemoryEventStore` as the only store that clones and disqualifies it as the least
 representative shape. That was true at phase 4 and has been stale since phase 9:
 `happenstance-cloudflare` has no `todo!()`, runs `event_store_conformance!`, and is
-published — and its `write_rows` (`crates/happenstance-cloudflare/src/event_store.rs:699-728`)
+published — and its `write_rows` (`crates/happenstance-cloudflare/src/event_store.rs:771-800`)
 copies the event type, payload and metadata into owned `SqlValue`s **per event**, because
 the Workers SQL binding cannot take a borrow. That is item 4's benefiting shape, in an
 adapter that is neither the reference store nor SQLite. A two-build measurement — the same

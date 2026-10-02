@@ -9,6 +9,11 @@
 //! `kb-decision-0023` for why that substitution is a recorded finding rather
 //! than a choice.
 //!
+//! The same rules also run under `workerd`, in a real Durable Object, in the
+//! `workerd` CI job beside the gate (`harness/workerd`). That harness is CF-23's
+//! fourth: its emitter dispatches by name rather than wrapping each rule in a
+//! test attribute, because its collector is vitest, in JavaScript.
+//!
 //! This is CF-23's **third harness** — `wasm-bindgen-test` — applied for the
 //! first time to a real adapter rather than to the testkit's own fixture. The
 //! two harnesses that came before it run against stores that happen to be

@@ -63,7 +63,7 @@ request against its own base SHA and the break is inside the diff only if
 somebody bothered to look at the job's output.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:318 (async fn head)` ·
-`.github/workflows/ci.yml:957 (baseline-rev: ${{ github.event.pull_request.base.sha }})` ·
+`.github/workflows/ci.yml:1133 (baseline-rev: ${{ github.event.pull_request.base.sha }})` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
 [cargo-semver-checks 0.50](https://github.com/obi1kenobi/cargo-semver-checks) —
@@ -257,7 +257,7 @@ that is never compiled is decoration (F1-04, and
 `crates/happenstance-core/src/lib.rs:176 (pub use futures_core)` ·
 `crates/happenstance-sqlite/src/lib.rs:148 (pub use rusqlite)` ·
 `crates/happenstance-sqlite/src/lib.rs:190 (compile_fail,E0433)` ·
-`crates/happenstance-cloudflare/src/lib.rs:587 (pub use {happenstance_core, worker})` ·
+`crates/happenstance-cloudflare/src/lib.rs:589 (pub use {happenstance_core, worker})` ·
 `crates/happenstance-core/src/store.rs:188 (impl Stream<Item = Result<SequencedEvent, Self::Error>>)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)
 
