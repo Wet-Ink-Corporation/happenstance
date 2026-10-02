@@ -1,0 +1,20 @@
+Phase A on a deployed Durable Object, through harness/workerd's /probe route,
+taken by the workerd CI job's deployed leg on 2026-10-02 (run 36966608470,
+commit 8a0591f8). The Worker was deployed by wrangler 4.146.0 to the account
+behind CLOUDFLARE_API_TOKEN and deleted at the end of the run.
+
+== deployed Durable Object ==
+compound SELECT terms: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+bound parameters: accepted 100; refused above it: JavaScript threw: Error: too many SQL variables at offset 207: SQLITE_ERROR
+statement length (bytes): accepted 100000; refused above it: JavaScript threw: Error: statement too long: SQLITE_TOOBIG
+expression terms (1+1+...): accepted 100; refused above it: JavaScript threw: Error: Expression tree is too large (maximum depth 100): SQLITE_ERROR
+row payload (bytes): accepted 8388637; refused above it: JavaScript threw: Error: string or blob too big: SQLITE_TOOBIG
+adapter: query items, one tag each: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+adapter: append-condition items, one tag each: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+adapter: tags in one query item: accepted 45; refused above it: JavaScript threw: Error: Expression tree is too large (maximum depth 100): SQLITE_ERROR
+
+== The conformance rules on the deployed object ==
+96 listed, 96 executed, 93 passed. Failures:
+store_evaluates_a_query_at_the_guaranteed_minimum_item_count  (Rust panic: read should succeed, too many SQL variables)
+two_fixture_instances_observe_none_of_each_others_appends  [500] Worker not found.  (platform propagation, not the adapter)
+query_item_tags_are_and  [500] Worker not found.  (platform propagation, not the adapter)

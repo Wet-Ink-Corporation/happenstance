@@ -1016,6 +1016,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "happenstance-workerd-harness"
+version = "0.4.0"
+dependencies = [
+ "futures-core",
+ "happenstance-cloudflare",
+ "happenstance-core",
+ "happenstance-testkit",
+ "worker",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

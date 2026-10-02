@@ -401,11 +401,11 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
 /// matters, and belongs there by subject. But `xtask/src/affected.rs`'s
 /// `exported_lints` scans `lints.rs` for the exact shape `pub(crate) fn
 /// NAME() -> Result<()> {` and requires `affected::run`'s unconditional block
-/// to call each one it finds by name (`xtask/src/affected.rs:1319-1344`) —
+/// to call each one it finds by name (`xtask/src/affected.rs:1320-1345`) —
 /// the invariant that catches a lint wired into `REQUIRED` and forgotten in
 /// the story grain. This check already runs in the story grain: `run` above
 /// is called unconditionally by `affected::run`
-/// (`xtask/src/affected.rs:188`), and `run` calls this. Giving it that same
+/// (`xtask/src/affected.rs:189`), and `run` calls this. Giving it that same
 /// shape in `lints.rs` would trip the scanner over reachability it cannot see
 /// through a name match, and `xtask/src/affected.rs` is not a path this
 /// change owns. So the entry point stays here, where `run` already reaches

@@ -473,3 +473,64 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   frozen directory as inert. CI lost the frozen `ladybug` job and the `msrv` job's
   `--exclude`. Citations into `xtask/src/main.rs`, `xtask/src/affected.rs` and
   `ci.yml` were repointed. Spec, CLAUDE.md and README edits keep their line counts. Verified: `cargo check --workspace --all-features --all-targets`, `cargo test -p xtask`, xtask clippy `-D warnings`, fmt, the `-D warnings` workspace doc build, `lints`, `lint-kb`, `lint-constitution`, `spec-trace`, `lint-workflows`, and the temper gate green. The full `cargo xtask ci` was not run.
+- 2026-10-01 — **Lane L6a: the `workerd` job, landed red on purpose.**
+  `harness/workerd` is a new workspace member and is never published. It holds a
+  real `#[durable_object]` class that runs one conformance rule by name. The
+  dispatch emitter expands `for_each_event_store_rule!` into a `match`, and the
+  runner's names come from the same enumeration through `__rule_names`, so a
+  dropped rule fails as `no such rule`. Two rules open two isolated stores, and a
+  Durable Object has one database. So `happenstance-cloudflare` gains
+  `CloudflareEventStore::namespaced` and `TableNamespace`: additive, owner-approved
+  in the phase plan, and **a 1.0 promise, flagged in the PR**. The `workerd` CI job
+  has a local leg (`@cloudflare/vitest-pool-workers`, lockfile committed) and a
+  deployed leg (`CLOUDFLARE_API_TOKEN`).
+  **Measured locally** (`experiments/durable-object-limits`):
+  - compound `SELECT` 5, bound parameters 100, statement 100,000 B, expression
+    depth 100, on workerd 1.20260815.1 and 1.20261001.1;
+  - the row wall is 2,199,995 B on the first and 8,388,637 B on the second, so
+    the deployed leg settles it;
+  - the adapter evaluates at most **5 query items** and **45 tags in one item**.
+  **Red, locally:** 96 of 97 pass. The failure is
+  `store_evaluates_a_query_at_the_guaranteed_minimum_item_count`: 128 parameters
+  against 100. L6b fixes the rendering and the constants.
+  **The red run, in CI** (PR #34,
+  https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36957404625/job/110683349880):
+  97 collected and 97 executed, 96 passed. The same single failure for the same
+  reason; the CI walls match local workerd 1.20260815.1. **The deployed leg did not
+  run.** `wrangler deploy` was refused with `Authentication error [code: 10000]`,
+  and then `Cannot use the access token from location: 172.212.163.227
+  [code: 9109]`: the token carries an IP filter that excludes GitHub's runners, and
+  its Workers permissions are still unverified. That is the owner's to fix. Still
+  owed: the deployed measurement, and the vacuity control on a throwaway branch.
+  **Verified:** `cargo xtask ci` green before review, the temper gate green after
+  it, `cargo xtask wasm`, `lints`, `lint-kb`, and three literal-table-name mutants
+  each caught by the namespace tests. Findings worth carrying:
+  - a panicking rule traps the wasm instance, so the harness relays the panic to
+    JavaScript;
+  - the Worker's entry point is JavaScript, because a Rust entry point dies with
+    the trap.
+- 2026-10-02 — **L6a: the deployed leg ran.** After the owner lifted the token's
+  IP filter, the deploy succeeded. The Worker then answered "not configured" for
+  the whole readiness window, even though `wrangler secret put` reported success,
+  and the readiness loop fell through silently. Fixed at `8a0591f8`: the per-run
+  token goes in `wrangler deploy --var` (one atomic upload), and the loop fails
+  loudly.
+  **Run 36966608470**
+  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36966608470/job/110711625329):
+  96 executed, 93 passed. VT-23 failed as expected. Two rules got `500 Worker not
+  found.`, which is Cloudflare's propagation error before any harness code runs.
+  `deployed.mjs` now retries exactly that response once, on a fresh object, and
+  logs it; a rule's own failure is never retried.
+  **Deployed walls:** compound 5, parameters 100, statement 100,000 B, depth 100,
+  adapter 5 items and 45 tags per item — all as local. The row wall is
+  **8,388,637 B**, the newer workerd's limit rather than the documented 2 MB.
+  CF-40's metadata ceiling (17b) is carved from it.
+  `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt`.
+- 2026-10-02 — **L6a: both legs red for the one intended reason.** Run
+  36967951105
+  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36967951105/job/110715683682).
+  Local: 97 collected and executed, 96 passed. Deployed: 96 executed, 95 passed,
+  no platform retry needed. The only failure on both legs is VT-23's
+  `store_evaluates_a_query_at_the_guaranteed_minimum_item_count`. The row walls
+  reproduced: 2,199,995 B local, 8,388,637 B deployed. Still owed: the vacuity
+  control on a throwaway branch.

@@ -131,7 +131,7 @@ claims more than the adapter needs fails in CI rather than on a consumer's machi
 already re-exports the core it was built against — `pub use happenstance_core;` at
 `crates/happenstance-sqlite/src/lib.rs:148`, `crates/happenstance-postgres/src/lib.rs:230` and
 `crates/happenstance-neon/src/lib.rs:173`, and `pub use {happenstance_core, worker};` at
-`crates/happenstance-cloudflare/src/lib.rs:587` — so a consumer who reaches core through the adapter
+`crates/happenstance-cloudflare/src/lib.rs:589` — so a consumer who reaches core through the adapter
 cannot end up holding the second `Event` this atom opens with.
 
 The sub-questions:

@@ -87,18 +87,19 @@ use anyhow::{Context, Result, bail};
 use crate::spec_trace::workspace_root;
 
 /// The glob-free member roots, matching the workspace manifest's
-/// `members = ["crates/*", "examples/*", "xtask"]`.
+/// `members = ["crates/*", "examples/*", "harness/workerd", "xtask"]`.
 ///
 /// A directory here is scanned one level deep for a `Cargo.toml`; a manifest
-/// directly at the path is taken as a member itself.
+/// directly at the path is taken as a member itself. `harness` is scanned, so
+/// `harness/workerd` is found one level down like any crate under `crates`.
 ///
-/// Duplicating the manifest's list is the risk this constant carries: a fourth
+/// Duplicating the manifest's list is the risk this constant carries: a fifth
 /// member root added to `Cargo.toml` and not here would leave that crate's
 /// changes mapping to no package, and — because an unattributable path widens to
 /// the whole workspace — the symptom would be a gate that got *slower*, which
 /// nobody investigates. [`assert_covers_manifest`] is what makes it a failure
 /// instead.
-const MEMBER_ROOTS: &[&str] = &["crates", "examples", "xtask"];
+const MEMBER_ROOTS: &[&str] = &["crates", "examples", "harness", "xtask"];
 
 /// Paths whose change invalidates every package's build.
 ///

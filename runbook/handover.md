@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`09854b3` on `main` (PR #29, phase 22: the documentation site), plus
-`lane/p17-retire-ladybug`. 2026-09-30.
+`lane/p17-workerd` at its L6a commit plus this rewrite, open as PR #34, on `9d99339`
+(`main`). 2026-10-01.
 
 ## Where things are
 
@@ -37,31 +37,53 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-- `lane/p17-retire-ladybug`: **`happenstance-ladybug` is retired** (ADR-0078, the owner's call `wi-630032`).
-  - It is excluded from the workspace, and the directory is kept as a frozen record because its files are cited by line.
-  - The gate's ladybug steps, its CI job and `lbug`'s dependency graph are gone.
-- PR #29 (phase 22, the documentation site) merged as `09854b3`, after `main` was merged into it.
+**PR #34: lane L6a, the `workerd` job, red on purpose. Not merged.**
+- `harness/workerd` runs every event-store rule in a real Durable Object.
+- `CloudflareEventStore::namespaced` and `TableNamespace` are new public API, a
+  1.0 promise, flagged in the PR.
+- The `ci.yml` `workerd` job has a local leg and a deployed leg.
+- The local leg is red in CI as intended
+  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36957404625/job/110683349880):
+  97 executed and 96 passed. The failure is VT-23's 128-item rule, against
+  workerd's 100-parameter and 5-compound-term limits.
+- Walls: `experiments/durable-object-limits` (README table and `results/`). The
+  adapter serves at most 5 query items and 45 tags in one item.
+- The temper review is approved. `cargo xtask ci` is green.
+
+Phase 17 lanes L0 to L5 are merged (PRs #26–#28, #30–#32), ladybug retired (#33),
+and the docs site landed (#29).
 
 ## Next action
 
-Lane L6a is the `workerd` CI job, landed red on purpose. It has a local leg and a deployed-Durable-Object leg using the Cloudflare token. The secret's name needs confirming: `CLOUDFLARE_API_TOKEN` unless the owner says otherwise.
+1. **The deployed leg runs** (token fixed 2026-10-02). Run 36966608470 measured
+   the deployed walls: everything as local, and the row wall at **8,388,637 B**
+   (`experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt`).
+   `deployed.mjs` now retries Cloudflare's `500 Worker not found.` once. Run
+   36967951105 confirmed both legs fail only on VT-23.
+2. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
+   throwaway branch and watch the job go red with `no such rule`.
+3. **Merge #34 red, then L6b** (a separate PR):
+   - render with `json_each` so an item binds constant parameters;
+   - set `MAX_QUERY_ARMS_PER_STATEMENT` ≤ 5 and the parameter budget under 100;
+   - write ADR-0083;
+   - record the green run;
+   - update the WF-11, CF-14 and CF-17 ledger bases.
 
 ## Waiting on the owner
 
-- Add `NEON_CONNECTION` and the Cloudflare API token as repository secrets before
-  lanes L5 (`Busy`), L6a (`workerd`) and L8 (ES-11).
+- **A follow-up PR is owed for PR #33's review** (`wi-13bd3b`):
+  - `declared_excludes` fails open and matches its key by prefix (`xtask/src/affected.rs:640`);
+  - a stale `xtask/src/main.rs:89-103` citation in `lint_narrative.rs` and `narrative_doctests.rs`, which should be `:131-144`;
+  - no test for a multi-line `exclude` array;
+  - one doc paragraph is stale.
 - Defaults the lanes will take unless overridden before they start:
   - `trait-variant` keeps its caret (17b);
-  - `apply` is async on one trait;
   - PS-25's digest is a hand-written FNV-1a;
   - `ProjectionId` refuses the full ADR-0015 set, with a generic reserved prefix;
   - Neon's `push` narrowing rides `0.4.0`;
   - VT-30 is a deprecated alias;
-  - the new CI jobs are not required checks.
-- The `workerd` job's two-instance rules need a namespaced constructor on
-  `CloudflareEventStore`, which becomes a 1.0 promise. It is flagged in lane L6a's PR.
-- Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the
-  untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
+  - the new CI jobs are not required checks (the `workerd` job is not one).
+- Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open
 
@@ -86,6 +108,20 @@ record, and the owner.
   `wi-38373d`.
 
 ## Traps
+
+- **Memory is tight on this machine.** Run cargo with `CARGO_BUILD_JOBS=2`. Background gate runs get stopped when the session idles, so run the temper gate in the foreground. Never stop a gate mid-run: `cargo hack --no-dev-deps` strips dev-dependencies, so restore with `git checkout -- '*Cargo.toml' Cargo.lock`.
+- **The `workerd` harness runs whatever is in `harness/workerd/build/`.** Re-run
+  `npm run build` (that is, `worker-build --release`) after any Rust change, or vitest
+  tests the old wasm. `worker-build` is `cargo install worker-build --version 0.8.5`.
+- **Spec and source edits shift `path:N` citations tree-wide.**
+  - Snapshot the file first, then map old line numbers to new with difflib and repoint once. The scratchpad scripts `specmap2.py` and its siblings did this.
+  - Never repoint inside historical quotes: `SESSION-DECISIONS-*`, `RUNBOOK.md`, `references/`, `.kb/_governance`, experiment results, and released CHANGELOG sections.
+  - An accepted atom's frontmatter `summary` must not change, even for a citation.
+- **Rebasing over a lane that repointed the same citations:** take `main`'s version of each file whose diff is citation-only, recompute the shift from `main`'s copies, and apply it once. Hand-fix ranges whose endpoints fell in deleted text.
+- **Git Bash mangles `rev:path`.** Set `MSYS_NO_PATHCONV=1` for `git show REV:path`.
+- **A hook refuses shell edits whose command text mentions a `.rs` path,** even in markdown. Use the Edit tool.
+- **Live Neon flakes on the ES-11/ES-12 race** (`query_items_share_one_snapshot`, `read_result_is_stable_under_concurrent_append`) until L8 lands its fence. Re-run it; don't chase it.
+- **The CI base-commit semver step is advisory** while `0.4.0` is unpublished (a crates.io probe). The release trace comes from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`.
 
 - **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal and the hidden emitter renames.
 

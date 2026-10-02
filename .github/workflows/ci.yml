@@ -853,6 +853,193 @@ jobs:
           fi
           echo "no conformance failures"
 
+  # Every event-store conformance rule inside `workerd`, through a real Durable
+  # Object — `happenstance-cloudflare`'s 1.0 claim is *conformance on the real
+  # runtime* (ADR-0066 §6), and the gate runs the rules against a `node:sqlite`
+  # shim. A sibling of `gate`, never a step inside it: it needs Node, an npm
+  # lockfile and, for its second leg, a Cloudflare account, and none of those
+  # belongs in `cargo xtask ci`
+  # (`.kb/open-questions/no-workerd-class-runner-in-the-gate.md`).
+  #
+  # Two legs over one Worker (`harness/workerd`):
+  #
+  # * **local** — `@cloudflare/vitest-pool-workers`, which runs `workerd`
+  #   itself, pinned by `harness/workerd/package-lock.json`. No secret; runs on
+  #   every PR, forks included.
+  # * **deployed** — the same Worker deployed to the account behind
+  #   `CLOUDFLARE_API_TOKEN`, driven over HTTPS. The only place the platform's
+  #   own limits can be observed rather than inferred: the row wall differs
+  #   between `workerd` releases, so no local runner settles it.
+  #
+  # Both legs end with the wall probe's report in the log
+  # (`experiments/durable-object-limits`). Not a required status check.
+  workerd:
+    name: conformance under workerd, local and deployed
+    runs-on: ubuntu-latest
+    # One Worker name per repository, so two runs deploying at once would swap
+    # code and token under each other. A running job is never cancelled by this
+    # group, so the step that deletes the Worker always gets to run; GitHub does
+    # cancel a run still *pending* here when a newer one queues, which is safe
+    # because a pending run has deployed nothing.
+    concurrency:
+      group: workerd-deployed
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: harness/workerd
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # rust-toolchain.toml pins the channel and the wasm32 target.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: harness/workerd/package-lock.json
+
+      # Pinned to the `worker` crate's own version; `worker-build` downloads the
+      # `wasm-bindgen` that matches Cargo.lock by itself.
+      - name: Install worker-build
+        run: cargo install worker-build --version 0.8.5 --locked
+
+      - name: Install the pinned runner
+        run: npm ci
+
+      - name: Build the harness Worker
+        run: worker-build --release
+
+      - name: The conformance rules under local workerd
+        run: |
+          npx vitest run test/conformance.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-run.json
+
+      # The vacuity guard. The rule names come from the harness, which expands
+      # the testkit's enumeration, so the test count is the suite's own rather
+      # than a number typed here; a rule the dispatcher does not know answers 404
+      # and fails by name. What this adds is that nothing was skipped, that every
+      # collected test executed, and a floor under the count. A floor rather than
+      # an equality, for live-neon's reason: an equality fails on the commit that
+      # adds a rule. (Listing first, as live-neon does, is not available: `vitest
+      # list` cannot reach a Durable Object binding.)
+      - name: The run executed every rule
+        if: always()
+        run: |
+          test -f vitest-run.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq '.numTotalTests' vitest-run.json)
+          passed=$(jq '.numPassedTests' vitest-run.json)
+          failed=$(jq '.numFailedTests' vitest-run.json)
+          pending=$(jq '.numPendingTests + .numTodoTests' vitest-run.json)
+          echo "collected $total; executed $((passed + failed)) (passed $passed, failed $failed), not run $pending"
+          # 95 rules + CF-18's declension check + the enumeration check.
+          if [ "$total" -lt 97 ]; then
+            echo "::error::only $total tests were collected; the enumeration or the dispatcher has lost rules"
+            exit 1
+          fi
+          if [ "$pending" -ne 0 ]; then
+            echo "::error::$pending tests did not run"
+            exit 1
+          fi
+          if [ "$((passed + failed))" -ne "$total" ]; then
+            echo "::error::executed $((passed + failed)) of $total"
+            exit 1
+          fi
+
+      # Strict, with the failure list empty on purpose: no tolerated set.
+      - name: Every rule passed under local workerd
+        if: always()
+        run: |
+          failures=$(jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .title' vitest-run.json)
+          if [ -n "$failures" ]; then
+            echo "::error::conformance failures under workerd:"
+            echo "$failures"
+            exit 1
+          fi
+          echo "no conformance failures"
+
+      - name: The SQLite walls of local workerd
+        if: always()
+        run: npx vitest run test/limits.test.ts --reporter=verbose
+
+      # The deployed leg. The same rule for the secret as live-neon: a fork PR
+      # cannot see it and is told so; a same-repository run without it is an
+      # error, because a green tick over a skipped leg proves nothing.
+      #
+      # The credentials are step-scoped, on the three steps that need them, so
+      # nothing before them — `npm ci`'s install scripts, `cargo install`'s build
+      # scripts, the local runs — can read them.
+      - name: Whether there is an account to deploy to
+        id: account
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Cloudflare credentials are set; the deployed leg will run."
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            echo "::notice::Cloudflare credentials are not visible to a fork PR. \
+          The deployed leg is skipped and proves NOTHING about the platform."
+          else
+            echo "::error::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not \
+          set on a same-repository run, so the deployed leg would be skipped and \
+          report green having observed nothing."
+            exit 1
+          fi
+
+      - name: Deploy the harness Worker
+        id: deploy
+        if: always() && steps.account.outputs.present == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # A fresh token per run, masked before anything can print it, and
+          # deployed in the same upload as the code. The first run set it with
+          # `wrangler secret put` after the deploy: the upload reported success
+          # and the Worker still answered "not configured" for the whole
+          # readiness window. One atomic deploy has no such window. It is a
+          # plain var rather than a secret, which is acceptable for a value
+          # minted per run on a Worker deleted at the end of the same run.
+          token=$(openssl rand -hex 32)
+          echo "::add-mask::$token"
+          echo "HARNESS_TOKEN=$token" >> "$GITHUB_ENV"
+          npx wrangler deploy --var "HARNESS_TOKEN:$token" | tee deploy.txt
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.txt | head -1)
+          test -n "$url" || { echo "::error::wrangler printed no workers.dev URL"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: The conformance rules on a deployed Durable Object
+        if: always() && steps.deploy.outputs.url != ''
+        run: |
+          # A new deployment takes a moment to reach the edge. The wait is
+          # bounded, and running out of it fails with what the Worker last
+          # answered rather than falling through to the run.
+          ready=""
+          for attempt in 1 2 3 4 5 6; do
+            status=$(curl -s -o last.txt -w '%{http_code}' \
+              -H "authorization: Bearer $HARNESS_TOKEN" \
+              "${{ steps.deploy.outputs.url }}/do/ready-${{ github.run_id }}/rules")
+            echo "attempt $attempt: $status"
+            if [ "$status" = "200" ]; then ready=yes; break; fi
+            sleep 10
+          done
+          if [ -z "$ready" ]; then
+            echo "::error::the deployed Worker never answered 200; last: $status $(head -c 200 last.txt)"
+            exit 1
+          fi
+          node deployed.mjs "${{ steps.deploy.outputs.url }}" \
+            "run-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      # Nothing is left listening: the Worker and every object's storage go.
+      - name: Delete the harness Worker
+        if: always() && steps.deploy.outputs.url != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler delete --force
+
   msrv:
     name: minimum supported Rust version
     runs-on: ubuntu-latest

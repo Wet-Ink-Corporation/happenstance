@@ -1,0 +1,21 @@
+# The Worker the `workerd` CI job runs and the deployed leg deploys.
+#
+# `main` wraps what `worker-build` emits (build/); build that first (see README.md).
+name = "happenstance-workerd-harness"
+main = "worker.mjs"
+# Pinned rather than "today", so a red run means the code changed and not the
+# runtime's defaults. Raise it deliberately, with the workerd pin in
+# package-lock.json.
+compatibility_date = "2026-08-15"
+
+[build]
+command = ""
+
+[[durable_objects.bindings]]
+name = "CONFORMANCE"
+class_name = "ConformanceObject"
+
+# SQLite-backed storage is what `ctx.storage.sql` needs.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ConformanceObject"]
