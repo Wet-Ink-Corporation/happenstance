@@ -58,8 +58,8 @@ and the docs site landed (#29).
 1. **The deployed leg runs** (token fixed 2026-10-02). Run 36966608470 measured
    the deployed walls: everything as local, and the row wall at **8,388,637 B**
    (`experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt`).
-   `deployed.mjs` now retries Cloudflare's `500 Worker not found.` once. Confirm
-   the next run fails only on VT-23.
+   `deployed.mjs` now retries Cloudflare's `500 Worker not found.` once. Run
+   36967951105 confirmed both legs fail only on VT-23.
 2. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
    throwaway branch and watch the job go red with `no such rule`.
 3. **Merge #34 red, then L6b** (a separate PR):
