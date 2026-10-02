@@ -25,6 +25,16 @@ async function call(object, route) {
   return { status: response.status, body: await response.text() };
 }
 
+// Cloudflare's own answer when a request reaches a location the freshly
+// deployed Worker has not propagated to yet. It is raised before any harness or
+// adapter code runs, so it says nothing about a rule; the first deployed run
+// saw it on two rules that pass everywhere else. Matched exactly, and retried
+// once: a rule's own failure (a panic, a 404 for an unknown rule, a harness
+// fault) is never retried, so the strict failure list stays strict.
+function isPlatformMiss(status, body) {
+  return status === 500 && body.trim() === "Worker not found.";
+}
+
 const listing = await call(`${runId}-rules`, "rules");
 if (listing.status !== 200) {
   console.error(`listing the rules failed: ${listing.status} ${listing.body}`);
@@ -38,7 +48,13 @@ let executed = 0;
 for (const rule of rules) {
   // One object per rule per run: every rule starts from empty storage, and a
   // re-run never inherits a previous run's log.
-  const { status, body } = await call(`${runId}-${rule}`, `rule/${rule}`);
+  let { status, body } = await call(`${runId}-${rule}`, `rule/${rule}`);
+  if (isPlatformMiss(status, body)) {
+    // Retried once, on a fresh object, and said so. See isPlatformMiss.
+    console.log(`retry ${rule}  [${status}] ${body.trim()}`);
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    ({ status, body } = await call(`${runId}-${rule}-retry`, `rule/${rule}`));
+  }
   executed += 1;
   if (status === 200) {
     console.log(`ok   ${rule}${body.startsWith("skipped\n") ? `  (${body.slice(8)})` : ""}`);

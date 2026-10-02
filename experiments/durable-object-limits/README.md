@@ -146,18 +146,19 @@ object through the `workerd` CI job. Each axis is bisected and the refusal above
 the largest accepted size is quoted verbatim, so the table names *which* limit
 refused rather than trusting the axis's label. Transcripts:
 [`results/run-workerd-local-2026-10-01.txt`](results/run-workerd-local-2026-10-01.txt);
-the deployed leg's report is in that job's log.
+the deployed leg's is
+[`results/run-workerd-deployed-2026-10-02.txt`](results/run-workerd-deployed-2026-10-02.txt).
 
-| Axis | `workerd` 1.20260815.1 | `workerd` 1.20261001.1 | SQLite's default, which the shim runs at |
-| --- | --- | --- | --- |
-| compound `SELECT` terms | **5** | **5** | 500 |
-| bound parameters | **100** | **100** | 32,766 |
-| statement length | **100,000** B | **100,000** B | 1,000,000,000 B |
-| expression depth (`1+1+…` terms) | **100** | **100** | 1,000 |
-| one row's payload | 2,199,995 B | 8,388,637 B | 1,000,000,000 B (M2A found no wall ≤ 8 MiB) |
-| adapter: query items, one tag each | **5** | **5** | unbounded: chunked at 400 (`tests/wide_query_ceiling.rs`) |
-| adapter: append-condition items | **5** | **5** | unbounded: chunked at 400 |
-| adapter: tags in one query item | **45** | **45** | not measured |
+| Axis | Deployed Durable Object | `workerd` 1.20260815.1 | `workerd` 1.20261001.1 | SQLite's default, which the shim runs at |
+| --- | --- | --- | --- | --- |
+| compound `SELECT` terms | **5** | **5** | **5** | 500 |
+| bound parameters | **100** | **100** | **100** | 32,766 |
+| statement length | **100,000** B | **100,000** B | **100,000** B | 1,000,000,000 B |
+| expression depth (`1+1+…` terms) | **100** | **100** | **100** | 1,000 |
+| one row's payload | **8,388,637 B** | 2,199,995 B | 8,388,637 B | 1,000,000,000 B (M2A found no wall ≤ 8 MiB) |
+| adapter: query items, one tag each | **5** | **5** | **5** | unbounded: chunked at 400 (`tests/wide_query_ceiling.rs`) |
+| adapter: append-condition items | **5** | **5** | **5** | unbounded: chunked at 400 |
+| adapter: tags in one query item | **45** | **45** | **45** | not measured |
 
 **The finding.** The first four are `sqlite3_limit`s `workerd` sets on every
 database it opens, and they are the same on both releases. Each is far below
@@ -171,8 +172,13 @@ chain exceeds the expression depth. The conformance rule
 `workerd` for exactly this reason, and it is the only rule that does.
 
 **The row wall moved between two `workerd` releases**, from about 2.2 MB to
-8 MiB + 29 B, so no local runner settles it. The deployed leg is the measurement
-that counts for `MAX_EVENT_DATA_LEN` and for CF-40's metadata ceiling (17b).
+8 MiB + 29 B. The deployed object settles it at **8,388,637 B (8 MiB + 29)**: the
+platform enforces the newer limit, not the 2 MB its documentation states, so the
+older local runner under-reports it. That is the number CF-40's metadata ceiling
+(17b) is carved from, and it leaves `MAX_EVENT_DATA_LEN`'s 1 MiB with more room
+than its derivation assumed.
+([`results/run-workerd-deployed-2026-10-02.txt`](results/run-workerd-deployed-2026-10-02.txt),
+CI run 36966608470.)
 
 Lane L6b changes the rendering so an item binds a constant number of parameters
 and sets the two constants from this table (ADR-0083).

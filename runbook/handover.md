@@ -55,14 +55,11 @@ and the docs site landed (#29).
 
 ## Next action
 
-1. **The owner fixes the Cloudflare token.** `wrangler deploy` in CI was refused
-   with `Authentication error [code: 10000]`, then `Cannot use the access token
-   from location: 172.212.163.227 [code: 9109]`. The token's IP filter excludes
-   GitHub's runners. Drop the filter, or allow GitHub's ranges. Also confirm it
-   carries *Workers Scripts: Edit* on the account. Then re-run the job on PR #34.
-   The deployed leg prints its walls; record them in the experiment README and in
-   phase 17's session log. The row wall is the open number: 2,199,995 B on workerd
-   1.20260815.1 and 8,388,637 B on 1.20261001.1.
+1. **The deployed leg runs** (token fixed 2026-10-02). Run 36966608470 measured
+   the deployed walls: everything as local, and the row wall at **8,388,637 B**
+   (`experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt`).
+   `deployed.mjs` now retries Cloudflare's `500 Worker not found.` once. Confirm
+   the next run fails only on VT-23.
 2. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
    throwaway branch and watch the job go red with `no such rule`.
 3. **Merge #34 red, then L6b** (a separate PR):
@@ -86,7 +83,6 @@ and the docs site landed (#29).
   - Neon's `push` narrowing rides `0.4.0`;
   - VT-30 is a deprecated alias;
   - the new CI jobs are not required checks (the `workerd` job is not one).
-- The Cloudflare token's IP filter (Next action 1).
 - Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open

@@ -509,3 +509,20 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     JavaScript;
   - the Worker's entry point is JavaScript, because a Rust entry point dies with
     the trap.
+- 2026-10-02 — **L6a: the deployed leg ran.** After the owner lifted the token's
+  IP filter, the deploy succeeded. The Worker then answered "not configured" for
+  the whole readiness window, even though `wrangler secret put` reported success,
+  and the readiness loop fell through silently. Fixed at `8a0591f8`: the per-run
+  token goes in `wrangler deploy --var` (one atomic upload), and the loop fails
+  loudly.
+  **Run 36966608470**
+  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36966608470/job/110711625329):
+  96 executed, 93 passed. VT-23 failed as expected. Two rules got `500 Worker not
+  found.`, which is Cloudflare's propagation error before any harness code runs.
+  `deployed.mjs` now retries exactly that response once, on a fresh object, and
+  logs it; a rule's own failure is never retried.
+  **Deployed walls:** compound 5, parameters 100, statement 100,000 B, depth 100,
+  adapter 5 items and 45 tags per item — all as local. The row wall is
+  **8,388,637 B**, the newer workerd's limit rather than the documented 2 MB.
+  CF-40's metadata ceiling (17b) is carved from it.
+  `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt`.
