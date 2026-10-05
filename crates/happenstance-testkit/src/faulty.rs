@@ -42,12 +42,12 @@ struct Armed {
 impl Armed {
     /// Consumes one armed failure, reporting whether there was one to consume.
     ///
-    /// `fetch_update` with a checked subtraction, so the count never wraps
+    /// `try_update` with a checked subtraction, so the count never wraps
     /// below zero and the **total** number of injected failures across every
     /// handle is at most the number armed — whatever order threads arrive in.
     fn take(counter: &AtomicU32) -> bool {
         counter
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
                 remaining.checked_sub(1)
             })
             .is_ok()
@@ -405,7 +405,7 @@ impl<S: SendEventStore> SendFaultyStore<S> {
     ///
     /// # It is exact under a race, not approximate
     ///
-    /// The count is consumed with a checked `fetch_update`, so when `m` racing
+    /// The count is consumed with a checked `try_update`, so when `m` racing
     /// callers meet an arming of `n`, exactly `min(n, m)` are refused however
     /// the threads interleave. *Which* callers lose is nondeterministic and
     /// *how many* is not, which is what lets a rule assert on the count without
