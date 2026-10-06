@@ -217,5 +217,5 @@ grade them, and the failure would read as a missing dependency in their crate.
 
 **Evidence.** `crates/happenstance-testkit/src/registry.rs:95 (captured as raw token trees)` ·
 `crates/happenstance-testkit/src/registry.rs:298 (macro_rules! emit_wasm {)` ·
-`.github/workflows/ci.yml:163 (Install the wasm32 conformance runner)` ·
+`.github/workflows/ci.yml:173 (Install the wasm32 conformance runner)` ·
 [SPECIFICATION CF-23](../../spec/SPECIFICATION.md)

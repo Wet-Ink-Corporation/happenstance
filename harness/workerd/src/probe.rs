@@ -8,10 +8,12 @@
 //!
 //! Each axis is searched by bisection for the largest size the runtime accepts,
 //! and the refusal one step above it is reported verbatim, so a reader can see
-//! *which* limit refused rather than trust the axis's name. Two axes go through
-//! the adapter rather than raw SQL — query items, and tags in one item —
-//! because those are the shapes the conformance rules and the partition
-//! constants are about.
+//! *which* limit refused rather than trust the axis's name. Four axes go
+//! through the adapter rather than raw SQL — query items, append-condition
+//! items, tags in one item, and maximum-length tags in one item — because those
+//! are the shapes the conformance rules and the partition constants are about.
+//! One raw axis, `json_each` elements in one parameter, measures the function
+//! the adapter's rendering rests on (ADR-0079): the authorizer must allow it.
 
 use core::fmt::Write as _;
 use core::future::poll_fn;
@@ -20,7 +22,8 @@ use core::pin::pin;
 use futures_core::Stream;
 use happenstance_cloudflare::{CloudflareEventStore, SqlStorage, SqlValue, TableNamespace};
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventStore, Query, QueryItem, ReadOptions, Tag, Tags,
+    AppendCondition, AppendError, Event, EventStore, MAX_TAG_LEN, Query, QueryItem, ReadOptions,
+    Tag, Tags,
 };
 
 /// One measured axis.
@@ -129,6 +132,28 @@ fn expression_depth(sql: &SqlStorage, terms: usize) -> Result<(), String> {
     run(sql, &format!("SELECT {}", vec!["1"; terms].join("+")), &[])
 }
 
+/// `SELECT count(*) FROM json_each(?)` over a JSON array of `elements` short
+/// strings: whether the runtime's authorizer allows the table-valued function
+/// at all, and how many elements one bound parameter can carry.
+fn json_each_elements(sql: &SqlStorage, elements: usize) -> Result<(), String> {
+    let mut array = String::with_capacity(elements.saturating_mul(6).saturating_add(2));
+    array.push('[');
+    for n in 0..elements {
+        if n > 0 {
+            array.push(',');
+        }
+        array.push_str("\"t");
+        array.push_str(&n.to_string());
+        array.push('"');
+    }
+    array.push(']');
+    run(
+        sql,
+        "SELECT count(*) FROM json_each(?)",
+        &[SqlValue::Text(array)],
+    )
+}
+
 fn row_bytes(sql: &SqlStorage, bytes: usize) -> Result<(), String> {
     run(
         sql,
@@ -180,6 +205,11 @@ fn tag(n: usize) -> Result<Tag, String> {
     Tag::new(format!("t{n}")).map_err(|e| e.to_string())
 }
 
+/// A distinct tag of exactly `MAX_TAG_LEN` bytes: the number, left-padded.
+fn long_tag(n: usize) -> Result<Tag, String> {
+    Tag::new(format!("{n:x>MAX_TAG_LEN$}")).map_err(|e| e.to_string())
+}
+
 /// Drains `store.read(query)`, reporting the first error.
 async fn read_all(store: &CloudflareEventStore, query: &Query) -> Result<(), String> {
     let mut stream = pin!(store.read(query, ReadOptions::default()));
@@ -205,9 +235,13 @@ async fn query_items(store: &CloudflareEventStore, items: usize) -> Result<(), S
     read_all(store, &one_tag_items(items)?).await
 }
 
-/// One item carrying `tags` distinct tags.
-async fn tags_in_one_item(store: &CloudflareEventStore, tags: usize) -> Result<(), String> {
-    let tags: Tags = (0..tags).map(tag).collect::<Result<_, _>>()?;
+/// One item carrying `tags` distinct tags, each made by `make`.
+async fn tags_in_one_item(
+    store: &CloudflareEventStore,
+    tags: usize,
+    make: fn(usize) -> Result<Tag, String>,
+) -> Result<(), String> {
+    let tags: Tags = (0..tags).map(make).collect::<Result<_, _>>()?;
     let item = QueryItem::new(core::iter::empty::<String>(), tags).map_err(|e| e.to_string())?;
     read_all(store, &Query::from_item(item)).await
 }
@@ -217,6 +251,8 @@ async fn tags_in_one_item(store: &CloudflareEventStore, tags: usize) -> Result<(
 /// The upper ends are SQLite's compiled defaults or a little past them, so a
 /// runtime at the defaults reports "no wall" rather than a number the search
 /// invented; the row axis stops at 16 MiB, twice `workerd`'s own row ceiling.
+/// The maximum-length tag axis stops at 40,000 tags of 255 bytes, about 10 MB
+/// of JSON, past the deployed object's 8,388,637-byte length limit.
 pub async fn report(sql: &SqlStorage) -> String {
     let mut walls = vec![
         bisect("compound SELECT terms", 600, async |n| {
@@ -230,6 +266,10 @@ pub async fn report(sql: &SqlStorage) -> String {
         .await,
         bisect("expression terms (1+1+...)", 1_100, async |n| {
             expression_depth(sql, n)
+        })
+        .await,
+        bisect("json_each elements in one parameter", 100_000, async |n| {
+            json_each_elements(sql, n)
         })
         .await,
         bisect("row payload (bytes)", 16 * 1024 * 1024, async |n| {
@@ -255,8 +295,16 @@ pub async fn report(sql: &SqlStorage) -> String {
             );
             walls.push(
                 bisect("adapter: tags in one query item", 1_024, async |n| {
-                    tags_in_one_item(&store, n).await
+                    tags_in_one_item(&store, n, tag).await
                 })
+                .await,
+            );
+            walls.push(
+                bisect(
+                    "adapter: max-length tags in one query item",
+                    40_000,
+                    async |n| tags_in_one_item(&store, n, long_tag).await,
+                )
                 .await,
             );
         }

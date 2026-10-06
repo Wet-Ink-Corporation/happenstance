@@ -1,0 +1,24 @@
+Phase A on workerd, through harness/workerd's /probe route (src/probe.rs), after
+lane L6b: an item binds a constant number of parameters (ADR-0079).
+Taken 2026-10-05 on Windows 11, on lane/p17-workerd-green's working tree (parent
+1f92d088). Each axis is bisected; "accepted N" is the largest size the runtime
+took, and the refusal one step above it is quoted verbatim. Two axes are new
+here: json_each elements in one parameter, and max-length (255 B) tags in one
+query item.
+
+== workerd 1.20260815.1 (@cloudflare/vitest-pool-workers 0.22.0, miniflare 5.20260815.0-alpha) ==
+compound SELECT terms: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+bound parameters: accepted 100; refused above it: JavaScript threw: Error: too many SQL variables at offset 207: SQLITE_ERROR
+statement length (bytes): accepted 100000; refused above it: JavaScript threw: Error: statement too long: SQLITE_TOOBIG
+expression terms (1+1+...): accepted 100; refused above it: JavaScript threw: Error: Expression tree is too large (maximum depth 100): SQLITE_ERROR
+json_each elements in one parameter: accepted 100000; no wall up to 100000
+row payload (bytes): accepted 2199995; refused above it: JavaScript threw: Error: string or blob too big: SQLITE_TOOBIG
+adapter: query items, one tag each: accepted 1024; no wall up to 1024
+adapter: append-condition items, one tag each: accepted 1024; no wall up to 1024
+adapter: tags in one query item: accepted 1024; no wall up to 1024
+adapter: max-length tags in one query item: accepted 8527; refused above it: JavaScript threw: Error: string or blob too big: SQLITE_TOOBIG
+
+== The conformance rules under workerd 1.20260815.1 ==
+npx vitest run: Test Files 2 passed (2), Tests 98 passed (98): the 97 rules
+and the probe. store_evaluates_a_query_at_the_guaranteed_minimum_item_count,
+red at L6a, passes: 128 one-tag items plan as 26 statements of 5 arms.

@@ -209,6 +209,43 @@ not the same as what a user needed to be told.
   inside its `Retry` bound, per the entry above
   ([ADR-0077](.kb/decisions/0077-appenderror-busy.md), ES-43).
 
+- **`happenstance-cloudflare` evaluates any query inside a real Durable Object.**
+  `workerd` sets four statement limits on every database it opens: 5 compound
+  `SELECT` terms, 100 bound parameters, 100,000-byte statements and an
+  expression depth of 100. The adapter's widths were SQLite's defaults, so on a
+  real object it served at most 5 query items, against VT-23's floor of 128, and
+  at most 45 tags in one item. The `workerd` CI job measured this on two
+  `workerd` releases and a deployed object
+  ([ADR-0079](.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md)).
+
+  - **An item binds a constant number of parameters.** Its tags and its types
+    each travel as one JSON array, unpacked by `json_each(?)`, so an item binds
+    0 to 3 parameters by its shape and its SQL text does not grow with its
+    width. Two or more tags match by `GROUP BY position HAVING count(*) = n`,
+    which is superset matching because `event_tag`'s key is `(tag, position)`.
+    One tag renders the SQL it always did. Matching is unchanged, and a tag's
+    text is matched byte-exactly, quotes and backslashes included.
+  - **`MAX_QUERY_ARMS_PER_STATEMENT` is 5, was 400**, `workerd`'s compound wall
+    exactly. **`MAX_QUERY_PARAMETERS_PER_STATEMENT` is 90, was 30,000**: the
+    100-parameter wall less the read wrapper's 5, held there by a compile-time
+    assertion. They are no longer `happenstance-sqlite`'s numbers, and need not
+    be.
+  - **`planned_statement_count` keeps its signature and its meaning and returns
+    different numbers.** A query of *n* items is now `n.div_ceil(5)` statements:
+    128 one-tag items are 26, where they were 1. Five items or fewer, which is
+    every scenario model this workspace has walked, are still one. No semver
+    tool sees a changed value, so the `0.4.0` trace table, owed before release,
+    will carry a hand row for it.
+  - **The per-item wall moved.** One item is still never split. What can refuse
+    it now is one JSON parameter longer than SQLite's length limit: 8,527 tags
+    of the maximum 255 bytes under `workerd` 1.20260815.1, where 46 tags of any
+    length were refused before. The store accepts 1,024 tags on an event.
+  - **The test shim enforces the same four limits.** `DurableObjectHost` opens
+    `node:sqlite` with them and panics on a Node that ignores the option, so
+    running the wasm32 tests now needs Node 24: Node 22's `node:sqlite` has no
+    `limits`. VT-23's rule plans 26 statements on the shim too, so the gate now
+    exercises the multi-statement merge.
+
 ### Added
 
 - **`happenstance-cloudflare`: several logs in one Durable Object.**

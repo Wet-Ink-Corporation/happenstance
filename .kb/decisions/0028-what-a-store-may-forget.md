@@ -167,7 +167,7 @@ it cannot fold into anything else*, naming `happenstance-cloudflare` and `happen
   over the `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint (CI run `36638870563`,
   2026-09-29);
-- `happenstance-cloudflare` answers in one statement (`crates/happenstance-cloudflare/src/event_store.rs:1168`),
+- `happenstance-cloudflare` answers in one statement (`crates/happenstance-cloudflare/src/event_store.rs:1173`),
   but that run is on the `node:sqlite` shim, not `workerd`, so the transport evidence rests on Neon.
 
 This record accepts the round trip rather than rewording it away, because no required path pays

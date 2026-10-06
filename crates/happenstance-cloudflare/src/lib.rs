@@ -200,18 +200,18 @@
 //!
 //! | Width | Value | What it is |
 //! | --- | --- | --- |
-//! | [`MAX_QUERY_ARMS_PER_STATEMENT`](event_store::CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT) | 400 | index arms in one statement, under `SQLITE_MAX_COMPOUND_SELECT`'s 500 terms |
-//! | [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](event_store::CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT) | 30,000 | bound parameters in one statement, under `SQLITE_MAX_VARIABLE_NUMBER`'s 32,766 |
+//! | [`MAX_QUERY_ARMS_PER_STATEMENT`](event_store::CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT) | 5 | index arms in one statement: `workerd`'s compound-`SELECT` wall of 5 terms, exactly |
+//! | [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](event_store::CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT) | 90 | bound parameters in one statement's arms: `workerd`'s wall of 100, less the read wrapper's 5 and headroom |
 //!
 //! **They are published because VT-23 does not ask for them.** Unlike VT-21,
 //! VT-22 and VT-24, VT-23 imposes no documentation obligation — a store *may*
 //! refuse a wider query and need not say where. That silence is exactly how two
 //! adapters shipped under one contract at one version can have materially
-//! different query capability with nothing on either page to compare. So the two
-//! numbers here are the ones `happenstance-sqlite` publishes, and they are the
-//! same numbers because they are properties of the SQLite underneath a Durable
-//! Object's storage rather than of either adapter: an application developed
-//! against the sibling and deployed here plans the same way in both places.
+//! different query capability with nothing on either page to compare. These
+//! numbers are **not** `happenstance-sqlite`'s 400 and 30,000, and need not be:
+//! they are `workerd`'s walls, measured inside it (ADR-0079), where the sibling's
+//! are SQLite's compiled defaults. An item binds 0 to 3 parameters whatever its
+//! width, so a 128-item query is 26 statements here and one there; both answer it.
 //!
 //! [`planned_statement_count`](event_store::CloudflareEventStore::planned_statement_count)
 //! is how a caller asks the question directly, before deploying rather than
@@ -459,11 +459,11 @@
 //! * **`wasm-bindgen-test-runner`, matching `Cargo.lock`'s `wasm-bindgen`
 //!   exactly** — the runner refuses a mismatched schema part way through a test
 //!   binary. `cargo install wasm-bindgen-cli --version <locked> --locked`.
-//! * **Node 22.5 or newer.** The runner's host is Node, and
-//!   `host.rs`'s Durable Object shim reaches Node's own `node:sqlite`
-//!   through `process.getBuiltinModule` — real SQLite, the same engine a Durable
-//!   Object runs. On an older Node every case fails at once inside the shim,
-//!   which reads as "the adapter is broken" and is not.
+//! * **Node 24.** The runner's host is Node, and `host.rs`'s Durable Object
+//!   shim opens Node's own `node:sqlite` — real SQLite, the engine a Durable
+//!   Object runs — with `workerd`'s statement limits, an option Node 22 lacks.
+//!   On an older Node every case fails at once inside the shim, which reads as
+//!   "the adapter is broken" and is not.
 //!
 //! Neither is a precondition for touching the crate: `cargo test`,
 //! `cargo clippy` and `cargo check` all run on a stock stable toolchain with no
