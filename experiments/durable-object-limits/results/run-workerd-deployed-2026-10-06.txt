@@ -1,0 +1,26 @@
+Phase A on a deployed Durable Object, through harness/workerd's /probe route,
+after lane L6b: an item binds a constant number of parameters (ADR-0079).
+Taken by the workerd CI job's deployed leg on 2026-10-06 (run 37419423991,
+commit 32ea2ada, PR #35). The Worker was deployed by wrangler 4.146.0 to the
+account behind CLOUDFLARE_API_TOKEN and deleted at the end of the run. Each axis
+is bisected; "accepted N" is the largest size the platform took, and the refusal
+one step above it is quoted verbatim.
+
+== deployed Durable Object ==
+compound SELECT terms: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+bound parameters: accepted 100; refused above it: JavaScript threw: Error: too many SQL variables at offset 207: SQLITE_ERROR
+statement length (bytes): accepted 100000; refused above it: JavaScript threw: Error: statement too long: SQLITE_TOOBIG
+expression terms (1+1+...): accepted 100; refused above it: JavaScript threw: Error: Expression tree is too large (maximum depth 100): SQLITE_ERROR
+json_each elements in one parameter: accepted 100000; no wall up to 100000
+row payload (bytes): accepted 8388637; refused above it: JavaScript threw: Error: string or blob too big: SQLITE_TOOBIG
+adapter: query items, one tag each: accepted 1024; no wall up to 1024
+adapter: append-condition items, one tag each: accepted 1024; no wall up to 1024
+adapter: tags in one query item: accepted 1024; no wall up to 1024
+adapter: max-length tags in one query item: accepted 32514; refused above it: JavaScript threw: Error: string or blob too big: SQLITE_TOOBIG
+
+== The conformance rules on the deployed object ==
+executed 96 of 96; 0 failed. The same run's local leg (workerd 1.20260815.1)
+passed 97 of 97 rules and the probe. VT-23's
+store_evaluates_a_query_at_the_guaranteed_minimum_item_count, red at L6a, passes
+on both legs. The predicted per-item wall (~32,500 max-length tags, from the
+8,388,637 B length limit) is measured at 32,514.
