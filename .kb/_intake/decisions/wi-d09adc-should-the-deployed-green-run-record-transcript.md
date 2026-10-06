@@ -79,6 +79,10 @@ Revisit when: If you'd rather merge the exact reviewed commit
 
 The reviewed tree changes, so the review gate re-runs too
 
+## Outcome
+
+Overridden by events, not by a new choice. #35 was merged (`6a3adf6a`, 2026-10-06 13:15 UTC) before the record could be added to it, so the record landed in **#36** instead: `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-06.txt`, the README's deployed cells, the phase-17 exit tick and session-log entry, and the handover. The intent — record the green run as part of closing L6b — held; only the PR changed.
+
 ## Provenance
 
 - Decided 2026-10-06T13:23:37Z by human:ryan (user-approved), via chat.

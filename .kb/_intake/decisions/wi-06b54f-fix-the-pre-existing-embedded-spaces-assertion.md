@@ -78,6 +78,10 @@ Revisit when: If you choose B on the records question
 
 It widens a reviewed PR for a cosmetic fix
 
+## Outcome
+
+The fix rode the records commit as decided, but that commit landed in **#36**, not #35: #35 was merged (`6a3adf6a`) before the records could be added to it (see `wi-d09adc`'s outcome). The two assertion messages in `crates/happenstance-cloudflare/src/query_sql.rs` are fixed there.
+
 ## Provenance
 
 - Decided 2026-10-06T13:23:37Z by human:ryan (user-approved), via chat.
