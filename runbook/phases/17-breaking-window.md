@@ -272,7 +272,7 @@ tool passed over, and the renamed `#[doc(hidden)]` emitters. The tool does repor
 - [x] The `apply` record is accepted (ADR-0074).
 - [ ] Every open question phase 16 classified as breaking is answered or closed.
 - [ ] `0.4.0` is released and its semver findings are fully traced.
-- [ ] The `workerd` job exists, has been watched failing once, and the SQL-text
+- [x] The `workerd` job exists, has been watched failing once, and the SQL-text
       wall and partition widths are recorded as measured on `workerd`, locally
       and on a deployed Durable Object. (The minimal-versions job moved to 17b
       with ADR-0072.)
@@ -534,3 +534,44 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   `store_evaluates_a_query_at_the_guaranteed_minimum_item_count`. The row walls
   reproduced: 2,199,995 B local, 8,388,637 B deployed. Still owed: the vacuity
   control on a throwaway branch.
+- 2026-10-05 — **L6b: the rendering, on branch `lane/p17-workerd-green`** (cut from
+  `1f92d088`, where L6a merged red). Not committed; left for review. The owner
+  answered D1–D8 of `.temper/plans/p17-l6b-workerd-green.md` in chat, and
+  [ADR-0079](../../.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md)
+  records them.
+  - **Step 0 first:** a new probe axis showed `json_each(?)` allowed inside a real
+    Durable Object, with no wall to 100,000 elements in one parameter.
+  - An item's tags and types each travel as one JSON array, so an arm binds 0–3
+    parameters and its text does not grow with its width.
+    `MAX_QUERY_ARMS_PER_STATEMENT` is 5 and `MAX_QUERY_PARAMETERS_PER_STATEMENT`
+    is 90. `planned_statement_count` returns new values (128 one-tag items: 26),
+    so the `0.4.0` trace table needs a **hand row** for it beside core's removed
+    feature and the emitter renames.
+  - The shim opens `node:sqlite` with `workerd`'s four statement limits and fails
+    closed, so the gate went red on VT-23 before the fix. Node 22 lacks the
+    option, so the gate job gained `actions/setup-node` at `"24"` (the owner's
+    conditional allowance; nothing else in `.github/` changed).
+  - Local `workerd` 1.20260815.1: 97 of 97 rules, and the probe reports no wall
+    to 1,024 items, condition items or tags in one item. The new per-item wall is
+    the length of one JSON parameter: 8,527 tags of 255 B.
+    `experiments/durable-object-limits/results/run-workerd-local-2026-10-05.txt`.
+  - Not yet run: the `workerd` CI job on this branch, both legs. The deployed
+    transcript, the run URL and the exit-criterion tick wait for it.
+  - The WF-11, CF-14 and CF-17 ledger bases are rewritten; their dispositions are
+    unchanged.
+- 2026-10-06 — **L6b merged green (#35, `6a3adf6a`).** CI run 37419423991 on
+  `32ea2ada`
+  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/37419423991/job/112125223626):
+  local `workerd` 97 of 97 rules and the probe; the deployed object 96 of 96, its
+  Worker deleted after. Every gate runner passed on Node 24.
+  - The deployed probe measured the per-item wall at **32,514** max-length tags,
+    against ADR-0079's prediction of about 32,500, and no wall to 1,024 items,
+    condition items or tags in one item, or to 100,000 `json_each` elements.
+    `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-06.txt`;
+    the README's † cells are filled.
+  - The `workerd` exit criterion is ticked: it was watched failing at L6a (run
+    36957404625) and both walls are recorded, locally and deployed.
+  - Two assertion messages in `query_sql.rs` lost their line continuations and
+    carried runs of spaces (already on main); fixed here (`wi-06b54f`).
+  - Still owed: the vacuity control, and the `0.4.0` trace table's hand row for
+    `planned_statement_count`.

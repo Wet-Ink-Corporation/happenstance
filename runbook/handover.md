@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-workerd` at its L6a commit plus this rewrite, open as PR #34, on `9d99339`
-(`main`). 2026-10-01.
+`lane/p17-workerd-green`'s working tree, uncommitted, on `1f92d088` (`main`, where
+PR #34 merged L6a red). 2026-10-05.
 
 ## Where things are
 
@@ -37,37 +37,25 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-**PR #34: lane L6a, the `workerd` job, red on purpose. Not merged.**
-- `harness/workerd` runs every event-store rule in a real Durable Object.
-- `CloudflareEventStore::namespaced` and `TableNamespace` are new public API, a
-  1.0 promise, flagged in the PR.
-- The `ci.yml` `workerd` job has a local leg and a deployed leg.
-- The local leg is red in CI as intended
-  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/36957404625/job/110683349880):
-  97 executed and 96 passed. The failure is VT-23's 128-item rule, against
-  workerd's 100-parameter and 5-compound-term limits.
-- Walls: `experiments/durable-object-limits` (README table and `results/`). The
-  adapter serves at most 5 query items and 45 tags in one item.
-- The temper review is approved. `cargo xtask ci` is green.
+**Lane L6b merged green (#35, `6a3adf6a`, 2026-10-06).** A `happenstance-cloudflare`
+query item binds 0–3 parameters through `json_each(?)`
+([ADR-0079](../.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md));
+`MAX_QUERY_ARMS_PER_STATEMENT` is 5 and `MAX_QUERY_PARAMETERS_PER_STATEMENT` is 90;
+the shim enforces `workerd`'s four statement limits, so the gate runs Node 24.
+- CI run 37419423991: local `workerd` 97 of 97, the deployed object 96 of 96.
+- The deployed per-item wall is **32,514** max-length tags (8,527 locally);
+  `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-06.txt`.
+- The `workerd` exit criterion in `phases/17-breaking-window.md` is ticked.
 
-Phase 17 lanes L0 to L5 are merged (PRs #26–#28, #30–#32), ladybug retired (#33),
-and the docs site landed (#29).
+Phase 17 lanes L0 to L6b are merged (PRs #26–#28, #30–#32, #34, #35), ladybug
+retired (#33), and the docs site landed (#29).
 
 ## Next action
 
-1. **The deployed leg runs** (token fixed 2026-10-02). Run 36966608470 measured
-   the deployed walls: everything as local, and the row wall at **8,388,637 B**
-   (`experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt`).
-   `deployed.mjs` now retries Cloudflare's `500 Worker not found.` once. Run
-   36967951105 confirmed both legs fail only on VT-23.
-2. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
-   throwaway branch and watch the job go red with `no such rule`.
-3. **Merge #34 red, then L6b** (a separate PR):
-   - render with `json_each` so an item binds constant parameters;
-   - set `MAX_QUERY_ARMS_PER_STATEMENT` ≤ 5 and the parameter budget under 100;
-   - write ADR-0083;
-   - record the green run;
-   - update the WF-11, CF-14 and CF-17 ledger bases.
+1. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
+   throwaway branch and watch the `workerd` job go red with `no such rule`.
+2. The `0.4.0` trace table needs a hand row for `planned_statement_count`'s new
+   values (ADR-0079), beside core's removed feature and the emitter renames.
 
 ## Waiting on the owner
 
@@ -110,6 +98,7 @@ record, and the owner.
 ## Traps
 
 - **Memory is tight on this machine.** Run cargo with `CARGO_BUILD_JOBS=2`. Background gate runs get stopped when the session idles, so run the temper gate in the foreground. Never stop a gate mid-run: `cargo hack --no-dev-deps` strips dev-dependencies, so restore with `git checkout -- '*Cargo.toml' Cargo.lock`.
+- **`happenstance-cloudflare`'s wasm32 tests need Node 24.** The shim opens `node:sqlite` with `limits`, which Node 22 lacks, and refuses to open without it (ADR-0079).
 - **The `workerd` harness runs whatever is in `harness/workerd/build/`.** Re-run
   `npm run build` (that is, `worker-build --release`) after any Rust change, or vitest
   tests the old wasm. `worker-build` is `cargo install worker-build --version 0.8.5`.
@@ -123,7 +112,7 @@ record, and the owner.
 - **Live Neon flakes on the ES-11/ES-12 race** (`query_items_share_one_snapshot`, `read_result_is_stable_under_concurrent_append`) until L8 lands its fence. Re-run it; don't chase it.
 - **The CI base-commit semver step is advisory** while `0.4.0` is unpublished (a crates.io probe). The release trace comes from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`.
 
-- **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal and the hidden emitter renames.
+- **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal, the hidden emitter renames, and `happenstance-cloudflare`'s `planned_statement_count` values (ADR-0079).
 
 - **17b is not a breaking window.** An item whose answer turns out to break a
   published crate goes back to phase 17 (ADR-0072's rule), not into a `0.5.0`.

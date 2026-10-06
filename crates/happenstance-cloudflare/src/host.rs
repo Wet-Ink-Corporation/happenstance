@@ -42,21 +42,30 @@
 //! as saying it is.** It is a Node process holding real SQLite behind the
 //! `DurableObjectState` shape. `workerd` is nowhere in it: no isolate, no
 //! eviction, no hibernation, no I/O gate, no event loop re-entering the object
-//! mid-`await`, and none of the platform's own storage ceilings. What it
-//! **does** model, because the conformance suite needs it and it is a property
-//! of the *object* rather than of the isolate, is a **reopen** — see
-//! [`DurableObjectHost::storage`].
+//! mid-`await`, and none of the platform's storage ceilings on a row or a
+//! database. What it **does** model, because the conformance suite needs them
+//! and they are properties of the *object* rather than of the isolate, is a
+//! **reopen** — see [`DurableObjectHost::storage`] — and `workerd`'s four
+//! **statement-shape** limits, which every database it opens carries: 5
+//! compound `SELECT` terms, 100 bound parameters, 100,000-byte statements and an
+//! expression depth of 100, measured inside `workerd` by
+//! `harness/workerd/src/probe.rs` (ADR-0079). The shim sets them when it opens
+//! its database, and refuses to open at all on a Node that ignores them, so a
+//! statement `workerd` would refuse is refused here too. `SQLITE_LIMIT_LENGTH`
+//! is left at Node's default, because `workerd`'s differs by release and by
+//! deployment.
 //!
 //! Two questions therefore still have *provisional* answers here, and they are
 //! named rather than left for a reader to discover:
 //!
-//! * **What this store's limits physically are.** No per-value wall is
-//!   observable on this host at 8 MiB of payload, 16,384 tags or 8,192
+//! * **What this store's per-value limits physically are.** No per-value wall
+//!   is observable on this host at 8 MiB of payload, 16,384 tags or 8,192
 //!   consecutive inserts, so the three ceilings the conformance fixture declares
 //!   are this adapter's own **refusal policy**, seeded from Cloudflare's
 //!   documented 2 MiB row cap — not a search result. `crate`'s own
 //!   documentation says so where a consumer lands, and
-//!   `experiments/durable-object-limits/README.md` records the finding.
+//!   `experiments/durable-object-limits/README.md` records the finding, beside
+//!   the statement-shape walls the shim now enforces.
 //! * **Whether an acknowledged write survives a real isolate restart.**
 //!   [`DurableObjectHost::storage`] re-derives a binding off the same `state`,
 //!   which is exactly what `Fixture::REOPEN` names and no more: process-level
@@ -106,7 +115,18 @@ use crate::sql_storage::{SqlStorage, storage_from_durable_object_state};
 const DURABLE_OBJECT_STATE: &str = r"
 (() => {
   const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
-  const db = new DatabaseSync(':memory:');
+  // workerd's four statement-shape walls, measured inside it by
+  // harness/workerd/src/probe.rs. `length` is left at Node's default: workerd's
+  // differs by release and by deployment, and nothing here depends on it.
+  const walls = { compoundSelect: 5, variableNumber: 100, sqlLength: 100000, exprDepth: 100 };
+  const db = new DatabaseSync(':memory:', { limits: walls });
+  // A Node too old for `limits` ignores the option silently and leaves SQLite's
+  // defaults in place, which would turn every wall below back into a guess.
+  for (const [name, value] of Object.entries(walls)) {
+    if (db.limits?.[name] !== value) {
+      throw new Error(`node:sqlite did not apply the ${name} limit; this host needs a Node whose DatabaseSync supports limits`);
+    }
+  }
 
   // A Durable Object hands integers back through a JS number. `node:sqlite`
   // hands them back as BigInt when asked to, which is the only way to read a
@@ -262,9 +282,11 @@ impl DurableObjectHost {
     ///
     /// If the shim fails to evaluate — because there is no JavaScript heap here
     /// at all (an ordinary host build, where every `worker` binding is a
-    /// panicking stub), because the host is not Node, or because it is too old
-    /// for `node:sqlite`. There is nothing to recover to, and a test that
-    /// silently ran against no storage would be worse than a failure.
+    /// panicking stub), because the host is not Node, because it is too old
+    /// for `node:sqlite`, or because its `node:sqlite` ignores the `limits`
+    /// option and so cannot enforce `workerd`'s statement walls. There is
+    /// nothing to recover to, and a test that silently ran against no storage,
+    /// or against SQLite's far wider defaults, would be worse than a failure.
     #[must_use]
     pub fn new() -> Self {
         let state: JsValue = js_sys::eval(DURABLE_OBJECT_STATE)

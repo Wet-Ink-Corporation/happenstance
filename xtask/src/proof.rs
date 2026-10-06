@@ -934,16 +934,16 @@ pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
         // the *strings* it builds — how many compound terms, how many bound
         // parameters — and arithmetic about a string is not evidence that SQLite
         // would have refused the string or that the merge behind the partition
-        // reassembles the right rows. The wall is reachable in this harness and
-        // was simply never approached; this row approaches it.
+        // reassembles the right rows. The shim enforces `workerd`'s statement
+        // walls, so this row's controls watch it refuse one past each.
         //
         // It is **not** a `WASM_TARGETS` row, for that registry's own stated
         // reason: every row there is held to a `RuleFamily`'s exhaustive
         // enumeration, and this target runs no conformance rule of either suite.
-        // It could not: `MIN_SUPPORTED_QUERY_ITEMS` is 128 items at one tag
-        // each, which is 128 arms and 128 parameters, inside both of SQLite's
-        // pushdown limits by two orders of magnitude — so no rule the suite
-        // enumerates can cross either wall, which is the whole finding.
+        // Since the shim took `workerd`'s five compound terms, VT-23's 128-item
+        // rule crosses the arm wall too, as 26 statements; what this target adds
+        // is width past anything the suite enumerates — 1,000 items, an item of
+        // 1,024 tags — and the controls.
         //
         // A second target rather than more cases in `durable_object_conformance`,
         // and forced by the same two things that forced WF-11's: that harness is
@@ -967,26 +967,30 @@ pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
 /// there is no `mod $mod_name` wrapper, because `event_store_conformance!` is
 /// not involved.
 ///
-/// **The first name is the control, and what it controls for changed once it
-/// met a third host.** `the_partition_budget_sits_inside_this_hosts_limits`
-/// hands this runtime the two statements a translation with no partition would
-/// have built. It was `the_unpartitioned_statement_is_refused_by_this_runtime`
-/// and asserted the driver refuses both; that went red on `macos-latest`,
-/// because `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option and macOS's
-/// SQLite accepts the 32,800 that ubuntu's and windows's refuse. It now asserts
-/// the arm wall is real here **and** that a statement at exactly the partition
-/// budget is accepted — the direction that breaks the store rather than the one
-/// that varies harmlessly.
+/// **The first two names are the controls, and what they control for has
+/// changed twice.** The first control was
+/// `the_unpartitioned_statement_is_refused_by_this_runtime`, which went red on
+/// `macos-latest` because `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option
+/// and macOS's SQLite accepts what ubuntu's and windows's refuse. It became
+/// `the_partition_budget_sits_inside_this_hosts_limits`, and then, when the shim
+/// took `workerd`'s statement limits at open time (ADR-0079), the pair below:
+/// one past each of the four walls is refused, and the widest statement the
+/// adapter emits is accepted. Limits set at open time are the same on every
+/// host, so the macOS divergence cannot recur here.
 ///
-/// It is no longer load-bearing for the six below, and the old comment claiming
-/// it was is corrected rather than left standing: each of those asserts
-/// `planned_statement_count > 1` and an answer drawn from every chunk, which are
-/// properties of the partition rather than of the engine, so they do not degrade
-/// into *nothing went wrong* on a host with a wider wall.
+/// The read cases and the two every-chunk guard cases do not lean on the
+/// controls for their validity: they assert a planned statement count above one
+/// and an answer drawn from a later chunk, which are properties of the partition
+/// rather than of the engine. The two not-refused guard cases do lean on them:
+/// what they reject is an unpartitioned guard, which only a limited host
+/// refuses. Since ADR-0079 no query crosses the parameter wall end to end, so
+/// the "parameter" cases are type-wide guards cut on the arm axis.
 const WIDE_QUERY_CEILING_TESTS: &[&str] = &[
-    "the_partition_budget_sits_inside_this_hosts_limits",
+    "the_host_enforces_workerds_statement_limits",
+    "a_statement_of_the_widest_chunk_is_accepted_here",
     "a_read_past_the_compound_select_ceiling_is_served_from_every_chunk",
-    "a_read_past_the_bound_parameter_ceiling_is_served_from_every_chunk",
+    "a_type_wide_query_binds_one_parameter_per_item_and_is_served",
+    "a_tag_wide_item_past_the_old_expression_depth_wall_is_served",
     "an_append_guard_past_the_compound_select_ceiling_is_not_refused",
     "an_append_guard_past_the_bound_parameter_ceiling_is_not_refused",
     "a_wide_guard_answers_from_every_chunk_not_the_first",
@@ -1030,9 +1034,10 @@ const WF11_MEMORY_CEILING_TESTS: &[&str] = &[
 /// Named once because both rows execute the same shim against the same engine,
 /// and a host requirement stated twice is a host requirement that will disagree
 /// with itself the first time Node's floor moves.
-const CLOUDFLARE_HOST: &str = "Node 22.5 or newer: `crates/happenstance-cloudflare/src/host.rs` \
-     reaches `node:sqlite` through `process.getBuiltinModule`, and the runner's \
-     default host is Node";
+const CLOUDFLARE_HOST: &str = "Node 24: `crates/happenstance-cloudflare/src/host.rs` \
+     reaches `node:sqlite` through `process.getBuiltinModule` and opens it with \
+     `workerd`'s statement limits, an option Node 22 does not have, and the \
+     runner's default host is Node";
 
 /// The fixture-contract cases that need a real object under them.
 ///

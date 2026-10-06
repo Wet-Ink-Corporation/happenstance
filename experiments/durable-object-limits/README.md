@@ -27,8 +27,8 @@ $ CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner \
 
 It needs the same two things every `wasm32` run in this repository needs, and
 both fail confusingly when missing: a `wasm-bindgen-test-runner` matching the
-locked `wasm-bindgen` exactly, and Node 22.5 or newer, because the Durable Object
-host reaches `node:sqlite` through `process.getBuiltinModule`.
+locked `wasm-bindgen` exactly, and Node 24, because the Durable Object host opens
+`node:sqlite` with workerd's `limits` and refuses to open on a Node without them.
 
 **This is not a crate the workspace knows about.** `Cargo.toml` opens with a bare
 `[workspace]` table, so cargo does not walk up and adopt it as a member; the root
@@ -146,30 +146,32 @@ object through the `workerd` CI job. Each axis is bisected and the refusal above
 the largest accepted size is quoted verbatim, so the table names *which* limit
 refused rather than trusting the axis's label. Transcripts:
 [`results/run-workerd-local-2026-10-01.txt`](results/run-workerd-local-2026-10-01.txt);
-the deployed leg's is
-[`results/run-workerd-deployed-2026-10-02.txt`](results/run-workerd-deployed-2026-10-02.txt).
+the deployed leg's are
+[`results/run-workerd-deployed-2026-10-02.txt`](results/run-workerd-deployed-2026-10-02.txt) and, after L6b, [`…-2026-10-06.txt`](results/run-workerd-deployed-2026-10-06.txt).
 
-| Axis | Deployed Durable Object | `workerd` 1.20260815.1 | `workerd` 1.20261001.1 | SQLite's default, which the shim runs at |
+| Axis | Deployed Durable Object | `workerd` 1.20260815.1 | `workerd` 1.20261001.1 | The shim: SQLite's defaults, with the first four set to `workerd`'s since L6b |
 | --- | --- | --- | --- | --- |
-| compound `SELECT` terms | **5** | **5** | **5** | 500 |
-| bound parameters | **100** | **100** | **100** | 32,766 |
-| statement length | **100,000** B | **100,000** B | **100,000** B | 1,000,000,000 B |
-| expression depth (`1+1+…` terms) | **100** | **100** | **100** | 1,000 |
+| compound `SELECT` terms | **5** | **5** | **5** | 5 (was 500) |
+| bound parameters | **100** | **100** | **100** | 100 (was 32,766) |
+| statement length | **100,000** B | **100,000** B | **100,000** B | 100,000 B (was 1,000,000,000 B) |
+| expression depth (`1+1+…` terms) | **100** | **100** | **100** | 100 (was 1,000) |
 | one row's payload | **8,388,637 B** | 2,199,995 B | 8,388,637 B | 1,000,000,000 B (M2A found no wall ≤ 8 MiB) |
-| adapter: query items, one tag each | **5** | **5** | **5** | unbounded: chunked at 400 (`tests/wide_query_ceiling.rs`) |
-| adapter: append-condition items | **5** | **5** | **5** | unbounded: chunked at 400 |
-| adapter: tags in one query item | **45** | **45** | **45** | not measured |
+| adapter: query items, one tag each | **5**; after L6b, no wall to 1,024 | **5**; after L6b, no wall to 1,024 | **5** | unbounded: chunked at 5 since L6b, 400 before (`tests/wide_query_ceiling.rs`) |
+| adapter: append-condition items | **5**; after L6b, no wall to 1,024 | **5**; after L6b, no wall to 1,024 | **5** | unbounded: chunked at 5 since L6b, 400 before |
+| adapter: tags in one query item | **45**; after L6b, no wall to 1,024 | **45**; after L6b, no wall to 1,024 | **45** | not measured |
+| adapter: max-length (255 B) tags in one query item | after L6b: **32,514** | after L6b: **8,527** | not measured | not measured |
+| `json_each` elements in one parameter | no wall to 100,000 | no wall to 100,000 | not measured | not measured |
 
 **The finding.** The first four are `sqlite3_limit`s `workerd` sets on every
 database it opens, and they are the same on both releases. Each is far below
 SQLite's defaults, which are what this adapter's partition constants were set
-against: `MAX_QUERY_ARMS_PER_STATEMENT` is 400 against a wall of 5, and
-`MAX_QUERY_PARAMETERS_PER_STATEMENT` is 30,000 against a wall of 100. So **today's
-adapter evaluates at most five query items** on a real Durable Object, against
+against: `MAX_QUERY_ARMS_PER_STATEMENT` was 400 against a wall of 5, and
+`MAX_QUERY_PARAMETERS_PER_STATEMENT` was 30,000 against a wall of 100. So **the
+adapter at L6a evaluated at most five query items** on a real Durable Object, against
 VT-23's floor of 128, and at most 45 tags in one item before the `AND … IN`
-chain exceeds the expression depth. The conformance rule
-`store_evaluates_a_query_at_the_guaranteed_minimum_item_count` fails under
-`workerd` for exactly this reason, and it is the only rule that does.
+chain exceeded the expression depth. The conformance rule
+`store_evaluates_a_query_at_the_guaranteed_minimum_item_count` failed under
+`workerd` for exactly this reason, and it was the only rule that did.
 
 **The row wall moved between two `workerd` releases**, from about 2.2 MB to
 8 MiB + 29 B. The deployed object settles it at **8,388,637 B (8 MiB + 29)**: the
@@ -180,5 +182,18 @@ than its derivation assumed.
 ([`results/run-workerd-deployed-2026-10-02.txt`](results/run-workerd-deployed-2026-10-02.txt),
 CI run 36966608470.)
 
-Lane L6b changes the rendering so an item binds a constant number of parameters
-and sets the two constants from this table (ADR-0083).
+**Lane L6b changed the rendering so an item binds a constant number of
+parameters, and set the two constants from this table**
+([ADR-0079](../../.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md)).
+An item's tags and its types each travel as one JSON array, unpacked by
+`json_each(?)`, so an arm binds 0 to 3 parameters and its text does not grow with
+its width. `MAX_QUERY_ARMS_PER_STATEMENT` is 5, the compound wall exactly, and
+`MAX_QUERY_PARAMETERS_PER_STATEMENT` is 90, under the 100-parameter wall less the
+read wrapper's 5. The shim now opens its database with the first four limits in
+the table, so the gate refuses what `workerd` refuses. What can still refuse one
+item is the length of one JSON parameter, `SQLITE_LIMIT_LENGTH`: 8,527 tags of
+255 bytes under `workerd` 1.20260815.1 (`string or blob too big`,
+[`results/run-workerd-local-2026-10-05.txt`](results/run-workerd-local-2026-10-05.txt)).
+On a deployed object, whose row wall puts its length limit at 8,388,637 B, the
+same arithmetic predicted about 32,500; the deployed leg measured **32,514**
+(CI run 37419423991, [`results/run-workerd-deployed-2026-10-06.txt`](results/run-workerd-deployed-2026-10-06.txt)).

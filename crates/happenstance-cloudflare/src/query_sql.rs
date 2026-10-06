@@ -8,28 +8,31 @@
 //! disagree about what "matches" means, and the disagreement shows up as a
 //! conformance failure in a rule that names neither.
 //!
-//! # Two pushdown limits, and neither implies the other
+//! # The walls are `workerd`'s, and an item binds a constant number of parameters
 //!
 //! A `Query` bounds nothing by design: VT-23 requires every store to evaluate at
 //! least 128 items and puts no ceiling above that, and nothing in
-//! `happenstance-core`'s `query.rs` bounds tags per query item at all. SQLite
-//! pushes back in two units and both are reachable from the contract's own
-//! floor.
+//! `happenstance-core`'s `query.rs` bounds tags per query item at all. A Durable
+//! Object's SQLite pushes back hard, because `workerd` lowers four
+//! `sqlite3_limit`s on every database it opens. Measured inside it by
+//! `harness/workerd/src/probe.rs` (ADR-0079):
 //!
-//! * `SQLITE_MAX_COMPOUND_SELECT` — **500 terms**. [`arms`] joins one term per
-//!   item, so a decision model of 1,000 boundaries is one statement of 1,000
-//!   terms.
-//! * `SQLITE_MAX_VARIABLE_NUMBER` — **32,766 bound parameters**. [`item_sql`]
-//!   spends one per tag and one per type, so 400 items — inside any plausible
-//!   arm width — carrying this store's own declared `tags_per_event` of 1,024
-//!   apiece bind 409,600.
+//! * **5 compound `SELECT` terms.** [`chunks`] joins one arm per item, so a
+//!   statement carries at most five items, and a 128-item query is 26 statements.
+//! * **100 bound parameters.** An arm binds **0 to 3**, decided by the item's
+//!   *shape* and never by how many tags or types it carries: an item's tags and
+//!   its types each travel as **one** JSON array, unpacked by `json_each(?)`.
+//! * **100,000-byte statements** and **an expression depth of 100.** An arm's
+//!   text is likewise independent of its tag and type counts, so neither grows
+//!   with the query. The `AND position IN (…)` chain this replaced nested one
+//!   level per tag and was refused at 46 tags in one item.
 //!
-//! Neither number is derivable from the other, so [`chunks`] partitions on
-//! **both**, and a wide query becomes several statements the caller merges
-//! rather than a refusal at the pushdown limit. The refusal is what VT-23 names
-//! as its wrong implementation, and on the append path it would arrive as
-//! `AppendError::Store` carrying a raw driver string, inside the turn, with the
-//! caller's decision already taken.
+//! The partition still prices **both** axes, and the price is [`Arm::parameters`]
+//! — the same value [`Arm::render`] spends, so the two cannot drift. A wide query
+//! becomes several statements the caller merges rather than a refusal at the
+//! pushdown limit. The refusal is what VT-23 names as its wrong implementation,
+//! and on the append path it would arrive as `AppendError::Store` carrying a raw
+//! driver string, inside the turn, with the caller's decision already taken.
 //!
 //! **What this crate does not do is keep a second, unchunked spelling beside the
 //! chunked one.** `happenstance-sqlite`'s own `query_sql.rs` records that as
@@ -39,9 +42,10 @@
 //!
 //! # Where this diverges from the sibling, and why
 //!
-//! The widths are the sibling's, because the storage underneath is the same
-//! SQLite and the two constants are properties of *it* rather than of either
-//! adapter. The **merge** is not. `happenstance-sqlite` collects every chunk's
+//! The widths are **not** the sibling's. `happenstance-sqlite` runs on SQLite's
+//! compiled defaults and partitions at 400 arms and 30,000 parameters; a
+//! Durable Object's walls are `workerd`'s, so the two adapters need not agree.
+//! The **merge** diverges too. `happenstance-sqlite` collects every chunk's
 //! page and truncates once at the end, which makes the resident row count
 //! `chunks x page`; a Durable Object is a single isolate with a real memory
 //! ceiling — `tests/wf11_memory_ceiling.rs` walks it — so the read path here
@@ -69,13 +73,13 @@
 //! most of it. `event_type` rides along as a covering column so an item
 //! constraining both type and tags never has to join back to `event`.
 
-use happenstance_core::{Query, QueryItem};
+use happenstance_core::{EventType, Query, QueryItem, Tag};
 
 use crate::namespace::Tables;
 use crate::sql_storage::SqlValue;
 
-/// One `SELECT position …` statement per chunk, bounded by **both** of SQLite's
-/// pushdown limits: at most `max_arms` items and at most `max_parameters` bound
+/// One `SELECT position …` statement per chunk, bounded by **both** pushdown
+/// limits: at most `max_arms` items and at most `max_parameters` bound
 /// parameters.
 ///
 /// Each statement is a *subquery body*: the caller wraps it in the bound, the
@@ -94,12 +98,12 @@ use crate::sql_storage::SqlValue;
 /// decomposition. It is never empty: a `Query::all` is one chunk.
 ///
 /// **One item is the atom of the partition and is never split.** An item's arm
-/// is an intersection — `tag = ? AND position IN (…) AND position IN (…)` — and
-/// the halves of an intersection cannot be recombined by the caller's `UNION` or
-/// its `max()`. An item whose own tags exceed `max_parameters` therefore still
-/// gets a chunk to itself and would still be refused by the driver; reaching
-/// that needs 32,766 tags on a single query item, against a store that accepts
-/// 1,024 on an event.
+/// is an intersection over its tags, and the halves of an intersection cannot be
+/// recombined by the caller's `UNION` or its `max()`. Since an arm binds a
+/// constant number of parameters, what can still refuse one item is the length
+/// of a single JSON parameter: SQLite's `SQLITE_LIMIT_LENGTH`, about 8,500 tags
+/// of the maximum 255 bytes under `workerd` 1.20260815.1 and about 32,500 on a
+/// deployed object — against a store that accepts 1,024 on an event.
 pub(crate) fn chunks(
     tables: &Tables,
     query: &Query,
@@ -112,18 +116,24 @@ pub(crate) fn chunks(
         // `all` matches every event *including an untagged one*, and an untagged
         // event has no row in `event_tag` at all.
         None => vec![(format!("SELECT position FROM {}", tables.event), Vec::new())],
-        Some(items) => partition(items, max_arms.max(1), max_parameters.max(1))
-            .into_iter()
-            .map(|chunk| {
-                let mut bindings = Vec::new();
-                let sql = arms(tables, chunk, &mut bindings);
-                (sql, bindings)
-            })
-            .collect(),
+        Some(items) => {
+            let arms: Vec<Arm<'_>> = items.iter().map(Arm::of).collect();
+            let lengths = partition(&arms, max_arms.max(1), max_parameters.max(1));
+            let mut arms = arms.into_iter();
+            lengths
+                .into_iter()
+                .map(|length| {
+                    let mut bindings = Vec::new();
+                    let sql = union(tables, arms.by_ref().take(length), &mut bindings);
+                    (sql, bindings)
+                })
+                .collect()
+        }
     }
 }
 
-/// `items` cut into runs that satisfy both limits, in order.
+/// The lengths of the runs `arms` is cut into, in order, each satisfying both
+/// limits.
 ///
 /// Greedy and order-preserving. A chunk is only ever merged by `UNION` or by
 /// `max()`, neither of which cares which chunk an item landed in, so packing
@@ -133,145 +143,219 @@ pub(crate) fn chunks(
 /// [`planned_statement_count`](crate::event_store::CloudflareEventStore::planned_statement_count)
 /// for itself.
 ///
-/// The `arms > 0` guard is what stops an item too wide for `max_parameters` on
+/// The `length > 0` guard is what stops an arm too wide for `max_parameters` on
 /// its own from emitting an empty chunk forever; it gets a chunk to itself
 /// instead, which is the honest outcome. See the note on splitting in
 /// [`chunks`].
-fn partition(items: &[QueryItem], max_arms: usize, max_parameters: usize) -> Vec<&[QueryItem]> {
+fn partition(arms: &[Arm<'_>], max_arms: usize, max_parameters: usize) -> Vec<usize> {
     let mut out = Vec::new();
-    let mut start = 0;
-    let mut arms = 0;
-    let mut parameters = 0;
+    let mut length = 0;
+    let mut parameters: usize = 0;
 
-    for (index, item) in items.iter().enumerate() {
-        let cost = item_parameters(item);
-        if arms > 0 && (arms == max_arms || parameters + cost > max_parameters) {
-            out.push(&items[start..index]);
-            start = index;
-            arms = 0;
+    for arm in arms {
+        let cost = arm.parameters();
+        if length > 0 && (length == max_arms || parameters.saturating_add(cost) > max_parameters) {
+            out.push(length);
+            length = 0;
             parameters = 0;
         }
-        arms += 1;
-        parameters += cost;
+        length += 1;
+        parameters = parameters.saturating_add(cost);
     }
 
-    out.push(&items[start..]);
+    out.push(length);
     out
 }
 
-/// Bound parameters one item's arm will cost, counted the way [`item_sql`]
-/// spends them.
-///
-/// One per distinct tag and one per type, in every branch: the tagless branch
-/// binds its types and nothing else, and the tagged branch binds the seed tag,
-/// then the types, then one per remaining tag.
-///
-/// This is a second reading of [`item_sql`], which is the shape that drifts —
-/// add a bound parameter there and this undercounts, and the partition goes back
-/// to being wrong past a driver limit without saying so. What catches that is
-/// the boundary case in this module's own tests, which computes the expected
-/// chunk count from the declared ceilings and the query it built and compares it
-/// against the partition: an undercount moves one of those and not the other.
-/// The alternative — returning the count from [`item_sql`] itself — would mean
-/// building every statement twice, once to size it and once to use it, on the
-/// path that runs inside the append turn.
-fn item_parameters(item: &QueryItem) -> usize {
-    distinct_tags(item).len() + item.types().len()
-}
-
-/// The `UNION` of one arm per item.
+/// The `UNION` of the rendered arms.
 ///
 /// `UNION` and not `UNION ALL`: an event matching two items of one query is one
 /// event, and de-duplicating here is what makes that true by construction rather
 /// than by a `DISTINCT` bolted on by whichever caller remembered.
-fn arms(tables: &Tables, items: &[QueryItem], bindings: &mut Vec<SqlValue>) -> String {
-    if items.is_empty() {
+fn union<'q>(
+    tables: &Tables,
+    arms: impl Iterator<Item = Arm<'q>>,
+    bindings: &mut Vec<SqlValue>,
+) -> String {
+    let rendered: Vec<String> = arms.map(|arm| arm.render(tables, bindings)).collect();
+    if rendered.is_empty() {
         // `Query::from_items` refuses an empty list, so this is unreachable
         // through the public builders — but a `SELECT` with no arms is a syntax
         // error rather than an empty result, so the case is spelled rather than
         // assumed.
         return format!("SELECT position FROM {} WHERE 0", tables.event);
     }
-    items
-        .iter()
-        .map(|item| item_sql(tables, item, bindings))
-        .collect::<Vec<_>>()
-        .join(" UNION ")
+    rendered.join(" UNION ")
 }
 
-/// SQL selecting the positions matching one item.
+/// `event_type IN (…)` over one JSON array parameter.
+const TYPE_IN: &str = "event_type IN (SELECT value FROM json_each(?))";
+
+/// `tag IN (…)` over one JSON array parameter.
+const TAG_IN: &str = "tag IN (SELECT value FROM json_each(?))";
+
+/// One item's arm, decided once from its shape, so that the partition prices
+/// exactly what the renderer binds.
+///
+/// An enum rather than the two functions it replaced — one rendering the SQL,
+/// one counting the parameters the first would spend — because two readings of
+/// one shape are how a count drifts from the thing it counts: add a bound
+/// parameter to the renderer and the counter undercounts, and the partition goes
+/// back to being wrong past a driver limit without saying so. Here the variant is
+/// the only input to both [`parameters`](Self::parameters) and
+/// [`render`](Self::render).
 ///
 /// Types within an item are OR — `event_type IN (…)`. Tags within an item are
 /// AND, with **superset** matching: an event matches when it carries *at least*
-/// the item's tags, which is why the extra tags become `position IN (…)`
-/// intersections rather than an equality on a tag set.
-fn item_sql(tables: &Tables, item: &QueryItem, bindings: &mut Vec<SqlValue>) -> String {
-    let tags = distinct_tags(item);
-    let types = item.types();
-
-    if tags.is_empty() {
-        if types.is_empty() {
-            // Unconstructible through the public builders — `QueryItem::new`
-            // refuses an item constraining nothing — and cheaper to spell than
-            // to reason about.
-            return format!("SELECT position FROM {}", tables.event);
-        }
-        for event_type in types {
-            bindings.push(SqlValue::Text(event_type.as_str().to_owned()));
-        }
-        return format!(
-            "SELECT position FROM {} WHERE event_type IN ({})",
-            tables.event,
-            placeholders(types.len())
-        );
-    }
-
-    // The seed carries the type constraint, because every `event_tag` row for
-    // one position also carries that position's own type — which is the whole
-    // point of the covering column.
-    let mut sql = format!("SELECT position FROM {} WHERE tag = ?", tables.event_tag);
-    bindings.push(SqlValue::Text(tags[0].clone()));
-    if !types.is_empty() {
-        for event_type in types {
-            bindings.push(SqlValue::Text(event_type.as_str().to_owned()));
-        }
-        sql.push_str(" AND event_type IN (");
-        sql.push_str(&placeholders(types.len()));
-        sql.push(')');
-    }
-    for tag in &tags[1..] {
-        bindings.push(SqlValue::Text(tag.clone()));
-        sql.push_str(" AND position IN (SELECT position FROM ");
-        sql.push_str(&tables.event_tag);
-        sql.push_str(" WHERE tag = ?)");
-    }
-    sql
+/// the item's tags. For two or more tags that is `GROUP BY position HAVING
+/// count(*) = n`, and the count is exact because `event_tag`'s primary key is
+/// `(tag, position)` — a position carrying *k* of the item's *n* tags contributes
+/// exactly *k* rows. Every `event_tag` row of one position carries that
+/// position's own `event_type`, so the type filter keeps all of a position's
+/// rows or none of them and the count stays exact under it.
+#[derive(Debug, PartialEq, Eq)]
+enum Arm<'q> {
+    /// No tags and no types. Unconstructible through the public builders —
+    /// `QueryItem::new` refuses an item constraining nothing — and cheaper to
+    /// spell than to reason about.
+    Everything,
+    /// No tags.
+    Types {
+        /// A JSON array of the item's types.
+        types: String,
+    },
+    /// One tag, which is the commonest DCB item and the cheapest: a seek on the
+    /// primary key, with no `GROUP BY`.
+    Tag {
+        /// The tag's text, borrowed from the item.
+        tag: &'q str,
+        /// A JSON array of the item's types, when it constrains any.
+        types: Option<String>,
+    },
+    /// Two or more tags.
+    Tags {
+        /// A JSON array of the item's tags.
+        tags: String,
+        /// How many tags the array holds, and so how many rows a matching
+        /// position contributes.
+        count: usize,
+        /// A JSON array of the item's types, when it constrains any.
+        types: Option<String>,
+    },
 }
 
-/// The item's tags, deduplicated.
-///
-/// A repeated tag would add an intersection that can never narrow anything, and
-/// on a metered runtime a redundant subquery is a redundant row read.
-fn distinct_tags(item: &QueryItem) -> Vec<String> {
-    let mut out: Vec<String> = Vec::with_capacity(item.tags().len());
-    for tag in item.tags() {
-        let value = tag.as_str().to_owned();
-        if !out.contains(&value) {
-            out.push(value);
+impl<'q> Arm<'q> {
+    /// The arm for `item`. Borrows the tag text and allocates only the JSON.
+    fn of(item: &'q QueryItem) -> Self {
+        let types = item.types();
+        let types = (!types.is_empty()).then(|| json_array(types.iter().map(EventType::as_str)));
+        match (distinct_tags(item).as_slice(), types) {
+            ([], None) => Self::Everything,
+            ([], Some(types)) => Self::Types { types },
+            ([tag], types) => Self::Tag { tag, types },
+            (tags, types) => Self::Tags {
+                tags: json_array(tags.iter().copied()),
+                count: tags.len(),
+                types,
+            },
         }
     }
+
+    /// The bound parameters [`render`](Self::render) will push: 0 to 3.
+    fn parameters(&self) -> usize {
+        match self {
+            Self::Everything => 0,
+            Self::Types { .. } | Self::Tag { types: None, .. } => 1,
+            Self::Tag { types: Some(_), .. } | Self::Tags { types: None, .. } => 2,
+            Self::Tags { types: Some(_), .. } => 3,
+        }
+    }
+
+    /// The arm's SQL, pushing its bindings in the order its `?`s occur.
+    ///
+    /// By value, so each JSON array moves into its [`SqlValue`] rather than
+    /// being copied there.
+    fn render(self, tables: &Tables, bindings: &mut Vec<SqlValue>) -> String {
+        match self {
+            Self::Everything => format!("SELECT position FROM {}", tables.event),
+            Self::Types { types } => {
+                bindings.push(SqlValue::Text(types));
+                format!("SELECT position FROM {} WHERE {TYPE_IN}", tables.event)
+            }
+            Self::Tag { tag, types } => {
+                // `SqlValue::Text` owns its string, and the binding outlives the
+                // item it was read from.
+                bindings.push(SqlValue::Text(tag.to_owned()));
+                let mut sql = format!("SELECT position FROM {} WHERE tag = ?", tables.event_tag);
+                if let Some(types) = types {
+                    bindings.push(SqlValue::Text(types));
+                    sql.push_str(" AND ");
+                    sql.push_str(TYPE_IN);
+                }
+                sql
+            }
+            Self::Tags { tags, count, types } => {
+                bindings.push(SqlValue::Text(tags));
+                let mut sql = format!("SELECT position FROM {} WHERE {TAG_IN}", tables.event_tag);
+                if let Some(types) = types {
+                    bindings.push(SqlValue::Text(types));
+                    sql.push_str(" AND ");
+                    sql.push_str(TYPE_IN);
+                }
+                sql.push_str(" GROUP BY position HAVING count(*) = ?");
+                // `count` is a `Vec` length, at most `isize::MAX`, which always
+                // fits an `i64`: the fallback is unreachable, not a hidden failure.
+                bindings.push(SqlValue::Integer(i64::try_from(count).unwrap_or(i64::MAX)));
+                sql
+            }
+        }
+    }
+}
+
+/// The item's tags, deduplicated, as borrowed text.
+///
+/// `Tags` is already sorted and deduplicated by construction, so the `dedup`
+/// is a guard rather than work: `count` is the number of rows a matching
+/// position contributes, and a repeated tag would make it unreachable.
+fn distinct_tags(item: &QueryItem) -> Vec<&str> {
+    let mut out: Vec<&str> = item.tags().iter().map(Tag::as_str).collect();
+    out.dedup();
     out
 }
 
-/// `?,?,?` for `n` bound parameters.
-pub(crate) fn placeholders(n: usize) -> String {
-    let mut out = String::with_capacity(n * 2);
-    for i in 0..n {
-        if i > 0 {
+/// `values` as a JSON array of strings, for `json_each` to unpack.
+///
+/// Hand-written rather than `serde_json`, which this crate does not depend on:
+/// the escaping JSON requires of a string is three rules. `"` and `\` are
+/// escaped, U+0000 to U+001F become `\u00XX`, and everything else — non-ASCII,
+/// U+2028 included — passes through raw, which `json_each` reads back
+/// byte-exactly. `Tag::new` and `EventType::new` already refuse category Cc, so
+/// the control-character branch is defensive, and tested directly.
+fn json_array<'a>(values: impl IntoIterator<Item = &'a str>) -> String {
+    let mut out = String::from("[");
+    for (index, value) in values.into_iter().enumerate() {
+        if index > 0 {
             out.push(',');
         }
-        out.push('?');
+        out.push('"');
+        for c in value.chars() {
+            match c {
+                '"' => out.push_str("\\\""),
+                '\\' => out.push_str("\\\\"),
+                c if u32::from(c) < 0x20 => {
+                    out.push_str("\\u00");
+                    // Two nibbles, each below 16, so `from_digit` is always
+                    // `Some`; extending by the `Option` needs no unwrap.
+                    for nibble in [u32::from(c) >> 4, u32::from(c) & 0xf] {
+                        out.extend(char::from_digit(nibble, 16));
+                    }
+                }
+                c => out.push(c),
+            }
+        }
+        out.push('"');
     }
+    out.push(']');
     out
 }
 
@@ -289,35 +373,26 @@ pub(crate) fn placeholders(n: usize) -> String {
 ///
 /// What that costs, stated rather than left implicit: these cases do **not**
 /// execute the statement, so they do not watch `prepare` refuse it. They assert
-/// against SQLite's own documented walls — `SQLITE_MAX_COMPOUND_SELECT`'s 500
-/// terms and `SQLITE_MAX_VARIABLE_NUMBER`'s 32,766 bound parameters — which are
-/// facts about the driver rather than about this adapter's chosen widths, and
-/// which the sibling adapter's `tests/wide_tags.rs` has separately watched a
-/// real SQLite enforce. Executing them here would need a
-/// `#[wasm_bindgen_test]` case, and every wasm harness this crate runs is
-/// enumerated by hand in `xtask/src/proof.rs`.
+/// against `workerd`'s measured walls — 5 compound terms and 100 bound
+/// parameters, from `harness/workerd/src/probe.rs` — which are facts about the
+/// runtime rather than about this adapter's chosen widths. The shim enforces the
+/// same four walls, and `tests/wide_query_ceiling.rs` watches it refuse a
+/// statement one past each of them.
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use happenstance_core::{Query, QueryItem, Tags};
+    use happenstance_core::{Query, QueryItem, Tag, Tags};
 
     use super::*;
-    use crate::event_store::CloudflareEventStore;
+    use crate::event_store::{
+        CloudflareEventStore, MAX_WRAPPER_BINDINGS, WORKERD_BOUND_PARAMETERS,
+    };
+    use crate::namespace::TableNamespace;
 
-    /// `SQLITE_MAX_COMPOUND_SELECT`, the default this runtime's SQLite is built
-    /// with: how many terms one compound `SELECT` may carry.
-    const COMPOUND_SELECT_TERMS: usize = 500;
-
-    /// `SQLITE_MAX_VARIABLE_NUMBER`, likewise: bound parameters per statement.
-    const BOUND_PARAMETERS: usize = 32_766;
+    /// `workerd`'s compound-`SELECT` limit: how many terms one compound
+    /// `SELECT` may carry inside a Durable Object.
+    const WORKERD_COMPOUND_SELECT_TERMS: usize = 5;
 
     /// The plan for `query`, as the shipped translation produces it.
-    ///
-    /// This helper is the **only** line the partition moved: before it, the
-    /// translation returned one statement and this wrapped it in a one-element
-    /// vector; after it, the translation returns the plan itself. Every
-    /// assertion below is stated against the plan rather than against the
-    /// spelling that produced it, so the two failing cases that named this
-    /// defect assert today exactly what they asserted when they were red.
     fn plan(query: &Query) -> Vec<(String, Vec<SqlValue>)> {
         chunks(
             &Tables::UNPREFIXED,
@@ -352,45 +427,358 @@ mod tests {
         .expect("a non-empty item list is a query")
     }
 
-    /// The arm axis. `arms` joins with `" UNION "` and nothing bounds the join.
+    /// An item of exactly these types and tags.
+    fn item(types: &[&str], tags: &[&str]) -> QueryItem {
+        QueryItem::new(
+            types.iter().copied(),
+            tags.iter()
+                .map(|tag| Tag::new(*tag).expect("the fixture's tags are well formed"))
+                .collect(),
+        )
+        .expect("the fixture's item constrains something")
+    }
+
+    /// An item of `types` distinct types and `tags` distinct tags.
+    fn item_of_width(types: usize, tags: usize) -> QueryItem {
+        let types: Vec<String> = (0..types).map(|n| format!("T{n}")).collect();
+        let tags: Vec<String> = (0..tags).map(|n| format!("k:v{n}")).collect();
+        item(
+            &types.iter().map(String::as_str).collect::<Vec<_>>(),
+            &tags.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
+    }
+
+    // -- json_array -------------------------------------------------------
+
+    #[test]
+    fn an_empty_list_encodes_as_an_empty_array() {
+        assert_eq!(json_array(Vec::<&str>::new()), "[]");
+    }
+
+    #[test]
+    fn one_and_two_values_encode_exactly() {
+        assert_eq!(json_array(["a"]), r#"["a"]"#);
+        assert_eq!(json_array(["a", "b:c"]), r#"["a","b:c"]"#);
+    }
+
+    #[test]
+    fn a_quote_and_a_backslash_are_escaped() {
+        assert_eq!(json_array([r#"k:"a\b""#]), r#"["k:\"a\\b\""]"#);
+    }
+
+    #[test]
+    fn non_ascii_passes_through_raw() {
+        assert_eq!(
+            json_array(["é", "😀", "\u{2028}"]),
+            "[\"é\",\"😀\",\"\u{2028}\"]"
+        );
+    }
+
+    /// Unreachable through `Tag::new` and `EventType::new`, which refuse
+    /// category Cc, and so tested directly.
+    #[test]
+    fn control_characters_encode_as_unicode_escapes() {
+        assert_eq!(
+            json_array(["\u{0}", "\u{1f}", "\t"]),
+            r#"["\u0000","\u001f","\u0009"]"#
+        );
+    }
+
+    // -- Arm::of ----------------------------------------------------------
+
+    /// The shape each item gets, and its price.
+    #[test]
+    fn an_items_shape_decides_its_arm() {
+        let cases: [(QueryItem, Arm<'static>, usize); 5] = [
+            (
+                item(&["B", "A"], &[]),
+                Arm::Types {
+                    types: r#"["A","B"]"#.to_owned(),
+                },
+                1,
+            ),
+            (
+                item(&[], &["a:1"]),
+                Arm::Tag {
+                    tag: "a:1",
+                    types: None,
+                },
+                1,
+            ),
+            (
+                item(&["A"], &["a:1"]),
+                Arm::Tag {
+                    tag: "a:1",
+                    types: Some(r#"["A"]"#.to_owned()),
+                },
+                2,
+            ),
+            (
+                item(&[], &["b:2", "a:1"]),
+                Arm::Tags {
+                    tags: r#"["a:1","b:2"]"#.to_owned(),
+                    count: 2,
+                    types: None,
+                },
+                2,
+            ),
+            (
+                item(&["A", "B"], &["a:1", "b:2"]),
+                Arm::Tags {
+                    tags: r#"["a:1","b:2"]"#.to_owned(),
+                    count: 2,
+                    types: Some(r#"["A","B"]"#.to_owned()),
+                },
+                3,
+            ),
+        ];
+        for (item, expected, parameters) in &cases {
+            let arm = Arm::of(item);
+            assert_eq!(&arm, expected, "{item:?}");
+            assert_eq!(arm.parameters(), *parameters, "{item:?}");
+        }
+    }
+
+    /// The declared tag ceiling is one arm of two or three parameters.
+    #[test]
+    fn an_item_of_the_declared_tag_ceiling_is_one_tags_arm() {
+        let wide = crate::event_store::Ceilings::DECLARED.tags_per_event;
+        let bare = item_of_width(0, wide);
+        let arm = Arm::of(&bare);
+        assert!(
+            matches!(arm, Arm::Tags { count, types: None, .. } if count == wide),
+            "{arm:?}"
+        );
+        assert_eq!(arm.parameters(), 2);
+
+        let typed = item_of_width(82, wide);
+        let arm = Arm::of(&typed);
+        assert!(
+            matches!(arm, Arm::Tags { count, types: Some(_), .. } if count == wide),
+            "{arm:?}"
+        );
+        assert_eq!(arm.parameters(), 3);
+    }
+
+    /// A repeated tag cannot reach `Tags`: `Tags` deduplicates on construction,
+    /// so an item built from the same tag twice holds it once and is a `Tag` arm.
+    /// That is why `count` is always reachable.
+    #[test]
+    fn a_repeated_tag_is_one_tag() {
+        let repeated = item(&[], &["a:1", "a:1"]);
+        assert_eq!(
+            Arm::of(&repeated),
+            Arm::Tag {
+                tag: "a:1",
+                types: None
+            }
+        );
+    }
+
+    /// Invariant 1: the price is a function of the shape, never of the width.
+    ///
+    /// The wrong implementation is the one this replaced, which bound one
+    /// parameter per tag and per type: at 46 tags it bound 46, and at 1,024 it
+    /// could not fit one item in `workerd`'s 100.
+    #[test]
+    fn an_items_bound_parameters_do_not_grow_with_its_tags_or_types() {
+        let widths = [1, 2, 45, 46, 1_024];
+        for types in widths {
+            assert_eq!(
+                Arm::of(&item_of_width(types, 0)).parameters(),
+                Arm::of(&item_of_width(2, 0)).parameters(),
+                "{types} types, no tags"
+            );
+            assert_eq!(
+                Arm::of(&item_of_width(types, 1)).parameters(),
+                Arm::of(&item_of_width(2, 1)).parameters(),
+                "{types} types, one tag"
+            );
+        }
+        for tags in widths.into_iter().filter(|width| *width >= 2) {
+            assert_eq!(
+                Arm::of(&item_of_width(0, tags)).parameters(),
+                Arm::of(&item_of_width(0, 2)).parameters(),
+                "{tags} tags, no types"
+            );
+            for types in widths {
+                assert_eq!(
+                    Arm::of(&item_of_width(types, tags)).parameters(),
+                    Arm::of(&item_of_width(2, 2)).parameters(),
+                    "{tags} tags, {types} types"
+                );
+            }
+        }
+    }
+
+    // -- Arm::render: text -----------------------------------------------
+
+    /// One arm's SQL and bindings, unprefixed.
+    fn rendered(item: &QueryItem) -> (String, Vec<SqlValue>) {
+        let mut bindings = Vec::new();
+        let sql = Arm::of(item).render(&Tables::UNPREFIXED, &mut bindings);
+        (sql, bindings)
+    }
+
+    #[test]
+    fn the_everything_arm_reads_the_event_table() {
+        let mut bindings = Vec::new();
+        assert_eq!(
+            Arm::Everything.render(&Tables::UNPREFIXED, &mut bindings),
+            "SELECT position FROM event"
+        );
+        assert!(bindings.is_empty());
+    }
+
+    #[test]
+    fn the_arm_text_of_each_shape_is_exact() {
+        let cases = [
+            (
+                item(&["A"], &[]),
+                "SELECT position FROM event WHERE event_type IN (SELECT value FROM json_each(?))",
+            ),
+            (
+                item(&[], &["a:1"]),
+                "SELECT position FROM event_tag WHERE tag = ?",
+            ),
+            (
+                item(&["A"], &["a:1"]),
+                "SELECT position FROM event_tag WHERE tag = ? \
+                 AND event_type IN (SELECT value FROM json_each(?))",
+            ),
+            (
+                item(&[], &["a:1", "b:2"]),
+                "SELECT position FROM event_tag WHERE tag IN (SELECT value FROM json_each(?)) \
+                 GROUP BY position HAVING count(*) = ?",
+            ),
+            (
+                item(&["A"], &["a:1", "b:2"]),
+                "SELECT position FROM event_tag WHERE tag IN (SELECT value FROM json_each(?)) \
+                 AND event_type IN (SELECT value FROM json_each(?)) \
+                 GROUP BY position HAVING count(*) = ?",
+            ),
+        ];
+        for (item, expected) in &cases {
+            assert_eq!(rendered(item).0, *expected, "{item:?}");
+        }
+    }
+
+    /// Namespacing reaches every table an arm names. Each literal table name
+    /// in [`Arm::render`] is a mutant this case catches.
+    #[test]
+    fn a_namespaced_arm_names_the_namespaced_tables() {
+        let tables = Tables::namespaced(&TableNamespace::new("ns").expect("a valid namespace"));
+        let query = Query::from_items([
+            item(&["A"], &[]),
+            item(&["A"], &["a:1"]),
+            item(&["A"], &["a:1", "b:2"]),
+        ])
+        .expect("a non-empty item list is a query");
+        let plan = chunks(&tables, &query, 5, 90);
+        assert_eq!(
+            plan.iter().map(|(sql, _)| sql.as_str()).collect::<Vec<_>>(),
+            [
+                "SELECT position FROM ns_event WHERE event_type IN (SELECT value FROM json_each(?)) \
+                 UNION SELECT position FROM ns_event_tag WHERE tag = ? \
+                 AND event_type IN (SELECT value FROM json_each(?)) \
+                 UNION SELECT position FROM ns_event_tag WHERE tag IN (SELECT value FROM json_each(?)) \
+                 AND event_type IN (SELECT value FROM json_each(?)) \
+                 GROUP BY position HAVING count(*) = ?"
+            ]
+        );
+    }
+
+    /// Invariant 1, on the text: constant length, and so constant expression
+    /// depth, whatever the item's width.
+    #[test]
+    fn the_arm_text_does_not_grow_with_the_query() {
+        let wide = crate::event_store::Ceilings::DECLARED.tags_per_event;
+        assert_eq!(
+            rendered(&item_of_width(0, 2)).0,
+            rendered(&item_of_width(0, wide)).0
+        );
+        assert_eq!(
+            rendered(&item_of_width(2, 2)).0,
+            rendered(&item_of_width(82, wide)).0
+        );
+        assert_eq!(
+            rendered(&item_of_width(2, 0)).0,
+            rendered(&item_of_width(82, 0)).0
+        );
+    }
+
+    // -- Arm::render: bindings --------------------------------------------
+
+    /// Invariant 2: the renderer binds exactly what the partition priced, one
+    /// per `?`, in textual order.
+    #[test]
+    fn render_binds_exactly_its_parameters_in_textual_order() {
+        let text = |value: &str| SqlValue::Text(value.to_owned());
+        let cases = [
+            (item(&["B", "A"], &[]), vec![text(r#"["A","B"]"#)]),
+            (item(&[], &["a:1"]), vec![text("a:1")]),
+            (item(&["A"], &["a:1"]), vec![text("a:1"), text(r#"["A"]"#)]),
+            (
+                item(&[], &["a:1", "b:2"]),
+                vec![text(r#"["a:1","b:2"]"#), SqlValue::Integer(2)],
+            ),
+            (
+                item(&["A"], &["a:1", "b:2", "c:3"]),
+                vec![
+                    text(r#"["a:1","b:2","c:3"]"#),
+                    text(r#"["A"]"#),
+                    SqlValue::Integer(3),
+                ],
+            ),
+        ];
+        for (item, expected) in &cases {
+            let parameters = Arm::of(item).parameters();
+            let (sql, bindings) = rendered(item);
+            assert_eq!(bindings.len(), parameters, "{item:?}");
+            assert_eq!(sql.matches('?').count(), bindings.len(), "{item:?}");
+            assert_eq!(&bindings, expected, "{item:?}");
+        }
+    }
+
+    // -- the partition ----------------------------------------------------
+
+    /// The arm axis. `union` joins with `" UNION "`, so a plan whose statements
+    /// carried more items than `workerd` allows compound terms would be refused
+    /// at `prepare`.
     ///
     /// A `Query` bounds nothing by design and VT-23 requires every store to
     /// evaluate at least 128 items with no ceiling above that, so a decision
-    /// model wider than SQLite's compound-`SELECT` limit is one a conformant
-    /// caller may build — and the sibling adapter chunks at 400 precisely
-    /// because it is.
+    /// model wider than the compound-`SELECT` limit is one a conformant caller
+    /// may build.
     #[test]
     fn no_statement_of_the_plan_exceeds_the_compound_select_ceiling() {
-        let query = query_of(COMPOUND_SELECT_TERMS * 2, 1);
+        let query = query_of(500 * 2, 1);
         for (sql, _) in plan(&query) {
             assert!(
-                arms_in(&sql) <= COMPOUND_SELECT_TERMS,
-                "one statement carries {} compound terms against SQLite's limit \
-                 of {COMPOUND_SELECT_TERMS}; a wide query must be chunked and \
-                 merged, never refused at the pushdown limit",
+                arms_in(&sql) <= WORKERD_COMPOUND_SELECT_TERMS,
+                "one statement carries {} compound terms against workerd's limit \
+                 of {WORKERD_COMPOUND_SELECT_TERMS}; a wide query must be chunked \
+                 and merged, never refused at the pushdown limit",
                 arms_in(&sql)
             );
         }
     }
 
-    /// The parameter axis, which is independent of the arm one.
+    /// The parameter axis, which is independent of the arm one, and which
+    /// the caller's wrapper spends from too.
     ///
-    /// `item_sql` binds one parameter per tag and one per type, so 400 items —
-    /// comfortably inside any plausible arm width — carrying this store's own
-    /// declared `tags_per_event` apiece is 409,600 bound parameters. Nothing in
-    /// `happenstance-core`'s `query.rs` bounds tags per query item, and the
-    /// number a caller reads off this adapter's own front page is 1,024.
+    /// 400 items carrying this store's own declared `tags_per_event` apiece:
+    /// the shape that bound 409,600 parameters under the old rendering.
     #[test]
     fn no_statement_of_the_plan_exceeds_the_bound_parameter_ceiling() {
         let wide = crate::event_store::Ceilings::DECLARED.tags_per_event;
         let query = query_of(400, wide);
         for (_, bindings) in plan(&query) {
             assert!(
-                bindings.len() <= BOUND_PARAMETERS,
-                "one statement binds {} parameters against SQLite's limit of \
-                 {BOUND_PARAMETERS}; the arm count says nothing about the \
-                 parameter count, and a partition on one is not a partition on \
-                 the other",
+                bindings.len() + MAX_WRAPPER_BINDINGS <= WORKERD_BOUND_PARAMETERS,
+                "one statement binds {} parameters, plus up to \
+                 {MAX_WRAPPER_BINDINGS} for the caller's wrapper, against \
+                 workerd's limit of {WORKERD_BOUND_PARAMETERS}",
                 bindings.len()
             );
         }
@@ -443,7 +831,7 @@ mod tests {
             assert_eq!(
                 total_arms(&plan),
                 items,
-                "a plan over {items} items of {tags} tags carries                  {} arms; a partition drops nothing",
+                "a plan over {items} items of {tags} tags carries {} arms; a partition drops nothing",
                 total_arms(&plan)
             );
         }
@@ -465,73 +853,67 @@ mod tests {
         );
     }
 
+    /// Statements in the plan of `items` at five arms and `budget` parameters.
+    fn statements_at(budget: usize, items: &[QueryItem]) -> usize {
+        let query = Query::from_items(items.iter().cloned()).expect("a non-empty item list");
+        chunks(&Tables::UNPREFIXED, &query, 5, budget).len()
+    }
+
     /// The boundary itself: one parameter under the budget, exactly at it, and
-    /// one over.
+    /// one over — at a synthetic budget, because the shipped one is never
+    /// reached by five arms of at most three.
     ///
     /// Off-by-one at a partition boundary is the defect this class of fix
-    /// reintroduces. The arm axis is held slack — every case is
-    /// `MAX_QUERY_ARMS_PER_STATEMENT` items, never more — so what moves the
-    /// answer is the parameter count and nothing else. A ceiling is a promise
-    /// about the statement that *is* issued: at exactly the budget the plan is
-    /// one statement, and one parameter over it is two.
+    /// reintroduces. A ceiling is a promise about the statement that *is*
+    /// issued: at exactly the budget the plan is one statement, and one
+    /// parameter over it is two.
     #[test]
     fn the_parameter_partition_splits_one_over_the_budget_and_not_before() {
-        let arms = CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
-        let budget = CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT;
-        let flat = budget / arms;
-        let remainder = budget - flat * arms;
+        let two = || item(&[], &["a:1", "b:2"]);
+        let three = || item(&["A"], &["a:1", "b:2"]);
+        assert_eq!(Arm::of(&two()).parameters(), 2);
+        assert_eq!(Arm::of(&three()).parameters(), 3);
 
-        // Item 0 carries the remainder, so the total is exactly the budget and
-        // the under/over cases move item 0 alone.
-        let widths = |delta: isize| -> Vec<usize> {
-            let mut widths = vec![flat; arms];
-            widths[0] = widths[0]
-                .saturating_add(remainder)
-                .saturating_add_signed(delta);
-            widths
-        };
-        let of_widths = |widths: &[usize]| -> Query {
-            Query::from_items(widths.iter().enumerate().map(|(item, width)| {
-                let pairs: Vec<(String, String)> = (0..*width)
-                    .map(|tag| (format!("k{item}"), format!("v{tag}")))
-                    .collect();
-                QueryItem::tagged(
-                    Tags::from_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
-                        .expect("the fixture's tags are well formed"),
-                )
-                .expect("an item carrying tags is constructible")
-            }))
-            .expect("a non-empty item list is a query")
-        };
-
-        assert_eq!(widths(0).iter().sum::<usize>(), budget);
         assert_eq!(
-            CloudflareEventStore::planned_statement_count(&of_widths(&widths(0))),
+            statements_at(6, &[two(), three()]),
             1,
-            "a plan of exactly {budget} parameters is one statement: the budget              is the largest a statement may carry, not the smallest it may not"
+            "one parameter under the budget is one statement"
         );
         assert_eq!(
-            CloudflareEventStore::planned_statement_count(&of_widths(&widths(-1))),
+            statements_at(6, &[three(), three()]),
             1,
-            "one parameter under the budget is still one statement"
+            "exactly the budget is one statement: the budget is the largest a \
+             statement may carry, not the smallest it may not"
         );
         assert_eq!(
-            CloudflareEventStore::planned_statement_count(&of_widths(&widths(1))),
+            statements_at(6, &[two(), two(), three()]),
             2,
-            "one parameter over the budget is two statements, and exactly two:              a partition that restarted its parameter count without restarting              its chunk would report more"
+            "one parameter over the budget is two statements, and exactly two: a \
+             partition that restarted its parameter count without restarting its \
+             chunk would report more"
         );
+    }
+
+    /// An arm wider than the budget on its own gets a chunk to itself, rather
+    /// than an empty chunk forever or a refusal here.
+    #[test]
+    fn an_arm_wider_than_the_budget_gets_a_chunk_to_itself() {
+        let one = || item(&["A"], &[]);
+        let three = || item(&["A"], &["a:1", "b:2"]);
+        assert_eq!(statements_at(2, &[three()]), 1);
+        assert_eq!(statements_at(2, &[one(), three(), one()]), 3);
     }
 
     /// The arm axis still binds where it is the tighter of the two.
     ///
     /// The regression this rejects is a partition that replaced one limit with
-    /// the other rather than taking both: at one tag per item, 900 items is 900
-    /// parameters — nowhere near the budget — and must still be three
+    /// the other rather than taking both: at one tag per item, eleven items is
+    /// eleven parameters — nowhere near the budget — and must still be three
     /// statements.
     #[test]
     fn the_arm_partition_still_binds_on_narrow_items() {
         let arms = CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
-        let items = arms * 2 + 100;
+        let items = arms * 2 + 1;
         assert!(items < CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT);
         assert_eq!(
             CloudflareEventStore::planned_statement_count(&query_of(items, 1)),
@@ -539,16 +921,29 @@ mod tests {
         );
     }
 
+    /// VT-23's floor, at the count the CHANGELOG and ADR-0079 publish.
+    ///
+    /// A literal, not `div_ceil` of the constant, because the number is a
+    /// published value change of `planned_statement_count`: 128 one-tag items
+    /// were one statement at 400 arms and are 26 at `workerd`'s five. A change
+    /// to either constant moves it, and should have to say so.
+    #[test]
+    fn vt_23s_floor_plans_twenty_six_statements() {
+        let floor = happenstance_core::MIN_SUPPORTED_QUERY_ITEMS;
+        assert_eq!(floor, 128);
+        assert_eq!(
+            CloudflareEventStore::planned_statement_count(&query_of(floor, 1)),
+            26
+        );
+    }
+
     /// The merge every multi-statement page runs, driven directly.
     ///
-    /// It is worth saying why these cases exist at all. Nothing in the gate
-    /// builds a plan of more than one statement — the conformance suite's widest
-    /// query is 128 items at one tag each, which is inside both ceilings by two
-    /// orders of magnitude — so the partition above ships with a merge behind it
-    /// that no executing test reaches. The cases above prove the *plan* is cut
-    /// correctly; these prove the pieces are put back together correctly, which
-    /// is the other half and the half a green suite would not have noticed was
-    /// missing.
+    /// The conformance suite now builds plans of many statements — VT-23's
+    /// 128-item rule is 26 of them — so the merge is exercised end to end. These
+    /// cases still drive it directly, because they name the wrong
+    /// implementations one at a time where an end-to-end rule sees only their
+    /// sum.
     ///
     /// Four wrong implementations, each rejected by a named case below:
     /// concatenating without ordering; ordering forwards under `backwards`;
@@ -659,7 +1054,7 @@ mod tests {
                         assert_eq!(
                             merge(&plan, backwards, want),
                             once,
-                            "incremental truncation must equal one truncation at the                              end (seed {seed}, backwards {backwards}, want {want})"
+                            "incremental truncation must equal one truncation at the end (seed {seed}, backwards {backwards}, want {want})"
                         );
                     }
                 }

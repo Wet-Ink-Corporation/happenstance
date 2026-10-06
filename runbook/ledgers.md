@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0079.** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0080.** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
@@ -29,8 +29,8 @@ Lane L4 wrote 0076: the conformance emitters CF-23 obliges are public API, un-hi
 renamed without their `__` prefix, and CF-41, minted `[FROZEN]`, pins them.
 Lane L5 wrote 0077: `AppendError::Busy` is promised at 1.0, the typed commit loop retries it
 inside the same `Retry` bound, and ES-43 is minted.
-The ladybug lane wrote 0078: `happenstance-ladybug` retired on the owner's call
-(`wi-630032`), excluded from the workspace and kept as a frozen record.
+The ladybug lane wrote 0078 (`happenstance-ladybug` retired on the owner's call, `wi-630032`), and
+lane L6b wrote 0079 (a Cloudflare query item binds constant parameters; widths 5 and 90).
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.
@@ -278,7 +278,7 @@ says why.
 | VT-24 | freeze-by-13 | Sync ingest is the first consumer that batches by the floor (E2E-35), and SY-14 is where a group larger than 128 would surface |
 | VT-30 | freeze-by-17b | Moved from 17 by ADR-0072, additive. ADR-0054's alias and builder-state decided in one pass; limb 2 retired by a record or by a multi-guard bench scenario |
 | WF-1 | renew-past-1.0: a DCB implementation publishes a wire-level encoding, or a user needs to read another implementation's log | The format is private and WF-8 versions it, so a bridge is additive: a separate `happenstance-dcb-interop` crate with its own ADR. Phase 13 records the renewal in ADR-0026 |
-| WF-11 | renew-past-1.0: a workerd-class isolate must forward a payload another store accepted, at or above about 36.6 MB under a 128 MiB cap (peak is payload × 11/3) | `serialize_str` makes a human-readable encoder hold the whole payload. The instrument is phase 17's workerd sibling job; phase 13 confirms which encoding the sync transport uses |
+| WF-11 | renew-past-1.0: a workerd-class isolate must forward a payload another store accepted, at or above about 36.6 MB under a 128 MiB cap (peak is payload × 11/3) | `serialize_str` makes a human-readable encoder hold the whole payload. Phase 17's workerd job exists and runs every event-store rule under workerd and on a deployed object. It does not run the WF-11 memory probe, which is still `tests/wf11_memory_ceiling.rs` on the shim. The row wall it measured, 8,388,637 B deployed, bounds what a Durable Object stores, not what a peer must forward. Phase 13 confirms which encoding the sync transport uses |
 | ES-7 | freeze-by-17b | Moved from 17 by ADR-0072, additive under the recommended caret answer; an exact pin is taken at 17 instead. Frozen in the record that answers `trait-variant-caret-resolves-past-the-locked-gate` and ES-17's ownership, its falsifier restated to cover a consumer's unlocked resolve |
 | ES-11 | freeze-by-17 | A record superseding ADR-0061's choice to keep the marker, now that `happenstance-neon` is in the 1.0 set; settles ES-11 and ES-12 together for the one-shot-HTTP shape |
 | ES-12 | freeze-by-17 | The same record as ES-11. Falsifier: `query_items_share_one_snapshot` red on a one-shot-HTTP adapter |
@@ -308,8 +308,8 @@ says why.
 | SY-30 | freeze-by-13 | Where the two unlike real peers, Durable Object and Neon, push real envelopes |
 | SY-31 | freeze-by-13 | The runner half. The reserved-`ProjectionId` half is phase 17's `projection-id-is-unvalidated`, since reserving `sync/` refuses ids valid today |
 | SY-32 | freeze-by-14 | Surface decided at 17 by ADR-0028: the scalar floor means resumability, not completeness. Built and frozen at 14, whose exit criteria require it no longer `[DEFERRED]` |
-| CF-14 | renew-past-1.0: phase 19a's REOPEN verdict for memory, IndexedDB or OPFS storage, or a workerd run observing a real Durable Object eviction, cannot be expressed with the one reopen shape | Four adapters express `REOPEN` with one shape. Both instruments that could fire it come after 1.0 (19a) or are not yet built (phase 17's workerd job); freeze jointly with CF-17 |
-| CF-17 | renew-past-1.0: a durable adapter cannot express even a reopen through this contract — the candidates are phase 19a's browser storage and the first workerd-class run observing a real eviction | Cloudflare's `REOPEN` runs over a host shim rather than workerd, so the instrument that could fire it is not yet built |
+| CF-14 | renew-past-1.0: phase 19a's REOPEN verdict for memory, IndexedDB or OPFS storage, or a workerd run observing a real Durable Object eviction, cannot be expressed with the one reopen shape | Four adapters express `REOPEN` with one shape. Since phase 17 the three reopen rules also pass under workerd and on a deployed object, but as a fresh handle off the object's state, not an eviction (`evictDurableObject` is reachable only from the runner, between requests). The eviction instrument is unbuilt, and 19a's comes after 1.0. Freeze jointly with CF-17 |
+| CF-17 | renew-past-1.0: a durable adapter cannot express even a reopen through this contract — the candidates are phase 19a's browser storage and the first workerd-class run observing a real eviction | Cloudflare's `REOPEN` now runs under workerd as well as the shim (phase 17's job), still as a fresh handle rather than an observed eviction. So the instrument that could fire it is not yet built |
 | CF-27 | freeze-by-14 | The report shape was decided at 17 by ADR-0028: instrument-local, over an arbitrary retained set, with a defaulted-declined removal capability. Built and frozen at 14. Phase 13's SY-27 needs the same instrument, so it may have to be built at 13 |
 | CF-34 | renew-past-1.0: a complexity property becomes expressible as a deterministic assertion rather than a timing — an instrumented fixture counting rows examined — and the clause splits | Needs an instrumented rows-examined fixture and a record on the scope of CF-33's operation-count ban (`.kb/open-questions/cf-33-cf-34-scope-outside-the-testkit.md`) |
 | CF-40 | freeze-by-13 | Phase 17 builds ADR-0043's `MetadataLen`; phase 13 decides whether `payload_len` — data plus metadata — is the budget unit |
