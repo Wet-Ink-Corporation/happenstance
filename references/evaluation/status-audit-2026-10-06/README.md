@@ -10,7 +10,7 @@ because it carries the verifiers' corrections.
 
 1. **Measure.** `cargo xtask ci` ran in a detached worktree at `1f92d08`, and so did
    five of the seven examples. The result is in [`gate-summary.md`](gate-summary.md).
-   The raw logs are not kept, because the same command reproduces them.
+   The raw logs are not kept, because the same command reproduces them. The lines the report cites from the second run are kept in [`gate2-excerpts.txt`](gate2-excerpts.txt), under their original line numbers.
 2. **Map.** Nine independent read-only readers each covered one area, and each
    cited `path:line`, a commit or a command for every claim: vision, plan, spec,
    core, adapters, sync, docs, history and governance. Their output is the

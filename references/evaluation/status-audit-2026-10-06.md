@@ -217,7 +217,7 @@ The following is quoted verbatim from `gate-summary.md` lines 2–6:
 
 ### 5.3 All seven examples were exercised
 
-`gate-summary.md`'s "not run as binaries" is accurate but incomplete. The gate ran the other two examples' integration tests (`gate2.log`):
+`gate-summary.md`'s "not run as binaries" is accurate but incomplete. The gate ran the other two examples' integration tests. The log lines cited below are kept in `status-audit-2026-10-06/gate2-excerpts.txt`, under their original line numbers:
 
 - **tickets-over-http.** `tests/two_processes.rs` ran 2 tests, both ok: `nothing_is_oversold_under_contention` and `two_processes_share_one_file` (`gate2.log:5703-5713`, `9600-9609`).
 - **outside-projection-adapter.** 4 test targets ran (`gate2.log:5537-5619`): capability_skip, conformance, discrimination and manifest. `outside_projection_conformance` ran **18 projection rules**.
@@ -313,6 +313,7 @@ Full method in `estimate.md`. The arithmetic below is corrected from earlier dra
 | **Total** | **66** | **127** |
 
 - **Central figure: about 90 working days.**
+- **Effort, not critical path.** The total assumes one person does every phase in sequence. Phase 20 is scheduled alongside the other phases (`runbook/roadmap.md`), and phase 21 waits only on whatever part of it is unfinished. If phase 20 is fully overlapped, the critical path is **56–105 days, central about 74**. The calendar below is therefore the solo, sequential (late) case. See `status-audit-2026-10-06/estimate.md` §1.
 - **Roadmap comparison.** The roadmap's own remaining path, without phase 20 and without the soak, is 52–64 days.
 - **Biggest single error: phase 13.** Its 12-day figure is the pre-phase-16 number, and phase 16 then added scope to it.
 - **Calibration signal.** Phase 17 grew about 5–6x when re-estimated: from 5–8 days to 35–45 unsplit (ADR-0072:13-19), or 33–40 days across 17 and 17b.

@@ -32,8 +32,8 @@ The local gate therefore executed **none** of the Postgres or Neon adapter's con
 ### F1 (high) The replication (SY) contract is frozen on design alone
 - Evidence: in the §7.2 generated table, 32 of 35 SY rule cells are daggered (†). By family, the daggered rows are SY 32, ES 9, PS 7 and CF 1. 21 SY clauses are FROZEN.
 - SY-8 cites "the whole of `happenstance-sync-testkit`", and that crate does not exist (`ls crates` lists only `happenstance-sync`).
-- `xtask/src/spec_trace.rs:1423-1460` exempts the family from resolution.
-- `happenstance-sync` still has `todo!()` in `lib.rs`, `memory.rs` and `ingest.rs`, and it is `publish = false`.
+- `xtask/src/spec_trace.rs:1423-1460` exempts the family from resolution. *[Superseded by verification (`verified.json`, V1): the allowlist covers nine SY clauses, not the whole family.]*
+- `happenstance-sync` still has `todo!()` in `lib.rs`, `memory.rs` and `ingest.rs`, and it is `publish = false`. *[Superseded by verification (`verified.json`, V1): `src/` has no `todo!()`; the five stubs are in the test-only peer shapes, `tests/real_peer_shapes.rs:110-218`. `publish = false` stands.]*
 - Result: about 14% of all clauses, and the whole replication story, carry no executable check. Phase 13 is not started.
 
 ### F2 (high) The real-platform Cloudflare check is red on main, and the gate's shim hid the defect

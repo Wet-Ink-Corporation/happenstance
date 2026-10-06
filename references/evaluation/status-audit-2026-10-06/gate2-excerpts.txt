@@ -1,0 +1,112 @@
+# Excerpts from the second gate run's log (gate2.log), 2026-10-06, commit 1f92d08.
+# Line numbers are those of the original log, kept so the report's citations resolve here.
+
+## gate2.log:5537-5619
+5537:      Running tests/outside_projection_capability_skip.rs (<audit scratch>/target/debug/deps/outside_projection_capability_skip-1f3f19901ef2ec66)
+5538: 
+5539: running 3 tests
+5540: test a_declined_capability_returns_a_skip_carrying_this_fixtures_own_reason ... ok
+5541: test an_ungated_rule_runs ... ok
+5542: test a_declared_capability_runs_the_rule_it_gates ... ok
+5543: 
+5544: successes:
+5545: 
+5546: successes:
+5547:     a_declared_capability_runs_the_rule_it_gates
+5548:     a_declined_capability_returns_a_skip_carrying_this_fixtures_own_reason
+5549:     an_ungated_rule_runs
+5550: 
+5551: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+5552: 
+5553:      Running tests/outside_projection_conformance.rs (<audit scratch>/target/debug/deps/outside_projection_conformance-1797df2046ae2767)
+5554: 
+5555: running 18 tests
+5556: test projection_conformance::batch_reads_reflect_pending_writes ... ok
+5557: test projection_conformance::commit_is_atomic_with_the_read_model ... ok
+5558: test projection_conformance::commit_accepts_a_position_the_batch_did_not_write ... ok
+5559: test projection_conformance::commit_advances_the_checkpoint ... ok
+5560: test projection_conformance::commit_rejects_a_foreign_batch ... ok
+5561: test projection_conformance::commit_rejects_a_regressing_position ... ok
+5562: test projection_conformance::every_declined_capability_is_stated_by_this_fixture ... ok
+5563: test projection_conformance::distinct_projections_advance_independently ... ok
+5564: test projection_conformance::dropped_batch_leaves_store_usable ... ok
+5565: test projection_conformance::failed_commit_leaves_both_unchanged ... ok
+5566: test projection_conformance::fresh_projection_has_no_checkpoint ... ok
+5567: test projection_conformance::rebuilding_is_distinguishable_from_live ... ok
+5568: test projection_conformance::refused_reset_changes_nothing ... ok
+5569: test projection_conformance::rebuild_is_chunk_size_invariant ... ok
+5570: test projection_conformance::reset_clears_rows_and_checkpoint_together ... ok
+5571: test projection_conformance::reset_is_scoped_to_one_projection ... ok
+5572: test projection_conformance::reset_is_not_commit_at_first ... ok
+5573: test projection_conformance::rollback_leaves_both_unchanged ... ok
+5574: 
+5575: successes:
+5576: 
+5577: ---- projection_conformance::refused_reset_changes_nothing stdout ----
+5578: SKIP refused_reset_changes_nothing: fixture declines `RESET_REFUSAL` — this store holds no protection policy at all: it is a process-local map with no notion of a projection anyone has asked it to guard, so there is no reset it could decline. `reset` here is unconditional, and a refusal it could produce would be a refusal nothing had asked for
+5579: 
+5580: 
+5581: successes:
+5582:     projection_conformance::batch_reads_reflect_pending_writes
+5583:     projection_conformance::commit_accepts_a_position_the_batch_did_not_write
+5584:     projection_conformance::commit_advances_the_checkpoint
+5585:     projection_conformance::commit_is_atomic_with_the_read_model
+5586:     projection_conformance::commit_rejects_a_foreign_batch
+5587:     projection_conformance::commit_rejects_a_regressing_position
+5588:     projection_conformance::distinct_projections_advance_independently
+5589:     projection_conformance::dropped_batch_leaves_store_usable
+5590:     projection_conformance::every_declined_capability_is_stated_by_this_fixture
+5591:     projection_conformance::failed_commit_leaves_both_unchanged
+5592:     projection_conformance::fresh_projection_has_no_checkpoint
+5593:     projection_conformance::rebuild_is_chunk_size_invariant
+5594:     projection_conformance::rebuilding_is_distinguishable_from_live
+5595:     projection_conformance::refused_reset_changes_nothing
+5596:     projection_conformance::reset_clears_rows_and_checkpoint_together
+5597:     projection_conformance::reset_is_not_commit_at_first
+5598:     projection_conformance::reset_is_scoped_to_one_projection
+5599:     projection_conformance::rollback_leaves_both_unchanged
+5600: 
+5601: test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+5602: 
+5603:      Running tests/outside_projection_discrimination.rs (<audit scratch>/target/debug/deps/outside_projection_discrimination-771b947c0f6cc30e)
+5604: 
+5605: running 3 tests
+5606: test the_checkpoint_only_store_passes_the_rule_that_watches_only_the_checkpoint ... ok
+5607: test commit_is_atomic_with_the_read_model_fails_the_checkpoint_only_store ... ok
+5608: test commit_is_atomic_with_the_read_model_passes_the_conformant_store ... ok
+5609: 
+5610: successes:
+5611: 
+5612: successes:
+5613:     commit_is_atomic_with_the_read_model_fails_the_checkpoint_only_store
+5614:     commit_is_atomic_with_the_read_model_passes_the_conformant_store
+5615:     the_checkpoint_only_store_passes_the_rule_that_watches_only_the_checkpoint
+5616: 
+5617: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+5618: 
+5619:      Running tests/outside_projection_manifest.rs (<audit scratch>/target/debug/deps/outside_projection_manifest-395f6fb346fb7520)
+
+## gate2.log:5703-5713
+5703:      Running tests/two_processes.rs (<audit scratch>/target/debug/deps/two_processes-45b9cdcb755735b4)
+5704: 
+5705: running 2 tests
+5706: test runs::nothing_is_oversold_under_contention ... ok
+5707: test runs::two_processes_share_one_file ... ok
+5708: 
+5709: successes:
+5710: 
+5711: successes:
+5712:     runs::nothing_is_oversold_under_contention
+5713:     runs::two_processes_share_one_file
+
+## gate2.log:9600-9609
+9600: tickets-over-http/two_processes: 2 named tests present
+9601: 
+9602: running 2 tests
+9603: test runs::nothing_is_oversold_under_contention ... ok
+9604: test runs::two_processes_share_one_file ... ok
+9605: 
+9606: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+9607: 
+9608:     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+9609:      Running tests/two_processes.rs (<audit scratch>/target/debug/deps/two_processes-1400e5ea7fa24258)

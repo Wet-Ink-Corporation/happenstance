@@ -32,7 +32,7 @@ Docs claim all four are published at 0.3.2 (`runbook/handover.md`, "Seven crates
 ## 2. Conformance invocation, per adapter
 
 Rule-family sizes (counted by regex over the enumeration macros): event-store ≈95 (`crates/happenstance-testkit/src/registry.rs:94`),
-projection 20 (`projection.rs:1937`), concurrency 6 (`concurrency.rs:1391`), model 1 rule `ops_agree_with_the_model` (`model.rs:813-820`).
+projection 20 (`projection.rs:1937`) *[superseded: the verified enumeration counts 17 projection-store rules; see `map-core.md` and the report]*, concurrency 6 (`concurrency.rs:1391`), model 1 rule `ops_agree_with_the_model` (`model.rs:813-820`).
 The workerd runner collected 97 tests locally and the deployed leg listed 96 (CI log, see §6).
 
 | Adapter | Invocation(s) | Emitter / gating |

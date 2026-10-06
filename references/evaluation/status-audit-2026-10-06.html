@@ -4,9 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Happenstance Status Audit</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,650&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: a single reading column like a surveyor's field report — summary first, then the track to 1.0, then evidence. */
 :root {
@@ -25,9 +22,9 @@
   --bad-soft: #f7e3e0;
   --idle: #8a959e;
   --idle-soft: #eceff1;
-  --display: "Source Serif 4", Georgia, "Times New Roman", serif;
-  --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -125,6 +122,8 @@ header { display: grid; gap: 14px; border-bottom: 1px solid var(--line); padding
 .sw { width: 22px; height: 8px; border-radius: 4px; display: inline-block; }
 .sw.road { background: var(--idle); height: 4px; }
 .sw.ind { background: var(--accent); }
+.erows { display: grid; gap: 10px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .erow { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr) 92px; gap: 12px; align-items: center; }
 .erow .lbl { font-size: 0.9rem; }
 .erow .lbl small { display: block; color: var(--muted); font-size: 0.78rem; }
@@ -262,14 +261,22 @@ a { color: var(--accent); }
     <h2>Remaining effort</h2>
     <p>Working days per remaining phase: the roadmap's figure against this audit's independent range. The independent range is calibrated on phase 17's overrun and on how little of sync exists.</p>
   </div>
-  <div class="chart" role="img" aria-label="Remaining effort per phase in working days, roadmap versus independent estimate">
+  <div class="chart" aria-label="Remaining effort per phase in working days: roadmap estimate, then independent range">
     <div class="legend"><span><i class="sw road"></i>Roadmap estimate</span><span><i class="sw ind"></i>Independent range</span></div>
-    <div id="erows" style="display:grid; gap:10px"></div>
-    <div class="axis"><div></div><div class="ticks"><span>0</span><span>10</span><span>20</span><span>30</span><span>40 days</span></div><div></div></div>
+    <div class="erows">
+      <div class="erow"><div class="lbl">Phase 17 remainder<small>breaking window, 0.4.0</small></div><div class="lane" aria-hidden="true"><div class="grid"></div><div class="road" style="left:47.5%;width:12.5%"></div><div class="ind" style="left:22.5%;width:22.5%"></div></div><div class="num"><span class="sr">Roadmap: </span>19–24 / <span class="sr">independent: </span>9–18<span class="sr"> working days</span></div></div>
+      <div class="erow"><div class="lbl">Phase 17b<small>additive half</small></div><div class="lane" aria-hidden="true"><div class="grid"></div><div class="road" style="left:20%;width:5%"></div><div class="ind" style="left:15%;width:12.5%"></div></div><div class="num"><span class="sr">Roadmap: </span>8–10 / <span class="sr">independent: </span>6–11<span class="sr"> working days</span></div></div>
+      <div class="erow"><div class="lbl">Phase 18<small>stable read models</small></div><div class="lane" aria-hidden="true"><div class="grid"></div><div class="road" style="left:12.5%;width:7.5%"></div><div class="ind" style="left:20%;width:17.5%"></div></div><div class="num"><span class="sr">Roadmap: </span>5–8 / <span class="sr">independent: </span>8–15<span class="sr"> working days</span></div></div>
+      <div class="erow"><div class="lbl">Phase 13<small>sync</small></div><div class="lane" aria-hidden="true"><div class="grid"></div><div class="road" style="left:30%;width:1.2%"></div><div class="ind" style="left:55%;width:45%"></div></div><div class="num"><span class="sr">Roadmap: </span>12 / <span class="sr">independent: </span>22–40<span class="sr"> working days</span></div></div>
+      <div class="erow"><div class="lbl">Phase 14<small>retention</small></div><div class="lane" aria-hidden="true"><div class="grid"></div><div class="road" style="left:12.5%;width:1.2%"></div><div class="ind" style="left:15%;width:12.5%"></div></div><div class="num"><span class="sr">Roadmap: </span>5 / <span class="sr">independent: </span>6–11<span class="sr"> working days</span></div></div>
+      <div class="erow"><div class="lbl">Phase 20<small>docs that teach</small></div><div class="lane" aria-hidden="true"><div class="grid"></div><div class="ind" style="left:25%;width:30%"></div></div><div class="num"><span class="sr">Roadmap: </span>none / <span class="sr">independent: </span>10–22<span class="sr"> working days</span></div></div>
+      <div class="erow"><div class="lbl">Phase 21<small>1.0.0 release</small></div><div class="lane" aria-hidden="true"><div class="grid"></div><div class="road" style="left:7.5%;width:5%"></div><div class="ind" style="left:12.5%;width:12.5%"></div></div><div class="num"><span class="sr">Roadmap: </span>3–5 / <span class="sr">independent: </span>5–10<span class="sr"> working days</span></div></div>
+    </div>
+    <div class="axis" aria-hidden="true"><div></div><div class="ticks"><span>0</span><span>10</span><span>20</span><span>30</span><span>40 days</span></div><div></div></div>
   </div>
   <div class="totals">
     <div class="total road"><b>52–64 days</b><span>Roadmap, what remains. It excludes the docs phase and the soak.</span></div>
-    <div class="total"><b>66–127 days</b><span>Independent estimate, central about 90, plus a 1–3 week release-candidate soak.</span></div>
+    <div class="total"><b>66–127 days</b><span>Independent estimate of effort, central about 90, plus a 1–3 week release-candidate soak. If the docs phase runs alongside the rest, the critical path is 56–105.</span></div>
     <div class="total"><b>~34–64 days</b><span>Independent estimate if sync moves out of 1.0, retention is deferred, and docs are narrowed to one outside-reader pass.</span></div>
   </div>
   <div class="table-wrap">
@@ -282,7 +289,7 @@ a { color: var(--accent); }
       </tbody>
     </table>
   </div>
-  <p style="color:var(--muted); font-size:0.9rem">The dates assume a cadence: about 5 active days a week since late September, or about 3 a week over the visible history. They are not measured, and holidays are not counted. The most likely window for 1.0 as currently scoped is <strong>late February to late May 2027</strong>, plus the soak.</p>
+  <p style="color:var(--muted); font-size:0.9rem">The dates assume a cadence: about 5 active days a week since late September, or about 3 a week over the visible history. They are not measured, and holidays are not counted. They also assume one person does every phase in sequence; if the docs phase runs alongside the rest, each date moves about 2–4 weeks earlier. The most likely window for 1.0 as currently scoped is <strong>late February to late May 2027</strong>, plus the soak.</p>
 </section>
 
 <section>
@@ -314,33 +321,5 @@ a { color: var(--accent); }
 
 </div>
 
-<script>
-(function () {
-  var rows = [
-    ["Phase 17 remainder", "breaking window, 0.4.0", [19, 24], [9, 18]],
-    ["Phase 17b", "additive half", [8, 10], [6, 11]],
-    ["Phase 18", "stable read models", [5, 8], [8, 15]],
-    ["Phase 13", "sync", [12, 12], [22, 40]],
-    ["Phase 14", "retention", [5, 5], [6, 11]],
-    ["Phase 20", "docs that teach", null, [10, 22]],
-    ["Phase 21", "1.0.0 release", [3, 5], [5, 10]]
-  ];
-  var MAX = 40, host = document.getElementById("erows");
-  function pct(v) { return (Math.min(v, MAX) / MAX * 100) + "%"; }
-  rows.forEach(function (r) {
-    var el = document.createElement("div");
-    el.className = "erow";
-    var road = r[2], ind = r[3];
-    var roadW = road ? Math.max((road[1] - road[0]) / MAX * 100, 1.2) : 0;
-    el.innerHTML =
-      '<div class="lbl">' + r[0] + '<small>' + r[1] + '</small></div>' +
-      '<div class="lane"><div class="grid"></div>' +
-      (road ? '<div class="road" style="left:' + pct(road[0]) + ';width:' + roadW + '%"></div>' : '') +
-      '<div class="ind" style="left:' + pct(ind[0]) + ';width:' + ((ind[1] - ind[0]) / MAX * 100) + '%"></div></div>' +
-      '<div class="num">' + (road ? (road[0] === road[1] ? road[0] : road[0] + "–" + road[1]) : "none") + ' / ' + ind[0] + "–" + ind[1] + '</div>';
-    host.appendChild(el);
-  });
-})();
-</script>
 </body>
 </html>

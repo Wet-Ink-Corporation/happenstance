@@ -254,8 +254,8 @@ judged a finding only partly true, the report uses their corrected wording and
 says so.
 
 It comes in three parts. The report is the record. The executive summary
-[`status-audit-2026-10-06.html`](status-audit-2026-10-06.html) is a self-contained
-page written for the owner rather than for a contributor. And
+[`status-audit-2026-10-06.html`](status-audit-2026-10-06.html) is a self-contained,
+script-free page using system fonts, written for the owner rather than for a contributor. And
 [`status-audit-2026-10-06/`](status-audit-2026-10-06/README.md) holds the evidence
 the report cites: nine reader maps, eight dimension assessments, the verifier votes
 and the effort model.

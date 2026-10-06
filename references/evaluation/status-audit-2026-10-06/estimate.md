@@ -11,6 +11,8 @@ Unit: **working days at the pace this repository has actually shown** (one owner
 | …plus phase 20 (unestimated) and the soak | not counted | not counted | — |
 | **This estimate, 1.0 path incl. phase 20, excl. soak calendar** | **66** | **127** | **~90** |
 
+**Total effort versus critical path.** The 66–127 figure is the *effort* the 1.0 path still needs. It is also the critical path only if one person does everything in sequence. The roadmap runs phase 20 off the path, alongside the other phases (`runbook/roadmap.md`, the "free to run alongside it" branch), and phase 21 waits only on the part of phase 20 that is unfinished when its other prerequisites are ready. If phase 20 is fully overlapped, for example by a second contributor or by the waits for outside readers, the critical path is the other six phases: **56–105 days, central about 74**. The calendar dates below assume a solo owner doing the work in sequence, so they are the late end. With phase 20 overlapped, each date moves earlier by about 2–4½ weeks at sprint pace.
+
 The roadmap's "62–75 working days" (`runbook/roadmap.md:78`) leaves out two things 1.0 waits on: phase 20, which phase 21 depends on (`runbook/README.md:110`; `phases/20-docs-that-teach.md:51` "Not yet made"), and the soak (`roadmap.md:76`). The biggest error is phase 13. Its 12-day figure is the pre-phase-16 monolith number (`RUNBOOK.md:5596`), and phase 16 then added five items and 17 clause freezes to it (`phases/13-sync.md:10-17`) without re-estimating it. Phase 17 sat in exactly that state before its research pass raised it about 5–6x (5–8 days to 35–45 unsplit, ADR-0072; or 33–40 across 17 and 17b).
 
 ## 2. Calibration signals (and how they were reconciled)
