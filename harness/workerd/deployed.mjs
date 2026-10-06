@@ -25,17 +25,41 @@ async function call(object, route) {
   return { status: response.status, body: await response.text() };
 }
 
-// Cloudflare's own answer when a request reaches a location the freshly
-// deployed Worker has not propagated to yet. It is raised before any harness or
-// adapter code runs, so it says nothing about a rule; the first deployed run
-// saw it on two rules that pass everywhere else. Matched exactly, and retried
-// once: a rule's own failure (a panic, a 404 for an unknown rule, a harness
-// fault) is never retried, so the strict failure list stays strict.
+// Cloudflare's own answers when a request reaches a location the freshly
+// deployed Worker has not propagated to yet. Both are raised before any harness
+// or adapter code runs, so they say nothing about a rule:
+// - `500 Worker not found.`, which the first deployed run saw on two rules that
+//   pass everywhere else;
+// - a `404` HTML page headed "There is nothing here yet", which a run on PR #36
+//   (37470989256, attempt 1) got on the rule listing one request after the
+//   readiness probe had seen a 200.
+// Matched exactly. The harness's own 404s (`no such rule`, `no route …`,
+// `expected /do/…`) are plain text and never match, so a rule's own failure (a
+// panic, an unknown rule, a harness fault) is never retried and the strict
+// failure list stays strict.
 function isPlatformMiss(status, body) {
-  return status === 500 && body.trim() === "Worker not found.";
+  return (
+    (status === 500 && body.trim() === "Worker not found.") ||
+    (status === 404 && body.includes("<h1>There is nothing here yet</h1>"))
+  );
 }
 
-const listing = await call(`${runId}-rules`, "rules");
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The listing and the probe touch no rule, so they wait out propagation a little
+// longer than a rule does: up to six attempts, ten seconds apart, each retry said
+// so, the last answer reported as it came.
+async function callPastPropagation(object, route) {
+  let result = await call(object, route);
+  for (let attempt = 2; attempt <= 6 && isPlatformMiss(result.status, result.body); attempt += 1) {
+    console.log(`retry ${route} (attempt ${attempt})  [${result.status}] platform miss`);
+    await pause(10_000);
+    result = await call(object, route);
+  }
+  return result;
+}
+
+const listing = await callPastPropagation(`${runId}-rules`, "rules");
 if (listing.status !== 200) {
   console.error(`listing the rules failed: ${listing.status} ${listing.body}`);
   process.exit(1);
@@ -51,8 +75,8 @@ for (const rule of rules) {
   let { status, body } = await call(`${runId}-${rule}`, `rule/${rule}`);
   if (isPlatformMiss(status, body)) {
     // Retried once, on a fresh object, and said so. See isPlatformMiss.
-    console.log(`retry ${rule}  [${status}] ${body.trim()}`);
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    console.log(`retry ${rule}  [${status}] platform miss`);
+    await pause(5_000);
     ({ status, body } = await call(`${runId}-${rule}-retry`, `rule/${rule}`));
   }
   executed += 1;
@@ -64,7 +88,7 @@ for (const rule of rules) {
   }
 }
 
-const probe = await call(`${runId}-probe`, "probe");
+const probe = await callPastPropagation(`${runId}-probe`, "probe");
 console.log(`--- deployed Durable Object SQLite walls ---\n${probe.body}`);
 writeFileSync("deployed-walls.txt", probe.body);
 writeFileSync("deployed-failures.json", JSON.stringify(failures, null, 2));
