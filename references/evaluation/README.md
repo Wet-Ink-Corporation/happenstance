@@ -239,6 +239,27 @@ resolves to — so a breaking change to any of the three is nearly free until
 `0.2.0` and permanent after it. The document is ordered by when a fix stops
 being available, not by severity.
 
+[`status-audit-2026-10-06.md`](status-audit-2026-10-06.md) (2026-10-06, pinned to
+`1f92d08`) is the ninth of these, and carries the same lifecycle — dated, pinned,
+**immutable, superseded rather than edited**. It is not one of the fourteen, and
+nothing in the runbook is derived from it or cites it.
+
+It is a status-quo audit: the whole tree read against the vision, the roadmap, the
+phase files and ADR-0066's definition of 1.0, to say how far the project has got
+and what realistically remains. It **decides nothing**. It writes no ADR, moves no
+clause and ticks no exit box; its recommendations are the owner's to take or leave.
+It ran `cargo xtask ci` itself in an isolated worktree (green: 2,965 passed, 0
+failed), and sent every material finding to two independent verifiers. Where they
+judged a finding only partly true, the report uses their corrected wording and
+says so.
+
+It comes in three parts. The report is the record. The executive summary
+[`status-audit-2026-10-06.html`](status-audit-2026-10-06.html) is a self-contained,
+script-free page using system fonts, written for the owner rather than for a contributor. And
+[`status-audit-2026-10-06/`](status-audit-2026-10-06/README.md) holds the evidence
+the report cites: nine reader maps, eight dimension assessments, the verifier votes
+and the effort model.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
