@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Happenstance Status Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,650&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column like a surveyor's field report — summary first, then the track to 1.0, then evidence. */
+:root {
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --fg: #1b2328;
+  --muted: #5a6670;
+  --line: #dde2e6;
+  --accent: #1f5f73;
+  --accent-soft: #e2eef1;
+  --good: #2f7d4f;
+  --good-soft: #e3f1e8;
+  --warn: #a8660a;
+  --warn-soft: #f8ecd8;
+  --bad: #b23b2e;
+  --bad-soft: #f7e3e0;
+  --idle: #8a959e;
+  --idle-soft: #eceff1;
+  --display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171a; --surface: #192024; --fg: #e3e8eb; --muted: #9aa6ae; --line: #2a3439;
+    --accent: #6fb3c6; --accent-soft: #1d3138;
+    --good: #6cc191; --good-soft: #1c3226; --warn: #e2a748; --warn-soft: #3a2c15;
+    --bad: #ec8a7d; --bad-soft: #3d221e; --idle: #7d8a93; --idle-soft: #222b30;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171a; --surface: #192024; --fg: #e3e8eb; --muted: #9aa6ae; --line: #2a3439;
+  --accent: #6fb3c6; --accent-soft: #1d3138;
+  --good: #6cc191; --good-soft: #1c3226; --warn: #e2a748; --warn-soft: #3a2c15;
+  --bad: #ec8a7d; --bad-soft: #3d221e; --idle: #7d8a93; --idle-soft: #222b30;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body); }
+.wrap { max-width: 920px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: grid; gap: 48px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 650; line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 2.75rem); letter-spacing: -0.01em; }
+h2 { font-size: 1.55rem; }
+h3 { font-size: 1.1rem; font-weight: 600; font-family: var(--body); }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font: 500 0.75rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 0.88em; }
+section { display: grid; gap: 18px; }
+.section-head { display: grid; gap: 6px; }
+.section-head p { color: var(--muted); }
+
+header { display: grid; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 28px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 0.9rem; }
+.lede { font-size: 1.15rem; line-height: 1.55; }
+.verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 4px; align-content: start; }
+.stat b { font: 600 1.7rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 0.88rem; line-height: 1.4; }
+
+.pill { display: inline-block; font: 500 0.72rem/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.idle { background: var(--idle-soft); color: var(--idle); }
+.pill.accent { background: var(--accent-soft); color: var(--accent); }
+
+/* Track to 1.0 */
+.track { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.track li { display: grid; grid-template-columns: 28px 1fr; gap: 14px; }
+.node { display: grid; justify-items: center; grid-template-rows: 18px 1fr; }
+.dot { width: 14px; height: 14px; border-radius: 50%; margin-top: 4px; border: 2px solid var(--idle); background: var(--surface); }
+.done .dot { background: var(--good); border-color: var(--good); }
+.now .dot { background: var(--warn); border-color: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
+.stem { width: 2px; background: var(--line); }
+.track li:last-child .stem { background: transparent; }
+.step { padding-bottom: 18px; display: grid; gap: 4px; min-width: 0; }
+.step-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.step-top h3 { font-size: 1rem; }
+.step p { color: var(--muted); font-size: 0.93rem; }
+.offpath { margin-top: 4px; padding: 14px 16px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: 0.93rem; }
+
+/* Capabilities */
+.caps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.cap { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.cap-top { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.cap p { font-size: 0.93rem; color: var(--muted); }
+
+/* Scorecard */
+.score { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.row { display: grid; grid-template-columns: minmax(150px, 1.1fr) 120px minmax(0, 2.4fr); gap: 16px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row .name { font-weight: 600; }
+.row .why { color: var(--muted); font-size: 0.92rem; min-width: 0; }
+.bar { height: 8px; border-radius: 4px; background: var(--idle-soft); position: relative; overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--warn); border-radius: 4px; }
+.pct { font: 500 0.8rem/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 6px; }
+@media (max-width: 640px) {
+  .row { grid-template-columns: 1fr; gap: 8px; }
+}
+
+/* Risks */
+.risks { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: r; }
+.risks li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; counter-increment: r; }
+.risks li::before { content: counter(r); font: 600 1.3rem/1.2 var(--display); color: var(--bad); }
+.risks h3 { margin-bottom: 2px; }
+.risks p { color: var(--muted); font-size: 0.94rem; }
+
+/* Effort chart */
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 16px; display: grid; gap: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 22px; height: 8px; border-radius: 4px; display: inline-block; }
+.sw.road { background: var(--idle); height: 4px; }
+.sw.ind { background: var(--accent); }
+.erow { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr) 92px; gap: 12px; align-items: center; }
+.erow .lbl { font-size: 0.9rem; }
+.erow .lbl small { display: block; color: var(--muted); font-size: 0.78rem; }
+.lane { position: relative; height: 26px; }
+.lane .grid { position: absolute; inset: 0; background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: 25% 100%; opacity: 0.8; }
+.lane .road { position: absolute; top: 6px; height: 4px; background: var(--idle); border-radius: 2px; }
+.lane .ind { position: absolute; top: 13px; height: 9px; background: var(--accent); border-radius: 4px; }
+.erow .num { font: 500 0.8rem/1.3 var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.axis { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr) 92px; gap: 12px; }
+.axis .ticks { display: flex; justify-content: space-between; font: 400 0.72rem/1 var(--mono); color: var(--muted); }
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.total { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; display: grid; gap: 2px; }
+.total.road { border-left-color: var(--idle); }
+.total b { font: 600 1.35rem/1.2 var(--display); font-variant-numeric: tabular-nums; }
+.total span { color: var(--muted); font-size: 0.88rem; }
+@media (max-width: 560px) {
+  .erow, .axis { grid-template-columns: 1fr; gap: 4px; }
+  .axis > div:first-child, .axis > div:last-child { display: none; }
+  .erow .num { text-align: left; }
+}
+
+.dates { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.dates th, .dates td { text-align: left; padding: 11px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+.dates thead th { border-top: 0; font: 500 0.72rem/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.dates td:not(:first-child) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Moves */
+.moves { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: m; }
+.moves li { counter-increment: m; display: grid; grid-template-columns: 34px 1fr; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.moves li::before { content: counter(m); font: 600 1.15rem/1.3 var(--display); color: var(--accent); }
+.moves p { color: var(--muted); font-size: 0.93rem; }
+.moves h3 { margin-bottom: 2px; }
+.tag { font: 500 0.7rem/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-left: 6px; }
+
+.method { font-size: 0.92rem; color: var(--muted); display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 24px; }
+.method ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Status-quo audit · 6 October 2026</div>
+  <h1>Happenstance status audit</h1>
+  <div class="meta">
+    <span>Audited snapshot <span class="mono">1f92d08</span> (same as <span class="mono">main</span>)</span>
+    <span>Read-only: no changes were made to the repository</span>
+  </div>
+  <p class="lede">The foundation is real, published, and unusually well tested. What is left is the larger half of the vision: offline sync, a stable read-model layer, docs a newcomer can learn from, and the first outside user. At the pace seen so far, a credible 1.0 is about <strong>four to seven months away</strong>. A single scope decision could cut that by a third or more.</p>
+  <p class="verdict"><span class="pill warn">Overall: amber</span> Solid engineering, behind its own plan, and the hardest part has not started.</p>
+</header>
+
+<section aria-label="Key figures">
+  <div class="stats">
+    <div class="stat"><b>7</b><span>libraries published to crates.io, now at version 0.3.2</span></div>
+    <div class="stat"><b>2,965 / 0</b><span>tests passed / failed when this audit ran the full quality gate itself</span></div>
+    <div class="stat"><b>~57%</b><span>of the way to 1.0, averaged across eight areas (a judgement, not a measurement)</span></div>
+    <div class="stat"><b>66–127</b><span>working days of effort left to 1.0 on an independent estimate (central ~90). The roadmap says 52–64.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>Where we are on the road to 1.0</h2>
+    <p>The milestones on the 1.0 path, in the order the roadmap runs them.</p>
+  </div>
+  <ol class="track">
+    <li class="done"><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>Foundations: phases 0–12</h3><span class="pill good">Done</span></div><p>The storage contract, the certification test suite, four database adapters and the typed layer. First published as 0.2.0 on 10 September, with three releases since.</p></div></li>
+    <li class="done"><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>Reconcile the records and define 1.0: phases 15–16</h3><span class="pill good">Done</span></div><p>Finished on or under estimate. 1.0 now has a written, checkable definition: nine libraries, sync included.</p></div></li>
+    <li class="now"><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>Last chance for breaking changes, released as 0.4.0: phase 17</h3><span class="pill warn">In progress · 3 of 10 exit criteria</span></div><p>Re-estimated from 5–8 days to 25–30 after it started. The biggest unknowns are still ahead: a Neon consistency fix, a runtime-handle question that may change two adapters' setup, and the release itself.</p></div></li>
+    <li><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>Additions after the window: phase 17b</h3><span class="pill idle">Not started</span></div><p>Non-breaking follow-ups split out of phase 17 so 0.4.0 does not wait on them.</p></div></li>
+    <li><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>Read models become stable: phase 18</h3><span class="pill idle">Not started</span></div><p>The read-model runner is still marked "unstable", and its agreed redesign (to async) has not been built.</p></div></li>
+    <li><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>Sync between devices and servers: phase 13</h3><span class="pill idle">Not started</span></div><p>The largest remaining item. About 10–15% exists: the interfaces and an in-memory peer. There is no sync engine, no certification tests and no networked peer.</p></div></li>
+    <li><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>Retention and forgetting data: phase 14</h3><span class="pill idle">Not started</span></div><p>The policy is decided (no deletion through the core interface in 1.x). The supporting work has not been built.</p></div></li>
+    <li><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>Documentation that teaches: phase 20</h3><span class="pill idle">Marked in progress, nothing recorded</span></div><p>1.0 depends on it, but the roadmap's day count leaves it out. No outside reader has tried the docs yet.</p></div></li>
+    <li><div class="node"><span class="dot"></span><span class="stem"></span></div><div class="step"><div class="step-top"><h3>1.0.0 and a release-candidate soak: phase 21</h3><span class="pill idle">Not started</span></div><p>Last by definition.</p></div></li>
+  </ol>
+  <div class="offpath">Off the 1.0 path: <strong>SQLite in the browser and on device</strong> (phases 19a and 19b, not started). <strong>The documentation website</strong> (phase 22) is built but has never gone live, because GitHub Pages is not switched on for the repository. Turning it on is a one-click setting for the owner.</div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>What it can do today</h2>
+    <p>Capabilities in plain terms, rated by how far they are proven.</p>
+  </div>
+  <div class="caps">
+    <div class="cap"><div class="cap-top"><h3>Record events with consistency rules enforced at write time</h3><span class="pill good">Proven</span></div><p>Works in memory, on SQLite, on Postgres and on Neon. CI runs the full certification suite against live Postgres and Neon databases, and it passes.</p></div>
+    <div class="cap"><div class="cap-top"><h3>A certification kit for storage back-ends</h3><span class="pill good">Proven</span></div><p>The standout asset. It is a published test suite that any database adapter must pass, and it is itself tested by deliberately broken adapters it has to catch.</p></div>
+    <div class="cap"><div class="cap-top"><h3>Typed commands with automatic retry</h3><span class="pill good">Working</span></div><p>An application decides on a change and appends it. Conflicts and busy databases are retried for you. A given/when/then test helper comes with it.</p></div>
+    <div class="cap"><div class="cap-top"><h3>Run at the edge on Cloudflare</h3><span class="pill bad">Fails on real platform</span></div><p>Passes in simulation but fails a size rule on a real Durable Object, and its published limits are far above what the platform allows. A fix is written and passing, but not merged. Until then, <span class="mono">main</span> is red.</p></div>
+    <div class="cap"><div class="cap-top"><h3>Read models (projections)</h3><span class="pill warn">Unstable</span></div><p>They work and can be rebuilt, but sit behind an "unstable" switch. Their shape will change in phase 18, and no guide page explains them yet.</p></div>
+    <div class="cap"><div class="cap-top"><h3>Neon (serverless Postgres)</h3><span class="pill warn">Known gap</span></div><p>Published and passing, but a known read-consistency rule fails intermittently. The fix is an open phase-17 item.</p></div>
+    <div class="cap"><div class="cap-top"><h3>Sync between devices and servers</h3><span class="pill idle">Designed only</span></div><p>Interfaces, data formats and an in-memory peer exist. Nothing yet moves events between real stores.</p></div>
+    <div class="cap"><div class="cap-top"><h3>Graph read models (Ladybug)</h3><span class="pill idle">Retired</span></div><p>Finished, then retired because it could not be published. Nothing replaces it, so 1.0 has no non-SQL store.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>Scorecard</h2>
+    <p>Eight areas, each assessed independently. All eight are amber: workable, with notable gaps. None is blocked.</p>
+  </div>
+  <div class="score">
+    <div class="row"><div class="name">Architecture</div><div><div class="bar"><i style="width:70%"></i></div><div class="pct">~70%</div></div><div class="why">The core design is sound, and its key rules are enforced by tests. The weak spots are at the edges: Cloudflare limits, Neon consistency, and a sync interface agreed only on paper.</div></div>
+    <div class="row"><div class="name">Implementation</div><div><div class="bar"><i style="width:65%"></i></div><div class="pct">~65%</div></div><div class="why">SQLite, Postgres and Neon are real and live-tested. Cloudflare fails on its real runtime. Sync is mostly unbuilt.</div></div>
+    <div class="row"><div class="name">Testing and verification</div><div><div class="bar"><i style="width:65%"></i></div><div class="pct">~65%</div></div><div class="why">Storage is exceptionally well tested. About a fifth of the rules declared final have no automated check behind them, and none of the sync rules do.</div></div>
+    <div class="row"><div class="name">Process and release</div><div><div class="bar"><i style="width:65%"></i></div><div class="pct">~65%</div></div><div class="why">Releases and CI work. Two workflows are red on main. The planning paperwork is about 3.5 times the size of the library's code, and the handover notes lag the code by days.</div></div>
+    <div class="row"><div class="name">Fit to the original vision</div><div><div class="bar"><i style="width:55%"></i></div><div class="pct">~55%</div></div><div class="why">The contract and certification idea are delivered. Local-first sync, the founding motive, is mostly design, and it has dropped out of the public pitch.</div></div>
+    <div class="row"><div class="name">Progress against plan</div><div><div class="bar"><i style="width:55%"></i></div><div class="pct">~55%</div></div><div class="why">15 phases are done, and phase 17 is at 3 of 10 exit criteria. The plan is checked automatically, but its hand-written parts drift.</div></div>
+    <div class="row"><div class="name">Docs and onboarding</div><div><div class="bar"><i style="width:40%"></i></div><div class="pct">~40%</div></div><div class="why">A newcomer can reach a working event store. There are no guides for read models, upgrading, choosing a store or operations, and the website has never gone live.</div></div>
+    <div class="row"><div class="name">Risk posture</div><div><div class="bar"><i style="width:40%"></i></div><div class="pct">~40%</div></div><div class="why">The least-built component is on the critical path, there is a single maintainer, and no outside user exists yet.</div></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>Top risks to a credible 1.0</h2>
+    <p>Ranked by how likely each is to delay 1.0 or make it disappointing.</p>
+  </div>
+  <ol class="risks">
+    <li><div><h3>The least-built part is on the critical path</h3><p>The owner chose to include sync in 1.0, against the plan's own recommendation. It is a third or more of the remaining effort, and its rules have no tests yet.</p></div></li>
+    <li><div><h3>1.0 would freeze an interface no outsider has used</h3><p>Every user of the core library today is inside this repository. Once 1.0 is out, changing the interface costs every adopter a major upgrade. Nobody outside the project has yet tested it in real use.</p></div></li>
+    <li><div><h3>The schedule has slipped once and is under-counted</h3><p>The one phase re-estimated mid-flight grew about five-fold. The roadmap's 1.0 figure leaves out the documentation phase and the release soak.</p></div></li>
+    <li><div><h3>One maintainer, with heavy process</h3><p>Work comes in bursts (12 active days in the last 29). Keeping the planning records consistent is now a sizeable job in its own right. Whether that slows delivery was not measured.</p></div></li>
+    <li><div><h3>Platform limits on edge and serverless</h3><p>Cloudflare's real limits sit below the specification's minimum. Neon's consistency gap is still open. Both have plans, but neither is closed.</p></div></li>
+  </ol>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>Remaining effort</h2>
+    <p>Working days per remaining phase: the roadmap's figure against this audit's independent range. The independent range is calibrated on phase 17's overrun and on how little of sync exists.</p>
+  </div>
+  <div class="chart" role="img" aria-label="Remaining effort per phase in working days, roadmap versus independent estimate">
+    <div class="legend"><span><i class="sw road"></i>Roadmap estimate</span><span><i class="sw ind"></i>Independent range</span></div>
+    <div id="erows" style="display:grid; gap:10px"></div>
+    <div class="axis"><div></div><div class="ticks"><span>0</span><span>10</span><span>20</span><span>30</span><span>40 days</span></div><div></div></div>
+  </div>
+  <div class="totals">
+    <div class="total road"><b>52–64 days</b><span>Roadmap, what remains. It excludes the docs phase and the soak.</span></div>
+    <div class="total"><b>66–127 days</b><span>Independent estimate, central about 90, plus a 1–3 week release-candidate soak.</span></div>
+    <div class="total"><b>~34–64 days</b><span>Independent estimate if sync moves out of 1.0, retention is deferred, and docs are narrowed to one outside-reader pass.</span></div>
+  </div>
+  <div class="table-wrap">
+    <table class="dates">
+      <thead><tr><th>Milestone</th><th>At recent sprint pace</th><th>At long-run pace</th></tr></thead>
+      <tbody>
+        <tr><td>0.4.0 (end of the breaking window)</td><td>late October 2026</td><td>late Oct – mid Nov 2026</td></tr>
+        <tr><td>1.0.0, as currently scoped</td><td>Jan – Apr 2027 (central early Feb)</td><td>Mar – Jul 2027 (central late Apr)</td></tr>
+        <tr><td>1.0.0 with the scope levers</td><td>late Nov 2026 – early Jan 2027</td><td>late Dec 2026 – late Feb 2027</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="color:var(--muted); font-size:0.9rem">The dates assume a cadence: about 5 active days a week since late September, or about 3 a week over the visible history. They are not measured, and holidays are not counted. The most likely window for 1.0 as currently scoped is <strong>late February to late May 2027</strong>, plus the soak.</p>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>Recommended next moves</h2>
+    <p>Ordered by leverage, quick unblockers first.</p>
+  </div>
+  <ol class="moves">
+    <li><div><h3>Get main green and the site live <span class="tag">days</span></h3><p>Merge the Cloudflare limits fix (PR #35, already passing) and turn on GitHub Pages so the documentation site deploys. Refresh the handover note, which still describes merged work as open.</p></div></li>
+    <li><div><h3>Decide whether sync belongs in 1.0 <span class="tag">owner decision</span></h3><p>This is the biggest lever on the date. Shipping 1.0 as seven libraries and giving sync its own 0.x line removes 22–40 days from the critical path. It also lets sync's design meet real use before it is frozen.</p></div></li>
+    <li><div><h3>Find two or three outside users now <span class="tag">calendar time</span></h3><p>Their feedback is the only evidence that the interface 1.0 freezes is right, and recruiting them takes weeks of waiting rather than effort. Start before 0.4.0, not after.</p></div></li>
+    <li><div><h3>Timebox the remaining phase-17 unknowns and ship 0.4.0</h3><p>Put a fixed limit on the Neon consistency spike, and fall back to a documented exception if it is not solved in time. Answer the runtime-handle question inside the window. Consider a small 0.3.3 that carries only the SQLite busy-timeout fix, which has waited 15 days for 0.4.0.</p></div></li>
+    <li><div><h3>Write the guides a newcomer actually needs</h3><p>Read models, upgrading from 0.3 to 0.4, choosing a store, and passing the certification suite. These matter more than polishing the pages that already exist.</p></div></li>
+    <li><div><h3>Close the testing gaps that matter</h3><p>Run the live-Postgres read-model store (the one the read-model interface was finalised against) in CI. Back the "final" rules that have no check yet, or mark them as unchecked.</p></div></li>
+    <li><div><h3>Trim the process to fit one maintainer</h3><p>The records are thorough but drift within days. Fewer hand-maintained status documents, and fewer citations by line number, would cut the upkeep without losing the decision history.</p></div></li>
+  </ol>
+</section>
+
+<div class="method">
+  <div class="eyebrow">How this audit was done</div>
+  <ul>
+    <li>Run against an isolated copy of <span class="mono">main</span> at <span class="mono">1f92d08</span>. The working branch was untouched, and nothing was committed or pushed.</li>
+    <li>The full quality gate was run for real and passed. Five of the seven examples were also run, and the other two ran as part of the gate's tests.</li>
+    <li>Nine independent readers mapped the vision, plans, specification, code, docs, history and process. Eight assessors then scored them. Every important finding went to two separate checkers who tried to disprove it: 27 were confirmed, 26 were confirmed only in part and reworded to match the evidence, and none were rejected outright.</li>
+    <li><strong>Not verified here:</strong> the live Postgres and Neon tests and the deployed Cloudflare tests (CI results were read instead), and the optional dependency-licence and nightly doc checks (tools not installed). Git history before 7 September 2026 is not in the repository.</li>
+    <li>The full findings, with file-and-line citations, are in the accompanying detailed report.</li>
+  </ul>
+</div>
+
+</div>
+
+<script>
+(function () {
+  var rows = [
+    ["Phase 17 remainder", "breaking window, 0.4.0", [19, 24], [9, 18]],
+    ["Phase 17b", "additive half", [8, 10], [6, 11]],
+    ["Phase 18", "stable read models", [5, 8], [8, 15]],
+    ["Phase 13", "sync", [12, 12], [22, 40]],
+    ["Phase 14", "retention", [5, 5], [6, 11]],
+    ["Phase 20", "docs that teach", null, [10, 22]],
+    ["Phase 21", "1.0.0 release", [3, 5], [5, 10]]
+  ];
+  var MAX = 40, host = document.getElementById("erows");
+  function pct(v) { return (Math.min(v, MAX) / MAX * 100) + "%"; }
+  rows.forEach(function (r) {
+    var el = document.createElement("div");
+    el.className = "erow";
+    var road = r[2], ind = r[3];
+    var roadW = road ? Math.max((road[1] - road[0]) / MAX * 100, 1.2) : 0;
+    el.innerHTML =
+      '<div class="lbl">' + r[0] + '<small>' + r[1] + '</small></div>' +
+      '<div class="lane"><div class="grid"></div>' +
+      (road ? '<div class="road" style="left:' + pct(road[0]) + ';width:' + roadW + '%"></div>' : '') +
+      '<div class="ind" style="left:' + pct(ind[0]) + ';width:' + ((ind[1] - ind[0]) / MAX * 100) + '%"></div></div>' +
+      '<div class="num">' + (road ? (road[0] === road[1] ? road[0] : road[0] + "–" + road[1]) : "none") + ' / ' + ind[0] + "–" + ind[1] + '</div>';
+    host.appendChild(el);
+  });
+})();
+</script>
+</body>
+</html>

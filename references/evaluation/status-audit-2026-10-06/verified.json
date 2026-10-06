@@ -1,0 +1,1036 @@
+{
+ "dimensions": [
+  {
+   "dimension": "vision-fit",
+   "rating": "amber",
+   "completeness_pct": 55,
+   "headline": "The storage contract and the conformance suite that tests it are built and proven, but local-first sync is mostly design on paper even though the owner made it the 1.0 headline, and the Cloudflare (edge) adapter has just failed a test against the real runtime's limits.",
+   "strengths": [
+    "The core differentiator is delivered: a storage contract plus a published, mutant-checked conformance suite. The measured gate passed 2,965 tests with 0 failures. On main, CI run 37406385109 shows live-Postgres and live-Neon conformance jobs green.",
+    "Seven crates are on crates.io at 0.3.2 (registry API). The adapters cover storage that behaves very differently: SQLite, a Durable Object, Postgres with unserialised writers, and Neon with no connection held.",
+    "ADR-0066 gives 1.0 a concrete definition a lint can check. It names the nine crates, gives every unsettled spec clause a disposition, requires Cloudflare to pass on the real workerd runtime, and sets the rc conditions.",
+    "The !Send/wasm32 constraint is kept in code (CLAUDE.md constraints 1 and 3). The edge target now has a real-workerd CI job, which is exactly why the platform gap surfaced.",
+    "The project re-scopes honestly. The 'fast, efficient' claim was withdrawn and replaced by a measured benchmark record kept out of the gate (README.md:285-309). The difference between the shim and workerd is stated. Ladybug's retirement records what was lost."
+   ],
+   "findings": [
+    {
+     "id": "VF-1",
+     "title": "Sync, the stated 1.0 headline, is the least-built part (about 10-15%)",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "The owner put happenstance-sync inside 1.0 (decision wi-40b321, which overrode recommended option A). The decision's premise, which is also its revisit condition, is that replication is the headline for first adopters. Yet sync is the least finished part of the 1.0 scope. The crate is publish = false and described as \"Not yet implemented.\" Neither it nor happenstance-sync-testkit is on crates.io, and the testkit crate does not exist. No SyncRunner exists. Ingest reaches a real store only through sqlite's test-only ingest_spike. The networked peer stand-ins (a durable-object peer and a one-shot HTTP peer) are todo!() shapes that only compile. All 35 SY clauses either cite a conformance rule marked \u2020 (does not exist yet) or point at the not-yet-existing testkit. What does exist in src/ is real: the port traits (SyncPeer, IngestStore), the identity types, a versioned wire format and a working in-memory peer, about 1,570 lines with no stubs. Phase 13 is not started. It depends formally on 17 and 18, and runs after 17, 17b and 18 in the runbook's order. No measured completion percentage exists.",
+     "evidence": "crates/happenstance-sync/Cargo.toml:3,12 ('Not yet implemented.', publish = false); grep SyncRunner finds nothing; crates/happenstance-sync/tests/real_peer_shapes.rs:110-218; crates/happenstance-sqlite/src/lib.rs:121-122 (ingest_spike is cfg(test)); crates.io API: happenstance-sync and -sync-testkit 'does not exist'; runbook/README.md:104 phase 13 'not started'; .kb/decisions/wi-40b321-*.md (recommended A, chose B)"
+    },
+    {
+     "id": "VF-2",
+     "title": "ADR-0066 \u00a76 (Cloudflare passes on real workerd) is unmet; main CI is red and the published constants exceed platform limits",
+     "severity": "high",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "At 1f92d08 (main), the 'conformance under workerd, local and deployed' job in CI run 37406385109 fails on both the local and the deployed leg. The only rule that fails is VT-23's 128-item query, against the platform's walls of 5 compound terms and 100 bound parameters (measured on the deployed object in the same log). The shipped constants MAX_QUERY_ARMS_PER_STATEMENT = 400 and MAX_QUERY_PARAMETERS_PER_STATEMENT = 30_000 (event_store.rs:402 and :423) date from 0.2.0. They are 80x and 300x above those walls, so a published 0.3.x Cloudflare store will render queries of more than 5 items that a real Durable Object refuses. ADR-0066 \u00a76's pre-1.0 condition, Cloudflare conformance on real workerd, is therefore not yet met. The README's workerd paragraph lists the walls but does not disclose the failing rule. The red was landed on purpose and is disclosed in commit 1f92d08 and runbook/handover.md:39-50. Open PR #35 (L6b, ADR-0079) changes the constants to 5 and 90 and reports local workerd at 97/97. Its deployed-leg result is still owed.",
+     "evidence": "GitHub CI run 37406385109, job 112084786585 'conformance under workerd, local and deployed' = failure (other jobs green); crates/happenstance-cloudflare/src/event_store.rs:402,423; runbook/handover.md:40-50; crates/happenstance-cloudflare/README.md:115-123; open PR #35"
+    },
+    {
+     "id": "VF-3",
+     "title": "The local-first positioning has dropped out of the public story",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "The README, the docs/ guides and every crate README never use the words \"local-first\" or \"offline\". The front page (README.md:3-6) leads with DCB compliance and the conformance suite. Replication and happenstance-sync appear only as \"comes next\" or \"stub\" (README.md:35,154). That is so even though ADR-0001:45-46 names a local-first app syncing to a Durable Object as the motivating deployment, and D-1 (wi-40b321) keeps sync inside 1.0 on the premise that \"replication is the headline for first adopters\". The local-first/edge persona is in HS-I0006's persona set (:182) but not in HS-I0007's three. The wording has not vanished from all public text, though: the docs.rs crate roots of happenstance-sync (lib.rs:27,54) and happenstance-sqlite (lib.rs:51) still say local-first. D-1's premise is worded as replication-first, not local-first.",
+     "evidence": "grep -i 'local-first\\|offline' README.md docs crates/*/README.md -> 0 hits; references/adr/0001-async-port-flavours.md:45-46; README.md:3-6; .bklg/.../personas-and-journeys.md (HS-I0006 :182 vs HS-I0007, no edge persona)"
+    },
+    {
+     "id": "VF-4",
+     "title": "Ladybug graph store dropped, and its record contradicts the registry about the name",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "happenstance-ladybug, the only projection adapter not built on SQL, was retired by ADR-0078 and excluded from the workspace (Cargo.toml:4). By ADR-0078's own account (lines 104-110 and 146-152), this removes the workspace's only evidence that the frozen projection port is not shaped around SQL, and nothing replaces it. ADR-0078:25,158-159, CHANGELOG.md:338-339 and the comment in xtask/src/reserve.rs all say the crates.io 0.0.0 reservation still holds the name. crates.io's API says the crate does not exist, so it appears never to have been reserved, and the name is unprotected. happenstance-sync has the same gap: reserve.rs lists it as a reserved name, but it also does not exist on crates.io.",
+     "evidence": ".kb/decisions/0078-happenstance-ladybug-is-retired.md:25,158; Cargo.toml exclude = [\"crates/happenstance-ladybug\"]; crates.io API: 'crate `happenstance-ladybug` does not exist'"
+    },
+    {
+     "id": "VF-5",
+     "title": "No on-device or browser store; the wasm SQLite phases are outside 1.0 and not started",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "No on-device browser or WASI store exists. happenstance-sqlite is host-only and does not build for wasm32-unknown-unknown (crates/happenstance-sqlite/src/lib.rs:26-32). Phases 19a and 19b (SQLite on wasm32) are both \"not started\" (runbook/README.md:106-107) and are explicitly off the 1.0 path: phase 21 does not depend on them, and 19-sqlite-on-wasm.md:17 says \"not on the 1.0 path\". The seed says four of six scenarios put SQLite on a device (references/seeds/sqlite-on-wasm.md:44-53). So 1.0 could ship sync with no browser-capable spoke. The real peers phase 13 plans are a Durable Object and Neon (Postgres over HTTP), and 19b is only a \"candidate offline spoke\".",
+     "evidence": "runbook/README.md:106-107 (19a/19b not started); references/seeds/sqlite-on-wasm.md:44-53; crates/happenstance-sqlite/src/lib.rs:26 (host only)"
+    },
+    {
+     "id": "VF-6",
+     "title": "'Batteries' incomplete at the projection layer",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "At the projection layer, the 'with batteries' claim is not yet delivered. In happenstance, the typed projection runner (`run_projection`, `Projection`, etc.) is still exported only under the `unstable-projection` feature (crates/happenstance/Cargo.toml:148; src/lib.rs:237-239). Phase 18, which removes that gate, is 'not started' (runbook/README.md:103). None of the seven narrative pages in docs/ mentions projections, read models or runners. Snapshotting and tracing/metrics are deferred to after 1.0 (runbook/ledgers.md:72-73). Live subscriptions are excluded on purpose: ES-32, which is provisional, says consumers poll (spec/SPECIFICATION.md:4459-4462), and the ledger plans to revisit it after 1.0 (runbook/ledgers.md:286). Even so, the crate manifest's description still says 'with batteries ... projection runners' (crates/happenstance/Cargo.toml:3).",
+     "evidence": "crates/happenstance/Cargo.toml:3,148; grep -ci projection docs/*.md -> 0 for every page; runbook/README.md:103 phase 18 'not started'; runbook/ledgers.md:72-73"
+    },
+    {
+     "id": "VF-7",
+     "title": "The 1.0 path is long and keeps growing; the 'trusted/delight' evidence is unbuilt",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "The 1.0 estimate has grown once, at phase 17's re-estimate (ADR-0072), from 34\u201343 to about 62\u201375 solo working days (runbook/roadmap.md:78-79). Phase 17 alone went from 5\u20138 to 25\u201330 days. That figure leaves out phase 20, which has no estimate yet. One of ADR-0066 \u00a78's five rc-soak conditions is phase 21's outside-reader pass. That pass uses the method phase 20's HS-P0024 (comprehension evidence) is meant to establish, and HS-P0024 is not built: all of phase 20's exit criteria are unchecked. The Pages workflow has run three times on pushes to main (09854b3, 9d99339, 1f92d08), and all three failed, so the docs site has never deployed from main.",
+     "evidence": "runbook/roadmap.md:78; .kb/decisions/wi-40b321 evidence ('34-43'); .kb/decisions/0066-what-1-0-promises.md \u00a78; runbook/phases/20-docs-that-teach.md (exit criteria unchecked); map-docs.md \u00a74 (pages.yml deploys 3/3 failed)"
+    },
+    {
+     "id": "VF-8",
+     "title": "Stale front-door and status claims",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "Crate READMEs and the handover still describe superseded states: a graph adapter, a 93-rule suite, 'Four ship at 0.2.0', and PR #34 'Not merged' when it is HEAD. The root README's 'five adapters have run the suite' counts the retired Ladybug.",
+     "evidence": "crates/happenstance-core/README.md:10-14; crates/happenstance/README.md:11,29; README.md:15-21; runbook/handover.md:15-16,34 vs git log 1f92d08"
+    },
+    {
+     "id": "VF-9",
+     "title": "Performance promise withdrawn honestly and replaced with a measured record",
+     "severity": "info",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "'fast, efficient' was dropped in favour of an explicit 'no performance claim' and a reproducible benchmark record. CF-34 forbids benchmarks from gating merges. This is a sound re-scope rather than a broken promise. It does mean the original 'fast' pitch is now unverified by design.",
+     "evidence": "README.md:283-309; benchmarks/results/GRADES.md:1-15; CI job 'the benchmark crate still compiles' green in run 37406385109"
+    }
+   ]
+  },
+  {
+   "dimension": "plan-progress",
+   "rating": "amber",
+   "completeness_pct": 55,
+   "headline": "Happenstance is partway through phase 17, the breaking window for 0.4.0: 3 of its 10 exit criteria are met, and 4 of 47 across everything left before 1.0. The plan is sound and machine-checked, but the hand-written handover, log and roadmap lag the code and leave out part of the 1.0 path.",
+   "strengths": [
+    "The runbook status table is lint-checked against the CHANGELOG and the crates.io registry (xtask/src/lints.rs:2205,4253,4263), and the gate ran green at 1f92d08.",
+    "Every phase names a proof artefact. For the done phases spot-checked, the artefact exists: frozen_signatures.rs, the two wire.rs files, LivePostgresProjectionStore (crates/happenstance-postgres/src/live_projection_store.rs:151), and the trybuild compile-fail case.",
+    "The clause counts agree everywhere they appear: 203 clauses (152 frozen, 32 provisional, 12 deferred, 7 non-normative) in spec sections 7.1, 7.2 and 1.3 and in the ledgers. All 44 non-frozen clauses have a 1.0 disposition.",
+    "Four releases are tagged on origin and published: v0.2.0, v0.3.0, v0.3.1 and v0.3.2. crates.io max_stable is 0.3.2.",
+    "Phase 17 was re-estimated openly and split at the release (ADR-0072), so 0.4.0 does not wait on additive work.",
+    "Each phase-17 lane lands as one reviewed PR, and its session log cites the CI runs.",
+    "The workerd failure on main already has a fix: open PR #35 passes all 20 check runs, workerd and semver compatibility included."
+   ],
+   "findings": [
+    {
+     "id": "F1",
+     "title": "Phase 17 is about 30% done by exit criteria, and the heaviest unknowns are still ahead",
+     "severity": "high",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "Phase 17 has 3 of 10 exit criteria ticked (runbook/phases/17-breaking-window.md:257-282). By commit, lanes L1\u2013L5, the ladybug retirement and L6a (the workerd job, merged deliberately red as 1f92d08 on 2026-10-05) have landed on main after the kickoff acffe1c (2026-09-29). L6b, the green fix, is in flight on lane/p17-workerd-green (32ea2ad). The workerd exit criterion is therefore close but unticked.\n\nNone of these has a commit or branch yet:\n- the ES-11/ES-12 fence record on Neon\n- the ES-17 measurement or record\n- the ADR-0022 \u00a79 reproduction\n- the LIST SUBQUERY guard-plan assertion\n- ProjectionId\n- codec sealing\n- the SQL-seam statement type\n- VT-6\n- the 0.4.0 release with its semver trace\n\nES-11, ES-12 and ES-17 remain [PROVISIONAL] (spec/SPECIFICATION.md:9874, 9875, 9880, \u00a77.2), although ledgers.md:283-285 disposes them freeze-by-17. The phase has used roughly 4\u20135 active days (session log 09-29 to 10-02, last merge 10-05) of a 25\u201330 day estimate, raised from 5\u20138 (:284).",
+     "evidence": "runbook/phases/17-breaking-window.md:257-283 (3 [x] of 10); session-log lane list :300-304; spec section 7.2 marks ES-11/12/17 PROVISIONAL; estimate :285; kickoff commit acffe1c on 2026-09-29."
+    },
+    {
+     "id": "F2",
+     "title": "The workerd job fails on main by design; the fix is green but unmerged",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "partly-true",
+      "confirmed"
+     ],
+     "statement": "On main (1f92d08), the 'conformance under workerd, local and deployed' job in CI run 37406385109 fails on both its local and its deployed leg, and the commit says it was landed red on purpose (#34). Every other job that ran passed: the gate on three OSes, live Postgres, live Neon, MSRV and the benchmark job. Semver, security advisories and backlog were skipped. Main's Cloudflare limits are 400 query arms and 30,000 parameters per statement (event_store.rs:402,423). The measured Durable Object walls are 5 compound SELECT terms and 100 bound parameters (experiments/durable-object-limits/README.md:154-155). Phase 9's exit criterion at RUNBOOK.md:4564, every rule passing under workerd, is therefore still unticked and unmet on main. PR #35 (head 32ea2ad) is open and unmerged with mergeable_state clean. Of its 20 check runs, none failed: 17 succeeded, including the workerd job, and 3 were skipped.",
+     "evidence": "CI run 37406385109 on 1f92d08: job 'conformance under workerd, local and deployed' = failure; gate on 3 OSes, live Postgres, live Neon and MSRV = success. PR #35 (head 32ea2ad) check runs: all completed, none failed. crates/happenstance-cloudflare/src/event_store.rs:402,423. RUNBOOK.md:4564."
+    },
+    {
+     "id": "F3",
+     "title": "The handover is wrong on three points, and its staleness check does not catch it",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "At HEAD 1f92d08, runbook/handover.md is wrong on three points:\n- Lines 15-16 and 40 say PR #34 is open and not merged. It merged as HEAD at 2026-10-06T02:54Z.\n- Line 68 says L6b will write ADR-0083. ledgers.md:20 gives 0079 as the next free number, the last atom on disk is 0078, and PR #35 adds ADR-0079.\n- Line 86 calls runbook/phase-15-afk-prompt.md untracked. The same PR #34 that rewrote the handover added that file.\n\nThe first error went stale when the PR merged. The other two were wrong when written.\n\nThe file's own staleness rule (handover.md:5: As-of must name HEAD or its parent) passes, because As-of names 9d99339, HEAD's parent. PR #35's replacement handover says \"working tree, uncommitted, on 1f92d088\". Once merged, it will pass the same check and be stale the same way, because the handover is written before its PR merges.",
+     "evidence": "runbook/handover.md:15-16, 40, 68, 86; runbook/ledgers.md:20; git log -1 = 1f92d08 (#34, merged_at 2026-10-06T02:54Z); PR #35 diff adds .kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md; git ls-files lists runbook/phase-15-afk-prompt.md."
+    },
+    {
+     "id": "F4",
+     "title": "The roadmap omits phase 22, and its 1.0 estimate leaves out a dependency",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "runbook/roadmap.md has no row or diagram node for phase 22, even though phase 22 is \"in progress\" (README.md:109) and the roadmap was edited after it was added. Phase 22 is not a dependency of phase 21, so this gap does not affect the 1.0 path. The roadmap's 62-75 working-day figure (roadmap.md:78-82) explicitly leaves out phase 20 (\"run alongside and are not counted\"), and the README makes phase 21 depend on phase 20 (README.md:110). Phase 20 has no estimate yet (phases/20-docs-that-teach.md:51). The rc soak in phase 21 is also outside the figure. So the figure understates the critical path by phase 20's unknown length (where 20 finishes after 14) plus the soak. The roughly 52-64 days of remaining serial work is the auditor's own estimate. It assumes phases 15 and 16 are done and that about 6 working days of phase 17 have been used up, and it counts 17b serially. It is not a figure the plan states.",
+     "evidence": "grep -n 22 runbook/roadmap.md matches only :140 (ADR-0022); roadmap.md:78-82 ('Phases 19a and 20 run alongside and are not counted'); README.md:110 (phase 21 depends on 20); phases/20-docs-that-teach.md:51 ('Not yet made')."
+    },
+    {
+     "id": "F5",
+     "title": "Phase 20 is marked in progress but nothing is recorded",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "Phase 20 has been marked `in progress` since the runbook split (65253fc, 2026-09-28). The status carries over from the docs initiative's in-flight state at that split, not from any later work. Since then nothing has been recorded under the phase: 0 of 4 exit criteria and the carried-in ES-23 item are unticked, there is no estimate, the session log is empty, and no commit in the available history names it. It blocks phase 21 (1.0). Its underlying initiative is not at zero, though: the frozen .bklg shows HS-P0020\u201322 at review and HS-P0023 in implementation, and these still need to be confirmed shipped or reopened.",
+     "evidence": "runbook/README.md:108; runbook/phases/20-docs-that-teach.md:42-54 (all exit criteria unticked; file ends after '**Session log**')."
+    },
+    {
+     "id": "F6",
+     "title": "The 1.0 critical path runs through the least-settled crate, with a sequencing hazard",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "The 1.0 path is 15, 16, 17, 17b, 18, 13, 14 and 21 (roadmap.md:78). Phase 13 (sync) is not started. It carries 17 of the 34 freeze-by-N dispositions in the 1.0 ledger (ledgers.md:270-315), and all 9 of its exit criteria are unchecked (phases/13-sync.md:214-230). ADR-0026 and ADR-0027 are not written. Neither happenstance-sync-testkit nor sync_peer_conformance! exists. SY-27 and SY-28 (freeze-by-13) need the CF-27 suffix-store instrument that the ledger gives to phase 14, which runs after 13. The runbook flags this hazard itself (ledgers.md:263-268) and plans to answer it by building a filtered-subset store in phase 13 or moving the two rows by a record (phases/13-sync.md:149-157). Decision D-1 (wi-40b321) put sync inside 1.0 against the plan's own recommendation, which put sync on the critical path (roadmap.md:89-95).",
+     "evidence": "runbook/ledgers.md:263-268 and :270-315 (dispositions); ls crates/ (no sync-testkit); ls .kb/decisions/ (no 0026 or 0027); roadmap.md:93-95 (D-1); phases/13-sync.md exit criteria 0/9."
+    },
+    {
+     "id": "F7",
+     "title": "The plan logs stop at 2026-09-30",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "log.md's newest entry is the ladybug retirement on 2026-09-30, with nothing for L6a or the #34 merge. Phase 22's session log has one entry, marked 'uncommitted', and does not record the #29 merge or the failed Pages deploy. The phase-17 session log does cover L6a through 2026-10-02.",
+     "evidence": "runbook/log.md:13; runbook/phases/22-docs-site.md:146-154; runbook/phases/17-breaking-window.md:476-536."
+    },
+    {
+     "id": "F8",
+     "title": "The docs site (phase 22) is built but not deployed",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "The site shell and the Pages workflow merged in #29, but the public URL returns 404 and the phase has 0 of 4 exit criteria ticked. Deployment is blocked on an unticked owner task: setting the repository's Pages source to GitHub Actions.",
+     "evidence": "curl https://wet-ink-corporation.github.io/happenstance/ returns 404 (2026-10-06); runbook/phases/22-docs-site.md:84, 88-93; merge commit 09854b3."
+    },
+    {
+     "id": "F9",
+     "title": "The old RUNBOOK.md checkboxes do not match the 'done' rows for phases 6-9 and 12",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "RUNBOOK.md, the frozen record of phases 0-12, leaves exit boxes unticked: phase 6 0/5, phase 7 2/8, phase 8 0/4, phase 9 1/4, phase 12 2/4. The artefacts I spot-checked do exist, so the boxes are stale rather than the work missing. The exception is phase 9's workerd criterion, which was moved to phase 17 and is still red on main. Separately, the phase 17 workerd exit criterion has the opposite problem: its evidence is largely met (failing runs watched, limits measured locally and deployed) but the box stays unticked, including in PR #35.",
+     "evidence": "RUNBOOK.md:4086-4092, 4193-4225, 4425-4429, 4564-4572, 5264-5280; examples/course-subscriptions/tests/ui.rs; experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt; phases/17-breaking-window.md:275."
+    },
+    {
+     "id": "F10",
+     "title": "The one re-estimate grew 3-5x; activity is bursty, and an earlier 'zero tags' reading is wrong",
+     "severity": "info",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "Phase 17 grew from 5-8 days to 25-30. Phases 15 and 16 landed on estimate. Commits by ISO week were W37 61, W38 1, W39 2, W40 21, W41 1, with idle gaps of 6-8 days, so the remaining 52-64 days carry real schedule risk. Phases 0-9 cannot be audited from git, because the root commit 673dcc5 squash-imported 2,538 files. The history map's 'zero tags' comes from the shallow local clone: origin has four release tags.",
+     "evidence": "git log --date=format:%G-W%V counts; git show --stat 673dcc5; GitHub list_tags returns v0.2.0, v0.3.0, v0.3.1, v0.3.2; roadmap.md table row 17."
+    }
+   ]
+  },
+  {
+   "dimension": "architecture",
+   "rating": "amber",
+   "completeness_pct": 70,
+   "headline": "The core contract is well designed, and the code holds its binding constraints, with tests enforcing them. The weak points are at the edges: one published adapter does not meet a read-snapshot rule, another fails a size floor on its real platform, and the replication port is frozen on paper but has no implementation or tests, with its build scheduled after the 0.4.0 breaking window.",
+   "strengths": [
+    "The two-flavour Send design is enforced at the definition. EventStore::read is non-async and returns the stream at the top level (crates/happenstance-core/src/store.rs:184-188). Both ports use #[trait_variant::make] (store.rs:158, projection.rs:425). Both guard tests exist: memory.rs:628 send_flavour_stream_is_send_in_generic_code and memory.rs:657 spawns_from_generic, which uses a real tokio::spawn.",
+    "All binding constraints hold. No #[async_trait] appears in code (grep finds only a string at crates/happenstance/tests/manifest_contract.rs:298). Core defaults are [\"std\",\"memory\"] with serde optional (crates/happenstance-core/Cargo.toml:48,35). Core has no in-workspace dependency. The only adapter-to-port edge is sqlite's versionless dev-dependency on sync, which Cargo strips on publish (crates/happenstance-sqlite/Cargo.toml:115).",
+    "The ports are small: 4 EventStore methods and 5 ProjectionStore methods, with no Send bounds on associated types, a choice documented at projection.rs:438-444. Their validity is tested against storage shapes that differ: a lock-serialised store (memory, sqlite, Durable Object), positions allocated outside the transaction (postgres xid8), and connectionless HTTP (neon). The projection port has been tested with both a buffered batch and a live sqlx transaction.",
+    "The specification is machine-checked. It has 203 clauses (152 frozen, 32 provisional, 12 deferred, 7 non-normative), and the authored count (SPECIFICATION.md:228-236) agrees with the generated table (:9791-9800). The clause-to-rule trace is diff-checked by spec-trace, and a 21-name sample resolved 21/21. The testkit checks its own rules with 84 + 18 named mutants and an every_rule_has_a_mutant meta-test.",
+    "The measured gate is green: cargo xtask ci exits 0, with 2,965 tests passed and 0 failed (gate-summary.md). CI run 37406385109 has gate x3, live-postgres, live-neon and msrv all green. There is no production unsafe, todo! or unwrap in core, the typed layer or the testkit."
+   ],
+   "findings": [
+    {
+     "id": "A1",
+     "title": "Published adapter happenstance-neon does not satisfy ES-11 (a read is a snapshot)",
+     "severity": "high",
+     "status": "confirmed",
+     "verdicts": [
+      "partly-true",
+      "confirmed"
+     ],
+     "statement": "happenstance-neon is published (0.2.0+, no `publish` key) and, by its own documentation, does not satisfy ES-11 (lib.rs:17-24; spec/SPECIFICATION.md:3087; ADR-0061). `read_result_is_stable_under_concurrent_append` fails intermittently because a read and an append are independent HTTP requests. ES-11 and ES-12 remain [PROVISIONAL]. The phase-17 record meant to settle them (runbook/phases/17-breaking-window.md:162) is unchecked. ES-12's rule currently passes on Neon but is exposed to the same race. The live-neon CI job is strict by ADR-0061, with no allowlist. Its secret is now configured, so the job really runs: it passed at 1f92d08, run 37406385109. ADR-0061's claim that strictness \"costs nothing today\" is therefore stale, and the job can go red intermittently. No red run was observed, and I did not verify that it is a required check. Before 1.0, the phase-17 record has to choose between three outcomes: a named, documented ES-11 exception for Neon, a one-shot-HTTP shape that satisfies ES-11, or another resolution such as weakening the clause or dropping the crate.",
+     "evidence": "spec/SPECIFICATION.md:3087 ('its falsifier has fired \u2026 ADR-0061 \u2026 states that happenstance-neon does not satisfy this clause'); crates/happenstance-neon/src/lib.rs:17-24; runbook/phases/17-breaking-window.md:162 unchecked"
+    },
+    {
+     "id": "A2",
+     "title": "Cloudflare adapter fails VT-23's 128-item floor on a real Durable Object, and its published limit constants are wrong there",
+     "severity": "high",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "At 1f92d08 (main), the Cloudflare adapter fails VT-23's 128-item rule, store_evaluates_a_query_at_the_guaranteed_minimum_item_count, under real workerd. Locally it passes 96 of 97 with \"too many SQL variables\" (128 parameters against 100). On a deployed Durable Object it passes 95 of 96 (CI run 37406385109, job 112084786585, steps 9, 11 and 15 failed). The measured platform walls are 5 compound SELECT terms and 100 bound parameters. Yet MAX_QUERY_ARMS_PER_STATEMENT = 400 (event_store.rs:402) and MAX_QUERY_PARAMETERS_PER_STATEMENT = 30_000 (:423) are derived from stock SQLite's defaults. The gate stayed green because it runs the adapter over a node:sqlite shim at those defaults. The fix (L6b) is not in the tree. The red merge was deliberate (\"landed red on purpose\"; handover.md:65). The runbook says workerd is not a required check (handover.md:85), but I did not verify branch protection.",
+     "evidence": "CI run 37406385109 job 112084786585 conclusion=failure (steps 9, 11, 15); crates/happenstance-cloudflare/src/event_store.rs:402 MAX_QUERY_ARMS_PER_STATEMENT = 400, :423 MAX_QUERY_PARAMETERS_PER_STATEMENT = 30_000; experiments/durable-object-limits/results/"
+    },
+    {
+     "id": "A3",
+     "title": "Replication port is frozen on design only, and its build is scheduled after the 0.4.0 breaking window",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "The 21 frozen SY clauses bind only the design (spec:200-201). Every one of the 35 SY Rule cells depends on happenstance-sync-testkit, which does not exist: 33 name rules marked \"(new, ...)\", and SY-8 and SY-17 depend on the crate directly. happenstance-sync is `publish = false`. Phase 13, which builds sync, depends on phases 17 and 18 and so runs after the 0.4.0 breaking release (roadmap: 17 [0.4.0] \u2192 18 \u2192 13). Seventeen non-frozen clauses are dispositioned freeze-by-13, including VT-6, VT-9, VT-21 and VT-24 (ADR-0066:161). This is a real post-0.4.0 risk to core, but the project has recorded and partly mitigated it. ADR-0073 settled at phase 17 that core needs no foreign-identity write path. ADR-0066 names a missed EventStore seam for sync as its own falsifier, meaning a 2.0 after 1.0. The spec does not call SyncPeer a frozen port: its CF-25 gate is unsatisfied and spec:203-205 says such a port is not frozen. So there is no violation of CF-25. The only gap is the one the project has already disclosed: frozen clauses with no far-end implementation.",
+     "evidence": "SPECIFICATION.md:198-199 ('SY clauses bind only the design'); runbook/README.md:104 (phase 13 deps include 17, 18; not started); ls crates (no sync-testkit); crates/happenstance-sync/Cargo.toml:12 publish = false"
+    },
+    {
+     "id": "A4",
+     "title": "Typed Projection::apply ships the synchronous design that accepted ADR-0074 rejected",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "At 1f92d08 the typed Projection::apply in crates/happenstance/src/runner.rs:95-99 is synchronous. It takes a bare Self::Event, returns StoreError<Self>, and its rustdoc at :50-59 argues for that shape. The accepted ADR-0074 chose an async apply that is handed a Delivered<E> and fails with the projection's own error. No Delivered type exists anywhere in crates/. Phase 18, which ADR-0074 assigns to build this, is \"not started\" (runbook/README.md:103). The runner sits behind the unstable-projection feature (lib.rs:196-197), so this is not a semver hazard, but the shipped rustdoc contradicts the accepted decision. The runner-level clauses PS-25 to PS-30 (a mix of PROVISIONAL, FROZEN and DEFERRED) have no rules: their named rules exist only as entries in xtask/src/spec_trace.rs that are declared unwritten and scheduled.",
+     "evidence": "crates/happenstance/src/runner.rs:50-59, :95-99; .kb/decisions/0074-projection-apply-is-async.md status: accepted; runbook/README.md:103 phase 18 not started"
+    },
+    {
+     "id": "A5",
+     "title": "Breaking-change candidates are still unanswered inside the 0.4.0 window",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "At 1f92d08, six phase-17 items that could break a published signature are still open:\n\n- ADR-0022 \u00a79: the runtime Handle captured at construction in happenstance-sqlite event_store.rs:512 / projection_store.rs:234 and happenstance-postgres event_store.rs:314. Its reproduction has not been written, and the remedy is not yet classified as additive or breaking.\n- ES-17: `append(&[Event])` at happenstance-core store.rs:283-287, which is neither measured nor frozen by a record.\n- ProjectionId is unvalidated (`ProjectionId::new` says it is infallible as an open question). This is tied to SY-31's reserved `sync/` prefix.\n- Whether Codec is sealed.\n- The statement type a SQL projection batch exposes.\n- VT-6 mint-per-open for Postgres and Neon.\n\nThe runbook boxes and exit criteria for all six are unchecked, and their open-question atoms have no successors. Cargo.toml already reads 0.4.0, but CHANGELOG.md shows 0.4.0 unreleased ([Unreleased]; the latest release is 0.3.2). The only open PR (#35) is the workerd L6b lane and does not address them.",
+     "evidence": "runbook/phases/17-breaking-window.md:61-136, 267-282 unchecked boxes; crates/happenstance-sqlite/src/event_store.rs:512; crates/happenstance-postgres/src/event_store.rs:314; crates/happenstance-core/src/store.rs:283-287; Cargo.toml:24 version = \"0.4.0\""
+    },
+    {
+     "id": "A6",
+     "title": "The two-flavour derivation depends on a caret-pinned proc macro that consumers can resolve past",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "`happenstance-core` gets `SendEventStore` (store.rs:158), `SendProjectionStore` (projection.rs:425) and the blanket impl that bridges the two flavours from the `trait_variant` proc macro. The workspace declares it with a caret, `trait-variant = \"0.1.3\"` (Cargo.toml:151), and the lockfile resolves it to 0.1.3. The shape guards are in-source tests, and they only see the workspace's own `--locked` resolve (store.rs:1194-1196). A consumer of the published crates resolves without that lockfile, so it can pick up any 0.1.z with z >= 3. The repository records this as an accepted open question (.kb/open-questions/trait-variant-caret-resolves-past-the-locked-gate.md). That atom classifies it as additive, and the runbook defers it from phase 17 to phase 17b, where it is an unticked item. The doc alias at store.rs:157 depends on the macro's internal name `TraitVariantBlanketType`, and store.rs:153-155 itself calls this an uncaught residual risk. The atom's body has stale details: it gives the manifest line as 130 and the published version as 0.2.0-alpha.1.",
+     "evidence": "Cargo.toml:151 trait-variant = \"0.1.3\"; .kb/open-questions/trait-variant-caret-resolves-past-the-locked-gate.md; crates/happenstance-core/src/store.rs:147-157"
+    },
+    {
+     "id": "A7",
+     "title": "Some frozen ES/PS clauses have no executable rule, and ES-6's rule is argued unwritable",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "Seven frozen ES/PS clauses name a conformance rule that does not exist and that spec-trace lists as Unresolvable::Scheduled: ES-6, ES-29, ES-31, ES-38, PS-26, PS-28 and PS-29. This is in addition to the SY/VT replication family. ES-6's rule, `store_error_crosses_a_join_handle`, is not just scheduled: send_shape.rs argues it cannot be written against today's port for any adapter, and an accepted open question records this. The gaps are declared in UNRESOLVABLE_RULE_NAMES and marked \u2020 in the spec's summary table, so spec-trace passes. The frozen behaviour still has no rule executing it.",
+     "evidence": "SPECIFICATION.md:2728-2730; crates/happenstance-cloudflare/src/send_shape.rs:14,95; .kb/open-questions/es-6-names-an-unwritable-rule.md; xtask/src/spec_trace.rs Scheduled entries (map-spec \u00a74)"
+    },
+    {
+     "id": "A8",
+     "title": "Conformance depth is uneven on the real-database adapters",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "The property-based model rule is skipped on Postgres and Neon, because both decline READ_YOUR_OWN_WRITES, so it runs only against memory and SQLite. LivePostgresProjectionStore was the instrument the projection port was frozen against (ADR-0063), but no CI job runs it. Cloudflare implements no ProjectionStore.",
+     "evidence": "crates/happenstance-postgres/tests/support/mod.rs:451-456; crates/happenstance-testkit/src/model.rs:693-695; grep -- '--test ' .github/workflows/ci.yml has no live_projection; CI log run 37406385109 'SKIP ops_agree_with_the_model' (map-adapters \u00a73)"
+    },
+    {
+     "id": "A9",
+     "title": "Hand-written spec prose about maturity contradicts the generated facts",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "SPECIFICATION.md:9775 says ES is 76% frozen; the generated table gives 81%. Line 9782 says PS is 51% frozen 'because it has no implementation at all'; it is 68%, and four adapters pass the projection suite. Line 409 says 'eighty-nine rules' where suite.rs has 95. CLAUDE.md calls happenstance 'a five-line facade'; it has 5,027 src lines. postgres_conformance.rs:153 still says the methods are todo!(). The generated sections are reliable; the hand-written prose readers use to judge maturity is not.",
+     "evidence": "spec/SPECIFICATION.md:9775,9782 vs :9791-9800; spec/SPECIFICATION.md:409; crates/happenstance-postgres/tests/postgres_conformance.rs:153"
+    }
+   ]
+  },
+  {
+   "dimension": "implementation",
+   "rating": "amber",
+   "completeness_pct": 65,
+   "headline": "The contract, the conformance suite and the SQLite, Postgres and Neon adapters are real and verified against live databases. Cloudflare fails the spec's 128-item query floor on the real platform, which leaves main red, and replication is still mostly unbuilt.",
+   "strengths": [
+    "Core contract is frozen and clean: across about 30k src lines in core, typed layer and testkit there is 0 unsafe, 0 todo!() and 0 production unwrap. The binding constraints (no async_trait, non-async read returning a top-level stream, both Send tests at crates/happenstance-core/src/memory.rs:628,657) are enforced by tests and deny.toml.",
+    "The testkit can be falsified: 95 event-store, 17 projection, 6 concurrency and 1 model rule, backed by 84 + 18 named mutant stores and a meta-test that every rule has a mutant.",
+    "Three adapters pass the full suite against real storage in required CI jobs on main run 37406385109: SQLite on 3 OSes, Postgres 17.10 at 108/108 and Neon at 108/108.",
+    "The adapters state their own limits honestly in their crate roots and READMEs: Neon ES-11, the Postgres global visibility frontier, and Cloudflare's 'thinnest evidence of the seven'.",
+    "The workerd harness is a strict real-runtime instrument that exposed the Cloudflare limits defect. The fix (open PR #35, lane L6b) is already green on its branch (CI run 2026-10-06T05:37Z, workerd=success).",
+    "The measured local gate at 1f92d08 is green: 31 required steps, 2,965 tests passed, 0 failed. Five runnable examples exit 0."
+   ],
+   "findings": [
+    {
+     "id": "IMPL-1",
+     "title": "Cloudflare adapter fails VT-23 (128-item query floor) on a real Durable Object; main CI is red",
+     "severity": "high",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "At 1f92d08, the main CI run 37406385109 is red only because of the 'conformance under workerd, local and deployed' job.\n\n- **Failure.** Under local workerd, `happenstance-cloudflare` passes 96 of 97 rules. Deployed, it passes 95 of 96. In both legs the failing rule is VT-23 (`store_evaluates_a_query_at_the_guaranteed_minimum_item_count`). Locally the error is 'too many SQL variables'; deployed it is surfaced as a Rust panic at suite.rs:155.\n- **Cause.** workerd's SQLite accepts at most 5 compound SELECT terms and 100 bound parameters. The adapter's published constants (`MAX_QUERY_ARMS_PER_STATEMENT = 400` at event_store.rs:402, `MAX_QUERY_PARAMETERS_PER_STATEMENT = 30_000` at :423) are sized for stock SQLite.\n- **Why the gate stayed green.** The gate runs the rules on a `node:sqlite` shim that has none of the platform's limits.\n- **Why PR #34 merged red.** The workerd job is not in required-checks ruleset 22926481. PR #34 merged as 1f92d08.\n- **Fix.** It is PR #35 (L6b), which is still open and unmerged.",
+     "evidence": "gh run view 37406385109: job 'conformance under workerd' X, log 'Tests 1 failed | 96 passed (97)', 'too many SQL variables at offset 5573: SQLITE_ERROR'. crates/happenstance-cloudflare/src/event_store.rs:402 MAX_QUERY_ARMS_PER_STATEMENT = 400, :423 MAX_QUERY_PARAMETERS_PER_STATEMENT = 30_000. Ruleset 22926481 required checks exclude workerd. gh api pulls: #35 open 'Phase 17 L6b \u2026 (workerd green)'."
+    },
+    {
+     "id": "IMPL-2",
+     "title": "happenstance-sync is a skeleton; replication/offline vision ~10-15% built",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "happenstance-sync is still an unpublished sketch (`publish = false`). It has the `SyncPeer` and `IngestStore` port traits, the identity types (`ReplicatedEvent`, `Watermark`), the wire envelope with tests, and a working `MemorySyncPeer`. It has no `todo!()` left in `src/`. It has no `SyncRunner`, no `happenstance-sync-testkit` and no networked peers: the Durable Object and one-shot HTTP peers exist only as `todo!()` type-checking stand-ins in `tests/real_peer_shapes.rs`. Ingest over a real store exists only as SQLite's `cfg(test)` `ingest_spike`. Its tests do exercise SY-5 (`ingested_events_land_above_the_local_head`) and SY-2/SY-3 (`compensation_is_atomic_with_the_losing_event_and_skipped_on_redelivery`). Even so, the spec marks all 35 SY conformance rules \u2020 (not yet written). Phase 13 is not started, and neither are 19a and 19b. The percentage of the vision that is built is an estimate, not a measured fact.",
+     "evidence": "grep -rn SyncRunner crates \u2192 none; ls crates has no sync-testkit; crates/happenstance-sync/tests/real_peer_shapes.rs:110,114,194,209,218 todo!(); crates/happenstance-sqlite/src/lib.rs:121-122 #[cfg(all(test, feature = \"event-store\"))] mod ingest_spike; crates/happenstance-sync/Cargo.toml publish = false; runbook/README.md:104 phase 13 'not started'"
+    },
+    {
+     "id": "IMPL-3",
+     "title": "Typed projection runner is still gated, and its apply shape contradicts accepted ADR-0074",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "At 1f92d08, happenstance's typed projection runner (Projection, run_projection, Progressed, ProjectionError) is compiled only under the `unstable-projection` feature (Cargo.toml:148; lib.rs:196-197, 237-239). `Projection::apply` is synchronous, takes a bare `Self::Event` and returns the store's error (runner.rs:95-99), and its rustdoc argues for that design (runner.rs:50-58). Accepted ADR-0074 requires an async apply that is handed a `Delivered<E>`, and no `Delivered` type exists in the crate. Phase 18, which is meant to close this gap, is \"not started\" (runbook/README.md:103). The runner's own docs list further gaps: no default chunk size (runner.rs:444), no progress observability (runner.rs:454-470), and no lease or fencing (runner.rs:474-494). The typed layer therefore has no stable read-model path, although the frozen core `ProjectionStore` port can be used directly without any feature.",
+     "evidence": "crates/happenstance/src/runner.rs:95-99 (fn apply(&mut self, event: Self::Event, batch: &mut StoreBatch<Self>)), :50-59 'Why apply is synchronous'; grep Delivered crates/happenstance/src \u2192 none; crates/happenstance/Cargo.toml:148 unstable-projection; runbook/README.md:103 phase 18 'not started'"
+    },
+    {
+     "id": "IMPL-4",
+     "title": "Neon ships knowingly failing ES-11 (intermittent)",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "happenstance-neon ships at 0.2.0+ with a documented, deliberate ES-11 exception. Its crate root (src/lib.rs:17-24), README (64-90) and event_store.rs (1298-1335) say read_result_is_stable_under_concurrent_append fails intermittently, because a read and an append are separate HTTP requests with no ordering the store honours. Per ADR-0061 the crate does not claim ES-11. Phase 17's \"ES-11 record\" (runbook/phases/17-breaking-window.md:162) is still unchecked. The failures are said to have been seen during phase 10b bring-up, but no counts or logs were kept, so no committed failure rate exists. In the 15 most recent CI runs (2026-10-01 to 2026-10-06), the live Neon conformance job passed in 13, was cancelled in 1, and was absent from 1. It never failed. In run 37406385109 at 1f92d08 the rule ran and passed (108 passed, 0 failed). So the documented intermittent failure has not shown up in recent CI.",
+     "evidence": "crates/happenstance-neon/src/lib.rs:17-24; runbook/phases/17-breaking-window.md:162 '- [ ] The ES-11 record'; gh run list -w CI -L 15 \u2192 live Neon=success in every completed run"
+    },
+    {
+     "id": "IMPL-5",
+     "title": "Neon publicly exports a deliberately wrong (lost-update) store",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "happenstance-neon publicly exports ProbeThenWriteStore, a deliberately wrong (lost-update) event store that probes and writes in two round trips. It is a pub struct with a pub constructor and an EventStore impl (event_store.rs:1475-1486). It sits in the pub event_store module (lib.rs:147), and lib.rs:186 also re-exports it at the crate root. Both are gated only by the default-on `event-store` feature. There is no cfg(test) and no doc(hidden). As it stands, a 1.0 release would make it semver-promised API. The crate docs refer to it as a named negative control, so the export looks intentional.",
+     "evidence": "crates/happenstance-neon/src/event_store.rs:1475 'pub struct ProbeThenWriteStore<T>'; crates/happenstance-neon/src/lib.rs:147 'pub mod event_store'"
+    },
+    {
+     "id": "IMPL-6",
+     "title": "ADR-0022 \u00a79 (runtime Handle captured at construction) unresolved inside the breaking window",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "ADR-0022 \u00a79 is still unresolved at 1f92d08. happenstance-sqlite (event_store.rs:512, projection_store.rs:234) and happenstance-postgres (event_store.rs:314) capture `Handle::try_current().ok()` at construction. At poll time they prefer that captured handle and fall back to try_current only when nothing was captured. NoRuntime therefore occurs only when there is no runtime at either construction or poll time. The hazard \u00a79 names is a store that outlives the runtime it captured. ADR-0068:174-176 reasons, without a reproduction, that its reads would hang or yield Worker(cancelled), not NoRuntime. No reproduction test exists (ADR-0068:176-179), and runbook/phases/17-breaking-window.md:105 and :267 are unchecked. The reproduction must be written in phase 17, before 0.4.0, because it decides whether the remedy is breaking. A breaking remedy (changing what open/new capture, or which variant a stranded read reports) must land in 0.4.0. An additive remedy (a new constructor) may land after 1.0.",
+     "evidence": "crates/happenstance-sqlite/src/event_store.rs:512 'runtime: Handle::try_current().ok()', projection_store.rs:234; runbook/phases/17-breaking-window.md:105 and :267 unchecked"
+    },
+    {
+     "id": "IMPL-7",
+     "title": "Real-database coverage gaps: model rule, live projection store, single PG version",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "Real-database coverage has gaps. The proptest model rule `ops_agree_with_the_model` runs only on the memory store and SQLite. Postgres and Neon decline READ_YOUR_OWN_WRITES; Postgres declines it because the rule was flaky on CI under the xmin visibility gate. Cloudflare's host conformance target runs no tests, and the workerd harness does not run the model rule. CI never runs crates/happenstance-postgres/tests/live_projection.rs (LivePostgresProjectionStore, the store ADR-0063 froze the port against), poll_shape.rs (a poll-count measurement, not a rule), port_shape.rs or cancellation_statement.rs. All except port_shape are confirmed `#[ignore]`d, so the local gate skips them too; port_shape's status was not checked. Postgres is tested only at postgres:17.10 via testcontainers. The benchmarks CI job only compiles the benchmark crate and never runs it. On fork PRs the live-neon job skips every step and prints a notice saying so. Locally, 24 Postgres-gated and 12 Neon-gated tests are ignored.",
+     "evidence": "grep -n -- '--test ' .github/workflows/ci.yml lists postgres_conformance, projection, rule_controls, naive_arm_probe, neon_conformance, neon_projection only (no live_projection/poll_shape); crates/happenstance-postgres/tests/support/mod.rs:177 postgres image; ci.yml:716-718 fork notice; gate-summary: 24 PG + 12 Neon tests ignored locally"
+    },
+    {
+     "id": "IMPL-8",
+     "title": "Stale records alongside the code (and one map error)",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "A comment in the Postgres tests still says append, head and contains_event_id are todo!(), but CI runs 108 rules green against their real bodies. CLAUDE.md calls the typed layer a 'five-line facade', though it has 5,027 src lines. CLAUDE.md's '101 of 101' predates the current 95+6+1 rule set. map-adapters.md says the projection family has 20 rules, but the enumeration counts 17.",
+     "evidence": "crates/happenstance-postgres/tests/postgres_conformance.rs:153; find crates/happenstance/src -name '*.rs' | xargs cat | wc -l \u2192 5027; crates/happenstance-testkit/src/projection.rs:1937-1968 (17 entries counted)"
+    },
+    {
+     "id": "IMPL-9",
+     "title": "Missing roles and ergonomics: no Cloudflare projection store, no non-SQL projection store, no DomainEvent derive",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "Cloudflare implements the event store only. Ladybug, the only non-SQL (graph) projection store, was retired by ADR-0078 and nothing replaces it. Applications write DomainEvent's positional EVENT_TYPES mapping by hand, with no compiler check (ADR-0033). The command loop has no backoff.",
+     "evidence": "grep -rn 'ProjectionStore for' crates/happenstance-cloudflare \u2192 none; Cargo.toml:4 exclude ladybug; crates/happenstance/src/domain.rs:70-200; crates/happenstance/src/command.rs:314 'There is no backoff'"
+    }
+   ]
+  },
+  {
+   "dimension": "verification",
+   "rating": "amber",
+   "completeness_pct": 65,
+   "headline": "Storage is very well tested: mutation-tested conformance rules run against live databases in CI. Replication has no executable checks yet, and three verification legs are red or skipped: a real Durable Object fails a rule on main, Neon flakes on ES-11, and the Postgres and Neon suites never run locally.",
+   "strengths": [
+    "Measured gate at 1f92d08: 2,965 tests passed, 0 failed. All 31 required gate steps are green locally, and the gate is green on ubuntu, macOS and Windows in CI run 37406385109.",
+    "Conformance rules are tested against deliberately wrong implementations: 84 for the event store plus 2 correct controls and 7 thread-level racers, and 18 for the projection store plus 3 controls. The meta-test every_rule_has_a_mutant (tests/mutation_coverage.rs:3275) has no exemption list.",
+    "The live Postgres and live Neon CI jobs are required checks. They assert that every listed test executed, with 0 ignored and 0 failed (ci.yml:441-607). Both were green on main.",
+    "All 203 spec clauses are linked to rules by a gate step (spec-trace). The prior reader resolved 21 of 21 sampled rule names, and rules not yet written are honestly marked with a dagger.",
+    "The Send/!Send binding constraints are enforced by compile-level tests: memory.rs:628 and :657, and happenstance/tests/flavours.rs.",
+    "The project is candid about its own failures: the Neon README says it does not claim ES-11, the workerd job landed red on purpose, and declined capabilities are reported as skips with reasons."
+   ],
+   "findings": [
+    {
+     "id": "V1",
+     "title": "The replication (SY) contract is frozen with no executable checks",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "The SY (replication) family has 21 FROZEN clauses out of 35, and not one of them has a conformance rule that exists. 32 rule cells are marked \u2020 (ES 9, PS 7, CF 1 for comparison). The other three (SY-8, SY-15, SY-17) cite happenstance-sync-testkit or peer_conformance!, and neither exists. So the frozen replication contract has no conformance coverage. happenstance-sync has a few probe tests (7 test fns in tests/) but no rule-level checks. Its src/ no longer contains todo!() bodies, since lib.rs:135-137 records that the last one was removed at phase 17. The remaining todo!()s are the deliberate stand-in peers in tests/real_peer_shapes.rs. spec_trace.rs's CF36_UNDISCHARGED allowlist records 9 SY clauses as breaches of CF-36's case-level check. It does not exempt the whole SY family.",
+     "evidence": "spec/SPECIFICATION.md \u00a77.2: daggered rows by family are SY 32, ES 9, PS 7, CF 1. SY-8's rule cell reads 'the whole of happenstance-sync-testkit'. `ls crates` shows no sync-testkit. xtask/src/spec_trace.rs:1423-1460 exempts the SY family. grep todo! finds hits in crates/happenstance-sync/src/{lib,memory,ingest}.rs."
+    },
+    {
+     "id": "V2",
+     "title": "Cloudflare fails a conformance rule on a real Durable Object, and the gate's stand-in hid it",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "At main 1f92d08, the Cloudflare adapter fails one event-store conformance rule under real workerd, both locally and on a deployed Durable Object: VT-23's store_evaluates_a_query_at_the_guaranteed_minimum_item_count, with \"too many SQL variables\". The required gate stays green because its wasm harness runs on a Node SQLite shim that has none of the platform's storage limits. The adapter's published limits (400 query arms, 30,000 parameters) exceed the platform's measured walls: 100 bound parameters and 5 compound SELECT terms. The workerd job is documented as not a required check. It was merged red deliberately and the failure was documented in PR #34's commit message and the runbook, so it was not hidden from the project. The fix (5 arms, 90 parameters, and a shim with workerd's limits) is in open PR #35, whose CI run 37419423991 is green but which is not merged.",
+     "evidence": "CI job 112084786585: 'collected 97; executed 97 (passed 96, failed 1)' and 'executed 96 of 96; 1 failed' on store_evaluates_a_query_at_the_guaranteed_minimum_item_count. The stand-in is described at crates/happenstance-cloudflare/tests/durable_object_conformance.rs:1-10 ('not under workerd'). The limits are at src/event_store.rs:402,423. ci.yml:875 says 'Not a required status check'. PR #35 CI run 37419423991: success."
+    },
+    {
+     "id": "V3",
+     "title": "Neon intermittently fails a required check on ES-11/ES-12",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "The published happenstance-neon adapter fails the ES-11/ES-12 snapshot rules intermittently (`read_result_is_stable_under_concurrent_append`, suite.rs:6147, and `query_items_share_one_snapshot`, suite.rs:6250). The cause is that a read and an append are separate HTTP requests with nothing ordering them. The live-Neon job is a required status check in the \"Protect main\" ruleset, and it failed in at least 4 of the 55 non-cancelled ci.yml runs since 2026-09-28: 36528489181 failed both rules, 36596302787 failed rule 6250, and 36619371439 and 36775667956 failed rule 6147. ES-11 is still [PROVISIONAL] with its falsifier recorded as fired (SPECIFICATION.md:3087). The crate says it does not claim ES-11 (README.md:89). The record that would supersede ADR-0061 and settle ES-11 and ES-12 is owed by phase 17 and has not been written: the item is unchecked at runbook/phases/17-breaking-window.md:162 and ADR-0061 is still accepted. Until it is written, the handover tells people to re-run the flake (handover.md:123).",
+     "evidence": "4 of 54 non-cancelled CI runs since 2026-09-28 failed the live-Neon job. Run 36528489181 failed both rules. Run 36596302787 failed query_items_share_one_snapshot (suite.rs:6250). Runs 36619371439 and 36775667956 failed read_result_is_stable_under_concurrent_append (suite.rs:6147). SPECIFICATION.md:3087. crates/happenstance-neon/README.md:89 ('this crate does not claim ES-11')."
+    },
+    {
+     "id": "V4",
+     "title": "Postgres and Neon conformance runs only in CI, never in the local gate",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "`cargo xtask ci` never runs the live conformance suites for Postgres and Neon. It ignores 277 integration tests: postgres_conformance 108, projection 21, live_projection 20, poll_shape 1, neon_conformance 108, neon_projection 19. The ignore reasons are \"needs a live Postgres\" and \"needs a live Neon endpoint\". Those suites run only in CI's live-postgres and live-neon jobs. The local gate does still build, lint and unit-test both crates: 51 Neon and 27 Postgres unit tests, about 13 non-gated integration tests, and 3 doctests all ran and passed. So a green local gate shows nothing about how either adapter behaves against a real database, but it does show something about the crates. On fork PRs the live-neon job skips every step after a notice saying it \"proves NOTHING\" and reports green (ci.yml:716-718). A same-repository run without the secret fails instead (ci.yml:719-723). The 288 figure is the workspace-wide ignored total, not a Postgres/Neon count.",
+     "evidence": "gate2.log ignored counts: postgres_conformance 108, projection 21, live_projection 20, poll_shape 1, neon_conformance 108, neon_projection 19, about 11 doctests (288 in total). The ignore reasons are 'needs a live Postgres' and 'needs a live Neon endpoint'. ci.yml:716-718: fork runs 'prove NOTHING'."
+    },
+    {
+     "id": "V5",
+     "title": "The store the projection port was frozen against is never run in CI",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "No CI job runs the test target for LivePostgresProjectionStore. That is the live-transaction projection store that ADR-0063 froze the projection port against, and the only real-database store whose conformance run executes PS-12 (batch_reads_reflect_pending_writes) and rebuild_is_chunk_size_invariant instead of skipping them. Its tests in crates/happenstance-postgres/tests/live_projection.rs are all #[ignore]. The live-postgres job in .github/workflows/ci.yml runs only the postgres_conformance, projection, rule_controls and naive_arm_probe targets, so live_projection is compiled and linted but never executed. The claim at spec/SPECIFICATION.md:405 and 5350-5356 that the store passes all seventeen rules against a live server therefore rests on a run outside CI, presumably manual, with no CI record.",
+     "evidence": "The `--test` targets in ci.yml (lines 441, 491, 524, 531, 647, 738, 740, 784, 786) are postgres_conformance, projection, rule_controls, naive_arm_probe, neon_conformance and neon_projection. There is no live_projection target. crates/happenstance-postgres/tests/live_projection.rs:20-30. Claim: spec/SPECIFICATION.md:405."
+    },
+    {
+     "id": "V6",
+     "title": "About 22% of FROZEN clauses have no executable check",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "34 of the 152 FROZEN clauses in spec/SPECIFICATION.md \u00a77.2 (about 22%) have no executable conformance check in the repository. They are:\n- All 21 FROZEN SY clauses. Their rules carry \u2020 or depend on the unbuilt happenstance-sync-testkit.\n- 4 ES clauses with unwritten \u2020 rules: ES-6, ES-29, ES-31 and ES-38. xtask itself records ES-6 as unwritable against today's port.\n- 3 runner rules for PS-26, PS-28 and PS-29, scheduled as 'the projection runner's own rules' (phase 18 runbook) and not yet written.\n- 6 clauses whose Rule cell is 'none': ES-23, ES-37, PS-9, PS-31, PS-36 and PS-37. For each, the spec argues that conformance cannot check it: an absence of a method or bound, a documented exclusion, a doctest stable rustdoc would not gate, or a contract-crate obligation. These are deliberate gaps, not oversights.\n\nES-3, ES-4 and ES-5 also show \u2020 but are checked elsewhere by unit tests in happenstance-core. No conformance rule checks the projection runner's per-projection failure policy, failing-position reporting or poisoned-view isolation; the rebuilding-read-models example demonstrates the last of these. Panic rollback (PS-30) is DEFERRED rather than FROZEN, so it is not part of the 34.",
+     "evidence": "spec/SPECIFICATION.md \u00a77.2 rows, e.g. '| ES-38 | FROZEN | `positions_are_not_reused_after_removal` \u2020 |' and '| PS-26 | FROZEN | `failure_policy_is_per_projection` \u2020 |'. xtask/src/spec_trace.rs:1167-1173 (ES-6 'unwritable against today's port')."
+    },
+    {
+     "id": "V7",
+     "title": "The strongest generative and contention checks cover only stores that serialise their writers",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "Only the generative check is limited to stores that serialise their writers. ops_agree_with_the_model skips any fixture that declines READ_YOUR_OWN_WRITES, and both Postgres and Neon decline it, so it only does work on the memory and SQLite stores. Cloudflare (a !Send store on wasm32) runs neither the model family nor the concurrency family. The main suite's racing rule appends twice in sequence on one handle, so it checks the semantics but cannot catch a probe-then-insert race. Contention testing is not limited the same way: the parallel concurrency family (5 rules, 64 contenders) is invoked by the Postgres and Neon live conformance targets and their CI jobs, so stores whose writers are not serialised are checked under real contention. That coverage depends on the live CI jobs; the local gate does not run it. What is missing is generative/model-based coverage on the non-serialising axis, not contention coverage.",
+     "evidence": "crates/happenstance-testkit/src/model.rs:693-697 (returns Skipped when READ_YOUR_OWN_WRITES is declined). The adapters map cites the CI log line 'SKIP ops_agree_with_the_model: fixture declines READ_YOUR_OWN_WRITES' for both live-postgres and live-neon. crates/happenstance-cloudflare/tests/durable_object_conformance.rs:46. suite.rs:5837-5874."
+    },
+    {
+     "id": "V8",
+     "title": "No integration test layer, and the case catalogue carries no status",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "The 9 integration-level end-to-end cases are meant to live in tests/e2e/, which does not exist. E2E-CASES.md has no implemented or pending marker per case, and several of its 'blocked' markers are stale. Spec prose still says 89 event-store rules; the registry has 95.",
+     "evidence": "spec/E2E-CASES.md:22 ('tests/e2e/, not yet created'). `ls tests` in the worktree: no such directory. spec/SPECIFICATION.md:404 ('89 conformance rules'). The for_each_event_store_rule! macro at registry.rs:94 lists 95 rules."
+    },
+    {
+     "id": "V9",
+     "title": "No crash-fault, performance or platform-lifecycle evidence",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "The durability rule CF-14 is deferred until after 1.0, and ES-35 is provisional. Reopen is tested, but crash or power-loss fault injection is not built. The benchmark job only compiles. Durable Object eviction and hibernation are untested. Locally, cargo-hack, cargo-deny and the nightly docs.rs builds were skipped because the tools were absent. One unrelated SQLite projection test flaked once on Windows.",
+     "evidence": "runbook/ledgers.md 1.0 dispositions (CF-14 renew-past-1.0). gate-summary.md SKIPPED list. Benchmark job step 'Compile the benchmark harness and its tests' in run 37406385109. Run 36962066186 windows: 'concurrent_opens_of_one_path_all_succeed ... FAILED' (happenstance-sqlite --test projection)."
+    }
+   ]
+  },
+  {
+   "dimension": "docs-dx",
+   "rating": "amber",
+   "completeness_pct": 40,
+   "headline": "A competent Rust developer can reach a working event store with conditional appends from the docs, but projections, operations, choosing a store and upgrading must be reverse-engineered from examples, the docs site has never deployed, and no outside reader has validated any of it.",
+   "strengths": [
+    "The documentation that exists is compiled. Narrative pages are registered in xtask/src/narrative.rs and crate READMEs are compiled as doctests (crates/happenstance/src/lib.rs:10). The measured gate passed the narrative docs steps (gate-summary.md).",
+    "docs/first-encounter.md is a solid tutorial: three standalone, compiled programs, each with its expected output and links to spec clauses. The 7 docs/ pages carry zero ADR or phase references.",
+    "There are seven examples covering the canonical DCB case, SQLite durability, rebuild and blue/green backfill, uniqueness and quota, codec evolution, HTTP plus a runner, and an outside-author falsifier. All 5 that were run exited 0 (gate-summary.md).",
+    "The rustdoc is rich. The typed crate's front door has a feature table and a compiled first program (crates/happenstance/src/lib.rs:19-130). Every published crate sets docs.rs all-features = true, so the gated runner still renders on docs.rs.",
+    "The docs are candid about maturity: README.md:155-158 ('Read the \u2705 rows narrowly') and crates/happenstance-cloudflare/README.md:106-113 ('It is not workerd').",
+    "The site machinery exists and its build is green: a Zola shell, cargo xtask site, and examples scraped into the API docs. Only the deploy step fails."
+   ],
+   "findings": [
+    {
+     "id": "F1",
+     "title": "Documentation site has never deployed",
+     "severity": "high",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "The documentation site has never deployed from main. All three Pages workflow runs on main (36810591479, 36863802395, 37406385128, the last at HEAD 1f92d08) concluded 'failure'. In each, the build job succeeded and actions/deploy-pages failed with 'Failed to create deployment (status: 404) ... Ensure GitHub Pages has been enabled'. That means Pages is not enabled with GitHub Actions as its source, and changing it is a repository-admin setting. Phase 22's proof artefact is 'the site deployed from main' (runbook/phases/22-docs-site.md:32, runbook/README.md:109). The runbook still leaves unchecked both the owner's Pages-source action (runbook/phases/22-docs-site.md:84) and the exit criterion that the artefact exists at https://wet-ink-corporation.github.io/happenstance/ (:88).",
+     "evidence": "GitHub Actions runs 36810591479, 36863802395 and 37406385128 are all 'failure'. The deploy job 112085167260 log reads 'Failed to create deployment (status: 404) ... Ensure GitHub Pages has been enabled'. runbook/phases/22-docs-site.md:84 and :88 are unchecked."
+    },
+    {
+     "id": "F2",
+     "title": "No guide page for projections or read models",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "None of the 7 guide pages in docs/ mentions projections or read models (grep returns 0 for every file). The `rebuild-a-read-model` how-to is still an unchecked item at runbook/phases/22-docs-site.md:75-78. To learn how to build a read model, a reader has three places to go:\n- the typed runner's rustdoc, which is behind happenstance's off-by-default `unstable-projection` feature (Cargo.toml:148, lib.rs:196-197 and :237-238);\n- the ungated `ProjectionStore` port rustdoc in happenstance-core;\n- the example sources (512 to 1,480 lines; transfers-on-sqlite is 663 and rebuilding-read-models is 1,480).\n\nThe root README and the site's reference page mention projections only in passing. This is a significant documentation gap for adopters. Calling it \"the largest\" is an opinion.",
+     "evidence": "`grep -c -i projection docs/*.md` returns 0 for all 7 pages, and the same holds for 'read model'. crates/happenstance/src/runner.rs:1-30; crates/happenstance/Cargo.toml:148 (unstable-projection); runbook/phases/22-docs-site.md:75-78 unchecked."
+    },
+    {
+     "id": "F3",
+     "title": "Five planned how-tos, the bridge page and site search are absent",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "At 1f92d08 none of these is done: the five planned how-tos (choose-a-store, rebuild-a-read-model, retry-a-command, pass-the-conformance-suite, run-on-a-durable-object), the boundaries-not-aggregates.md bridge page, and site search. All are unchecked in runbook/phases/22-docs-site.md:75-83, and site/config.toml:15 has `build_search_index = false`. docs/ holds 7 files (a README plus 6 guide pages). The how-tos are explicitly scheduled for a follow-up branch after the site merges, so this is planned, not-yet-started work rather than a lapse.",
+     "evidence": "runbook/phases/22-docs-site.md:75-83 (unchecked items); `ls docs` lists 7 files."
+    },
+    {
+     "id": "F4",
+     "title": "No 0.3 to 0.4 migration guide despite breaking changes",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "partly-true"
+     ],
+     "statement": "The workspace version is 0.4.0 (Cargo.toml:24). That release has not shipped yet: its changes sit in CHANGELOG.md's [Unreleased] section (:35-340). The section has 6 distinct BREAKING entries (:92, :120, :137, :175, :304, :317). \"breaking\" appears 8 times, but one of those says \"not breaking\" and one belongs to another entry. The breaking entries include removing core's `unstable-projection`, removing postgres's `naive-arm`, and `commit` retrying `AppendError::Busy`. Each entry carries its own migration instructions. There is no single 0.3 to 0.4 upgrade or migration page in docs/, site/content/guide, or anywhere else. Earlier breaking releases had none either: per-entry notes are the project's existing practice.",
+     "evidence": "Cargo.toml:24 version = \"0.4.0\". The CHANGELOG.md [Unreleased] section (:35-340) contains 8 'breaking' mentions. `ls docs | grep -iE 'migrat|upgrad'` returns nothing."
+    },
+    {
+     "id": "F5",
+     "title": "crates.io front pages for happenstance and happenstance-core are stale",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "The crates.io pages for happenstance and happenstance-core (published at 0.3.2, and unchanged at HEAD) carry stale status text:\n- `crates/happenstance/README.md:11` says \"Four ship at `0.2.0`\" in the present tense.\n- `crates/happenstance-core/README.md:10-14` counts five adapters, including Ladybug (\"an embedded graph database for the projection role\"). Ladybug was accurate at 0.3.2 but was retired at phase 17 (ADR-0078), so the README is wrong for the next release.\n\nThe core README's \"93-rule event-store suite\" does NOT conflict with the root README's 116. The root README (`README.md:333`) itself breaks 116 down as event-store 93, concurrency 5, projection 17 and model 1.\n\nThe \"0.3\" pins are already out of step with the tree, not just at some future 0.4.0 release:\n- `README.md:194` and `:197` pin \"0.3\", and so do the sqlite, postgres and neon READMEs.\n- The workspace manifest is already `version = \"0.4.0\"` (`Cargo.toml:24`, unreleased).\n- The core README mixes tenses: it says \"Status: 0.3.2\" but also says 0.4.0 \"removed\" the feature, in the past tense.",
+     "evidence": "crates/happenstance/README.md:11 says 'Four ship at `0.2.0`'; :29 says '`0.2.0` is the first stable release'. crates/happenstance-core/README.md:10-14 says '93-rule' and 'an embedded graph database for the projection role'. README.md:16 says '116-rule'; README.md:194 pins happenstance = \"0.3\"."
+    },
+    {
+     "id": "F6",
+     "title": "Cloudflare's workerd query limit is not stated in user terms",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "PR #34's harness measured that on real workerd, both local and deployed, happenstance-cloudflare evaluates at most 5 query items (and 5 append-condition items) and at most 45 tags per item. VT-23's 128-item rule is the only conformance rule that fails there. These figures are recorded only in experiments/durable-object-limits/README.md:159-172, runbook/handover.md:44-48 and the commit message.\n\nThe Cloudflare README (lines 113-122) gives only the platform's raw limits (5 compound terms, 100 parameters, 100,000 B). The root README (177-183) still describes the crate as tested only under a shim. docs/ is silent. Worse, the crate's rustdoc (src/lib.rs:191-210) tells users that wide queries are chunked at 400 arms and 30,000 parameters and are never refused, which contradicts the workerd measurement. A user would expect far more query capacity than the adapter can serve on the real runtime. The fix is planned for lane L6b (ADR-0083) and is not yet shipped.",
+     "evidence": "Commit 1f92d08 message: 'the adapter evaluates at most 5 query items. VT-23's 128-item rule fails'. runbook/handover.md:44-48 gives the 5 items / 45 tags. crates/happenstance-cloudflare/README.md:119-120 gives only the raw limits. README.md:177-183 does not mention this. Grepping the Cloudflare README for 'VT-23|query items' finds nothing."
+    },
+    {
+     "id": "F7",
+     "title": "No outside reader has validated the docs",
+     "severity": "medium",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "No outside reader has validated the docs. Phase 20's bar (runbook/phases/20-docs-that-teach.md:3-5) is a reader who is not the author using the docs and being listened to. HS-P0024 comprehension-evidence is not built (lines 19-21; .bklg project.md is at stage design), and every phase-20 exit criterion is unticked. No friction log exists at all. `.bklg/docs-that-teach/comprehension-evidence/friction-log-skeleton` is the directory of story HS-S0163, which plans the log's scaffold: it is at stage plan, has an empty plan.md and no commits, and is blocked by HS-S0162. examples/outside-projection-adapter is partial evidence only. It was written inside the project, and it records its gaps in the frozen .bklg tree (src/lib.rs:10). Phase 22's persona section (runbook/phases/22-docs-site.md:104) says none of the four personas has been observed.",
+     "evidence": "runbook/phases/20-docs-that-teach.md:3-5 and :19-22. `find . -iname '*friction*'` returns only .bklg/docs-that-teach/comprehension-evidence/friction-log-skeleton. examples/outside-projection-adapter/src/lib.rs:10."
+    },
+    {
+     "id": "F8",
+     "title": "Front-door prose is dense, cluttered with internal material, and points to a frozen runbook",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "The root README is 392 lines and full of ADR numbers, phase numbers, commit ids and process pointers. The repository root shows internal handover files and the 5,704-line frozen RUNBOOK.md. Both the root README and docs/README direct readers to RUNBOOK.md as 'the plan', but that file is frozen and its own header says the live plan is runbook/README.md. About half of docs/README.md explains gate mechanics to an audience of users. The pages inside docs/ are clean by comparison.",
+     "evidence": "README.md has 5 ADR, 6 phase and 6 .kb/runbook references; README.md:171-172 cites e597c34; README.md:185 and docs/README.md:30 link to RUNBOOK.md; RUNBOOK.md:3 says it is frozen. Root files include HANDOVER.md, REMEDIATION-HANDOVER.md and SESSION-DECISIONS-0.2.0.md; docs/README.md:36-55 covers gate mechanics."
+    },
+    {
+     "id": "F9",
+     "title": "Examples have no READMEs and are not installable",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "No example directory has a README; each example's entry point is its //! module header. Those headers are good. All seven examples are publish = false workspace members, so a stranger must clone the repository to run them. The scraped-example API pages would help, but they depend on the site deploying (F1).",
+     "evidence": "`find examples -iname 'README*'` returns nothing. examples/transfers-on-sqlite/src/main.rs:1-16 (good header, 'cargo run -p transfers-on-sqlite'). Cargo.toml:3 lists the examples as workspace members."
+    }
+   ]
+  },
+  {
+   "dimension": "process-governance",
+   "rating": "amber",
+   "completeness_pct": 65,
+   "headline": "The release and CI machinery works: tagged releases, a gate passing on three operating systems, and live-database tests. But main is red on two workflows, the 0.4.0 release is holding a liveness fix that has waited 15 days, and the governance paperwork is about five times the size of the library a single maintainer has to keep it consistent with.",
+   "strengths": [
+    "The whole gate is defined once (cargo xtask ci) and CI runs the same thing. It is green locally (31 required steps, 2,965 tests passing, 0 failing) and green on ubuntu, windows and macos for HEAD in CI run 37406385109.",
+    "Real-infrastructure legs pass on main in run 37406385109: live Postgres and live Neon. A deployed Cloudflare Durable Object leg also exists, which is unusual rigour for a solo library.",
+    "Release hygiene is sound: remote tags v0.2.0, v0.3.0, v0.3.1 and v0.3.2 exist (GitHub list_tags), the alphas are yanked, and each release has a dated CHANGELOG section (CHANGELOG.md:341,373,389,457).",
+    "Semver is checked two ways: against the published registry baseline for all seven crates (ci.yml:1162-1175), and against the base commit, which is advisory only while the version is unpublished (ci.yml:1133).",
+    "Supply-chain controls: cargo-deny with yanked=deny, wildcards=deny and async-trait banned with named exemptions; SHA-pinned actions enforced by a gate step; a weekly advisories cron; and CodeQL, which caught a stack-trace exposure that was fixed in #34.",
+    "Accepted decisions cannot be edited, and a gate step (lint-kb) enforces this rather than convention. It passed with HS_KB_BASE=origin/main.",
+    "The red workerd job was a recorded owner decision (wi-557b41), and its fix is already open as PR #35, created 2026-10-06, whose Pages run 37419424003 is green."
+   ],
+   "findings": [
+    {
+     "id": "PG-1",
+     "title": "main is red on two workflows; the Pages deploy has never succeeded on main",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "On main (1f92d08), two workflows are red.\n\n(1) In CI run 37406385109, the job 'conformance under workerd, local and deployed' fails at steps 9, 11 and 15. Exactly one rule fails, VT-23's store_evaluates_a_query_at_the_guaranteed_minimum_item_count: 1 of 96 on the deployed leg, against Durable Object SQLite walls of 5 compound terms and 100 parameters. The commit says the job landed red on purpose. The fix is open PR #35, which is unmerged and mergeable. All other CI jobs on HEAD are green or skipped.\n\n(2) The Pages workflow has failed on every push to main: 3 of 3 runs, at 09854b3, 9d99339 and 1f92d08. In every one, 'build' succeeded and 'deploy' failed with a 404 asking to \"Ensure GitHub Pages has been enabled\". The owner item for that is unticked at runbook/phases/22-docs-site.md:84, and phase 22's exit criterion (the site live at github.io) is unmet.\n\nThe nightly fetch_update deprecation broke only pull_request runs on PR #34's branch (runs 6 through 13). It never broke a main build, and it was fixed by try_update before the merge. Commit 1f92d08's message says Pages was red on main because of it, which misattributes the cause.",
+     "evidence": "CI run 37406385109, job 'conformance under workerd, local and deployed': conclusion failure at steps 9, 11 and 15. Pages push runs 36810591479 (09854b3), 36863802395 (9d99339) and 37406385128 (1f92d08) all failed; in 37406385128 'build' succeeded and 'deploy' failed. Commit 1f92d08's message says Pages 'has been red on main since 2026-10-01'. runbook/phases/22-docs-site.md:84 (Pages source unset)."
+    },
+    {
+     "id": "PG-2",
+     "title": "The governance apparatus is several times the size of the shipped library",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "At 1f92d08 the governance prose is about 8.76 MB (.kb, references, spec, RUNBOOK.md, standards, runbook and CHANGELOG). The src of the seven published crates is about 2.44 MB and 54,488 lines, about 47% of them comment lines. That is roughly 3.6:1, or roughly 16.5:1 counting the frozen .bklg (30.2 MB) and .redkiln (1.36 MB). The 39,409 lines / 1.72 MB figure leaves out the published happenstance-testkit and includes the unpublished happenstance-sync. xtask/src/*.rs is 32,981 lines, about 60% of shipped src. 19,578 of those lines (59%) are in lint_pages, lint_narrative, lints and spec_trace, which mostly check documents and documents-against-code. ci.yml has 699 comment lines against 487 non-blank YAML lines. The 0.2.0 CHANGELOG section is 1,853 lines (457-2309). docs/*.md is 649 lines. The governance load is clearly large compared with the library. That it is the main brake on throughput is an opinion that was not measured.",
+     "evidence": "du -sb: .kb 3,319,225; references 3,442,276; spec 743,453; RUNBOOK.md 401,610; standards 356,411; runbook 233,269; CHANGELOG.md 261,330; .bklg 30,241,198. wc -l xtask/src/*.rs = 32,981. ci.yml: 699 comment lines vs 487 non-comment lines (grep). CHANGELOG.md:457-2310. docs/*.md total 649 lines."
+    },
+    {
+     "id": "PG-3",
+     "title": "Citations by line number make the record expensive to change",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "About 2,257 RUNBOOK.md:N citations (on 2,022 lines of .md/.rs files) pin the 5,704-line RUNBOOK.md. CLAUDE.md:104-106 says it must never shrink. 20 of the 86 commits visible in this shallow clone say in their messages that they repointed citations. PR #29 (09854b3) repointed 33 path:N citations, and PR #34 (1f92d08) kept its diff line-neutral on purpose so that no citation would move. The retired happenstance-ladybug crate is kept as a frozen record because the spec, ADRs and constitution cite its files by line (CLAUDE.md:30-33, 146-150; ADR-0078). Because the record cites line numbers rather than anchors or symbols, routine edits carry a recurring repointing cost.",
+     "evidence": "grep -c 'RUNBOOK.md:' -r over .md/.rs = 2,022. git log --format=%B | grep -ciE 'repoint|citation' = 53 across 86 commits. PR #29: '33 path:N citations repointed'. #34: 'The diff is line-neutral so no path:N citation moves'. CLAUDE.md repository map (ladybug kept 'because ... cite its files by line'; ADR-0078)."
+    },
+    {
+     "id": "PG-4",
+     "title": "0.4.0 is unreleased and is holding a liveness fix for a published crate",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "The manifests read 0.4.0 (Cargo.toml:24), but the GitHub tags end at v0.3.2. The CHANGELOG [Unreleased] section runs about 305 lines (:35-340). Its first entry is happenstance-sqlite's busy-timeout change from 5 s to 15 s, which landed 2026-09-21 in f89e184 (#13). That entry says the 5 s value makes the 64-contender conformance concurrency rule go red 7 launches in 8, worst case. It calls this a liveness failure with nothing unsound: a red test, not a wrong result. The fix will ship only with 0.4.0, and 0.4.0 is gated on phase 17, which has 3 of 10 exit criteria ticked against a 25\u201330 day estimate. Not cutting a 0.3.3 is a recorded owner decision: accepted atom wi-052920, 2026-09-28, \"No 0.3.3; the entries stay in [Unreleased] for phase 17\", repeated at runbook/phases/17-breaking-window.md:233-236 and runbook/handover.md:106. The open risk is the time a known flaky-under-contention value stays live on crates.io, not a missing policy.",
+     "evidence": "Cargo.toml:24 version = \"0.4.0\". CHANGELOG.md:35 '## [Unreleased]' and :39-60 (the busy-timeout entry). Commit f89e184 (#13, 2026-09-21). GitHub tags end at v0.3.2. runbook/phases/17-breaking-window.md:257-283 (3/10 exit criteria ticked)."
+    },
+    {
+     "id": "PG-5",
+     "title": "Plan-of-record documents drift from git within days",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "Several live plan-of-record documents lag git and contradict each other.\n\n- **runbook/handover.md** (As of 2026-10-01): it still says PR #34 is \"Not merged\" (:40), but #34 is HEAD 1f92d08. It lists the tracked file `runbook/phase-15-afk-prompt.md` as untracked, together with `assets/brand/happenstance-mark.png`, which does not exist (:86). Its staleness rule (:4-6) does not flag any of this, because the As-of line names 9d99339, which after the squash-merge is HEAD's parent.\n- **ADR number:** the handover plans \"ADR-0083\" (:68). runbook/ledgers.md:17 and the open PR #35 both use 0079, and .kb/decisions ends at 0078.\n- **runbook/log.md:** the newest entry is dated 2026-09-30 (:13).\n- **CLAUDE.md:404:** it says 202 clauses, but the generated spec table says 203 (SPECIFICATION.md:9800).\n- **.kb/_intake/decisions:** six accepted Weigh-In decisions sit there unpromoted (wi-269e5a, wi-3c4f18, wi-557b41, wi-642765, wi-8cdf0a, wi-c11a24).\n- **Review follow-up:** the owed follow-up for PR #33's review, wi-13bd3b, is recorded in the tree only in the handover (and in a commit message).\n\nSeparately, the frozen RUNBOOK.md (frozen 2026-09-28) leaves exit-criteria boxes unticked for phases the status table marks done, including 6 (:4086-4092) and 12 (:5264-5265). That is an unreconciled frozen record rather than recent drift.",
+     "evidence": "runbook/handover.md:4-6 (staleness rule), :15-16, :40, :68 (ADR-0083), :86. runbook/ledgers.md:20 ('next free number is 0079'). PR #35 body (ADR-0079). ls .kb/decisions ends at 0078. runbook/log.md:13 (newest heading 2026-09-30). RUNBOOK.md:4086-4092 and :5264-5265 (unticked). ls .kb/_intake/decisions: wi-269e5a, wi-3c4f18, wi-557b41, wi-642765, wi-8cdf0a, wi-c11a24."
+    },
+    {
+     "id": "PG-6",
+     "title": "Estimates are unreliable, and the 1.0 figure leaves out a dependency",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "Phase 17 was re-estimated when it started, on 2026-09-29, from 5\u20138 days to 25\u201330 (runbook/roadmap.md:68, runbook/phases/17-breaking-window.md:285,294). The roadmap's solo 1.0 path of about 62\u201375 working days (roadmap.md:78-81) explicitly leaves out phase 20, calling it work that runs alongside. Yet runbook/README.md:110 and the roadmap's own diagram make phase 20 a prerequisite of phase 21, and phase 20 has no estimate (roadmap.md:75). The rc soak has no duration either (roadmap.md:76,129). So the figure is a lower bound on a path with a dependency that has not been estimated.\n\nThe roadmap does warn that estimates have been wrong before (roadmap.md:82-83), but it gives no calendar projection. Measured over the visible window from 2026-09-07 to 2026-10-05, commits fall on 12 distinct days out of 29 calendar days. Read that way, the remaining working-day figure means several calendar months.\n\nPhases 15 (estimated 2\u20133 days) and 16 (estimated 2 days) both finished within estimate, on 2026-09-28 and 09-29. Earlier phases are not hidden behind a squashed root. Commit 673dcc5 has a parent (b0d9e67), and the earlier history is on GitHub. The local clone is simply shallow, so earlier actuals have to be read from GitHub, not from this clone.",
+     "evidence": "runbook/roadmap.md:68 ('~~5-8~~ 25-30'), :75 (phase 20 'to be estimated'), :76 ('3-5, plus a soak'), :78-83. runbook/README.md:110 (phase 21 depends on 20). Root commit 673dcc5 = 2,538 files, +685,860 lines. git log --date=short | sort -u = 12 distinct days."
+    },
+    {
+     "id": "PG-7",
+     "title": "The governance apparatus generates much of its own backlog",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "47 open questions remain, against 31 resolved. Judging by their titles, roughly 20 concern the governance machinery itself (status vocabulary, citation form, ADR correction policy, gate-step bundling, the dagger convention) rather than library behaviour. Accepted decisions are immutable, so every correction becomes a new record. The process keeps producing meta-work.",
+     "evidence": "grep -h -m1 '^status:' .kb/open-questions/*.md: 47 accepted, 31 superseded. Examples: adr-status-vocabulary-exceeds-the-schema, rustdoc-citations-relative-or-url-shaped, references-adr-in-place-correction-policy, gate-step-first-check-hides-its-second, is-the-dagger-convention-superseded-by-maturity-markers. .kb/decisions: 94 accepted, 2 superseded."
+    },
+    {
+     "id": "PG-8",
+     "title": "CI keeps a disabled job, a redundant job and a flaky weekly run",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "The backlog job has been if: false since the tool it checks was retired, and it carries a justification comment of more than 60 lines. The msrv job runs the same 1.97.1 compiler as the gate, and CLAUDE.md admits it proves nothing for now. The scheduled CI run was red 3 of the last 5 times. The 09-22 run failed only on the live Neon leg, consistent with the Neon flake rates recorded in ci.yml and the handover's warning that Neon is flaky until the L8 fence lands.",
+     "evidence": "ci.yml:188-255 (backlog, if: false at :255). Cargo.toml:26 and rust-toolchain.toml are both 1.97.1. Scheduled CI runs: 34224381190 (09-08) failure, 34970233414 (09-15) failure, 35728235725 (09-22) failure (job 'conformance against a live Neon endpoint', step 'Every gated test passed'), 36579901117 (09-29) success."
+    },
+    {
+     "id": "PG-9",
+     "title": "The gate's runtime is reasonable, but a green local run proves less than CLAUDE.md implies",
+     "severity": "info",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "The gate takes about 9.5 minutes locally on 4 CPUs and 12-17 minutes per OS in CI, which is acceptable. About 12 of its 31 required steps check prose, citations, changelog structure or the KB rather than behaviour. In this container, four optional steps skipped because their tools were missing: cargo-hack powerset, wasm32 powerset, cargo-deny and the nightly docs.rs builds. The gate also failed to catch the nightly breakage that kept Pages red.",
+     "evidence": "gate-summary.md (9m34s; 31 required steps; SKIPPED list). Run 37406385109 'Run the gate' step: ubuntu 02:54:51-03:06:32, macos 02:54:47-03:11:14. Commit 1f92d08 message: 'The gate's docs.rs step did not see it: rustdoc does not lint function bodies.'"
+    }
+   ]
+  },
+  {
+   "dimension": "risk",
+   "rating": "amber",
+   "completeness_pct": 40,
+   "headline": "The engineering is sound and the gate is green. The risk to a credible 1.0 is threefold: the unbuilt sync crate sits on the critical path, one maintainer works in bursts under a heavy governance load, and no outside user has ever tried the API that 1.0 would freeze.",
+   "strengths": [
+    "The measured gate is green: 31 required steps, 2,965 tests passed and 0 failed. CI also runs live Postgres and live Neon, a three-OS matrix, the MSRV and semver jobs, and a deployed Durable Object leg.",
+    "The contract is largely frozen: 152 of 203 clauses are FROZEN and the projection port is frozen (ADR-0063). Four adapters pass conformance across genuinely different storage shapes.",
+    "The project states its own risks honestly. D-1 names its failure mode, ADR-0066:319-322 admits there are no external users, the Neon crate root names the rule it fails, and the workerd job was landed red on purpose rather than hidden.",
+    "Breaking work is being front-loaded on purpose: ADR-0072 split the additive work into 17b, and Busy, VT-10, apply (ADR-0074) and ADR-0028 have already landed inside the 0.4.0 window.",
+    "The fix for the Cloudflare limits exists. PR #35 (head 32ea2ad) passes every check, including 'conformance under workerd, local and deployed', so that risk is one merge from residual."
+   ],
+   "findings": [
+    {
+     "id": "R1",
+     "title": "Sync is inside 1.0 and is the least-built piece",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "D-1 (wi-40b321, accepted) puts happenstance-sync inside 1.0, overriding the recommendation to ship without it. The record itself accepts that if this is wrong, \"1.0 slips about 17 working days on the least-settled piece\". In code, the crate is `publish = false` and describes itself as \"Not yet implemented\". It has no runner and there is no happenstance-sync-testkit crate. Its networked peer stand-ins (Durable Object, one-shot HTTP) are `todo!()`, and its only real peer is the in-memory `MemorySyncPeer`. The only real ingest is a cfg(test) spike in happenstance-sqlite. No conformance rule exists for any of the 21 FROZEN SY clauses: 32 of the 35 SY index rows carry \u2020, and the other three point at the missing sync-testkit. The sqlite spike does, however, have one-adapter unit tests for SY-1, SY-2, SY-5 and SY-11 behaviour. ADR-0026 and ADR-0027 are unwritten. Phase 13 carries 17 of the 34 freeze-by rows in the 1.0 clause ledger.",
+     "evidence": ".kb/decisions/wi-40b321-*.md:8,59-60; runbook/roadmap.md:86-95; crates/happenstance-sync/Cargo.toml:3,12; `grep -rn SyncRunner crates` returns nothing; no crates/happenstance-sync-testkit; crates/happenstance-sync/tests/real_peer_shapes.rs:110,114,194,209,218; crates/happenstance-sqlite/src/lib.rs:121-122; 32 of the 35 SY index rows daggered in spec/SPECIFICATION.md; runbook/ledgers.md:270-315"
+    },
+    {
+     "id": "R2",
+     "title": "The 1.0 schedule is long, under-counted, and has already slipped 4\u20135x once",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "Phase 17 was re-estimated from 5\u20138 to 25\u201330 days when it started on 2026-09-29, mainly because phase 16 added scope to it; it was not an overrun on work already under way. Part of that scope was then moved to 17b. Phase 17 stands at 3 of 10 exit criteria. ES-11, ES-17, ADR-0022 \u00a79, ProjectionId, the codec, the SQL seam, VT-6, the workerd work and the 0.4.0 release are all still open. The roadmap's 1.0 path is 62\u201375 working days in total, which suggests very roughly 50\u201365 remain. That figure leaves out phase 20, which has no estimate even though phase 21 depends on it, and it leaves out the soak. The plan states both exclusions openly, so they are known gaps rather than hidden ones. Git shows 12 active dates in 29 calendar days, with gaps of 8 and 6 days. But main is now one squash-merged PR per lane, so commit dates are a poor measure of throughput, and a calendar multiplier drawn from them is speculative. Schedule risk is high. The size of the slip and the cadence-based extrapolation are overstated.",
+     "evidence": "runbook/phases/17-breaking-window.md:257-290; runbook/roadmap.md:68,78-82; runbook/README.md:110; runbook/phases/20-docs-that-teach.md:51; `git log --since=2026-09-07 --format=%ad --date=short | sort -u` gives 12 dates"
+    },
+    {
+     "id": "R3",
+     "title": "Bus factor of one, with process overhead larger than the code it governs",
+     "severity": "high",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "Within the shallow history the clone holds (86 commits from 2026-09-07), one person authored every commit (56 commits from one email, 30 from a GitHub noreply address). There are 136 Claude co-author trailers across 83 of those commits. CLAUDE.md says the owner is new to idiomatic Rust.\n\nxtask is 33,774 lines, and roughly 70% of that sits in document, citation and lint modules. The core contract plus the typed layer is 13,217 lines, of which about 7,042 are not `//` lines.\n\nLive governance prose (.kb, references, spec, RUNBOOK.md, standards, runbook) is about 8.5 MB, against about 2.5 MB of crate src .rs files, or 4.7 MB counting all crate .rs files. Ladybug and the frozen .bklg and .redkiln trees are excluded from these figures. 47 open questions are accepted; how many are about governance machinery has not been counted.\n\nThe records drift within days:\n- handover.md:40 says PR #34 is not merged, but it was merged as HEAD 1f92d08 on 2026-10-06. The handover was written before the merge.\n- handover.md:68 says \"write ADR-0083\", but ledgers.md:20 gives 0079 as the next free number, and PR #35 uses ADR-0079.\n- log.md has no L6a entry; L6a is logged only in the phase 17 file.\n- CLAUDE.md:404 says 202 clauses, while SPECIFICATION.md:228 counts 203.\n\nThe single-maintainer risk and the size of the process overhead are real. Likelihood and impact are judgements.",
+     "evidence": "`git log --format='%an <%ae>' | sort | uniq -c` shows one person (56+30); xtask/src at 33,774 lines; core+happenstance src at 13,217 lines; `grep -l '^status: accepted' .kb/open-questions/*.md | wc -l` = 47; runbook/handover.md:15-16,40,68; runbook/ledgers.md:20; PR #35 body names ADR-0079"
+    },
+    {
+     "id": "R4",
+     "title": "No external adopter, so 1.0 would freeze an API no outsider has used",
+     "severity": "high",
+     "status": "confirmed",
+     "verdicts": [
+      "confirmed",
+      "confirmed"
+     ],
+     "statement": "No external adopter: happenstance-core's crates.io reverse dependencies are only this workspace's six crates. Lifetime downloads run from about 101 to 1176 per crate (core 1176, sqlite 1043, the rest 101\u2013159). No non-PR issue has ever been filed, and the repo has 1 star and 0 forks. ADR-0066 \u00a78 drops the rc soak's time floor for exactly this reason. The newcomer path is thin. The docs site has never deployed: all 3 push runs of pages.yml on main failed with \"Ensure GitHub Pages has been enabled\", and has_pages is false. Phase 20 is at 0 of 4 exit criteria with no estimate. docs/ is 7 files and 649 lines with no projection guide, and there is no 0.3\u21920.4 migration guide (migration notes exist only in CHANGELOG entries). The README mentions replication but never says \"local-first\", even though the premise recorded for D-1 (wi-40b321) is that replication is the headline for first adopters.",
+     "evidence": "crates.io API /crates/happenstance-core/reverse_dependencies: total 6, all workspace crates; GitHub REST: stargazers 1, forks 0, 0 non-PR issues; .kb/decisions/0066-what-1-0-promises.md:319-322; pages.yml run 37406385128 deploy failed with 'Ensure GitHub Pages has been enabled'; runbook/phases/22-docs-site.md:84; docs/ totals 649 lines"
+    },
+    {
+     "id": "R5",
+     "title": "0.4.0 is declared the last breaking window, but sync, runner and retention all come after it",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "Phase 17 / 0.4.0 is called \"the last cheap place to break a published signature\". ADR-0072 forbids a 0.5.0 only for phase 17b's additive items. Phases 18, 13 and 14 run after 0.4.0, and 13 is placed after 17 because 17 may change the core surface. The roadmap's mitigation is that every breaking question is decided in the 16/17 window even when its code lands later. Phase 21 allows breaks at 1.0.0 only when they are traced to a decision (phase 17's, ADR-0070's, or phase 18's feature removal). A core break that sync uncovers late, and that the window never decided, has no sanctioned outlet: it would be an untraced break at 1.0.0 or an unplanned 0.5.0. As of 1f92d08, several breaking questions are still open inside phase 17: ADR-0022 \u00a79 (the runtime Handle captured at sqlite event_store.rs:512 and postgres event_store.rs:314), VT-6 mint-per-open, codec sealing, ProjectionId with the reserved sync/ prefix, the SQL-seam statement type, and ES-17. Separately, ProbeThenWriteStore, a deliberately wrong store, is public API re-exported from the publishable happenstance-neon crate.",
+     "evidence": ".kb/decisions/0072-phase-17-is-split-at-the-release.md:117-119; runbook/handover.md:128-129; runbook/roadmap.md:70; runbook/phases/17-breaking-window.md:61-137; crates/happenstance-sqlite/src/event_store.rs:512 `runtime: Handle::try_current().ok()`; crates/happenstance-postgres/src/event_store.rs:314; crates/happenstance-neon/src/event_store.rs:1475 `pub struct ProbeThenWriteStore<T>`"
+    },
+    {
+     "id": "R6",
+     "title": "Neon fails ES-11/ES-12 intermittently, and its required check flakes on main",
+     "severity": "medium",
+     "status": "plausible",
+     "verdicts": [
+      "partly-true",
+      "partly-true"
+     ],
+     "statement": "The live-Neon conformance job is a required status check on main (ruleset 22926481). It has failed intermittently on ES-11 (`read_result_is_stable_under_concurrent_append`) and ES-12 (`query_items_share_one_snapshot`), at suite.rs:6147/:6250. That made 3 of the 13 most recent push runs on main red solely on that job (36528489181, 36596302787, 36619371439). All three were on 2026-09-29. The 7 main runs since then have had a green Neon job, and the current red head is red on the workerd job, not Neon. The neon crate root admits ES-11 failures only; it does not mention ES-12. The handover explicitly tells maintainers to re-run rather than chase the flake 'until L8 lands its fence'. The phase-17 item that would settle ES-11/ES-12 (17-breaking-window.md:162) is unticked, and no fence work is on main. The flake risk is real and institutionalised, but its observed frequency is lower than 'high' suggests.",
+     "evidence": "CI runs 36528489181, 36596302787 and 36619371439 failed only on the live-Neon job; log lines 'dcb_conformance::read_result_is_stable_under_concurrent_append ... FAILED' and 'query_items_share_one_snapshot ... FAILED', panicking at crates/happenstance-testkit/src/suite.rs:6147 and :6250; crates/happenstance-neon/src/lib.rs:17-21; runbook/phases/17-breaking-window.md:162 unticked"
+    },
+    {
+     "id": "R7",
+     "title": "Cloudflare's real-runtime limits sit below the specification's floor; the fix is green but unmerged",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "The workerd job is red on main. A real Durable Object allows only 5 compound terms and 100 bound parameters, which through the adapter means 5 query items and 45 tags per item, against VT-23's floor of 128. The published constants on main still say 400 arms and 30,000 parameters. PR #35's json_each rendering is now green on every check, workerd included. Once it merges, what remains is: eviction and hibernation untested, workerd not a required check, the vacuity control still owed, and VT-23 still PROVISIONAL. Likelihood: low-medium, and falling. Impact: medium.",
+     "evidence": "CI run 37406385109 (workerd failed); crates/happenstance-cloudflare/src/event_store.rs:402 `MAX_QUERY_ARMS_PER_STATEMENT: usize = 400`, :423 `= 30_000`; experiments/durable-object-limits/results/run-workerd-deployed-2026-10-02.txt; GitHub REST check-runs for PR #35 head 32ea2ad: all success; runbook/handover.md:61-62"
+    },
+    {
+     "id": "R8",
+     "title": "The sync crate names are unclaimed, and the ladybug reservation record contradicts the registry",
+     "severity": "low",
+     "status": "unverified-low",
+     "verdicts": [],
+     "statement": "ADR-0066 promises happenstance-sync and happenstance-sync-testkit at 1.0, but neither name exists on crates.io, which leaves them open to squatting. ADR-0078 and xtask's reserve list say the happenstance-ladybug 0.0.0 reservation 'stands, unyanked', but crates.io has no such crate. Together with the stale handover, the next session can start from a wrong picture. Likelihood: medium. Impact: low-medium.",
+     "evidence": "crates.io API: happenstance-sync, happenstance-sync-testkit and happenstance-ladybug all ABSENT; .kb/decisions/0066-what-1-0-promises.md:118-125; .kb/decisions/0078-happenstance-ladybug-is-retired.md:158; xtask/src/reserve.rs:110-112"
+    }
+   ]
+  }
+ ],
+ "estimate": {
+  "method": "Each remaining phase's open work items and exit criteria were counted from runbook/phases/*.md, then sized item by item and calibrated against two signals.\n(1) Estimates made before a research pass missed scope by about 4\u20135x. Phase 17 went from 5\u20138 days to about 275 h, which is 35\u201345 days unsplit (ADR-0072:13-19,50-53). Separately, \"13 of 14 proposed freezes were refuted\" (handover.md:151-152).\n(2) Once scoped, execution has beaten the estimate unit by about 2x:\n- Phases 0\u201312 were estimated at about 82 days and ran from 2026-08-05 to 2026-09-10 (RUNBOOK.md session-log dates).\n- Phases 15 and 16, estimated at 2\u20133 and 2 days, took 2 and 1 active days.\n- Phase 17 lanes L0\u2013L5 merged in 2 days, and roughly 40\u201355% of phase 17's weighted work landed in 6 weekdays (a judgement). Exit criteria stand at only 3/10.\nPhases that had a research pass (17, 17b) get about 0.5\u20131.0x the plan figure. Those that did not (13, 14, 18, 20) get about 1.5\u20133.5x, scaled by how much of each is new instrument work.\nCalendar figures use two cadences: about 5 active days/week, observed since 09-28, and about 3.1/week long-run (12 git commit dates in 29 days, plus hidden squash days such as 10-02).\nMarkdown is at references/evaluation/status-audit-2026-10-06/estimate.md.",
+  "phases": [
+   {
+    "phase": "17 remainder (breaking window, 0.4.0)",
+    "roadmap_days": "25-30 total (6 weekdays used since 2026-09-29)",
+    "independent_low": 9,
+    "independent_high": 18,
+    "on_1_0_path": true,
+    "rationale": "8 open work lines and 3/10 exit criteria (phases/17-breaking-window.md:61-232,257-283). Open: L6b (PR #35, opened 2026-10-06), ES-17, the ES-11/12 Neon fence spike (~16h per ADR-0072:53), ADR-0022 \u00a79 with the guard-plan assertion, ProjectionId, codec, SQL-seam type, VT-6, and a 7-crate release with the semver trace table. The heaviest items (Busy ~20h, most of workerd ~26h) are done. Variance: the fence may fail ('ask again', handover.md:33), ES-17 may change append, and \u00a79 may force a breaking change across two adapters."
+   },
+   {
+    "phase": "17b (additive half)",
+    "roadmap_days": "8-10",
+    "independent_low": 6,
+    "independent_high": 11,
+    "on_1_0_path": true,
+    "rationale": "0/7 exit criteria (17b-after-the-window.md:87-96). Research-estimated, so trusted with an execution discount. Tail risks: the minimal-versions job with its wasm32 leg (five DB crates declare no rust-version) and CF-40 MetadataLen across core, testkit and cloudflare with mutants."
+   },
+   {
+    "phase": "18 (typed runner leaves its gate)",
+    "roadmap_days": "5-8",
+    "independent_low": 8,
+    "independent_high": 15,
+    "on_1_0_path": true,
+    "rationale": "0/6 exit and 0/13 work items, with 7 freezes and 3 rules plus mutants (18-typed-runner.md:21-192). The ADR-0074 spike settled the design but the build list is long: async apply across 12+ impls, the error type, on_error, a live savepoint test, the FNV-1a derived id with golden values, the fan-out runner with a benchmark, a refusable reset, Chunk, and the convergence declaration 13 consumes. Not research-estimated."
+   },
+   {
+    "phase": "13 (happenstance-sync + sync-testkit)",
+    "roadmap_days": "12",
+    "independent_low": 22,
+    "independent_high": 40,
+    "on_1_0_path": true,
+    "rationale": "The 12 days is the pre-phase-16 monolith figure (RUNBOOK.md:5596); phase 16 then added 5 items and 17 freeze-by-13 rows without re-estimating (13-sync.md:10-17). 0/9 exit criteria. 0 of 35 SY rules are executable (32 daggered). Missing: SyncRunner, happenstance-sync-testkit, networked peers (only todo!() stand-ins, real_peer_shapes.rs:110-218), ADR-0026/0027, and the CF-25 portfolio check. Needs two unlike networked peers (L6a's workerd harness alone took ~4 days), plus the filtered-subset and KV-capped instruments. Raw sum ~36-66 days, discounted for execution."
+   },
+   {
+    "phase": "14 (retention and completeness)",
+    "roadmap_days": "5",
+    "independent_low": 6,
+    "independent_high": 11,
+    "on_1_0_path": true,
+    "rationale": "1/5 exit criteria (14-retention.md:108-122). ADR-0028's refusal shrank the decision. Still to build: a removal capability on Fixture across 4 adapters, the completeness instrument (extending 13's filtered store), the reader experiment, the ES-38/ES-40 rules, and the SY-32 120-day case across peers."
+   },
+   {
+    "phase": "20 (documentation that teaches)",
+    "roadmap_days": "not estimated",
+    "independent_low": 10,
+    "independent_high": 22,
+    "on_1_0_path": true,
+    "rationale": "Phase 21 depends on 20 (README.md:110), yet the roadmap does not count it (roadmap.md:81-82). 0/4 exit criteria and an empty session log. 3 unbuilt projects with 29 specified stories (.bklg/docs-that-teach: 8+10+11), plus confirming 3 projects left at review, at ~0.3-0.8 day per story. HS-P0024 needs readers who are not the author, which adds calendar wait beyond effort."
+   },
+   {
+    "phase": "21 (1.0.0) + rc soak",
+    "roadmap_days": "3-5 plus a soak",
+    "independent_low": 5,
+    "independent_high": 10,
+    "on_1_0_path": true,
+    "rationale": "0/6 exit criteria. Work: choose release tooling, nine-crate PUBLISHABLE, SECURITY.md, MSRV text, rc.1. The soak has no time floor but needs all five ADR-0066 \u00a78 conditions on the rc (21-one-point-oh.md:55-62): docs.rs for 9 crates, two examples against the registry rc, a clean semver baseline, an outside-reader pass, and no API-change defect (otherwise rc.N+1). Add 1-3 calendar weeks of soak on top of this effort."
+   },
+   {
+    "phase": "19a (SQLite on wasm32 skeleton)",
+    "roadmap_days": "3",
+    "independent_low": 3,
+    "independent_high": 5,
+    "on_1_0_path": false,
+    "rationale": "Not in phase 21's dependency row (README.md:106,110). Runs alongside and competes for the same owner."
+   },
+   {
+    "phase": "19b (SQLite on wasm32 adapter)",
+    "roadmap_days": "8-10",
+    "independent_low": 8,
+    "independent_high": 14,
+    "on_1_0_path": false,
+    "rationale": "Off path. Its estimate is by analogy with phase 9 (19-sqlite-on-wasm.md:71-72). It is a candidate offline spoke for 13, but 13 does not require it."
+   },
+   {
+    "phase": "22 (documentation site)",
+    "roadmap_days": "none stated",
+    "independent_low": 1,
+    "independent_high": 3,
+    "on_1_0_path": false,
+    "rationale": "Not in phase 21's dependency row and missing from the roadmap. 4/10 work items done; built but not deployed (Pages 404, waiting on the owner's setting at 22-docs-site.md:84). Its cost is owner attention: it already took a day inside phase 17 (PR #29)."
+   }
+  ],
+  "total_roadmap": "The roadmap says ~62-75 working days for the solo 1.0 path (roadmap.md:78). What remains by its own figures (17 remainder 19-24, 17b 8-10, 18 5-8, 13 12, 14 5, 21 3-5) is ~52-64 days. Both figures exclude phase 20, which 1.0 waits on, and the soak.",
+  "total_independent_low": 67,
+  "total_independent_high": 128,
+  "calendar_projection": "Central estimate ~90 working days on the 1.0 path, including phase 20 and excluding soak calendar time.\nAt the sprint pace seen since 2026-09-28 (~5 active days/week), 1.0.0 lands ~2027-01-08 (low), ~2027-02-09 (central) or ~2027-04-03 (high).\nAt the long-run pace (~3.1 active days/week: 12 git commit dates in 29 calendar days, plus squash-hidden days such as 10-02), it lands ~2027-03-06, ~2027-04-27 or ~2027-07-22.\nAdd 1-3 calendar weeks for the ADR-0066 rc soak.\nMost likely window: late February to late May 2027.\n0.4.0 at sprint pace: about late October to early November 2026.\nAssumptions:\n- Solo owner, with AI-assisted lanes keeping their observed throughput.\n- No idle stretch like the one from 09-12 to 09-27.\n- Phase 20's outside readers are recruited early enough not to gate the rc.\n- Git active days understate effort, because squash merges hide working days.",
+  "scope_levers": [
+   "Revisit D-1 (wi-40b321, roadmap.md:90-95): ship 1.0 as seven crates and put happenstance-sync on its own 0.x line. This removes phase 13 (22-40 days) and most of 14's SY-32 work, roughly 30-45% of what remains. The cost is that the freeze-by-13 rows on core and adapter surfaces (VT-6, VT-9, VT-21, VT-24, CF-40) need re-disposition by a record.",
+   "Defer phase 14 by renewing ES-39 past 1.0, which phase 14's own text permits because firing it is additive (14-retention.md:91-93). Saves 6-11 days, mainly if sync also leaves 1.0.",
+   "Take phase 18's recorded fallbacks: PS-30 fan-out outside 1.0 and PS-18 renewed (18-typed-runner.md:146-156), saving 2-6 days. Last resort: the runner exempt from semver at 1.0 (:172-173).",
+   "Narrow phase 20 to the single outside-reader pass phase 21 already requires, and drop the rest of HS-P0024/25 from 21's dependency row. Saves 5-12 days. Recruit outside readers now, because that wait is calendar time, not effort.",
+   "Timebox the ES-11 Neon fence spike and fall back to a named, documented exception rather than iterating. This caps the largest phase-17 variance.",
+   "Keep 19a/19b/22 off the path in practice as well as on paper (phase 22 already took a day inside phase 17); only the owner's Pages toggle is cheap enough to do now.",
+   "Levers 1, 2 and 4 together bring the path to roughly 30-60 working days, which puts 1.0 around December 2026 to February 2027 at sprint pace."
+  ]
+ }
+}
