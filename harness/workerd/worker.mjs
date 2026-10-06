@@ -51,7 +51,10 @@ export default {
     try {
       return await stub.fetch(`https://harness/${route}`);
     } catch (error) {
-      return new Response(String(error?.message ?? error), { status: 500 });
+      // The message only — it carries the panic's assertion text, which the
+      // runner reports; the error itself would also carry its stack.
+      const message = error instanceof Error ? error.message : "the object failed without an Error";
+      return new Response(message, { status: 500 });
     }
   },
 };
