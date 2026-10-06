@@ -509,6 +509,7 @@ pub mod event_store;
 #[doc(hidden)]
 pub mod host;
 pub mod js;
+mod namespace;
 mod query_sql;
 pub mod send_shape;
 pub mod sql_storage;
@@ -521,6 +522,7 @@ pub use event_store::{CloudflareEventStore, CloudflareEventStoreError, SqlRowStr
 // which is on the type's own page in `js.rs`, and the crate root's Finding 2,
 // which argued for a route this crate has now withdrawn and was edited with it.
 pub use js::{JsHandle, JsThrow};
+pub use namespace::{InvalidTableNamespace, TableNamespace};
 pub use sql_storage::{SqlCursor, SqlError, SqlRow, SqlStorage, SqlValue};
 
 /// Compiled proof that `StringifiedThrow` cannot be named from outside this

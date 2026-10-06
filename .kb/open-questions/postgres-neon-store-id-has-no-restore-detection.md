@@ -73,7 +73,7 @@ earns it:
   `happenstance-ladybug` together as **undecided**, "Skeletons. Each owes this row before it can
   claim to have passed the suite" (`:385`). Three of those four are now published, conformant
   adapters. Cloudflare's answer does exist in code — `store_id_is_not_reminted_per_handle`
-  (`crates/happenstance-cloudflare/src/event_store.rs:2114`), because Durable Object storage
+  (`crates/happenstance-cloudflare/src/event_store.rs:2223`), because Durable Object storage
   outlives the isolate — but it is not in the table either.
 
 **How the identity is read differs, and the difference matters to any re-mint.**

@@ -7,7 +7,7 @@ authority_tier: note
 summary: >-
   redkiln validate --kb's immutability check compares each status: accepted
   decision atom in the working tree against the same file at HEAD. Verified
-  (CLAUDE.md:216): it reports "accepted decision 'kb-decision-0042' was
+  (CLAUDE.md:221): it reports "accepted decision 'kb-decision-0042' was
   edited in place" on an uncommitted edit and exits 0 the moment that edit is
   committed. It is therefore a dirty-tree guard whose honest reach is
   pre-commit, not pre-merge, and it is weaker than the surrounding prose
@@ -57,7 +57,7 @@ last_reviewed: 2026-09-28
 
 `redkiln validate --kb`'s immutability rule compares each `status:
 accepted` decision atom's body in the working tree against the same file as
-`HEAD` has it. `CLAUDE.md:216` records the transcript that proves the
+`HEAD` has it. `CLAUDE.md:221` records the transcript that proves the
 comparison's base: editing an accepted atom and running the check reports
 *"accepted decision 'kb-decision-0042' was edited in place"* on the
 **uncommitted** change, and the report clears the instant that edit is

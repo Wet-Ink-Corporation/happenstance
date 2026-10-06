@@ -1,0 +1,26 @@
+[package]
+name = "happenstance-workerd-harness"
+description = "Runs happenstance-cloudflare's conformance rules inside workerd, through a real Durable Object."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+# An instrument, never published: neither "unfinished" nor "held out of this
+# release". The crate root says so too, because the two other meanings of this
+# key look identical in a manifest.
+publish = false
+
+[lib]
+# `cdylib` because `worker-build` links the crate as a wasm module; `rlib` so the
+# host build (clippy, `cargo test --workspace`) has an artifact to check.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+happenstance-core = { workspace = true, features = ["std"] }
+happenstance-cloudflare = { path = "../../crates/happenstance-cloudflare" }
+happenstance-testkit.workspace = true
+futures-core.workspace = true
+worker.workspace = true
+
+[lints]
+workspace = true

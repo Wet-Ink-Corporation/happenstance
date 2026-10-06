@@ -35,9 +35,9 @@ so they are repaired first.
       verbatim.
 - [x] `README.md:139-141` and `:175-176` stop saying nothing is published at
       `0.3.2`. `CONTRIBUTING.md:23` and `:323-352` stop describing the registry
-      semver baseline as future work, and `.github/workflows/ci.yml:974-983`'s
+      semver baseline as future work, and `.github/workflows/ci.yml:1161-1170`'s
       comment stops telling a reader to delete an `if: false` that is gone. Check
-      whether the rev-baseline job at `ci.yml:959` still lists five crates of
+      whether the rev-baseline job at `ci.yml:1146` still lists five crates of
       seven, and whether it should.
       Done: all seven are at `0.3.2` on crates.io, measured on 2026-09-28. It
       listed five and should not have. Its own comment said `happenstance-postgres`

@@ -1,0 +1,19 @@
+{
+  "name": "happenstance-workerd-harness",
+  "private": true,
+  "description": "Runs happenstance-cloudflare's conformance rules inside workerd. Not published.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "worker-build --release",
+    "test": "vitest run",
+    "deployed": "node deployed.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "vitest": "4.1.11",
+    "wrangler": "4.146.0"
+  }
+}

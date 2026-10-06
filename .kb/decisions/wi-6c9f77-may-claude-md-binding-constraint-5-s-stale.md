@@ -30,7 +30,7 @@ tree_hash: "a8fa8b6b323aa45634607fab102f512ebf83acf0"
 
 May CLAUDE.md binding constraint 5's stale present-tense registry narrative (0.2.0 'has not happened yet', 'nothing is yanked', max_stable_version reads 0.0.0) be rewritten to the registry's current state, leaving the MSRV constraint itself unchanged?
 
-Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-6c9f77`. Anchor: `CLAUDE.md:252`.
+Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-6c9f77`. Anchor: `CLAUDE.md:257`.
 
 ## Decision outcome
 

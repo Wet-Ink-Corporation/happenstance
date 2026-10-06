@@ -94,7 +94,7 @@ fourth adapter repeating it is what raises that cost from "one embarrassing gap,
 **Classification: additive** — `xtask` only. ES-23 is `[FROZEN]` and has no row in
 `runbook/ledgers.md`, *The 1.0 dispositions*. The forcing event has passed, and the adapter half was discharged without the array:
 all four published event-store adapters carry their own `# Cancellation` section —
-`crates/happenstance-sqlite/src/event_store.rs:125`, `crates/happenstance-cloudflare/src/event_store.rs:119`,
+`crates/happenstance-sqlite/src/event_store.rs:125`, `crates/happenstance-cloudflare/src/event_store.rs:122`,
 `crates/happenstance-postgres/src/event_store.rs:29` and `crates/happenstance-neon/src/event_store.rs:3`.
 `FROZEN_DOC_MUSTS` still has only the port row (`xtask/src/lint_narrative.rs:1426-1431`).
 

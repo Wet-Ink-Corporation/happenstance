@@ -136,7 +136,7 @@ The tree says a required method would mostly be answered "unknown", so it would 
 break. Every published adapter forgets outside the port, where no adapter code runs:
 - **SQLite and Cloudflare** allocate with `INTEGER PRIMARY KEY AUTOINCREMENT`
   (`crates/happenstance-sqlite/src/event_store.rs:285`,
-  `crates/happenstance-cloudflare/src/event_store.rs:184`).
+  `crates/happenstance-cloudflare/src/event_store.rs:202`).
 - **Postgres and Neon** allocate from a sequence read explicitly
   (`crates/happenstance-postgres/src/event_store.rs:990`,
   `crates/happenstance-neon/src/config.rs:96`).
@@ -167,7 +167,7 @@ it cannot fold into anything else*, naming `happenstance-cloudflare` and `happen
   over the `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint (CI run `36638870563`,
   2026-09-29);
-- `happenstance-cloudflare` answers in one statement (`crates/happenstance-cloudflare/src/event_store.rs:1084`),
+- `happenstance-cloudflare` answers in one statement (`crates/happenstance-cloudflare/src/event_store.rs:1168`),
   but that run is on the `node:sqlite` shim, not `workerd`, so the transport evidence rests on Neon.
 
 This record accepts the round trip rather than rewording it away, because no required path pays

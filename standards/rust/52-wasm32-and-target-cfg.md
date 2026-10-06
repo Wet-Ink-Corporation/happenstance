@@ -156,7 +156,7 @@ message about an unused function that says nothing about targets. The author
 reproduces none of it locally, because `cargo test` never builds for wasm32.
 
 **Evidence.** `crates/happenstance-cloudflare/tests/support/mod.rs:142 (is denied under)` ·
-`crates/happenstance-cloudflare/src/lib.rs:610 (mod not_send_probe)` ·
+`crates/happenstance-cloudflare/src/lib.rs:612 (mod not_send_probe)` ·
 `xtask/src/main.rs:318 (name: "wasm32 build of the Cloudflare adapter")`
 
 ## RS-52-4. The per-test attribute is the caller's, because `#[test]` cannot run on wasm32.

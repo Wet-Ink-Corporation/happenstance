@@ -112,6 +112,16 @@ runtime. So there is no isolate, no eviction, no hibernation, no event loop
 re-entering the object mid-`await`, and none of the platform's own storage
 ceilings.
 
+**`workerd` runs them too, outside the gate.** The `workerd` CI job, a sibling of
+the gate, runs every rule in a real Durable Object through `harness/workerd`.
+It runs under local `workerd` and again on an object deployed to Cloudflare. That
+covers the isolate, the I/O gate and the platform's SQLite limits, which the shim
+cannot. Those limits are far tighter than SQLite's defaults: 5 compound-`SELECT`
+terms, 100 bound parameters, and 100,000 bytes of statement
+(`experiments/durable-object-limits`). Eviction and hibernation are still not
+exercised. To give each fixture instance its own log inside one object, the
+harness uses `CloudflareEventStore::namespaced`.
+
 **The fixture declines nothing, so the conformance run prints no `SKIP` line.** A
 rule whose capability a fixture declines still runs and reports the fixture's
 stated reason rather than vanishing from the binary; there is nothing here for

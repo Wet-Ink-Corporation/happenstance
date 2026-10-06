@@ -9,7 +9,10 @@
 //! # Schema
 //!
 //! Applied by [`CloudflareEventStore::migrate`], which is `CREATE … IF NOT
-//! EXISTS` throughout and safe to call on every open.
+//! EXISTS` throughout and safe to call on every open. These are the names
+//! [`CloudflareEventStore::new`] uses; a store built by
+//! [`CloudflareEventStore::namespaced`] prefixes every table and index name with
+//! `{namespace}_` (see [`TableNamespace`]) and is migrated per namespace.
 //!
 //! ```sql
 //! CREATE TABLE event (
@@ -161,6 +164,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::task::{Context, Poll};
 
 use futures_core::Stream;
@@ -170,6 +174,7 @@ use happenstance_core::{
     StoreLimit, Tag, Tags,
 };
 
+use crate::namespace::{TableNamespace, Tables};
 use crate::query_sql;
 use crate::sql_storage::{SqlError, SqlRow, SqlStorage, SqlValue};
 
@@ -179,27 +184,46 @@ use crate::sql_storage::{SqlError, SqlRow, SqlStorage, SqlValue};
 /// accept several at once, but a prepared statement does not, and issuing them
 /// one at a time is the spelling that works on every host this crate is
 /// exercised against.
-const MIGRATION: &[&str] = &[
-    "CREATE TABLE IF NOT EXISTS event (\
-        position        INTEGER PRIMARY KEY AUTOINCREMENT, \
-        event_type      TEXT    NOT NULL, \
-        data            BLOB    NOT NULL, \
-        metadata        BLOB, \
-        tags            BLOB    NOT NULL, \
-        origin_store    BLOB, \
-        origin_position INTEGER, \
-        recorded_at     INTEGER NOT NULL, \
-        UNIQUE (origin_store, origin_position))",
-    "CREATE INDEX IF NOT EXISTS event_type_idx ON event(event_type, position)",
-    "CREATE TABLE IF NOT EXISTS event_tag (\
-        tag        TEXT    NOT NULL, \
-        position   INTEGER NOT NULL REFERENCES event(position), \
-        event_type TEXT    NOT NULL, \
-        PRIMARY KEY (tag, position)) WITHOUT ROWID",
-    "CREATE TABLE IF NOT EXISTS store_meta (\
-        k TEXT PRIMARY KEY, \
-        v BLOB NOT NULL) WITHOUT ROWID",
-];
+///
+/// Rendered from [`Tables`] rather than written as literals, so a
+/// [`TableNamespace`]'s log gets the same schema under its own names. The
+/// unprefixed rendering is byte-for-byte the statements this crate has always
+/// issued.
+fn migration(tables: &Tables) -> [String; 4] {
+    let Tables {
+        event,
+        event_tag,
+        store_meta,
+        event_type_idx,
+    } = tables;
+    [
+        format!(
+            "CREATE TABLE IF NOT EXISTS {event} (\
+                position        INTEGER PRIMARY KEY AUTOINCREMENT, \
+                event_type      TEXT    NOT NULL, \
+                data            BLOB    NOT NULL, \
+                metadata        BLOB, \
+                tags            BLOB    NOT NULL, \
+                origin_store    BLOB, \
+                origin_position INTEGER, \
+                recorded_at     INTEGER NOT NULL, \
+                UNIQUE (origin_store, origin_position))"
+        ),
+        format!("CREATE INDEX IF NOT EXISTS {event_type_idx} ON {event}(event_type, position)"),
+        format!(
+            "CREATE TABLE IF NOT EXISTS {event_tag} (\
+                tag        TEXT    NOT NULL, \
+                position   INTEGER NOT NULL REFERENCES {event}(position), \
+                event_type TEXT    NOT NULL, \
+                PRIMARY KEY (tag, position)) WITHOUT ROWID"
+        ),
+        format!(
+            "CREATE TABLE IF NOT EXISTS {store_meta} (\
+                k TEXT PRIMARY KEY, \
+                v BLOB NOT NULL) WITHOUT ROWID"
+        ),
+    ]
+}
 
 /// The `store_meta` key holding this object's incarnation.
 const STORE_ID_KEY: &str = "store_id";
@@ -326,6 +350,10 @@ impl Ceilings {
 pub struct CloudflareEventStore {
     /// The object's SQL storage. Cloning aliases it rather than copying it.
     sql: SqlStorage,
+    /// The names this store's statements are rendered with. `Rc` because a
+    /// clone of the store and every read stream it opens carry the same names,
+    /// and the store is `!Send` already.
+    tables: Rc<Tables>,
     /// This object's incarnation, read back from `store_meta` on first use.
     ///
     /// A cache, never a source: it is filled from the row `migrate` wrote, so a
@@ -405,6 +433,7 @@ impl CloudflareEventStore {
     #[must_use]
     pub fn planned_statement_count(query: &Query) -> usize {
         query_sql::chunks(
+            &Tables::UNPREFIXED,
             query,
             Self::MAX_QUERY_ARMS_PER_STATEMENT,
             Self::MAX_QUERY_PARAMETERS_PER_STATEMENT,
@@ -420,8 +449,43 @@ impl CloudflareEventStore {
     /// path for both.
     #[must_use]
     pub fn new(sql: SqlStorage) -> Self {
+        Self::over(sql, Tables::UNPREFIXED)
+    }
+
+    /// Wraps a Durable Object's SQL storage, keeping this log in `namespace`'s
+    /// own tables.
+    ///
+    /// One object, several logs: a store built here shares nothing with the
+    /// store [`new`](Self::new) builds over the same storage, or with one built
+    /// under a different namespace — not a row, not the position sequence, and
+    /// not the incarnation, so an [`EventId`] minted in one is never a member of
+    /// another. Two handles built under the *same* namespace are two handles onto
+    /// one log, exactly as two [`new`](Self::new) handles are.
+    ///
+    /// [`migrate`](Self::migrate) applies per namespace; each log is migrated
+    /// before its first use. See [`TableNamespace`] for how names are formed.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use happenstance_cloudflare::{CloudflareEventStore, SqlStorage, TableNamespace};
+    ///
+    /// # fn tenant(sql: SqlStorage) -> Result<(), Box<dyn std::error::Error>> {
+    /// let store = CloudflareEventStore::namespaced(sql, &TableNamespace::new("tenant_7")?);
+    /// store.migrate()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn namespaced(sql: SqlStorage, namespace: &TableNamespace) -> Self {
+        Self::over(sql, Tables::namespaced(namespace))
+    }
+
+    /// The one construction path both constructors take.
+    fn over(sql: SqlStorage, tables: Tables) -> Self {
         Self {
             sql,
+            tables: Rc::new(tables),
             identity: RefCell::new(None),
             ceilings: Ceilings::DECLARED,
             page_size: PAGE_SIZE,
@@ -477,15 +541,18 @@ impl CloudflareEventStore {
     /// a store whose identity is guessed answers `contains_event_id` wrongly
     /// about its own past.
     pub fn migrate(&self) -> Result<(), CloudflareEventStoreError> {
-        for statement in MIGRATION {
-            self.sql.exec(statement, &[])?;
+        for statement in migration(&self.tables) {
+            self.sql.exec(&statement, &[])?;
         }
         // `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
         // engine already under the object, weighed against adding a crate for
         // them: `happenstance-core` mints nothing because it is `no_std`-capable
         // and has no entropy source, so the adapter must.
         self.sql.exec(
-            "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, randomblob(16))",
+            &format!(
+                "INSERT OR IGNORE INTO {} (k, v) VALUES (?, randomblob(16))",
+                self.tables.store_meta
+            ),
             &[SqlValue::Text(STORE_ID_KEY.to_owned())],
         )?;
 
@@ -521,7 +588,10 @@ impl CloudflareEventStore {
     /// Reads the incarnation row, without consulting or filling the cache.
     fn read_identity(&self) -> Result<StoreId, CloudflareEventStoreError> {
         let mut cursor = self.sql.exec(
-            "SELECT v AS store_id FROM store_meta WHERE k = ?",
+            &format!(
+                "SELECT v AS store_id FROM {} WHERE k = ?",
+                self.tables.store_meta
+            ),
             &[SqlValue::Text(STORE_ID_KEY.to_owned())],
         )?;
         let row = cursor.next_row().transpose()?.ok_or_else(|| {
@@ -617,6 +687,7 @@ impl CloudflareEventStore {
             let mut highest: Option<SequencePosition> = None;
 
             for (matched, mut bindings) in query_sql::chunks(
+                &self.tables,
                 &guard.query,
                 Self::MAX_QUERY_ARMS_PER_STATEMENT,
                 Self::MAX_QUERY_PARAMETERS_PER_STATEMENT,
@@ -632,8 +703,9 @@ impl CloudflareEventStore {
                 // been taken. `IN` over the primary key is the same lookup the
                 // read plan makes.
                 let statement = format!(
-                    "SELECT max(position) AS position FROM event \
-                     WHERE position IN ({matched}) AND {STAMPED} AND position > ?"
+                    "SELECT max(position) AS position FROM {} \
+                     WHERE position IN ({matched}) AND {STAMPED} AND position > ?",
+                    self.tables.event
                 );
                 let mut cursor = self.sql.exec(&statement, &bindings)?;
                 let Some(row) = cursor.next_row().transpose()? else {
@@ -743,13 +815,17 @@ impl CloudflareEventStore {
         recorded_at: RecordedAt,
         positions: &mut Vec<SequencePosition>,
     ) -> Result<SequencePosition, CloudflareEventStoreError> {
+        let insert = format!(
+            "INSERT INTO {} (event_type, data, metadata, tags, recorded_at) \
+             VALUES (?, ?, ?, ?, ?) RETURNING position",
+            self.tables.event
+        );
         for event in events {
             let metadata = event
                 .metadata()
                 .map_or(SqlValue::Null, |bytes| SqlValue::Blob(bytes.to_vec()));
             let mut cursor = self.sql.exec(
-                "INSERT INTO event (event_type, data, metadata, tags, recorded_at) \
-                 VALUES (?, ?, ?, ?, ?) RETURNING position",
+                &insert,
                 &[
                     SqlValue::Text(event.event_type().as_str().to_owned()),
                     SqlValue::Blob(event.data().to_vec()),
@@ -790,8 +866,11 @@ impl CloudflareEventStore {
         // be restamped under this incarnation.
         if let Some(first) = positions.first() {
             self.sql.exec(
-                "UPDATE event SET origin_store = ?, origin_position = position \
-                 WHERE position >= ? AND origin_position IS NULL",
+                &format!(
+                    "UPDATE {} SET origin_store = ?, origin_position = position \
+                     WHERE position >= ? AND origin_position IS NULL",
+                    self.tables.event
+                ),
                 &[
                     SqlValue::Blob(store_id.to_bytes().to_vec()),
                     SqlValue::Integer(position_as_i64(*first)),
@@ -832,11 +911,11 @@ impl CloudflareEventStore {
     fn discard_from(&self, from: SequencePosition) -> Result<(), CloudflareEventStoreError> {
         let from = position_as_i64(from);
         self.sql.exec(
-            "DELETE FROM event_tag WHERE position >= ?",
+            &format!("DELETE FROM {} WHERE position >= ?", self.tables.event_tag),
             &[SqlValue::Integer(from)],
         )?;
         self.sql.exec(
-            "DELETE FROM event WHERE position >= ?",
+            &format!("DELETE FROM {} WHERE position >= ?", self.tables.event),
             &[SqlValue::Integer(from)],
         )?;
         Ok(())
@@ -848,10 +927,14 @@ impl CloudflareEventStore {
         events: &[Event],
         positions: &[SequencePosition],
     ) -> Result<(), CloudflareEventStoreError> {
+        let statement = format!(
+            "INSERT INTO {} (tag, position, event_type) VALUES (?, ?, ?)",
+            self.tables.event_tag
+        );
         for (event, position) in events.iter().zip(positions) {
             for tag in event.tags() {
                 self.sql.exec(
-                    "INSERT INTO event_tag (tag, position, event_type) VALUES (?, ?, ?)",
+                    &statement,
                     &[
                         SqlValue::Text(tag.as_str().to_owned()),
                         SqlValue::Integer(position_as_i64(*position)),
@@ -1029,6 +1112,7 @@ impl EventStore for CloudflareEventStore {
         SqlRowStream {
             state: StreamState::Deferred {
                 sql: self.sql.clone(),
+                tables: Rc::clone(&self.tables),
                 query: query.clone(),
                 options,
                 page_size: self.page_size,
@@ -1078,7 +1162,7 @@ impl EventStore for CloudflareEventStore {
         // The same statement the read path captures its ceiling with, and the
         // same function: "the highest position this store holds" is one
         // question, and two spellings of it would be two answers.
-        max_position(&self.sql)
+        max_position(&self.sql, &self.tables)
     }
 
     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
@@ -1088,8 +1172,11 @@ impl EventStore for CloudflareEventStore {
         // `WHERE position = ?` gets the easy half right and the hard half
         // exactly wrong.
         let mut cursor = self.sql.exec(
-            "SELECT 1 AS present FROM event \
-             WHERE origin_store = ? AND origin_position = ? LIMIT 1",
+            &format!(
+                "SELECT 1 AS present FROM {} \
+                 WHERE origin_store = ? AND origin_position = ? LIMIT 1",
+                self.tables.event
+            ),
             &[
                 SqlValue::Blob(id.store().to_bytes().to_vec()),
                 SqlValue::Integer(position_as_i64(id.position())),
@@ -1351,6 +1438,8 @@ enum StreamState {
     Deferred {
         /// The storage to execute against.
         sql: SqlStorage,
+        /// The names to render statements with.
+        tables: Rc<Tables>,
         /// Cloned rather than borrowed, so the stream outlives the caller's
         /// query without a lifetime on the stream type.
         query: Query,
@@ -1363,6 +1452,8 @@ enum StreamState {
     Paging {
         /// The storage to execute against.
         sql: SqlStorage,
+        /// The names to render statements with.
+        tables: Rc<Tables>,
         /// The caller's query.
         query: Query,
         /// The caller's options.
@@ -1403,6 +1494,7 @@ impl Stream for SqlRowStream {
             match core::mem::replace(&mut this.state, StreamState::Done) {
                 StreamState::Deferred {
                     sql,
+                    tables,
                     query,
                     options,
                     page_size,
@@ -1417,12 +1509,13 @@ impl Stream for SqlRowStream {
                     // error: it is the state every adapter is in on its first
                     // run, and arithmetic on it is the registered failure mode
                     // of this very mechanism.
-                    match max_position(&sql) {
+                    match max_position(&sql, &tables) {
                         Err(err) => return Poll::Ready(Some(Err(err))),
                         Ok(None) => return Poll::Ready(None),
                         Ok(Some(ceiling)) => {
                             this.state = StreamState::Paging {
                                 sql,
+                                tables,
                                 query,
                                 options,
                                 ceiling,
@@ -1438,6 +1531,7 @@ impl Stream for SqlRowStream {
 
                 StreamState::Paging {
                     sql,
+                    tables,
                     query,
                     options,
                     ceiling,
@@ -1460,6 +1554,7 @@ impl Stream for SqlRowStream {
                         };
                         this.state = StreamState::Paging {
                             sql,
+                            tables,
                             query,
                             options,
                             ceiling,
@@ -1477,7 +1572,7 @@ impl Stream for SqlRowStream {
                     }
 
                     let want = remaining.map_or(page_size, |left| left.min(page_size));
-                    let plan = render_read(&query, options, ceiling, cursor, want);
+                    let plan = render_read(&tables, &query, options, ceiling, cursor, want);
                     let rows = match drain_plan(&sql, &plan, options.backwards, want) {
                         Err(err) => return Poll::Ready(Some(Err(err))),
                         Ok(rows) => rows,
@@ -1488,6 +1583,7 @@ impl Stream for SqlRowStream {
                     }
                     this.state = StreamState::Paging {
                         sql,
+                        tables,
                         query,
                         options,
                         ceiling,
@@ -1515,9 +1611,15 @@ impl Stream for SqlRowStream {
 ///
 /// `origin_position IS NOT NULL` is [`STAMPED`], and it is the reason ES-18 holds
 /// here rather than an optimisation. See that constant.
-fn max_position(sql: &SqlStorage) -> Result<Option<SequencePosition>, CloudflareEventStoreError> {
+fn max_position(
+    sql: &SqlStorage,
+    tables: &Tables,
+) -> Result<Option<SequencePosition>, CloudflareEventStoreError> {
     let mut cursor = sql.exec(
-        &format!("SELECT max(position) AS position FROM event WHERE {STAMPED}"),
+        &format!(
+            "SELECT max(position) AS position FROM {} WHERE {STAMPED}",
+            tables.event
+        ),
         &[],
     )?;
     let Some(row) = cursor.next_row().transpose()? else {
@@ -1670,6 +1772,7 @@ fn page_position(row: &SqlRow) -> Result<i64, CloudflareEventStoreError> {
 /// merge. One ceiling shared across every statement of every page is also how
 /// ES-12 stays discharged when a page becomes several statements.
 fn render_read(
+    tables: &Tables,
     query: &Query,
     options: ReadOptions,
     ceiling: SequencePosition,
@@ -1677,12 +1780,15 @@ fn render_read(
     limit: usize,
 ) -> Vec<(String, Vec<SqlValue>)> {
     query_sql::chunks(
+        tables,
         query,
         CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
         CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
     )
     .into_iter()
-    .map(|(matched, bindings)| render_chunk(&matched, bindings, options, ceiling, cursor, limit))
+    .map(|(matched, bindings)| {
+        render_chunk(tables, &matched, bindings, options, ceiling, cursor, limit)
+    })
     .collect()
 }
 
@@ -1694,6 +1800,7 @@ fn render_read(
 /// the ceiling above it, and from then on only this predicate keeps it out of the
 /// replay.
 fn render_chunk(
+    tables: &Tables,
     matched: &str,
     mut bindings: Vec<SqlValue>,
     options: ReadOptions,
@@ -1701,8 +1808,10 @@ fn render_chunk(
     cursor: Option<SequencePosition>,
     limit: usize,
 ) -> (String, Vec<SqlValue>) {
-    let mut sql =
-        format!("SELECT {READ_COLUMNS} FROM event WHERE position IN ({matched}) AND {STAMPED}");
+    let mut sql = format!(
+        "SELECT {READ_COLUMNS} FROM {} WHERE position IN ({matched}) AND {STAMPED}",
+        tables.event
+    );
 
     sql.push_str(" AND position <= ?");
     bindings.push(SqlValue::Integer(position_as_i64(ceiling)));
@@ -3229,7 +3338,7 @@ mod read_path_tests {
                     return Poll::Ready(None);
                 }
 
-                let ceiling = match super::max_position(&this.sql) {
+                let ceiling = match super::max_position(&this.sql, &super::Tables::UNPREFIXED) {
                     Err(err) => {
                         this.done = true;
                         return Poll::Ready(Some(Err(err)));
@@ -3250,6 +3359,7 @@ mod read_path_tests {
                 };
 
                 let (statement, bindings) = the_only_statement(super::render_read(
+                    &super::Tables::UNPREFIXED,
                     &this.query,
                     this.options,
                     ceiling,
@@ -3305,12 +3415,13 @@ mod read_path_tests {
 
     impl CursorHoldingStream {
         fn new(sql: &SqlStorage, query: &Query, options: ReadOptions) -> Self {
-            let ceiling = super::max_position(sql)
+            let ceiling = super::max_position(sql, &super::Tables::UNPREFIXED)
                 .expect("the ceiling capture runs")
                 .expect("this control is only ever pointed at a non-empty store");
             Self {
                 sql: sql.clone(),
                 statement: Some(the_only_statement(super::render_read(
+                    &super::Tables::UNPREFIXED,
                     query,
                     options,
                     ceiling,

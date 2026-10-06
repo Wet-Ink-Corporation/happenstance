@@ -1,0 +1,29 @@
+Phase A on workerd, through harness/workerd's /probe route (src/probe.rs).
+Taken 2026-10-01 on Windows 11, at the parent of the lane/p17-workerd commit
+that adds this file. Each axis is bisected; "accepted N" is the largest size
+the runtime took, and the refusal one step above it is quoted verbatim.
+
+== workerd 1.20260815.1 (@cloudflare/vitest-pool-workers 0.22.0, miniflare 5.20260815.0-alpha) ==
+compound SELECT terms: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+bound parameters: accepted 100; refused above it: JavaScript threw: Error: too many SQL variables at offset 207: SQLITE_ERROR
+statement length (bytes): accepted 100000; refused above it: JavaScript threw: Error: statement too long: SQLITE_TOOBIG
+expression terms (1+1+...): accepted 100; refused above it: JavaScript threw: Error: Expression tree is too large (maximum depth 100): SQLITE_ERROR
+row payload (bytes): accepted 2199995; refused above it: JavaScript threw: Error: string or blob too big: SQLITE_TOOBIG
+adapter: query items, one tag each: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+adapter: append-condition items, one tag each: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+adapter: tags in one query item: accepted 45; refused above it: JavaScript threw: Error: Expression tree is too large (maximum depth 100): SQLITE_ERROR
+
+== workerd 1.20261001.1 (wrangler 4.146.0, `wrangler dev`) ==
+compound SELECT terms: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+bound parameters: accepted 100; refused above it: JavaScript threw: Error: too many SQL variables at offset 207: SQLITE_ERROR
+statement length (bytes): accepted 100000; refused above it: JavaScript threw: Error: statement too long: SQLITE_TOOBIG
+expression terms (1+1+...): accepted 100; refused above it: JavaScript threw: Error: Expression tree is too large (maximum depth 100): SQLITE_ERROR
+row payload (bytes): accepted 8388637; refused above it: JavaScript threw: Error: string or blob too big: SQLITE_TOOBIG
+adapter: query items, one tag each: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+adapter: append-condition items, one tag each: accepted 5; refused above it: JavaScript threw: Error: too many terms in compound SELECT: SQLITE_ERROR
+adapter: tags in one query item: accepted 45; refused above it: JavaScript threw: Error: Expression tree is too large (maximum depth 100): SQLITE_ERROR
+
+== The conformance rules under workerd 1.20260815.1 ==
+96 of 97 tests passed. The one failure:
+store_evaluates_a_query_at_the_guaranteed_minimum_item_count
+  read should succeed, got Sql(Thrown(... too many SQL variables at offset 5573: SQLITE_ERROR))

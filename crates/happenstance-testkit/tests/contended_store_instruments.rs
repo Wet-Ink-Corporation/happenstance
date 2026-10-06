@@ -277,7 +277,7 @@ async fn arming_zero_contentions_arms_nothing() {
 /// This is the property that lets a rule assert on the count without reading a
 /// clock, which CF-33 forbids. The wrong implementation it rejects is a
 /// saturating or unsynchronised counter: one that wrapped below zero, or that
-/// read-then-wrote without `fetch_update`, would refuse a number of callers
+/// read-then-wrote without `try_update`, would refuse a number of callers
 /// that varied run to run and would make every count in this file a coin flip.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_refusal_count_is_exact_under_a_race() {

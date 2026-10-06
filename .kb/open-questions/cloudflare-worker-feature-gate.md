@@ -105,7 +105,7 @@ saying "no features table, and why", rather than letting the question retire una
 it rests on still hold at HEAD. `crates/happenstance-cloudflare/Cargo.toml` has no `[features]`
 table, while every other adapter has one (`happenstance-sqlite`'s at `:100`, `happenstance-postgres`'s
 at `:82`, `happenstance-neon`'s at `:115`). `worker.workspace = true` is unconditional at `:102`.
-The crate re-exports `worker` next to `happenstance_core` (`crates/happenstance-cloudflare/src/lib.rs:587`),
+The crate re-exports `worker` next to `happenstance_core` (`crates/happenstance-cloudflare/src/lib.rs:589`),
 so `worker`'s types sit on the public surface as well as in the signatures this atom listed.
 
 The sub-questions:
