@@ -1,5 +1,5 @@
-//! A query past SQLite's pushdown limits is served, against a real Durable
-//! Object.
+//! A query past a Durable Object's pushdown limits is served, against the
+//! shim, which enforces `workerd`'s statement walls.
 //!
 //! # Why this target exists rather than the arithmetic that was here first
 //!
@@ -13,32 +13,29 @@
 //! target, which cargo never hands to a compiler, was inert for as long as it
 //! stood.
 //!
-//! So the first case below is a **control**: it hands this runtime the
-//! unpartitioned statement and asserts the driver refuses it, in this harness,
-//! today. Everything after it is the same shape going through the adapter and
-//! succeeding. Without the control the passing cases would prove only that
-//! nothing went wrong; with it they prove the wall is real, reachable here, and
-//! no longer hit.
+//! So the first two cases are **controls**: one hands this runtime a statement
+//! one past each of `workerd`'s walls and asserts the driver refuses it, and one
+//! hands it the widest statement this adapter can emit and asserts it is
+//! accepted. Everything after them goes through the adapter and succeeds.
+//! Without the controls the passing cases would prove only that nothing went
+//! wrong; with them they prove the walls are real, reachable here, and no
+//! longer hit.
 //!
-//! # The two walls, and the two shapes that cross them
+//! # The walls, and the shapes that cross them
 //!
-//! * `SQLITE_MAX_COMPOUND_SELECT` — **500 terms**. Crossed by
-//!   [`ARM_WIDE_ITEMS`] items of one tag each: 1,000 arms, and only 1,000 bound
-//!   parameters, so the parameter budget is nowhere near binding and the arm
-//!   axis is the one under test.
-//! * `SQLITE_MAX_VARIABLE_NUMBER` — **32,766 bound parameters**. Crossed by
-//!   [`PARAMETER_WIDE_ITEMS`] items of [`TYPES_PER_ITEM`] event types each:
-//!   32,800 parameters, on exactly `MAX_QUERY_ARMS_PER_STATEMENT` arms — so the
-//!   arm axis says *one statement* and the parameter axis is the only thing that
-//!   can split it. That is the independence the two ceilings exist for, driven
-//!   rather than argued.
+//! The shim opens its database with `workerd`'s four statement limits —
+//! measured inside `workerd` by `harness/workerd/src/probe.rs` — so the walls
+//! here are a Durable Object's rather than SQLite's compiled defaults:
 //!
-//! Types rather than tags for the second shape, and it is a cost decision worth
-//! stating: an item's parameters are one per tag **and** one per type, and a
-//! tag-wide item renders a chain of nested `position IN (SELECT …)`
-//! intersections where a type-wide item renders one flat `event_type IN (?,…)`.
-//! Both reach the wall; the flat one asks the planner for far less to reach it,
-//! which is what keeps this target's runtime in seconds rather than minutes.
+//! * **5 compound `SELECT` terms.** Crossed by [`ARM_WIDE_ITEMS`] items of one
+//!   tag each: 1,000 arms, 200 statements.
+//! * **100 bound parameters.** An item binds 0 to 3 parameters whatever its
+//!   width, so no query can cross this wall through the adapter. What is driven
+//!   instead is the shape that *used* to cross it: items of [`TYPES_PER_ITEM`]
+//!   event types each, which bound one parameter per type and now bind one.
+//! * **An expression depth of 100.** The old tag chain nested one level per tag
+//!   and was refused at 46 tags in one item. Crossed by one item of 46 tags and
+//!   one of the declared 1,024.
 //!
 //! # Both callers, because only one of them holds the turn
 //!
@@ -53,12 +50,10 @@
 //! # What this is not
 //!
 //! Not `workerd`. The shim is a Node process holding real SQLite behind the
-//! `DurableObjectState` shape, so the *pushdown* limits below are the real
-//! engine's and the *platform's* limits are absent entirely — which is
-//! `kb-decision-0023`'s recorded finding and not this target's to fix. What
-//! matters here is that `SQLITE_MAX_COMPOUND_SELECT` and
-//! `SQLITE_MAX_VARIABLE_NUMBER` are compile-time constants of the engine the
-//! shim runs, so the control case measures the same wall a deployed object has.
+//! `DurableObjectState` shape, opened with `workerd`'s four statement limits and
+//! none of its other properties — which is `kb-decision-0023`'s recorded finding
+//! and not this target's to fix. `harness/workerd` runs the conformance rules
+//! inside `workerd` itself.
 
 #![cfg(target_arch = "wasm32")]
 
@@ -69,42 +64,35 @@ use happenstance_cloudflare::event_store::CloudflareEventStore;
 use happenstance_cloudflare::host::DurableObjectHost;
 use happenstance_cloudflare::sql_storage::{SqlStorage, SqlValue};
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventStore, Query, QueryItem, ReadOptions, Tags,
+    AppendCondition, AppendError, Event, EventStore, Query, QueryItem, ReadOptions, Tag, Tags,
 };
 use wasm_bindgen_test::wasm_bindgen_test;
 
-/// Items enough to pass `SQLITE_MAX_COMPOUND_SELECT`'s 500 terms, twice over.
+/// Items enough to pass the old 500-term compound-`SELECT` default twice
+/// over, and `workerd`'s 5 two hundred times.
 ///
-/// One tag each, so the query is 1,000 arms and 1,000 bound parameters — the
-/// arm axis binding, the parameter axis idle.
+/// One tag each, so the query is 1,000 arms of one parameter apiece — the arm
+/// axis binding, the parameter axis idle.
 const ARM_WIDE_ITEMS: usize = 1_000;
 
-/// Items in the parameter-wide query: the chunk width **exactly**.
+/// Items in the type-wide queries: two full chunks and one more, so the plan
+/// is three statements and the last item is alone in the third.
 ///
-/// So the arm partition would return one statement, and anything that splits
-/// this query split it on the other axis.
-const PARAMETER_WIDE_ITEMS: usize = CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
+/// The read and both parameter-axis guards use it. Under the old rendering
+/// those guards were 400 items of 82 types, 32,800 parameters split on the
+/// parameter axis. Each item now binds one parameter, so with the shipped
+/// constants no query crosses the parameter axis end to end; its only
+/// coverage is the host partition tests in `src/query_sql.rs`. What these
+/// guards keep is a type-wide guard cut into several statements by the arm
+/// axis (the owner's call on review finding F1, 2026-10-05).
+const TYPE_WIDE_ITEMS: usize = CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT * 2 + 1;
 
-/// Event types per item of the parameter-wide query.
+/// Event types per item of the type-wide queries.
 ///
-/// `400 * 82 = 32,800`, which clears `SQLITE_MAX_VARIABLE_NUMBER`'s 32,766 by 34
-/// — deliberately the smallest margin that crosses it, because every parameter
-/// past the wall is planner work this target pays for and proves nothing extra.
+/// Under the rendering this target was written against, `400 * 82 = 32,800`
+/// parameters cleared `SQLITE_MAX_VARIABLE_NUMBER`'s 32,766 by 34. An item now
+/// binds its types as one JSON array, so 82 types is one parameter.
 const TYPES_PER_ITEM: usize = 82;
-
-/// `SQLITE_MAX_VARIABLE_NUMBER`'s most common default — and **not a portable
-/// fact**, which is why nothing below asserts a refusal at it.
-///
-/// Measured across this repository's three CI hosts: `ubuntu-latest` and
-/// `windows-latest` refuse a statement binding 32,800 parameters;
-/// **`macos-latest` accepts it.** The limit is a compile-time option of whichever
-/// SQLite the runtime was built against, so a target asserting "this engine
-/// refuses N" asserts a property of the host it happened to run on.
-///
-/// That is why [`CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT`] is
-/// 30,000 rather than pinned here: the budget must sit below the *lowest* limit
-/// any host imposes, and the headroom is what makes it portable.
-const BOUND_PARAMETERS: usize = 32_766;
 
 /// A fresh Durable Object with the schema applied.
 fn store() -> CloudflareEventStore {
@@ -149,7 +137,7 @@ fn tagged(index: usize) -> Event {
         )
 }
 
-/// An event of the type item `index` of the parameter-wide query names first.
+/// An event of the type item `index` of a type-wide query names first.
 fn typed(index: usize) -> Event {
     Event::new(format!("T{}", index * TYPES_PER_ITEM), &b"{}"[..]).expect("a valid event type")
 }
@@ -165,12 +153,12 @@ fn arm_wide_query() -> Query {
     .expect("a non-empty item list is a query")
 }
 
-/// `PARAMETER_WIDE_ITEMS` items of `TYPES_PER_ITEM` distinct event types each.
+/// `items` items of `TYPES_PER_ITEM` distinct event types each.
 ///
 /// The type sets are disjoint across items, so an event of one type is matched
 /// by exactly one item and "which chunk answered" is observable.
-fn parameter_wide_query() -> Query {
-    Query::from_items((0..PARAMETER_WIDE_ITEMS).map(|index| {
+fn type_wide_query(items: usize) -> Query {
+    Query::from_items((0..items).map(|index| {
         let base = index * TYPES_PER_ITEM;
         QueryItem::of_types((base..base + TYPES_PER_ITEM).map(|n| format!("T{n}")))
             .expect("an item constraining types is constructible")
@@ -178,100 +166,140 @@ fn parameter_wide_query() -> Query {
     .expect("a non-empty item list is a query")
 }
 
+/// `TYPE_WIDE_ITEMS` type-wide items: the parameter-axis guards' query.
+fn parameter_wide_query() -> Query {
+    type_wide_query(TYPE_WIDE_ITEMS)
+}
+
+/// The tags `t:0` to `t:<width - 1>`.
+fn tag_set(width: usize) -> Tags {
+    (0..width)
+        .map(|n| Tag::new(format!("t:{n}")).expect("a valid tag"))
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
-// The control: this host's walls, and the budget sitting inside them
+// The controls: this host's walls, and the widest statement sitting inside them
 // ---------------------------------------------------------------------------
 
-/// Both walls, measured through the storage handle rather than the adapter —
-/// and each asserted in the direction that is portable.
+/// Runs `statement` and drains it, so a refusal at step time is seen too.
+fn ran(sql: &SqlStorage, statement: &str, bindings: &[SqlValue]) -> Result<(), String> {
+    let mut cursor = sql.exec(statement, bindings).map_err(|e| e.to_string())?;
+    while let Some(row) = cursor.next_row() {
+        row.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// The four statement-shape walls `workerd` puts on a Durable Object's SQLite,
+/// enforced by this host too.
 ///
-/// **This case was renamed after it went red on `macos-latest`**, and the rename
-/// is the finding. It was
-/// `the_unpartitioned_statement_is_refused_by_this_runtime`, and it asserted
-/// that the driver refuses *both* unpartitioned statements. The compound-`SELECT`
-/// half holds on all three CI hosts. The parameter half does not:
-/// `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option of whichever SQLite the
-/// runtime was built against, and macOS's accepts the 32,800 that ubuntu's and
-/// windows's refuse. The old assertion was a claim about the host it happened to
-/// run on, and it was true on two of three.
+/// Measured inside `workerd` by `harness/workerd/src/probe.rs`: 5 compound
+/// terms, 100 bound parameters, 100,000-byte statements and an expression depth
+/// of 100. Each is asserted on both sides, so a host that refused everything
+/// would fail the accepted half.
 ///
-/// What it asserts now is the pair that actually protects this store. A compound
-/// `SELECT` of `ARM_WIDE_ITEMS` terms is refused — the arm wall is real here — and
-/// a statement binding exactly `MAX_QUERY_PARAMETERS_PER_STATEMENT` is
-/// **accepted**, which is the direction that can break us: a host whose limit
-/// sits *below* the budget would reject every partitioned statement this store
-/// emits, and for an append guard that rejection lands inside the turn with the
-/// caller's decision already taken.
-///
-/// It is no longer load-bearing for the six cases below, and that is worth
-/// stating plainly rather than leaving as an inherited justification. Each of
-/// those asserts `planned_statement_count > 1` and that the answer comes from
-/// every chunk — properties of this store's partition, not of the engine — so
-/// they do not silently degrade on a host with a wider wall. This control guards
-/// the *budget*, not their validity.
+/// It replaces `the_partition_budget_sits_inside_this_hosts_limits`, which
+/// asserted a 1,000-term compound refused and a 30,000-parameter statement
+/// accepted. That second half went red on `macos-latest` in an earlier form,
+/// because `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option of whichever
+/// SQLite the host was built against. Setting the limits at open time is what
+/// makes them the same on every host, and the shim refuses to open at all on a
+/// Node that ignores them.
 #[wasm_bindgen_test]
-fn the_partition_budget_sits_inside_this_hosts_limits() {
+fn the_host_enforces_workerds_statement_limits() {
+    let sql = DurableObjectHost::new().storage();
+
+    let compound = |terms: usize| vec!["SELECT 1"; terms].join(" UNION ALL ");
+    assert_eq!(ran(&sql, &compound(5), &[]), Ok(()), "five compound terms");
+    assert!(ran(&sql, &compound(6), &[]).is_err(), "six compound terms");
+
+    let variables = |count: usize| -> (String, Vec<SqlValue>) {
+        let bindings = (0..count)
+            .map(|n| SqlValue::Integer(i64::try_from(n).expect("a small count fits")))
+            .collect();
+        (format!("SELECT {}", vec!["?"; count].join(",")), bindings)
+    };
+    let (statement, bindings) = variables(100);
+    assert_eq!(
+        ran(&sql, &statement, &bindings),
+        Ok(()),
+        "100 bound parameters"
+    );
+    let (statement, bindings) = variables(101);
+    assert!(
+        ran(&sql, &statement, &bindings).is_err(),
+        "101 bound parameters"
+    );
+
+    let padded = |bytes: usize| format!("SELECT 1 --{}", "x".repeat(bytes - 11));
+    assert_eq!(
+        ran(&sql, &padded(100_000), &[]),
+        Ok(()),
+        "a 100,000-byte statement"
+    );
+    assert!(
+        ran(&sql, &padded(100_001), &[]).is_err(),
+        "a 100,001-byte statement"
+    );
+
+    let depth = |terms: usize| format!("SELECT {}", vec!["1"; terms].join("+"));
+    assert_eq!(ran(&sql, &depth(100), &[]), Ok(()), "100 terms of 1+1+...");
+    assert!(ran(&sql, &depth(101), &[]).is_err(), "101 terms of 1+1+...");
+}
+
+/// The widest statement the adapter emits, executed raw and accepted.
+///
+/// Five arms of the widest shape — 1,024 tags and 82 types each, three
+/// parameters apiece — inside the read wrapper with every bound set: 20
+/// parameters and constant text. The direction that can break the store is a
+/// host that refuses this, because then every wide statement the partition
+/// plans is one it rejects, and for a guard inside the append turn.
+///
+/// The text is a hand copy of `render_chunk`'s wrapper and `Arm::render`'s
+/// widest arm, because neither is reachable from an integration target. If
+/// either gains a predicate or a binding, this control does not notice; the
+/// host test `the_widest_statement_fits_workerds_text_wall` in
+/// `src/event_store.rs` pins the real renderer's width and parameter count.
+#[wasm_bindgen_test]
+fn a_statement_of_the_widest_chunk_is_accepted_here() {
     let host = DurableObjectHost::new();
     let sql: SqlStorage = host.storage();
-    let store = CloudflareEventStore::new(sql.clone());
-    store.migrate().expect("the schema applies");
+    CloudflareEventStore::new(sql.clone())
+        .migrate()
+        .expect("the schema applies");
 
-    // One compound SELECT of ARM_WIDE_ITEMS terms.
-    let arms: Vec<&str> = vec!["SELECT position FROM event_tag WHERE tag = ?"; ARM_WIDE_ITEMS];
-    let bindings: Vec<SqlValue> = (0..ARM_WIDE_ITEMS)
-        .map(|index| SqlValue::Text(format!("subject:s{index}")))
-        .collect();
-    let refused = sql.exec(&arms.join(" UNION "), &bindings);
-    assert!(
-        refused.is_err(),
-        "this runtime accepted a compound SELECT of {ARM_WIDE_ITEMS} terms, so \
-         SQLITE_MAX_COMPOUND_SELECT is not what this target believes it is and \
-         every case below is passing for the wrong reason"
+    let json = |values: Vec<String>| {
+        let quoted: Vec<String> = values.iter().map(|value| format!("\"{value}\"")).collect();
+        format!("[{}]", quoted.join(","))
+    };
+    let arm = "SELECT position FROM event_tag WHERE tag IN (SELECT value FROM json_each(?)) \
+               AND event_type IN (SELECT value FROM json_each(?)) \
+               GROUP BY position HAVING count(*) = ?";
+    let arms = CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
+    let mut bindings = Vec::new();
+    for item in 0..arms {
+        bindings.push(SqlValue::Text(json(
+            (0..1_024).map(|n| format!("k{item}:v{n}")).collect(),
+        )));
+        bindings.push(SqlValue::Text(json(
+            (0..TYPES_PER_ITEM).map(|n| format!("T{n}")).collect(),
+        )));
+        bindings.push(SqlValue::Integer(1_024));
+    }
+    bindings.extend([2, 9, 9, 4, 3].map(SqlValue::Integer));
+    let statement = format!(
+        "SELECT position FROM event WHERE position IN ({}) \
+         AND origin_position IS NOT NULL AND position <= ? AND position >= ? \
+         AND position <= ? AND position > ? ORDER BY position ASC LIMIT ?",
+        vec![arm; arms].join(" UNION ")
     );
-
-    // The parameter axis, asserted in the only direction that is portable.
-    //
-    // This used to assert that the runtime REFUSES a statement binding
-    // `PARAMETER_WIDE_ITEMS * TYPES_PER_ITEM` (32,800) parameters. It does on
-    // `ubuntu-latest` and `windows-latest`; it does **not** on `macos-latest`,
-    // because `SQLITE_MAX_VARIABLE_NUMBER` is a compile-time option of whichever
-    // SQLite the host was built against. That assertion was a claim about the
-    // host, and it went red on the first CI run that met a host with a wider one.
-    //
-    // What matters for correctness is the other direction, and nothing checked
-    // it: this store partitions to `MAX_QUERY_PARAMETERS_PER_STATEMENT`, so a
-    // host whose limit is **below** that budget would refuse statements the store
-    // considers safe — for the guard, inside the append turn with the caller's
-    // decision already taken, which is VT-24's named timing. A host with a
-    // *higher* limit costs nothing but conservatism.
-    //
-    // The six cases below do not depend on either wall being crossed: each
-    // asserts `planned_statement_count > 1` and that the answer comes from every
-    // chunk, which are properties of this store's partition rather than of the
-    // engine. So this control guards the budget, not their validity.
-    let budget = CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT;
-    assert!(
-        budget < BOUND_PARAMETERS,
-        "the budget must sit below the lowest limit any host imposes, or the \
-         partition is headroom on one machine and a coin toss on the next: \
-         budget {budget}, most common default {BOUND_PARAMETERS}"
-    );
-    let placeholders = vec!["?"; budget].join(",");
-    let bindings: Vec<SqlValue> = (0..budget)
-        .map(|n| SqlValue::Text(format!("T{n}")))
-        .collect();
-    let accepted = sql.exec(
-        &format!("SELECT position FROM event WHERE event_type IN ({placeholders})"),
-        &bindings,
-    );
-    assert!(
-        accepted.is_ok(),
-        "this runtime refused a statement binding {budget} parameters — the \
-         exact width this store partitions to — so every partitioned statement \
-         it emits is one this host rejects, and for a guard that rejection \
-         arrives inside the append turn. Lower \
-         `MAX_QUERY_PARAMETERS_PER_STATEMENT` below this host's limit. Got \
-         {accepted:?}"
+    assert_eq!(
+        ran(&sql, &statement, &bindings),
+        Ok(()),
+        "the widest chunk, {} bytes and {} parameters, must be accepted",
+        statement.len(),
+        bindings.len()
     );
 }
 
@@ -314,24 +342,24 @@ async fn a_read_past_the_compound_select_ceiling_is_served_from_every_chunk() {
     );
 }
 
-/// The parameter axis, through `EventStore::read`.
+/// The shape that crossed the parameter wall, through `EventStore::read`.
 ///
-/// `PARAMETER_WIDE_ITEMS` is the arm width exactly, so the arm partition alone
-/// would plan this as one statement — and that statement binds 32,800
-/// parameters, which the control above watched this runtime refuse.
+/// Each item names 82 types and binds them as one parameter, so the plan is
+/// cut by the arm axis alone: three statements, the last holding one item. The
+/// first and last items each match one event, in the first and last chunks.
 #[wasm_bindgen_test]
-async fn a_read_past_the_bound_parameter_ceiling_is_served_from_every_chunk() {
+async fn a_type_wide_query_binds_one_parameter_per_item_and_is_served() {
     let store = store();
     store
-        .append(&[typed(0), typed(PARAMETER_WIDE_ITEMS - 1)], None)
+        .append(&[typed(0), typed(TYPE_WIDE_ITEMS - 1)], None)
         .await
         .expect("the seed lands");
 
-    let query = parameter_wide_query();
-    assert!(
-        CloudflareEventStore::planned_statement_count(&query) > 1,
-        "the arm axis says one statement here, so a plan of one means the \
-         parameter axis is not partitioning anything"
+    let query = type_wide_query(TYPE_WIDE_ITEMS);
+    assert_eq!(
+        CloudflareEventStore::planned_statement_count(&query),
+        3,
+        "a type-wide item binds one parameter, so only the arm axis cuts the plan"
     );
 
     let seen = positions(&store, &query).await;
@@ -341,6 +369,46 @@ async fn a_read_past_the_bound_parameter_ceiling_is_served_from_every_chunk() {
         "the first and last items of the query each match one event, and they \
          are in different chunks"
     );
+}
+
+/// One item past the expression depth the old tag chain hit, and one of the
+/// declared 1,024 tags, read and guarded.
+///
+/// The old rendering nested one `AND position IN (…)` per tag and was refused
+/// by `workerd` at 46. The event carries every tag the item names, so a read
+/// must return it and a guard must be violated by it.
+#[wasm_bindgen_test]
+async fn a_tag_wide_item_past_the_old_expression_depth_wall_is_served() {
+    for width in [46, 1_024] {
+        let store = store();
+        let landed = store
+            .append(
+                &[Event::new("Subject", &b"{}"[..])
+                    .expect("a valid event type")
+                    .with_tags(tag_set(width))],
+                None,
+            )
+            .await
+            .expect("the seed lands");
+        let query =
+            Query::from_item(QueryItem::tagged(tag_set(width)).expect("a valid query item"));
+
+        assert_eq!(
+            positions(&store, &query).await,
+            [landed.get()],
+            "an item of {width} tags matches the event carrying them"
+        );
+        let outcome = store
+            .append(
+                &[Event::new("Decided", &b"{}"[..]).expect("a valid event type")],
+                Some(&AppendCondition::new(query)),
+            )
+            .await;
+        assert!(
+            matches!(outcome, Err(AppendError::ConditionViolated(_))),
+            "a guard of {width} tags is answered, and violated: {outcome:?}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -374,6 +442,11 @@ async fn an_append_guard_past_the_compound_select_ceiling_is_not_refused() {
 }
 
 /// The parameter axis, as an append-condition guard.
+///
+/// Since ADR-0079 no guard crosses the parameter wall (see
+/// [`TYPE_WIDE_ITEMS`]): this one is 11 type-wide items, three statements cut
+/// on the arm axis. What it still rejects is a guard sent unpartitioned, which
+/// the shim refuses as `workerd` does, inside the append turn.
 #[wasm_bindgen_test]
 async fn an_append_guard_past_the_bound_parameter_ceiling_is_not_refused() {
     let store = store();
@@ -426,14 +499,22 @@ async fn a_wide_guard_answers_from_every_chunk_not_the_first() {
 
 /// The same question on the parameter axis, so neither partition is trusted on
 /// the other's evidence.
+///
+/// Since ADR-0079 its plan is cut on the arm axis (see [`TYPE_WIDE_ITEMS`]),
+/// and the only matching event is named by the last item, alone in the third
+/// statement.
 #[wasm_bindgen_test]
 async fn a_parameter_wide_guard_answers_from_every_chunk_not_the_first() {
     let store = store();
     store
-        .append(&[typed(PARAMETER_WIDE_ITEMS - 1)], None)
+        .append(&[typed(TYPE_WIDE_ITEMS - 1)], None)
         .await
         .expect("the seed lands");
 
+    assert!(
+        CloudflareEventStore::planned_statement_count(&parameter_wide_query()) > 1,
+        "at one statement a guard that folded only its first chunk would pass"
+    );
     let outcome = store
         .append(
             &[Event::new("Decided", &b"{}"[..]).expect("a valid event type")],
@@ -443,7 +524,7 @@ async fn a_parameter_wide_guard_answers_from_every_chunk_not_the_first() {
 
     assert!(
         matches!(outcome, Err(AppendError::ConditionViolated(_))),
-        "the matching event is named only by the last item, which the parameter \
-         partition puts in the last chunk: {outcome:?}"
+        "the matching event is named only by the last item, which the partition \
+         puts in the last chunk: {outcome:?}"
     );
 }

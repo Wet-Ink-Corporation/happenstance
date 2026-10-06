@@ -610,6 +610,10 @@ retry it inside the same `Retry` bound, mints ES-43, and supersedes
 ADR-0078 retires `happenstance-ladybug` on the owner's Weigh-In call
 (`wi-630032`): excluded from the workspace and kept in the tree as a frozen record, because its
 files are cited by line. It supersedes nothing.
+ADR-0079 is lane L6b's: on the `workerd` job's measurements, a `happenstance-cloudflare` query
+item binds a constant number of parameters through `json_each`, the two partition widths become
+`workerd`'s 5 and 90, and the test shim takes `workerd`'s four statement limits. It supersedes
+nothing, and answers the first item ADR-0052 left undecided: the adapters' widths need not agree.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -624,6 +628,7 @@ files are cited by line. It supersedes nothing.
 | ADR-0078 | [`kb-decision-0078`](../decisions/0078-happenstance-ladybug-is-retired.md) | happenstance-ladybug is retired — excluded from the workspace, kept in the tree as a frozen record | accepted | 17 | — |
 | — | [`kb-decision-wi-ff17f4`](../decisions/wi-ff17f4-ps-15-freeze-after-narrowing-to-commit-and.md) | PS-15 frozen narrowed to commit and reset; rollback non-normative (owner, Weigh-In) | accepted | 17 | — |
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
+| ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
 
 ## Adding a row
 

@@ -379,12 +379,16 @@ impl CloudflareEventStore {
     /// split across several.
     ///
     /// SQLite compiles a `UNION` of *n* arms as one compound `SELECT`, and
-    /// `SQLITE_MAX_COMPOUND_SELECT` defaults to **500** terms. A `Query` bounds
-    /// nothing by design — the specification requires every store to evaluate at
-    /// least 128 items and puts no ceiling above that — so a wide query is
-    /// **chunked and merged, never refused**: there is no query-item refusal
-    /// anywhere in this crate and no fourth [`StoreLimit`] variant to report one
-    /// through, because a query-item refusal is not an append outcome.
+    /// `workerd` sets `SQLITE_LIMIT_COMPOUND_SELECT` to **5** on every database
+    /// it opens. This is that wall exactly, because a compound-term count is
+    /// exact: measured through this adapter on two `workerd` releases and a
+    /// deployed object (`experiments/durable-object-limits/`, ADR-0079). A
+    /// `Query` bounds nothing by design — the specification requires every store
+    /// to evaluate at least 128 items and puts no ceiling above that — so a wide
+    /// query is **chunked and merged, never refused**: 128 items are 26
+    /// statements. There is no query-item refusal anywhere in this crate and no
+    /// fourth [`StoreLimit`] variant to report one through, because a query-item
+    /// refusal is not an append outcome.
     ///
     /// This is not one of the three ceilings under *The capacity limits this
     /// store declares* on the crate's front page, and it is deliberately not a
@@ -392,35 +396,36 @@ impl CloudflareEventStore {
     /// and names a `StoreLimit` to refuse it with, and this is a value the store
     /// accepts and plans differently. It is published for the reason the sibling
     /// publishes its own — a test that has to guess the boundary is a test that
-    /// stops crossing it — and because a caller pairing this adapter with
-    /// `happenstance-sqlite` should be able to compare the two numbers before
-    /// deploying rather than after.
+    /// stops crossing it — and so that a caller pairing this adapter with
+    /// `happenstance-sqlite` can see before deploying that the two differ.
     ///
-    /// It is **one of two** axes, and not the one that binds first on a query of
-    /// wide items: see
+    /// It is **one of two** axes, and on every arm this crate renders today it
+    /// is the one that binds first: see
     /// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](Self::MAX_QUERY_PARAMETERS_PER_STATEMENT).
-    pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 400;
+    pub const MAX_QUERY_ARMS_PER_STATEMENT: usize = 5;
 
-    /// How many bound parameters one query statement carries before the query is
-    /// split across several.
+    /// How many bound parameters one query statement's arms carry before the
+    /// query is split across several.
     ///
-    /// SQLite's `SQLITE_MAX_VARIABLE_NUMBER` is 32,766, and the translation binds
-    /// one parameter per tag and one per type of every item in a chunk. So this
-    /// and [`MAX_QUERY_ARMS_PER_STATEMENT`](Self::MAX_QUERY_ARMS_PER_STATEMENT)
-    /// are **independent** axes rather than two spellings of one width: 400 items
-    /// of a single tag each is 400 arms and 400 parameters, while the same 400
-    /// items at this store's declared `tags_per_event` of 1,024 apiece is still
-    /// 400 arms and **409,600** parameters. It sits below the wall with headroom
-    /// rather than at it, because an adapter that binds one extra parameter per
-    /// row should not be within rounding distance.
+    /// `workerd` sets `SQLITE_LIMIT_VARIABLE_NUMBER` to **100**, and the caller's
+    /// wrapper around a chunk binds up to five more — the read ceiling, `from`,
+    /// `to`, the page cursor and the `LIMIT`. So 90 sits below the wall with
+    /// headroom, and a compile-time assertion beside the wrapper holds this plus
+    /// the wrapper's share to the measured 100.
     ///
-    /// Both numbers are the sibling adapter's, and that is deliberate rather than
-    /// borrowed: they are properties of the SQLite underneath a Durable Object's
-    /// storage rather than of either adapter, so two adapters over one engine
-    /// disagreeing about them would be two guesses rather than one measurement.
-    /// The **merge** does diverge, and `query_sql`'s module documentation says
-    /// where and why.
-    pub const MAX_QUERY_PARAMETERS_PER_STATEMENT: usize = 30_000;
+    /// An arm binds a **constant** number of parameters — 0 to 3, by the item's
+    /// shape — because its tags and its types each travel as one JSON array.
+    /// Five arms therefore bind at most 15, and this axis does not bind first
+    /// today. It stays as the guard against a future arm shape that binds more,
+    /// and it is **independent** of the arm axis rather than a second spelling
+    /// of it.
+    ///
+    /// Both numbers are `workerd`'s, not the sibling adapter's:
+    /// `happenstance-sqlite` runs on SQLite's compiled defaults and partitions at
+    /// 400 arms and 30,000 parameters, and the two adapters need not agree
+    /// (ADR-0079). The **merge** diverges as well, and `query_sql`'s module
+    /// documentation says where and why.
+    pub const MAX_QUERY_PARAMETERS_PER_STATEMENT: usize = 90;
 
     /// How many statements one page of `query` will take.
     ///
@@ -675,9 +680,9 @@ impl CloudflareEventStore {
     /// `AppendError::Store` wrapping a raw driver string — a refusal at the
     /// pushdown limit, which is VT-23's named wrong implementation, on the path
     /// where `crates/happenstance-core/src/limits.rs` gives it no variant to be
-    /// honestly reported through. The conformance suite cannot reach it:
-    /// `MIN_SUPPORTED_QUERY_ITEMS` is 128 items at one tag each, which is 128
-    /// arms and 128 parameters, comfortably inside both walls.
+    /// honestly reported through. The conformance suite reaches it:
+    /// `MIN_SUPPORTED_QUERY_ITEMS` is 128 items, which is 26 statements here,
+    /// all synchronous `exec`s with nothing awaited, so the turn stays whole.
     fn evaluate(
         &self,
         condition: &AppendCondition,
@@ -1669,8 +1674,9 @@ fn drain_page(
 ///
 /// **A one-statement plan is the overwhelmingly common case and takes neither
 /// the sort nor the decode**, so the read this replaced is byte-identical for
-/// every query narrow enough to plan as one statement — which is every query any
-/// conformance rule builds. The consequence worth stating: a row whose
+/// every query narrow enough to plan as one statement: five items or fewer,
+/// which covers every scenario model this workspace has walked. VT-23's
+/// 128-item rule is 26 statements. The consequence worth stating: a row whose
 /// `position` column is not an integer at all ends the read one step earlier on
 /// a multi-statement plan than on a single-statement one, because the merge has
 /// to order by it. It ends the read either way; only the moment moves.
@@ -1700,13 +1706,12 @@ fn drain_plan(
 /// Orders, de-duplicates and truncates the rows gathered so far.
 ///
 /// Split out from [`drain_plan`] so that it can be *executed by a test*. It is
-/// otherwise reachable only through a plan of more than one statement, and
-/// nothing in the gate builds one: the conformance suite's widest query is
-/// `MIN_SUPPORTED_QUERY_ITEMS` items at one tag each, which is 128 arms and 128
-/// parameters, inside both ceilings by two orders of magnitude. A merge no test
-/// runs is dead code behind a green suite, which is the failure this workspace
-/// exists to retire — so the arithmetic lives here, generic over what it is
-/// carrying, and `query_sql`'s host tests drive it over integers.
+/// otherwise reachable only through a plan of more than one statement, which
+/// the conformance suite now builds: `MIN_SUPPORTED_QUERY_ITEMS`' 128 items
+/// are 26 statements at `workerd`'s five compound terms. The arithmetic still
+/// lives here, generic over what it is carrying, so that `query_sql`'s host
+/// tests can drive it over integers and name each wrong merge on its own
+/// rather than through the sum an end-to-end rule sees.
 ///
 /// `sort_by` rather than a negated key: a comparator has no value it cannot
 /// order, where negating the key is a panic in debug on `i64::MIN`. The sort is
@@ -1791,6 +1796,32 @@ fn render_read(
     })
     .collect()
 }
+
+/// The most bound parameters a caller's wrapper adds to one chunk of the plan.
+///
+/// [`render_chunk`] binds the ceiling, `from`, `to`, the page cursor and the
+/// `LIMIT`, which is five when every option is set; [`evaluate`]'s guard
+/// statement binds one. A chunk may therefore spend at most
+/// [`WORKERD_BOUND_PARAMETERS`] minus this, and the assertion below holds
+/// [`CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT`] to it.
+///
+/// [`evaluate`]: CloudflareEventStore::evaluate
+pub(crate) const MAX_WRAPPER_BINDINGS: usize = 5;
+
+/// The bound parameters one statement may carry inside a Durable Object.
+///
+/// `workerd` sets `SQLITE_LIMIT_VARIABLE_NUMBER` to 100 on every database it
+/// opens, measured by `harness/workerd/src/probe.rs` on two `workerd` releases
+/// and a deployed object (`experiments/durable-object-limits/results/`,
+/// ADR-0079). It is used only by the assertion below.
+pub(crate) const WORKERD_BOUND_PARAMETERS: usize = 100;
+
+// A chunk's parameters plus its widest wrapper fit inside a Durable Object's
+// statement, or every wide statement this store plans is one `workerd` refuses.
+const _: () = assert!(
+    CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT + MAX_WRAPPER_BINDINGS
+        <= WORKERD_BOUND_PARAMETERS
+);
 
 /// One statement of the plan: the chunk's own subquery, wrapped in the bounds.
 ///
@@ -4612,6 +4643,94 @@ mod read_path_tests {
         assert_eq!(decoded.event_type().as_str(), "SeatMapPublished");
         assert!(decoded.event.tags().is_empty());
     }
+
+    /// Whether an append guarded by `query` is refused as a conflict. Any other
+    /// refusal fails the test: a guard must answer, not error.
+    async fn guard_violated(store: &CloudflareEventStore, query: Query) -> bool {
+        let condition = happenstance_core::AppendCondition::new(query);
+        match store.append(&[event("Decided")], Some(&condition)).await {
+            Ok(_) => false,
+            Err(happenstance_core::AppendError::ConditionViolated(_)) => true,
+            Err(other) => panic!("the guard was refused rather than answered: {other:?}"),
+        }
+    }
+
+    /// One item of exactly `tags`.
+    fn tag_item(tags: &[&str]) -> Query {
+        Query::from_item(QueryItem::tagged(tag_set(tags)).expect("a valid item"))
+    }
+
+    /// A tag's text reaches `json_each` as a JSON string and comes back
+    /// byte-exactly: a quote, a backslash and a decomposed accent are matched
+    /// as themselves and never as their near misses. Through the one-tag arm,
+    /// which binds the text raw, and the several-tag arm, which escapes it.
+    #[wasm_bindgen_test]
+    async fn tags_with_json_metacharacters_match_exactly() {
+        let (_sql, store) = open();
+        let quoted = r#"k:"a\b""#;
+        let composed = "city:caf\u{e9}";
+        let decomposed = "city:cafe\u{301}";
+        let exact = store
+            .append(&[tagged("Alpha", &[quoted, composed])], None)
+            .await
+            .expect("the append lands");
+        let near_miss = store
+            .append(&[tagged("Alpha", &[r"k:a\b", decomposed])], None)
+            .await
+            .expect("the append lands");
+
+        for (query, expected) in [
+            (tag_item(&[quoted]), vec![exact]),
+            (tag_item(&[decomposed]), vec![near_miss]),
+            (tag_item(&[quoted, composed]), vec![exact]),
+            (tag_item(&[quoted, decomposed]), vec![]),
+        ] {
+            assert_eq!(
+                read_positions(&store, &query, ReadOptions::new()).await,
+                expected,
+                "{query:?}"
+            );
+        }
+
+        assert!(guard_violated(&store, tag_item(&[quoted, composed])).await);
+        assert!(!guard_violated(&store, tag_item(&[quoted, decomposed])).await);
+        assert!(guard_violated(&store, tag_item(&[decomposed])).await);
+    }
+
+    /// An item of the declared `tags_per_event` matches by superset: the event
+    /// carrying all of them, and not one carrying all but one, nor an item
+    /// with one foreign tag. Read and guard. Under the `AND position IN (…)`
+    /// chain this replaced, 46 tags exceeded `workerd`'s expression depth.
+    #[wasm_bindgen_test]
+    async fn an_item_of_the_declared_tag_ceiling_matches_by_superset() {
+        let (_sql, store) = open();
+        let wide = super::Ceilings::DECLARED.tags_per_event;
+        let names: Vec<String> = (0..wide).map(|n| format!("t:{n}")).collect();
+        let all: Vec<&str> = names.iter().map(String::as_str).collect();
+        let carrying_all = store
+            .append(&[tagged("Alpha", &all)], None)
+            .await
+            .expect("the declared ceiling is accepted");
+        store
+            .append(&[tagged("Alpha", &all[1..])], None)
+            .await
+            .expect("the append lands");
+        let mut foreign = all.clone();
+        foreign[0] = "t:foreign";
+
+        assert_eq!(
+            read_positions(&store, &tag_item(&all), ReadOptions::new()).await,
+            [carrying_all],
+            "all {wide} tags match the event carrying them, and not the one missing one"
+        );
+        assert_eq!(
+            read_positions(&store, &tag_item(&foreign), ReadOptions::new()).await,
+            [],
+            "one foreign tag matches nothing"
+        );
+        assert!(guard_violated(&store, tag_item(&all)).await);
+        assert!(!guard_violated(&store, tag_item(&foreign)).await);
+    }
 }
 
 /// The host half, reachable by a plain `cargo test -p happenstance-cloudflare`
@@ -4671,5 +4790,97 @@ mod source_chain_tests {
             ),
             "PartialBatch must chain to its cause via #[source], not just print it: {err}"
         );
+    }
+}
+
+/// The wrapper's share of `workerd`'s statement walls, on the host.
+///
+/// `query_sql`'s host tests price a chunk; these price what [`render_chunk`]
+/// wraps around it, which is the other half of every statement the read path
+/// issues.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod wrapper_tests {
+    use happenstance_core::{Query, QueryItem, ReadOptions, SequencePosition, Tag};
+
+    use super::{
+        Ceilings, CloudflareEventStore, MAX_WRAPPER_BINDINGS, WORKERD_BOUND_PARAMETERS,
+        render_chunk,
+    };
+    use crate::namespace::{TableNamespace, Tables};
+    use crate::query_sql;
+    use crate::sql_storage::SqlValue;
+
+    fn position(n: u64) -> SequencePosition {
+        SequencePosition::new(n).expect("a test position is non-zero")
+    }
+
+    /// Every option set: the most a page wraps a chunk in.
+    fn widest_options() -> ReadOptions {
+        ReadOptions::new()
+            .from(position(2))
+            .to(position(9))
+            .limit(3)
+    }
+
+    /// `MAX_WRAPPER_BINDINGS` is what the wrapper binds at its widest, so the
+    /// `const` assertion beside it is about the real statement.
+    #[test]
+    fn the_wrapper_binds_at_most_max_wrapper_bindings() {
+        for options in [widest_options(), widest_options().backwards()] {
+            let chunk = vec![SqlValue::Text("a:1".to_owned())];
+            let (_, bindings) = render_chunk(
+                &Tables::UNPREFIXED,
+                "SELECT position FROM event_tag WHERE tag = ?",
+                chunk,
+                options,
+                position(10),
+                Some(position(4)),
+                3,
+            );
+            assert_eq!(bindings.len() - 1, MAX_WRAPPER_BINDINGS);
+        }
+    }
+
+    /// Five of the widest arm, under the longest namespace and inside the
+    /// widest wrapper, against `workerd`'s 100,000-byte statement wall and its
+    /// 100 bound parameters.
+    #[test]
+    fn the_widest_statement_fits_workerds_text_wall() {
+        let namespace = TableNamespace::new(&"a".repeat(TableNamespace::MAX_LEN))
+            .expect("the longest namespace is valid");
+        let tables = Tables::namespaced(&namespace);
+        let arms = CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT;
+        let query = Query::from_items((0..arms).map(|item| {
+            let tags = (0..Ceilings::DECLARED.tags_per_event)
+                .map(|n| Tag::new(format!("k{item}:v{n}")).expect("a valid tag"))
+                .collect();
+            QueryItem::new([format!("A{item}"), format!("B{item}")], tags).expect("a valid item")
+        }))
+        .expect("a non-empty item list");
+
+        let plan = query_sql::chunks(
+            &tables,
+            &query,
+            arms,
+            CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        );
+        assert_eq!(plan.len(), 1, "the arm width is one statement");
+        for (matched, chunk) in plan {
+            let (sql, bindings) = render_chunk(
+                &tables,
+                &matched,
+                chunk,
+                widest_options(),
+                position(10),
+                Some(position(4)),
+                3,
+            );
+            assert!(sql.len() < 100_000, "{} bytes", sql.len());
+            assert!(
+                bindings.len() <= WORKERD_BOUND_PARAMETERS,
+                "{} bindings",
+                bindings.len()
+            );
+        }
     }
 }

@@ -109,16 +109,16 @@ compiled target's `--list` before the run starts.
 `worker::State::from(…)` → `state.storage().sql()` → `worker::SqlStorage::exec`,
 with real SQLite underneath. The *adapter* is unmodified; what is doubled is the
 runtime. So there is no isolate, no eviction, no hibernation, no event loop
-re-entering the object mid-`await`, and none of the platform's own storage
-ceilings.
+re-entering the object mid-`await`, and no row or database ceiling; it does
+take `workerd`'s four statement limits, which the shim sets when it opens.
 
 **`workerd` runs them too, outside the gate.** The `workerd` CI job, a sibling of
 the gate, runs every rule in a real Durable Object through `harness/workerd`.
 It runs under local `workerd` and again on an object deployed to Cloudflare. That
-covers the isolate, the I/O gate and the platform's SQLite limits, which the shim
-cannot. Those limits are far tighter than SQLite's defaults: 5 compound-`SELECT`
-terms, 100 bound parameters, and 100,000 bytes of statement
-(`experiments/durable-object-limits`). Eviction and hibernation are still not
+covers the isolate, the I/O gate and the platform's row and length limits, which
+the shim does not take. Its statement limits are far tighter than SQLite's
+defaults: 5 compound-`SELECT` terms, 100 bound parameters, and 100,000 bytes of
+statement (`experiments/durable-object-limits`). Eviction and hibernation are still not
 exercised. To give each fixture instance its own log inside one object, the
 harness uses `CloudflareEventStore::namespaced`.
 

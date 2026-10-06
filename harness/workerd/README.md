@@ -2,8 +2,9 @@
 
 Runs every event-store conformance rule against `happenstance-cloudflare` inside
 `workerd`, through a real Durable Object. The gate runs the same rules against a
-`node:sqlite` shim, which has none of the platform's SQLite limits, so this
-harness checks conformance on the real runtime. It also measures where that
+`node:sqlite` shim, which takes `workerd`'s four statement limits but none of the
+platform's other properties, so this harness checks conformance on the real
+runtime. It also measures where that
 runtime's SQLite refuses a statement. Never published.
 
 It is the `workerd` job in `.github/workflows/ci.yml`, a sibling of `gate`, and
