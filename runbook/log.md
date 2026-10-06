@@ -10,6 +10,27 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-06 — status-quo audit
+
+*Committed on `feature/intelligent-mendel-uef6ou`, on `1f92d08`.*
+No phase moved.
+
+A read-only audit compared the tree with the vision, the roadmap and ADR-0066. It is
+recorded as [`status-audit-2026-10-06.md`](../references/evaluation/status-audit-2026-10-06.md),
+together with an executive summary and its evidence. It decides nothing. No status
+row, exit box or ledger row changes. Its recommendations are the owner's to adopt:
+merge #35, enable Pages, decide whether sync stays inside 1.0 (D-1), recruit outside
+readers, and timebox the ES-11 spike.
+
+**Verified.** `cargo xtask ci` ran in a detached worktree at `1f92d08` with
+`HS_KB_BASE=origin/main`, because the clone is shallow. All checks passed:
+2,965 tests passed, 0 failed and 288 were ignored. The live-database suites were
+among the ignored tests, and their CI results were read instead. `cargo hack`,
+`cargo deny` and nightly were absent, so those steps skipped. This handover was not
+rewritten, and it is stale: it still describes #34 as unmerged.
+
+---
+
 ## 2026-09-30 — happenstance-ladybug retired
 
 *Uncommitted at writing; `lane/p17-retire-ladybug`.*

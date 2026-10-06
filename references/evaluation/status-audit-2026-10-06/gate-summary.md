@@ -1,0 +1,6 @@
+# Gate run (measured) — commit 1f92d08, isolated worktree, 2026-10-06
+- `cargo xtask ci` run 1: all REQUIRED steps up to "no accepted decision's body has changed" passed; that step failed ONLY because this cloud clone is shallow (environmental). 9m34s wall on 4 CPUs.
+- Run 2 with HS_KB_BASE=origin/main: **all checks passed, exit 0**. 31 required steps green (fmt, clippy -D warnings, tests, phase proof artefacts, 7 wasm32 steps incl. wasm32 run of conformance rules, docs x3 configs, spec-trace, conformance-suite lints, constitution consistency+examples compile, narrative docs checks, packaging of 7 publishable crates, workflow pinning, lint-kb).
+- SKIPPED (tool absent in this container, not failures): cargo-hack feature powerset, wasm32 feature powerset, cargo-deny licences/advisories, two nightly docs.rs builds.
+- Tests: 2,965 passed, 0 failed, 288 ignored (summed over `test result:` lines; panics in log are expected should_panic tests). Ignored include 24 tests needing live Postgres (Docker) and 12 needing a live Neon endpoint — NOT exercised here. Deployed-Cloudflare workerd leg also not exercised.
+- Examples run: course-subscriptions, transfers-on-sqlite, rebuilding-read-models, handles-and-quotas, telemetry-across-codecs — all exit 0. (tickets-over-http and outside-projection-adapter not run as binaries.)
