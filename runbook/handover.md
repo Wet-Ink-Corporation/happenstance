@@ -37,37 +37,24 @@ Object leg, and Docker for testcontainers Postgres are available.
 
 ## In flight
 
-**Lane L6b on `lane/p17-workerd-green`: the `workerd` job's fix. Uncommitted, left
-for review.** The owner answered D1–D8 of `.temper/plans/p17-l6b-workerd-green.md`
-on 2026-10-05; [ADR-0079](../.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md)
-records them.
-- A `happenstance-cloudflare` query item binds 0–3 parameters: its tags and types
-  each travel as one JSON array through `json_each(?)`.
-- `MAX_QUERY_ARMS_PER_STATEMENT` is 5 and `MAX_QUERY_PARAMETERS_PER_STATEMENT` is
-  90; `planned_statement_count` returns new values (128 one-tag items: 26).
-- The shim (`DurableObjectHost`) opens `node:sqlite` with `workerd`'s four statement
-  limits and fails closed, so the gate needs Node 24; the gate job gained
-  `actions/setup-node` at `"24"`.
-- Local `workerd`: 97 of 97 rules. The per-item wall is now one JSON parameter's
-  length: 8,527 tags of 255 B on 1.20260815.1.
-- The plan's Progress section has every red run.
+**Lane L6b merged green (#35, `6a3adf6a`, 2026-10-06).** A `happenstance-cloudflare`
+query item binds 0–3 parameters through `json_each(?)`
+([ADR-0079](../.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md));
+`MAX_QUERY_ARMS_PER_STATEMENT` is 5 and `MAX_QUERY_PARAMETERS_PER_STATEMENT` is 90;
+the shim enforces `workerd`'s four statement limits, so the gate runs Node 24.
+- CI run 37419423991: local `workerd` 97 of 97, the deployed object 96 of 96.
+- The deployed per-item wall is **32,514** max-length tags (8,527 locally);
+  `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-06.txt`.
+- The `workerd` exit criterion in `phases/17-breaking-window.md` is ticked.
 
-Phase 17 lanes L0 to L6a are merged (PRs #26–#28, #30–#32, #34), ladybug retired
-(#33), and the docs site landed (#29).
+Phase 17 lanes L0 to L6b are merged (PRs #26–#28, #30–#32, #34, #35), ladybug
+retired (#33), and the docs site landed (#29).
 
 ## Next action
 
-1. **Review and commit L6b, open its PR, and watch the `workerd` job.** Both legs
-   should run 97 of 97. Then:
-   - save the deployed probe as
-     `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-DD.txt`
-     and fill the README table's † cells;
-   - record the run URL in phase 17's session log;
-   - tick the `workerd` exit criterion in `phases/17-breaking-window.md`;
-   - check all three gate runners pass the wasm32 steps on Node 24.
-2. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
-   throwaway branch and watch the job go red with `no such rule`.
-3. The `0.4.0` trace table needs a hand row for `planned_statement_count`'s new
+1. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
+   throwaway branch and watch the `workerd` job go red with `no such rule`.
+2. The `0.4.0` trace table needs a hand row for `planned_statement_count`'s new
    values (ADR-0079), beside core's removed feature and the emitter renames.
 
 ## Waiting on the owner
