@@ -146,8 +146,8 @@ object through the `workerd` CI job. Each axis is bisected and the refusal above
 the largest accepted size is quoted verbatim, so the table names *which* limit
 refused rather than trusting the axis's label. Transcripts:
 [`results/run-workerd-local-2026-10-01.txt`](results/run-workerd-local-2026-10-01.txt);
-the deployed leg's is
-[`results/run-workerd-deployed-2026-10-02.txt`](results/run-workerd-deployed-2026-10-02.txt).
+the deployed leg's are
+[`results/run-workerd-deployed-2026-10-02.txt`](results/run-workerd-deployed-2026-10-02.txt) and, after L6b, [`…-2026-10-06.txt`](results/run-workerd-deployed-2026-10-06.txt).
 
 | Axis | Deployed Durable Object | `workerd` 1.20260815.1 | `workerd` 1.20261001.1 | The shim: SQLite's defaults, with the first four set to `workerd`'s since L6b |
 | --- | --- | --- | --- | --- |
@@ -156,11 +156,11 @@ the deployed leg's is
 | statement length | **100,000** B | **100,000** B | **100,000** B | 100,000 B (was 1,000,000,000 B) |
 | expression depth (`1+1+…` terms) | **100** | **100** | **100** | 100 (was 1,000) |
 | one row's payload | **8,388,637 B** | 2,199,995 B | 8,388,637 B | 1,000,000,000 B (M2A found no wall ≤ 8 MiB) |
-| adapter: query items, one tag each | **5**; after L6b, pending † | **5**; after L6b, no wall to 1,024 | **5** | unbounded: chunked at 5 since L6b, 400 before (`tests/wide_query_ceiling.rs`) |
-| adapter: append-condition items | **5**; after L6b, pending † | **5**; after L6b, no wall to 1,024 | **5** | unbounded: chunked at 5 since L6b, 400 before |
-| adapter: tags in one query item | **45**; after L6b, pending † | **45**; after L6b, no wall to 1,024 | **45** | not measured |
-| adapter: max-length (255 B) tags in one query item | pending † | after L6b: **8,527** | not measured | not measured |
-| `json_each` elements in one parameter | pending † | no wall to 100,000 | not measured | not measured |
+| adapter: query items, one tag each | **5**; after L6b, no wall to 1,024 | **5**; after L6b, no wall to 1,024 | **5** | unbounded: chunked at 5 since L6b, 400 before (`tests/wide_query_ceiling.rs`) |
+| adapter: append-condition items | **5**; after L6b, no wall to 1,024 | **5**; after L6b, no wall to 1,024 | **5** | unbounded: chunked at 5 since L6b, 400 before |
+| adapter: tags in one query item | **45**; after L6b, no wall to 1,024 | **45**; after L6b, no wall to 1,024 | **45** | not measured |
+| adapter: max-length (255 B) tags in one query item | after L6b: **32,514** | after L6b: **8,527** | not measured | not measured |
+| `json_each` elements in one parameter | no wall to 100,000 | no wall to 100,000 | not measured | not measured |
 
 **The finding.** The first four are `sqlite3_limit`s `workerd` sets on every
 database it opens, and they are the same on both releases. Each is far below
@@ -195,5 +195,5 @@ item is the length of one JSON parameter, `SQLITE_LIMIT_LENGTH`: 8,527 tags of
 255 bytes under `workerd` 1.20260815.1 (`string or blob too big`,
 [`results/run-workerd-local-2026-10-05.txt`](results/run-workerd-local-2026-10-05.txt)).
 On a deployed object, whose row wall puts its length limit at 8,388,637 B, the
-same arithmetic predicts about 32,500. The cells marked † are the deployed leg's
-to fill, from the `workerd` CI job's first run after L6b.
+same arithmetic predicted about 32,500; the deployed leg measured **32,514**
+(CI run 37419423991, [`results/run-workerd-deployed-2026-10-06.txt`](results/run-workerd-deployed-2026-10-06.txt)).

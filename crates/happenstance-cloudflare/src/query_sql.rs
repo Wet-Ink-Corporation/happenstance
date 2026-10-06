@@ -831,7 +831,7 @@ mod tests {
             assert_eq!(
                 total_arms(&plan),
                 items,
-                "a plan over {items} items of {tags} tags carries                  {} arms; a partition drops nothing",
+                "a plan over {items} items of {tags} tags carries {} arms; a partition drops nothing",
                 total_arms(&plan)
             );
         }
@@ -1054,7 +1054,7 @@ mod tests {
                         assert_eq!(
                             merge(&plan, backwards, want),
                             once,
-                            "incremental truncation must equal one truncation at the                              end (seed {seed}, backwards {backwards}, want {want})"
+                            "incremental truncation must equal one truncation at the end (seed {seed}, backwards {backwards}, want {want})"
                         );
                     }
                 }

@@ -272,7 +272,7 @@ tool passed over, and the renamed `#[doc(hidden)]` emitters. The tool does repor
 - [x] The `apply` record is accepted (ADR-0074).
 - [ ] Every open question phase 16 classified as breaking is answered or closed.
 - [ ] `0.4.0` is released and its semver findings are fully traced.
-- [ ] The `workerd` job exists, has been watched failing once, and the SQL-text
+- [x] The `workerd` job exists, has been watched failing once, and the SQL-text
       wall and partition widths are recorded as measured on `workerd`, locally
       and on a deployed Durable Object. (The minimal-versions job moved to 17b
       with ADR-0072.)
@@ -559,3 +559,19 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     transcript, the run URL and the exit-criterion tick wait for it.
   - The WF-11, CF-14 and CF-17 ledger bases are rewritten; their dispositions are
     unchanged.
+- 2026-10-06 — **L6b merged green (#35, `6a3adf6a`).** CI run 37419423991 on
+  `32ea2ada`
+  (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/37419423991/job/112125223626):
+  local `workerd` 97 of 97 rules and the probe; the deployed object 96 of 96, its
+  Worker deleted after. Every gate runner passed on Node 24.
+  - The deployed probe measured the per-item wall at **32,514** max-length tags,
+    against ADR-0079's prediction of about 32,500, and no wall to 1,024 items,
+    condition items or tags in one item, or to 100,000 `json_each` elements.
+    `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-06.txt`;
+    the README's † cells are filled.
+  - The `workerd` exit criterion is ticked: it was watched failing at L6a (run
+    36957404625) and both walls are recorded, locally and deployed.
+  - Two assertion messages in `query_sql.rs` lost their line continuations and
+    carried runs of spaces (already on main); fixed here (`wi-06b54f`).
+  - Still owed: the vacuity control, and the `0.4.0` trace table's hand row for
+    `planned_statement_count`.
