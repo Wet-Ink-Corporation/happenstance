@@ -209,6 +209,43 @@ not the same as what a user needed to be told.
   inside its `Retry` bound, per the entry above
   ([ADR-0077](.kb/decisions/0077-appenderror-busy.md), ES-43).
 
+- **BREAKING, behaviour only (`happenstance-sqlite`, `happenstance-postgres`):
+  a store runs its work on the runtime it is called on, and the runtime it was
+  built on is the fallback.** *Pending the acceptance of
+  [ADR-0081](.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md),
+  which is proposed; this entry leaves with the change if it is declined.*
+  Both stores in `happenstance-sqlite` and `PostgresEventStore` capture a tokio
+  `Handle` at construction, and used to prefer it at every use. A store that
+  outlived the runtime it was built in — a `static` initialised inside the first
+  `#[tokio::test]` is the usual shape — sent its work to that dead runtime, and
+  tokio cancelled it unrun:
+
+  - `happenstance-sqlite`: a `read` yielded one
+    `Err(SqliteEventStoreError::Worker(JoinError::Cancelled))` and ended, and
+    every `SqliteProjectionStore` method failed the same way. `append` and `head`
+    were unaffected, because they run inline.
+  - `happenstance-postgres`: every `PostgresEventStore` operation failed as
+    `Worker(JoinError::Cancelled)`, and with the capturing runtime alive but
+    undriven, a read hung until that runtime was dropped.
+
+  Each now prefers `Handle::try_current()` and falls back to the captured
+  handle only when the caller is on no runtime, which is what keeps the
+  concurrency family's bare-thread contenders working. `NoRuntime` keeps its
+  meaning: no runtime at construction and none at use. **No signature changes**,
+  so this compiles unchanged; what changes is which runtime runs a store's work.
+  A caller that relied on a store's work staying on the runtime it was built in,
+  while calling it from another, no longer gets that. On `happenstance-postgres`
+  the calling runtime now also needs tokio's time and I/O drivers
+  (`enable_all`), because `sqlx` acquires every connection under
+  `tokio::time::timeout`; a call from a runtime built without them, which used
+  to run on the captured runtime, now fails as `Worker(JoinError::Panic)`.
+
+  **Not fixed by this, on `happenstance-postgres`:** a pooled `sqlx` connection
+  opened on a runtime that has since been dropped is not seen as broken, and a
+  query on it ends in `PoolTimedOut` or does not finish. Open a `PgPool` on a
+  runtime that lives at least as long as the pool. ADR-0081 records the
+  measurements (`tests/runtime_seam.rs` in both crates).
+
 - **`happenstance-cloudflare` evaluates any query inside a real Durable Object.**
   `workerd` sets four statement limits on every database it opens: 5 compound
   `SELECT` terms, 100 bound parameters, 100,000-byte statements and an

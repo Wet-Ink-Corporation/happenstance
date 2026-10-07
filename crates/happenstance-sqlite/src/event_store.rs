@@ -246,16 +246,16 @@ pub struct SqliteEventStore {
     /// unlike a cached `rusqlite::Statement` or `Transaction<'_>`, both of which
     /// borrow the connection and are `!Send`. See [`SqliteReadStream`]'s docs.
     store_id: StoreId,
-    /// The runtime a read's `spawn_blocking` hops onto, captured here rather
-    /// than looked up at every poll.
+    /// The fallback runtime for a read's `spawn_blocking`, used only when the
+    /// poll is not executing on a runtime of its own, which is preferred.
     ///
-    /// ADR-0022 §9's decision, and the reason is the concurrency family: its
-    /// contenders are **bare OS threads** driving futures under the testkit's
-    /// own park-loop `block_on`, with no tokio context anywhere at poll time. A
-    /// store constructed inside the harness's runtime carries a handle out to
-    /// them; `Handle::try_current()` at poll would find nothing and every read
-    /// would fail as `NoRuntime` — a red family that is not about this
-    /// adapter's logic.
+    /// ADR-0081 put that order on ADR-0022 §9. Captured-first strands a store
+    /// that outlives the runtime it was built in (`tests/runtime_seam.rs`). The
+    /// fallback exists for the concurrency family: its contenders are **bare OS
+    /// threads** under the testkit's park-loop `block_on`, with no tokio context
+    /// at poll time, and a store constructed inside the harness's runtime
+    /// carries a handle out to them. Without it every read there would fail as
+    /// `NoRuntime`, a red family that is not about this adapter's logic.
     ///
     /// A [`Handle`] is `Clone`, `Send`, `Sync` and `Unpin`, so carrying one in
     /// the store, the cursor and the stream costs the shape assertions nothing.
@@ -503,8 +503,8 @@ impl SqliteEventStore {
 
     /// Pairs a connection with an incarnation already read off it.
     ///
-    /// The runtime handle is captured **here**, at construction, because this is
-    /// the point at which a caller is most likely to be inside one — and the
+    /// The fallback runtime handle is captured **here**, at construction, because
+    /// this is the point a caller is most likely to be inside one — and the
     /// concurrency family's contenders, which are bare OS threads, never are.
     fn with_store_id(connection: Connection, store_id: StoreId) -> Self {
         Self {
@@ -1950,8 +1950,8 @@ enum Ceiling {
 #[derive(Debug)]
 struct ReadCursor {
     connection: Arc<Mutex<Connection>>,
-    /// The runtime the store captured, carried so that every hop of this read
-    /// uses the same one. See [`SqliteEventStore`]'s field of the same name.
+    /// The runtime the store captured, carried for a hop that is polled with no
+    /// runtime of its own. See [`SqliteEventStore`]'s field of the same name.
     runtime: Option<Handle>,
     query: Query,
     options: ReadOptions,
@@ -2375,18 +2375,18 @@ impl Stream for SqliteReadStream {
                     // The deferred spawn. This is the line that could not have
                     // been written inside `read`.
                     //
-                    // The handle captured at construction is preferred, and
-                    // `Handle::try_current()` is the fallback — ADR-0022 §9's
-                    // decision, and the reason is that the concurrency family's
-                    // contenders are bare OS threads with no tokio context at
-                    // poll time. `NoRuntime` keeps a real meaning under it: it
-                    // is reachable only for a store both constructed *and*
-                    // driven with no runtime anywhere.
-                    let runtime = match cursor.runtime.clone() {
-                        Some(runtime) => runtime,
-                        None => match Handle::try_current() {
-                            Ok(runtime) => runtime,
-                            Err(err) => return Poll::Ready(Some(Err(err.into()))),
+                    // The runtime this poll executes on is preferred, the handle
+                    // captured at construction is the fallback: ADR-0081's
+                    // reordering of ADR-0022 §9, as captured-first stranded a store that
+                    // outlived its runtime (`tests/runtime_seam.rs`). The fallback
+                    // serves the concurrency family's bare-thread contenders, with
+                    // no tokio context at poll time. `NoRuntime` stays reachable,
+                    // for a store constructed *and* driven with no runtime at all.
+                    let runtime = match Handle::try_current() {
+                        Ok(runtime) => runtime,
+                        Err(err) => match cursor.runtime.clone() {
+                            Some(runtime) => runtime,
+                            None => return Poll::Ready(Some(Err(err.into()))),
                         },
                     };
                     this.state = ReadState::Fetching(runtime.spawn_blocking(move || {

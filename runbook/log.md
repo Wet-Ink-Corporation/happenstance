@@ -10,6 +10,22 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — ADR-0022 §9 reproduced; remedy B proposed (ADR-0081)
+
+*Committed on `lane/p17-runtime-seam`, on `3462bf8`.* Phase 17, lane L9. PR open.
+
+A store outliving the runtime it was built in reported `Worker(JoinError::Cancelled)`
+on `happenstance-sqlite` and `happenstance-postgres`. The stores now prefer the
+executing runtime; a behaviour change on two published crates, so ADR-0081 is
+`proposed` and the PR waits for the owner. The Postgres pool strand is not fixed and
+is documented.
+
+**Verified.** The temper gate, both crates' `runtime_seam` tests (Postgres live),
+Postgres conformance 108/108, `spec-trace`, `lints`, `lint-constitution`, `lint-kb`.
+The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — ES-17 frozen on `&[Event]` (ADR-0080)
 
 *Committed on `lane/p17-es17`, on `6235224`.* Phase 17, lane L7.

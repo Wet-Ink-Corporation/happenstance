@@ -66,7 +66,7 @@ source_paths:
   - crates/happenstance-sqlite/src/connection.rs
   - experiments/correlated-exists-guard/
   - crates/happenstance-sqlite/src/query_sql.rs
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-07
 ---
 
 # Two of ADR-0022's falsifiers have fired, a third cannot fire as written, and nobody has re-opened
@@ -271,3 +271,29 @@ close for §8 and §16" and "stays open for §9 alone, owned by phase 17". Closi
 a decision and the question it answers disagreeing about whether the question is open, so the
 status stays `accepted`, as it did on 2026-09-21 when §11 was answered. It closes when phase 17's
 reproduction decides §9, either way. Amended by hand in phase 16. No accepted decision was edited.
+
+**Amended 2026-10-07: §9 is reproduced, and answered by a proposed record.** Phase 17's lane L9
+wrote the reproduction this atom asked for, against both adapters that capture a runtime `Handle`:
+`crates/happenstance-sqlite/tests/runtime_seam.rs` and `crates/happenstance-postgres/tests/runtime_seam.rs`,
+the latter against a live Postgres. A store built inside one runtime and driven from another after
+the first was dropped reported `Worker(JoinError::Cancelled)` and never `NoRuntime`, so
+`kb-decision-0068`'s falsifier (*"if the reproduction shows the stranded read reporting `NoRuntime`
+after all"*) did not fire and the hazard is real. The SQLite read, every SQLite projection-store
+method, and every Postgres operation were stranded; `append` and `head` on SQLite were not, because
+they run inline.
+
+**This atom's prediction was half right.** It said a stranded read *"hangs or yields one
+cancelled-task item and terminates"*. It yields one cancelled item and terminates, on both
+adapters, deterministically and without a hang: tokio shuts a task spawned onto a shut-down runtime
+down unrun, and its `JoinHandle` completes at once. It hangs only in a shape this atom did not
+name, and only on Postgres: a capturing runtime that is alive but undriven, whose task queue nobody
+polls.
+
+`kb-decision-0081` (ADR-0081) answers §9 with remedy B, prefer the executing runtime and fall back
+to the captured handle, and classifies it as behavioural on two published crates, so `0.4.0` only.
+It also records what B cannot fix, a `sqlx` pool connection opened on a dropped runtime, as a
+documented obligation with an owner question attached. **ADR-0081 is proposed, pending the owner's
+call**, so this atom stays `accepted` and open, and `kb-decision-0022` is not touched. It closes for
+§9, its last open section, when ADR-0081 is accepted. The frontmatter is left as it was, apart from
+`last_reviewed`, because `references/adr/0068-adr-0022-sections-8-9-16-settled.md:29` cites this
+body by line. No accepted decision was edited.

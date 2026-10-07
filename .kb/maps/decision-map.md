@@ -618,6 +618,13 @@ ADR-0080 is lane L7's: on the two-build measurement ADR-0012's falsifier asked f
 `happenstance-cloudflare` with calibrated replica arms, `append` keeps `&[Event]` and ES-17 is
 frozen. It rests on ADR-0012 and ADR-0055 without superseding either, records what neither can
 say, and supersedes `kb-open-question-es-17-two-adapter-measurement-001`.
+ADR-0081, proposed, is lane L9's: ADR-0022 §9's reproduction, which ADR-0068 assigned to phase 17.
+A store built on one runtime and driven from another after the first is gone reported
+`Worker(JoinError::Cancelled)`, never `NoRuntime`, so the stores now prefer the executing runtime
+and fall back to the captured handle (remedy B), a behaviour change on `happenstance-sqlite` and
+`happenstance-postgres` for `0.4.0`. On acceptance it partly supersedes ADR-0022 at §9's
+"prefer it", the ADR-0065 shape, and `kb-decision-0022`'s row gains the annotation; until then that
+row is unchanged.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -634,6 +641,7 @@ say, and supersedes `kb-open-question-es-17-two-adapter-measurement-001`.
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
 | ADR-0080 | [`kb-decision-0080`](../decisions/0080-append-keeps-a-borrowed-batch.md) | append keeps its borrowed batch, and ES-17 is frozen on the two-build measurement | accepted | 17 | — |
+| ADR-0081 | [`kb-decision-0081`](../decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | A store hops onto the runtime it is called on, and the handle it captured is the fallback | proposed | 17 | — |
 
 ## Adding a row
 

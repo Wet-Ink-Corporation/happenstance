@@ -102,7 +102,7 @@ gave to this phase.
       `cloudflare-worker-feature-gate` was closed at phase 16: the crate has no
       features table to gate. And `adapter-version-lockstep-and-cf-32` was closed
       by ADR-0066's versioning section rather than sent on.
-- [ ] **ADR-0022 §9's reproduction** (ADR-0068). A store built on one runtime
+- [ ] **ADR-0022 §9's reproduction** (ADR-0068; reproduced, ADR-0081 `proposed`). A store built on one runtime
       and read after that runtime is gone, against both adapters that capture a
       runtime `Handle` at construction — `happenstance-sqlite`
       (`crates/happenstance-sqlite/src/event_store.rs:513`,
@@ -669,3 +669,25 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   stays unsealed), #44 (ADR-0084, the SQL seam, now also proposing a Postgres
   parameter-count check after a real gap was found) and #45 (ADR-0086, VT-6
   mint-once), each `proposed`.
+- 2026-10-07 — **L9: ADR-0022 §9 is reproduced, and its remedy is breaking**, on
+  `lane/p17-runtime-seam`, PR open and **not to be merged until the owner accepts
+  [ADR-0081](../../.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md)**,
+  which is `proposed`. A store built on one runtime and driven from another after
+  the first is dropped reported `Worker(JoinError::Cancelled)`, never `NoRuntime`:
+  a `happenstance-sqlite` read and every `SqliteProjectionStore` method, and every
+  `PostgresEventStore` operation (a read hung while the capturing runtime was alive
+  but undriven). Remedy B prefers `Handle::try_current()` and falls back to the
+  captured handle at four sites; no signature changes, so it is a behaviour change
+  on two published crates and rides `0.4.0`. ADR-0068's falsifier did not fire.
+  **Not fixed by B:** a pooled `sqlx` connection opened on a dropped runtime ends in
+  `PoolTimedOut` or hangs; ADR-0081 makes it a documented obligation and asks the
+  owner whether that is enough. The review added one disclosure: on Postgres the
+  calling runtime now needs tokio's time and I/O drivers. Tests:
+  `tests/runtime_seam.rs` in both crates (Postgres's `#[ignore]` and live, run by a
+  new list/run/assert trio in `live-postgres`). Verified: temper gate green
+  (`fbf30a6067548135`, before the merge of `main` and the disclosure); sqlite
+  `runtime_seam` 4/4, `concurrency` 10/10, `read` 20/20; Postgres live
+  `runtime_seam` 4/4 six times and `postgres_conformance` 108/108;
+  `spec-trace`, `lints`, `lint-constitution`, `lint-kb`. `temper:rust-reviewer`
+  found no blocker or major on this tree, reported in prose, because its verdict
+  JSON binds to the main checkout's tree rather than this worktree.

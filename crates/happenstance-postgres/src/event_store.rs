@@ -181,7 +181,7 @@ pub struct PostgresEventStore {
     /// benign race is two handles reading the same committed row and one
     /// `set` losing, which costs a round trip and changes no value.
     store_id: Arc<OnceLock<StoreId>>,
-    /// The runtime every operation hops onto, captured at construction.
+    /// The runtime an operation hops onto when its caller is executing on none.
     ///
     /// # Why a store needs this at all
     ///
@@ -194,10 +194,10 @@ pub struct PostgresEventStore {
     /// bridge, every rule in that family panics inside `sqlx`'s `missing_rt`,
     /// which is exactly what the first run of it did.
     ///
-    /// Captured here rather than looked up per call because a store is
-    /// *constructed* inside the harness's runtime and *used* outside it. The
-    /// same shape `happenstance-sqlite` carries, for the same reason one layer
-    /// down.
+    /// Captured at construction as the **fallback**, because a store is built
+    /// inside the harness's runtime and used outside it; the executing runtime
+    /// is preferred (ADR-0081, reordering ADR-0022 §9; `tests/runtime_seam.rs`). The same
+    /// shape `happenstance-sqlite` carries, for the same reason one layer down.
     ///
     /// # Why `spawn` and not `Handle::enter`
     ///
@@ -353,18 +353,18 @@ impl PostgresEventStore {
 
     /// The runtime this store's work runs on.
     ///
-    /// The handle captured at construction first, then the caller's current one,
-    /// and only then an error. The second chance matters: a store built outside
-    /// a runtime and used inside one is a legitimate wiring order.
+    /// The caller's current runtime first, then the handle captured at construction,
+    /// and only then an error. Current-first is ADR-0081's, on ADR-0022 §9: a store that
+    /// outlives its runtime hops onto the live one, not the dead one's closed tasks.
     ///
     /// # Errors
     ///
     /// [`PostgresEventStoreError::NoRuntime`] when there is no runtime in either
     /// place.
     fn runtime(&self) -> Result<Handle, PostgresEventStoreError> {
-        self.runtime
-            .clone()
-            .or_else(|| Handle::try_current().ok())
+        Handle::try_current()
+            .ok()
+            .or_else(|| self.runtime.clone())
             .ok_or(PostgresEventStoreError::NoRuntime)
     }
 

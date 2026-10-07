@@ -3102,9 +3102,9 @@ in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
 its ceiling is sampled there — `Ceiling::Unsampled` at
 `crates/happenstance-sqlite/src/event_store.rs:1364` is the state the first poll
 resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
-to the call site: the store captures a `tokio::runtime::Handle` at construction
-and falls back to `Handle::try_current`, so the lazy spawn has a runtime to hop
-onto even under the concurrency family's bare OS threads, and
+to the call site, and ADR-0081 (proposed) reorders it: `Handle::try_current` first, then
+a `tokio::runtime::Handle` captured at construction, so the lazy spawn prefers
+the polling runtime yet has one under the concurrency family's bare threads, and
 `SqliteEventStoreError::NoRuntime` keeps a reachable meaning instead of becoming
 dead code. Laziness is
 therefore **permitted and never required**, and building a stream and never
