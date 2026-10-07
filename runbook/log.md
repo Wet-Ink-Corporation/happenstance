@@ -10,6 +10,20 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — the deployed `workerd` leg retries a Durable Object reset
+
+*Committed on `lane/p17-workerd-reset`, on `3462bf8`.* Phase 17.
+
+PR #46 merged as `3462bf8`. Cloudflare's `500 Durable Object reset because its code
+was updated.` failed one rule on #44 and on #46; the deployed leg now retries it
+once on a fresh object, as it already did `Worker not found.`
+
+**Verified.** vitest on `test/platform-miss.test.ts` (red 1 of 6, then 6 of 6),
+`spec-trace`, `lints` and `lint-kb`. No Rust changed; the full `cargo xtask ci` was
+not run.
+
+---
+
 ## 2026-10-07 — ES-17 frozen on `&[Event]` (ADR-0080)
 
 *Committed on `lane/p17-es17`, on `6235224`.* Phase 17, lane L7.
