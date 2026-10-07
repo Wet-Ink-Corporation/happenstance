@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-runtime-seam`, on `3462bf8` (`main`, where PR #46 merged). 2026-10-07.
+`lane/p17-runtime-seam`, on `12540a7` (`main`, where PR #47 merged). 2026-10-07.
 
 ## Where things are
 
@@ -37,7 +37,8 @@ Neon failure does.
 An unattended overnight session (2026-10-07) is working the phase 17 queue.
 - **Merged:** #41 (`4fbfefa`, the vacuity control's record and `wi-13bd3b`), #42
   (`6235224`, the guard-plan assertion), #46 (`3462bf8`, L7: ES-17 frozen on
-  `&[Event]` by ADR-0080).
+  `&[Event]` by ADR-0080), #47 (`12540a7`, the deployed `workerd` leg retries a
+  Durable Object reset).
 - **This PR (open, not to merge until the owner accepts ADR-0081):** L9 —
   ADR-0022 §9 reproduced; stores prefer the runtime they are called on.
 - **Open for the owner** (each a `proposed` record): #43 ADR-0083 (codec stays
@@ -46,9 +47,7 @@ An unattended overnight session (2026-10-07) is working the phase 17 queue.
 - **Also open:** #47, the deployed `workerd` leg retries a Durable Object reset.
 - **In flight:** L10 (`ProjectionId`), Neon's `push` narrowing, L8 last.
 - **Pre-existing:** the testkit's racing-mutant flake under load; the default-features
-  doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link; the
-  deployed `workerd` leg does not retry "Durable Object reset because its code was
-  updated".
+  doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link.
 
 ## Next action
 
