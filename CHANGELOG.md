@@ -336,6 +336,17 @@ not the same as what a user needed to be told.
   conformance rule can see this, because the suite runs against one endpoint
   ([ADR-0075](.kb/decisions/0075-the-projection-ports-1-0-clauses.md), PS-38).
 
+- **`EventStore::append` keeps taking a borrowed batch, `&[Event]`, and that is
+  now a promise.** No API changed. ES-17 was provisional on one measurement:
+  whether taking `Vec<Event>` instead would make an append materially cheaper.
+  That measurement has now been taken on `happenstance-cloudflare`, the one
+  adapter that copies each payload into a row value it owns. At a batch of 128,
+  with 1 to 64 tags and payloads up to 16 KiB, owning the batch saved two heap
+  allocations per event and no time that could be told from noise. A caller
+  that resends the same batch after a refusal would instead have paid a clone
+  on every attempt. ES-17 is `[FROZEN]`, so from `1.0.0` changing it is a major
+  release ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md)).
+
 ### Removed
 
 - **BREAKING (`happenstance-core`): the empty `unstable-projection` feature is

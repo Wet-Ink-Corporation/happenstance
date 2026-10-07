@@ -1,0 +1,58 @@
+# Deliberately outside the workspace, for the reasons
+# `experiments/event-clone-allocations/Cargo.toml` gives in full: the empty
+# `[workspace]` table stops cargo adopting this crate as a member, so the root
+# `members` list, the root `Cargo.lock` and `cargo xtask ci` never see it (CF-34:
+# a benchmark may not be part of the conformance bar).
+#
+# The counting allocator is the second reason, and here it is borrowed rather
+# than re-written. `event-clone-allocations`'s `lib.rs` installs
+# `counting::Counting` as the `#[global_allocator]` of every binary that links
+# it, so depending on it by path is how this crate gets the same instrument —
+# one copy of the one `unsafe impl GlobalAlloc` in the repository, not two. That
+# is also why this crate writes no `unsafe` of its own.
+[workspace]
+
+[package]
+name = "append-batch-ownership"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract at the pinned tree. `memory` because the host-side control is the
+# real `MemoryEventStore`, calibrated against before its replica is trusted.
+happenstance-core = { path = "../../crates/happenstance-core", features = [
+    "std",
+    "memory",
+] }
+# The instrument: a pass-through counting allocator over `System` (on wasm32,
+# `System` is the target's dlmalloc), plus `measure` and `snapshot`.
+event-clone-allocations = { path = "../event-clone-allocations" }
+futures-core = "0.3"
+
+# The subject. Only on the target it runs on: the Durable Object host shim
+# evaluates JavaScript and has nothing to evaluate it with on the host.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+happenstance-cloudflare = { path = "../../crates/happenstance-cloudflare" }
+
+# This crate's own `Cargo.lock` is resolved fresh, because it is outside the
+# workspace, and unpinned cargo picked `worker 0.8.7` and `wasm-bindgen 0.2.129`.
+# The lock was therefore resolved once with temporary `=` requirements on
+# `wasm-bindgen-test 0.3.76`, `worker 0.8.5` and `wasm-bindgen 0.2.126` (the
+# family pins itself with `=`, so `cargo update --precise` cannot move one member
+# at a time), and the manifest put back to carets, which those locked versions
+# satisfy. They are the versions the workspace lock holds at the base commit: `worker 0.8.5`, whose
+# `sql.rs:126-130` is copy 3 of the payload, and `wasm-bindgen 0.2.126`, which
+# the installed `wasm-bindgen-test-runner` must match exactly.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+# What `run.sh` times on the host, stated rather than defaulted, and the same
+# settings `event-clone-allocations` states less its `panic` key, which
+# wasm32-unknown-unknown does not honour. The wasm32 leg is built with the
+# same profile (`cargo test --release --target wasm32-unknown-unknown`).
+[profile.release]
+opt-level = 3
+debug = false
+lto = false
+codegen-units = 16

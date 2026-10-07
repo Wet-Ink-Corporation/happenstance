@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 203 clause IDs, of which 196 are normative:
-**152 `[FROZEN]`**, **32 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+**153 `[FROZEN]`**, **31 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -3564,13 +3564,15 @@ async fn append(&self, events: &[Event], condition: Option<&AppendCondition>)
 
 `append` MUST continue to take `events: &[Event]`.
 
-**[PROVISIONAL — falsified by a measurement on a real adapter showing the
-per-event clone is a material fraction of append cost. The named measurement is
-the SQLite adapter's multi-row insert benchmark, in the phase that builds it. A
-positive result changes the signature to take `Vec<Event>` **and** obliges the
-contract to give callers a cheap way to keep a copy for retry.]**
+`[FROZEN]` — by [ADR-0080](../.kb/decisions/0080-append-keeps-a-borrowed-batch.md), at
+phase 17, on the two-build measurement ADR-0012's falsifier asked for, taken on
+`happenstance-cloudflare`, the shipped adapter that copies the payload into an owned
+row (`experiments/append-batch-ownership/`). At VT-24's batch of 128, 1 to 64 tags
+and payloads to 16 KiB, an owned batch saved two heap operations per event and no
+time a rule written before the run could tell from noise: 0 of 9 cells fired.
+Reopened by a `workerd` run where allocation dominates, or a larger realistic payload.
 
-An owning adapter must clone — `memory.rs:388-400` does. The consequence nobody
+An owning adapter must clone — `memory.rs:402-413` does. The consequence nobody
 had written down is that `Event::into_parts` (`event.rs:404-427`) is unreachable
 from any trait impl, so its doc comment — which read "Decomposes the event,
 avoiding a clone in adapter write paths" — was **false as written**. This
@@ -3585,14 +3587,12 @@ every future edit to that comment — the reason the sentence was wrong is
 structural, not a slip, and an adapter author reading a clone-avoidance promise
 would go looking for a method they cannot call.
 
-The borrow wins on three grounds. `Event`'s expensive fields are `Bytes`
-(`event.rs:323`, `:325`), so a clone bumps a refcount rather than copying the
-payload; the remaining cost is one `Box<str>` and one boxed tag slice, bounded by
-the tag count. A rejected append clones **nothing** — `memory.rs:377-383` returns
-before the `extend` — and rejection is the routine outcome under contention. And
-`ConditionViolated` obliges the caller to keep its events across the call, so
-by-value would move the clone from the adapter's success path to the caller's
-every path.
+The borrow wins on three grounds. `Event`'s payload fields are `Bytes`
+(`event.rs:323`, `:325`), so a clone bumps a refcount; the rest costs `t + 2` heap
+operations — the type, the boxed tag slice and one per tag. A rejected append
+clones **nothing** — `memory.rs:386-397` returns before the `extend`. And a raw
+caller resending one batch after `ConditionViolated` would clone on every attempt
+under by-value; the typed loop rebuilds its batch per attempt (`command.rs:468`).
 
 - **Rule:** `append_preserves_event_payload` — the round-trip
   that catches a lossy clone.
@@ -9793,11 +9793,11 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|---|---|---|
 | §2.1–§2.6 value types | `VT` | 34 | 25 | 8 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 43 | 35 | 7 | 1 | 0 |
+| §3 `EventStore` | `ES` | 43 | 36 | 6 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 38 | 26 | 4 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **203** | **152** | **32** | **12** | **7** |
+| **Total** | | **203** | **153** | **31** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9877,7 +9877,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-14 | FROZEN | `read_limit_truncates`, `read_backwards_from_with_limit`, `limit_applies_acros… | E2E-12, E2E-13 |
 | ES-15 | FROZEN | `duplicate_items_do_not_duplicate_events`, `query_item_order_does_not_change_t… | E2E-32 |
 | ES-16 | FROZEN | `read_to_is_inclusive`, `read_from_and_to_bound_a_closed_window`, `read_to_und… | E2E-11 |
-| ES-17 | PROVISIONAL | `append_preserves_event_payload` | E2E-36, E2E-39 |
+| ES-17 | FROZEN | `append_preserves_event_payload` | E2E-36, E2E-39 |
 | ES-18 | FROZEN | `append_is_atomic`, `condition_rejection_leaves_store_unchanged`, `append_is_a… | E2E-39, E2E-48, E2E-07 |
 | ES-19 | FROZEN | `append_returns_last_written_position`, `batch_positions_follow_slice_order`, … | E2E-13, E2E-23 |
 | ES-20 | FROZEN | `append_rejects_empty_batch`, `empty_batch_is_refused_before_the_condition_is_… | E2E-06 |

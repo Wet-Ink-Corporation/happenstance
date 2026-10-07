@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-guard-plan`, on `4fbfefa` (`main`, where PR #41 merged). 2026-10-07.
+`lane/p17-es17`, on `6235224` (`main`, where PR #42 merged). 2026-10-07.
 
 ## Where things are
 
@@ -34,23 +34,25 @@ Neon failure does.
 
 ## In flight
 
-An unattended overnight session (2026-10-07) is working the phase 17 queue in
-order, one PR per item.
-- **Merged:** #41 (`4fbfefa`): the vacuity control's record (draft PR #40, run
-  37570009097, red by name on both `workerd` legs, closed unmerged) and
-  `wi-13bd3b`'s `declared_excludes` fixes.
-- **This PR:** the guard-plan `LIST SUBQUERY` assertion (ADR-0068 §16, limb 1); the
-  falsifier did not fire.
-- **Next, in flight:** L7's measurement, `experiments/append-batch-ownership/`.
-- **A pre-existing flake** in `happenstance-testkit`'s
-  `the_concurrency_rules_reject_exactly_what_they_claim` (the racing mutants'
-  yield-bounded rendezvous) turns the local gate red under load. It is recorded in
-  the phase log; fixing it rewrites a test instrument, which is the owner's call.
+An unattended overnight session (2026-10-07) is working the phase 17 queue.
+- **Merged:** #41 (`4fbfefa`, the vacuity control's record and `wi-13bd3b`), #42
+  (`6235224`, the guard-plan assertion).
+- **This PR:** L7 — ES-17 frozen on `&[Event]` by ADR-0080, on a committed
+  measurement.
+- **Open for the owner** (each a `proposed` record): #43 ADR-0083 (codec stays
+  unsealed), #44 ADR-0084 (the SQL seam is final; proposes a Postgres
+  parameter-count check), #45 ADR-0086 (Postgres and Neon keep mint-once).
+- **In flight:** L9 (ADR-0022 §9's reproduction and a remedy, `proposed`), then L10
+  (`ProjectionId`, planned), Neon's `push` narrowing, L8 last.
+- **Pre-existing:** the testkit's racing-mutant flake under load; the default-features
+  doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link; the
+  deployed `workerd` leg does not retry "Durable Object reset because its code was
+  updated".
 
 ## Next action
 
-1. L7 (ES-17), L9 (ADR-0022 §9), L10 (`ProjectionId`), the breaking open
-   questions, VT-6, then L8's Neon fence spike last, then the `0.4.0` trace table.
+1. L9's PR (open, `proposed`), L10, the Neon `push` narrowing, L8's fence spike,
+   then the `0.4.0` trace table and the exit pass.
 
 ## Waiting on the owner
 

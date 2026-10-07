@@ -523,7 +523,8 @@ own partial supersession of ADR-0007),
 `kb-open-question-es-17-two-adapter-measurement-001` (added 2026-08-17 — ADR-0012's falsifier item
 1 asks for two builds of one SQLite adapter differing only in `append`'s batch ownership; the
 phase-8 append-condition experiment measured three strategies against the same `&[Event]` signature
-instead, and nothing currently scheduled produces the two-build evidence),
+instead, and nothing currently scheduled produces the two-build evidence. **Superseded** 2026-10-07
+by `kb-decision-0080`, which took the measurement on `happenstance-cloudflare` and froze ES-17),
 `kb-open-question-workerd-runner-absent-001` (added 2026-08-20 — the whole Cloudflare conformance
 suite runs on `wasm32-unknown-unknown` under `wasm-bindgen-test-runner` against a `node:sqlite`
 shim, never under `workerd`; ADR-0023 records the exclusion as an escalated, not a rejected,
