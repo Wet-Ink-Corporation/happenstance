@@ -495,7 +495,8 @@ fn members(root: &Path) -> Result<Vec<Member>> {
     // it is laid out: `happenstance-ladybug` still sits under `crates/` as a
     // frozen record (ADR-0078), `-p` on it is an error from cargo, and its
     // manifest is not read at all.
-    let excluded: Vec<PathBuf> = declared_excludes(&text)?
+    let excluded: Vec<PathBuf> = declared_excludes(&text)
+        .with_context(|| format!("failed to read the `exclude` key of {}", manifest.display()))?
         .iter()
         .map(|rel| root.join(rel))
         .collect();
@@ -631,7 +632,9 @@ fn declared_member_roots(manifest: &str) -> Option<BTreeSet<String>> {
 /// the start of a line: an `exclude` under another table, a comment, or a value
 /// that merely contains the word is not taken for it, and a manifest with no
 /// workspace `exclude` key excludes nothing. The array may span several lines
-/// and carry `#` comments.
+/// and carry `#` comments. What a textual reader cannot see: a quoted key
+/// (`"exclude" = …`) is no key to it, and a `#` or `]` inside a quoted entry is
+/// read as a comment or the array's end. No path in this workspace has either.
 ///
 /// # Errors
 ///
@@ -1174,22 +1177,33 @@ mod tests {
     /// silence. A key that is present and unreadable is an error.
     #[test]
     fn an_exclude_key_that_is_not_a_closed_array_is_an_error() {
-        for value in ["\"crates/old\"", "[\"crates/old\"", "", "]\"crates/old\"["] {
+        let not_an_array = "is not `= [`";
+        let never_closed = "is never closed";
+        for (value, expected) in [
+            ("\"crates/old\"", not_an_array),
+            ("", not_an_array),
+            ("]\"crates/old\"[", not_an_array),
+            ("[\"crates/old\"", never_closed),
+        ] {
             let manifest = format!("[workspace]\nmembers = [\"crates/*\"]\nexclude = {value}\n");
+            let error = declared_excludes(&manifest)
+                .expect_err(&format!("`exclude = {value}` was read without an error"));
             assert!(
-                declared_excludes(&manifest).is_err(),
-                "`exclude = {value}` was read without an error"
+                error.to_string().contains(expected),
+                "`exclude = {value}` failed for the wrong reason: {error}"
             );
         }
+        let error = declared_excludes("[workspace]\nexclude\n")
+            .expect_err("an `exclude` key with no `=` was read without an error");
         assert!(
-            declared_excludes("[workspace]\nexclude\n").is_err(),
-            "an `exclude` key with no `=` was read without an error"
+            error.to_string().contains(not_an_array),
+            "wrong reason: {error}"
         );
     }
 
     #[test]
     fn a_multi_line_exclude_array_is_read() {
-        let manifest = "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\n  \"crates/old\",\n  # a comment line\n  \"crates/older/\",\n]\nresolver = \"3\"\n";
+        let manifest = "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\n  \"crates/old\",\n  # a comment line, see [x]\n  \"crates/older/\",\n]\nresolver = \"3\"\n";
         assert_eq!(
             declared_excludes(manifest).expect("a multi-line array is valid TOML"),
             ["crates/old", "crates/older"]
