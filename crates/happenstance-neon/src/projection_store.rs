@@ -212,11 +212,11 @@ impl NeonWriteBatch {
     /// # Parameter count
     ///
     /// The values must match the placeholders `sql` uses, one for one. Nothing
-    /// counts them here. The endpoint sees them only at `commit` or `reset`
-    /// ([`ProjectionStore`]), and refuses there as [`CommitError::Store`] or
-    /// [`ResetError::Store`], with neither the batch's statements nor the
-    /// checkpoint moved. Whether it refuses a surplus value is **unmeasured**
-    /// (ADR-0084).
+    /// counts them here; the endpoint sees them only at `commit` or `reset`
+    /// ([`ProjectionStore`]). What it refuses is [`CommitError::Store`] or
+    /// [`ResetError::Store`], and nothing moves. **Which mismatches it refuses is
+    /// unmeasured** (ADR-0084): do not rely on a surplus value being refused,
+    /// because one may commit.
     pub fn push(&mut self, sql: &'static str, params: Vec<serde_json::Value>) {
         self.push_raw_sql(SqlStatement::with_params(sql, params));
     }
