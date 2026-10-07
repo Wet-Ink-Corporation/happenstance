@@ -86,7 +86,9 @@ ADR-0012 (`:93-160`) already foreclosed the other two shapes: an `EventBatch` ne
 2. **The rule fixed before the run did not fire.** At batch 128, tags 1, 8 and 64, payload 64 B,
    1 KiB and 16 KiB, `Vec`-backed: O1 would have had to beat B1 by more than 10% with its median
    below B1's first quartile in one cell. **0 of 9 did.** The largest apparent saving, 11.5%, sat
-   inside B1's interquartile range, and a placebo of identical work moved medians by up to 19.6%.
+   inside B1's interquartile range. The clock's noise rests on the bimodal 64-tag samples and on a
+   re-run moving which out-of-region cells fire; the static regime (equal allocation counts, not
+   identical work) moved medians by up to 19.6%, consistent with that but not proof of it.
    B1 is borrowed with one Rust copy per payload, not the best a borrowed batch can do:
    `worker` 0.8.5's `SqlStorage::exec_raw` (`sql.rs:220`) binds from the borrow with no Rust copy,
    fewer than O1. O1 failed against a weaker borrowed arm than exists, so the freeze is the more
@@ -99,10 +101,12 @@ ADR-0012 (`:93-160`) already foreclosed the other two shapes: an `EventBatch` ne
 4. **Item 5 points the other way.** In a k = 8 contended run (36 attempts, 8 commits), a raw
    caller resending one batch under `Vec<Event>` pays **+90–95% heap operations** over `&[Event]`,
    and its clone turns O1's one saving back into a copy. A typed-layer caller saves 2,048
-   operations a run, 0.2–3.8%, and nothing on a refusal.
+   operations a run and nothing on a refusal. The 0.2–3.8% is that difference's share of a
+   simplified run (a fixed batch and a one-statement fence); the real command loop also reads,
+   decodes, decides and encodes per attempt, so it is an upper bound on the share.
 5. **ES-17's text is corrected line for line**: the falsifier naming the SQLite multi-row insert
    benchmark is replaced by this outcome and the reopening conditions; the clone cost is `t + 2`;
-   the cited clone is `memory.rs:402-413` and the early return `:386-397`.
+   the cited clone is `memory.rs:402-414` and the early return `:386-398`.
 6. **ES-7 is not frozen here.** It is `freeze-by-17b` since ADR-0072, on the `trait-variant`
    caret question, which this measurement does not touch.
 
@@ -123,7 +127,8 @@ ADR-0012 (`:93-160`) already foreclosed the other two shapes: an `EventBatch` ne
 ## Not measured
 
 `workerd` or a deployed object; Postgres; SQLite and Neon (null by construction); the adapter's
-own `evaluate`; the compensating discard; effects under a ~20% clock noise floor; an `exec_raw`
+own `evaluate`; the compensating discard; effects the clock does not resolve (bimodal samples, a
+re-run moving which cells fire; ~20% or less); an `exec_raw`
 arm. Two of the 63 cells outside the decision region fired — batch 128, 8 tags, 256 KiB at 14.9%
 (neighbours −8.1% and −15.9%), and batch 1, 8 tags, 64 B at 13.8% — and a reviewer's re-run fired
 at different ones (batch 1, 256 KiB, at 1 and 8 tags), which marks them as noise.

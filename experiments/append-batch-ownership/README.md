@@ -17,8 +17,8 @@ threshold cannot be fitted to the result. Nothing below this section was known
 when it was written.
 
 **That claim is self-attested.** This directory was untracked until it was
-committed, and this file's modification time (05:39Z on the run day) is after the
-raw outputs' (05:26–05:31Z), because the verdict below was written into the same
+committed, and the README's modification time was 05:39Z when the verdict was
+written (on the run day), after the raw outputs' (05:26–05:31Z), because the verdict below was written into the same
 file afterwards. Nothing in the repository proves the section came first. The
 earliest records of the rule are outside this directory, and both precede the
 first raw output by 27 minutes:
@@ -87,8 +87,12 @@ written after it.*
 more than 10% with its median below B1's first quartile
 ([`results/realistic-point.md`](results/realistic-point.md)). The largest
 apparent saving in the region, 11.5% (64 tags, 64 B), had O1's median inside
-B1's IQR. The static-regime placebo shows medians of identical work moving by up
-to 19.6%, so it was not noise the rule should have counted.
+B1's IQR. The 64-tag samples are bimodal in every arm, and a reviewer's re-run
+fired at different out-of-region cells than this one, so a gap of that size is
+within what the clock moves here. (The static regime, where O1 and B1 make equal
+allocation counts, shows gaps up to 19.6%; it is an allocation-count control,
+not identical work, so it is consistent with that reading rather than proof of
+it — corrected on review.)
 
 The deterministic numbers say the same thing more plainly
 ([`results/allocations.md`](results/allocations.md)):
@@ -109,7 +113,10 @@ cut against item 5. A raw caller that resends under an owned `append` pays a
 clone on every attempt, refusals included: **+90–95% heap ops** over borrowed on
 Cloudflare. The clone also keeps the refcount above one, so O1's one saving turns
 back into a copy. A typed-layer caller, which rebuilds every attempt, saves 2 ops
-per *committed* event and nothing on a refusal.
+per *committed* event and nothing on a refusal: 0.2–3.8% of the simplified run
+measured, which builds a fixed batch and fences with one statement. The real
+command loop also reads, decodes, decides and encodes per attempt, so that share
+is an upper bound.
 
 **Recommended follow-up, not this measurement's to make:** bind through
 `SqlStorage::exec_raw` (`worker-0.8.5/src/sql.rs:220`) inside
@@ -199,8 +206,11 @@ wasm32 and `Instant` on the host. Quartiles are nearest-rank.
   one-tag `Fence`, the same single statement in every arm.
 * **The compensating discard** on a failed batch; no measured batch fails.
 * **A clock finer than the noise.** At 64 tags every arm's samples are bimodal
-  (near 70 ms and near 97–100 ms), and the placebo moves medians by up to ~20%.
-  Effects below that are visible only in the allocation counts.
+  (near 70 ms and near 97–100 ms), and a re-run moves which out-of-region cells
+  fire; effects of ~20% or less are not resolved in time and are visible only in
+  the allocation counts. (The static regime's gaps of up to 19.6% are an
+  allocation-count control, not identical work, so they do not set that floor
+  by themselves.)
 
 ## Running it
 
@@ -224,3 +234,8 @@ exact-count assertions in `tests/host.rs` failed under the default parallel
 harness. `run.sh` still passes `--test-threads=1`, because the lock keeps tests
 out of each other's regions but not the harness's own threads. On wasm32 there is
 one thread and the question does not arise.
+
+The `region::hold` lock and the F8 bytes assertion in the host tests were added
+after the recorded run, so the `results/raw` conformance logs (05:26Z) predate
+both. The measured code paths are unchanged: `Region::measure` delegates to
+`counting::measure`, and `run.sh` used `--test-threads=1`.

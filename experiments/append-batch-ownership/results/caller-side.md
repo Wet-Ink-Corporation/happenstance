@@ -35,7 +35,13 @@ repetition (asserted). Batch 128, payload 1 KiB, `Vec` regime.
 * **Typed-layer retry: owned saves exactly 2,048 heap ops** (`B1Rebuild` −
   `O1Rebuild`) = 8 commits × 128 events × 2 buffers. Refused attempts write
   nothing in either shape, so they save nothing. Against a run of 52–1,266
-  thousand heap ops that is 0.2–3.8%.
+  thousand heap ops that is 0.2–3.8% — **of this simplified run**, not of a
+  measured typed-layer retry. `B1Rebuild` and `O1Rebuild` build a fixed batch
+  each attempt and fence with one statement; the real typed command loop also
+  reads, decodes, decides and encodes on every attempt. The 2,048-op difference
+  isolates the append shape, so it stands; the percentage is an **upper bound**
+  on its share, because the real loop does more work per attempt and the same
+  2,048 ops are a smaller share of it.
 
 Median wall time per contended run (µs) [Q1, Q3]:
 

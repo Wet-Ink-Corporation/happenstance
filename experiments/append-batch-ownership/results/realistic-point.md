@@ -37,26 +37,36 @@ The rule (README, written before the run) fires in a cell only if
 | 8 | 16 KiB | 12,780 | 12,727 | 12,432 | 12,541 |
 | 64 | 16 KiB | 73,398 | 100,160 | 101,152 | 98,733 |
 
-## How noisy the clock is here: two controls the sweep carries for free
+## How noisy the clock is here: what the sweep carries, and what it does not show
 
 **The 64-tag rows are bimodal.** Every arm's samples at 64 tags cluster near
 70 ms and near 97–100 ms (see any 64-tag row's Q1 and Q3), so a median can jump
 between the two modes. That is why the 64-tag medians move by ±30% between arms
 whose allocation counts differ by 0.6%.
 
-**The static regime is a placebo.** There, O1's `Vec::from(Bytes)` must copy, and
-O1 makes *exactly* B1's heap operations and bytes in all 36 static points (checked
-row by row). Any O1-vs-B1 difference there is noise. At batch 128 it reaches
-**19.6%** (64 tags, 64 B: B1 91,617 [71,234, 102,497], O1 73,681) and 12.5%
-(1 tag, 256 KiB), and in neither case is O1's median below B1's Q1. That is the
-case the IQR clause was written for.
+**The static regime is an allocation-count control, not a placebo.** There,
+O1's `Vec::from(Bytes)` must copy, and O1 makes *exactly* B1's heap operations
+and bytes in all 36 static points (checked row by row). Equal counts are not
+identical work: B1 copies each payload with `to_vec`, while O1 consumes the
+event's parts and converts `Bytes` into `Vec`, so the two arms run different
+code to the same allocations. The O1-vs-B1 gap there reaches **19.6%** at batch
+128 (64 tags, 64 B: B1 91,617 [71,234, 102,497], O1 73,681) and 12.5% (1 tag,
+256 KiB), and in neither case is O1's median below B1's Q1 — but that gap cannot
+by itself establish a ~20% clock-noise floor, because some of it may be the
+difference in work.
+
+*Corrected after the run, on review:* this section first called the static
+regime a placebo of identical work and read its gap as the noise floor. The
+noise argument rests on two other things: the bimodal 64-tag clusters above, and
+the re-run below moving which out-of-region cells fire with no change in what
+the arms allocate. The static gap is consistent with that, not proof of it.
 
 ## Outside the decision cells, stated rather than buried
 
 The sweep prints the rule's verdict for all 72 points (`rule:` rows in
 `raw/cloudflare-sweep.txt`), 63 of them outside the nine decision cells. Both
 conditions held in **two** of those 63, both in the `Vec` regime; no static
-(placebo) row fired. These are every `fires=true` row outside the region:
+(allocation-count control) row fired. These are every `fires=true` row outside the region:
 
 | batch | tags | payload | B1 median [Q1, Q3] µs | O1 median µs | saving |
 | ---: | ---: | ---: | --- | ---: | ---: |
@@ -73,7 +83,7 @@ neighbours at batch 128:
 | 64 | 256 KiB | 148,481 [139,120, 179,859] | 172,156 [139,215, 178,715] | −15.9% |
 
 Its two neighbours went the other way by similar amounts, and the static
-placebo at the same payload showed 12.5% and 8.9% with identical work. The
+regime at the same payload showed 12.5% and 8.9% with equal allocation counts. The
 batch-1 cell is a single event whose O1 saves exactly 2 of B1's 59 heap
 operations (57 against 59) in an append of about 130 µs.
 

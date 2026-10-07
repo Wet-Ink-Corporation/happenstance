@@ -9,8 +9,10 @@
 //! binary allocates while it runs.
 //!
 //! The lock holds a [`Region`], a zero-sized handle whose only method is the
-//! measurement, rather than guarding `()` beside it: a test cannot count without
-//! holding the lock (OWN-12). The static is the one place the rule "global
+//! measurement, rather than guarding `()` beside it: a test that counts through
+//! [`Region`] cannot do so without holding the lock (OWN-12). Counting does not
+//! have to go through it — `measured::measure` remains, for the single-threaded
+//! wasm32 leg. The static is the one place the rule "global
 //! counters, so one reader at a time" can live, because the counters themselves
 //! are a global in another crate (ARC-09). It does not silence the test
 //! harness's own threads, which still allocate when a test finishes or the next

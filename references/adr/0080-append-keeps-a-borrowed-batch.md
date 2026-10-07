@@ -118,9 +118,9 @@ Recorded in the experiment's README before the first measuring run (Weigh-In `wi
 threshold could not be fitted to the result.
 
 **That precedence is self-attested.** The experiment directory was untracked until it was
-committed, and the README's modification time (05:39Z) is after the raw outputs' (05:26–05:31Z),
-because the verdict was written into the same file afterwards; nothing in the repository proves
-the rule came first. The earliest records of it are outside the directory, and both are 27
+committed, and the README's modification time was 05:39Z when the verdict was written, after the
+raw outputs' (05:26–05:31Z), because the verdict was written into the same file afterwards;
+nothing in the repository proves the rule came first. The earliest records of it are outside the directory, and both are 27
 minutes older than the first raw output. One is the lane brief's suggested rule
 (`.temper/plans/p17-es17-brief.md`, "Decision rule", last written 04:59:41Z, not committed):
 *"Freeze `&[Event]` if, at the realistic point (batch 128, any tag count, payload ≤ 16 KiB,
@@ -166,9 +166,13 @@ freeze is more robust for it, not less. `exec_raw` was not measured as an arm (�
 
 The largest apparent saving, 11.5%, had O1's median inside B1's interquartile range. Two controls
 the sweep carries say why that clause was needed. The 64-tag rows are bimodal in every arm (near
-70 ms and near 97–100 ms), so a median can jump between modes. And the static regime is a placebo:
+70 ms and near 97–100 ms), so a median can jump between modes. And the out-of-region cells that
+fire move between runs (§8). The static regime is an allocation-count control, not a placebo:
 there O1 makes exactly B1's heap operations and bytes at all 36 points, yet its median moved by up
-to 19.6% (64 tags, 64 B), never below B1's first quartile.
+to 19.6% (64 tags, 64 B), never below B1's first quartile. Equal counts are not identical work — B1
+copies with `to_vec`, O1 consumes the event's parts and converts `Bytes` into `Vec` — so that gap
+is consistent with the clock's noise but cannot establish a noise floor by itself; the bimodal
+clusters and the re-run do (corrected on review).
 
 **The deterministic numbers say the same thing more plainly.** Heap operations per append, batch
 128, identical in all 21 repetitions of every row:
@@ -197,8 +201,10 @@ A raw caller that resends under an owned `append` pays **+90–95% heap operatio
 borrowed shape, and more bytes (1,890,736 against 1,437,616 at one tag), because its clone keeps
 the refcount above one and O1's one saving turns back into a copy — paid on all 36 attempts,
 including the 28 that write nothing. A caller that rebuilds its batch per attempt saves exactly
-2,048 operations (8 commits × 128 events × 2 buffers), 0.2–3.8% of the run, and nothing on a
-refusal. No caller's median time separated from its counterpart's. On the reference store, where
+2,048 operations (8 commits × 128 events × 2 buffers), and nothing on a refusal. That is
+0.2–3.8% of the run measured, which builds a fixed batch and fences with one statement; the real
+typed command loop also reads, decodes, decides and encodes on every attempt, so the 2,048 isolates
+the append shape and the percentage is an upper bound on its share of a real typed-layer retry. No caller's median time separated from its counterpart's. On the reference store, where
 the clone *is* the write path and which ADR-0012 rules out as unrepresentative, the raw owned
 caller was 4.2–6.6× slower and the rebuilding owned caller 2–11% faster: the ceiling on what
 ownership could buy, and a ceiling the representative adapter does not approach.
@@ -253,8 +259,8 @@ saving under `Vec<Event>` was 2 operations per committed event and no measurable
    shape that cannot fire it, is gone from the clause.
 3. **The clause's stale prose is corrected, line for line.** The clone cost reads `t + 2` heap
    operations rather than "one `Box<str>` and one boxed tag slice"; the clone it cites is at
-   `crates/happenstance-core/src/memory.rs:402-413` (was `:388-400`), the early return at
-   `:386-397` (was `:377-383`); and the third ground is stated for the raw caller, with the typed
+   `crates/happenstance-core/src/memory.rs:402-414` (was `:388-400`), the early return at
+   `:386-398` (was `:377-383`); and the third ground is stated for the raw caller, with the typed
    loop's per-attempt rebuild cited.
 4. **No API changes.** No rule changes either: `append_preserves_event_payload` passes under
    either shape and stays ES-17's rule, because ownership is a cost question a conformance rule
@@ -275,16 +281,18 @@ saving under `Vec<Event>` was 2 operations per committed event and no measurable
 - **The adapter's own `evaluate`.** The contention scenario's condition is a one-tag fence, the
   same single statement in every arm.
 - **The compensating discard** on a failed batch; no measured batch fails.
-- **Anything under the clock's noise floor.** The placebo moves medians by up to about 20%, so
-  effects below that are visible only in the allocation counts, which is why those are reported.
+- **Anything under the clock's noise floor.** The 64-tag samples are bimodal and a re-run moves
+  which out-of-region cells fire, so effects of about 20% or less are visible only in the
+  allocation counts, which is why those are reported. The static regime's gaps (up to 19.6%) are
+  an allocation-count control, not identical work, and do not set that floor by themselves.
 - **An `exec_raw` arm** (§4): the strongest borrowed shape, binding from the borrow with no Rust
   copy. Named as the follow-up (§10), not measured.
 - **Cells outside the decision region as decision points.** The sweep prints the rule for all 72
   points; 63 lie outside the nine cells, and both conditions held in two of them, both `Vec`
-  regime, no static placebo row among them. At batch 128, 8 tags, 256 KiB: B1 48,823
+  regime, no static-regime row among them. At batch 128, 8 tags, 256 KiB: B1 48,823
   [41,796, 50,088] µs against O1 41,570, a 14.9% saving, with its neighbours going the other way
-  by similar amounts (−8.1% at one tag, −15.9% at 64) and the static placebo at the same payload
-  moving 12.5% and 8.9% on identical work. At batch 1, 8 tags, 64 B: B1 130.5 [112.8, 144.4] µs
+  by similar amounts (−8.1% at one tag, −15.9% at 64) and the static regime at the same payload
+  moving 12.5% and 8.9% on equal allocation counts. At batch 1, 8 tags, 64 B: B1 130.5 [112.8, 144.4] µs
   against O1 112.5, a 13.8% saving on a single event whose arms differ by 2 of 59 heap operations.
   An independent reviewer's re-run of the sweep (its rows are not committed) fired at different
   cells — batch 1, 256 KiB, at 1 tag (19.5%) and at 8 tags (10.4%) — and not at batch 128, 8 tags,

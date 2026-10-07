@@ -3572,7 +3572,7 @@ and payloads to 16 KiB, an owned batch saved two heap operations per event and n
 time a rule written before the run could tell from noise: 0 of 9 cells fired.
 Reopened by a `workerd` run where allocation dominates, or a larger realistic payload.
 
-An owning adapter must clone — `memory.rs:402-413` does. The consequence nobody
+An owning adapter must clone — `memory.rs:402-414` does. The consequence nobody
 had written down is that `Event::into_parts` (`event.rs:404-427`) is unreachable
 from any trait impl, so its doc comment — which read "Decomposes the event,
 avoiding a clone in adapter write paths" — was **false as written**. This
@@ -3590,7 +3590,7 @@ would go looking for a method they cannot call.
 The borrow wins on three grounds. `Event`'s payload fields are `Bytes`
 (`event.rs:323`, `:325`), so a clone bumps a refcount; the rest costs `t + 2` heap
 operations — the type, the boxed tag slice and one per tag. A rejected append
-clones **nothing** — `memory.rs:386-397` returns before the `extend`. And a raw
+clones **nothing** — `memory.rs:386-398` returns before the `extend`. And a raw
 caller resending one batch after `ConditionViolated` would clone on every attempt
 under by-value; the typed loop rebuilds its batch per attempt (`command.rs:468`).
 

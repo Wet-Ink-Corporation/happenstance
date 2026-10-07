@@ -26,7 +26,7 @@ use append_batch_ownership::contention::{self, Attempt, CONTENDERS};
 use append_batch_ownership::measured::{Counts, measure};
 use append_batch_ownership::poll::now_or_never;
 use append_batch_ownership::stats::{Summary, now_us};
-use happenstance_core::{Event, EventStore, SequencePosition};
+use happenstance_core::{Event, EventStore, InvalidTag, SequencePosition};
 use wasm_bindgen_test::{console_log, wasm_bindgen_test};
 
 const WARMUP: usize = 3;
@@ -235,11 +235,34 @@ fn salt(contender: usize) -> usize {
     contender * 1000
 }
 
-fn attempt_outcome(outcome: Result<SequencePosition, ArmError>) -> Attempt<ArmError> {
+/// Why a contended run stopped early. Every variant is a defect in the
+/// experiment, reported rather than panicked on inside the run.
+enum Stopped {
+    /// An arm failed for a reason other than its condition.
+    Arm(ArmError),
+    /// The boundary tag did not parse, so no fence could be built.
+    BoundaryTag(InvalidTag),
+    /// The schedule named a contender with no batch.
+    NoSuchContender(usize),
+}
+
+// Written out rather than derived: a derived `Debug` does not count as reading
+// the fields, and this is the only place they are read.
+impl std::fmt::Debug for Stopped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Arm(error) => write!(f, "an arm failed: {error:?}"),
+            Self::BoundaryTag(invalid) => write!(f, "the boundary tag is invalid: {invalid:?}"),
+            Self::NoSuchContender(contender) => write!(f, "no batch for contender {contender}"),
+        }
+    }
+}
+
+fn attempt_outcome(outcome: Result<SequencePosition, ArmError>) -> Attempt<Stopped> {
     match outcome {
         Ok(position) => Attempt::Committed(position),
         Err(ArmError::Conflict(_)) => Attempt::Refused,
-        Err(other) => Attempt::Failed(other),
+        Err(other) => Attempt::Failed(Stopped::Arm(other)),
     }
 }
 
@@ -252,11 +275,12 @@ fn contended_once(arms: &Arms, caller: Caller, shape: Shape) -> (Counts, f64, co
     let start = now_us();
     let (tally, counts) = measure(|| {
         contention::run(|contender, decided_at| {
-            let Ok(fence) = Fence::on_boundary(decided_at) else {
-                return Attempt::Failed(ArmError::Row("boundary tag"));
+            let fence = match Fence::on_boundary(decided_at) {
+                Ok(fence) => fence,
+                Err(invalid) => return Attempt::Failed(Stopped::BoundaryTag(invalid)),
             };
             let Some(mine) = held.get(contender) else {
-                return Attempt::Failed(ArmError::Row("no such contender"));
+                return Attempt::Failed(Stopped::NoSuchContender(contender));
             };
             let rebuilt = || batch::build(shape, salt(contender)).expect("builds");
             attempt_outcome(match caller {
