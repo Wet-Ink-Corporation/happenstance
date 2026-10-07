@@ -9,11 +9,15 @@ every read the same transport dispatched before it has been answered**:
 The record this feeds is ADR-0087 (`proposed`, superseding ADR-0061), whichever
 way the result goes.
 
-**Status: pre-registered, no run yet.** Everything under "Decision rule" below
-was written on 2026-10-07, before the first trial ran, and has not been edited
-since a row existed. That ordering is **self-attested**: nothing but the commit
-history vouches for it, as with `wi-95d2b2`. `results/raw/` is empty until the
-first attempt.
+**Status: pre-registered, amended once, no counted run yet.** The decision
+rule below was first written on 2026-10-07, before any trial ran. It was
+amended the same day, after a review and before the first **counted** run; the
+amendment and its reason are recorded under "Amendment, before the first
+counted run", and the rule below is the amended one. One attempt ran before the
+amendment, under the old rule. It is a **pilot**, excluded from the tally
+whatever it shows. The ordering is **self-attested**: nothing but the commit
+history vouches for it, as with `wi-95d2b2`. `results/raw/` holds no counted
+attempt yet.
 
 ## The instrument
 
@@ -33,14 +37,43 @@ append or the `before` read failing.
 4. append a late event the scope matches;
 5. drain the stream.
 
-A trial is **`red`** when the drained set differs from `before` (positions and
-events, in order) or contains the late event; **`pass`** otherwise; **`error`**
-when the first poll, the append or the drain returned an error.
+Each trial gets one outcome, decided in this order:
 
-* Shape `es11` — `read_result_is_stable_under_concurrent_append`: one seeded
-  `Seeded`, late `Later`.
-* Shape `es12` — `query_items_share_one_snapshot`: seeded `Alpha` and `Omega`, a
-  two-item query, late `Omega` matching the second item.
+* **`anchor`**: `before` did not hold exactly the seeded events at the positions
+  their appends returned (1 event for `es11`, 2 for `es12`). This is the rule's
+  own anchor assertion. Every read carries the visibility frontier, which CI has
+  seen hide committed rows, so a lagged `before` can differ from the drain with
+  no race in the window. Nothing the window shows is judged against it.
+* **`error`**: the first poll, the append or the drain returned an error.
+* **`red`**: the drain contains the late event (`reason: late_in_drained`), or
+  it differs from `before`, compared by positions and events in order
+  (`reason: drained_ne_before`). These are the rule's two assertions, in that
+  order.
+* **`pass`** otherwise.
+
+* Shape `es11` follows `read_result_is_stable_under_concurrent_append`: one
+  seeded `Seeded` and a late `Later`.
+* Shape `es12` follows `query_items_share_one_snapshot`: seeded `Alpha` and
+  `Omega`, a two-item query, and a late `Omega` matching the second item.
+
+**The shapes follow the rules. They are not copies of them.** The differences:
+
+* The ES-11 rule seeds **three** events with distinct tags on a **fresh**
+  fixture and reads `Query::all()`. The `es11` shape seeds **one** event and
+  reads with a query scoped by the trial's tag, on **one schema shared** by every
+  trial of the attempt. So the rule's snapshot covers the whole log, and the
+  sweep's covers one tag's rows in a log that grows by about 2,500 events per
+  attempt.
+* The ES-12 rule's two items are **type-only** (`Alpha`, `Omega`, no tags). The
+  `es12` shape's items carry the trial's tag as well, for the same scoping
+  reason.
+* Neither rule anchors on `before` the way this sweep scores it. The rules
+  **assert** the anchor and fail the test. The sweep records an `anchor`
+  outcome and goes on.
+
+So a sweep result speaks to the race on this shape, and it carries over to the
+rules only by argument. The argument: the fence orders an append against a
+read, and neither the query's breadth nor the schema's age enters that.
 
 **Two arms**, same binary, same client, same endpoint, one migrated schema:
 
@@ -53,51 +86,87 @@ Arms and shapes are interleaved per iteration, the order of the four cells
 rotated by one each iteration, so drift in the endpoint falls on both arms alike.
 
 **One row per trial**, a JSON object on one line prefixed `ES11-SWEEP `:
-`run, attempt, iter, arm, shape, outcome, error, before_n, drained_n,
+`schema` (2 since the amendment), `run, attempt, iter, arm, shape, outcome,
+reason, error, seeded_n, before_complete, before_n, drained_n,
 late_in_drained`, and client-side times in microseconds from the trial's start:
 `t_read_dispatch_us, t_read_send_us, t_read_answer_us, t_append_call_us,
 t_append_dispatch_us, t_append_send_us, t_append_answer_us, fence_wait_us`.
-*Dispatch* is `round_trip` being called, *send* the spawned task handing the
-request to the client, *answer* the task ending. One `ES11-SWEEP-META` row per
-attempt carries the run, the attempt and the commit SHA. No host and no
-credential is in any row.
+*Dispatch* is `round_trip` being called, *send* the spawned task about to hand
+the request to `hyper`, and *answer* the task ending. *Send* is taken **before**
+`hyper` and its HTTP/2 connection, so the order in which two requests' frames
+reached the wire is not recorded. Any reordering inside `hyper` or `h2` shows up
+as C2 below, not C1. Every round trip is bounded at 30 s by the test transport
+(`ROUND_TRIP_TIMEOUT`). One that hits the bound is an `error`, and its read is
+settled, so a hung read cannot hold the next append back indefinitely.
+
+One `ES11-SWEEP-META` row per attempt carries the run, the attempt and the
+commit SHA. No host and no credential is in any row.
 
 ## Decision rule
 
-Written before the first run. Self-attested. Applied mechanically by `run.sh`.
+Written before the first run, and amended before the first counted run (see
+"Amendment, before the first counted run"). Self-attested. Applied mechanically
+by `run.sh`.
 
-**Size.** 250 trials per arm per shape per job attempt — 1,000 trials per
-attempt. At most **3 attempts**, pooled. An attempt whose extracted row count is
-not exactly 1,000 is **void** (truncated log or lost rows) and is excluded from
-the pool, and the void is reported. `error` rows are reported and are neither
-`pass` nor `red`; an attempt with more than 25 `error` rows is void.
+**Size.** 250 trials per arm per shape per job attempt, so 1,000 trials per
+attempt. Only rows of `schema` 2 are judged. An attempt whose rows lack it is
+the pilot's and is excluded. So is the pilot attempt by name (run
+`37591126575`, attempt 1).
+
+**Void attempts.** An attempt is **void**, excluded from the pool and reported
+as void, when any of these holds:
+
+* its extracted row count is not exactly 1,000 (a truncated log or lost rows);
+* it has more than 25 `error` rows;
+* it has more than **50 `anchor` rows** (5% of the attempt);
+* its log does not carry exactly **one** result line (`... ok` or
+  `... FAILED`) for each of the two racing rules (V1 below).
+
+**Pooling.** Valid attempts are pooled in attempt order (run ID, then attempt
+number, both numeric), and only the **first 3** are pooled. A valid attempt
+after the third is reported and not pooled, whatever it shows.
+
+**What counts.** A trial counts as `red` only when its `before` was complete.
+`anchor` and `error` rows are reported, per arm and shape, and are neither
+`pass` nor `red`. They are left out of every N below. A judged trial is a
+`pass` or a `red`.
 
 **The instrument is live** if the pooled `baseline` arm shows **at least 3**
-`red` trials (both shapes together). If it shows fewer after 3 non-void
-attempts — 1,500 baseline trials — the verdict is **inconclusive: the race was
-not reproduced at this N**. It is reported to the owner and nothing is claimed.
+`red` trials (both shapes together). If it shows fewer after 3 pooled
+attempts, about 1,500 judged baseline trials, the verdict is **inconclusive:
+the race was not reproduced at this N**. It is reported to the owner and
+nothing is claimed.
 
 **The fence works** if all three hold:
 
 * the instrument is live;
 * the pooled `fence` arm has **0 `red`** trials, of any class;
 * V1: the conformance rules `read_result_is_stable_under_concurrent_append` and
-  `query_items_share_one_snapshot` are green in every attempt in which they ran.
+  `query_items_share_one_snapshot` are green in every pooled attempt. Each
+  pooled attempt carries one result line per rule, so V1 cannot pass on zero
+  lines.
 
 The record then quotes the counts per arm and shape, the rule-of-three 95% upper
-bound for the fence arm (3 / N per shape and pooled: 0.6% per shape at N = 500,
-0.3% pooled at N = 1,000), and the baseline count with its Clopper–Pearson 95%
-interval.
+bound for the fence arm (3 / N, with N the judged fence trials, per shape and
+pooled: about 0.4% per shape at N = 750 and 0.2% pooled at N = 1,500 when no
+attempt is void and nothing is an anchor), and the baseline count with its
+Clopper–Pearson 95% interval.
 
 **The fence fails** if any `fence` row is `red`. Each red is classed by
 client-side order:
 
-* **C1, client reorder** — `t_append_send < t_read_send`: the append's task
-  reached the client first.
-* **C2, proxy or backend reorder** — the read was sent first, and the append was
-  dispatched before the read was answered.
-* **C3, causal violation** — `t_append_dispatch > t_read_answer`: the endpoint
-  served a snapshot that postdates a commit sent after the read was answered.
+* **C3, causal violation**: `t_append_dispatch_us >= t_read_answer_us`. The
+  endpoint served a snapshot that postdates a commit sent no earlier than the
+  read was answered. It is tested first. The comparison is `>=` on the
+  microsecond times: a tie at that resolution is classed C3. A true C3 is never
+  filed as a spike defect. At worst a tie that was really C2 is filed as C3,
+  and that error stops the work and asks the owner.
+* **C1, client reorder**: `t_append_send_us < t_read_send_us`. The append's
+  task reached `hyper` first.
+* **C2, reorder after send**: the read reached `hyper` first, and the append was
+  dispatched before the read was answered. This takes in reordering anywhere
+  after *send*: inside `hyper` and `h2` on the client, at the proxy, or at the
+  backend. The sweep cannot tell these apart.
 
 A C1 or C2 red **under the fence** means the fence was not engaged: a spike
 defect, not a finding. Check the trace, fix, re-run, and record the defect here.
@@ -111,6 +180,54 @@ Green conformance runs are not evidence on their own (ADR-0061's long form,
 `:241-242`). The claim rests on the mechanism and on the offline tests in
 `crates/happenstance-neon/tests/es11_fence.rs`. This sweep checks that the
 instrument sees the race and bounds the residual rate.
+
+## Amendment, before the first counted run
+
+**2026-10-07.** A review of the spike at `81eab3b` found that the rule as first
+written could score a frontier lag as a falsifier (finding W1, with W2–W4 beside
+it, and W5 on this file). The rule was amended before any counted run, and the pilot is set
+aside.
+
+**Who saw the pilot, and when.** The amendment's content (W1–W5, the anchor outcome,
+the pooling and V1 rules) was fixed by the review and handed to the agent that wrote
+it before the pilot's log was fetched, and that agent never read the pilot's rows.
+The session that ran the spike did read them afterwards: baseline 27 red of 250 per
+shape, fence 0 of 250 per shape, under the old schema. They informed no part of this
+rule, and they are not evidence for the verdict: the pilot is excluded by name.
+
+**W1, the anchor.** `before` was never checked against the seeds. Every read
+carries the xmin frontier, which CI has seen hide committed rows. A lagged
+`before` then gave `drained != before`, which was scored `red`. Under the fence
+its timings class it C3, so it read as **a false falsifier**. Under the baseline
+it inflated the reds that make the instrument live. Now:
+
+* a trial whose `before` does not hold exactly the seeded events is `anchor`,
+  neither `red` nor `error`;
+* each `red` records its `reason`, `late_in_drained` or `drained_ne_before`;
+* only trials with a complete `before` count as red;
+* anchors are reported separately, and an attempt with more than 50 (5%) is
+  void.
+
+**W2, pooling.** The first version pooled every valid attempt. Now only the
+first 3 valid attempts in attempt order are pooled, so a fourth attempt cannot
+be run to change the verdict.
+
+**W3, V1.** "V1 green" held with zero result lines. Now every pooled attempt must
+carry exactly one result line per racing rule, or it is void.
+
+**W4, ties.** C3 was `>` on microsecond times, which can file a true C3 as C2.
+Now it is `>=`, as stated under the classes.
+
+**W5, the claim.** The trial description overstated how closely it follows the
+rules. The differences are now listed under "One trial", and C2 now says that it
+takes in client-side reordering inside `hyper` and `h2`.
+
+**The pilot.** The first CI attempt ran on `81eab3b` (CI run `37591126575`,
+attempt 1, started 2026-10-07 at about 08:02 UTC; `live-neon` job
+`112692596645`). It ran under the old rule. It is a **pilot** and is excluded
+from the tally **whatever it shows**: by name in `run.sh`, and by its rows, which
+lack `schema` 2. The amendment rests on the review's reading of the code and the
+rule, not on anything the pilot printed.
 
 ## How to run it
 
@@ -145,8 +262,12 @@ HTTP/2 with a one-connection pool (`tests/support/transport.rs`), from a GitHub
   callback is reasoning, recorded in the plan, and not measured here.
 * **Throughput cost.** `fence_wait_us` is recorded per trial, but the sweep is
   not a benchmark and no performance claim rests on it.
-* **The anchor read's frontier lag.** `READ_YOUR_OWN_WRITES` is declined; the
-  sweep has no anchor read.
+* **The anchor read's frontier lag, as a rate.** `before` is an anchor read.
+  When the frontier hides a seed, the trial is an `anchor`, counted and
+  reported. It is not a measurement of the lag: `READ_YOUR_OWN_WRITES` is
+  declined, and the anchor threshold only bounds how much of an attempt it may
+  consume.
+* **Client-side reordering inside `hyper`.** See C2 above.
 
 ## Results
 

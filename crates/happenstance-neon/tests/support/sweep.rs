@@ -12,9 +12,14 @@
 //!
 //! Seed, read the scope back as `before`, build a stream over the same scope and
 //! poll it **once** on this task, append a late event the scope matches, drain.
-//! A trial is `red` when the drained set differs from `before` or carries the
-//! late event — exactly the rule's assertion. Every trial is scoped by a tag of
-//! its own, so the reads stay small and no trial sees another's events.
+//! A trial is `anchor` when `before` does not hold exactly the seeded events at
+//! the positions their appends returned — the rule's own anchor assertion, which
+//! a frontier-lagged read can fail with no race at all. Otherwise it is `red`
+//! when the drain carries the late event (`late_in_drained`) or differs from
+//! `before` (`drained_ne_before`), the rule's two assertions. Every trial is
+//! scoped by a tag of its own, so the reads stay small and no trial sees
+//! another's events. What the trial does *not* share with the rules is listed
+//! in `experiments/es-11-fence/README.md`.
 //!
 //! # The arms
 //!
@@ -76,6 +81,102 @@ impl Shape {
             Self::Es11 => "es11",
             Self::Es12 => "es12",
         }
+    }
+}
+
+/// The row layout `run.sh` pools. The pilot's rows, judged under the
+/// pre-amendment rule, carry no `schema` field, and `run.sh` excludes every
+/// attempt whose rows are not all of this one.
+const ROW_SCHEMA: u32 = 2;
+
+/// Why a trial is red: the rule's two assertions, kept apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reason {
+    /// The event appended after the first poll was drained.
+    LateInDrained,
+    /// The drain differs from a `before` that held exactly the seeded events.
+    DrainedNeBefore,
+}
+
+impl Reason {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::LateInDrained => "late_in_drained",
+            Self::DrainedNeBefore => "drained_ne_before",
+        }
+    }
+}
+
+/// What one trial showed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+    Pass,
+    Red(Reason),
+    /// `before` did not hold exactly the seeded events, so nothing the window
+    /// shows can be compared against it. Every read carries the visibility
+    /// frontier, which has been seen to hide committed rows; a lagged `before`
+    /// would otherwise score `drained != before` as a race.
+    Anchor,
+    /// The first poll, the append or the drain failed.
+    Error,
+}
+
+impl Outcome {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::Red(_) => "red",
+            Self::Anchor => "anchor",
+            Self::Error => "error",
+        }
+    }
+
+    const fn reason(self) -> Option<Reason> {
+        match self {
+            Self::Red(reason) => Some(reason),
+            Self::Pass | Self::Anchor | Self::Error => None,
+        }
+    }
+}
+
+/// What the window — first poll, append, drain — showed.
+#[derive(Debug, Clone, Copy)]
+enum Window {
+    /// The first poll, the append or the drain returned an error.
+    Failed,
+    /// The stream drained to its end.
+    Drained {
+        late_in_drained: bool,
+        matches_before: bool,
+    },
+}
+
+/// What a trial observed, before it is judged.
+#[derive(Debug, Clone, Copy)]
+struct Observed {
+    /// `before` held exactly the seeded events, at the positions their appends
+    /// returned: the rule's own anchor assertion.
+    before_complete: bool,
+    window: Window,
+}
+
+/// Judges a trial. The anchor comes first: without a complete `before` the
+/// window has nothing to be compared against, whatever else happened in it.
+const fn judge(observed: Observed) -> Outcome {
+    if !observed.before_complete {
+        return Outcome::Anchor;
+    }
+    match observed.window {
+        Window::Failed => Outcome::Error,
+        Window::Drained {
+            late_in_drained: true,
+            ..
+        } => Outcome::Red(Reason::LateInDrained),
+        Window::Drained {
+            matches_before: false,
+            ..
+        } => Outcome::Red(Reason::DrainedNeBefore),
+        Window::Drained { .. } => Outcome::Pass,
     }
 }
 
@@ -164,30 +265,19 @@ async fn trial(
         instrument.arm.as_str(),
         shape.as_str()
     );
-    let tags = Tags::from_pairs([("trial", scope.as_str())]).expect("a trial tag is valid");
-    let pairs = [("trial", scope.as_str())];
-    let late_pairs = [("trial", scope.as_str()), ("item", "late")];
-
-    let (query, late) = match shape {
-        Shape::Es11 => {
-            seed(store, tagged_event("Seeded", &pairs)).await;
-            let query = Query::from_item(QueryItem::tagged(tags).expect("a tagged item is valid"));
-            (query, tagged_event("Later", &late_pairs))
-        }
-        Shape::Es12 => {
-            seed(store, tagged_event("Alpha", &pairs)).await;
-            seed(store, tagged_event("Omega", &pairs)).await;
-            // Each item owns its tag set, and both items carry the same one.
-            let items = [
-                QueryItem::new(["Alpha"], tags.clone()).expect("a valid item"),
-                QueryItem::new(["Omega"], tags).expect("a valid item"),
-            ];
-            let query = Query::from_items(items).expect("two items are a valid query");
-            (query, tagged_event("Omega", &late_pairs))
-        }
-    };
+    let Seeded {
+        query,
+        late,
+        positions: seeded,
+    } = seed_shape(store, shape, &scope).await;
 
     let before = read_all(store, &query).await;
+    // The rule's anchor: `before` must hold exactly what was seeded before the
+    // window means anything. A frontier lag can hide a committed seed here.
+    let before_complete = before
+        .iter()
+        .map(|event| event.position)
+        .eq(seeded.iter().copied());
     // Discard the seeding and the `before` read: the row is about the window.
     drop(instrument.trace.take());
 
@@ -225,22 +315,32 @@ async fn trial(
     let trace = instrument.trace.take();
     let late_in_drained =
         late_position.is_some_and(|late| drained.iter().any(|event| event.position == late));
-    let outcome = match error {
-        Some(_) => "error",
-        None if late_in_drained || snapshot(&drained) != snapshot(&before) => "red",
-        None => "pass",
+    let window = match error {
+        Some(_) => Window::Failed,
+        None => Window::Drained {
+            late_in_drained,
+            matches_before: snapshot(&drained) == snapshot(&before),
+        },
     };
+    let outcome = judge(Observed {
+        before_complete,
+        window,
+    });
     let at = |read_only: bool, stage: Stage| micros_since(start, &trace, read_only, stage);
     let append_dispatch = at(false, Stage::Dispatched);
 
     serde_json::json!({
+        "schema": ROW_SCHEMA,
         "run": provenance.run,
         "attempt": provenance.attempt,
         "iter": iter,
         "arm": instrument.arm.as_str(),
         "shape": shape.as_str(),
-        "outcome": outcome,
+        "outcome": outcome.as_str(),
+        "reason": outcome.reason().map(Reason::as_str),
         "error": error,
+        "seeded_n": seeded.len(),
+        "before_complete": before_complete,
         "before_n": before.len(),
         "drained_n": drained.len(),
         "late_in_drained": late_in_drained,
@@ -257,10 +357,49 @@ async fn trial(
     })
 }
 
+/// One trial's scope, seeded: the query over it, the late event it will
+/// match, and the positions the seeds were appended at.
+struct Seeded {
+    query: Query,
+    late: Event,
+    positions: Vec<SequencePosition>,
+}
+
+/// Seeds `shape`'s events under the trial's own tag.
+async fn seed_shape(store: &NeonEventStore<HyperTransport>, shape: Shape, scope: &str) -> Seeded {
+    let tags = Tags::from_pairs([("trial", scope)]).expect("a trial tag is valid");
+    let pairs = [("trial", scope)];
+    let late_pairs = [("trial", scope), ("item", "late")];
+    match shape {
+        Shape::Es11 => Seeded {
+            positions: vec![seed(store, tagged_event("Seeded", &pairs)).await],
+            query: Query::from_item(QueryItem::tagged(tags).expect("a tagged item is valid")),
+            late: tagged_event("Later", &late_pairs),
+        },
+        Shape::Es12 => {
+            let positions = vec![
+                seed(store, tagged_event("Alpha", &pairs)).await,
+                seed(store, tagged_event("Omega", &pairs)).await,
+            ];
+            // Each item owns its tag set, and both items carry the same one.
+            let items = [
+                QueryItem::new(["Alpha"], tags.clone()).expect("a valid item"),
+                QueryItem::new(["Omega"], tags).expect("a valid item"),
+            ];
+            Seeded {
+                positions,
+                query: Query::from_items(items).expect("two items are a valid query"),
+                late: tagged_event("Omega", &late_pairs),
+            }
+        }
+    }
+}
+
 /// A seed the trial cannot run without: a failure here is a harness error.
-async fn seed(store: &NeonEventStore<HyperTransport>, event: Event) {
-    if let Err(err) = store.append(&[event], None).await {
-        panic!("a broken sweep, not a measurement: a seed append failed: {err:?}");
+async fn seed(store: &NeonEventStore<HyperTransport>, event: Event) -> SequencePosition {
+    match store.append(&[event], None).await {
+        Ok(position) => position,
+        Err(err) => panic!("a broken sweep, not a measurement: a seed append failed: {err:?}"),
     }
 }
 
@@ -301,4 +440,85 @@ fn micros_since(
 
 fn micros(start: Instant, at: Instant) -> u64 {
     u64::try_from(at.saturating_duration_since(start).as_micros()).unwrap_or(u64::MAX)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Observed, Outcome, Reason, Window, judge};
+
+    const fn complete(window: Window) -> Observed {
+        Observed {
+            before_complete: true,
+            window,
+        }
+    }
+
+    const fn drained(late_in_drained: bool, matches_before: bool) -> Window {
+        Window::Drained {
+            late_in_drained,
+            matches_before,
+        }
+    }
+
+    #[test]
+    fn a_clean_trial_passes() {
+        assert_eq!(judge(complete(drained(false, true))), Outcome::Pass);
+    }
+
+    /// W1: a frontier-lagged `before` makes `drained != before` without any
+    /// race in the window. That is an anchor failure, never a red — under the
+    /// fence a red here would be scored a false C3 falsifier.
+    #[test]
+    fn an_incomplete_before_is_an_anchor_and_not_a_red() {
+        let lagged = Observed {
+            before_complete: false,
+            window: drained(false, false),
+        };
+
+        assert_eq!(judge(lagged), Outcome::Anchor);
+    }
+
+    #[test]
+    fn an_anchor_outranks_a_late_event_and_an_error() {
+        for window in [drained(true, false), Window::Failed] {
+            let lagged = Observed {
+                before_complete: false,
+                window,
+            };
+
+            assert_eq!(judge(lagged), Outcome::Anchor, "{window:?}");
+        }
+    }
+
+    #[test]
+    fn a_late_event_in_the_drain_is_red_for_that_reason() {
+        assert_eq!(
+            judge(complete(drained(true, false))),
+            Outcome::Red(Reason::LateInDrained)
+        );
+    }
+
+    #[test]
+    fn a_drain_that_differs_from_a_complete_before_is_red_for_that_reason() {
+        assert_eq!(
+            judge(complete(drained(false, false))),
+            Outcome::Red(Reason::DrainedNeBefore)
+        );
+    }
+
+    #[test]
+    fn a_failed_window_is_an_error() {
+        assert_eq!(judge(complete(Window::Failed)), Outcome::Error);
+    }
+
+    /// The strings `run.sh` and the README match on.
+    #[test]
+    fn outcomes_and_reasons_print_as_the_tally_reads_them() {
+        assert_eq!(Outcome::Pass.as_str(), "pass");
+        assert_eq!(Outcome::Anchor.as_str(), "anchor");
+        assert_eq!(Outcome::Error.as_str(), "error");
+        assert_eq!(Outcome::Red(Reason::LateInDrained).as_str(), "red");
+        assert_eq!(Reason::LateInDrained.as_str(), "late_in_drained");
+        assert_eq!(Reason::DrainedNeBefore.as_str(), "drained_ne_before");
+    }
 }

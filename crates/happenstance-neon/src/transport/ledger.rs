@@ -501,6 +501,71 @@ mod tests {
         );
     }
 
+    /// Two waiters at different horizons: settling the one read only the
+    /// earlier waiter was behind releases that waiter and leaves the later one
+    /// parked behind the read it was created after.
+    ///
+    /// Rejects: a release that wakes every waiter on any settlement, and one
+    /// that measures every waiter against the newest horizon.
+    #[test]
+    fn settling_a_read_releases_only_the_waiters_it_preceded() {
+        let ledger = ReadLedger::new();
+        let (early_counter, early_waker) = counting();
+        let (late_counter, late_waker) = counting();
+        let first = ledger.dispatch();
+        let mut early = pin!(ledger.settled());
+        let second = ledger.dispatch();
+        let mut late = pin!(ledger.settled());
+        assert_eq!(poll_once(early.as_mut(), &early_waker), Poll::Pending);
+        assert_eq!(poll_once(late.as_mut(), &late_waker), Poll::Pending);
+
+        drop(first);
+
+        assert_eq!(early_counter.wakes(), 1, "the earlier waiter is released");
+        assert_eq!(late_counter.wakes(), 0, "the later one still waits");
+        assert_eq!(poll_once(early, &early_waker), Poll::Ready(()));
+        assert_eq!(poll_once(late.as_mut(), &late_waker), Poll::Pending);
+        assert_eq!(ledger.waiter_slots(), 1, "only the later waiter is parked");
+
+        drop(second);
+
+        assert_eq!(late_counter.wakes(), 1);
+        assert_eq!(poll_once(late, &late_waker), Poll::Ready(()));
+    }
+
+    /// A thread that panics while holding the ledger's lock poisons it. The
+    /// ledger recovers the state rather than failing: later dispatches,
+    /// settlements and waits behave exactly as before the panic.
+    ///
+    /// Rejects: a `lock` that propagates poison, which would turn one
+    /// panicking task anywhere in a transport into every later append failing.
+    #[test]
+    fn a_poisoned_ledger_keeps_working() {
+        let ledger = ReadLedger::new();
+        let (counter, waker) = counting();
+        let in_flight = ledger.dispatch();
+        std::thread::scope(|scope| {
+            let poisoner = scope.spawn(|| {
+                let _held = ledger.state.lock();
+                panic!("a deliberate panic while the ledger's lock is held");
+            });
+            assert!(poisoner.join().is_err(), "the thread panicked");
+        });
+        assert!(ledger.state.is_poisoned(), "the panic poisoned the lock");
+
+        let mut settled = pin!(ledger.settled());
+        assert_eq!(poll_once(settled.as_mut(), &waker), Poll::Pending);
+        drop(in_flight);
+
+        assert_eq!(counter.wakes(), 1, "the settlement still wakes the waiter");
+        assert_eq!(poll_once(settled, &waker), Poll::Ready(()));
+        let after = ledger.dispatch();
+        let mut next = pin!(ledger.settled());
+        assert_eq!(poll_once(next.as_mut(), &waker), Poll::Pending);
+        drop(after);
+        assert_eq!(poll_once(next, &waker), Poll::Ready(()));
+    }
+
     /// Past 2^64 dispatches every read shares the last generation. A waiter
     /// then waits for all of them: possibly longer, never early.
     #[test]

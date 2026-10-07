@@ -21,7 +21,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Wake;
 
 use futures_core::Stream;
-use happenstance_core::{Event, EventStore, Query, ReadOptions};
+use happenstance_core::{
+    Event, EventId, EventStore, Query, ReadOptions, SequencePosition, StoreId,
+};
 use happenstance_neon::SqlTransport;
 use happenstance_neon::transport::{ReadLedger, ReadTicket};
 use happenstance_neon::{HttpResponse, NeonConfig, NeonError, NeonEventStore, SqlRequest};
@@ -561,4 +563,79 @@ fn a_read_dispatched_while_an_append_waits_does_not_extend_the_wait() {
     );
     transport.release_reads();
     assert!(poll_next(overtaking, &waker).is_ready());
+}
+
+/// Polls `in_flight` once, so its read is dispatched, then checks that an
+/// append waits for that read's answer and goes out after it.
+fn assert_an_append_waits_behind<F: Future>(
+    transport: &OrderingTransport,
+    store: &NeonEventStore<&OrderingTransport>,
+    mut in_flight: Pin<&mut F>,
+) -> Poll<F::Output> {
+    let (_, waker) = counting();
+    let events = later();
+    assert!(poll(in_flight.as_mut(), &waker).is_pending());
+    let mut append = pin!(store.append(&events, None));
+
+    assert!(poll(append.as_mut(), &waker).is_pending());
+    assert_eq!(
+        transport.log(),
+        [Logged::Dispatched {
+            index: 0,
+            read_only: true
+        }],
+        "no write may be dispatched while the read is unanswered"
+    );
+
+    transport.release_reads();
+
+    assert!(matches!(poll(append, &waker), Poll::Ready(Ok(_))));
+    assert_eq!(
+        transport.log().get(1..3),
+        Some(
+            &[
+                Logged::Answered { index: 0 },
+                Logged::Dispatched {
+                    index: 1,
+                    read_only: false
+                },
+            ][..]
+        ),
+        "the write leaves only after the read is answered"
+    );
+    poll(in_flight, &waker)
+}
+
+/// D13: `head` is a read-only request, so an append waits behind one in
+/// flight exactly as it waits behind a stream.
+///
+/// Rejects: an adapter that sends `head` without marking it read-only, so no
+/// transport ever registers it.
+#[test]
+fn an_append_waits_behind_an_in_flight_head() {
+    let transport = OrderingTransport::new();
+    let store = store(&transport);
+    let head = pin!(store.head());
+
+    let answered = assert_an_append_waits_behind(&transport, &store, head);
+
+    assert!(matches!(answered, Poll::Ready(Ok(_))), "got {answered:?}");
+}
+
+/// D13, for `contains_event_id`: the other read-only request outside `read`.
+///
+/// Rejects: as for `head`.
+#[test]
+fn an_append_waits_behind_an_in_flight_contains_event_id() {
+    let transport = OrderingTransport::new();
+    let store = store(&transport);
+    let id = EventId::new(
+        StoreId::from_bytes([7; 16]),
+        SequencePosition::new(APPENDED_AT).expect("a non-zero position"),
+    );
+    let contains = pin!(store.contains_event_id(id));
+
+    let answered = assert_an_append_waits_behind(&transport, &store, contains);
+
+    assert!(matches!(answered, Poll::Ready(Ok(_))), "got {answered:?}");
 }

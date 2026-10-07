@@ -1321,12 +1321,12 @@ fn as_i64(position: SequencePosition) -> i64 {
 /// stream polled once and set aside does not hold an append back forever. An
 /// unpolled stream has dispatched nothing and costs an append nothing.
 ///
-/// **This is a spike, and it is not yet measured.** Without the fence the race
-/// was observed: over the conformance transport
-/// `read_result_is_stable_under_concurrent_append` failed **intermittently**,
-/// always with the read seeing an event appended after it was issued. No rate
-/// is stated, because no committed artefact backs one; `experiments/es-11-fence/`
-/// is where the sweep that measures both arms records its rows.
+/// Without the fence the race has been observed: over the conformance
+/// transport `read_result_is_stable_under_concurrent_append` failed
+/// **intermittently**, always with the read seeing an event appended after it
+/// was issued. No rate is stated here, because no committed artefact backs one;
+/// `experiments/es-11-fence/` records the rows of a sweep that runs the race
+/// with the fence and without it.
 ///
 /// The ordering domain is one transport value: reads and appends through
 /// clones of one transport are ordered, and those through independent

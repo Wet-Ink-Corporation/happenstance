@@ -131,10 +131,10 @@
 #![allow(dead_code)]
 
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use happenstance_core::bytes::Bytes;
-use happenstance_neon::transport::ReadLedger;
+use happenstance_neon::transport::{ReadLedger, ReadTicket};
 use happenstance_neon::{HttpResponse, SqlRequest, SqlTransport};
 use http_body_util::{BodyExt, Full};
 use hyper::Uri;
@@ -432,7 +432,25 @@ pub(crate) enum HyperTransportError {
     /// The spawned task panicked or was cancelled.
     #[error("the task carrying the /sql round trip did not finish")]
     Join(#[source] tokio::task::JoinError),
+
+    /// No answer arrived within [`ROUND_TRIP_TIMEOUT`]. The request was
+    /// abandoned, and a read was settled, so nothing queued behind it waits on.
+    #[error("the /sql round trip got no answer within {after:?}")]
+    Timeout {
+        /// The bound that elapsed.
+        after: Duration,
+    },
 }
+
+/// How long one round trip may take before this transport gives up on it.
+///
+/// Since the fence, a read that never answers holds back every later append on
+/// the same transport, so an unbounded exchange would turn one hung request into
+/// a hung suite (H-13). Thirty seconds is about three hundred of this endpoint's
+/// 80–100 ms round trips: far past anything a healthy request takes, including
+/// the concurrency family's contended appends, and short enough that a hang
+/// reports as a failed rule rather than as a job killed at its own limit.
+const ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl SqlTransport for HyperTransport {
     type Error = HyperTransportError;
@@ -520,17 +538,37 @@ impl HyperTransport {
         let client = self.shared.client.clone();
         let trace = self.trace.clone();
         Ok(self.shared.runtime.spawn(async move {
-            if let Some(trace) = &trace {
-                trace.record(read_only, Stage::Sent);
-            }
-            let outcome = exchange(&client, http_request).await;
-            if let Some(trace) = &trace {
-                trace.record(read_only, Stage::Answered);
-            }
-            drop(ticket);
-            outcome
+            let exchange = exchange(&client, http_request);
+            bounded(exchange, ROUND_TRIP_TIMEOUT, ticket, trace, read_only).await
         }))
     }
+}
+
+/// Runs one exchange to an answer, a failure or `limit`, whichever comes
+/// first, then settles its read.
+///
+/// The ticket is consumed here, after the outcome is known, so every way the
+/// exchange can end — answered, failed, timed out — settles the read. A panic
+/// or a cancelled task drops it too, by unwinding through this frame.
+async fn bounded(
+    exchange: impl Future<Output = Result<HttpResponse, HyperTransportError>>,
+    limit: Duration,
+    ticket: Option<ReadTicket>,
+    trace: Option<Trace>,
+    read_only: bool,
+) -> Result<HttpResponse, HyperTransportError> {
+    if let Some(trace) = &trace {
+        trace.record(read_only, Stage::Sent);
+    }
+    let outcome = match tokio::time::timeout(limit, exchange).await {
+        Ok(outcome) => outcome,
+        Err(_elapsed) => Err(HyperTransportError::Timeout { after: limit }),
+    };
+    if let Some(trace) = &trace {
+        trace.record(read_only, Stage::Answered);
+    }
+    drop(ticket);
+    outcome
 }
 
 /// Sends one request and buffers the whole answer.
@@ -553,7 +591,41 @@ async fn exchange(
 
 #[cfg(test)]
 mod tests {
-    use super::host_of;
+    use core::pin::pin;
+    use core::task::{Context, Poll, Waker};
+    use std::time::Duration;
+
+    use happenstance_neon::transport::ReadLedger;
+
+    use super::{HyperTransportError, bounded, host_of};
+
+    /// W7: a read the endpoint never answers is given up on after the bound,
+    /// reported as a timeout, and settled — so the appends queued behind it
+    /// proceed instead of hanging with it.
+    ///
+    /// Rejects: an unbounded exchange (this test never returns), and a timeout
+    /// that reports the error but keeps the read registered.
+    #[tokio::test]
+    async fn a_hung_read_times_out_and_settles() {
+        let ledger = ReadLedger::new();
+        let ticket = ledger.dispatch();
+        let mut settled = pin!(ledger.settled());
+        let mut cx = Context::from_waker(Waker::noop());
+        assert_eq!(settled.as_mut().poll(&mut cx), Poll::Pending);
+
+        let limit = Duration::from_millis(1);
+        let outcome = bounded(core::future::pending(), limit, Some(ticket), None, true).await;
+
+        assert!(
+            matches!(outcome, Err(HyperTransportError::Timeout { after }) if after == limit),
+            "got {outcome:?}"
+        );
+        assert_eq!(
+            settled.poll(&mut cx),
+            Poll::Ready(()),
+            "the timed-out read is settled"
+        );
+    }
 
     /// The pooler URL's shape, without any real one.
     #[test]
