@@ -505,3 +505,20 @@ fn the_read_stream_needs_no_send_bound() {
     let _ =
         the_stream_is_polled_in_place::<happenstance_neon::NeonReadStream<'static, HyperTransport>>;
 }
+
+/// ES-11's fence, measured: the two racing rules' shape, `TRIALS_PER_CELL`
+/// times per arm and shape, over an unfenced baseline transport and the fenced
+/// one. See `support/sweep.rs` and `experiments/es-11-fence/README.md`.
+///
+/// An instrument rather than a rule. It prints one `ES11-SWEEP` row per trial
+/// under `--show-output` and passes whatever it measured; it fails only when
+/// the harness cannot run. In this target, behind `#[ignore]`, so the
+/// `live-neon` job runs it with no workflow change.
+///
+/// Current-thread, as the two rules it mirrors run: the read and the append
+/// are polled on one task, and the transport's own runtime does the I/O.
+#[tokio::test]
+#[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
+async fn es11_fence_sweep() {
+    support::sweep::run().await;
+}

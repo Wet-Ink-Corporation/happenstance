@@ -10,9 +10,9 @@
 //! `wasm-bindgen`. Those are two different clients, and neither of them is the
 //! thing this crate exists to prove.
 //!
-//! So the transport is a trait with exactly one method, and the crate owns no
-//! socket. [`NullTransport`] is the in-tree implementation, and it fails every
-//! round trip.
+//! So the transport is a trait — one round trip, one read-settlement wait — and
+//! the crate owns no socket. [`NullTransport`] is the in-tree implementation,
+//! and it fails every round trip.
 //!
 //! # What the shape of this trait is asserting
 //!
@@ -301,6 +301,94 @@ pub trait SqlTransport {
         &self,
         request: SqlRequest,
     ) -> impl Future<Output = Result<HttpResponse, Self::Error>>;
+
+    /// Resolves once every **read-only** request this transport dispatched
+    /// **before this call** has been answered or has failed.
+    ///
+    /// Required, with no default: a default that resolved at once would compile
+    /// in every transport and leave the ordering below silently unmet.
+    ///
+    /// # Ordering (ES-11)
+    ///
+    /// `NeonEventStore::append` awaits this once, before its first attempt, so
+    /// no write leaves while a read the same transport sent earlier is
+    /// unanswered. An answer follows the statement's execution, so the read's
+    /// snapshot precedes the write — an order the endpoint itself honours, which
+    /// no ordering of two independent requests does.
+    ///
+    /// To make that true an implementor **MUST**:
+    ///
+    /// * register a request whose [`SqlRequest::read_only`] is set **before
+    ///   `round_trip` returns** — dispatch is eager;
+    /// * settle it when the endpoint answers, the send fails or the transport's
+    ///   own timeout fires, **driven by the transport and never by polling
+    ///   `round_trip`'s future** — on the host a spawned task, on `wasm32` the
+    ///   `fetch` promise's settlement callback;
+    /// * settle it when that future is dropped unanswered, or leave it to settle
+    ///   when the abandoned request does.
+    ///
+    /// A transport whose I/O advances only while its `round_trip` future is
+    /// polled **deadlocks** an `append` behind a read the caller polled once
+    /// and set aside. The adapter cannot detect that. [`ReadLedger`] is the
+    /// bookkeeping; [`ReadLedger::settled`] is this method's body. A transport
+    /// that never dispatches anything, as [`NullTransport`], returns a ready
+    /// future.
+    ///
+    /// The ordering domain is the transport value: a transport whose clones
+    /// share one [`ReadLedger`] orders every store built over those clones.
+    ///
+    /// A transport that omits this method does not compile:
+    ///
+    /// ```compile_fail,E0046
+    /// use core::future::Future;
+    /// use happenstance_neon::transport::ReadLedger;
+    /// use happenstance_neon::{HttpResponse, SqlRequest, SqlTransport};
+    ///
+    /// struct OnlyRoundTrips {
+    ///     ledger: ReadLedger,
+    /// }
+    ///
+    /// impl SqlTransport for OnlyRoundTrips {
+    ///     type Error = std::io::Error;
+    ///
+    ///     fn round_trip(
+    ///         &self,
+    ///         _request: SqlRequest,
+    ///     ) -> impl Future<Output = Result<HttpResponse, Self::Error>> {
+    ///         core::future::ready(Err(std::io::Error::other("no client")))
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// Stable rustdoc does not check a `compile_fail` error code, so the block
+    /// above alone would pass on any error. This one is the same impl with the
+    /// method added, and it compiles, so the omission is what fails above:
+    ///
+    /// ```
+    /// use core::future::Future;
+    /// use happenstance_neon::transport::ReadLedger;
+    /// use happenstance_neon::{HttpResponse, SqlRequest, SqlTransport};
+    ///
+    /// struct OnlyRoundTrips {
+    ///     ledger: ReadLedger,
+    /// }
+    ///
+    /// impl SqlTransport for OnlyRoundTrips {
+    ///     type Error = std::io::Error;
+    ///
+    ///     fn round_trip(
+    ///         &self,
+    ///         _request: SqlRequest,
+    ///     ) -> impl Future<Output = Result<HttpResponse, Self::Error>> {
+    ///         core::future::ready(Err(std::io::Error::other("no client")))
+    ///     }
+    ///
+    ///     fn reads_settled(&self) -> impl Future<Output = ()> {
+    ///         self.ledger.settled()
+    ///     }
+    /// }
+    /// ```
+    fn reads_settled(&self) -> impl Future<Output = ()>;
 }
 
 /// The transport that owns no I/O.
@@ -334,4 +422,13 @@ impl SqlTransport for NullTransport {
     ) -> impl Future<Output = Result<HttpResponse, Self::Error>> {
         core::future::ready(Err(NullTransportError))
     }
+
+    /// Ready at once: this transport never dispatches a request.
+    fn reads_settled(&self) -> impl Future<Output = ()> {
+        core::future::ready(())
+    }
 }
+
+mod ledger;
+
+pub use ledger::{ReadLedger, ReadTicket, ReadsSettled};

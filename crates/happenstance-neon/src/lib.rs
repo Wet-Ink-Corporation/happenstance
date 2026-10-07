@@ -36,7 +36,7 @@
 //!
 //! # It owns no HTTP client, and that is still true
 //!
-//! [`SqlTransport`] is a one-method trait and [`NullTransport`] is the only
+//! [`SqlTransport`] is a two-method trait and [`NullTransport`] is the only
 //! implementation in `src/`. See the [`transport`] module for why: a real client
 //! needs a TLS stack on the host and `wasm-bindgen`'s `fetch` on `wasm32`, they
 //! are two different clients, and neither is what this crate is here to prove.
@@ -178,7 +178,7 @@ pub use config::NeonConfig;
 pub use error::{NeonError, NeonSqlError};
 pub use transport::{
     HttpResponse, IsolationLevel, MAX_RESPONSE_BYTES, NullTransport, NullTransportError,
-    SqlRequest, SqlStatement, SqlTransport,
+    ReadLedger, ReadTicket, ReadsSettled, SqlRequest, SqlStatement, SqlTransport,
 };
 
 #[cfg(feature = "event-store")]

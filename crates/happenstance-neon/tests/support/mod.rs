@@ -557,3 +557,7 @@ async fn execute(request: SqlRequest, what: &str, schema: &str) {
             .collect::<String>()
     );
 }
+
+// Declared last rather than beside `transport` above, so this file's lines that
+// the knowledge base cites by number do not move.
+pub(crate) mod sweep;

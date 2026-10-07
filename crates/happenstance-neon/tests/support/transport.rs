@@ -130,9 +130,11 @@
 
 #![allow(dead_code)]
 
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::time::Instant;
 
 use happenstance_core::bytes::Bytes;
+use happenstance_neon::transport::ReadLedger;
 use happenstance_neon::{HttpResponse, SqlRequest, SqlTransport};
 use http_body_util::{BodyExt, Full};
 use hyper::Uri;
@@ -174,9 +176,68 @@ struct Shared {
 }
 
 /// A one-shot HTTPS transport onto Neon's `/sql` endpoint.
+///
+/// Clones share one [`ReadLedger`], so every store built over clones of one
+/// transport is one ES-11 ordering domain. [`HyperTransport::shared`] builds a
+/// fresh ledger per call, which makes the fixture's domain one `connect()`.
 #[derive(Clone)]
 pub(crate) struct HyperTransport {
     shared: &'static Shared,
+    /// The reads this transport has sent and the endpoint has not answered.
+    /// `None` only for the sweep's unfenced baseline arm.
+    ledger: Option<ReadLedger>,
+    /// The sweep's timing record. `None` everywhere else.
+    trace: Option<Trace>,
+}
+
+/// Where in its life one round trip was when a [`TraceEvent`] was taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stage {
+    /// `round_trip` was called.
+    Dispatched,
+    /// The spawned task is about to hand the request to the client.
+    Sent,
+    /// The spawned task finished: an answer, or a failure.
+    Answered,
+}
+
+/// One timestamped step of one round trip.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TraceEvent {
+    pub(crate) read_only: bool,
+    pub(crate) stage: Stage,
+    pub(crate) at: Instant,
+}
+
+/// The most events a [`Trace`] holds between two [`Trace::take`]s. A trial
+/// produces six; anything past this is dropped rather than grown into.
+const TRACE_CAPACITY: usize = 256;
+
+/// A bounded, shared record of round-trip timings, for the ES-11 sweep only.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Trace {
+    // Shared and mutable: the spawned round-trip tasks record into it from the
+    // runtime's workers, and the sweep drains it between trials.
+    events: Arc<Mutex<Vec<TraceEvent>>>,
+}
+
+impl Trace {
+    fn record(&self, read_only: bool, stage: Stage) {
+        let at = Instant::now();
+        let mut events = self.events.lock().unwrap_or_else(PoisonError::into_inner);
+        if events.len() < TRACE_CAPACITY {
+            events.push(TraceEvent {
+                read_only,
+                stage,
+                at,
+            });
+        }
+    }
+
+    /// Everything recorded since the last call.
+    pub(crate) fn take(&self) -> Vec<TraceEvent> {
+        core::mem::take(&mut *self.events.lock().unwrap_or_else(PoisonError::into_inner))
+    }
 }
 
 impl core::fmt::Debug for HyperTransport {
@@ -187,6 +248,8 @@ impl core::fmt::Debug for HyperTransport {
         f.debug_struct("HyperTransport")
             .field("uri", &self.shared.uri)
             .field("connection", &"<redacted>")
+            .field("ledger", &self.ledger)
+            .field("trace", &self.trace)
             .finish()
     }
 }
@@ -213,6 +276,32 @@ impl HyperTransport {
     pub(crate) fn shared() -> Self {
         Self {
             shared: SHARED.get_or_init(build_shared),
+            ledger: Some(ReadLedger::new()),
+            trace: None,
+        }
+    }
+
+    /// The shared client with **no** read-settlement fence: the shipped
+    /// behaviour before ES-11's fence, kept as the sweep's baseline arm.
+    ///
+    /// It registers nothing and its `reads_settled` is ready at once, so it
+    /// differs from [`HyperTransport::shared`] in the wait and nothing else.
+    ///
+    /// # Panics
+    ///
+    /// As [`HyperTransport::shared`].
+    pub(crate) fn shared_unfenced() -> Self {
+        Self {
+            ledger: None,
+            ..Self::shared()
+        }
+    }
+
+    /// This transport, recording every round trip's timings into `trace`.
+    pub(crate) fn traced(self, trace: Trace) -> Self {
+        Self {
+            trace: Some(trace),
+            ..self
         }
     }
 
@@ -365,6 +454,18 @@ impl SqlTransport for HyperTransport {
             }
         }
     }
+
+    /// The ledger's horizon is taken here, at the call. The wait itself is
+    /// released by the runtime's worker finishing each earlier read's task,
+    /// never by anyone polling a read stream.
+    fn reads_settled(&self) -> impl Future<Output = ()> {
+        let settled = self.ledger.as_ref().map(ReadLedger::settled);
+        async move {
+            if let Some(settled) = settled {
+                settled.await;
+            }
+        }
+    }
 }
 
 impl HyperTransport {
@@ -376,6 +477,10 @@ impl HyperTransport {
         tokio::task::JoinHandle<Result<HttpResponse, HyperTransportError>>,
         HyperTransportError,
     > {
+        let read_only = request.read_only;
+        if let Some(trace) = &self.trace {
+            trace.record(read_only, Stage::Dispatched);
+        }
         let body = request.body().map_err(|_| HyperTransportError::Request)?;
 
         let mut builder = hyper::Request::builder()
@@ -403,21 +508,47 @@ impl HyperTransport {
             .body(Full::new(Bytes::from(body)))
             .map_err(|_| HyperTransportError::Request)?;
 
+        // Registered here, synchronously, before `round_trip` returns, and
+        // moved into the task: the task ending — answered, failed, panicked or
+        // cancelled — drops the ticket and settles the read. A request that
+        // failed to build above was never sent and is never registered.
+        let ticket = read_only
+            .then(|| self.ledger.as_ref().map(ReadLedger::dispatch))
+            .flatten();
+        // Both are cheap handles moved into the task: the client is an
+        // `Arc`-backed pool and the trace an `Arc`.
         let client = self.shared.client.clone();
+        let trace = self.trace.clone();
         Ok(self.shared.runtime.spawn(async move {
-            let response = client
-                .request(http_request)
-                .await
-                .map_err(HyperTransportError::Http)?;
-            let status = response.status().as_u16();
-            let collected = response
-                .into_body()
-                .collect()
-                .await
-                .map_err(HyperTransportError::Body)?;
-            Ok(HttpResponse::new(status, collected.to_bytes()))
+            if let Some(trace) = &trace {
+                trace.record(read_only, Stage::Sent);
+            }
+            let outcome = exchange(&client, http_request).await;
+            if let Some(trace) = &trace {
+                trace.record(read_only, Stage::Answered);
+            }
+            drop(ticket);
+            outcome
         }))
     }
+}
+
+/// Sends one request and buffers the whole answer.
+async fn exchange(
+    client: &Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
+    http_request: hyper::Request<Full<Bytes>>,
+) -> Result<HttpResponse, HyperTransportError> {
+    let response = client
+        .request(http_request)
+        .await
+        .map_err(HyperTransportError::Http)?;
+    let status = response.status().as_u16();
+    let collected = response
+        .into_body()
+        .collect()
+        .await
+        .map_err(HyperTransportError::Body)?;
+    Ok(HttpResponse::new(status, collected.to_bytes()))
 }
 
 #[cfg(test)]

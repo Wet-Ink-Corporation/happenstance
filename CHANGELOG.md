@@ -36,6 +36,26 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **BREAKING (`happenstance-neon`): `SqlTransport` gains a required method,
+  `reads_settled`, and `NeonEventStore::append` awaits it once before its first
+  attempt.** *Spike; pending ADR-0087. Not for release from this branch.* The
+  method resolves once every read-only request the transport dispatched before the
+  call has been answered or has failed, so no write leaves while an earlier read
+  on the same transport is unanswered: an order the endpoint honours, which ES-11
+  and ES-12 need and two independent requests never gave. It is required, with no
+  default, because a default that resolved at once would compile in every
+  transport and leave the ordering silently unmet. Three types are added in
+  `happenstance_neon::transport` and re-exported at the root: `ReadLedger`,
+  `ReadTicket` and `ReadsSettled`, a `std`-only bookkeeping with no executor, timer
+  or tokio, so it works unchanged on `wasm32`. To migrate a transport: hold a
+  `ReadLedger`, call `dispatch()` for each `read_only` request before
+  `round_trip` returns, move the `ReadTicket` to whatever observes the answer
+  (dropping it settles the read), and return `ledger.settled()` from
+  `reads_settled`. A transport whose I/O advances only while its future is polled
+  deadlocks an append behind a read polled once and set aside; the trait's docs
+  state the obligation. `append` may now wait up to one read round trip when a
+  read is in flight on the same transport, and not at all otherwise.
+
 - **BREAKING (`happenstance-neon`, `projection-store` feature): `NeonWriteBatch::push`
   takes `&'static str` and its values, the free-form spelling moved to
   `push_raw_sql`, and `statements` is private.** A statement written in source goes
