@@ -64,7 +64,7 @@ gave to this phase.
       published signature, or that 1.0 cannot promise around without an answer.
       In `.kb/open-questions/`:
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
-      - `projection-batch-sql-seam-statement-type` — the statement type a SQL
+      - `projection-batch-sql-seam-statement-type` (ADR-0084 `proposed`, #44; Neon's `push` narrowed) — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
       - `projection-id-is-unvalidated`, **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
@@ -679,3 +679,33 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   reset, or a `404` carrying the same words, is still a failure. Red first: the new
   case failed against the old matcher (1 of 6), then 6 of 6. Verified: vitest on
   `test/platform-miss.test.ts`, `spec-trace`, `lints`, `lint-kb`. No Rust changed.
+- 2026-10-07 — **PR #47 merged as `12540a7`** (the deployed `workerd` leg retries
+  a Durable Object reset). **Neon N2: `NeonWriteBatch::push` is narrowed**, on
+  `lane/p17-neon-push`, by the owner's default that it rides `0.4.0`.
+  - **What changed.** `push` now takes `(&'static str, Vec<serde_json::Value>)`.
+    A computed statement goes through the new `push_raw_sql(SqlStatement)`. The
+    `statements` field is private, read through `statements()`, because
+    `#[non_exhaustive]` does not stop `batch.statements.push(…)`. The probes
+    moved to `push_raw_sql`, since their table name is computed.
+  - **Tests.** Three unit tests, and two `compile_fail` doctests (E0308 for an
+    interpolated `String`, E0616 for the field). A reviewer compiled both
+    snippets by hand to confirm each error code.
+  - **Records.** A BREAKING CHANGELOG entry. The shape is ADR-0084 §2.4's, which
+    is still `proposed` in #44; if the owner amends it on acceptance, this
+    follows.
+  - **Review fixes.** The review asked for six fixes, all made:
+    - the parameter-count doc names `reset`;
+    - a stale open-question citation;
+    - three spec citations into Neon's `projection_store.rs` were already off
+      target and now land (`:294`, `:430-445`, `:570-637`);
+    - the CHANGELOG's migration line;
+    - two doc nits.
+  - **Verified.**
+    - The temper gate (green on `--no-cache`, after the known `mutation_coverage`
+      racing-mutant flake).
+    - `cargo test -p happenstance-neon --all-features`.
+    - `spec-trace`, `lints`, `lint-kb`, `lint-constitution`.
+    - `cargo xtask wasm`, with Node 24 on `PATH`; Node 22 fails the Cloudflare
+      shim.
+  - **Not verified.** The probe's `push_raw_sql` path against a live endpoint
+    in this session. CI's `live-neon` runs it.

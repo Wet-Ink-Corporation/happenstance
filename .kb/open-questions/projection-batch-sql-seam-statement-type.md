@@ -151,8 +151,8 @@ is a contract-level question this atom does not reach.
 published: `crates/happenstance-sqlite/src/projection_store.rs:487` and
 `crates/happenstance-postgres/src/projection_store.rs:252`. Option B changes that parameter's type,
 so only `0.4.0` can absorb it. Recording *Option A is final* closes the atom without a break.
-Either record also says whether Neon's `push(SqlStatement)`
-(`crates/happenstance-neon/src/projection_store.rs:182`) owes the same narrowing. Ladybug's
+Either record also says whether Neon's `push` (then `push(SqlStatement)`, now `push_raw_sql`,
+`crates/happenstance-neon/src/projection_store.rs:242`) owes the same narrowing. Ladybug's
 `push_raw_cypher` is outside 1.0 under `kb-decision-0066`'s crate set. **Owner now: phase 17.**
 
 ## Amendment — 2026-09-30

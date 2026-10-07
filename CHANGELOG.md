@@ -36,6 +36,20 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **BREAKING (`happenstance-neon`, `projection-store` feature): `NeonWriteBatch::push`
+  takes `&'static str` and its values, the free-form spelling moved to
+  `push_raw_sql`, and `statements` is private.** A statement written in source goes
+  through `push(sql, params)`; one whose shape is computed goes through
+  `push_raw_sql(SqlStatement)`, whose name is the warning. `#[non_exhaustive]` does
+  not stop `batch.statements.push(…)` on a batch the caller holds, so the field had
+  to go private for the narrowing to mean anything; read it through `statements()`.
+  To migrate: `batch.push(SqlStatement::with_params("…", v))` becomes
+  `batch.push("…", v)`; a `format!`-built statement becomes
+  `batch.push_raw_sql(SqlStatement::with_params(format!(…), v))`; a read of
+  `batch.statements` becomes `batch.statements()` (`.to_vec()` for an owned
+  copy), and a write through it becomes `push_raw_sql`. `SqlStatement` is unchanged. The release is the
+  owner's phase 17 default; ADR-0084, proposed in PR #44, records the seam.
+
 - **`happenstance-sqlite`'s busy timeout is 15 s, was 5 s.**
   `connection::BUSY_TIMEOUT_MS` moves on measurement, superseding
   [ADR-0022](references/adr/0022-append-condition-strategy.md) §11 in part.
