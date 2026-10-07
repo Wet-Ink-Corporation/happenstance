@@ -1,6 +1,7 @@
-# ADR-0084 — The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the driver discharges the parameter count
+# ADR-0084 — The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once
 
-- **Status:** proposed. The owner decides §2.1, §2.2, §2.5 and the *shape* in §2.4. That Neon
+- **Status:** proposed. The owner decides §2.1, §2.2, §2.5, the Postgres count check in §2.3, and
+  the *shape* in §2.4. That Neon
   narrows in `0.4.0` is a default the owner already holds; the shape §2.4 gives it is proposed.
 - **Date:** 2026-10-07
 - **Phase:** 17 (the breaking window). This is the breaking open question
@@ -82,21 +83,54 @@ only the second narrowing of `push` itself.
 ### 2.3 The arity obligation, stated once
 
 > The number of values bound to a queued statement MUST equal the number of placeholders its text
-> declares. No batch counts placeholders when a statement is queued. The adapter's driver
-> discharges the obligation when the statement runs, and the adapter reports a refusal as
-> `CommitError::Store` (buffered batches) or as the `execute` error (the live batch).
+> declares. No batch counts placeholders when a statement is queued. A mismatch is refused when the
+> statement runs, and the adapter reports the refusal as `CommitError::Store` (buffered batches) or
+> as the `execute` error (the live batch).
 
-Each adapter honours the obligation as follows. The evidence is in §5.
+Its third sentence is true today **only for SQLite, and for Postgres in one direction.** The
+driver does not discharge the whole obligation everywhere, and the table says where it does not.
+The evidence is in §5.
 
 | Adapter | When | Too few values | Too many values |
 |---|---|---|---|
 | `happenstance-sqlite` | At `commit`/`reset`, inside `BEGIN IMMEDIATE` | refused, `InvalidParameterCount` | refused, `InvalidParameterCount` |
-| `happenstance-postgres`, buffered | At `commit`/`reset`, inside the transaction | refused by the server at `Bind` | **depends on the connection**: accepted when the text is first prepared (the surplus is an unused, typed parameter); refused when the statement cache already holds the text with another count |
-| `happenstance-postgres`, live | At `execute`, and the transaction is then poisoned | refused by the server at `Bind` | **depends on the connection**, as above |
+| `happenstance-postgres`, buffered | At `commit`/`reset`, inside the transaction | refused by the server at `Bind` | **not enforced; depends on the connection.** Accepted, and committed, when this connection prepares the text for the first time (the surplus is an unused, typed parameter). Refused when the connection's statement cache already holds the text with the right count. A surplus accepted first leaves a cached statement that refuses every later *correct* call of that text on that connection |
+| `happenstance-postgres`, live | At `execute`, and the transaction is then poisoned | refused by the server at `Bind` | **not enforced**, as above |
 | `happenstance-neon` | At `commit`/`reset`, server-side | unmeasured | unmeasured |
 
-The statement goes on each `push` and `execute` under a `# Parameter count` heading
-(`edits.md` §3). It is not a clause. The seam is each adapter's inherent API, PS-9 keeps it out of
+**Who checks the count, at `4fbfefa`.** Neither Postgres batch checks it. `bind_all` binds every
+supplied value, in order, with no count check
+(`crates/happenstance-postgres/src/projection_store.rs:322-337`). `push` and `push_raw_sql`
+store the values as given (`:252-269`). `execute_raw_sql` hands them straight to `bind_all`
+(`live_projection_store.rs:133-142`). So on Postgres the too-many direction is checked by nothing
+on the adapter's side, and only sometimes by the server.
+
+**Proposed: `happenstance-postgres` counts before it binds.** A surplus that commits silently is
+the failure the obligation exists to prevent. One that also makes later correct calls fail, on
+whichever pooled connection it reached first, is worse. Leaving that to the caller is not an
+honest reading of "stated once". So `replay` and `execute_raw_sql` compare `params.len()` with the
+highest `$n` in the text before anything is sent, and refuse a mismatch in either direction as a
+store error. A refusal at `execute` must also leave the live batch unable to commit, as a server
+refusal does today. A refusal the server never saw does not abort the transaction, so the adapter
+has to mark the batch itself. The check is a run-time one, at the same place the driver's check
+sits, so it does not reopen Option B (§4.3). Two mechanisms were weighed:
+
+- **A placeholder scan of the text.** This is the proposal. It finds the highest `$n` outside
+  quoted strings (`'…'`, `E'…'`), quoted identifiers, dollar-quoted bodies and comments. It needs
+  no round trip, it has the same answer on every connection, and a unit test can pin it without a
+  server. Its cost is a small lexer in one crate. That cost is lower than §4.3's macro bar, because
+  it runs on a `&str` at run time and not on a token at expansion.
+- **Asking the server, through `describe`.** Declined. `describe` prepares *persistently* with no
+  declared types (`…/sqlx-postgres-0.8.6/src/connection/executor.rs:465-485`). It would put the
+  server-inferred types into the same per-text cache that `query()` reads. That changes how every
+  later call of that text binds, and it adds a round trip per statement.
+
+With the check in place, the Postgres rows read *refused, by the adapter, before `Bind`* for both
+directions. The obligation then holds for every measured adapter, and Neon stays unmeasured
+(§5.3).
+
+The statement goes on each `push` and `execute` under a `# Parameter count` heading. The text is
+in Appendix A.3. It is not a clause. The seam is each adapter's inherent API, PS-9 keeps it out of
 the port, and the testkit cannot reach it.
 
 ### 2.4 Neon narrows in `0.4.0`, on the owner's default; the shape is proposed
@@ -173,10 +207,11 @@ This record declines to make them uniform. The argument:
   code that is otherwise identical. No such code exists. PS-9 makes every projection adapter-typed,
   so a projection is written against one adapter at a time.
 
-### 2.6 One additive test per buffered adapter, and rustdoc
+### 2.6 One additive test per adapter, and rustdoc
 
-Specified in §6, with the exact code in `edits.md`. They are additive and two-way, so they
-implement on acceptance and need no further decision.
+Specified in §6, with code sketches in Appendix A. The tests and the rustdoc are additive and
+two-way, so they are implemented on acceptance and need no further decision. The Postgres
+surplus leg is the exception. It asserts §2.3's count check, so it lands with that check.
 
 ## 3. Why `&'static str` is the right type, and what it does not prove
 
@@ -244,11 +279,17 @@ already has a type that does the provenance job.
 
 **On coherence, since this is where a newcomer might expect a trait.** The alternative to two
 newtypes is one trait, `trait Statement { fn text(&self) -> &str; }`, implemented by each adapter's
-type. A public trait that downstream crates may implement is an open set. To keep a stranger from
-implementing `Statement` for `String` (which the orphan rule *allows* them to do for their own
-types, and which would reopen the seam), the trait would have to be **sealed**. Sealing means a
-supertrait that lives in a private module, so no outside crate can name it and therefore none can
-satisfy it. Sealing a trait after it is published is a major (the codec atom that is this record's
+type. Rust's *coherence* rules decide who may write `impl Trait for Type`, so that two crates can
+never supply conflicting impls for the same pair. Their downstream half is the *orphan rule*: a
+crate may write an impl only if it defines the trait or the type (roughly; generics add detail).
+So a downstream crate **cannot** write `impl happenstance_sqlite::Statement for String`. It owns
+neither `Statement` nor `String`, and the compiler refuses with `error[E0117]`. What the orphan
+rule *does* allow is `impl happenstance_sqlite::Statement for MyQuery`, where `MyQuery` is the
+downstream crate's own type, because it owns the type. That is the hole. `MyQuery::text` can
+return a `format!`-built string, and `push` would accept it, which reopens the seam `&'static str`
+closed. To shut it the trait would have to be **sealed**. Sealing means a supertrait that lives in
+a private module, so no outside crate can name it and therefore none can satisfy it, even for its
+own types. Sealing a trait after it is published is a major (the codec atom that is this record's
 sibling turns on exactly that). Sealing it from the start makes it a closed vocabulary across
 adapters, which PS-9 forbids. Inherent methods on concrete types raise none of this. Nobody outside
 `happenstance-sqlite` can add an inherent method to `SqliteBatch`, so the seam is closed by
@@ -260,8 +301,9 @@ placeholder/parameter-count check as the reason to want a minted type
 literal at expansion and can count its placeholders. It cannot see the values: `params` is
 `impl IntoIterator<Item = Value>` or `Vec<PgParam>`, whose length exists only at run time. A check
 between the two is therefore a run-time check. It would sit at `push`, which returns `()` and
-cannot fail. It would have to be parked in the batch and reported at `commit`, which is what the
-driver already does (§5).
+cannot fail. It would have to be parked in the batch and reported at `commit`. For SQLite, and for
+too few values on Postgres, the driver already does that (§5). For a surplus on Postgres, §2.3's
+adapter-side count check does it, at the same point and with no new type.
 
 The alternative that *would* move the check to compile time is a typed parameter tuple:
 `sql!("… ?1, ?2", a, b)`, with the macro emitting a fixed-arity binding. It costs every call site
@@ -278,8 +320,8 @@ signature is.
 
 **4.5 It would be the second narrowing of the same parameter.** `push` narrowed once, from
 `impl Into<String>` to `&'static str`, in `0.2.0` (`CHANGELOG.md:1896-1925`, under `## [0.2.0]`). A second
-narrowing in `0.4.0` would break every caller in `examples/` (§8) for the guarantee §4.3 shows is
-already met. The CHANGELOG entry that landed Option A said why that matters: "a signature narrowed twice is
+narrowing in `0.4.0` would break every caller in `examples/` (§8) for a guarantee that §4.3 shows
+only a run-time check can give, and a run-time check needs no new type. The CHANGELOG entry that landed Option A said why that matters: "a signature narrowed twice is
 worse than one narrowed once" (`CHANGELOG.md:1921-1925`).
 
 ## 5. The arity obligation: what each driver does
@@ -352,10 +394,11 @@ statement with the bound values' types (`…/sqlx-postgres-0.8.6/src/connection/
   (`grep -rn statement_cache crates/happenstance-postgres/src` is empty).
 
 This row is **reasoned from the protocol and the vendored driver, not measured.** The Postgres twin
-in §6 measures the too-few leg. Its first run is the check on that half. The too-many half is stated
-as the obligation's caller-side residue: on Postgres, a surplus value is the caller's bug, it is
-reported nondeterministically (per connection), and it can break correct calls elsewhere. This is
-the strongest in-tree argument for an additive `push_checked` (§7); it does not argue for Option B,
+in §6 measures the too-few leg. Its first run is the check on that half. The too-many half is not
+something the driver can be left with. Today a surplus value is the caller's bug. It is reported
+nondeterministically (per connection), it can commit, and it can make correct calls of the same
+text fail on that connection later. That is why §2.3 proposes the adapter-side count check, and
+why §6's Postgres test gains a surplus leg once the check exists. It does not argue for Option B,
 because the check is still a run-time one.
 
 **5.3 Neon is unmeasured.** The batch is a JSON array of `{query, params}` objects, run server-side
@@ -401,16 +444,29 @@ as a refactor, though. "Use `raw_execute` to avoid re-preparing" and "batch the 
 point is the only thing that discharges the obligation, and nothing would notice the change.
 
 **Postgres, required, live-gated.**
-`a_statement_missing_a_parameter_fails_the_commit_and_moves_nothing` goes in
+`a_statement_with_the_wrong_parameter_count_fails_the_commit_and_moves_nothing` goes in
 `crates/happenstance-postgres/tests/projection.rs`, under the same
-`#[ignore = "needs a live Postgres; …"]` as its neighbours. It runs the too-few leg only, against
-`PostgresProjectionBatch`, with `$1`/`$2` placeholders and the same four assertions. It rejects the
-"replay outside the transaction" and "log and continue" implementations. The too-many leg is not
-asserted, because §5.2 says its outcome depends on the connection's statement cache. An assertion
-either way would be flaky, and an assertion that it *succeeds* would pin a behaviour this record
-calls the caller's bug. `LivePostgresBatch` needs no twin: an arity refusal at
-`execute` is a refused statement, and `a_refused_statement_poisons_the_batch_and_commit_says_so`
-already covers what follows.
+`#[ignore = "needs a live Postgres; …"]` as its neighbours. It runs against
+`PostgresProjectionBatch`, with `$1`/`$2` placeholders and the same four assertions, in two legs:
+
+- **Too few.** This leg can land on acceptance, because the server already refuses it. It rejects
+  the "replay outside the transaction" and "log and continue" implementations.
+- **Too many.** This leg lands with §2.3's count check. Its text is used by no other test, so on
+  every pooled connection the surplus is a first preparation. An adapter without the check then
+  commits it. The leg fails *deterministically*, not by the luck of the cache. After the refused
+  surplus, a correct call of the same text must still commit. That rejects a refusal that comes too
+  late, after the statement has reached the server. By then the surplus is prepared and cached
+  with two parameters, and the correct call is refused. The leg runs on a store whose pool holds
+  one connection, so the correct call reuses the connection the surplus would have reached.
+
+`LivePostgresBatch` gains one live-gated test with the surplus leg. An `execute` with one value too
+many must return the error, and `commit` must then refuse. That rejects a check that refuses the
+statement locally but leaves the transaction un-aborted, so that the checkpoint still commits. An
+arity refusal from the server, the too-few leg, is a refused statement, and
+`a_refused_statement_poisons_the_batch_and_commit_says_so` already covers what follows it.
+
+The count scan gets unit tests in the adapter. They pin the highest `$n` it finds, and that it skips
+`$n` inside quoted strings, dollar-quoted bodies and comments.
 
 **Rustdoc, required.**
 
@@ -425,13 +481,17 @@ already covers what follows.
   (`crates/happenstance-sqlite/src/projection_store.rs:502-505`). Both of those call `push`
   (`:813`, `:832`). Nothing in the crate calls `push_raw_sql`.
 - **The arity paragraph** of §2.3 is added under `# Parameter count` on rows 1, 2, 4, 5, 6, 7 and on
-  Neon's new pair.
+  Neon's new pair (Appendix A.3).
 
 ## 7. Semver: what this costs now and what it leaves open
 
 **Proposed (Option A, §2.1, §2.5):** no signature changes. `cargo-semver-checks` reports nothing,
 and the `0.4.0` trace table needs no row for SQLite or Postgres. The rustdoc and the tests are
 additive. ADR-0066 §5 exempts rustdoc prose (`.kb/decisions/0066-what-1-0-promises.md:265`).
+
+**The Postgres count check (§2.3)** changes no signature either. It changes behaviour: a statement
+with a surplus value, which today sometimes commits, is now always refused. That is a `### Changed`
+entry in `happenstance-postgres`'s CHANGELOG, and it rides `0.4.0` with the rest.
 
 **Neon (§2.4; the release is the owner's default, the shape proposed):** three breaks to `happenstance-neon`, all compiler-caught:
 
@@ -442,7 +502,7 @@ additive. ADR-0066 §5 exempts rustdoc prose (`.kb/decisions/0066-what-1-0-promi
 - `push_raw_sql` and `statements()` are additions.
 
 `cargo-semver-checks` reports the removed public field and the changed method. The trace table
-maps both to this record. The CHANGELOG entry is drafted in `edits.md` §6.
+maps both to this record. The CHANGELOG entry is drafted in Appendix A.4.
 
 **What stays open after 1.0, without a major.** Adding an inherent method to a concrete type is a
 minor change. A downstream crate cannot have defined a method of the same name on
@@ -454,7 +514,8 @@ lists this as a minor change with known breakage, and it is the reason a future 
 chosen to be unlikely in a caller's extension traits. So these remain additive after 1.0:
 
 - `sql!` + `push_statement(Statement)`;
-- an arity-checking `push_checked` that parks the mismatch and reports it at commit;
+- an arity-checking `push_checked` that refuses at queue time, not at commit, returning a
+  `Result`;
 - Neon's arity measurement and a test for it.
 
 What becomes a major after 1.0: any change to the parameter types of rows 1, 2, 4–7, or of Neon's
@@ -492,11 +553,14 @@ scope, `experiments/apply-shape/tests/sqlite.rs:66`, `:83` also call `SqliteBatc
 
 ## 9. Consequences
 
-- The open question closes on acceptance, as `superseded` by this record. The edits are in
-  `edits.md`.
+- The open question closes on acceptance, as `superseded` by this record. Its amendment, the map
+  rows and the ledger line land with this record. The rustdoc, the tests and the Neon entry are
+  sketched in Appendix A.
 - Every SQL batch entry point carries the arity paragraph. The obligation is written once, in this
   record, and repeated per method because rustdoc has no shared include.
-- Two tests are added. Neither touches the testkit, because the seam is outside the port (PS-9).
+- Three tests are added: SQLite's, the buffered Postgres pair of legs, and the live surplus test.
+  None touches the testkit, because the seam is outside the port (PS-9).
+- `happenstance-postgres` gains the count check of §2.3, and a `### Changed` entry for it.
 - `happenstance-neon`'s `0.4.0` CHANGELOG carries one BREAKING entry for the batch, in the lane
   PR that lands the narrowing's code (§2.4), not in this record's change.
 - Phase 17's item `projection-batch-sql-seam-statement-type` is struck when this record is
@@ -512,9 +576,12 @@ scope, `experiments/apply-shape/tests/sqlite.rs:66`, `:83` also call `SqliteBatc
 - **PS-9's falsifier fires.** That would be a bound on `Batch` that carries a write vocabulary, in
   a crate this workspace publishes. A shared `Statement` would then have a generic consumer, and
   Option B returns as a major.
-- **A field report of an arity bug that a driver let through.** Postgres's cache-dependent surplus
-  handling is the only candidate. Such a report justifies the additive `push_checked` or `sql!` of §7. It does not
-  justify replacing `push`.
+- **A field report of an arity bug that the adapters let through, after §2.3's check lands.** Neon
+  is the only remaining candidate. Such a report justifies the additive `push_checked` or `sql!` of
+  §7. It does not justify replacing `push`.
+- **The count scan disagrees with the server.** If a statement the server accepts is refused by
+  the scan, or the reverse, the scan is wrong and is fixed. A unit test pins the case. The
+  obligation is unchanged.
 
 ## 11. Out of scope
 
@@ -524,3 +591,104 @@ scope, `experiments/apply-shape/tests/sqlite.rs:66`, `:83` also call `SqliteBatc
 - **`happenstance-ladybug`'s `push_raw_cypher`.** It is retired with its crate (ADR-0078).
 - **The `SqlStatement` transport type's own openness**, which the event store depends on.
 - **Making the escape hatches uniform** (§2.5): declined here, and only cheap in `0.4.0`.
+
+## Appendix A. What acceptance implements
+
+These are sketches. The lane PR that implements each one owns its final text. Line numbers are
+against `4fbfefa`.
+
+### A.1 SQLite: the commit-arity test
+
+The test goes in `crates/happenstance-sqlite/tests/projection.rs`, after `commit_one` (`:241-248`),
+and imports `happenstance_sqlite::rusqlite::types::Value`.
+
+```rust
+#[tokio::test]
+async fn a_statement_with_the_wrong_parameter_count_fails_the_commit_and_moves_nothing() {
+    let fixture = SqliteProjectionFixture::new();
+    let store = fixture.connect().await;
+    let id = ProjectionId::new("a_statement_with_the_wrong_parameter_count");
+    commit_one(&store, &id, SequencePosition::FIRST).await; // KEY = VALUE
+
+    let legs: [(&str, &'static str, Vec<Value>); 2] = [
+        ("too few", "DELETE FROM projection_probe WHERE k = ?1 OR k = ?2",
+         vec![Value::Text(KEY.to_owned())]),
+        ("too many", "DELETE FROM projection_probe WHERE k = ?1",
+         vec![Value::Text(KEY.to_owned()), Value::Text("unused".to_owned())]),
+    ];
+    for (leg, sql, params) in legs {
+        let mut batch = store.begin().await.unwrap();
+        store.probe_write(&mut batch, "fresh", 7).await.unwrap();
+        batch.push(sql, params);
+        let refused = store
+            .commit(batch, &id, SequencePosition::new(2).unwrap(), Authority::Live)
+            .await
+            .expect_err("a parameter-count mismatch must fail the commit");
+        assert!(matches!(refused, CommitError::Store(_)), "{leg}: {refused:?}");
+        assert_eq!(store.probe_read(KEY).await.unwrap(), Some(VALUE), "{leg}");
+        assert_eq!(store.probe_read("fresh").await.unwrap(), None, "{leg}");
+        assert_eq!(
+            store.checkpoint(&id).await.unwrap(),
+            Checkpoint::Live { through: SequencePosition::FIRST },
+            "{leg}"
+        );
+    }
+}
+```
+
+### A.2 Postgres: the legs
+
+The buffered test in `crates/happenstance-postgres/tests/projection.rs` has the same shape as
+A.1. It commits a `"kept"` row first, uses `$1`/`$2` and `PgParam::text`, and carries the
+neighbours' `#[ignore = "needs a live Postgres; …"]`. Its too-many leg uses a text no other test
+issues, `DELETE FROM projection_probe WHERE k = $1 /* arity-surplus */`. After that leg is
+refused, it commits the same text with one value and asserts that the commit succeeds (§6). The
+live test in `crates/happenstance-postgres/tests/live_projection.rs` issues that text through
+`LivePostgresBatch::execute` with two values. It asserts the `Err`, then asserts that `commit`
+refuses.
+
+### A.3 The `# Parameter count` rustdoc
+
+On `SqliteBatch::push`:
+
+> The values must match the placeholders `sql` declares, one for one. Nothing counts them here.
+> The driver does, when the batch is replayed inside `commit`'s or `reset`'s `BEGIN IMMEDIATE`,
+> and it refuses a mismatch in either direction. The refusal is `CommitError::Store`, and neither
+> the batch's statements nor the checkpoint move. This matters because SQLite reads an unbound
+> placeholder as `NULL` and does not complain on its own.
+
+On `PostgresProjectionBatch::push`, once §2.3's check lands:
+
+> The values must match the highest `$n` that `sql` uses, one for one. Nothing counts them here.
+> At `commit` the batch counts them before binding, and refuses a mismatch in either direction as
+> `CommitError::Store`. Neither the batch's statements nor the checkpoint move. The server alone
+> would refuse only too few values (ADR-0084).
+
+`LivePostgresBatch::execute` carries the same paragraph, with "at this call, and the batch can then
+no longer commit" in place of "at `commit`". Each escape hatch says "As for `push`" (or `execute`),
+and SQLite's adds that a computed `IN (…)` list is where a count goes wrong. Neon's new `push` says
+the endpoint refuses what it refuses at `commit`, as `CommitError::Store`, and that whether it
+refuses a surplus is unmeasured.
+
+The same change corrects the stale sentence on `SqliteBatch::push_raw_sql` (§6). It names
+`probe_write` and `probe_delete_all` as the pattern "through `push`", not as callers of
+`push_raw_sql`.
+
+### A.4 Neon N2: the CHANGELOG entry
+
+The entry goes under `## [Unreleased]` → `### Changed`:
+
+```markdown
+- **BREAKING (`happenstance-neon`, `projection-store` feature): `NeonWriteBatch::push`
+  takes `&'static str` and its values, the free-form spelling moved to
+  `push_raw_sql`, and `statements` is private.** A statement written in source goes
+  through `push(sql, params)`; one whose shape is computed goes through
+  `push_raw_sql(SqlStatement)`, whose name is the warning. `#[non_exhaustive]` does
+  not stop `batch.statements.push(…)` on a batch the caller holds, so the field had
+  to go private for the narrowing to mean anything; read it through `statements()`.
+  To migrate: `batch.push(SqlStatement::with_params("…", v))` becomes
+  `batch.push("…", v)`; a `format!`-built statement becomes
+  `batch.push_raw_sql(SqlStatement::with_params(format!(…), v))`; `batch.statements`
+  becomes `batch.statements()`. `SqlStatement` is unchanged
+  ([ADR-0084](.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md)).
+```

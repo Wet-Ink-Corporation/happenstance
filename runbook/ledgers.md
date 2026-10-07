@@ -33,7 +33,7 @@ The ladybug lane wrote 0078 (`happenstance-ladybug` retired on the owner's call,
 lane L6b wrote 0079 (a Cloudflare query item binds constant parameters; widths 5 and 90).
 The breaking-questions lane wrote 0084, **proposed**: the projection batch's SQL seam is
 `&'static str` plus a named escape hatch at 1.0, `LivePostgresBatch::execute` included, and the
-parameter count is stated once and discharged by the driver at commit. Neon's `0.4.0` narrowing
+parameter count is stated once, with an adapter-side count check proposed for Postgres. Neon's `0.4.0` narrowing
 is the owner's default; the record proposes its shape, and its code lands in its own lane PR.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
