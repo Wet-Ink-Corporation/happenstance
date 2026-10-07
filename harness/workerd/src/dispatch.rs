@@ -96,7 +96,10 @@ pub async fn run(state: &State, rule: &str) -> Dispatched {
         ($($name:ident),* $(,)?) => {
             match rule {
                 $(
-                    ::core::stringify!($name) => Some(
+                    // VACUITY CONTROL, never merged: one rule is dropped from the
+                    // dispatch table, so the runner must report `no such rule`.
+                    ::core::stringify!($name)
+                        if ::core::stringify!($name) != "query_item_types_are_or" => Some(
                         happenstance_testkit::__private::rules::$name(open).await,
                     ),
                 )*
