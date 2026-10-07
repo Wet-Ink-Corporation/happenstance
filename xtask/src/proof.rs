@@ -1149,7 +1149,7 @@ pub(crate) const WASM_RUNNER: &str = "wasm-bindgen-test-runner";
 /// process and reach the real invocation only by inheritance — which works
 /// inside the gate and leaves `cargo xtask wasm-conformance` broken as a
 /// standalone command. Setting it per-`Command` honours the reason `Step.env`
-/// exists (`main.rs:89-97`: a per-target variable must not become a
+/// exists (`main.rs:107-115`: a per-target variable must not become a
 /// process-wide one) more strictly than `Step.env` itself would, because the
 /// variable never touches this process's own environment at all.
 const WASM_RUNNER_VAR: &str = "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER";

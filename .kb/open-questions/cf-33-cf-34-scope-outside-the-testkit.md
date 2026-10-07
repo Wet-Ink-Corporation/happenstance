@@ -96,7 +96,7 @@ forbids. What distinguishes this instance from the first two is reachability. I-
 The preflight is invoked by nothing that blocks a merge: it is absent from `xtask/src/main.rs`'s
 step table, from `.redkiln/config.yaml`'s `verify:` block and from `.github/workflows/`, and
 `ops/` is on `is_inert`'s INERT list (`xtask/src/affected.rs:359-429`), held there by
-`the_host_provisioning_tree_selects_no_package` (`xtask/src/affected.rs:1039`) so that a diff
+`the_host_provisioning_tree_selects_no_package` (`xtask/src/affected.rs:1065`) so that a diff
 confined to it selects no package for the story-grain gate.
 
 ## What is not decided

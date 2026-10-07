@@ -1648,7 +1648,7 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
 /// [`stale_publication_claims`]: the *check* itself — the
 /// `Result<()>`-returning entry point — lives in `xtask/src/lint_pages.rs`
 /// rather than here, deliberately. `exported_lints`
-/// (`xtask/src/affected.rs:1279-1287`) scans this file for exactly the shape
+/// (`xtask/src/affected.rs:1352-1360`) scans this file for exactly the shape
 /// `pub(crate) fn NAME() -> Result<()> {` and requires `affected::run`'s
 /// unconditional block to call each one it finds by name — the invariant
 /// that catches a lint wired into `REQUIRED` and forgotten in the story

@@ -495,7 +495,7 @@ fn members(root: &Path) -> Result<Vec<Member>> {
     // it is laid out: `happenstance-ladybug` still sits under `crates/` as a
     // frozen record (ADR-0078), `-p` on it is an error from cargo, and its
     // manifest is not read at all.
-    let excluded: Vec<PathBuf> = declared_excludes(&text)
+    let excluded: Vec<PathBuf> = declared_excludes(&text)?
         .iter()
         .map(|rel| root.join(rel))
         .collect();
@@ -541,8 +541,10 @@ fn members(root: &Path) -> Result<Vec<Member>> {
 /// The reverse direction. A root listed here and absent from `Cargo.toml` finds
 /// no manifests, contributes no members, and costs nothing — so it is not worth a
 /// failure. And it reads the `members` key textually; a manifest that declares
-/// members some other way (a `workspace.exclude` interaction, a path dependency
-/// pulled in implicitly) is invisible to it.
+/// members some other way (a path dependency pulled in implicitly) is invisible
+/// to it. The `exclude` key is not its business: [`members`] honours it through
+/// [`declared_excludes`], which fails rather than reading an unparseable key as
+/// excluding nothing.
 ///
 /// # Errors
 ///
@@ -628,8 +630,15 @@ fn declared_member_roots(manifest: &str) -> Option<BTreeSet<String>> {
 /// TOML dependency. Only the `[workspace]` table is searched, and the key only at
 /// the start of a line: an `exclude` under another table, a comment, or a value
 /// that merely contains the word is not taken for it, and a manifest with no
-/// workspace `exclude` key excludes nothing.
-fn declared_excludes(manifest: &str) -> BTreeSet<String> {
+/// workspace `exclude` key excludes nothing. The array may span several lines
+/// and carry `#` comments.
+///
+/// # Errors
+///
+/// When the `[workspace]` table carries an `exclude` key whose value is not an
+/// array this reader can close. It fails closed: an unreadable key is not read
+/// as excluding nothing.
+fn declared_excludes(manifest: &str) -> Result<BTreeSet<String>> {
     // The rest of the table from the key on, not the rest of its line: the
     // array may be spread over several lines, which is valid TOML.
     let table = workspace_table(manifest);
@@ -637,29 +646,46 @@ fn declared_excludes(manifest: &str) -> BTreeSet<String> {
     let mut found = None;
     for line in table.split_inclusive('\n') {
         let indent = line.len() - line.trim_start().len();
-        if line.trim_start().starts_with("exclude") {
+        // The whole key, not a prefix of one: `excludes` or `exclude-note`
+        // above the real key would otherwise stop the scan short of it.
+        if let Some(rest) = line.trim_start().strip_prefix("exclude")
+            && rest
+                .chars()
+                .next()
+                .is_none_or(|next| next == '=' || next.is_whitespace())
+        {
             found = table.get(offset + indent + "exclude".len()..);
             break;
         }
         offset += line.len();
     }
     let Some(after) = found else {
-        return BTreeSet::new();
+        return Ok(BTreeSet::new());
     };
-    let Some(after) = after.trim_start().strip_prefix('=') else {
-        return BTreeSet::new();
-    };
-    let body = after
-        .find('[')
-        .zip(after.find(']'))
-        .and_then(|(open, close)| after.get(open + 1..close))
-        .unwrap_or("");
 
-    body.split(',')
+    // From here the key is present, so a value this reader cannot parse is an
+    // error rather than an empty set: reading it as "nothing excluded" would scan
+    // the excluded crate as a member in silence.
+    let rest = after
+        .trim_start()
+        .strip_prefix('=')
+        .and_then(|value| value.trim_start().strip_prefix('['))
+        .context("the workspace `exclude` key is not `= [` followed by an array")?;
+    let uncommented = rest
+        .lines()
+        .map(|line| line.split_once('#').map_or(line, |(code, _)| code))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let (body, _) = uncommented
+        .split_once(']')
+        .context("the workspace `exclude` array is never closed")?;
+
+    Ok(body
+        .split(',')
         .map(|entry| entry.trim().trim_matches('"').trim_matches('\''))
         .filter(|entry| !entry.is_empty())
         .map(|entry| entry.trim_end_matches('/').to_owned())
-        .collect()
+        .collect())
 }
 
 /// The body of the manifest's `[workspace]` table: the lines after its header,
@@ -1111,7 +1137,7 @@ mod tests {
     #[test]
     fn excludes_are_read_off_the_exclude_key_and_nothing_else() {
         let manifest = "[workspace]\nmembers = [\"crates/*\"]\n# the exclude below\nexclude = [\"crates/old\", \"crates/older/\"]\n";
-        let excluded = declared_excludes(manifest);
+        let excluded = declared_excludes(manifest).unwrap();
         assert_eq!(
             excluded,
             ["crates/old", "crates/older"]
@@ -1119,7 +1145,58 @@ mod tests {
                 .map(|r| (*r).to_owned())
                 .collect()
         );
-        assert!(declared_excludes("[workspace]\nmembers = [\"crates/*\"]\n").is_empty());
+        assert!(
+            declared_excludes("[workspace]\nmembers = [\"crates/*\"]\n")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// The prefix defect: a key that merely starts with `exclude`, sitting above
+    /// the real one, was taken for it, its value failed to parse, and the scan
+    /// stopped there. The real key was never read and nothing was excluded.
+    #[test]
+    fn a_key_that_only_starts_with_exclude_is_not_the_exclude_key() {
+        for decoy in ["excludes = 1", "exclude-note = \"x\"", "exclude_old = []"] {
+            let manifest = format!(
+                "[workspace]\nmembers = [\"crates/*\"]\n{decoy}\nexclude = [\"crates/old\"]\n"
+            );
+            assert_eq!(
+                declared_excludes(&manifest).expect("the real key is well formed"),
+                ["crates/old"].iter().map(|r| (*r).to_owned()).collect(),
+                "decoy `{decoy}` was taken for the exclude key"
+            );
+        }
+    }
+
+    /// The fail-open defect: an `exclude` key the reader cannot parse was read
+    /// as excluding nothing, so the crate it names was scanned as a member in
+    /// silence. A key that is present and unreadable is an error.
+    #[test]
+    fn an_exclude_key_that_is_not_a_closed_array_is_an_error() {
+        for value in ["\"crates/old\"", "[\"crates/old\"", "", "]\"crates/old\"["] {
+            let manifest = format!("[workspace]\nmembers = [\"crates/*\"]\nexclude = {value}\n");
+            assert!(
+                declared_excludes(&manifest).is_err(),
+                "`exclude = {value}` was read without an error"
+            );
+        }
+        assert!(
+            declared_excludes("[workspace]\nexclude\n").is_err(),
+            "an `exclude` key with no `=` was read without an error"
+        );
+    }
+
+    #[test]
+    fn a_multi_line_exclude_array_is_read() {
+        let manifest = "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\n  \"crates/old\",\n  # a comment line\n  \"crates/older/\",\n]\nresolver = \"3\"\n";
+        assert_eq!(
+            declared_excludes(manifest).expect("a multi-line array is valid TOML"),
+            ["crates/old", "crates/older"]
+                .iter()
+                .map(|r| (*r).to_owned())
+                .collect()
+        );
     }
 
     /// The narrowing defect: an `exclude` key in some other table, read as the
@@ -1128,12 +1205,12 @@ mod tests {
     #[test]
     fn an_exclude_key_outside_the_workspace_table_is_not_read() {
         let before = "[workspace.metadata.tool]\nexclude = [\"crates/core\"]\n\n[workspace]\nmembers = [\"crates/*\"]\n";
-        assert!(declared_excludes(before).is_empty());
+        assert!(declared_excludes(before).unwrap().is_empty());
         let after = "[workspace]\nmembers = [\"crates/*\"]\n\n[package.metadata.tool]\nexclude = [\"crates/core\"]\n";
-        assert!(declared_excludes(after).is_empty());
+        assert!(declared_excludes(after).unwrap().is_empty());
         let both = "[workspace.metadata.tool]\nexclude = [\"crates/core\"]\n\n[workspace]\nexclude = [\"crates/old\"]\n";
         assert_eq!(
-            declared_excludes(both),
+            declared_excludes(both).unwrap(),
             ["crates/old"].iter().map(|r| (*r).to_owned()).collect()
         );
     }
