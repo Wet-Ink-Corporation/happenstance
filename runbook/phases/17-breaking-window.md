@@ -617,3 +617,26 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     count, which an oversubscribed host exhausts before the cohort arrives. Nothing in this diff touches the
     testkit. It is recorded, not fixed; a mutant that must lose a race needs a
     forced interleaving, not a retry.
+- 2026-10-07 — **PR #41 merged as `4fbfefa`** (the vacuity control's record and
+  `wi-13bd3b`). **The guard-plan assertion ADR-0068 left owed**, on
+  `lane/p17-guard-plan`. `evaluate` in `happenstance-sqlite` now builds its
+  statements through three private functions, `guard_boundary`,
+  `guard_statements` and `guard_statement`, so a test plans the exact text and
+  binds `append` runs under `BEGIN IMMEDIATE`; no public item moved.
+  `the_guard_plan_has_no_list_subquery` runs `EXPLAIN QUERY PLAN` over five guard
+  shapes (two tags with and without a boundary, three tags, two items, two tags
+  with types) on the bundled SQLite, with `tag_cardinality` seeded so the
+  selective tag seeds, and asserts a `SEARCH seed` row, no `LIST SUBQUERY`, and
+  `position=?` on every chained seek. **The falsifier did not fire.** Two standing
+  mutants keep both limbs from being decorative: the pre-`8c8b215` uncorrelated
+  `IN (SELECT …)` chain plans a `LIST SUBQUERY`, and a dropped-alias `EXISTS` plans
+  a chained seek without `position=?` and no `LIST SUBQUERY`. Both limbs were also
+  watched red by hand against `query_sql.rs`, restored byte for byte. The stale
+  `event_store.rs:2418` now reads `:2939`, the read-path plan test it named at
+  `230065f`; 29 other citations shifted by the extraction were repointed by
+  difflib, accepted atoms by `:N` only. Verified: the temper gate, `spec-trace`,
+  `lints`, `lint-constitution`, `lint-kb`; `temper:rust-reviewer` approved, and its
+  one minor (the correlation limb had no standing mutant) was added. Citations
+  already stale on `main` (the spec's `:284`, `:998`, `:1133`, `:1364`; ADR-0055's
+  and ADR-0058's ranges; `remint-identity-precondition-is-trust-only.md:59`) were
+  left for a sweep that reads each referent.

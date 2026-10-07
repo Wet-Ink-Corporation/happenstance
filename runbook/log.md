@@ -10,6 +10,19 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — the guard-plan assertion (ADR-0068)
+
+*Committed on `lane/p17-guard-plan`, on `4fbfefa`.* Phase 17.
+
+`happenstance-sqlite` asserts the multi-tag append-condition guard plans no `LIST
+SUBQUERY` on the bundled SQLite, over the exact statements `append` runs, with two
+standing mutants. ADR-0068's falsifier did not fire; the exit criterion is ticked.
+
+**Verified.** The temper gate, `spec-trace`, `lints`, `lint-constitution` and
+`lint-kb`. The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — vacuity control, and PR #33's follow-up
 
 *Committed on `lane/p17-affected-followup`, on `896d48c`.* Phase 17.
