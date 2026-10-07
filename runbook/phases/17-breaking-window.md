@@ -610,6 +610,10 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     `mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim`
     failed once in two runs of `cargo test --workspace --all-features --test
     mutation_coverage`: `RacingProbeStore` passed `exactly_one_of_n_contenders_commits`
-    because no race happened to interleave. Nothing in this diff touches the
+    because no race happened to interleave. Under the temper gate while another
+    cargo build ran, it was red three runs in three, on `GlobalVersionStore`
+    against `k_disjoint_boundaries_never_conflict`; on an idle machine, green.
+    The rendezvous in `tests/mutation_coverage/racers.rs` is bounded by a yield
+    count, which an oversubscribed host exhausts before the cohort arrives. Nothing in this diff touches the
     testkit. It is recorded, not fixed; a mutant that must lose a race needs a
     forced interleaving, not a retry.
