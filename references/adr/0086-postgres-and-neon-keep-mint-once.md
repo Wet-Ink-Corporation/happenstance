@@ -73,8 +73,9 @@ and the change that lands this record corrects both texts.
   `append_stamps_a_local_event_id` (`:2339-2386`, whose comment at `:2328-2335` names
   `PerEventStoreIdStore`).
 
-So the case against mint-per-open has to rest on cost and coverage, which §4 makes. The fix to both
-texts is in this record's `edits.md`.
+So the case against mint-per-open has to rest on cost and coverage, which §4 makes. Both texts are
+corrected in the change that proposes this record, because they are false whatever the owner
+decides.
 
 ## 3. The options, classified
 
@@ -229,25 +230,52 @@ provide it, leaves both crates outside VT-6 in `0.4.0` until phase 13's `remint_
 on Postgres the procedure's restart step exists only because the adapter's own cache defeats the
 statement. Neither reading changes §8 or §9.
 
-This is the text the crate roots and READMEs carry. `edits.md` E5–E8 hold the exact wording. The
-statement is the same one migration 1 runs, turned from an insert into an update. A later run of
-migration 1 cannot undo it, because that insert is `ON CONFLICT (k) DO NOTHING`
+**When it lands.** Nothing in this section is in a crate root, a README or
+`references/adapter-shapes.md` while the record is proposed. The procedure and the VT-6 mechanism
+rows are acceptance edits: they land in the PR that flips the atom to `accepted`, and Appendix A
+carries their exact text so that PR can paste it. Until then the adapter-shapes row for Postgres
+and Neon (`references/adapter-shapes.md:385`) still says "undecided", which is true.
+
+The statement is the same one migration 1 runs, turned from an insert into an update. A later run
+of migration 1 cannot undo it, because that insert is `ON CONFLICT (k) DO NOTHING`
 (`0001_event_log.sql:116-118`).
 
-> **After a restore, a copy or a branch, re-mint before the first append.**
-> A `pg_restore`, a point-in-time recovery, a promoted replica that lost acknowledged writes, or
-> a Neon branch that is created, reset or restored all bring back this store's identity row
-> together with an older position sequence. The copy would then re-issue `EventId`s it has already
-> issued. Run, against the copy, before anything appends to it:
->
-> ```sql
-> UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
-> ```
->
-> On `happenstance-postgres`, restart every process holding a `PostgresEventStore` on that
-> database afterwards: a handle caches the identity it read first. On `happenstance-neon`, use the
-> configured schema and meta table (`NeonConfig::qualified_meta`). No restart is needed, because
-> every append reads the row.
+**The procedure.** It is the same in the atom, here and in Appendix A. It applies after a
+`pg_restore`, a point-in-time recovery, a promoted replica that lost acknowledged writes, any
+other copy, or a Neon branch that is created, reset or restored.
+
+1. **Stop every writer.** Nothing appends to the copy until step 4.
+2. **Run the re-mint** against the copy:
+   ```sql
+   UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
+   ```
+   On Neon, use the configured schema and meta table (`NeonConfig::qualified_meta`).
+3. **Postgres only: restart every process holding a `PostgresEventStore`** on that database (or
+   drop every handle and every clone of it and construct a new one), so that no cached id survives.
+4. **Resume appends.**
+
+**Why the order is what it is, on Postgres.** `PostgresEventStore` caches the identity in an
+`Arc<OnceLock<StoreId>>` (`crates/happenstance-postgres/src/event_store.rs:183`). `store_id()`
+fills it from `store_meta` on first use and never reads the row again (`:396-420`), and every
+clone shares the one cell, because cloning an `Arc` clones the pointer, not the cell. A `OnceLock`
+cannot be reset through `&self` (§7.1), so only dropping every clone empties it.
+
+- *Stale-cache race, so step 1 is first.* A writer that keeps running after the restore stamps
+  its cached, retired id onto positions the rewound sequence hands out again. Those pairs repeat
+  ones already issued. Running the `UPDATE` does not help that writer, because it never re-reads
+  the row.
+- *Early-recache race, so step 3 is after step 2.* A process restarted before the `UPDATE`
+  commits fills its fresh cell from the retired row on its first append, and keeps it for its
+  whole lifetime. Restarting first and re-minting second leaves exactly the hazard the restart was
+  for.
+- *Step 4 is last* because a resumed writer that was only paused, not restarted, still holds a
+  filled cell.
+
+**On Neon there is no cache.** `local_origin` stamps the identity with a scalar subquery inside
+each append's `INSERT … SELECT` (`crates/happenstance-neon/src/event_store.rs:570-575`), so the
+first statement after the `UPDATE` commits reads the new row. Step 3 does not apply. Steps 1 and 2
+still do, because an append that reaches the copy before the `UPDATE` commits stamps the parent's
+id onto a rewound position.
 
 **Why the failover trigger is named, though it is unmeasured.** Under asynchronous replication, a
 failover can lose the tail of the primary's WAL. PostgreSQL WAL-logs a sequence ahead of use, 32
@@ -346,7 +374,7 @@ The record recommends ruling default refusal out, for two reasons.
    already re-estimated at 25–30 days (`runbook/phases/17-breaking-window.md:287-292`).
 
 If the owner wants default refusal, it must be built in this window. Otherwise it is opt-in for
-ever. The weigh-in block in `edits.md` puts this to the owner.
+ever. Appendix B, question 2, puts this to the owner.
 
 ## 9. The other one-way call: mint-per-open
 
@@ -365,7 +393,7 @@ session log records the decline.
 - **Phase 13's exit criteria are unchanged in substance.** `restored_peer_does_not_reissue_identities`
   must be green against a Postgres-backed peer with its negative control red, and both crates
   document what they do on a restore (`runbook/phases/13-sync.md:160-161`, exit criterion `:226-229`). The second
-  half is discharged by this record's edits.
+  half is discharged by the acceptance edits in Appendix A.
 - **The VT-6 clause is unchanged.** It stays `[PROVISIONAL]`, freeze-by-13. Nothing here touches
   its text, and the clause permits the arm taken.
 
@@ -388,10 +416,169 @@ Each of these reopens the record. Reversing it after `0.4.0` would be a major.
 - **Cloudflare's earning arm.** Its mechanism is mint-once, but whether it can be restored
   underneath itself is unexamined. Durable Objects with SQLite storage are documented by the
   platform as supporting point-in-time recovery, which nothing in the tree mentions; this is
-  unverified here. It is proposed as its own open question (`edits.md` E10). Its adapter-shapes
-  row says "mint once; earning arm undecided".
+  unverified here. It is proposed as its own open question (Appendix C). Its adapter-shapes
+  row says "mint once; earning arm undecided" once the Appendix A rows land.
 - Which report-only fingerprint, if any, is built, after measuring which survive which operations.
 - The method's placement: inherent, a `migration` function or constant, or both. This record
   recommends both on Neon and leaves Postgres open. The CTE-versus-`SELECT` choice in §7.1 is also
   open.
 - ADR-0014's body. It is cited, not edited (`.kb/decisions/0014-event-identity-and-recorded-time.md:21-22`, `:81-84`).
+
+---
+
+## Appendix A. The acceptance edits, verbatim
+
+These land in the PR that flips the atom to `status: accepted`, and not before. Line numbers are
+against this record's base; re-check them when that PR is cut. Outer fences here are `~~~` so the
+inner `sql` fences survive a paste.
+
+### A.1 `references/adapter-shapes.md:385`, the VT-6 mechanism rows
+
+Replace the one "undecided" row with three. Ladybug is dropped: it never had an event store, and
+it is retired (ADR-0078). The file grows by two lines, so the two citations of
+`references/adapter-shapes.md:395-401` (in
+`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md` and
+`.kb/open-questions/remint-identity-precondition-is-trust-only.md`) become `:397-403`.
+
+~~~
+| `happenstance-postgres` | **mint once, in migration 1** | The documented re-mint (ADR-0086). After `pg_restore`, PITR, a failover that lost acknowledged writes, or any copy: stop every writer, run the re-mint statement on the copy, restart every process holding a `PostgresEventStore` (a handle and its clones cache the identity they read first), then resume appends. Detection is not taken: no candidate fingerprint has been measured, and none is expected to change under a restore into the same database | `crates/happenstance-postgres/migrations/0001_event_log.sql:102-118`; the procedure is in the crate root and README. `remint_identity` and stamping inside the append transaction are phase 13's |
+| `happenstance-neon` | **mint once, in migration 1** | The documented re-mint (ADR-0086). On every branch that is created, reset or restored, and after any restore: stop every writer, run the statement against `NeonConfig::qualified_meta`, then resume appends. No restart is needed, because every append reads the row | `crates/happenstance-neon/migrations/0001_neon_log.sql:126-141`; the procedure is in the crate root and README |
+| `happenstance-cloudflare` | **mint once, at the first `migrate`**, cached per handle | **Undecided.** Durable Object storage outlives the isolate, so eviction is not a restore (`store_id_is_not_reminted_per_handle`). Whether the platform's point-in-time recovery is a restore this adapter must answer for is open (Appendix C) | `crates/happenstance-cloudflare/src/event_store.rs:364`, `:575-591`, `:2254` |
+~~~
+
+### A.2 `crates/happenstance-postgres/src/lib.rs`, before `//! # Still open`
+
+~~~
+//! # After a restore, re-mint before the first append
+//!
+//! This store's identity, the `StoreId` half of every `EventId` it mints, is
+//! one row that migration 1 writes once. A `pg_restore`, a point-in-time
+//! recovery, a promoted replica that lost acknowledged writes, or any other copy
+//! brings that row back together with an older position sequence, and the copy
+//! would then re-issue `EventId`s it has already issued, which replication drops
+//! silently (VT-6). In this order:
+//!
+//! 1. Stop every process that appends to the copy.
+//! 2. Run, against the copy:
+//!    ```sql
+//!    UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
+//!    ```
+//! 3. Restart every process holding a `PostgresEventStore` on that database. A
+//!    handle and all its clones read the identity once and keep it, so a process
+//!    started before step 2 would keep the retired one.
+//! 4. Resume appends.
+//!
+//! Events already in the database keep the identity they were stamped with,
+//! which is correct. Minting afresh on every open was considered and declined
+//! (ADR-0086).
+//!
+~~~
+
+### A.3 `crates/happenstance-postgres/README.md`, before `## Limits this store enforces`
+
+~~~
+## After a restore, re-mint before the first append
+
+A `pg_restore`, a point-in-time recovery, a promoted replica that lost acknowledged writes, or any
+other copy of this store's database brings back its identity row together with an older position
+sequence. The copy would then re-issue event identities it has already issued, and a replication
+peer would silently drop the new events as already seen. In this order:
+
+1. Stop every process that appends to the copy.
+2. Run, against the copy:
+   ```sql
+   UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
+   ```
+3. Restart every process holding a `PostgresEventStore` on that database. A handle reads the
+   identity once and keeps it, so a process started before step 2 would keep the retired one.
+4. Resume appends.
+~~~
+
+### A.4 `crates/happenstance-neon/src/lib.rs`, before `//! # Which flavour, and which claim`
+
+~~~
+//! # After a branch or a restore, re-mint before the first append
+//!
+//! This store's identity, the `StoreId` half of every `EventId` it mints, is
+//! one row that migration 1 writes once. A Neon branch that is created, reset
+//! or restored, like a `pg_restore` or a point-in-time recovery, carries its
+//! parent's identity together with an older position sequence, and would then
+//! re-issue `EventId`s the parent has already issued, which replication drops
+//! silently (VT-6). Stop every writer to the copy, then run against it, with the
+//! schema and table `NeonConfig::qualified_meta` names (`"public"."store_meta"`
+//! by default):
+//!
+//! ```sql
+//! UPDATE "public"."store_meta" SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
+//! ```
+//!
+//! Then resume appends. No restart is needed: every append reads the row inside
+//! its own statement. A branch is made by the platform's control plane rather
+//! than by this crate, so put the statement in whatever tooling makes branches.
+//! Minting afresh on every open was considered and declined (ADR-0086).
+//!
+~~~
+
+### A.5 `crates/happenstance-neon/README.md`, before `## Limits this store enforces`
+
+~~~
+## Re-mint every branch before its first append
+
+A Neon branch is a copy of its parent, so it carries the parent's store identity together with an
+older position sequence. A branch that is created, reset or restored, and equally a `pg_restore` or
+a point-in-time recovery, would re-issue event identities its parent already issued, and a
+replication peer would silently drop the new events as already seen. Stop every writer to the
+branch, run this against it with your `NeonConfig`'s schema and meta table, then resume appends:
+
+```sql
+UPDATE "public"."store_meta" SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
+```
+
+No restart is needed. The platform creates branches, not this crate, so put the statement in the
+tooling that does.
+~~~
+
+### A.6 Bookkeeping in the same PR
+
+- The atom: `status: proposed` becomes `accepted`.
+- `kb-open-question-postgres-neon-store-id-no-restore-001`: `status: superseded`,
+  `superseded_by: kb-decision-0086`, a closing note answering its five sub-questions from §6–§8,
+  and the matching entries in `.kb/maps/open-questions-index.md`, `.kb/maps/domain-map.md` and
+  `.kb/maps/decision-map.md`.
+- `runbook/phases/17-breaking-window.md:128-136`: tick the item and name ADR-0086;
+  `runbook/phases/13-sync.md:79-83`: say mint-per-open was declined and list §7's build;
+  `runbook/ledgers.md`: the 0086 queue row and the VT-6 disposition row.
+
+## Appendix B. Questions put to the owner
+
+1. **One-way.** Do `happenstance-postgres` or `happenstance-neon` mint a `StoreId` on every open in
+   `0.4.0`, or do both keep mint-once, earned by VT-6's documented-re-mint arm? Recommended: keep
+   mint-once (§4, §9). It flips on evidence that the procedure cannot be followed on Neon's standard
+   branch workflow, or on a measured operator-free discontinuity only per-open minting would cover
+   (§11).
+2. **One-way.** Does `0.4.0` ship detection that refuses appends by default on a fingerprint
+   mismatch, or is any detection opt-in or report-only for ever? Recommended: the second (§8). It
+   flips on a measured fingerprint that survives everything except restore, clone and branch, on
+   both platforms, and is readable by an ordinary role.
+3. **Two-way.** Is a published statement plus a restart "an explicit re-mint operation" under
+   VT-6 (`spec/SPECIFICATION.md:884-886`)? A strict reading leaves both crates outside VT-6 until
+   phase 13's `remint_identity` (§6).
+4. **Two-way.** On acceptance, is the open question superseded (recommended) or only narrowed, and
+   do the Appendix A edits land in `0.4.0` (recommended) or in 17b? If 17b, `0.4.0` ships outside
+   VT-6.
+
+## Appendix C. The proposed Cloudflare open question
+
+To be written at acceptance as
+`.kb/open-questions/cloudflare-store-id-and-object-recovery.md`, with the id
+`kb-open-question-cloudflare-store-id-and-object-recovery-001`, owned by phase 13.
+
+> `happenstance-cloudflare` mints its `StoreId` once, at the first `migrate`, and caches it per
+> handle in a `RefCell<Option<StoreId>>` (`crates/happenstance-cloudflare/src/event_store.rs:364`,
+> `:575-591`); `store_id_is_not_reminted_per_handle` (`:2254`) pins it. Eviction is answered:
+> Durable Object storage outlives the isolate. Not answered: (1) whether the platform can rewind an
+> object's SQLite storage, by point-in-time recovery or otherwise, and whether a rewind includes
+> `store_meta`, which needs the platform's documentation and a deployed-object probe under
+> `harness/workerd/`; (2) if it can, a `remint_identity` and a procedure; if it cannot, the
+> adapter-shapes row says why mint-once is earned with no procedure. Mint-per-open is declined by
+> ADR-0086's reasoning, because a Durable Object has no natural open either.

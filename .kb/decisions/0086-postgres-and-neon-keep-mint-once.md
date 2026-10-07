@@ -26,9 +26,11 @@ summary: >-
   minting it inside the append statement is per-append minting, which the suite rejects.
   The earlier claim that mint-per-open fails reopened_store_does_not_reissue_an_event_id is stale:
   that rule was rewritten by ADR-0014 to admit it, and is corrected in adapter-shapes and the open
-  question. The procedure is documented now, as rustdoc and README prose with the raw statement.
-  On Postgres it says to restart every process holding a store, because the per-handle OnceLock
-  cache would keep stamping the retired id. The additive remedies go to phase 13, or 17b if
+  question. The procedure is rustdoc and README prose with the raw statement: stop every writer,
+  re-mint, and on Postgres restart every process holding a store before appends resume, because
+  the OnceLock cache shared by a handle's clones would keep stamping the retired id. Its text is
+  in the long form's Appendix A. It lands in the crate roots and READMEs, with the adapter-shapes
+  mechanism rows, in the PR that accepts this record, not with the proposal. The additive remedies go to phase 13, or 17b if
   earlier: a remint_identity method on each store, Postgres stamping the identity inside the append
   transaction instead of caching it, Neon refusing an append when the meta row is absent, a
   statement builder for Neon's branch tooling, and restored_peer_does_not_reissue_identities with
@@ -90,22 +92,36 @@ takes that choice (`runbook/phases/17-breaking-window.md:128-136`).
 1. **Neither adapter mints per open**, in `0.4.0` or as a later default. Both keep mint-once. A
    later move to mint-per-open is a post-1.0 major.
 2. **Mint-once is earned by the documented-re-mint arm.** The procedure is written as rustdoc and
-   README prose, using the raw statement. It is additive either way, but the record recommends
-   landing it with this record's edits rather than in 17b: on this record's reading, that puts
-   `0.4.0` inside VT-6 without any code. That reading is the owner's to accept. VT-6's first
+   README prose, using the raw statement. **None of it lands with this proposed record.** The
+   crate-root and README procedure text, and the `references/adapter-shapes.md` mechanism rows
+   VT-6 requires (`spec/SPECIFICATION.md:897-898`), are acceptance edits: they land in the PR that
+   flips this atom to `accepted`, and the long form's Appendix A carries their exact text for that
+   PR to paste. Until then the adapter-shapes row for Postgres and Neon still reads "undecided",
+   which is true while this is proposed. The record recommends that acceptance land in `0.4.0`
+   rather than 17b: on this record's reading, that puts `0.4.0` inside VT-6 without any code.
+   That reading is the owner's to accept. VT-6's first
    mechanism is to "provide an explicit re-mint operation the deployment invokes"
    (`spec/SPECIFICATION.md:884-886`), and the open question described this arm as "a
    `remint_identity`-shaped operation, plus the procedure"
    (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md:115-118`). Whether a
    documented raw statement, plus a restart on Postgres, is that operation is a judgement, not a
    fact; if the owner reads it strictly, both crates stay outside VT-6 until phase 13's methods. Rustdoc prose is outside the semver promise
-   (`.kb/decisions/0066-what-1-0-promises.md:265`). The procedure is: after `pg_restore`, PITR,
-   promoting a replica that lost acknowledged writes, or creating, resetting or restoring a Neon
-   branch, run the re-mint statement before the copy takes its first append. On Postgres,
-   restart every process holding a `PostgresEventStore` first. Its `Arc<OnceLock<StoreId>>`
-   (`crates/happenstance-postgres/src/event_store.rs:183`, read at `:396-420`) would otherwise
-   keep stamping the retired id. The `references/adapter-shapes.md` rows VT-6 requires
-   (`spec/SPECIFICATION.md:897-898`) land with it.
+   (`.kb/decisions/0066-what-1-0-promises.md:265`). The procedure applies after `pg_restore`,
+   PITR, promoting a replica that lost acknowledged writes, or creating, resetting or restoring a
+   Neon branch. It is one procedure, the same in both files (long form §6):
+   1. **Stop every writer.** No append reaches the copy until step 4.
+   2. **Run the re-mint `UPDATE`** against the copy.
+   3. **Postgres only: restart every process holding a `PostgresEventStore`**, so every cached id
+      is dropped. The cache is an `Arc<OnceLock<StoreId>>` shared by a handle's clones
+      (`crates/happenstance-postgres/src/event_store.rs:183`, filled at `:396-420`).
+   4. **Resume appends.**
+
+   The order matters on Postgres. A writer still running after the restore would stamp its
+   cached, retired id onto rewound positions (the stale-cache race), so step 1 comes first. A
+   process restarted before the `UPDATE` commits would read the retired row and cache it for its
+   lifetime (the early-recache race), so step 3 follows step 2. Neon caches nothing: `local_origin`
+   reads the meta row inside every append statement (`crates/happenstance-neon/src/event_store.rs:570-575`),
+   so for Neon steps 1, 2 and 4 suffice.
 3. **The additive remedies go to phase 13, or 17b if one is taken earlier.**
    - `remint_identity` on both stores, matching SQLite's name
      (`crates/happenstance-sqlite/src/event_store.rs:631`).
