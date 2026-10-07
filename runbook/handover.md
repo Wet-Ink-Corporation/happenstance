@@ -12,8 +12,9 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`main` at `80e1a213`, after #35 (L6b), #36 (its green-run record) and #38 (the
-deployed leg's propagation retry). 2026-10-06.
+`lane/p17-affected-followup`, on `896d48c` (`main`, where PR #39 merged). 2026-10-07.
+The previous handover named `80e1a213` and so did not know #39; `git log` was
+trusted over it.
 
 ## Where things are
 
@@ -24,53 +25,42 @@ breaking window released as `0.4.0` (17), its additive half (17b), then the type
 runner (18), sync (13) and retention (14), and `1.0.0` (21) last.
 
 **Phase 17 is split at its release** ([ADR-0072](../.kb/decisions/0072-phase-17-is-split-at-the-release.md)).
-A read-only research pass over every item re-estimated the unsplit phase at about
-275 hours. Phase 17 now keeps what breaks or changes behaviour on a published
-crate, plus the `workerd` job, and ends at `0.4.0` (25–30 days). Phase 17b takes
-the additive items (8–10 days), and phase 21 waits on it. VT-14, VT-30 and ES-7
-are `freeze-by-17b`.
+Phase 17 keeps what breaks or changes behaviour on a published crate, plus the
+`workerd` job, and ends at `0.4.0`. Phase 17b takes the additive items.
 
 **The owner's calls at kickoff:** spike the ES-11 fence on Neon (ask again if it
 fails); promise `AppendError::Busy`, with the typed commit loop retrying it inside
-`Retry`; a `NEON_CONNECTION` secret, a Cloudflare API token for a deployed Durable
-Object leg, and Docker for testcontainers Postgres are available.
+`Retry`. **The live Neon job is not a required check until L8 lands** (`wi-0f1291`,
+#39): a Neon red from the known ES-11/ES-12 race does not block a merge; any other
+Neon failure does.
 
 ## In flight
 
-**Lane L6b merged green (#35, `6a3adf6a`, 2026-10-06).** A `happenstance-cloudflare`
-query item binds 0–3 parameters through `json_each(?)`
-([ADR-0079](../.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md));
-`MAX_QUERY_ARMS_PER_STATEMENT` is 5 and `MAX_QUERY_PARAMETERS_PER_STATEMENT` is 90;
-the shim enforces `workerd`'s four statement limits, so the gate runs Node 24.
-- CI run 37419423991: local `workerd` 97 of 97, the deployed object 96 of 96.
-- The deployed per-item wall is **32,514** max-length tags (8,527 locally);
-  `experiments/durable-object-limits/results/run-workerd-deployed-2026-10-06.txt`.
-- The `workerd` exit criterion in `phases/17-breaking-window.md` is ticked.
-
-Phase 17 lanes L0 to L6b are merged (PRs #26–#28, #30–#32, #34, #35), ladybug
-retired (#33), and the docs site landed (#29).
+An unattended overnight session (2026-10-07) is working the queue in order, one PR
+per item.
+- **The vacuity control ran.** Draft PR #40 dropped `query_item_types_are_or` from
+  `emit_dispatch`; run 37570009097 went red on both `workerd` legs with
+  `[404] no such rule` for exactly that rule. Closed unmerged; branch
+  `lane/p17-vacuity-control` kept.
+- **This PR (`wi-13bd3b`):** `declared_excludes` matches its whole key and fails
+  closed (`wi-9e72a4`), a multi-line `exclude` with comments is read and tested, and
+  the stale citations into `xtask/src/main.rs` are repointed by anchor.
 
 ## Next action
 
-1. **The vacuity control is still owed:** drop one name from `emit_dispatch` on a
-   throwaway branch and watch the `workerd` job go red with `no such rule`.
-2. The `0.4.0` trace table needs a hand row for `planned_statement_count`'s new
-   values (ADR-0079), beside core's removed feature and the emitter renames.
+1. The guard-plan `LIST SUBQUERY` assertion (ADR-0068), in `happenstance-sqlite`.
+2. L7 (ES-17), L9 (ADR-0022 §9), L10 (`ProjectionId`), the breaking open
+   questions, VT-6, then L8's Neon fence spike last, then the `0.4.0` trace table.
 
 ## Waiting on the owner
 
-- **A follow-up PR is owed for PR #33's review** (`wi-13bd3b`):
-  - `declared_excludes` fails open and matches its key by prefix (`xtask/src/affected.rs:640`);
-  - a stale `xtask/src/main.rs:89-103` citation in `lint_narrative.rs` and `narrative_doctests.rs`, which should be `:131-144`;
-  - no test for a multi-line `exclude` array;
-  - one doc paragraph is stale.
-- Defaults the lanes will take unless overridden before they start:
-  - `trait-variant` keeps its caret (17b);
-  - PS-25's digest is a hand-written FNV-1a;
-  - `ProjectionId` refuses the full ADR-0015 set, with a generic reserved prefix;
-  - Neon's `push` narrowing rides `0.4.0`;
-  - VT-30 is a deprecated alias;
-  - the new CI jobs are not required checks (the `workerd` job is not one).
+- Defaults in force (the owner's, from the previous handover): `trait-variant`
+  keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; `ProjectionId`
+  refuses the full ADR-0015 set with a generic reserved prefix; Neon's `push`
+  narrowing rides `0.4.0`; VT-30 is a deprecated alias; new CI jobs are not
+  required checks.
+- When L8 lands, the owner re-adds `conformance against a live Neon endpoint` to
+  the `Protect main` ruleset (id 22926481).
 - Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open
