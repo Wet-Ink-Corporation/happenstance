@@ -496,6 +496,7 @@ fn members(root: &Path) -> Result<Vec<Member>> {
     // frozen record (ADR-0078), `-p` on it is an error from cargo, and its
     // manifest is not read at all.
     let excluded: Vec<PathBuf> = declared_excludes(&text)
+        .with_context(|| format!("failed to read the `exclude` key of {}", manifest.display()))?
         .iter()
         .map(|rel| root.join(rel))
         .collect();
@@ -541,8 +542,10 @@ fn members(root: &Path) -> Result<Vec<Member>> {
 /// The reverse direction. A root listed here and absent from `Cargo.toml` finds
 /// no manifests, contributes no members, and costs nothing — so it is not worth a
 /// failure. And it reads the `members` key textually; a manifest that declares
-/// members some other way (a `workspace.exclude` interaction, a path dependency
-/// pulled in implicitly) is invisible to it.
+/// members some other way (a path dependency pulled in implicitly) is invisible
+/// to it. The `exclude` key is not its business: [`members`] honours it through
+/// [`declared_excludes`], which fails rather than reading an unparseable key as
+/// excluding nothing.
 ///
 /// # Errors
 ///
@@ -628,8 +631,18 @@ fn declared_member_roots(manifest: &str) -> Option<BTreeSet<String>> {
 /// TOML dependency. Only the `[workspace]` table is searched, and the key only at
 /// the start of a line: an `exclude` under another table, a comment, or a value
 /// that merely contains the word is not taken for it, and a manifest with no
-/// workspace `exclude` key excludes nothing.
-fn declared_excludes(manifest: &str) -> BTreeSet<String> {
+/// workspace `exclude` key excludes nothing. The array may span several lines
+/// and carry `#` comments; a `#`, `]` or `,` inside a quoted entry is part of the
+/// path. What this reader cannot see: a quoted key (`"exclude" = …`) is no key to
+/// it, and a backslash escape in a basic string is refused rather than read. No
+/// path in this workspace has either.
+///
+/// # Errors
+///
+/// When the `[workspace]` table carries an `exclude` key whose value is not an
+/// array this reader can close. It fails closed: an unreadable key is not read
+/// as excluding nothing.
+fn declared_excludes(manifest: &str) -> Result<BTreeSet<String>> {
     // The rest of the table from the key on, not the rest of its line: the
     // array may be spread over several lines, which is valid TOML.
     let table = workspace_table(manifest);
@@ -637,29 +650,77 @@ fn declared_excludes(manifest: &str) -> BTreeSet<String> {
     let mut found = None;
     for line in table.split_inclusive('\n') {
         let indent = line.len() - line.trim_start().len();
-        if line.trim_start().starts_with("exclude") {
+        // The whole key, not a prefix of one: `excludes` or `exclude-note`
+        // above the real key would otherwise stop the scan short of it.
+        if let Some(rest) = line.trim_start().strip_prefix("exclude")
+            && rest
+                .chars()
+                .next()
+                .is_none_or(|next| next == '=' || next.is_whitespace())
+        {
             found = table.get(offset + indent + "exclude".len()..);
             break;
         }
         offset += line.len();
     }
     let Some(after) = found else {
-        return BTreeSet::new();
+        return Ok(BTreeSet::new());
     };
-    let Some(after) = after.trim_start().strip_prefix('=') else {
-        return BTreeSet::new();
-    };
-    let body = after
-        .find('[')
-        .zip(after.find(']'))
-        .and_then(|(open, close)| after.get(open + 1..close))
-        .unwrap_or("");
 
-    body.split(',')
-        .map(|entry| entry.trim().trim_matches('"').trim_matches('\''))
-        .filter(|entry| !entry.is_empty())
-        .map(|entry| entry.trim_end_matches('/').to_owned())
-        .collect()
+    // From here the key is present, so a value this reader cannot parse is an
+    // error rather than an empty set: reading it as "nothing excluded" would scan
+    // the excluded crate as a member in silence.
+    let rest = after
+        .trim_start()
+        .strip_prefix('=')
+        .and_then(|value| value.trim_start().strip_prefix('['))
+        .context("the workspace `exclude` key is not `= [` followed by an array")?;
+    quoted_entries(rest)
+}
+
+/// The quoted strings of a TOML array, read from just after its `[` up to the
+/// first `]` outside a string. A `#` outside a string starts a comment that runs
+/// to the end of its line; inside one, `#`, `]` and `,` are part of the entry.
+///
+/// # Errors
+///
+/// When a string's quote, or the array itself, is never closed.
+fn quoted_entries(rest: &str) -> Result<BTreeSet<String>> {
+    let mut entries = BTreeSet::new();
+    let mut chars = rest.chars();
+    while let Some(next) = chars.next() {
+        match next {
+            ']' => return Ok(entries),
+            '#' => {
+                for skipped in chars.by_ref() {
+                    if skipped == '\n' {
+                        break;
+                    }
+                }
+            }
+            '"' | '\'' => {
+                let mut entry = String::new();
+                loop {
+                    match chars.next() {
+                        Some(closing) if closing == next => break,
+                        Some('\\') if next == '"' => {
+                            bail!("a backslash escape in a workspace `exclude` entry is not read")
+                        }
+                        Some(other) => entry.push(other),
+                        None => bail!(
+                            "an entry of the workspace `exclude` array never closes its quote"
+                        ),
+                    }
+                }
+                let entry = entry.trim_end_matches('/');
+                if !entry.is_empty() {
+                    entries.insert(entry.to_owned());
+                }
+            }
+            _ => {}
+        }
+    }
+    bail!("the workspace `exclude` array is never closed")
 }
 
 /// The body of the manifest's `[workspace]` table: the lines after its header,
@@ -1111,7 +1172,7 @@ mod tests {
     #[test]
     fn excludes_are_read_off_the_exclude_key_and_nothing_else() {
         let manifest = "[workspace]\nmembers = [\"crates/*\"]\n# the exclude below\nexclude = [\"crates/old\", \"crates/older/\"]\n";
-        let excluded = declared_excludes(manifest);
+        let excluded = declared_excludes(manifest).unwrap();
         assert_eq!(
             excluded,
             ["crates/old", "crates/older"]
@@ -1119,7 +1180,92 @@ mod tests {
                 .map(|r| (*r).to_owned())
                 .collect()
         );
-        assert!(declared_excludes("[workspace]\nmembers = [\"crates/*\"]\n").is_empty());
+        assert!(
+            declared_excludes("[workspace]\nmembers = [\"crates/*\"]\n")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// The prefix defect: a key that merely starts with `exclude`, sitting above
+    /// the real one, was taken for it, its value failed to parse, and the scan
+    /// stopped there. The real key was never read and nothing was excluded.
+    #[test]
+    fn a_key_that_only_starts_with_exclude_is_not_the_exclude_key() {
+        for decoy in ["excludes = 1", "exclude-note = \"x\"", "exclude_old = []"] {
+            let manifest = format!(
+                "[workspace]\nmembers = [\"crates/*\"]\n{decoy}\nexclude = [\"crates/old\"]\n"
+            );
+            assert_eq!(
+                declared_excludes(&manifest).expect("the real key is well formed"),
+                ["crates/old"].iter().map(|r| (*r).to_owned()).collect(),
+                "decoy `{decoy}` was taken for the exclude key"
+            );
+        }
+    }
+
+    /// The fail-open defect: an `exclude` key the reader cannot parse was read
+    /// as excluding nothing, so the crate it names was scanned as a member in
+    /// silence. A key that is present and unreadable is an error.
+    #[test]
+    fn an_exclude_key_that_is_not_a_closed_array_is_an_error() {
+        let not_an_array = "is not `= [`";
+        let never_closed = "is never closed";
+        for (value, expected) in [
+            ("\"crates/old\"", not_an_array),
+            ("", not_an_array),
+            ("]\"crates/old\"[", not_an_array),
+            ("[\"crates/old\"", never_closed),
+        ] {
+            let manifest = format!("[workspace]\nmembers = [\"crates/*\"]\nexclude = {value}\n");
+            let error = declared_excludes(&manifest)
+                .expect_err(&format!("`exclude = {value}` was read without an error"));
+            assert!(
+                error.to_string().contains(expected),
+                "`exclude = {value}` failed for the wrong reason: {error}"
+            );
+        }
+        let error = declared_excludes("[workspace]\nexclude\n")
+            .expect_err("an `exclude` key with no `=` was read without an error");
+        assert!(
+            error.to_string().contains(not_an_array),
+            "wrong reason: {error}"
+        );
+    }
+
+    #[test]
+    fn a_multi_line_exclude_array_is_read() {
+        let manifest = "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\n  \"crates/old\",\n  # a comment line, see [x]\n  \"crates/older/\",\n]\nresolver = \"3\"\n";
+        assert_eq!(
+            declared_excludes(manifest).expect("a multi-line array is valid TOML"),
+            ["crates/old", "crates/older"]
+                .iter()
+                .map(|r| (*r).to_owned())
+                .collect()
+        );
+    }
+
+    /// A `#` or `]` inside a quoted entry is part of the path, not a comment or
+    /// the array's end: Cargo accepts such a manifest, so the reader must too.
+    #[test]
+    fn a_hash_or_bracket_inside_a_quoted_entry_is_part_of_the_path() {
+        let manifest = "[workspace]\nexclude = [\"crates/old#archive\", 'crates/a]b', # note\n  \"crates/c,d\"]\n";
+        assert_eq!(
+            declared_excludes(manifest).expect("every entry is a closed string"),
+            ["crates/old#archive", "crates/a]b", "crates/c,d"]
+                .iter()
+                .map(|r| (*r).to_owned())
+                .collect()
+        );
+        let error = declared_excludes("[workspace]\nexclude = [\"crates/old]\n")
+            .expect_err("an entry whose quote never closes was read without an error");
+        assert!(error.to_string().contains("quote"), "wrong reason: {error}");
+        let error = declared_excludes("[workspace]\nexclude = [\"crates/a\\\"b\"]\n")
+            .expect_err("an escaped quote was read as the end of the entry");
+        assert!(
+            error.to_string().contains("backslash"),
+            "wrong reason: {error}"
+        );
     }
 
     /// The narrowing defect: an `exclude` key in some other table, read as the
@@ -1128,12 +1274,12 @@ mod tests {
     #[test]
     fn an_exclude_key_outside_the_workspace_table_is_not_read() {
         let before = "[workspace.metadata.tool]\nexclude = [\"crates/core\"]\n\n[workspace]\nmembers = [\"crates/*\"]\n";
-        assert!(declared_excludes(before).is_empty());
+        assert!(declared_excludes(before).unwrap().is_empty());
         let after = "[workspace]\nmembers = [\"crates/*\"]\n\n[package.metadata.tool]\nexclude = [\"crates/core\"]\n";
-        assert!(declared_excludes(after).is_empty());
+        assert!(declared_excludes(after).unwrap().is_empty());
         let both = "[workspace.metadata.tool]\nexclude = [\"crates/core\"]\n\n[workspace]\nexclude = [\"crates/old\"]\n";
         assert_eq!(
-            declared_excludes(both),
+            declared_excludes(both).unwrap(),
             ["crates/old"].iter().map(|r| (*r).to_owned()).collect()
         );
     }

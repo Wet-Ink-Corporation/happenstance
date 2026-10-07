@@ -2390,7 +2390,7 @@ mod tests {
 
     // ---- AC-005: the mount, on all four invocation paths --------------------
 
-    /// `probe: Some(..)` means *skip when absent* (`xtask/src/main.rs:89-103`),
+    /// `probe: Some(..)` means *skip when absent* (`xtask/src/main.rs:131-144`),
     /// and a documentation step that can skip is `RUNBOOK.md:918-925` again.
     #[test]
     fn the_checker_step_is_required_and_unprobed() {
