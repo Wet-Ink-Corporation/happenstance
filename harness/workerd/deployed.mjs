@@ -10,6 +10,7 @@
 // Strict, like the local leg: it exits non-zero if any rule fails, if a rule's
 // name is unknown to the dispatcher, or if fewer rules ran than were listed.
 import { writeFileSync } from "node:fs";
+import { callPastPropagation, isPlatformMiss } from "./platform-miss.mjs";
 
 const [base, runId] = process.argv.slice(2);
 const token = process.env.HARNESS_TOKEN;
@@ -25,17 +26,11 @@ async function call(object, route) {
   return { status: response.status, body: await response.text() };
 }
 
-// Cloudflare's own answer when a request reaches a location the freshly
-// deployed Worker has not propagated to yet. It is raised before any harness or
-// adapter code runs, so it says nothing about a rule; the first deployed run
-// saw it on two rules that pass everywhere else. Matched exactly, and retried
-// once: a rule's own failure (a panic, a 404 for an unknown rule, a harness
-// fault) is never retried, so the strict failure list stays strict.
-function isPlatformMiss(status, body) {
-  return status === 500 && body.trim() === "Worker not found.";
-}
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const past = (object, route) =>
+  callPastPropagation(call, object, route, { pause, log: console.log });
 
-const listing = await call(`${runId}-rules`, "rules");
+const listing = await past(`${runId}-rules`, "rules");
 if (listing.status !== 200) {
   console.error(`listing the rules failed: ${listing.status} ${listing.body}`);
   process.exit(1);
@@ -50,9 +45,9 @@ for (const rule of rules) {
   // re-run never inherits a previous run's log.
   let { status, body } = await call(`${runId}-${rule}`, `rule/${rule}`);
   if (isPlatformMiss(status, body)) {
-    // Retried once, on a fresh object, and said so. See isPlatformMiss.
-    console.log(`retry ${rule}  [${status}] ${body.trim()}`);
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    // Retried once, on a fresh object, and said so. See platform-miss.mjs.
+    console.log(`retry ${rule}  [${status}] platform miss`);
+    await pause(5_000);
     ({ status, body } = await call(`${runId}-${rule}-retry`, `rule/${rule}`));
   }
   executed += 1;
@@ -64,7 +59,7 @@ for (const rule of rules) {
   }
 }
 
-const probe = await call(`${runId}-probe`, "probe");
+const probe = await past(`${runId}-probe`, "probe");
 console.log(`--- deployed Durable Object SQLite walls ---\n${probe.body}`);
 writeFileSync("deployed-walls.txt", probe.body);
 writeFileSync("deployed-failures.json", JSON.stringify(failures, null, 2));

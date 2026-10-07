@@ -971,6 +971,13 @@ jobs:
         if: always()
         run: npx vitest run test/limits.test.ts --reporter=verbose
 
+      # What the deployed leg below retries (platform-miss.mjs): Cloudflare's
+      # propagation answers and nothing else. Pinned here, where a change to the
+      # matcher or the attempt count fails by name rather than as a flaky deploy.
+      - name: What the deployed leg retries
+        if: always()
+        run: npx vitest run test/platform-miss.test.ts --reporter=verbose
+
       # The deployed leg. The same rule for the secret as live-neon: a fork PR
       # cannot see it and is told so; a same-repository run without it is an
       # error, because a green tick over a skipped leg proves nothing.
