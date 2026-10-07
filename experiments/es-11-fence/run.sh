@@ -66,6 +66,9 @@ extract() {
   fi
   mkdir -p "$raw"
   while IFS=$'\t' read -r run attempt; do
+    # Both come from the log, so they are checked before they name a file.
+    [[ "$run" =~ ^[0-9]+$ && "$attempt" =~ ^[0-9]+$ ]] \
+      || die "run '$run' / attempt '$attempt' in $log is not numeric; refusing to write it"
     local out="$raw/$run-$attempt"
     jq -c --arg run "$run" --arg attempt "$attempt" \
       'select(.run == $run and .attempt == $attempt)' "$rows" >"$out.jsonl"
@@ -177,6 +180,8 @@ tally() {
       excluded_notes+="* \`$key\`: void, $n rows rather than $ROWS_PER_ATTEMPT"$'\n'
     elif [ "$errors" -gt "$MAX_ERROR_ROWS" ]; then
       excluded_notes+="* \`$key\`: void, $errors error rows (more than $MAX_ERROR_ROWS)"$'\n'
+    elif [ "$(jq -s '[.[] | [.iter, .arm, .shape]] | unique | length' "$f")" -ne "$ROWS_PER_ATTEMPT" ]; then
+      excluded_notes+="* \`$key\`: void, rows are not one per (iter, arm, shape) trial"$'\n'
     elif [ "$anchors" -gt "$MAX_ANCHOR_ROWS" ]; then
       excluded_notes+="* \`$key\`: void, $anchors anchor rows (more than $MAX_ANCHOR_ROWS, 5%)"$'\n'
     elif [ -n "$problem" ]; then

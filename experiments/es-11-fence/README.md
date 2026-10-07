@@ -119,6 +119,10 @@ as void, when any of these holds:
 * its extracted row count is not exactly 1,000 (a truncated log or lost rows);
 * it has more than 25 `error` rows;
 * it has more than **50 `anchor` rows** (5% of the attempt);
+* its rows are not exactly one per trial: 1,000 distinct `(iter, arm, shape)`
+  keys (a duplicated row hiding a lost one). *Added 2026-10-07 in review of the
+  records PR, after the counted runs; it can only void an attempt, and the three
+  counted attempts satisfy it.*
 * its log does not carry exactly **one** result line (`... ok` or
   `... FAILED`) for each of the two racing rules (V1 below).
 

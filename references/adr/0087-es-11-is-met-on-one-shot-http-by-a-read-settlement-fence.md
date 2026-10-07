@@ -145,6 +145,15 @@ contenders, which connect separately, do not wait on each other's reads. ES-11's
 changed. What the rules check is the same-handle case; cross-handle real-time order is not
 observable through the port, and this record does not claim it.
 
+**So the conformance claim this record proposes is scoped, and the scope is the owner's call (D3).**
+A read on one handle and an append on a second handle with its own transport are not ordered by
+the fence: the second transport's ledger cannot see the first's outstanding read, so the append can
+commit before the read's snapshot is taken. ES-11's MUST is written of the store, not of a handle.
+Whether "met for operations sharing one transport, and stated as such" satisfies it, or whether
+Neon's claim must carry the cross-handle case as a named exception, is not settled by the
+measurement and is not settled here. A process-wide ledger would widen the domain to one process
+and still leave two processes unordered (plan D3).
+
 ### 2.5 The offline evidence
 
 These run in the gate on the spike branch, drive futures by hand with a counting waker, and use no
@@ -427,6 +436,11 @@ branch. The owner decides each.
 - **D2 — publishing `ReadLedger`, `ReadTicket` and `ReadsSettled`.** Recommended public: every real
   transport needs exactly this bookkeeping, it is where the lost-wakeup and starvation bugs live, and
   it is the no-tokio answer for `wasm32`. Additive, but a public surface 1.0 then carries.
+- **D3 — the ordering domain, and what the claim says about it.** One transport value (clones
+  share), as built. Two handles over separate transports, or two processes, are not ordered (§2.4).
+  Recommended: accept the transport domain and state the cross-handle case as a named limitation of
+  Neon's ES-11 claim; the alternative is a process-wide ledger, which still leaves processes
+  unordered. This is the question review raised against the record, and it gates the claim.
 - **D6 — when ES-11 and ES-12 freeze.** Recommended: when the fence lands on `main`, not on this
   record's acceptance. Freezing is one-way.
 - **D8 — when `wi-0f1291`'s required check comes back.** Recommended: when the fence lands on `main`
