@@ -105,14 +105,14 @@ major (`.kb/open-questions/should-codec-be-sealed.md:101-108`).
 
 - **The published surface invites foreign codecs.**
   - `commit_with` is ungated (`crates/happenstance/src/lib.rs:232`), and its page is the one for
-    a codec of your own (`tests/codec_extension_point.rs:167-177`).
+    a codec of your own (`tests/codec_extension_point.rs:175-185`).
   - `reads_tag` exists only to serve a foreign codec (`CHANGELOG.md:1419-1432`).
 - **Sealing would leave a build that compiles but cannot be used.** `default-features = false`
   with no codec feature is a valid build (`crates/happenstance/Cargo.toml:105-127`). Sealed, it
   would have no implementors at all.
 - **Five implementors outside the crate would stop compiling.**
   - the doctest at `codec.rs:130-159`;
-  - `Runic` (`tests/codec_extension_point.rs:203`), `Elder` (`:226`) and `Forgetful` (`:429`);
+  - `Runic` (`tests/codec_extension_point.rs:211`), `Elder` (`:234`) and `Forgetful` (`:437`);
   - `Json` in `tests/composition.rs:93`.
 - **The one invariant the crate needs from a foreign codec is already enforced.** That is a
   non-empty tag, checked at compile time per codec type (`codec.rs:372-384`).

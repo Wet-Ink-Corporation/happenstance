@@ -62,9 +62,9 @@ use crate::domain::DomainEvent;
 /// would answer the second migration too and costs global mutable state, an
 /// initialisation order and a failure mode where the same log reads differently
 /// depending on what has been registered yet. **Sealing the trait** would
-/// withdraw the invitation above, and only a major release can: a seal added
+/// withdraw the invitation above. After `1.0` only a major can: a seal added
 /// later breaks every codec written against this page, and lifting one breaks
-/// none. ADR-0083 records the choice, and the reasons on both sides.
+/// none. In `0.x` it is a minor; [ADR-0083] (proposed) weighs both sides.
 ///
 /// **`Codec` carries no associated `Error` type, and that is deliberate.** An
 /// associated error would add a third type parameter to every downstream
@@ -73,10 +73,10 @@ use crate::domain::DomainEvent;
 /// single [`CodecError`] carrying the underlying error as a typed source keeps
 /// those signatures at two.
 ///
-/// The worked example lives on each concrete codec's own page, where it can
-/// be written against a type that exists in that build.
+/// The worked example is on each concrete codec's page, where its type exists.
 ///
 /// [`Boundary::absorb`]: crate::Boundary::absorb
+/// [ADR-0083]: https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0083-codec-stays-unsealed-through-1-x.md
 pub trait Codec {
     /// The value written into an event so a reader knows how to decode it.
     ///
@@ -205,10 +205,10 @@ pub enum CodecError {
     /// before the typed layer existed unreadable.
     ///
     /// **Three conditions, and they differ in how they are repaired.** A tag
-    /// naming one of this crate's three codecs is a feature away. A tag from a
-    /// codec outside this crate is not: nothing registers one, so no build
-    /// resolves it on its own. A framing region this build cannot parse lands
-    /// here too, as its first 32 bytes: a later framing version, or damage.
+    /// naming one of this crate's codecs is a feature away. A foreign
+    /// codec's tag is not: nothing registers one, so no build resolves it.
+    /// Framing this build cannot parse lands here too, as up to its first 32
+    /// bytes, lossily decoded: a later framing version, or damage.
     ///
     /// The second case is repairable from the reading side rather than the
     /// build's: a codec claims the tag with

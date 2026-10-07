@@ -138,23 +138,31 @@ fn the_unsealed_trait_states_what_a_foreign_tag_costs() {
     }
 }
 
-/// The error the limit produces says which of its two meanings applies.
+/// The error the limit produces says which of its three meanings applies.
 ///
-/// `UnknownTag` is one variant covering two conditions that differ in whether
-/// they can ever be repaired: a built-in codec behind a feature that is off,
-/// and a codec that is in no build's feature table at all. A caller writing a
-/// recovery path needs to know which one they have.
+/// `UnknownTag` is one variant covering three conditions, two of which differ
+/// in whether a build can repair them: a built-in codec behind a feature that
+/// is off, and a codec that is in no build's feature table at all. The third
+/// is a framing region this build cannot parse, which is a later framing
+/// version or damage rather than a tag. A caller writing a recovery path
+/// needs to know which one they have.
 #[test]
 fn the_refusal_distinguishes_a_feature_from_a_dead_end() {
     let source = read("codec.rs");
-    let block = doc_block_above(&source, "UnknownTag {");
+    let block = flat(&doc_block_above(&source, "UnknownTag {"));
 
     assert!(
-        flat(&block).contains("no build"),
+        block.contains("no build"),
         "`CodecError::UnknownTag`'s page says a tag \"was written and this \
          build cannot honour it\" and stops there. For a codec outside this \
          crate no build can, ever, and the page has to say which case a \
          reader is in"
+    );
+    assert!(
+        block.contains("cannot parse"),
+        "`CodecError::UnknownTag`'s page never says that unreadable framing \
+         lands there too, so a caller reads its `tag` as a codec's name when \
+         it may be the first bytes of a region nothing here could parse"
     );
 }
 

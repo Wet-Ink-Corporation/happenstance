@@ -114,7 +114,7 @@ They are two different walls, and this record leaves both standing.
      closed enum. The trait's page says why: "An enum would have been shorter and would have
      forbidden it" (`codec.rs:24-26`).
    - `commit_with`'s page is the door for a codec of your own, and a test holds its pointer to the
-     limit section (`tests/codec_extension_point.rs:161-177`).
+     limit section (`tests/codec_extension_point.rs:169-185`).
    - `reads_tag` serves only a foreign codec. The three built-ins never override it, and its
      CHANGELOG entry says so (`CHANGELOG.md:1419-1432`).
 2. **Sealing leaves a valid build that compiles but cannot be used.** `default = ["std", "memory",
@@ -128,9 +128,9 @@ They are two different walls, and this record leaves both standing.
 3. **Implementors that sealing would break.** Each of these is outside the crate as the compiler
    sees it, because an integration test and a doctest each compile as a separate crate:
    - the `MyApp` doctest, `codec.rs:130-159`;
-   - `Runic`, `tests/codec_extension_point.rs:203`;
-   - `Elder`, `:226`;
-   - `Forgetful`, `:429`;
+   - `Runic`, `tests/codec_extension_point.rs:211`;
+   - `Elder`, `:234`;
+   - `Forgetful`, `:437`;
    - a local `Json`, `tests/composition.rs:93`.
 
    Two in-crate implementors would survive: `src/tests.rs:101` and `src/command.rs:634`. These
@@ -179,8 +179,8 @@ variant"). So the split is a `0.4.0` change or it does not happen in `1.x`.
 
 - **The strongest in-tree argument for the split, and why it does not carry.** The test that pins
   the variant's page says "A caller writing a recovery path needs to know which one they have"
-  (`tests/codec_extension_point.rs:141-146`). What the test then asserts is a sentence in the
-  rustdoc (`:152-158`), so the tree already chose to answer that need in documentation rather than
+  (`tests/codec_extension_point.rs:141-148`). What the test then asserts is sentences in the
+  rustdoc (`:154-166`), so the tree already chose to answer that need in documentation rather than
   in a variant. This record keeps that choice; it does not invent it.
 - **The distinction has no runtime consumer.** Case 2's repair is a `Cargo.toml` edit and a
   rebuild. A program that matched `CodecDisabled` at run time could do nothing with it except
@@ -197,8 +197,9 @@ variant"). So the split is a `0.4.0` change or it does not happen in `1.x`.
 and is rewritten to name all three in the same five lines (§7). Case 1 is not one condition with
 one repair: an unknown framing *version* (`codec.rs:360-363`, `:422-424`) is repaired by
 upgrading, and only damaged bytes are a dead end, so the rewrite does not call it unrepairable.
-The test that pins that page, `the_refusal_distinguishes_a_feature_from_a_dead_end` (`tests/codec_extension_point.rs:147-159`),
-asserts only `no build`, and the rewrite keeps it.
+The test that pins that page, `the_refusal_distinguishes_a_feature_from_a_dead_end` (`tests/codec_extension_point.rs:149-167`),
+asserted only `no build`; the rewrite keeps it, and the test now also asserts `cannot parse`, the
+words that name case 1.
 
 ## 6. If Option C is ever taken (a `2.0` note, not a plan)
 
@@ -244,7 +245,7 @@ refuses" (`:45`). What shipped, and what `0.3.2` publishes, defaults to `tag == 
 (`codec.rs:185-187`). `decode_event` also checks `tag == C::TAG` before consulting the method
 (`codec.rs:467-471`), so an override can widen what a codec reads and cannot narrow it. The test
 `an_override_that_forgets_its_own_tag_still_reads_what_it_wrote`
-(`tests/codec_extension_point.rs:420-429`) holds that ordering. Under either default, a codec that
+(`tests/codec_extension_point.rs:428-437`) holds that ordering. Under either default, a codec that
 says nothing reads exactly its own tag, because of the short-circuit. The visible difference is a
 direct call: `MyCodec.reads_tag(MyCodec::TAG)` returns `true`. The code is authoritative. The atom
 is accepted and immutable, so it is not edited. This paragraph is the correction.
