@@ -632,9 +632,10 @@ fn declared_member_roots(manifest: &str) -> Option<BTreeSet<String>> {
 /// the start of a line: an `exclude` under another table, a comment, or a value
 /// that merely contains the word is not taken for it, and a manifest with no
 /// workspace `exclude` key excludes nothing. The array may span several lines
-/// and carry `#` comments. What a textual reader cannot see: a quoted key
-/// (`"exclude" = …`) is no key to it, and a `#` or `]` inside a quoted entry is
-/// read as a comment or the array's end. No path in this workspace has either.
+/// and carry `#` comments; a `#`, `]` or `,` inside a quoted entry is part of the
+/// path. What this reader cannot see: a quoted key (`"exclude" = …`) is no key to
+/// it, and a backslash escape in a basic string is kept as written. No path in
+/// this workspace has either.
 ///
 /// # Errors
 ///
@@ -674,21 +675,49 @@ fn declared_excludes(manifest: &str) -> Result<BTreeSet<String>> {
         .strip_prefix('=')
         .and_then(|value| value.trim_start().strip_prefix('['))
         .context("the workspace `exclude` key is not `= [` followed by an array")?;
-    let uncommented = rest
-        .lines()
-        .map(|line| line.split_once('#').map_or(line, |(code, _)| code))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let (body, _) = uncommented
-        .split_once(']')
-        .context("the workspace `exclude` array is never closed")?;
+    quoted_entries(rest)
+}
 
-    Ok(body
-        .split(',')
-        .map(|entry| entry.trim().trim_matches('"').trim_matches('\''))
-        .filter(|entry| !entry.is_empty())
-        .map(|entry| entry.trim_end_matches('/').to_owned())
-        .collect())
+/// The quoted strings of a TOML array, read from just after its `[` up to the
+/// first `]` outside a string. A `#` outside a string starts a comment that runs
+/// to the end of its line; inside one, `#`, `]` and `,` are part of the entry.
+///
+/// # Errors
+///
+/// When a string's quote, or the array itself, is never closed.
+fn quoted_entries(rest: &str) -> Result<BTreeSet<String>> {
+    let mut entries = BTreeSet::new();
+    let mut chars = rest.chars();
+    while let Some(next) = chars.next() {
+        match next {
+            ']' => return Ok(entries),
+            '#' => {
+                for skipped in chars.by_ref() {
+                    if skipped == '\n' {
+                        break;
+                    }
+                }
+            }
+            '"' | '\'' => {
+                let mut entry = String::new();
+                loop {
+                    match chars.next() {
+                        Some(closing) if closing == next => break,
+                        Some(other) => entry.push(other),
+                        None => bail!(
+                            "an entry of the workspace `exclude` array never closes its quote"
+                        ),
+                    }
+                }
+                let entry = entry.trim_end_matches('/');
+                if !entry.is_empty() {
+                    entries.insert(entry.to_owned());
+                }
+            }
+            _ => {}
+        }
+    }
+    bail!("the workspace `exclude` array is never closed")
 }
 
 /// The body of the manifest's `[workspace]` table: the lines after its header,
@@ -1211,6 +1240,23 @@ mod tests {
                 .map(|r| (*r).to_owned())
                 .collect()
         );
+    }
+
+    /// A `#` or `]` inside a quoted entry is part of the path, not a comment or
+    /// the array's end: Cargo accepts such a manifest, so the reader must too.
+    #[test]
+    fn a_hash_or_bracket_inside_a_quoted_entry_is_part_of_the_path() {
+        let manifest = "[workspace]\nexclude = [\"crates/old#archive\", 'crates/a]b', # note\n  \"crates/c,d\"]\n";
+        assert_eq!(
+            declared_excludes(manifest).expect("every entry is a closed string"),
+            ["crates/old#archive", "crates/a]b", "crates/c,d"]
+                .iter()
+                .map(|r| (*r).to_owned())
+                .collect()
+        );
+        let error = declared_excludes("[workspace]\nexclude = [\"crates/old]\n")
+            .expect_err("an entry whose quote never closes was read without an error");
+        assert!(error.to_string().contains("quote"), "wrong reason: {error}");
     }
 
     /// The narrowing defect: an `exclude` key in some other table, read as the
