@@ -614,6 +614,11 @@ ADR-0079 is lane L6b's: on the `workerd` job's measurements, a `happenstance-clo
 item binds a constant number of parameters through `json_each`, the two partition widths become
 `workerd`'s 5 and 90, and the test shim takes `workerd`'s four statement limits. It supersedes
 nothing, and answers the first item ADR-0052 left undecided: the adapters' widths need not agree.
+ADR-0083, proposed, answers `kb-open-question-seal-the-codec-001`: `Codec` stays unsealed through
+1.x, because sealing later is the major and unsealing is additive, and `CodecError::UnknownTag` is
+not split. It corrects `Codec`'s rustdoc, which stated the asymmetry backwards, and records that
+ADR-0049's atom shows `reads_tag` defaulting to `false` where the code defaults to the codec's own
+tag. It supersedes nothing; on acceptance it closes the open question.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -629,6 +634,7 @@ nothing, and answers the first item ADR-0052 left undecided: the adapters' width
 | — | [`kb-decision-wi-ff17f4`](../decisions/wi-ff17f4-ps-15-freeze-after-narrowing-to-commit-and.md) | PS-15 frozen narrowed to commit and reset; rollback non-normative (owner, Weigh-In) | accepted | 17 | — |
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
+| ADR-0083 | [`kb-decision-0083`](../decisions/0083-codec-stays-unsealed-through-1-x.md) | Codec stays unsealed through 1.x, and CodecError::UnknownTag is not split | proposed | 17 | — |
 
 ## Adding a row
 

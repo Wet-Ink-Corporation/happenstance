@@ -843,6 +843,7 @@ the decision and reference atoms this domain also owns.
   (`kb-open-question-seal-the-codec-001`) — whether `Codec` is later sealed, now that `0.2.0` is
   live and the window to do so for free has closed; bundles the `UnknownTag`-split and
   `Boundary::absorb` sub-questions ADR-0049 left undone. Added 2026-09-07.
+  Answered by `kb-decision-0083`, `proposed`, pending the owner's call.
 - **Superseded** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
   (`kb-open-question-apply-synchronous-live-store-001`) — `Projection::apply` is synchronous
   (`crates/happenstance/src/domain.rs:249`) and `run_projection` folds events through it before

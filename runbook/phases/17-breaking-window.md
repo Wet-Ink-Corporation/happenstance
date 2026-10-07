@@ -64,6 +64,8 @@ gave to this phase.
       published signature, or that 1.0 cannot promise around without an answer.
       In `.kb/open-questions/`:
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
+        Answered by [ADR-0083](../../.kb/decisions/0083-codec-stays-unsealed-through-1-x.md),
+        `proposed`, pending the owner's call.
       - `projection-batch-sql-seam-statement-type` — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
       - `projection-id-is-unvalidated`, **with SY-31's reserved `sync/` prefix**:

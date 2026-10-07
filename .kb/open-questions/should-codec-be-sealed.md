@@ -109,3 +109,9 @@ change, but it has to be written before 1.0 rather than left open.
 
 Sub-question 1, the `UnknownTag` split, is additive whichever way sealing goes, because
 `CodecError` is `#[non_exhaustive]`, and any phase may take it. **Owner now: phase 17.**
+
+## Phase 17 — 2026-10-07
+
+Answered by [ADR-0083](../decisions/0083-codec-stays-unsealed-through-1-x.md), `proposed`, pending the
+owner's call: `Codec` stays unsealed through 1.x, and the `UnknownTag` split is declined. This
+atom stays open until the record is accepted.

@@ -62,9 +62,9 @@ use crate::domain::DomainEvent;
 /// would answer the second migration too and costs global mutable state, an
 /// initialisation order and a failure mode where the same log reads differently
 /// depending on what has been registered yet. **Sealing the trait** would
-/// withdraw the invitation above and is the cheaper, truer answer if no fourth
-/// codec ever appears; it stays open, because it is additive to take later and
-/// impossible to undo.
+/// withdraw the invitation above, and only a major release can: a seal added
+/// later breaks every codec written against this page, and lifting one breaks
+/// none. ADR-0083 records the choice, and the reasons on both sides.
 ///
 /// **`Codec` carries no associated `Error` type, and that is deliberate.** An
 /// associated error would add a third type parameter to every downstream
@@ -204,11 +204,11 @@ pub enum CodecError {
     /// already in hand, because refusing it would make every log written
     /// before the typed layer existed unreadable.
     ///
-    /// **Two conditions, and they differ in how they are repaired.** A tag
-    /// naming one of this crate's three codecs is a feature away: turn
-    /// `postcard` on and the same event decodes. A tag written by a codec from
-    /// outside this crate is not — nothing registers one, so no build resolves
-    /// it on its own, and no feature exists to turn on.
+    /// **Three conditions, and they differ in how they are repaired.** A tag
+    /// naming one of this crate's three codecs is a feature away. A tag from a
+    /// codec outside this crate is not: nothing registers one, so no build
+    /// resolves it on its own. A framing region this build cannot parse lands
+    /// here too, as its first 32 bytes: a later framing version, or damage.
     ///
     /// The second case is repairable from the reading side rather than the
     /// build's: a codec claims the tag with

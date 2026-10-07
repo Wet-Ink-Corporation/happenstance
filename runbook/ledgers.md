@@ -31,6 +31,8 @@ Lane L5 wrote 0077: `AppendError::Busy` is promised at 1.0, the typed commit loo
 inside the same `Retry` bound, and ES-43 is minted.
 The ladybug lane wrote 0078 (`happenstance-ladybug` retired on the owner's call, `wi-630032`), and
 lane L6b wrote 0079 (a Cloudflare query item binds constant parameters; widths 5 and 90).
+0083 is proposed for the breaking open questions: `Codec` stays unsealed through 1.x and
+`UnknownTag` is not split (`should-codec-be-sealed`); it is accepted on the owner's call.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.
