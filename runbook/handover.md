@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-workerd-green`'s working tree, uncommitted, on `1f92d088` (`main`, where
-PR #34 merged L6a red). 2026-10-05.
+`main` at `80e1a213`, after #35 (L6b), #36 (its green-run record) and #38 (the
+deployed leg's propagation retry). 2026-10-06.
 
 ## Where things are
 
@@ -109,7 +109,7 @@ record, and the owner.
 - **Rebasing over a lane that repointed the same citations:** take `main`'s version of each file whose diff is citation-only, recompute the shift from `main`'s copies, and apply it once. Hand-fix ranges whose endpoints fell in deleted text.
 - **Git Bash mangles `rev:path`.** Set `MSYS_NO_PATHCONV=1` for `git show REV:path`.
 - **A hook refuses shell edits whose command text mentions a `.rs` path,** even in markdown. Use the Edit tool.
-- **Live Neon flakes on the ES-11/ES-12 race** (`query_items_share_one_snapshot`, `read_result_is_stable_under_concurrent_append`) until L8 lands its fence. Re-run it; don't chase it.
+- **Live Neon flakes on the ES-11/ES-12 race** (`query_items_share_one_snapshot`, `read_result_is_stable_under_concurrent_append`) until L8 lands its fence. Re-run it; don't chase it. **It is not a required check until then** (`wi-0f1291`, 2026-10-06: dropped from the `Protect main` ruleset, id 22926481). When L8 lands, the owner re-adds it to that ruleset and confirms it is required; a Neon red on a PR still needs a look before merging.
 - **The CI base-commit semver step is advisory** while `0.4.0` is unpublished (a crates.io probe). The release trace comes from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`.
 
 - **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal, the hidden emitter renames, and `happenstance-cloudflare`'s `planned_statement_count` values (ADR-0079).
