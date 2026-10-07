@@ -603,4 +603,13 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     gate, `cargo test -p xtask`, xtask clippy `-D warnings`, `spec-trace`,
     `lints`, `lint-kb`; `temper:rust-reviewer`'s first round asked for changes
     (two citations four lines off, error reasons unpinned); all were made, and
-    its second round approved the tree.
+    its second round approved the tree. Greptile then found that a `#` inside a
+    quoted entry was cut as a comment; `quoted_entries` now reads the array
+    quote-aware and refuses a backslash escape rather than misreading it.
+  - **A pre-existing flake, seen while gating this:**
+    `mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim`
+    failed once in two runs of `cargo test --workspace --all-features --test
+    mutation_coverage`: `RacingProbeStore` passed `exactly_one_of_n_contenders_commits`
+    because no race happened to interleave. Nothing in this diff touches the
+    testkit. It is recorded, not fixed; a mutant that must lose a race needs a
+    forced interleaving, not a retry.

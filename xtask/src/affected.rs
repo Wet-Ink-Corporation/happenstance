@@ -634,8 +634,8 @@ fn declared_member_roots(manifest: &str) -> Option<BTreeSet<String>> {
 /// workspace `exclude` key excludes nothing. The array may span several lines
 /// and carry `#` comments; a `#`, `]` or `,` inside a quoted entry is part of the
 /// path. What this reader cannot see: a quoted key (`"exclude" = …`) is no key to
-/// it, and a backslash escape in a basic string is kept as written. No path in
-/// this workspace has either.
+/// it, and a backslash escape in a basic string is refused rather than read. No
+/// path in this workspace has either.
 ///
 /// # Errors
 ///
@@ -703,6 +703,9 @@ fn quoted_entries(rest: &str) -> Result<BTreeSet<String>> {
                 loop {
                     match chars.next() {
                         Some(closing) if closing == next => break,
+                        Some('\\') if next == '"' => {
+                            bail!("a backslash escape in a workspace `exclude` entry is not read")
+                        }
                         Some(other) => entry.push(other),
                         None => bail!(
                             "an entry of the workspace `exclude` array never closes its quote"
@@ -1257,6 +1260,12 @@ mod tests {
         let error = declared_excludes("[workspace]\nexclude = [\"crates/old]\n")
             .expect_err("an entry whose quote never closes was read without an error");
         assert!(error.to_string().contains("quote"), "wrong reason: {error}");
+        let error = declared_excludes("[workspace]\nexclude = [\"crates/a\\\"b\"]\n")
+            .expect_err("an escaped quote was read as the end of the entry");
+        assert!(
+            error.to_string().contains("backslash"),
+            "wrong reason: {error}"
+        );
     }
 
     /// The narrowing defect: an `exclude` key in some other table, read as the
