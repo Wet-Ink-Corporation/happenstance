@@ -91,7 +91,7 @@ major (`.kb/open-questions/should-codec-be-sealed.md:101-108`).
    branch can do. The rustdoc names the third condition instead.
 4. **Sub-question 2.** `Boundary::absorb` promises the same thing whichever way the trait goes.
    It reaches the codec only through `decode_event` (`crates/happenstance/src/boundary.rs:146`,
-   `codec.rs:458-473`), and that path consults `reads_tag` the same way for any `C: Codec`.
+   `codec.rs:458-474`), and that path consults `reads_tag` the same way for any `C: Codec`.
 5. **Two rustdoc corrections, both two-way.** ADR-0066 §5 exempts rustdoc prose from semver
    (`0066-what-1-0-promises.md:262-265`).
    - `codec.rs:61-67` says sealing "is additive to take later and impossible to undo", which is
@@ -100,6 +100,8 @@ major (`.kb/open-questions/should-codec-be-sealed.md:101-108`).
 
    Both keep their line counts. The strings `tests/codec_extension_point.rs` pins stay where they
    are: `not sealed`, the heading `# Reading a tag this build did not write`, and `no build`.
+   `codec.rs:67` cites this record as `(proposed)`; accepting it edits that line to drop the
+   word, and nothing else.
 
 ## Why
 
@@ -115,7 +117,7 @@ major (`.kb/open-questions/should-codec-be-sealed.md:101-108`).
   - `Runic` (`tests/codec_extension_point.rs:211`), `Elder` (`:234`) and `Forgetful` (`:437`);
   - `Json` in `tests/composition.rs:93`.
 - **The one invariant the crate needs from a foreign codec is already enforced.** That is a
-  non-empty tag, checked at compile time per codec type (`codec.rs:372-384`).
+  non-empty tag, checked at compile time per codec type (`codec.rs:373-385`).
 - **There is no evidence that sealing would harm nobody.** crates.io showed 0 reverse dependencies
   for `happenstance` on 2026-10-07. Private users are invisible, so that does not prove sealing
   harms nobody. Staying open costs nobody anything.

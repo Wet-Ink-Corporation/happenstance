@@ -63,8 +63,8 @@ use crate::domain::DomainEvent;
 /// initialisation order and a failure mode where the same log reads differently
 /// depending on what has been registered yet. **Sealing the trait** would
 /// withdraw the invitation above. After `1.0` only a major can: a seal added
-/// later breaks every codec written against this page, and lifting one breaks
-/// none. In `0.x` it is a minor; [ADR-0083] (proposed) weighs both sides.
+/// later breaks every codec written against this page; lifting one breaks none.
+/// A `0.x` minor can, as Cargo reads it as breaking; see [ADR-0083] (proposed).
 ///
 /// **`Codec` carries no associated `Error` type, and that is deliberate.** An
 /// associated error would add a third type parameter to every downstream
@@ -207,8 +207,8 @@ pub enum CodecError {
     /// **Three conditions, and they differ in how they are repaired.** A tag
     /// naming one of this crate's codecs is a feature away. A foreign
     /// codec's tag is not: nothing registers one, so no build resolves it.
-    /// Framing this build cannot parse lands here too, as up to its first 32
-    /// bytes, lossily decoded: a later framing version, or damage.
+    /// Framing this build cannot parse lands here as up to 32 bytes, lossily:
+    /// a later version, damage, or application metadata beginning `hpst`.
     ///
     /// The second case is repairable from the reading side rather than the
     /// build's: a codec claims the tag with
@@ -220,7 +220,7 @@ pub enum CodecError {
     /// to it.
     #[error("no codec is registered for tag `{tag}`")]
     UnknownTag {
-        /// The tag read off the event.
+        /// The tag read off the event, or the unparseable framing as found.
         tag: Box<str>,
     },
     /// A nominated event's type is not one this domain type declares.

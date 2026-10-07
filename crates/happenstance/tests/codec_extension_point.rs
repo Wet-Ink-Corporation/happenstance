@@ -17,8 +17,8 @@
 //! **The decision this file was written to await was taken at `0.2.0`, and it
 //! is `Codec::reads_tag`**: a defaulted method by which a codec declares the
 //! tags it can read, consulted before the built-in chain. A registry and
-//! sealing the trait were the alternatives; `codec.rs` records why each lost
-//! and that sealing stays open.
+//! sealing the trait were the alternatives; `codec.rs` records why each
+//! lost, and what sealing would cost after `1.0`.
 //!
 //! **The paragraph above is deliberately not rewritten to say the limit is
 //! gone, because it is not.** The repair is *per codec*, and the orphan rule

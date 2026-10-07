@@ -138,7 +138,7 @@ They are two different walls, and this record leaves both standing.
    them, so no new test is owed.
 4. **The one invariant the crate needs from a foreign codec is already enforced.** A tag must be
    non-empty. `TagIsWritable::<C>::CHECKED` is a `const` assertion, evaluated once per codec type
-   when `frame::<C>` is instantiated (`codec.rs:372-384`, `:392-393`). It fails the downstream
+   when `frame::<C>` is instantiated (`codec.rs:373-385`, `:392-393`). It fails the downstream
    build at compile time and needs no seal. The other half, "no `0xFF`", is free because a
    `&'static str` is UTF-8 (`codec.rs:89-91`).
 5. **No visible user either way.** On 2026-10-07 crates.io reported 0 reverse dependencies for
@@ -160,7 +160,7 @@ and ADR-0049 named two.
 
 | # | Condition | Producer | Repair |
 | --- | --- | --- | --- |
-| 1 | A framing region is present but unreadable: a framing version this build does not know (the magic `hpst` followed by a version other than `\x01`), no terminator, or a tag that is not UTF-8 | `unreadable()`, `codec.rs:438-445`, from `:422-433` (version: `:422-424`, `:360-363`) | an unknown version: upgrade `happenstance` to the release that wrote it; otherwise none, the bytes are damaged or not ours |
+| 1 | A framing region is present but unreadable: a later framing version this build does not know (the magic `hpst` followed by a version other than `\x01`), damage (no terminator, or a tag that is not UTF-8), or application metadata that happens to begin with `hpst` and was never a framing region | `unreadable()`, `codec.rs:438-445`, from `:422-433` (version and magic-prefixed metadata: `:422-424`, `:360-363`) | an unknown version: upgrade `happenstance` to the release that wrote it; otherwise none, the bytes are damaged or not ours |
 | 2 | A tag naming a built-in codec whose feature is off in this build | `decode_by_tag`, `codec.rs:501-503` | turn the feature on in `Cargo.toml` |
 | 3 | A tag no codec in this build claims | the same line | pass a codec whose `reads_tag` claims it |
 
@@ -225,7 +225,12 @@ words that name case 1.
   citation moves. It is below the heading, so the order `not sealed` (`:24`) then
   `# Reading a tag this build did not write` (`:28`) that `tests/codec_extension_point.rs:117-129`
   asserts is untouched. So are the five strings the section must contain (`:132`).
+- **Acceptance edits `codec.rs:67` once more**, to drop `(proposed)` after `[ADR-0083]`. The
+  rewritten line points at this record while it is still a proposal and says so; the word goes in
+  the same change that sets this record's status to accepted, and no other line moves.
 - **`codec.rs:207-211` is rewritten** to name three conditions, in five lines, keeping `no build`.
+  Its unparseable-framing case also names application metadata that happens to begin with `hpst`,
+  which `recover()` refuses rather than passes through (`codec.rs:422-424`).
 - `kb-open-question-seal-the-codec-001` is closed on acceptance. The phase 17 item's line is struck
   through.
 - In `1.x`, `Codec` grows only by defaulted items (§2).
