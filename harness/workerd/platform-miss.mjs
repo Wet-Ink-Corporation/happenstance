@@ -2,9 +2,10 @@
 // and how long it waits that out. Its own module so that
 // test/platform-miss.test.ts can pin both without a deployment.
 //
-// Cloudflare's own answers when a request reaches a location the freshly
-// deployed Worker has not propagated to yet. Both are raised before any harness
-// or adapter code runs, so they say nothing about a rule:
+// Cloudflare's own answers while a fresh Worker is still landing. The first
+// two are raised before any harness or adapter code runs; the third can cut a
+// rule off part way. None of them is a rule's verdict, and a retry goes to a
+// fresh object, so no partial state from the cut request is replayed into it:
 // - `500 Worker not found.`, which the first deployed run saw on two rules that
 //   pass everywhere else;
 // - a `404` HTML page headed "There is nothing here yet", which a run on PR #36
@@ -14,7 +15,8 @@
 //   runtime raises when a rolling deploy replaces the object's code under an
 //   in-flight request. Runs on PR #44 and PR #46 (37580786041, job
 //   112659800922, `nothing_below_an_observed_position_appears_later`) got it
-//   on one rule each; the request was cut before the rule's result existed.
+//   on one rule each; the request was cut before the rule's result existed,
+//   which is why the retry needs a fresh object rather than the same one.
 // Matched exactly. The harness's own 404s (`no such rule`, `no route …`,
 // `expected /do/…`) are plain text and never match, so a rule's own failure (a
 // panic, an unknown rule, a harness fault) is never retried and the strict
