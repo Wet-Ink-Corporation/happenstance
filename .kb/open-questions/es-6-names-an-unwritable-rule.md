@@ -198,7 +198,7 @@ sealing option in that pass — wrap `rusqlite::Error` behind an opaque value en
 publicly — depended entirely on the answer, and `kb-decision-0044` settled the re-export question
 without supplying it, so the option was ruled out on cost-of-delay rather than on ES-6's meaning.
 `#[non_exhaustive]` protects the *addition* of variants, not the *change* of a variant's payload
-(`crates/happenstance-sqlite/src/event_store.rs:1229`), which is why the question has a semver
+(`crates/happenstance-sqlite/src/event_store.rs:1259`), which is why the question has a semver
 consequence and not only a documentation one.
 
 ## What forces it
@@ -238,7 +238,7 @@ Whether the dagger convention survives at all, now that the guard it switched is
 ## Phase 16 — 2026-09-29
 
 **Sub-question 4 is answered by `kb-decision-0066`.** Driver error payloads re-exported under
-ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1535`,
+ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1565`,
 are **inside** the 1.0 promise, with a named limit: an adapter's major follows the breaking
 version of the driver it re-exports. That rules out the sealing option `kb-decision-0044` left
 open. Writing the answer into ES-6's prose is phase 17's

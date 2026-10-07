@@ -135,7 +135,7 @@ attribute-level `Batch: Send`, is ES-3's trap in another place.
 The tree says a required method would mostly be answered "unknown", so it would buy only the
 break. Every published adapter forgets outside the port, where no adapter code runs:
 - **SQLite and Cloudflare** allocate with `INTEGER PRIMARY KEY AUTOINCREMENT`
-  (`crates/happenstance-sqlite/src/event_store.rs:285`,
+  (`crates/happenstance-sqlite/src/event_store.rs:286`,
   `crates/happenstance-cloudflare/src/event_store.rs:202`).
 - **Postgres and Neon** allocate from a sequence read explicitly
   (`crates/happenstance-postgres/src/event_store.rs:990`,

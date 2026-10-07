@@ -81,7 +81,7 @@ earns it:
 (`crates/happenstance-postgres/src/event_store.rs:175-183`, read at `:393-416`). A handle that was
 open across a re-mint would keep stamping the retired identity. That is the stale-handle bug
 `happenstance-sqlite` closed in `f719b2a` by re-reading the identity inside the append
-(`crates/happenstance-sqlite/src/event_store.rs:680-743`). `NeonEventStore` has no cache. Its
+(`crates/happenstance-sqlite/src/event_store.rs:681-744`). `NeonEventStore` has no cache. Its
 append reads `store_id` inside the same `INSERT … SELECT` statement
 (`crates/happenstance-neon/src/event_store.rs:529`), so a re-mint would be seen by the next append.
 

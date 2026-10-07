@@ -170,8 +170,9 @@ use std::vec;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventId, InvalidEventType, InvalidTag,
-    Query, ReadOptions, RecordedAt, SendEventStore, SequencePosition, SequencedEvent, StoreId,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, Guard, InvalidEventType,
+    InvalidTag, Query, ReadOptions, RecordedAt, SendEventStore, SequencePosition, SequencedEvent,
+    StoreId,
 };
 use rusqlite::Connection;
 use rusqlite::types::Value;
@@ -1133,7 +1134,7 @@ fn begin_error(error: rusqlite::Error) -> AppendError<SqliteEventStoreError> {
 /// 400 items — the arm width exactly, therefore one chunk — carrying
 /// [`MAX_TAGS_PER_EVENT`](SqliteEventStore::MAX_TAGS_PER_EVENT) tags apiece
 /// binds 51,200 of SQLite's 32,766 bound parameters, and the selectivity lookup
-/// on the line below reaches the same wall earlier still, on a query of ordinary
+/// in [`guard_statements`] reaches the same wall earlier still, on a query of ordinary
 /// two-tag items, because it accumulates across the whole query rather than
 /// across a chunk. Both are bounded by
 /// [`MAX_QUERY_PARAMETERS_PER_STATEMENT`](SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT)
@@ -1163,30 +1164,18 @@ fn evaluate(
     }
 
     for guard in condition.guards() {
-        let selectivity = Selectivity::read_for(
-            connection,
-            &guard.query,
-            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
-        )?;
         // The boundary reaches SQLite rather than only Rust. See
         // `query_sql::chunks`: the comparison below stays, and the bound makes
         // it trivially true rather than load-bearing.
-        let boundary = guard.after.map_or(0, as_i64);
-        let plan = crate::query_sql::chunks(
-            &guard.query,
-            &selectivity,
-            SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
-            SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
-            Some(boundary),
-        );
+        let boundary = guard_boundary(guard);
 
         // `Option<i64>`'s own ordering is what merges the chunks: `None` sorts
         // below every `Some`, so an empty chunk contributes nothing and the fold
         // is the global maximum without a special case for "no match yet".
         let mut highest: Option<i64> = None;
-        for (matched, params) in plan {
+        for (statement, params) in guard_statements(connection, guard)? {
             let chunk: Option<i64> = connection.query_row(
-                &format!("SELECT max(position) FROM ({matched})"),
+                &statement,
                 rusqlite::params_from_iter(params.iter()),
                 |row| row.get(0),
             )?;
@@ -1209,6 +1198,47 @@ fn evaluate(
         }
     }
     Ok(None)
+}
+
+/// A guard's `after` as the bound its statements carry: `None` is zero,
+/// because positions start at one.
+fn guard_boundary(guard: &Guard) -> i64 {
+    guard.after.map_or(0, as_i64)
+}
+
+/// The statements [`evaluate`] runs for one guard, exactly as it runs them:
+/// each chunk of the guard's arms, wrapped by [`guard_statement`], with its
+/// bind values.
+///
+/// A function of its own so that `plan_tests` can plan the very text `append`
+/// executes under `BEGIN IMMEDIATE`, rather than a second spelling of it that
+/// could pass while this one drifts.
+fn guard_statements(
+    connection: &Connection,
+    guard: &Guard,
+) -> rusqlite::Result<Vec<(String, Vec<Value>)>> {
+    let selectivity = Selectivity::read_for(
+        connection,
+        &guard.query,
+        SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+    )?;
+    let plan = crate::query_sql::chunks(
+        &guard.query,
+        &selectivity,
+        SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
+        SqliteEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT,
+        Some(guard_boundary(guard)),
+    );
+    Ok(plan
+        .into_iter()
+        .map(|(matched, params)| (guard_statement(&matched), params))
+        .collect())
+}
+
+/// One chunk's matched positions reduced to the highest, which is all a guard
+/// needs to know.
+fn guard_statement(matched: &str) -> String {
+    format!("SELECT max(position) FROM ({matched})")
 }
 
 /// Checks the file's persisted incarnation against the one this handle stamps
@@ -2807,8 +2837,9 @@ mod tests {
 
 #[cfg(test)]
 mod plan_tests {
-    use happenstance_core::{Query, QueryItem, Tags};
+    use happenstance_core::{AppendCondition, Query, QueryItem, SequencePosition, Tags};
     use rusqlite::Connection;
+    use rusqlite::types::Value;
 
     use super::SqliteEventStore;
     use crate::query_sql::{Selectivity, Window, page_statements};
@@ -2851,11 +2882,7 @@ mod plan_tests {
     }
 
     /// `EXPLAIN QUERY PLAN` as `(id, parent, detail)` rows.
-    fn plan_rows(
-        connection: &Connection,
-        sql: &str,
-        params: &[rusqlite::types::Value],
-    ) -> Vec<(i64, i64, String)> {
+    fn plan_rows(connection: &Connection, sql: &str, params: &[Value]) -> Vec<(i64, i64, String)> {
         let mut statement = connection
             .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
             .expect("the plan must prepare");
@@ -3021,6 +3048,276 @@ mod plan_tests {
                     && detail.contains("position>")
             }),
             "the arm's window did not reach the index:\n{rendered}"
+        );
+    }
+
+    /// `seeded()`, plus a third tag per event and the cardinalities a real
+    /// store would have recorded.
+    ///
+    /// `seeded()` writes no `tag_cardinality` rows, so its seed choice falls
+    /// back to canonical order and starts from `shard:cold`, the unselective
+    /// tag. That suits the read-path tests and would misrepresent the guard: on
+    /// a store built through `append`, `bump_cardinality` keeps the table, and
+    /// `most_selective_first` seeds from `subject:*`. The rows are written here
+    /// rather than in `seeded()` so the two read-path tests keep the plan they
+    /// were written against.
+    fn guard_seeded() -> Connection {
+        let mut connection = seeded();
+        let transaction = connection.transaction().expect("a transaction");
+        for position in 1..=5_000i64 {
+            transaction
+                .execute(
+                    "INSERT INTO event_tag (tag, position, event_type) VALUES (?, ?, 'Seeded')",
+                    rusqlite::params![format!("region:r{}", position % 7), position],
+                )
+                .expect("a tag row");
+        }
+        for (tag, events) in [
+            ("subject:s1", 50i64),
+            ("subject:s2", 50),
+            ("region:r1", 714),
+            ("region:r2", 714),
+            ("shard:cold", 5_000),
+        ] {
+            transaction
+                .execute(
+                    "INSERT INTO tag_cardinality (tag, events) VALUES (?, ?)",
+                    rusqlite::params![tag, events],
+                )
+                .expect("a cardinality row");
+        }
+        transaction.commit().expect("the seed must commit");
+        connection
+    }
+
+    /// One query item over `pairs`, optionally restricted to `types`.
+    fn guard_item(pairs: &[(&str, &str)], types: &[&str]) -> QueryItem {
+        let tags = Tags::from_pairs(pairs.iter().copied()).expect("non-empty pairs");
+        QueryItem::new(types.iter().copied(), tags).expect("a constrained item")
+    }
+
+    /// A plan as one line per row, for a failure message.
+    fn render(rows: &[(i64, i64, String)]) -> String {
+        rows.iter()
+            .map(|(id, parent, detail)| format!("id={id} parent={parent} {detail}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// The guard shapes the assertion runs over, by name.
+    ///
+    /// (a) is the shape ADR-0068 measured; (b) is the unanchored guard an
+    /// idempotency key or a unique name writes; (c) chains twice, so `m1`
+    /// exists; (d) is two items, so the arms meet in a `UNION`; (e) carries
+    /// the value-list `IN` a typed item puts on the seed.
+    fn guard_cases() -> Vec<(&'static str, AppendCondition)> {
+        let after = SequencePosition::new(2_500).expect("non-zero");
+        let two = || guard_item(&[("subject", "s1"), ("shard", "cold")], &[]);
+        vec![
+            (
+                "(a) two tags, after",
+                AppendCondition::new(Query::from_item(two())).after(after),
+            ),
+            (
+                "(b) two tags, no boundary",
+                AppendCondition::new(Query::from_item(two())),
+            ),
+            (
+                "(c) three tags, after",
+                AppendCondition::new(Query::from_item(guard_item(
+                    &[("subject", "s1"), ("region", "r1"), ("shard", "cold")],
+                    &[],
+                )))
+                .after(after),
+            ),
+            (
+                "(d) two two-tag items, after",
+                AppendCondition::new(
+                    Query::from_items([
+                        two(),
+                        guard_item(&[("subject", "s2"), ("shard", "cold")], &[]),
+                    ])
+                    .expect("a non-empty item list"),
+                )
+                .after(after),
+            ),
+            (
+                "(e) two tags and two types, after",
+                AppendCondition::new(Query::from_item(guard_item(
+                    &[("subject", "s1"), ("shard", "cold")],
+                    &["Seeded", "Other"],
+                )))
+                .after(after),
+            ),
+        ]
+    }
+
+    /// The plan of every statement `evaluate` would run for `condition`.
+    fn guard_plans(
+        connection: &Connection,
+        condition: &AppendCondition,
+    ) -> Vec<Vec<(i64, i64, String)>> {
+        condition
+            .guards()
+            .iter()
+            .flat_map(|guard| {
+                super::guard_statements(connection, guard).expect("the guard must render")
+            })
+            .map(|(sql, params)| plan_rows(connection, &sql, &params))
+            .collect()
+    }
+
+    /// **ADR-0068 §16, limb 1: the falsifier for the guard's seed-driven
+    /// shape, asserted rather than run by hand.**
+    ///
+    /// Each chained tag is an `EXISTS` correlated to `seed.position`, so the
+    /// seed is the outer loop and every chained test is a point seek. A `LIST
+    /// SUBQUERY` anywhere in the guard's plan means a chained test was
+    /// materialised once in full and the seed demoted to the probe side: the
+    /// pre-`8c8b215` uncorrelated chain from our side, or a planner that
+    /// decorrelates the `EXISTS` from SQLite's. Same rows either way, and a
+    /// cost proportional to the *least* selective tag, which no conformance
+    /// rule can see.
+    ///
+    /// The second limb catches what the first cannot: a chained test that
+    /// lost its alias still plans no `LIST SUBQUERY`, but its `SEARCH m{i}`
+    /// row then seeks on `tag=?` alone. So every such row must carry
+    /// `position=?`.
+    ///
+    /// Scoped to guard statements on purpose: the windowed read path carries a
+    /// harmless `LIST SUBQUERY` of its own. Row text is otherwise not pinned,
+    /// because it varies between SQLite versions; these substrings do not.
+    #[test]
+    fn the_guard_plan_has_no_list_subquery() {
+        let connection = guard_seeded();
+
+        for (case, condition) in guard_cases() {
+            let plans = guard_plans(&connection, &condition);
+            assert!(!plans.is_empty(), "{case}: the guard rendered no statement");
+
+            for rows in &plans {
+                let rendered = render(rows);
+                assert!(
+                    rows.iter()
+                        .any(|(_, _, detail)| detail.contains("SEARCH seed")),
+                    "{case}: the plan never searches the seed, so it says nothing \
+                     about the shape under test:\n{rendered}"
+                );
+                assert!(
+                    !rows
+                        .iter()
+                        .any(|(_, _, detail)| detail.contains("LIST SUBQUERY")),
+                    "{case}: a chained test was materialised, so the seed no \
+                     longer drives the guard:\n{rendered}"
+                );
+
+                let chained = rows
+                    .iter()
+                    .filter(|(_, _, detail)| detail.contains("SEARCH m"))
+                    .collect::<Vec<_>>();
+                assert!(
+                    !chained.is_empty(),
+                    "{case}: no chained test in the plan:\n{rendered}"
+                );
+                for (_, _, detail) in chained {
+                    assert!(
+                        detail.contains("position=?"),
+                        "{case}: a chained test seeks without the seed's \
+                         position, so it is no longer correlated:\n{rendered}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The pre-`8c8b215` chain, kept verbatim so the instrument above can be
+    /// shown to fire: each chained tag as an **uncorrelated** `IN` list rather
+    /// than a correlated `EXISTS`. Same seed, same boundary, same wrapper —
+    /// shape from `experiments/correlated-exists-guard/src/chain.rs:341-352`.
+    fn uncorrelated_guard_statement(
+        seed: &str,
+        chained: &[&str],
+        boundary: i64,
+    ) -> (String, Vec<Value>) {
+        let mut matched = String::from(
+            "SELECT seed.position AS position FROM event_tag AS seed \
+             WHERE seed.tag = ? AND seed.position > ?",
+        );
+        let mut params = vec![Value::Text(seed.to_owned()), Value::Integer(boundary)];
+        for tag in chained {
+            matched
+                .push_str(" AND seed.position IN (SELECT position FROM event_tag WHERE tag = ?)");
+            params.push(Value::Text((*tag).to_owned()));
+        }
+        (super::guard_statement(&matched), params)
+    }
+
+    /// **The instrument is not decorative.** The uncorrelated chain returns
+    /// the same rows and passes every conformance rule; only its plan and its
+    /// cost class differ (about 580,000 µs against 33 µs at 10^6 events,
+    /// ADR-0068). The predicate `the_guard_plan_has_no_list_subquery` asserts
+    /// absent must be present here, or that test could not fail.
+    #[test]
+    fn the_guard_plan_instrument_fires_on_the_uncorrelated_chain() {
+        let connection = guard_seeded();
+        let (sql, params) = uncorrelated_guard_statement("subject:s1", &["shard:cold"], 2_500);
+        let rows = plan_rows(&connection, &sql, &params);
+
+        assert!(
+            rows.iter()
+                .any(|(_, _, detail)| detail.contains("LIST SUBQUERY")),
+            "the uncorrelated chain planned no `LIST SUBQUERY`, so the guard-plan \
+             assertion cannot tell it from the shipped shape:\n{}",
+            render(&rows)
+        );
+    }
+
+    /// The correlated chain with its alias dropped: `m0.position = position`
+    /// binds the inner table's own column, so the `EXISTS` is true whenever the
+    /// tag exists at all and the chain no longer filters the seed.
+    fn dropped_alias_guard_statement(
+        seed: &str,
+        chained: &str,
+        boundary: i64,
+    ) -> (String, Vec<Value>) {
+        let matched = "SELECT seed.position AS position FROM event_tag AS seed \
+             WHERE seed.tag = ? AND seed.position > ? \
+             AND EXISTS (SELECT 1 FROM event_tag AS m0 WHERE m0.tag = ? AND m0.position = position)";
+        let params = vec![
+            Value::Text(seed.to_owned()),
+            Value::Integer(boundary),
+            Value::Text(chained.to_owned()),
+        ];
+        (super::guard_statement(matched), params)
+    }
+
+    /// **The correlation limb is not decorative either.** The dropped-alias
+    /// chain plans no `LIST SUBQUERY`, so only the `position=?` check on its
+    /// `SEARCH m0` row can tell it from the shipped shape.
+    #[test]
+    fn the_guard_plan_correlation_limb_fires_on_a_dropped_alias() {
+        let connection = guard_seeded();
+        let (sql, params) = dropped_alias_guard_statement("subject:s1", "shard:cold", 2_500);
+        let rows = plan_rows(&connection, &sql, &params);
+
+        assert!(
+            !rows
+                .iter()
+                .any(|(_, _, detail)| detail.contains("LIST SUBQUERY")),
+            "the dropped-alias chain planned a `LIST SUBQUERY`, so it does not isolate \
+             the correlation limb:\n{}",
+            render(&rows)
+        );
+        let chained: Vec<&String> = rows
+            .iter()
+            .map(|(_, _, detail)| detail)
+            .filter(|detail| detail.contains("SEARCH m0"))
+            .collect();
+        assert!(
+            !chained.is_empty() && chained.iter().all(|detail| !detail.contains("position=?")),
+            "the dropped-alias chain's `SEARCH m0` row carries `position=?`, so the \
+             correlation limb cannot tell it from the shipped shape:\n{}",
+            render(&rows)
         );
     }
 }

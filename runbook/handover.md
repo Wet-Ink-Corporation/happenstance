@@ -12,9 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-affected-followup`, on `896d48c` (`main`, where PR #39 merged). 2026-10-07.
-The previous handover named `80e1a213` and so did not know #39; `git log` was
-trusted over it.
+`lane/p17-guard-plan`, on `4fbfefa` (`main`, where PR #41 merged). 2026-10-07.
 
 ## Where things are
 
@@ -36,20 +34,22 @@ Neon failure does.
 
 ## In flight
 
-An unattended overnight session (2026-10-07) is working the queue in order, one PR
-per item.
-- **The vacuity control ran.** Draft PR #40 dropped `query_item_types_are_or` from
-  `emit_dispatch`; run 37570009097 went red on both `workerd` legs with
-  `[404] no such rule` for exactly that rule. Closed unmerged; branch
-  `lane/p17-vacuity-control` kept.
-- **This PR (`wi-13bd3b`):** `declared_excludes` matches its whole key and fails
-  closed (`wi-9e72a4`), a multi-line `exclude` with comments is read and tested, and
-  the stale citations into `xtask/src/main.rs` are repointed by anchor.
+An unattended overnight session (2026-10-07) is working the phase 17 queue in
+order, one PR per item.
+- **Merged:** #41 (`4fbfefa`): the vacuity control's record (draft PR #40, run
+  37570009097, red by name on both `workerd` legs, closed unmerged) and
+  `wi-13bd3b`'s `declared_excludes` fixes.
+- **This PR:** the guard-plan `LIST SUBQUERY` assertion (ADR-0068 §16, limb 1); the
+  falsifier did not fire.
+- **Next, in flight:** L7's measurement, `experiments/append-batch-ownership/`.
+- **A pre-existing flake** in `happenstance-testkit`'s
+  `the_concurrency_rules_reject_exactly_what_they_claim` (the racing mutants'
+  yield-bounded rendezvous) turns the local gate red under load. It is recorded in
+  the phase log; fixing it rewrites a test instrument, which is the owner's call.
 
 ## Next action
 
-1. The guard-plan `LIST SUBQUERY` assertion (ADR-0068), in `happenstance-sqlite`.
-2. L7 (ES-17), L9 (ADR-0022 §9), L10 (`ProjectionId`), the breaking open
+1. L7 (ES-17), L9 (ADR-0022 §9), L10 (`ProjectionId`), the breaking open
    questions, VT-6, then L8's Neon fence spike last, then the `0.4.0` trace table.
 
 ## Waiting on the owner

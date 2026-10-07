@@ -158,7 +158,7 @@ Re-open §8 if either of the following happens:
 
 Either would mean the requirement has changed sign again. The first can be asserted in the
 adapter's own tests, but it is not asserted there today: the read path's plan is
-(`event_store.rs:2418`), and the guard's plan is not. That assertion is additive and owed, and
+(`event_store.rs:2939`), and the guard's plan is not. That assertion is additive and owed, and
 phase 17 owns it. Until it exists, this falsifier fires by hand.
 
 The single-tag fast path keeps its own falsifier. ADR-0022's was headed *"§8, the fast path"*
@@ -170,7 +170,7 @@ fast path if the single-tag guard stops being cheaper than the multi-tag chain i
 
 §9's falsifier asks that *"a deployment shows"* the captured `Handle` costing something
 (`0022:609-612`). The capture is unconditional in the three places it is written:
-`crates/happenstance-sqlite/src/event_store.rs:512`, `projection_store.rs:234` and
+`crates/happenstance-sqlite/src/event_store.rs:513`, `projection_store.rs:234` and
 `crates/happenstance-postgres/src/event_store.rs:314`. What the open question describes is a store
 that outlives its runtime and whose reads hang, or yield a `Worker(cancelled)` item, but never
 `NoRuntime`. That outcome was reasoned from tokio's semantics. Nothing in the tree reproduces it:

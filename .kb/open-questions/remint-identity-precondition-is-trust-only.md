@@ -102,7 +102,7 @@ the same store.
 `8900697` wrote the failing test first:
 `an_append_through_a_handle_the_file_has_outgrown_is_refused`
 (`crates/happenstance-sqlite/tests/migration.rs:501`). Commit `f719b2a` made it pass. `append_locked`
-(`crates/happenstance-sqlite/src/event_store.rs:680-743`) re-reads the file's persisted identity
+(`crates/happenstance-sqlite/src/event_store.rs:681-744`) re-reads the file's persisted identity
 inside the append's own `BEGIN IMMEDIATE`, before any guard is probed. When the handle's identity
 differs, it refuses with `SqliteEventStoreError::IdentityMoved` and names both incarnations. The
 check is one indexed read on a four-row table, under a lock the writer already holds. Both commits

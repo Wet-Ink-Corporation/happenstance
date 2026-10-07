@@ -61,7 +61,7 @@ poll and bound every later statement by it, and `ReadOptions` gains an inclusive
 `Option<usize>` limit. None of those seven is about what one page of that read costs to hold in
 memory or in lock time. `PAGE_SIZE` — the row count an adapter fetches per underlying statement
 when a read spans more than one — appears nowhere in `.kb/` before this atom, and it is not a port
-concept at all: `crates/happenstance-sqlite/src/event_store.rs:222` declares `const PAGE_SIZE:
+concept at all: `crates/happenstance-sqlite/src/event_store.rs:223` declares `const PAGE_SIZE:
 usize = 512` as a private implementation constant, one `happenstance-sqlite` chose and the port
 never asked for.
 
@@ -101,7 +101,7 @@ number was measured against in combination.
 
 `kb-decision-0053` settles the parts of the question that had no trade in them and leaves the third
 fork exactly where this atom put it. **A byte budget now exists at all**: the public
-`SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT` (`event_store.rs:380`), set to `8 *
+`SqliteEventStore::MAX_PAGE_BYTES_PER_STATEMENT` (`event_store.rs:381`), set to `8 *
 MAX_EVENT_DATA_LEN`, bounds one page's payload residency, and the connection is taken per statement
 rather than held across a page — sound only because of ADR-0011's ceiling, since every statement
 carries `position <= H` and what commits between two of them is invisible to all of them. `PAGE_SIZE`
@@ -158,7 +158,7 @@ additive at the type level:
 
 - `ReadOptions` is `#[non_exhaustive]` with `Default` (`crates/happenstance-core/src/query.rs:267-269`),
   so a budget field breaks no caller.
-- An adapter-local builder, making `PAGE_SIZE` public (`crates/happenstance-sqlite/src/event_store.rs:222`),
+- An adapter-local builder, making `PAGE_SIZE` public (`crates/happenstance-sqlite/src/event_store.rs:223`),
   and deprecating `MAX_PAGE_BYTES_PER_STATEMENT` (`:380`) are all minors.
 
 Under `kb-decision-0066`'s versioning, a **contract-level** caller budget would oblige every
