@@ -721,13 +721,15 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
       count, a removed field and a hidden field (#49);
     - two on `happenstance-postgres`: `naive-arm` and `new_naive` (lane L4);
     - one on `happenstance-testkit`: the `k_disjoint` rename (ADR-0077).
-  - **Six hand rows:**
+  - **Seven hand rows:**
     - core's `unstable-projection`, which the tool passes over as an `unstable-*`
       feature;
     - the hidden emitters (ADR-0076);
     - `planned_statement_count`'s values (ADR-0079);
     - `Busy` replacing `Store`, and the typed retry (ADR-0077);
-    - SQLite's 15 s timeout (ADR-0065).
+    - SQLite's 15 s timeout (ADR-0065);
+    - `CommandError::Exhausted.source`'s type, and the renamed rule's changed
+      acceptance (both added in review, Greptile on #52).
   - **Every row has a decision.** Four `proposed` records are listed as pending
     (ADR-0081, 0082, 0084, 0087). The release box stays open: nothing is
     published or tagged.

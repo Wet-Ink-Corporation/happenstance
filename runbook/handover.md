@@ -54,7 +54,8 @@ An unattended overnight session (2026-10-07) is working the phase 17 queue.
 
 ## Next action
 
-1. L10, L8's fence spike, then the `0.4.0` trace table and the exit pass.
+1. L10, then the exit pass. L8's spike (#50) and record (#51) are done and wait on the
+   owner; the trace table's pending rows join as their records are accepted.
 
 ## Waiting on the owner
 

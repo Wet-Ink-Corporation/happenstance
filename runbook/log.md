@@ -15,7 +15,7 @@ monolith, `RUNBOOK.md`, and in `git log`.
 *Committed on `lane/p17-trace-table`, on `4278816`.* Phase 17.
 
 `cargo semver-checks` against `0.3.2` (`--release-type minor`) reports six breaks
-in three crates. Each one, and six hand rows the tool cannot see, is traced to its
+in three crates. Each one, and seven hand rows the tool cannot see, is traced to its
 decision in `CHANGELOG.md`'s `[Unreleased]`. Four pending records are named. Not
 released.
 
