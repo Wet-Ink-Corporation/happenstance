@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-es17`, on `6235224` (`main`, where PR #42 merged). 2026-10-07.
+`lane/p17-workerd-reset`, on `3462bf8` (`main`, where PR #46 merged). 2026-10-07.
 
 ## Where things are
 
@@ -36,18 +36,17 @@ Neon failure does.
 
 An unattended overnight session (2026-10-07) is working the phase 17 queue.
 - **Merged:** #41 (`4fbfefa`, the vacuity control's record and `wi-13bd3b`), #42
-  (`6235224`, the guard-plan assertion).
-- **This PR:** L7 — ES-17 frozen on `&[Event]` by ADR-0080, on a committed
-  measurement.
+  (`6235224`, the guard-plan assertion), #46 (`3462bf8`, L7: ES-17 frozen on
+  `&[Event]` by ADR-0080).
+- **This PR:** the deployed `workerd` leg retries Cloudflare's "Durable Object
+  reset because its code was updated" once, as a platform miss.
 - **Open for the owner** (each a `proposed` record): #43 ADR-0083 (codec stays
   unsealed), #44 ADR-0084 (the SQL seam is final; proposes a Postgres
   parameter-count check), #45 ADR-0086 (Postgres and Neon keep mint-once).
 - **In flight:** L9 (ADR-0022 §9's reproduction and a remedy, `proposed`), then L10
   (`ProjectionId`, planned), Neon's `push` narrowing, L8 last.
 - **Pre-existing:** the testkit's racing-mutant flake under load; the default-features
-  doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link; the
-  deployed `workerd` leg does not retry "Durable Object reset because its code was
-  updated".
+  doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link.
 
 ## Next action
 

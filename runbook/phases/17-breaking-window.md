@@ -669,3 +669,13 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   stays unsealed), #44 (ADR-0084, the SQL seam, now also proposing a Postgres
   parameter-count check after a real gap was found) and #45 (ADR-0086, VT-6
   mint-once), each `proposed`.
+- 2026-10-07 — **PR #46 merged as `3462bf8`** (L7, ES-17 frozen on `&[Event]`,
+  ADR-0080). Its deployed `workerd` leg failed once with
+  `500 Durable Object reset because its code was updated.` on one rule
+  (run 37580786041, job 112659800922), as #44's had; `workerd` is not a required
+  check, and its one re-run was spent. **The deployed leg now treats that answer
+  as a platform miss**, on `lane/p17-workerd-reset`: `harness/workerd/platform-miss.mjs`
+  matches the exact `500` body, and a rule's own message that merely mentions a
+  reset, or a `404` carrying the same words, is still a failure. Red first: the new
+  case failed against the old matcher (1 of 6), then 6 of 6. Verified: vitest on
+  `test/platform-miss.test.ts`, `spec-trace`, `lints`, `lint-kb`. No Rust changed.

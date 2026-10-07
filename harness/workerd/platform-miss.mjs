@@ -9,7 +9,12 @@
 //   pass everywhere else;
 // - a `404` HTML page headed "There is nothing here yet", which a run on PR #36
 //   (37470989256, attempt 1) got on the rule listing one request after the
-//   readiness probe had seen a 200.
+//   readiness probe had seen a 200;
+// - `500 Durable Object reset because its code was updated.`, which the
+//   runtime raises when a rolling deploy replaces the object's code under an
+//   in-flight request. Runs on PR #44 and PR #46 (37580786041, job
+//   112659800922, `nothing_below_an_observed_position_appears_later`) got it
+//   on one rule each; the request was cut before the rule's result existed.
 // Matched exactly. The harness's own 404s (`no such rule`, `no route …`,
 // `expected /do/…`) are plain text and never match, so a rule's own failure (a
 // panic, an unknown rule, a harness fault) is never retried and the strict
@@ -17,7 +22,8 @@
 export function isPlatformMiss(status, body) {
   return (
     (status === 500 && body.trim() === "Worker not found.") ||
-    (status === 404 && body.includes("<h1>There is nothing here yet</h1>"))
+    (status === 404 && body.includes("<h1>There is nothing here yet</h1>")) ||
+    (status === 500 && body.trim() === "Durable Object reset because its code was updated.")
   );
 }
 

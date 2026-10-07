@@ -27,9 +27,16 @@ function scripted(answers: Answer[]) {
 const quiet = { pause: async () => {}, log: () => {} };
 
 describe("isPlatformMiss", () => {
-  it("matches both of Cloudflare's propagation answers", () => {
+  it("matches each of Cloudflare's propagation answers", () => {
     expect(isPlatformMiss(500, "Worker not found.\n")).toBe(true);
     expect(isPlatformMiss(404, PROPAGATING_PAGE)).toBe(true);
+    expect(isPlatformMiss(500, "Durable Object reset because its code was updated.")).toBe(true);
+  });
+
+  it("matches the reset only as the platform words it", () => {
+    // A rule whose own message merely mentions a reset is the rule's failure.
+    expect(isPlatformMiss(500, "Rust panic: Durable Object reset because its code was updated. (in suite.rs)")).toBe(false);
+    expect(isPlatformMiss(404, "Durable Object reset because its code was updated.")).toBe(false);
   });
 
   it("never matches the harness's own answers", () => {
