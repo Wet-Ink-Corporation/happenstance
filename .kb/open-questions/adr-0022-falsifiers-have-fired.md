@@ -245,8 +245,15 @@ cheaper on the correlated chain. ES-27's "roughly 200x" (`spec/SPECIFICATION.md:
 
 Two things were owed from that record. The ES-27 edit landed in the same change as
 `kb-decision-0068`, line-neutral, three lines for three. The other is an assertion in the adapter's
-own tests that the guard's plan has no `LIST SUBQUERY`; it is additive, **phase 17 owns it**, and
-until it exists the new falsifier fires only by hand.
+own tests that the guard's plan has no `LIST SUBQUERY`; it is additive, phase 17 owned it, and
+**it is in the tree since 2026-10-07**, so the new falsifier no longer fires only by hand:
+`the_guard_plan_has_no_list_subquery` (`crates/happenstance-sqlite/src/event_store.rs:3191`)
+plans the exact statements `append` runs, through the private `guard_statements`, over five guard
+shapes on the bundled SQLite, and also asserts each chained seek carries `position=?`;
+`the_guard_plan_instrument_fires_on_the_uncorrelated_chain` keeps the pre-`8c8b215` `IN (SELECT …)`
+chain as a standing mutant that the same predicate catches, and
+`the_guard_plan_correlation_limb_fires_on_a_dropped_alias` does the same for the `position=?`
+limb. The falsifier did not fire.
 
 **§9: still open, now with an owner.** `kb-decision-0068` declines to decide it, on the ground this
 atom gave: the falsifier asks that *"a deployment shows"* the captured `Handle` costing something,

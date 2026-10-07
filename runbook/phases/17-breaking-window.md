@@ -105,7 +105,7 @@ gave to this phase.
 - [ ] **ADR-0022 §9's reproduction** (ADR-0068). A store built on one runtime
       and read after that runtime is gone, against both adapters that capture a
       runtime `Handle` at construction — `happenstance-sqlite`
-      (`crates/happenstance-sqlite/src/event_store.rs:512`,
+      (`crates/happenstance-sqlite/src/event_store.rs:513`,
       `projection_store.rs:234`) and `happenstance-postgres`
       (`crates/happenstance-postgres/src/event_store.rs:314`). About twenty lines,
       and they decide the classification: if the remedy changes what the existing
@@ -114,12 +114,12 @@ gave to this phase.
       new constructor, it is additive and may land after 1.0 (ADR-0058). Either
       way the reproduction is written here, and
       `.kb/open-questions/adr-0022-falsifiers-have-fired.md` closes for §9.
-- [ ] **The guard-plan assertion ADR-0068 left owed.** An adapter test in
+- [x] **The guard-plan assertion ADR-0068 left owed.** An adapter test in
       `happenstance-sqlite` that runs `EXPLAIN QUERY PLAN` on the multi-tag
       append-condition guard, on the SQLite the crate bundles, and fails on a
       `LIST SUBQUERY` — the first limb of ADR-0068's replacement falsifier for
       ADR-0022 §8, which until this test exists fires only by hand. The read
-      path's plan is already asserted (`event_store.rs:2418`); the guard's is not.
+      path's plan is asserted (`event_store.rs:2939`), the guard's at `:3191`.
       Additive, and it rides this window because ADR-0068 named no other owner.
       (ES-27's `Rejects:` repair, the other thing ADR-0068 left owed, landed at
       phase 16.)
@@ -267,7 +267,7 @@ tool passed over, and the renamed `#[doc(hidden)]` emitters. The tool does repor
 - [ ] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
       `happenstance-postgres`, and a record classifies its remedy as additive or
       breaking; a breaking remedy has landed.
-- [ ] The guard-plan `LIST SUBQUERY` assertion (ADR-0068) is in the tree.
+- [x] The guard-plan `LIST SUBQUERY` assertion (ADR-0068) is in the tree.
       (`QueryItem`'s total constructor moved to 17b with ADR-0072.)
 - [x] The `apply` record is accepted (ADR-0074).
 - [ ] Every open question phase 16 classified as breaking is answered or closed.
