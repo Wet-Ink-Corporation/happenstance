@@ -89,7 +89,9 @@ Any of three shapes would settle the question, in either direction:
 - `query_items_share_one_snapshot` (ES-12's rule) going red on the same
   adapter, which `kb-decision-0061` already names as a falsifier of its own
   soft-edge figure and would force this question to be revisited alongside
-  that one.
+  that one. **This trigger has fired**: the rule went red against live Neon on
+  2026-09-28 (PR #20) and in CI run 37504851570 (2026-10-06, PR #36), passing on
+  re-run each time. Phase 17's ES-11 record (lane L8) takes the question up.
 
 ## Why nothing forces an answer yet
 

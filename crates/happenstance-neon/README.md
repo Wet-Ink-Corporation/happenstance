@@ -90,10 +90,10 @@ weakening what a store must do — and **this crate does not claim ES-11**. The
 conformance job that checks it is deliberately kept strict rather than taught to
 tolerate a named failure.
 
-The figure is **104 of 105 rules observed**, and the missing certainty is worth a
-sentence: `query_items_share_one_snapshot` passes, but it appends after the first
-poll and asserts the drained set unchanged, which is structurally the same race.
-It has not lost it in sixty measured runs. That is not the same as immunity.
+Neither race rule is reliably green: `query_items_share_one_snapshot` appends after
+the first poll and asserts the drained set unchanged, which is structurally the same
+race, and it has lost it against live Neon (2026-09-28; CI run 37504851570,
+2026-10-06). Both rules pass on most runs and fail intermittently; ES-12 is open too.
 
 ## Things the endpoint does that will surprise you
 
