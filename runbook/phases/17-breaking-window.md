@@ -66,6 +66,8 @@ gave to this phase.
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
       - `projection-batch-sql-seam-statement-type` — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
+        Answered by [ADR-0084](../../.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md),
+        `proposed`, pending the owner's call.
       - `projection-id-is-unvalidated`, **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
         the sync runner's reservation is decided here, not at phase 13.

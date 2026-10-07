@@ -614,6 +614,12 @@ ADR-0079 is lane L6b's: on the `workerd` job's measurements, a `happenstance-clo
 item binds a constant number of parameters through `json_each`, the two partition widths become
 `workerd`'s 5 and 90, and the test shim takes `workerd`'s four statement limits. It supersedes
 nothing, and answers the first item ADR-0052 left undecided: the adapters' widths need not agree.
+ADR-0084, proposed, answers the projection batch's SQL seam. `&'static str` plus a named escape
+hatch is final for SQLite and Postgres at 1.0, and that includes `LivePostgresBatch::execute`. A
+minted `Statement` is declined as a replacement for `push`. The parameter-count obligation is
+stated once and discharged by each driver at commit. It proposes the shape of Neon's `0.4.0`
+narrowing, whose release the owner had already set as a default. On acceptance it supersedes
+`kb-open-question-projection-batch-sql-statement-type-001`.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -629,6 +635,7 @@ nothing, and answers the first item ADR-0052 left undecided: the adapters' width
 | — | [`kb-decision-wi-ff17f4`](../decisions/wi-ff17f4-ps-15-freeze-after-narrowing-to-commit-and.md) | PS-15 frozen narrowed to commit and reset; rollback non-normative (owner, Weigh-In) | accepted | 17 | — |
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
+| ADR-0084 | [`kb-decision-0084`](../decisions/0084-the-projection-batch-sql-seam-is-final.md) | The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the driver discharges the parameter count | proposed | 17 | supersedes `kb-open-question-projection-batch-sql-statement-type-001` on acceptance |
 
 ## Adding a row
 

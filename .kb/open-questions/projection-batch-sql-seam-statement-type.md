@@ -161,3 +161,18 @@ Either record also says whether Neon's `push(SqlStatement)`
 its leg of this question is moot: whether `LadybugProjectionStore`'s write vocabulary owes the
 narrowing, and the note on `push_raw_cypher`, no longer bind anything. What phase 17 still owes is
 the SQLite and Postgres `push` signature and Neon's `push(SqlStatement)`.
+
+## Amendment — 2026-10-07: an answer is proposed
+
+Answered by ADR-0084 (`kb-decision-0084`), `proposed`, pending the owner's call. It proposes
+Option A as the 1.0 seam. It covers two entry points that this atom and the phase-16 section above
+both missed: `LivePostgresBatch::execute` and `execute_raw_sql`
+(`crates/happenstance-postgres/src/live_projection_store.rs:114-142`). It also states the arity
+obligation once. The driver discharges it at commit. SQLite refuses a mismatch in either direction.
+The Postgres server refuses too few values; too many is accepted or refused depending on the
+connection's statement cache. Neon is unmeasured.
+
+That Neon narrows in `0.4.0` is the owner's default already in force (`runbook/handover.md:57-61`);
+the record proposes its shape. This atom stays `accepted` until the owner accepts the record.
+
+One correction to "What is true today": `push` is at `projection_store.rs:487`, not `:473`.
