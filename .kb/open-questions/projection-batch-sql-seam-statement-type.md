@@ -72,7 +72,7 @@ list sized by a variable key count, for instance). A `compile_fail,E0308`
 doctest on `push` holds the narrowing, checked by `cargo test -p
 happenstance-sqlite --all-features`. Every in-tree caller — the crate's
 own `probe_write`, `probe_delete_all`, and `examples/transfers-on-
-sqlite/src/main.rs:562` — already passed a literal, so the narrowing cost
+sqlite/src/main.rs:565` — already passed a literal, so the narrowing cost
 nothing today; that is evidence about current usage, not proof no
 consumer will ever need `push_raw_sql`.
 

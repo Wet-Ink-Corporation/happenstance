@@ -293,7 +293,8 @@ pub use happenstance_core::{MemoryEventStore, MemoryStoreError};
 // behind this crate's `unstable-projection` is the *runner* above, not the
 // port it runs over.
 pub use happenstance_core::projection;
-pub use happenstance_core::{Authority, Checkpoint, CommitError, ProjectionId};
+pub use happenstance_core::{Authority, Checkpoint, CommitError, InvalidProjectionId};
+pub use happenstance_core::{MAX_PROJECTION_ID_LEN, ProjectionId};
 pub use happenstance_core::{ProjectionStore, ResetError, SendProjectionStore};
 
 #[cfg(feature = "memory")]

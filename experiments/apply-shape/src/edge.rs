@@ -188,11 +188,16 @@ pub struct EdgeTally {
 }
 
 impl EdgeTally {
-    /// A fresh tally.
+    /// A fresh tally, named by a literal.
+    ///
+    /// # Panics
+    ///
+    /// If `name` is not a valid [`ProjectionId`]. Every caller passes a literal
+    /// that is: `ProjectionId::from_static` is the validating door for one.
     #[must_use]
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &'static str) -> Self {
         Self {
-            id: ProjectionId::new(name),
+            id: ProjectionId::from_static(name),
             scope: scope(),
             seen: Rc::default(),
         }

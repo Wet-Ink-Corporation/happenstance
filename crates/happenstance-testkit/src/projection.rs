@@ -44,7 +44,7 @@
 //! Every rule §4.11 assigns to an adapter's own suite is now written; what is
 //! still owed is the **six runner-dependent** ones, which CF-36 moves to the
 //! workspace e2e crate because they need a runner rather than a store
-//! (`spec/SPECIFICATION.md:5995-6004`). A store that passes everything here has
+//! (`spec/SPECIFICATION.md:6065-6074`). A store that passes everything here has
 //! not been observed under replay.
 //!
 //! The seventeenth landed last and did not land quietly.
@@ -97,7 +97,7 @@
 //!
 //! One stale sentence, named here because it cannot be repaired here. PS-1's
 //! **Rejects:** prose says *"Today no rule can fail it"*
-//! (`spec/SPECIFICATION.md:5022-5024`), which stopped being true when
+//! (`spec/SPECIFICATION.md:5092-5094`), which stopped being true when
 //! `CheckpointOnlyStore` landed and is further from true now. PS-1 is
 //! `[FROZEN]`, so the repair is a new decision atom under the repair-frozen-clause
 //! discipline rather than a line edit, and it belongs to
@@ -245,8 +245,8 @@ pub mod rules {
     #![allow(clippy::missing_panics_doc)]
 
     use happenstance_core::{
-        Authority, Checkpoint, CommitError, ProjectionId, ProjectionProbe, ProjectionStore,
-        ResetError, SequencePosition,
+        Authority, Checkpoint, CommitError, MAX_PROJECTION_ID_LEN, ProjectionId, ProjectionProbe,
+        ProjectionStore, ResetError, SequencePosition,
     };
 
     use crate::{ProjectionFixture, RuleOutcome};
@@ -510,7 +510,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("commit_advances_the_checkpoint");
+        let id = ProjectionId::from_static("commit_advances_the_checkpoint");
 
         // The position the commit is given, and the only thing the assertion
         // below is allowed to compare against.
@@ -569,7 +569,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("commit_is_atomic_with_the_read_model");
+        let id = ProjectionId::from_static("commit_is_atomic_with_the_read_model");
 
         let mut batch = begin_ok(&writer).await;
         probe_write_ok(&writer, &mut batch, PROBE_KEY, PROBE_VALUE).await;
@@ -680,7 +680,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("failed_commit_leaves_both_unchanged");
+        let id = ProjectionId::from_static("failed_commit_leaves_both_unchanged");
 
         let anchored = SequencePosition::FIRST;
 
@@ -775,7 +775,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("rollback_leaves_both_unchanged");
+        let id = ProjectionId::from_static("rollback_leaves_both_unchanged");
         let position = SequencePosition::FIRST;
 
         let mut anchor = begin_ok(&writer).await;
@@ -818,7 +818,7 @@ pub mod rules {
     /// **Rejects:** `PooledConnectionStore` — an adapter whose `begin` checks out
     /// a pooled connection that `Drop` returns to nothing. A reviewer's probe
     /// already found exactly this: the store answered `Busy` forever afterwards
-    /// (`spec/SPECIFICATION.md:5164-5176`). Two further stores fail it at the
+    /// (`spec/SPECIFICATION.md:5234-5246`). Two further stores fail it at the
     /// second row for unrelated reasons — `CheckpointOnlyStore`, which applies no
     /// rows at all, and `UncommittedTransactionStore`, which makes nothing
     /// durable — and their registry rows say so.
@@ -832,7 +832,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("dropped_batch_leaves_store_usable");
+        let id = ProjectionId::from_static("dropped_batch_leaves_store_usable");
         let position = SequencePosition::FIRST;
 
         let mut abandoned = begin_ok(&writer).await;
@@ -901,7 +901,7 @@ pub mod rules {
         let origin = first.connect().await;
         let stranger = second.connect().await;
 
-        let id = ProjectionId::new("commit_rejects_a_foreign_batch");
+        let id = ProjectionId::from_static("commit_rejects_a_foreign_batch");
         let position = SequencePosition::FIRST;
 
         let mut batch = begin_ok(&origin).await;
@@ -947,7 +947,7 @@ pub mod rules {
     ///
     /// **Rejects:** `ValidatingCommitStore` — an adapter that validates
     /// `position` against what the batch wrote, which the specification names for
-    /// this rule (`spec/SPECIFICATION.md:5981-5986`). It is the sharper hazard
+    /// this rule (`spec/SPECIFICATION.md:6051-6056`). It is the sharper hazard
     /// rather than a capability gap: validating is a *reasonable* reading of
     /// "advances `id`'s checkpoint to `position`", it would be equally conformant
     /// without this rule, and it makes a narrow projection re-scan the same range
@@ -961,7 +961,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("commit_accepts_a_position_the_batch_did_not_write");
+        let id = ProjectionId::from_static("commit_accepts_a_position_the_batch_did_not_write");
         let position = SequencePosition::FIRST;
 
         // Empty on purpose: this projection considered the range and applied
@@ -1008,7 +1008,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("commit_rejects_a_regressing_position");
+        let id = ProjectionId::from_static("commit_rejects_a_regressing_position");
 
         let earlier = SequencePosition::FIRST;
         let later = after(earlier);
@@ -1077,8 +1077,8 @@ pub mod rules {
         let fixture = open().await;
         let writer = fixture.connect().await;
 
-        let slower = ProjectionId::new("distinct_projections_advance_independently.slower");
-        let faster = ProjectionId::new("distinct_projections_advance_independently.faster");
+        let slower = ProjectionId::from_static("distinct_projections_advance_independently.slower");
+        let faster = ProjectionId::from_static("distinct_projections_advance_independently.faster");
 
         let earlier = SequencePosition::FIRST;
         let later = after(earlier);
@@ -1117,6 +1117,167 @@ pub mod rules {
             "neither projection's commit may disturb the other's rows, and the \
              row the second commit wrote is not readable"
         );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // Identity: the key is the id's bytes (PS-39)
+    // ---------------------------------------------------------------------
+
+    /// Every id [`ProjectionId::new`] accepts names its own checkpoint, kept by
+    /// its exact bytes through `commit`, `checkpoint` and `reset`.
+    ///
+    /// PS-39, and VT-35's store half: the constructor promises it folds,
+    /// trims and normalises nothing, and that promise is worth nothing if the
+    /// store keying the checkpoint does any of it. Seven pairs of ids, each two
+    /// ids distinct by bytes and equal under one plausible lossy key mapping:
+    /// case, two [`MAX_PROJECTION_ID_LEN`]-byte ids differing only in their
+    /// final codepoint, Persian with U+200C against U+200D, two emoji ZWJ
+    /// sequences, `-` against `_`, a trailing space against none, and U+00E9
+    /// against `e` + U+0301. The first id of each pair commits at an
+    /// earlier position and the second at a later one, every position strictly
+    /// above the last, so no commit can be refused as a regression and the
+    /// only way to read a wrong checkpoint is to have filed two ids as one.
+    /// Then the second id of each pair is reset, and the first must not move.
+    ///
+    /// **Rejects:** `CaseFoldingKeyStore` (`COLLATE NOCASE`, `citext`),
+    /// `TruncatingKeyStore` (`VARCHAR(64)` under a truncating server),
+    /// `AsciiOnlyKeyStore` (a `latin1` column behind a lossy conversion),
+    /// `SluggedKeyStore` (an id mapped onto a SQL identifier or a file name),
+    /// `TrailingSpaceKeyStore` (a `CHAR(n)` column, or a trim before binding)
+    /// and `CanonicalEquivalenceKeyStore` (a nondeterministic ICU collation, or
+    /// NFC normalisation before binding).
+    /// `SingleRowCheckpointStore` and `UncommittedTransactionStore` fail it too,
+    /// for their own defects, and their registry rows say so.
+    ///
+    /// **What no fixed set of ids can reject:** a store keyed on a
+    /// cryptographic or wide hash of the id. It is lossy and this clause
+    /// forbids it, but showing it needs two ids that collide, and finding them
+    /// is the hash's whole purpose. The mutant registry names it rather than
+    /// registering it.
+    pub async fn projection_ids_round_trip_by_bytes<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // 211 bytes, so that the rule's prefix, `long.` and one four-byte
+        // codepoint make exactly `MAX_PROJECTION_ID_LEN` bytes. A macro rather
+        // than a `const` because `concat!` takes only literals; the length is
+        // asserted against the constant itself, at compile time, below.
+        macro_rules! padding {
+            () => {
+                "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
+                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
+                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
+                 x"
+            };
+        }
+
+        // Each pair: what it models, then two ids equal under that mapping.
+        const PAIRS: [(&str, &str, &str); 7] = [
+            (
+                "case",
+                "projection_ids_round_trip_by_bytes.Van_Stock",
+                "projection_ids_round_trip_by_bytes.van_stock",
+            ),
+            (
+                "the longest id, differing in its final codepoint",
+                concat!("projection_ids_round_trip_by_bytes.long.", padding!(), "👩"),
+                concat!("projection_ids_round_trip_by_bytes.long.", padding!(), "👨"),
+            ),
+            (
+                "Persian, with U+200C against U+200D",
+                "projection_ids_round_trip_by_bytes.persian.می\u{200C}خواهم",
+                "projection_ids_round_trip_by_bytes.persian.می\u{200D}خواهم",
+            ),
+            (
+                "an emoji ZWJ sequence",
+                "projection_ids_round_trip_by_bytes.emoji.👩\u{200D}💻",
+                "projection_ids_round_trip_by_bytes.emoji.👨\u{200D}💻",
+            ),
+            (
+                "`-` against `_`",
+                "projection_ids_round_trip_by_bytes.slug.van-stock",
+                "projection_ids_round_trip_by_bytes.slug.van_stock",
+            ),
+            (
+                "a trailing space",
+                "projection_ids_round_trip_by_bytes.pad.van_stock",
+                "projection_ids_round_trip_by_bytes.pad.van_stock ",
+            ),
+            (
+                "canonical equivalence, U+00E9 against `e` + U+0301",
+                "projection_ids_round_trip_by_bytes.nfc.caf\u{e9}",
+                "projection_ids_round_trip_by_bytes.nfc.cafe\u{301}",
+            ),
+        ];
+
+        // The longest pair is the bound exactly, or it tests nothing about it.
+        const _: () = assert!(
+            PAIRS[1].1.len() == MAX_PROJECTION_ID_LEN && PAIRS[1].2.len() == MAX_PROJECTION_ID_LEN,
+            "the rule's own longest ids must be exactly MAX_PROJECTION_ID_LEN bytes"
+        );
+
+        must!(F: SECOND_HANDLE);
+
+        let fixture = open().await;
+        let writer = fixture.connect().await;
+
+        let mut position = SequencePosition::FIRST;
+        let mut committed = Vec::with_capacity(PAIRS.len());
+        for (index, (model, first, second)) in PAIRS.into_iter().enumerate() {
+            if index > 0 {
+                position = after(position);
+            }
+            let first_at = position;
+            position = after(position);
+            let second_at = position;
+
+            let first = ProjectionId::from_static(first);
+            let second = ProjectionId::from_static(second);
+
+            // Each batch carries a row, so that no commit is a position the
+            // batch applied nothing from: that is PS-21's question, and a store
+            // wrongly refusing it must fail PS-21's rule rather than this one.
+            for (id, at) in [(&first, first_at), (&second, second_at)] {
+                let mut batch = begin_ok(&writer).await;
+                probe_write_ok(&writer, &mut batch, PROBE_KEY, PROBE_VALUE).await;
+                commit_ok(&writer, batch, id, at, Authority::Live).await;
+            }
+            committed.push((model, first, first_at, second, second_at));
+        }
+
+        let observer = fixture.connect().await;
+        for (model, first, first_at, second, second_at) in &committed {
+            for (id, at) in [(first, first_at), (second, second_at)] {
+                assert_eq!(
+                    checkpoint_ok(&observer, id).await,
+                    Checkpoint::Live { through: *at },
+                    "two ids that differ in any byte are two checkpoints, and the \
+                     pair that differs by {model} ({first} and {second}) reads \
+                     back as one: {id} does not read its own commit. A key \
+                     column that folds case, truncates, trims, normalises, \
+                     cannot hold what is not ASCII, or slugs the id files two \
+                     projections under one row"
+                );
+            }
+        }
+
+        // That the reset id itself reads `NeverRun` afterwards is PS-16's and
+        // PS-19's to assert, and asserting it here would convict a store of
+        // their defects under this rule's name. This rule asks only whether
+        // the reset reached an id it did not name.
+        for (model, first, first_at, second, _) in &committed {
+            reset_ok(&writer, begin_ok(&writer).await, second).await;
+            let observer = fixture.connect().await;
+            assert_eq!(
+                checkpoint_ok(&observer, first).await,
+                Checkpoint::Live { through: *first_at },
+                "two ids that differ in any byte are two checkpoints, and \
+                 resetting {second} moved {first}, which differs from it by \
+                 {model}. A reset keyed lossily where commit is exact clears a \
+                 projection nobody asked to clear"
+            );
+        }
 
         RuleOutcome::Ran
     }
@@ -1180,7 +1341,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("reset_clears_rows_and_checkpoint_together");
+        let id = ProjectionId::from_static("reset_clears_rows_and_checkpoint_together");
         let position = SequencePosition::FIRST;
 
         let mut batch = begin_ok(&writer).await;
@@ -1305,8 +1466,9 @@ pub mod rules {
 
         // Named after the deployment rather than `a` / `b`: the failure message
         // below is read by someone who has never seen this file.
-        let van_stock = ProjectionId::new("reset_is_scoped_to_one_projection.van_stock");
-        let fgas_ledger = ProjectionId::new("reset_is_scoped_to_one_projection.fgas_ledger");
+        let van_stock = ProjectionId::from_static("reset_is_scoped_to_one_projection.van_stock");
+        let fgas_ledger =
+            ProjectionId::from_static("reset_is_scoped_to_one_projection.fgas_ledger");
 
         let rebuilt_through = SequencePosition::FIRST;
         let protected_through = after(rebuilt_through);
@@ -1420,7 +1582,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("refused_reset_changes_nothing");
+        let id = ProjectionId::from_static("refused_reset_changes_nothing");
         let position = SequencePosition::FIRST;
 
         let mut batch = begin_ok(&writer).await;
@@ -1477,7 +1639,7 @@ pub mod rules {
     ///
     /// **PS-38's second sentence**, which is the clause this rule is written
     /// against: *"a `ProjectionId` no successful `commit` has named MUST read as
-    /// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5731-5747`). §4.11 lists
+    /// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5801-5817`). §4.11 lists
     /// the rule against PS-19 as well, because it is the same distinction that
     /// clause is about — *never run* told apart from *committed at the first
     /// position* — asked before any `reset` has happened; but PS-19's own MUST
@@ -1494,7 +1656,7 @@ pub mod rules {
     /// The specification names that shape by name, because it is the natural one
     /// rather than a contrivance: an adapter whose `reset` writes an explicit
     /// `NeverRun` row satisfies PS-19's MUST verbatim and still answers `Live`
-    /// for an id nobody has ever committed (`spec/SPECIFICATION.md:5566-5582`).
+    /// for an id nobody has ever committed (`spec/SPECIFICATION.md:5636-5652`).
     /// PS-38 is what makes that store non-conformant rather than merely
     /// surprising, and its `Rejects` field names the wider version of the same
     /// defect — a store whose backing state lives per *handle* rather than per
@@ -1507,7 +1669,7 @@ pub mod rules {
     /// writes, so a rule written that way cannot tell the two mutants of this
     /// family apart and both walk free. [`Checkpoint`] is a three-variant enum
     /// precisely so this assertion can be made without naming a position
-    /// (`spec/SPECIFICATION.md:4908-4924`).
+    /// (`spec/SPECIFICATION.md:4978-4994`).
     ///
     /// # Why it spells no capability gate at all
     ///
@@ -1523,7 +1685,8 @@ pub mod rules {
 
         // Committed to by nothing, in this rule or any other: every rule in this
         // family names its ids after itself.
-        let unseen = ProjectionId::new("fresh_projection_has_no_checkpoint.never-committed-to");
+        let unseen =
+            ProjectionId::from_static("fresh_projection_has_no_checkpoint.never-committed-to");
 
         assert_eq!(
             checkpoint_ok(&store, &unseen).await,
@@ -1563,7 +1726,7 @@ pub mod rules {
     /// violation and the exact value the defective store writes, so a rule
     /// written that way could not tell the two apart. [`Checkpoint`] is a
     /// three-variant enum precisely so this assertion can be made without naming
-    /// a position (`spec/SPECIFICATION.md:4908-4924`). The **consequence** half
+    /// a position (`spec/SPECIFICATION.md:4978-4994`). The **consequence** half
     /// derives a resume point from each under the port's own rule — in one
     /// private helper shared by both arms, so the derivation is stated once —
     /// and asserts the event at the store's first position is applied in the
@@ -1590,8 +1753,8 @@ pub mod rules {
         let fixture = open().await;
         let writer = fixture.connect().await;
 
-        let rebuilt = ProjectionId::new("reset_is_not_commit_at_first.reset");
-        let substituted = ProjectionId::new("reset_is_not_commit_at_first.commit_at_first");
+        let rebuilt = ProjectionId::from_static("reset_is_not_commit_at_first.reset");
+        let substituted = ProjectionId::from_static("reset_is_not_commit_at_first.commit_at_first");
 
         // The store's first position, and the only position this rule names: it
         // is the one the substitute commits at and the one a replay must decide
@@ -1776,7 +1939,7 @@ pub mod rules {
             // neither see nor be seen by the others.
             let fixture = open().await;
             let writer = fixture.connect().await;
-            let id = ProjectionId::new("rebuild_is_chunk_size_invariant");
+            let id = ProjectionId::from_static("rebuild_is_chunk_size_invariant");
 
             // Non-contiguous on purpose, and strictly increasing across chunks.
             let mut position = SequencePosition::FIRST;
@@ -1860,7 +2023,7 @@ pub mod rules {
 
         let fixture = open().await;
         let writer = fixture.connect().await;
-        let id = ProjectionId::new("rebuilding_is_distinguishable_from_live");
+        let id = ProjectionId::from_static("rebuilding_is_distinguishable_from_live");
 
         // A rebuild starts by clearing what is there. `reset` is a *step* here
         // and not the subject: the rules that interrogate it are the reset
@@ -1955,6 +2118,9 @@ macro_rules! for_each_projection_store_rule {
             commit_accepts_a_position_the_batch_did_not_write,
             commit_rejects_a_regressing_position,
             distinct_projections_advance_independently,
+
+            // --- Identity: the key is the id's bytes (PS-39) ---------------
+            projection_ids_round_trip_by_bytes,
 
             // --- Reset -----------------------------------------------------
             reset_clears_rows_and_checkpoint_together,
@@ -2220,7 +2386,7 @@ fn two_opens_make_two_isolated_stores() {
 
         let writer = first.connect().await;
         let observer = second.connect().await;
-        let id = ProjectionId::new("two_opens_make_two_isolated_stores");
+        let id = ProjectionId::from_static("two_opens_make_two_isolated_stores");
         let position = SequencePosition::FIRST;
 
         let mut batch = writer

@@ -295,7 +295,7 @@ async fn round_trip<P: ProjectionProbe>(
 #[tokio::test]
 async fn writes_are_visible_through_the_trait_alone() {
     let store = TestStore::default();
-    let id = ProjectionId::new("round_trip");
+    let id = ProjectionId::from_static("round_trip");
 
     let value = round_trip(&store, &id, SequencePosition::FIRST)
         .await
@@ -383,7 +383,7 @@ async fn drive_every_member<P: ProjectionProbe>(
 #[tokio::test]
 async fn all_five_members_are_reachable_generically() {
     let store = TestStore::default();
-    let id = ProjectionId::new("every_member");
+    let id = ProjectionId::from_static("every_member");
 
     drive_every_member(&store, &id, SequencePosition::FIRST)
         .await

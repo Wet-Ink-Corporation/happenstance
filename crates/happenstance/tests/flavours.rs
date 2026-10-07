@@ -370,7 +370,7 @@ async fn every_entry_point_binds_the_weak_flavour() {
 
         let models = MemoryProjectionStore::new();
         let mut seen = Enrolments {
-            id: ProjectionId::new("enrolments"),
+            id: ProjectionId::from_static("enrolments"),
             scope: course_tags(),
             count: 0,
         };
@@ -560,7 +560,7 @@ async fn run_projection_spawns_from_generic() {
 
     let models = Arc::new(MemoryProjectionStore::new());
     let seen = Enrolments {
-        id: ProjectionId::new("enrolments"),
+        id: ProjectionId::from_static("enrolments"),
         scope: course_tags(),
         count: 0,
     };
