@@ -618,6 +618,13 @@ ADR-0080 is lane L7's: on the two-build measurement ADR-0012's falsifier asked f
 `happenstance-cloudflare` with calibrated replica arms, `append` keeps `&[Event]` and ES-17 is
 frozen. It rests on ADR-0012 and ADR-0055 without superseding either, records what neither can
 say, and supersedes `kb-open-question-es-17-two-adapter-measurement-001`.
+ADR-0087 is lane L8's, and the one row in this section that is `proposed`: on a sweep against the
+live Neon endpoint (`experiments/es-11-fence/`; baseline 172 red of 1,500, fence 0 of 1,500, under a
+rule fixed before the first counted run), `happenstance-neon` meets ES-11 and ES-12 by holding an
+append until every read its transport dispatched earlier has been answered, through a required
+`SqlTransport::reads_settled`. It supersedes `kb-decision-0061` only on the owner's acceptance, so
+that atom's row is not flipped here and its frontmatter stays `accepted`. The fence itself lands as
+a separate change, and ES-11 and ES-12 freeze with it.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -634,6 +641,7 @@ say, and supersedes `kb-open-question-es-17-two-adapter-measurement-001`.
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
 | ADR-0080 | [`kb-decision-0080`](../decisions/0080-append-keeps-a-borrowed-batch.md) | append keeps its borrowed batch, and ES-17 is frozen on the two-build measurement | accepted | 17 | — |
+| ADR-0087 | [`kb-decision-0087`](../decisions/0087-es-11-is-met-on-one-shot-http-by-a-read-settlement-fence.md) | ES-11 is met on one-shot HTTP by a read-settlement fence | proposed | 17 | supersedes `kb-decision-0061` on acceptance; that row is unchanged until then |
 
 ## Adding a row
 

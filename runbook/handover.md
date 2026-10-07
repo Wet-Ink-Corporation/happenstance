@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-neon-push`, on `12540a7` (`main`, where PR #47 merged). 2026-10-07.
+`lane/p17-adr-0087-es11`, on `4278816` (`main`, where PR #49 merged). 2026-10-07.
 
 ## Where things are
 
@@ -38,27 +38,29 @@ An unattended overnight session (2026-10-07) is working the phase 17 queue.
 - **Merged:** #41 (`4fbfefa`, the vacuity control's record and `wi-13bd3b`), #42
   (`6235224`, the guard-plan assertion), #46 (`3462bf8`, L7: ES-17 frozen on
   `&[Event]` by ADR-0080), #47 (`12540a7`, the deployed `workerd` leg retries a
-  Durable Object reset).
-- **This PR:** Neon's `push` narrowed (N2), BREAKING for `0.4.0`.
+  Durable Object reset), #49 (`4278816`, Neon's `push` narrowed, BREAKING for
+  `0.4.0`).
+- **This PR (open, for the owner):** ADR-0087, `proposed` — the ES-11 fence works
+  on Neon (0 red of 1,500 against 172 of 1,500 unfenced). The spike is draft #50,
+  never merged; landing it breaks `SqlTransport`.
 - **Open, not to merge until the owner accepts ADR-0081:** #48, L9 (ADR-0022 §9
   reproduced; stores prefer the runtime they are called on).
 - **Open for the owner** (each a `proposed` record): #43 ADR-0083 (codec stays
   unsealed), #44 ADR-0084 (the SQL seam is final; proposes a Postgres
   parameter-count check), #45 ADR-0086 (Postgres and Neon keep mint-once).
-- **In flight:** L10 (`ProjectionId`), then L8 last (planned in
-  `.temper/plans/p17-l8.md` on `lane/p17-es11-fence`).
+- **In flight:** L10 (`ProjectionId`); then the `0.4.0` trace table and the exit pass.
 - **Pre-existing:** the testkit's racing-mutant flake under load; the default-features
   doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link.
 
 ## Next action
 
-1. L10, L8's fence spike, then the `0.4.0` trace table and the exit pass.
+1. L10, then the `0.4.0` trace table and the exit pass.
 
 ## Waiting on the owner
 
 - Accept or decline the `proposed` records: ADR-0081 (#48; remedy B, and whether
   the documented Postgres pool obligation is enough), ADR-0083 (#43), ADR-0084 (#44),
-  ADR-0086 (#45).
+  ADR-0086 (#45), ADR-0087 (this PR; D1–D12 in its §11).
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; `ProjectionId`
   refuses the full ADR-0015 set with a generic reserved prefix; Neon's `push`

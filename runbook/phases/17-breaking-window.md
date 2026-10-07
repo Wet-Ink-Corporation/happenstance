@@ -159,7 +159,7 @@ gave to this phase.
       under it. The item read: ~~removed, or declared outside semver in the crate
       root and on ADR-0066's exemption list. A stranger can turn it on, so 1.0
       either promises it or says in writing that it does not.~~
-- [ ] **The ES-11 record, settling ES-11 and ES-12 together.** It supersedes
+- [ ] **The ES-11 record, settling ES-11 and ES-12 together** (ADR-0087 `proposed`: the fence held, 0 red of 1,500). It supersedes
       ADR-0061's choice to keep ES-11 `[PROVISIONAL]` — a reasonable choice while
       `happenstance-neon` was held out of the release set, and not one that
       survives Neon being one of 1.0's nine crates. It decides whether Neon's
@@ -709,3 +709,44 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
       shim.
   - **Not verified.** The probe's `push_raw_sql` path against a live endpoint
     in this session. CI's `live-neon` runs it.
+- 2026-10-07 — **PR #49 merged as `4278816`** (Neon's `push` narrowed). **L8: the
+  ES-11 fence works on Neon, and ADR-0087 is `proposed`**, on
+  `lane/p17-adr-0087-es11`. Not merged until the owner decides it.
+  - **The spike.** Draft PR #50, `lane/p17-es11-fence`, head `1177cfc`. It is
+    never merged; the branch is kept.
+    - It adds a required `SqlTransport::reads_settled()`, and a std-only
+      `ReadLedger` whose release comes from the transport's own I/O, so the
+      rule's single task cannot deadlock it.
+    - `NeonEventStore::append` waits once for every read its transport
+      dispatched earlier.
+    - Offline tests reproduce the race over a hand-polled fake transport. A1 was
+      red before the wait.
+  - **The rule, and its amendment.** Pre-registered in
+    `experiments/es-11-fence/README.md` before any run, then amended before the
+    first counted run. The review's finding W1 was that a frontier-lagged
+    `before` scored as a false falsifier. The first attempt, run 37591126575,
+    is a pilot excluded by name, and the README says who saw its rows.
+  - **Measured.** CI's live-neon job, run 37594816236, attempts 1–3:
+    - baseline: 172 red of 1,500 (92 in es11, 80 in es12), all C2, Clopper–Pearson
+      95% 9.9–13.2%;
+    - fence: 0 red of 1,500, rule-of-three 95% bound 0.20%;
+    - 0 anchors, 0 errors;
+    - both racing rules green in all three attempts, and the live suite 109/109
+      each time.
+  - **Owner decisions** (ADR-0087 §11):
+    - D1: the fence shape, a semver-major break of `SqlTransport`;
+    - D2: publish the ledger types;
+    - D6: freeze ES-11/ES-12 when the fence lands on `main`;
+    - D8: restore `wi-0f1291`'s required check when the fence lands, not when
+      the record does;
+    - D10: mark ADR-0061 superseded on acceptance;
+    - D11: correct "Postgres gets both halves";
+    - D12: land the break in `0.4.0`.
+  - **Not measured.**
+    - A wasm32 `fetch` transport; reasoning only.
+    - The cross-handle and cross-process case.
+    - Contention under the fence.
+  - **Verified.** `spec-trace`, `lints`, `lint-kb` (xtask rebuilt in this
+    worktree first), and `run.sh tally` regenerating the committed tally byte for
+    byte. The spike: temper gate `--no-cache` green, two independent reviews (the
+    first requested the W1–W7 fixes), `cargo xtask wasm`.
