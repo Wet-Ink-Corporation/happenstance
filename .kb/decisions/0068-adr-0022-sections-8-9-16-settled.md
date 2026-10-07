@@ -171,7 +171,7 @@ fast path if the single-tag guard stops being cheaper than the multi-tag chain i
 §9's falsifier asks that *"a deployment shows"* the captured `Handle` costing something
 (`0022:609-612`). The capture is unconditional in the three places it is written:
 `crates/happenstance-sqlite/src/event_store.rs:513`, `projection_store.rs:234` and
-`crates/happenstance-postgres/src/event_store.rs:314`. What the open question describes is a store
+`crates/happenstance-postgres/src/event_store.rs:337`. What the open question describes is a store
 that outlives its runtime and whose reads hang, or yield a `Worker(cancelled)` item, but never
 `NoRuntime`. That outcome was reasoned from tokio's semantics. Nothing in the tree reproduces it:
 `tests/read.rs:157-180` and `tests/concurrency.rs:146-176` cover a store with *no* runtime, and

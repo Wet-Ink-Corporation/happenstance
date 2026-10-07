@@ -35,7 +35,7 @@ on?* It succeeds inside a task or a `block_on`, and fails on a bare OS thread.
 later `PostgresEventStore`, call `Handle::try_current().ok()` in their constructor and keep the
 result (`crates/happenstance-sqlite/src/event_store.rs:513`,
 `crates/happenstance-sqlite/src/projection_store.rs:234`,
-`crates/happenstance-postgres/src/event_store.rs:314`), then **prefer** that handle at every use.
+`crates/happenstance-postgres/src/event_store.rs:337`), then **prefer** that handle at every use.
 The reason was sound: the conformance suite's concurrency family drives stores from bare OS threads
 with no runtime of their own, and the captured handle is the only one they can reach. But a
 captured handle names the runtime that was current *when the store was built*, not the one that is
@@ -89,9 +89,11 @@ against a live `postgres:17.10` through testcontainers; its hang legs are bounde
 | 6 | Postgres, A alive and undriven, pool on B: `a_read_from_b_does_not_wait_on_an_undriven_capturing_runtime` (`:240`) | **hung for the whole 15 s bound**; once A was dropped it yielded `Err(Worker(JoinError::Cancelled))` — the arm at `:260` | the seeded event, promptly |
 | 7 | Postgres, raw `sqlx`, no store — a pooled connection opened on A, A dropped, a query from B: `a_pool_connection_opened_on_a_dropped_runtime_does_not_serve_the_next` (`:287`) | `PoolTimedOut` or `Elapsed` (passes) | the same — remedy B cannot reach it (§6) |
 | 8 | Postgres, pool, store and seed all on A, A dropped: `a_store_built_wholly_on_a_dropped_runtime_is_stranded_by_its_pool_not_its_handle` (`:337`) | `head` from B failed as `Worker(JoinError::Cancelled)` — the arm at `:356` | the store's work runs on B; `head` then meets case 7's strand and ends on its arm in about 5 s, the fixture's `acquire_timeout`, so `PoolTimedOut` by its timing (the test accepts that or `Elapsed`) |
+| 9 | Postgres, pool, store and seed on a full runtime that stays alive, called from a `current_thread` runtime built without `enable_all`: `a_call_from_a_runtime_without_drivers_fails_as_a_worker_panic` (`:404`) | `head` succeeded, on the captured runtime (run with the two Postgres sites put back captured-first) | `head`, `append` and `read` each fail as `Worker(JoinError::Panic)`, inside `sqlx`'s `tokio::time::timeout` (§6) |
 
 The SQLite target ran in 0.13 s and never hung. The Postgres target ran twice red with the same
-outcomes, and three times green after the change. Under remedy B the concurrency families stay
+outcomes, and three times green after the change. Case 9 came from the change's review: it ran red
+once with the two Postgres sites put back captured-first, and green under B. Under remedy B the concurrency families stay
 green — `happenstance-sqlite`'s `concurrency` 10/10 and `postgres_conformance` 108/108 including the
 five concurrency rules — because their contenders are bare threads, where `try_current` fails and
 the captured fallback is what they use.
@@ -120,7 +122,7 @@ Four sites change order, and nothing else does:
 
 - `SqliteReadStream::poll_next`, the `Idle` arm (`crates/happenstance-sqlite/src/event_store.rs:2385`);
 - `SqliteProjectionStore::runtime` (`crates/happenstance-sqlite/src/projection_store.rs:344-349`);
-- `PostgresEventStore::runtime` (`crates/happenstance-postgres/src/event_store.rs:364-369`);
+- `PostgresEventStore::runtime` (`crates/happenstance-postgres/src/event_store.rs:387-392`);
 - `PgReadStream::poll_next`, the `Unstarted` arm (`crates/happenstance-postgres/src/read_stream.rs:386`).
 
 No signature, type or variant moves, and no dependency is added. The precedent is already in the
@@ -174,9 +176,14 @@ dedicated runtime it built the store in, while calling from another, loses that.
 tool for that caller, and it is additive. One narrower caller is affected on Postgres alone: `sqlx`
 acquires every connection under `crate::rt::timeout`, which is `tokio::time::timeout`
 (`sqlx-core-0.8.6/src/pool/inner.rs:250`, `src/rt/mod.rs:29`), so the calling runtime now needs
-tokio's time and I/O drivers. A call from a runtime built without `enable_time` or `enable_io`, which
-used to succeed on the captured runtime, now fails as `Worker(JoinError::Panic)`. Found by reading
-the code, not run. SQLite is unaffected: its work is `spawn_blocking`, which needs neither driver.
+tokio's timer. Measured as case 9: from a `current_thread` runtime built without `enable_all`,
+`head`, `append` and `read` each fail as `Worker(JoinError::Panic)`, the panic raised at
+`src/rt/mod.rs:29` (*"timers are disabled"*); with the captured handle put back first, as before B,
+the same `head` succeeded. The I/O driver is the narrower need: a runtime with `enable_time` alone
+succeeded, in one run, because the calls reused an idle connection
+opened on the store's full runtime. It is needed when a call must open a new connection, which
+`sqlx` does inside `acquire`, on the calling runtime (`inner.rs:288`) — read, not run. SQLite is
+unaffected: its work is `spawn_blocking`, which needs neither driver.
 
 **What B does not fix: the Postgres pool strand.** A pooled `sqlx` connection's socket is
 registered with the I/O driver of the runtime that **opened** it. When that runtime is dropped the
@@ -200,9 +207,13 @@ nothing.
 
 **The obligation, therefore:** *a `PgPool` handed to a `happenstance-postgres` store must be opened
 on a runtime that lives at least as long as the pool.* That is the application's to keep, because
-the application builds the pool (`PostgresEventStore::new` takes one, `event_store.rs:300-304`). On
-acceptance it is owed in `PostgresEventStore::new`'s rustdoc and the crate README; it is not written
-there in this change, because every line added to `event_store.rs` would move citations into it.
+the application builds the pool (`PostgresEventStore::new` takes one, `event_store.rs:300-328`).
+`PostgresEventStore::new`'s rustdoc carries it now, under *Runtimes*, beside case 9's driver
+requirement, and so does the crate README; the citations the rustdoc moved were repointed in the
+same change. Both add a corollary, read from `sqlx`'s source and not run: a pool opens connections
+lazily inside `acquire`, on the runtime the call runs on (`inner.rs:288`), so under B a pooled
+connection can belong to any runtime the store was called on, and those runtimes should outlive the
+pool too. Before B that runtime was the captured one.
 
 **One narrow residue in both adapters.** A store whose captured runtime is dead and which is then
 driven from a bare thread with no runtime at all still reaches the dead handle and reports
@@ -228,8 +239,8 @@ dead handle from a live one (remedy C's problem).
   *"partly superseded by `kb-decision-0081`"*; the atom's `status` stays `accepted`.
 - On acceptance: `kb-open-question-adr-0022-falsifiers-fired-001` can close for §9, its last open
   section. Until then it is amended, not closed.
-- On acceptance: the pool obligation lands in `PostgresEventStore::new`'s rustdoc and the README,
-  with any citation it moves repointed.
+- The pool obligation and case 9's driver requirement are in `PostgresEventStore::new`'s rustdoc
+  and the README in this change; if B is declined, the driver requirement leaves with it.
 - The `0.4.0` trace table owes a hand row for both crates, beside ADR-0079's.
 - The phase-17 exit criterion at `runbook/phases/17-breaking-window.md:267-269` is met by this
   change on acceptance: the reproduction runs against both adapters, this record classifies the
@@ -247,5 +258,9 @@ dead handle from a live one (remedy C's problem).
 - **The pool strand going away:** case 7 succeeding. It panics saying the record describing the
   strand is wrong; §6's obligation would then be reconsidered against the `sqlx` version that
   changed it.
+- **The driver requirement going away, or the work moving back:** case 9 going red. A call from a
+  driverless runtime that succeeds means either the store's work left the calling runtime, which
+  is cases 5 and 6 at risk, or `sqlx` stopped needing tokio's timer, and the rustdoc's *Runtimes*
+  section is then wrong.
 - **tokio adding a shut-down query on `Handle`:** remedy C would become checkable rather than
   inferred, and is worth re-reading.

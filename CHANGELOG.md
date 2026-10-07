@@ -235,16 +235,16 @@ not the same as what a user needed to be told.
   so this compiles unchanged; what changes is which runtime runs a store's work.
   A caller that relied on a store's work staying on the runtime it was built in,
   while calling it from another, no longer gets that. On `happenstance-postgres`
-  the calling runtime now also needs tokio's time and I/O drivers
-  (`enable_all`), because `sqlx` acquires every connection under
-  `tokio::time::timeout`; a call from a runtime built without them, which used
-  to run on the captured runtime, now fails as `Worker(JoinError::Panic)`.
+  the calling runtime now needs tokio's timer, so build it with `enable_all`:
+  `sqlx` acquires every connection under `tokio::time::timeout`, and a call from
+  a runtime without a timer, which used to run on the captured runtime, now
+  fails as `Worker(JoinError::Panic)`. Opening a new connection needs I/O too.
 
   **Not fixed by this, on `happenstance-postgres`:** a pooled `sqlx` connection
   opened on a runtime that has since been dropped is not seen as broken, and a
-  query on it ends in `PoolTimedOut` or does not finish. Open a `PgPool` on a
-  runtime that lives at least as long as the pool. ADR-0081 records the
-  measurements (`tests/runtime_seam.rs` in both crates).
+  query on it ends in `PoolTimedOut` or does not finish. Open a `PgPool`, and
+  call the stores, on runtimes that live at least as long as the pool. ADR-0081
+  measures both (`tests/runtime_seam.rs`); `PostgresEventStore::new` says so.
 
 - **`happenstance-cloudflare` evaluates any query inside a real Durable Object.**
   `workerd` sets four statement limits on every database it opens: 5 compound

@@ -115,9 +115,16 @@ without running it and still returns a `JoinHandle`, which completes at once wit
 runtime that opened it. After that runtime is dropped, `sqlx` 0.8.6 does not see the connection as
 broken, and a query on it ends in `PoolTimedOut` or hangs without bound. Remedy B cannot reach it:
 it is the pool's, not the store's. **Obligation: a `PgPool` handed to a store must be opened on a
-runtime that lives at least as long as the pool.** On acceptance it is owed in
-`PostgresEventStore::new`'s rustdoc and the README. **Owner question:** is that documented
-obligation enough, or is more owed?
+runtime that lives at least as long as the pool.** `PostgresEventStore::new`'s rustdoc and the
+README carry it, with a corollary read from `sqlx`'s source: a pool opens connections lazily on the
+runtime a call runs on, so under B the runtimes a store is called on should outlive the pool too.
+**Owner question:** is that documented obligation enough, or is more owed?
+
+**The calling runtime needs tokio's timer**, on Postgres, because `sqlx` acquires every connection
+under `tokio::time::timeout`. Measured by `a_call_from_a_runtime_without_drivers_fails_as_a_worker_panic`:
+from a runtime built without `enable_all`, `head`, `append` and `read` each fail as
+`Worker(JoinError::Panic)`; before B the same `head` succeeded on the captured runtime. The I/O
+driver is needed only when a call opens a new connection. The rustdoc and README say so.
 
 A store whose captured runtime is dead, driven from a bare thread with no runtime at all, still
 reports `Worker(JoinError::Cancelled)`; there is no runtime anywhere that could run the work.
@@ -133,3 +140,5 @@ reports `Worker(JoinError::Cancelled)`; there is no runtime anywhere that could 
   `tests/read.rs` and `tests/concurrency.rs` go red.
 - `a_pool_connection_opened_on_a_dropped_runtime_does_not_serve_the_next` succeeding: the pool
   strand has gone and the obligation above is reconsidered.
+- `a_call_from_a_runtime_without_drivers_fails_as_a_worker_panic` going red: the work left the
+  calling runtime, or `sqlx` stopped needing tokio's timer.

@@ -63,7 +63,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use happenstance_core::{
-    Event, EventStore, Query, ReadOptions, SequencePosition, SequencedEvent, collect,
+    AppendError, Event, EventStore, Query, ReadOptions, SequencePosition, SequencedEvent, collect,
 };
 use happenstance_postgres::error::PostgresEventStoreError;
 use happenstance_postgres::event_store::PostgresEventStore;
@@ -369,4 +369,95 @@ fn a_store_built_wholly_on_a_dropped_runtime_is_stranded_by_its_pool_not_its_han
         ),
         Ok(Err(other)) => panic!("head from B failed in an unmeasured way: {other:?}"),
     }
+}
+
+/// What a store's three operations yielded when called from a runtime without
+/// drivers.
+struct DriverlessOutcome {
+    head: Result<Option<SequencePosition>, PostgresEventStoreError>,
+    append: Result<SequencePosition, AppendError<PostgresEventStoreError>>,
+    read: ReadOutcome,
+}
+
+/// The price of remedy B on Postgres alone (ADR-0081 §6): the calling runtime
+/// now runs the store's work, so it needs tokio's drivers.
+///
+/// The pool, the store and a seed are all on a full multi-thread runtime that
+/// stays alive throughout, so neither strand above is in play. The store is then
+/// called from a `current_thread` runtime built **without** `enable_all`. Remedy
+/// B spawns the work there, and `sqlx` acquires every connection under
+/// `tokio::time::timeout`, which panics on a runtime with no timer
+/// (`sqlx-core-0.8.6/src/rt/mod.rs:29`, *"timers are disabled"*): each of `head`,
+/// `append` and `read` ends as `Worker(JoinError::Panic)`. With the captured
+/// handle put back first, as before remedy B, the same `head` succeeded.
+///
+/// Measured once and not pinned: the same calls from a runtime with
+/// `enable_time` alone succeeded, because they reused an idle connection whose
+/// socket belongs to the full runtime. The I/O driver is needed, by reading and
+/// not by running, when a call has to open a new connection, which `sqlx` does
+/// inside `acquire`, on the caller's runtime.
+///
+/// The driverless runtime has no timer to bound a hang with, so the calls run on
+/// a named worker thread that reports through a channel, as [`BoundedRead`] does.
+#[test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+fn a_call_from_a_runtime_without_drivers_fails_as_a_worker_panic() {
+    let fixture = PostgresFixture::new();
+    let full = second_runtime();
+    let (store, seeded) = full.block_on(async {
+        let store = fixture.connect().await;
+        let seeded = store
+            .append(&[event("Seeded")], None)
+            .await
+            .expect("a store built on a live, full runtime appends from it");
+        (store, seeded)
+    });
+
+    let (send, outcome) = mpsc::sync_channel(1);
+    // A second handle onto the same store, moved to the worker; the pool and the
+    // identity cell are both shared, so this clones two `Arc`s and no state.
+    let caller = store.clone();
+    let worker = thread::Builder::new()
+        .name("runtime-seam-driverless".to_owned())
+        .spawn(move || {
+            let driverless = Builder::new_current_thread()
+                .build()
+                .expect("a current-thread runtime with no drivers builds");
+            let outcome = driverless.block_on(async {
+                DriverlessOutcome {
+                    head: caller.head().await,
+                    append: caller.append(&[event("Driverless")], None).await,
+                    read: collect(caller.read(&Query::all(), ReadOptions::new())).await,
+                }
+            });
+            send.send(outcome)
+                .expect("the test thread holds the receiver until it joins this one");
+        })
+        .expect("the OS starts a test thread");
+    let outcome = outcome
+        .recv_timeout(HANG_LIMIT)
+        .unwrap_or_else(|error| panic!("the driverless calls did not report: {error:?}"));
+    worker
+        .join()
+        .expect("the worker reported, so it did not panic");
+
+    match outcome.head {
+        Err(PostgresEventStoreError::Worker(join)) if join.is_panic() => {}
+        other => panic!("ADR-0081 §6: head from a driverless runtime yielded {other:?}"),
+    }
+    match outcome.append {
+        Err(AppendError::Store(PostgresEventStoreError::Worker(join))) if join.is_panic() => {}
+        other => panic!("ADR-0081 §6: append from a driverless runtime yielded {other:?}"),
+    }
+    match outcome.read {
+        Err(PostgresEventStoreError::Worker(join)) if join.is_panic() => {}
+        other => panic!("ADR-0081 §6: read from a driverless runtime yielded {other:?}"),
+    }
+
+    // The failure is the caller's runtime, not the store: from the full runtime
+    // the same store still answers, and the driverless append did not land.
+    let head = full
+        .block_on(store.head())
+        .expect("the store answers from the runtime that has its drivers");
+    assert_eq!(head, Some(seeded), "only the seed is in the log");
 }

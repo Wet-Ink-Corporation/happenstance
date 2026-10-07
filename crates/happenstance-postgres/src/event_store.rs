@@ -302,6 +302,29 @@ impl PostgresEventStore {
     /// Takes a pool rather than a connection string because pool sizing,
     /// timeouts and TLS are the application's business, and because a store that
     /// builds its own pool cannot share one with the projection store beside it.
+    ///
+    /// # Runtimes
+    ///
+    /// Every operation runs on the tokio runtime it is **called** on. The runtime
+    /// current here, at construction, is used only by a call made from a thread
+    /// with no runtime at all (ADR-0081). Two obligations follow, and both are
+    /// the application's, because it builds the pool and the runtimes:
+    ///
+    /// * **Call the store from a runtime with tokio's drivers enabled**:
+    ///   `enable_all`, as `#[tokio::main]` and `#[tokio::test]` do. `sqlx`
+    ///   acquires every connection under `tokio::time::timeout`, so a call from a
+    ///   runtime built without `enable_time` fails as
+    ///   [`Worker`](PostgresEventStoreError::Worker) carrying a panicked
+    ///   `JoinError`, and opening a new connection needs `enable_io` as well.
+    /// * **Open `pool` on a runtime that lives at least as long as the pool.** A
+    ///   pooled connection's socket belongs to the I/O driver of the runtime that
+    ///   opened it. Once that runtime is dropped, `sqlx` does not see the
+    ///   connection as broken, and a query handed it ends in
+    ///   [`PoolTimedOut`](sqlx::Error::PoolTimedOut) or does not finish. A pool
+    ///   opens connections lazily, inside the call that needs one, so the
+    ///   runtimes this store is called on should outlive the pool too. A pool in
+    ///   a `static` initialised inside one `#[tokio::test]` and used by the next,
+    ///   each on its own runtime, is the usual way to break this.
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,

@@ -107,7 +107,7 @@ gave to this phase.
       runtime `Handle` at construction — `happenstance-sqlite`
       (`crates/happenstance-sqlite/src/event_store.rs:513`,
       `projection_store.rs:234`) and `happenstance-postgres`
-      (`crates/happenstance-postgres/src/event_store.rs:314`). About twenty lines,
+      (`crates/happenstance-postgres/src/event_store.rs:337`). About twenty lines,
       and they decide the classification: if the remedy changes what the existing
       `open` / `new` capture, or which variant a stranded read reports, it is a
       behaviour change on two published adapters and lands in `0.4.0`; if it is a
