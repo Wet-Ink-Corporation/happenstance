@@ -709,3 +709,25 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
       shim.
   - **Not verified.** The probe's `push_raw_sql` path against a live endpoint
     in this session. CI's `live-neon` runs it.
+- 2026-10-07 — **The `0.4.0` trace table is drafted, not released**, on
+  `lane/p17-trace-table`, at the end of `CHANGELOG.md`'s `[Unreleased]`.
+  - **The tool run.** `cargo semver-checks check-release --workspace
+    --baseline-version 0.3.2 --release-type minor`, cargo-semver-checks 0.51.0,
+    against `main` at `4278816`.
+  - **Clean.** `happenstance`, `happenstance-core`, `happenstance-sqlite` and
+    `happenstance-cloudflare` reported no break.
+  - **Six tool rows:**
+    - three on `happenstance-neon`: the `push` narrowing, reported as a parameter
+      count, a removed field and a hidden field (#49);
+    - two on `happenstance-postgres`: `naive-arm` and `new_naive` (lane L4);
+    - one on `happenstance-testkit`: the `k_disjoint` rename (ADR-0077).
+  - **Six hand rows:**
+    - core's `unstable-projection`, which the tool passes over as an `unstable-*`
+      feature;
+    - the hidden emitters (ADR-0076);
+    - `planned_statement_count`'s values (ADR-0079);
+    - `Busy` replacing `Store`, and the typed retry (ADR-0077);
+    - SQLite's 15 s timeout (ADR-0065).
+  - **Every row has a decision.** Four `proposed` records are listed as pending
+    (ADR-0081, 0082, 0084, 0087). The release box stays open: nothing is
+    published or tagged.
