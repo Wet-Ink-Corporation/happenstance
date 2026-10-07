@@ -69,8 +69,8 @@ gave to this phase.
       - `projection-id-is-unvalidated`, **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
         the sync runner's reservation is decided here, not at phase 13.
-      - `es-17-two-adapter-measurement-is-unscheduled` — take ADR-0055's restated
-        measurement and act on it, or freeze `&[Event]` by a record. ES-17 below.
+      - ~~`es-17-two-adapter-measurement-is-unscheduled` — take ADR-0055's restated
+        measurement and act on it, or freeze `&[Event]` by a record.~~ **Settled by [ADR-0080](../../.kb/decisions/0080-append-keeps-a-borrowed-batch.md)**: measured, `&[Event]` frozen. ES-17 below.
       - ~~`no-fixture-tolerance-for-transient-contention` — a `Busy` variant on the
         `#[non_exhaustive]` `AppendError` is additive to add, but whether 1.0
         promises one is decided in this window, not after it.~~ **Settled by
@@ -187,7 +187,7 @@ gave to this phase.
       - ~~**VT-14**, **VT-30**, **ES-7**~~ — `freeze-by-17b` since ADR-0072; each
         is additive under its recommended answer.
       - **ES-11, ES-12** — the ES-11 record above.
-      - **ES-17** — the measurement or the freezing record, above.
+      - ~~**ES-17** — the measurement or the freezing record, above.~~ **Frozen by ADR-0080.**
       - ~~**ES-41** — with ADR-0028. The transport half is already answered: Neon
         and Cloudflare each probe membership in one read-only round trip over the
         pair VT-8 indexes.~~ **Frozen by ADR-0028.**
@@ -640,3 +640,32 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   already stale on `main` (the spec's `:284`, `:998`, `:1133`, `:1364`; ADR-0055's
   and ADR-0058's ranges; `remint-identity-precondition-is-trust-only.md:59`) were
   left for a sweep that reads each referent.
+- 2026-10-07 — **PR #42 merged as `6235224`. L7: ES-17 is frozen on
+  `&[Event]` (ADR-0080)**, on `lane/p17-es17`. The measurement ADR-0012's falsifier
+  and ADR-0055 asked for, in `experiments/append-batch-ownership/`: Cloudflare,
+  the adapter whose write path an owned batch could shorten, through calibrated
+  replica arms (`wi-8b2786`), because `event_store_benchmarks!` is compiled out on
+  wasm32. B0 is the shipped write path and allocates exactly what
+  `CloudflareEventStore::append` does at all 72 sweep points; B1 is borrowed with
+  one Rust copy per payload; O1 owns the batch and moves its buffers. A decision
+  rule was fixed before the run (`wi-95d2b2`; self-attested, the README says so
+  and quotes the two earlier records): freeze unless O1 beats B1 by more than 10%
+  and below B1's lower quartile at batch 128, payloads up to 16 KiB. **It fired in
+  0 of the 9 decision cells.** Owning saves exactly 2 heap operations per event;
+  a raw caller resending one batch under a by-value `append` pays 90–95% more heap
+  operations at k = 8 contenders, and the typed loop, which re-decides, pays
+  nothing either way. Two cells outside the region fired and an independent
+  re-run moved them, which reads as noise. The stronger finding is internal: the
+  shipped Cloudflare path makes 27–29% more heap operations than B1 and
+  `worker`'s `exec_raw` would bind with no Rust copy at all — a follow-up with no
+  signature change, not decided here. ES-17 is `[FROZEN]`, line-neutrally; its
+  open question is superseded; the ledger's next free ADR is 0088, with 0081–0087
+  reserved by phase 17 lanes in flight. Not measured: `workerd` or a deployed
+  object, Postgres, and effects under about 20% of wall time. Verified: the
+  experiment's fmt, both clippies, host tests under the default harness, the six
+  wasm32 conformance tests, `spec-trace`, `lints`, `lint-kb`; two independent
+  reviews (the second re-ran the sweep and matched all 288 deterministic rows).
+  Records PRs opened this session and left for the owner: #43 (ADR-0083, the codec
+  stays unsealed), #44 (ADR-0084, the SQL seam, now also proposing a Postgres
+  parameter-count check after a real gap was found) and #45 (ADR-0086, VT-6
+  mint-once), each `proposed`.

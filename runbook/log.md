@@ -10,6 +10,21 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — ES-17 frozen on `&[Event]` (ADR-0080)
+
+*Committed on `lane/p17-es17`, on `6235224`.* Phase 17, lane L7.
+
+The measurement is committed under `experiments/append-batch-ownership/`; its
+pre-declared rule fired in none of nine cells, so `append` keeps its borrowed batch
+and ES-17 is `[FROZEN]`. Three `proposed` records went up for the owner as #43, #44
+and #45.
+
+**Verified.** The experiment's own checks, `spec-trace`, `lints` and `lint-kb`. The
+workspace gate is unaffected (nothing outside `experiments/` and the records
+changed). The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — the guard-plan assertion (ADR-0068)
 
 *Committed on `lane/p17-guard-plan`, on `4fbfefa`.* Phase 17.

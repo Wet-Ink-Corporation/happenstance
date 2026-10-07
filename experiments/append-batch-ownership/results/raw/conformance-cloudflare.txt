@@ -1,0 +1,13 @@
+   Compiling append-batch-ownership v0.0.0 (/home/user/wt-es17/experiments/append-batch-ownership)
+    Finished `release` profile [optimized] target(s) in 1.30s
+     Running tests/cloudflare.rs (target/wasm32-unknown-unknown/release/deps/cloudflare-5521e1d446de45d2.wasm)
+running 6 tests
+test o1_is_b1_minus_the_moved_buffers_in_the_vec_regime_only ... ok
+test every_arm_reads_back_the_batch_through_the_real_store ... ok
+test b1_is_b0_minus_the_binding_clones ... ok
+test b0_allocates_exactly_what_the_adapter_allocates ... ok
+test a_vec_backed_payload_moves_without_allocating_on_wasm32 ... ok
+test a_fenced_append_is_refused_once_the_boundary_has_moved ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.19s
+
