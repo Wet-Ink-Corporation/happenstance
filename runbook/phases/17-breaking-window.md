@@ -166,7 +166,7 @@ gave to this phase.
       conformance claim carries ES-11 as a named, documented exception, or whether
       a one-shot-HTTP shape that satisfies ES-11 exists; ES-12 is frozen on the
       same axis, with `query_items_share_one_snapshot` red on a one-shot-HTTP
-      adapter as its falsifier (fired: CI run 37504851570). Landing it restores the live Neon check as required (`wi-0f1291`).
+      adapter as its falsifier (fired: CI run 37504851570). When it lands, the owner re-adds `conformance against a live Neon endpoint` to the `Protect main` ruleset (id 22926481) and confirms it is required again (`wi-0f1291`).
 - [ ] **A `workerd` sibling job** in `.github/workflows/ci.yml`, shaped like
       `live-postgres` and `live-neon`: a sibling of `gate`, never a step inside it
       (`.kb/open-questions/no-workerd-class-runner-in-the-gate.md`). ADR-0066 makes

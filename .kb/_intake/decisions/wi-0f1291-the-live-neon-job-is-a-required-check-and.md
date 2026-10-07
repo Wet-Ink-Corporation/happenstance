@@ -22,7 +22,7 @@ provenance: user-directed
 decided_at: "2026-10-06T21:22:22Z"
 tree_hash: "cb53b0117974473d5baab3b551a15152f7b07678"
 recommended: "A"
-flip_condition: "If two PRs in a row each need two or more re-runs, switch to B"
+flip_condition: "When L8's ES-11 record lands, re-add the check to the Protect main ruleset and confirm it is required; restore it sooner (back to A) if the race starts masking other Neon failures"
 ---
 
 # Non-required until L8
@@ -82,7 +82,7 @@ Decider's note: After the L8 sizing (~2-3 days, fence undesigned, CI-only verifi
 
 ### Confirmation
 
-Revisit when: If two PRs in a row each need two or more re-runs, switch to B
+Revisit when: When L8's ES-11 record lands, re-add the check to the Protect main ruleset and confirm it is required; restore it sooner (back to A) if the race starts masking other Neon failures.
 
 ## Why this might be wrong
 
