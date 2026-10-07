@@ -78,12 +78,12 @@ earns it:
 
 **How the identity is read differs, and the difference matters to any re-mint.**
 `PostgresEventStore` reads the row once per handle and caches it in an `Arc<OnceLock<StoreId>>`
-(`crates/happenstance-postgres/src/event_store.rs:175-183`, read at `:393-416`). A handle that was
+(`crates/happenstance-postgres/src/event_store.rs:175-183`, read at `:386-420`). A handle that was
 open across a re-mint would keep stamping the retired identity. That is the stale-handle bug
 `happenstance-sqlite` closed in `f719b2a` by re-reading the identity inside the append
-(`crates/happenstance-sqlite/src/event_store.rs:681-744`). `NeonEventStore` has no cache. Its
+(`crates/happenstance-sqlite/src/event_store.rs:699-746`). `NeonEventStore` has no cache. Its
 append reads `store_id` inside the same `INSERT … SELECT` statement
-(`crates/happenstance-neon/src/event_store.rs:529`), so a re-mint would be seen by the next append.
+(`crates/happenstance-neon/src/event_store.rs:527`), so a re-mint would be seen by the next append.
 
 ## Why a clone is not an edge case here
 
@@ -123,8 +123,8 @@ Which of VT-6's arms each adapter takes, and at what cost:
   branch case and miss the restore case.
 - **Mint-per-open.** This satisfies the clause by construction, and it is the one arm that changes
   behaviour on a published crate. A server store has no natural "open", and per pool or per handle
-  would split one store's history into a great many origins. `references/adapter-shapes.md:387-393`
-  records that mint-per-open fails `reopened_store_does_not_reissue_an_event_id` outright.
+  would split one store's history into a great many origins. It does *not* fail
+  `reopened_store_does_not_reissue_an_event_id`, which ADR-0014 rewrote to admit it (`suite.rs:2594-2601`).
 
 ## What forces it
 
@@ -132,7 +132,7 @@ VT-6 already binds both crates, so the violation exists in `0.3.2` today. It has
 symptom until something dedups by `EventId`. **Phase 13** is that something. Sync's watermark trusts
 the pair, VT-6 is dispositioned *freeze-by-13* in phase 16's table, and phase 13's exit criteria
 require `restored_peer_does_not_reissue_identities` to be green against a Postgres-backed peer and
-both adapters to document what they do on a restore (`runbook/phases/13-sync.md:63-77`, `:191-194`).
+both adapters to document what they do on a restore (`runbook/phases/13-sync.md:66-83`, `:226-229`).
 A re-mint operation is an additive inherent method, and a documented procedure is additive too, so
 both fit phase 13. Switching either adapter to mint-per-open is a behaviour change, and it would
 belong to phase 17's breaking window.
@@ -155,4 +155,8 @@ belong to phase 17's breaking window.
 
 ## Owner
 
-Phase 13 (`runbook/phases/13-sync.md:63-77`).
+Phase 13 (`runbook/phases/13-sync.md:66-83`).
+
+Answered by [ADR-0086](../decisions/0086-postgres-and-neon-keep-mint-once.md), `proposed`, pending the
+owner's call: neither adapter mints per open, and both keep mint-once, earned by a documented
+re-mint. This atom stays open until the record is accepted.

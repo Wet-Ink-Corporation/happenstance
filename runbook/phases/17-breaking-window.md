@@ -134,6 +134,8 @@ gave to this phase.
       adapter takes mint-per-open, the session log says so and phase 13 builds
       only the additive arms; mint-per-open after this window is a post-1.0
       major.
+      Answered by [ADR-0086](../../.kb/decisions/0086-postgres-and-neon-keep-mint-once.md),
+      `proposed`, pending the owner's call.
 - [x] **Execute ADR-0057 — the testkit version key is dropped.** Done in lane L4:
       the workspace entry for `happenstance-testkit` carries no `version`, and
       `cargo xtask package-check` refuses a publishable crate whose testkit

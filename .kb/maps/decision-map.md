@@ -614,6 +614,11 @@ ADR-0079 is lane L6b's: on the `workerd` job's measurements, a `happenstance-clo
 item binds a constant number of parameters through `json_each`, the two partition widths become
 `workerd`'s 5 and 90, and the test shim takes `workerd`'s four statement limits. It supersedes
 nothing, and answers the first item ADR-0052 left undecided: the adapters' widths need not agree.
+ADR-0086, proposed, settles VT-6's phase-17 half for the two server adapters: neither mints per
+open, both keep mint-once and earn it through a documented re-mint, and default-refusing detection
+is ruled out after 1.0. On acceptance it supersedes
+`kb-open-question-postgres-neon-store-id-no-restore-001`. It corrects the claim that mint-per-open
+fails `reopened_store_does_not_reissue_an_event_id`.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -629,6 +634,7 @@ nothing, and answers the first item ADR-0052 left undecided: the adapters' width
 | — | [`kb-decision-wi-ff17f4`](../decisions/wi-ff17f4-ps-15-freeze-after-narrowing-to-commit-and.md) | PS-15 frozen narrowed to commit and reset; rollback non-normative (owner, Weigh-In) | accepted | 17 | — |
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
+| ADR-0086 | [`kb-decision-0086`](../decisions/0086-postgres-and-neon-keep-mint-once.md) | Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined | proposed | 17 | — |
 
 ## Adding a row
 

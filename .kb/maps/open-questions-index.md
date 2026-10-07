@@ -589,6 +589,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `happenstance-neon` mint their `StoreId` once, in their first migration, and take neither branch
   VT-6 requires of mint-once, so a `pg_restore` or a Neon branch re-issues identities already
   issued. Owned by phase 13; a switch to mint-per-open would be phase 17's. Added 2026-09-29.
+  Answered by `kb-decision-0086`, `proposed`, pending the owner's call.
 - **Superseded** — [`query-plan-parameter-chunking-incomplete.md`](../open-questions/query-plan-parameter-chunking-incomplete.md)
   (`kb-open-question-query-plan-parameter-chunking-001`) — the
   30,000-parameter budget is enforced on `write_tag_rows`'s insert path but
