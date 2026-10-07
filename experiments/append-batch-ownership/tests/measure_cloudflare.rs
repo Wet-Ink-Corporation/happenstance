@@ -231,7 +231,7 @@ const CALLERS: [Caller; 5] = [
     Caller::O1Rebuild,
 ];
 
-fn salt(contender: usize) -> usize {
+fn variant(contender: usize) -> usize {
     contender * 1000
 }
 
@@ -270,7 +270,7 @@ fn contended_once(arms: &Arms, caller: Caller, shape: Shape) -> (Counts, f64, co
     // What each contender holds before the run starts: its first decision's
     // batch. Built outside the region; the rebuild scenarios ignore it.
     let held: Vec<Vec<Event>> = (0..CONTENDERS)
-        .map(|contender| batch::build(shape, salt(contender)).expect("builds"))
+        .map(|contender| batch::build(shape, variant(contender)).expect("builds"))
         .collect();
     let start = now_us();
     let (tally, counts) = measure(|| {
@@ -282,7 +282,7 @@ fn contended_once(arms: &Arms, caller: Caller, shape: Shape) -> (Counts, f64, co
             let Some(mine) = held.get(contender) else {
                 return Attempt::Failed(Stopped::NoSuchContender(contender));
             };
-            let rebuilt = || batch::build(shape, salt(contender)).expect("builds");
+            let rebuilt = || batch::build(shape, variant(contender)).expect("builds");
             attempt_outcome(match caller {
                 Caller::B0Resend => arms.b0.append(mine, Some(&fence)),
                 Caller::B1Resend => arms.b1.append(mine, Some(&fence)),

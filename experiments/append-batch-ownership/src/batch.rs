@@ -165,17 +165,17 @@ fn tags(count: usize, index: usize) -> Result<Tags, BuildError> {
     Ok(Tags::from_pairs(pairs)?)
 }
 
-/// One batch at `shape`. `salt` varies the payload bytes between batches so two
-/// appends of "the same" shape are not byte-identical rows.
+/// One batch at `shape`. `variant` varies the payload bytes between batches so
+/// two appends of "the same" shape are not byte-identical rows.
 ///
 /// # Errors
 ///
 /// Returns [`BuildError`] if the shape asks for something the constants above
 /// cannot supply.
-pub fn build(shape: Shape, salt: usize) -> Result<Vec<Event>, BuildError> {
+pub fn build(shape: Shape, variant: usize) -> Result<Vec<Event>, BuildError> {
     (0..shape.batch)
         .map(|index| {
-            let seed = salt.wrapping_add(index);
+            let seed = variant.wrapping_add(index);
             Ok(
                 Event::new(EVENT_TYPE, buffer(shape.regime, shape.payload, seed)?)?
                     .with_tags(tags(shape.tags, index)?)
