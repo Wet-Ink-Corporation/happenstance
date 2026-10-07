@@ -10,6 +10,19 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — vacuity control, and PR #33's follow-up
+
+*Committed on `lane/p17-affected-followup`, on `896d48c`.* Phase 17.
+
+An unattended session. The `workerd` vacuity control ran on draft PR #40 and went
+red by name on both legs (run 37570009097); closed unmerged. `declared_excludes`
+now matches its whole key and fails closed (`wi-13bd3b`, `wi-9e72a4`).
+
+**Verified.** The temper gate, `cargo test -p xtask`, xtask clippy, `spec-trace`,
+`lints` and `lint-kb`. The full `cargo xtask ci` was not run for this change.
+
+---
+
 ## 2026-10-06 — status-quo audit
 
 *Committed on `feature/intelligent-mendel-uef6ou`, on `1f92d08`.*

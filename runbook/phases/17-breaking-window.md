@@ -575,3 +575,31 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     carried runs of spaces (already on main); fixed here (`wi-06b54f`).
   - Still owed: the vacuity control, and the `0.4.0` trace table's hand row for
     `planned_statement_count`.
+- 2026-10-07 — **An unattended overnight session starts the queue.** The
+  handover named `80e1a213` and did not know #39, which merged during the
+  session as `896d48c` (the live Neon job is not a required check until L8,
+  `wi-0f1291`); `git log` was trusted over it.
+  - **The vacuity control ran, owed since L6a.** Draft PR #40 (branch
+    `lane/p17-vacuity-control`, kept) put a match guard in `emit_dispatch` that
+    drops `query_item_types_are_or`. Run 37570009097
+    (https://github.com/Wet-Ink-Corporation/happenstance/actions/runs/37570009097/job/112626278503):
+    local `workerd` 97 collected, 96 passed, the one failure
+    `query_item_types_are_or` with `no such rule: expected 404 to be 200`; the
+    deployed object 96 executed, one failed, `FAIL query_item_types_are_or [404]
+    no such rule`. A dropped rule is red by name on both legs. Closed unmerged.
+    The same run's live Neon job went red on `query_items_share_one_snapshot`
+    (107 of 108), the known ES-12 race: one more data point for L8.
+  - **`wi-13bd3b`, PR #33's review follow-up**, on `lane/p17-affected-followup`.
+    `declared_excludes` matched its key by prefix, so an `excludes` or
+    `exclude-note` line above the real key stopped the scan short of it, and a
+    present key it could not parse read as excluding nothing. It now matches
+    the whole key and fails closed with the manifest's path (`wi-9e72a4`, a
+    two-way default); a `#` comment inside a multi-line array, which the old
+    reader took for part of an entry, is stripped. Three tests carry the wrong
+    implementations and were red against the old body. Citations into
+    `xtask/src/main.rs` (`lint_narrative.rs`, `narrative_doctests.rs`,
+    `proof.rs`) and the shifted `affected.rs` lines were repointed by anchor, and
+    `assert_covers_manifest`'s stale paragraph rewritten. Verified: the temper
+    gate, `cargo test -p xtask`, xtask clippy `-D warnings`, `spec-trace`,
+    `lints`, `lint-kb`; `temper:rust-reviewer`'s first round asked for changes
+    (two citations four lines off, error reasons unpinned), all made.
