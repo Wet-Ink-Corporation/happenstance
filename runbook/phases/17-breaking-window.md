@@ -602,4 +602,5 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     `assert_covers_manifest`'s stale paragraph rewritten. Verified: the temper
     gate, `cargo test -p xtask`, xtask clippy `-D warnings`, `spec-trace`,
     `lints`, `lint-kb`; `temper:rust-reviewer`'s first round asked for changes
-    (two citations four lines off, error reasons unpinned), all made.
+    (two citations four lines off, error reasons unpinned); all were made, and
+    its second round approved the tree.
