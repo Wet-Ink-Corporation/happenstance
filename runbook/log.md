@@ -10,6 +10,21 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — Neon's `push` narrowed (N2)
+
+*Committed on `lane/p17-neon-push`, on `12540a7`.* Phase 17.
+
+PR #47 merged as `12540a7`. `NeonWriteBatch::push` takes `&'static str` and its
+values; a computed statement goes through `push_raw_sql`; `statements` is private
+behind `statements()`. BREAKING on `happenstance-neon`, for `0.4.0`, by the owner's
+default.
+
+**Verified.** The temper gate, `happenstance-neon`'s tests and `compile_fail`
+doctests, `spec-trace`, `lints`, `lint-kb`, `lint-constitution`, `cargo xtask wasm`
+(Node 24). The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — the deployed `workerd` leg retries a Durable Object reset
 
 *Committed on `lane/p17-workerd-reset`, on `3462bf8`.* Phase 17.
