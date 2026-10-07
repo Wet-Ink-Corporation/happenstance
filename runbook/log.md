@@ -10,6 +10,20 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — the `0.4.0` trace table, drafted
+
+*Committed on `lane/p17-trace-table`, on `4278816`.* Phase 17.
+
+`cargo semver-checks` against `0.3.2` (`--release-type minor`) reports six breaks
+in three crates. Each one, and seven hand rows the tool cannot see, is traced to its
+decision in `CHANGELOG.md`'s `[Unreleased]`. Four pending records are named. Not
+released.
+
+**Verified.** The tool run itself, `spec-trace`, `lints`, `lint-kb`. The full
+`cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — Neon's `push` narrowed (N2)
 
 *Committed on `lane/p17-neon-push`, on `12540a7`.* Phase 17.
