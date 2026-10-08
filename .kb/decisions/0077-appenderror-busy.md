@@ -73,7 +73,7 @@ phase 17's window.
 The trigger the atom named, *the first adapter whose conformance run fails on contention rather
 than on conformance*, has fired. The Postgres live suite exhausted its `40001` retry budget on a
 pull request and surfaced `Failed` where the rule requires a commit or a `ConditionViolated`
-(`crates/happenstance-postgres/src/event_store.rs:685-687`). Three of the four published
+(`crates/happenstance-postgres/src/event_store.rs:708-710`). Three of the four published
 event-store adapters produce the condition, over three storage shapes: SQLite's file lock
 (`SQLITE_BUSY` after ADR-0065's 15 s timeout), pooled PostgreSQL SSI (`40001` after the adapter's
 budget) and Neon's one-shot-HTTP SSI (`40001` after `SERIALISATION_ATTEMPTS`). That is a spread,

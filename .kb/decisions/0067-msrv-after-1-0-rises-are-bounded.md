@@ -71,7 +71,7 @@ last_reviewed: 2026-09-29
 `1.0.0` requires Rust **1.97.1**. This is the owner's choice recorded in `kb-decision-wi-460397`
 (*"Hold 1.97.1; bounded rises"*), written up here with its reasons. `Cargo.toml:26` (`rust-version = "1.97.1"`) and
 `rust-toolchain.toml:2` (`channel = "1.97.1"`) do not move, and neither does the `msrv` job's
-spelled-out `toolchain: "1.97.1"` (`.github/workflows/ci.yml:1060-1099`). This is the number seven
+spelled-out `toolchain: "1.97.1"` (`.github/workflows/ci.yml:1099-1138`). This is the number seven
 crates have been published at since `0.2.0`, through `0.3.2`.
 
 This record amends ADR-0037 and does not supersede it, on the precedent ADR-0029 set against

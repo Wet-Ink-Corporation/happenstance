@@ -238,7 +238,7 @@ nothing, since ADR-0020 published its own contrary prediction as explicitly fals
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted (partly superseded) | 8 | partly superseded by `kb-decision-0065`, `kb-decision-0068` |
+| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted (partly superseded) | 8 | partly superseded by `kb-decision-0065`, `kb-decision-0068`, `kb-decision-0081` (§9) |
 | ADR-0031 | [`kb-decision-0031`](../decisions/0031-the-runner-collapses-upward.md) | One runner, in happenstance — the checkpoint pump collapses upward | accepted | 7 | partly supersedes `kb-decision-0007` |
 | ADR-0032 | [`kb-decision-0032`](../decisions/0032-adr-0021-serde-attribution-correction.md) | The serde-encoded framing region is rejected on two grounds, and ADR-0003 was never one of them | accepted | 7 | supersedes `kb-decision-0021` |
 | ADR-0033 | [`kb-decision-0033`](../decisions/0033-happenstance-macros-out-of-scope-for-0-1.md) | happenstance-macros is out of scope for 0.1 | accepted | 7 | — |
@@ -482,7 +482,7 @@ map.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0025 | [`kb-decision-0025`](../decisions/0025-the-ladybug-projection-adapter.md) | The Ladybug projection adapter — a checkpoint node, raw Cypher, and a blocking driver | accepted | 11 | — |
 | ADR-0060 | [`kb-decision-0060`](../decisions/0060-ps-2s-axis-re-evaluated.md) | The projection port keeps its gate, and the reason ADR-0036 gave has expired | accepted | 11 | — |
-| ADR-0061 | [`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md) | ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none | accepted | 10 | — |
+| ADR-0061 | [`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md) | ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none | superseded | 10 | superseded by ADR-0087 |
 
 ## 2026-09-11 intake: the probe seam moves, the port freezes, and the measurement host gets declared conditions (ADR-0062, ADR-0063, ADR-0064)
 
@@ -628,6 +628,31 @@ ADR-0083, accepted by the owner on 2026-10-08, answers `kb-open-question-seal-th
 not split. It corrects `Codec`'s rustdoc, which stated the asymmetry backwards, and records that
 ADR-0049's atom shows `reads_tag` defaulting to `false` where the code defaults to the codec's own
 tag. It supersedes nothing and closes the open question.
+ADR-0084, accepted by the owner on 2026-10-08, answers the projection batch's SQL seam. `&'static str` plus a named escape
+hatch is final for SQLite and Postgres at 1.0, and that includes `LivePostgresBatch::execute`. A
+minted `Statement` is declined as a replacement for `push`. The parameter-count obligation is
+stated once. SQLite's driver enforces it both ways; Postgres enforces only too few, so the record
+proposes an adapter-side count check there. It proposes the shape of Neon's `0.4.0`
+narrowing, whose release the owner had already set as a default. It supersedes
+`kb-open-question-projection-batch-sql-statement-type-001`; the Postgres count check it proposes is owed.
+ADR-0086, accepted by the owner on 2026-10-08, settles VT-6's phase-17 half for the two server adapters: neither mints per
+open, both keep mint-once and earn it through a documented re-mint, and default-refusing detection
+is ruled out after 1.0. It supersedes
+`kb-open-question-postgres-neon-store-id-no-restore-001`. It corrects the claim that mint-per-open
+fails `reopened_store_does_not_reissue_an_event_id`.
+ADR-0081, accepted by the owner on 2026-10-08, is lane L9's: ADR-0022 §9's reproduction, which ADR-0068 assigned to phase 17.
+A store built on one runtime and driven from another after the first is gone reported
+`Worker(JoinError::Cancelled)`, never `NoRuntime`, so the stores now prefer the executing runtime
+and fall back to the captured handle (remedy B), a behaviour change on `happenstance-sqlite` and
+`happenstance-postgres` for `0.4.0`. It partly supersedes ADR-0022 at §9's "prefer it", the
+ADR-0065 shape, and `kb-decision-0022`'s row carries the annotation.
+ADR-0087 is lane L8's, accepted by the owner on 2026-10-08: on a sweep against the
+live Neon endpoint (`experiments/es-11-fence/`; baseline 172 red of 1,500, fence 0 of 1,500, under a
+rule fixed before the first counted run), `happenstance-neon` meets ES-11 and ES-12 by holding an
+append until every read its transport dispatched earlier has been answered, through a required
+`SqlTransport::reads_settled`, scoped to one transport (D3). It supersedes `kb-decision-0061`,
+whose row and frontmatter now read `superseded`. The fence itself lands as a separate change, and
+ES-11 and ES-12 freeze with it.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -646,6 +671,10 @@ tag. It supersedes nothing and closes the open question.
 | ADR-0080 | [`kb-decision-0080`](../decisions/0080-append-keeps-a-borrowed-batch.md) | append keeps its borrowed batch, and ES-17 is frozen on the two-build measurement | accepted | 17 | — |
 | ADR-0082 | [`kb-decision-0082`](../decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | ProjectionId is validated: VT-14's set, 255 bytes, and happenstance/ and sync/ reserved | accepted | 17 | partly supersedes `kb-decision-0015` (§10) |
 | ADR-0083 | [`kb-decision-0083`](../decisions/0083-codec-stays-unsealed-through-1-x.md) | Codec stays unsealed through 1.x, and CodecError::UnknownTag is not split | accepted | 17 | — |
+| ADR-0084 | [`kb-decision-0084`](../decisions/0084-the-projection-batch-sql-seam-is-final.md) | The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once | accepted | 17 | supersedes `kb-open-question-projection-batch-sql-statement-type-001` on acceptance |
+| ADR-0086 | [`kb-decision-0086`](../decisions/0086-postgres-and-neon-keep-mint-once.md) | Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined | accepted | 17 | — |
+| ADR-0081 | [`kb-decision-0081`](../decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | A store hops onto the runtime it is called on, and the handle it captured is the fallback | accepted | 17 | partly supersedes `kb-decision-0022` (§9) |
+| ADR-0087 | [`kb-decision-0087`](../decisions/0087-es-11-is-met-on-one-shot-http-by-a-read-settlement-fence.md) | ES-11 is met on one-shot HTTP by a read-settlement fence | accepted | 17 | supersedes `kb-decision-0061` |
 
 ## Adding a row
 

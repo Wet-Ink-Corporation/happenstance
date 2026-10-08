@@ -38,6 +38,21 @@ released.
 
 ---
 
+## 2026-10-07 — ES-11's fence works on Neon; ADR-0087 proposed (L8)
+
+*Committed on `lane/p17-adr-0087-es11`, on `4278816`.* Phase 17, lane L8. PR open.
+
+PR #49 merged as `4278816`. The spike (draft #50, never merged) fences an append
+behind its transport's earlier reads. On the live endpoint: baseline 172 red of
+1,500, fence 0 of 1,500, both racing rules green in three attempts, under a rule
+written before the first counted run. ADR-0087 supersedes ADR-0061 on acceptance;
+landing the fence breaks `SqlTransport` and is the owner's call.
+
+**Verified.** `spec-trace`, `lints`, `lint-kb`, the tally regenerated from the
+committed rows. The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — Neon's `push` narrowed (N2)
 
 *Committed on `lane/p17-neon-push`, on `12540a7`.* Phase 17.
@@ -50,6 +65,22 @@ default.
 **Verified.** The temper gate, `happenstance-neon`'s tests and `compile_fail`
 doctests, `spec-trace`, `lints`, `lint-kb`, `lint-constitution`, `cargo xtask wasm`
 (Node 24). The full `cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — ADR-0022 §9 reproduced; remedy B proposed (ADR-0081)
+
+*Committed on `lane/p17-runtime-seam`, on `3462bf8`.* Phase 17, lane L9. PR open.
+
+A store outliving the runtime it was built in reported `Worker(JoinError::Cancelled)`
+on `happenstance-sqlite` and `happenstance-postgres`. The stores now prefer the
+executing runtime; a behaviour change on two published crates, so ADR-0081 is
+`proposed` and the PR waits for the owner. The Postgres pool strand is not fixed and
+is documented.
+
+**Verified.** The temper gate, both crates' `runtime_seam` tests (Postgres live),
+Postgres conformance 108/108, `spec-trace`, `lints`, `lint-constitution`, `lint-kb`.
+The full `cargo xtask ci` was not run.
 
 ---
 

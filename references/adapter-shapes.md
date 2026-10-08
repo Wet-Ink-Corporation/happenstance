@@ -366,7 +366,7 @@ goes, so does the workspace's exposure to this ICE.
 
 ## 7. VT-6 identity mechanisms, per adapter
 
-VT-6 (`spec/SPECIFICATION.md:783-841`) permits two mechanisms for a store's own
+VT-6 (`spec/SPECIFICATION.md:848-906`) permits two mechanisms for a store's own
 `StoreId` — **minted afresh on every open**, or **minted once and persisted** —
 and it does not leave the choice free. Mint-once is available only to an adapter
 that can **detect** its state was restored or cloned, *or* whose deployment is
@@ -386,8 +386,8 @@ that the second MUST was undischarged for every adapter in the workspace.
 
 **Why mint-once and not mint-per-open, for a file-backed store.** Mint-per-open
 splits one store's history into many origins whose interleaving is no longer
-recoverable, and it fails `reopened_store_does_not_reissue_an_event_id`
-(`crates/happenstance-testkit/src/suite.rs:2310`) outright. Holding the
+recoverable. It does *not* fail `reopened_store_does_not_reissue_an_event_id`,
+which ADR-0014 rewrote to admit it (`crates/happenstance-testkit/src/suite.rs:2594-2601`). Holding the
 incarnation fixed across a reopen is what makes the *position* the thing that
 must never repeat — and `AUTOINCREMENT` is the mechanism for that, which is why
 the two decisions are one decision rather than two.

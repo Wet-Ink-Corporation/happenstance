@@ -38,6 +38,7 @@ depends_on: []
 related:
   - kb-decision-0087
   - kb-decision-0061
+  - kb-decision-0087
   - kb-open-question-es-11-sqlite-ceiling-sample-cost-001
   - kb-open-question-provisional-falsifiers-001
   - kb-decision-0011
@@ -47,6 +48,7 @@ source_paths:
   - .kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md
   - crates/happenstance-neon/src/lib.rs
   - spec/SPECIFICATION.md
+  - experiments/es-11-fence/results/tally.md
 last_reviewed: 2026-10-08
 ---
 
@@ -122,6 +124,28 @@ It is also not a request for a `Capability` the fixture could decline;
 `Capability` states what a fixture can arm, not whether a store provides a
 guarantee, and using it here would print "skipped" where the honest word is
 either "conforms" or "does not."
+
+## 2026-10-07: answered by ADR-0087, proposed, pending acceptance
+
+**This question is answered, but not closed.** [`kb-decision-0087`](../decisions/0087-es-11-is-met-on-one-shot-http-by-a-read-settlement-fence.md)
+(`proposed`) takes the first shape under *What would answer it*: a one-shot-HTTP adapter that
+supplies a store-honoured ordering primitive. The primitive is not one the endpoint exposes. It is
+the read's **answer**: `happenstance-neon` holds an `append` until every read its transport
+dispatched earlier has been answered, and an answer follows the statement's execution, so the
+read's snapshot precedes the append's commit at the store.
+
+Measured on the live endpoint under a rule fixed before the first counted run
+(`experiments/es-11-fence/results/tally.md:14-25`): without the fence 172 of 1,500 trials red,
+every one in the same direction; with it, 0 of 1,500, and both racing rules green in every attempt.
+So the answer to the title is **yes, a one-shot-HTTP adapter can satisfy ES-11**, by ordering on
+the response rather than on the request.
+
+It stays open until the owner accepts ADR-0087, and the fence it describes is not on `main`: the
+spike that measured it is unmerged, and landing it is a separate change (a breaking one, to
+`SqlTransport`). On acceptance this atom gains `superseded_by: kb-decision-0087`. Two things the
+record leaves unmeasured bear on the answer's reach: a `wasm32` `fetch` transport, where settling a
+read from a promise callback is reasoning only, and the order between two handles over separate
+transports, which no rule observes.
 
 ## Closed — 2026-10-08
 
