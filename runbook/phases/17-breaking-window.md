@@ -64,8 +64,12 @@ gave to this phase.
       published signature, or that 1.0 cannot promise around without an answer.
       In `.kb/open-questions/`:
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
-      - `projection-batch-sql-seam-statement-type` (ADR-0084 `proposed`, #44; Neon's `push` narrowed) — the statement type a SQL
+        Answered by [ADR-0083](../../.kb/decisions/0083-codec-stays-unsealed-through-1-x.md),
+        accepted by the owner on 2026-10-08.
+      - `projection-batch-sql-seam-statement-type` (ADR-0084 accepted, #44; Neon's `push` narrowed) — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
+        Answered by [ADR-0084](../../.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md),
+        accepted by the owner on 2026-10-08.
       - `projection-id-is-unvalidated` (closed by ADR-0082, lane L10), **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
         the sync runner's reservation is decided here, not at phase 13.
@@ -125,7 +129,7 @@ gave to this phase.
       phase 16.)
 - [ ] ~~**ADR-0069's total `QueryItem` constructor.**~~ Moved to
       [phase 17b](17b-after-the-window.md) by ADR-0072: additive.
-- [ ] **VT-6 for Postgres and Neon: mint-per-open, or not**
+- [x] **VT-6 for Postgres and Neon: mint-per-open, or not**
       (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`).
       Phase 13 closes the restore gap, but it runs after this window, and
       mint-per-open is the one remedy that changes behaviour on a published
@@ -134,6 +138,9 @@ gave to this phase.
       adapter takes mint-per-open, the session log says so and phase 13 builds
       only the additive arms; mint-per-open after this window is a post-1.0
       major.
+      Answered by [ADR-0086](../../.kb/decisions/0086-postgres-and-neon-keep-mint-once.md),
+      accepted by the owner on 2026-10-08: neither adapter mints per open, so phase 13
+      builds only the additive arms.
 - [x] **Execute ADR-0057 — the testkit version key is dropped.** Done in lane L4:
       the workspace entry for `happenstance-testkit` carries no `version`, and
       `cargo xtask package-check` refuses a publishable crate whose testkit

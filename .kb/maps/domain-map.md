@@ -560,7 +560,7 @@ test never actually restores or clones a store, so VT-6's `[PROVISIONAL]` marker
 same-process assertion rather than the cross-instance one its text describes. **Superseded**
 2026-09-29: every append re-reads the persisted identity and refuses a stale handle
 (`f719b2a`); the gap beside it is the successor entry below),
-`kb-open-question-postgres-neon-store-id-no-restore-001` (added 2026-09-29 — `happenstance-postgres`
+`kb-open-question-postgres-neon-store-id-no-restore-001` (**superseded** 2026-10-08 by `kb-decision-0086`; added 2026-09-29 — `happenstance-postgres`
 and `happenstance-neon` mint their `StoreId` once and take neither branch VT-6 requires of mint-once,
 so a restore or a Neon branch re-issues identities; owned by phase 13),
 `kb-open-question-query-plan-parameter-chunking-001` (added 2026-09-04 — the 30,000-parameter
@@ -631,7 +631,7 @@ compensation-based atomicity, not every counter-assigning store),
 `kb-open-question-probe-read-through-signature-001` (added 2026-09-07 — whether
 `ProjectionProbe::probe_read_through` moves to `&mut Self::Batch` / async / fallible before
 phase 10, corroborating ADR-0036's part-2-unmet finding with a second causal reading),
-`kb-open-question-projection-batch-sql-statement-type-001` (added 2026-09-07 — whether
+`kb-open-question-projection-batch-sql-statement-type-001` (**superseded** 2026-10-08 by `kb-decision-0084`; added 2026-09-07 — whether
 `SqliteBatch::push`'s landed `&'static str` narrowing is the seam's final shape or a minted
 `Statement` newtype follows once `ProjectionStore` freezes),
 `kb-open-question-projection-runner-chunk-observation-001` (added 2026-09-07 — the chunk type and
@@ -772,7 +772,7 @@ new ceremony measurement strengthens instead),
 `kb-open-question-tuple-boundary-event-type-001` (added 2026-09-07 — `composition.rs`'s
 macro-generated tuple impls bind every member to the first member's `Event` type, unwritten in
 ADR-0020's decision text or the signed-off design),
-`kb-open-question-seal-the-codec-001` (added 2026-09-07 — whether `Codec` is later sealed now that
+`kb-open-question-seal-the-codec-001` (**superseded** 2026-10-08 by `kb-decision-0083`; added 2026-09-07 — whether `Codec` is later sealed now that
 `0.2.0` is live and the window to do so for free has closed; bundles the `UnknownTag`-split and
 `Boundary::absorb` sub-questions ADR-0049 left undone).
 
