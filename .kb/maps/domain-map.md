@@ -631,7 +631,7 @@ compensation-based atomicity, not every counter-assigning store),
 `kb-open-question-probe-read-through-signature-001` (added 2026-09-07 — whether
 `ProjectionProbe::probe_read_through` moves to `&mut Self::Batch` / async / fallible before
 phase 10, corroborating ADR-0036's part-2-unmet finding with a second causal reading),
-`kb-open-question-projection-batch-sql-statement-type-001` (added 2026-09-07 — whether
+`kb-open-question-projection-batch-sql-statement-type-001` (**superseded** 2026-10-08 by `kb-decision-0084`; added 2026-09-07 — whether
 `SqliteBatch::push`'s landed `&'static str` narrowing is the seam's final shape or a minted
 `Statement` newtype follows once `ProjectionStore` freezes),
 `kb-open-question-projection-runner-chunk-observation-001` (added 2026-09-07 — the chunk type and
@@ -772,7 +772,7 @@ new ceremony measurement strengthens instead),
 `kb-open-question-tuple-boundary-event-type-001` (added 2026-09-07 — `composition.rs`'s
 macro-generated tuple impls bind every member to the first member's `Event` type, unwritten in
 ADR-0020's decision text or the signed-off design),
-`kb-open-question-seal-the-codec-001` (added 2026-09-07 — whether `Codec` is later sealed now that
+`kb-open-question-seal-the-codec-001` (**superseded** 2026-10-08 by `kb-decision-0083`; added 2026-09-07 — whether `Codec` is later sealed now that
 `0.2.0` is live and the window to do so for free has closed; bundles the `UnknownTag`-split and
 `Boundary::absorb` sub-questions ADR-0049 left undone).
 

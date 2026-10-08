@@ -2,7 +2,8 @@
 id: kb-open-question-seal-the-codec-001
 title: Codec stays unsealed after 0.2.0, and the window in which sealing was free has now closed
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0083
 authority_tier: note
 summary: >-
   kb-decision-0049 (Codec::reads_tag) landed Option A of codec-foreign-tag-resolution.md and left
@@ -18,8 +19,10 @@ summary: >-
   feature off" from "tag nothing in this build has ever heard of", and whether Boundary::absorb
   remains the only public reading door reads_tag works through, or whether sealing would change
   what that door needs to guarantee.
+  Resolved 2026-10-08 by kb-decision-0083: Codec stays unsealed through 1.x, because sealing later is the major and unsealing is additive; the UnknownTag split is declined, and Boundary::absorb is unaffected either way.
 depends_on: []
 related:
+  - kb-decision-0083
   - kb-decision-0049
   - kb-decision-0021
   - kb-decision-0032
@@ -28,7 +31,7 @@ source_paths:
   - .kb/_intake/2026-09-07-ratifications-discharged-and-what-execution-changed.md
   - Cargo.toml
   - crates/happenstance/src/codec.rs
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-08
 ---
 
 # Codec stays unsealed after 0.2.0, and the window in which sealing was free has now closed
@@ -109,3 +112,14 @@ change, but it has to be written before 1.0 rather than left open.
 
 Sub-question 1, the `UnknownTag` split, is additive whichever way sealing goes, because
 `CodecError` is `#[non_exhaustive]`, and any phase may take it. **Owner now: phase 17.**
+
+## Phase 17 — 2026-10-07
+
+Answered by [ADR-0083](../decisions/0083-codec-stays-unsealed-through-1-x.md): `Codec` stays
+unsealed through 1.x, and the `UnknownTag` split is declined.
+
+## Closed — 2026-10-08
+
+**Superseded by `kb-decision-0083`**, accepted by the owner on 2026-10-08. Both sub-questions
+are answered there: the `UnknownTag` split is declined, and `Boundary::absorb` is unaffected
+either way.

@@ -34,6 +34,12 @@ lane L6b wrote 0079 (a Cloudflare query item binds constant parameters; widths 5
 Lane L7 wrote 0080: `append` keeps its borrowed batch, and ES-17 is frozen on the two-build
 measurement against `happenstance-cloudflare` (`experiments/append-batch-ownership/`).
 Lane L10 wrote 0082: `ProjectionId` is validated, `sync/` and `happenstance/` are reserved, VT-35 and PS-39 are minted.
+0083 answers a breaking open question, accepted by the owner on 2026-10-08: `Codec` stays
+unsealed through 1.x and `UnknownTag` is not split (`should-codec-be-sealed`).
+The breaking-questions lane wrote 0084, **accepted** by the owner on 2026-10-08: the projection batch's SQL seam is
+`&'static str` plus a named escape hatch at 1.0, `LivePostgresBatch::execute` included, and the
+parameter count is stated once, with an adapter-side count check proposed for Postgres. Neon's `0.4.0` narrowing
+is the owner's default; the record proposes its shape, and its code lands in its own lane PR.
 The VT-6 lane wrote 0086, **accepted** by the owner on 2026-10-08 (Postgres and Neon keep mint-once with a documented
 re-mint; mint-per-open declined; default-refusing detection ruled out after 1.0).
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
