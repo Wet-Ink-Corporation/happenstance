@@ -499,7 +499,10 @@ mod tests {
     ///
     /// Rejects: an unbounded exchange (this test never returns), and a timeout
     /// that reports the error but keeps the read registered.
-    #[tokio::test]
+    ///
+    /// On paused time: the bound fires when the runtime is idle, not after
+    /// a real millisecond, so the test reads no wall clock.
+    #[tokio::test(start_paused = true)]
     async fn a_hung_read_times_out_and_settles() {
         let ledger = ReadLedger::new();
         let ticket = ledger.dispatch();

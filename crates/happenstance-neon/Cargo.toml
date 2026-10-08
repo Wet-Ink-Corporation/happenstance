@@ -55,8 +55,9 @@ thiserror.workspace = true
 happenstance-testkit = { workspace = true, features = ["proptest"] }
 # `rt-multi-thread` is not decoration: the concurrency family starts `CONTENDERS`
 # contenders, and a current-thread runtime turns that family from a race into a
-# queue.
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+# queue. `test-util` is for paused time: the transport's timeout test fires its
+# bound on virtual time rather than a real millisecond (wi-51f0e9).
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time", "test-util"] }
 
 # --- the live transport, and why it is here and not behind a feature ---
 #

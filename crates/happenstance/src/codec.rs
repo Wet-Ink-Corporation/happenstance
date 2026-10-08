@@ -64,7 +64,7 @@ use crate::domain::DomainEvent;
 /// depending on what has been registered yet. **Sealing the trait** would
 /// withdraw the invitation above. After `1.0` only a major can: a seal added
 /// later breaks every codec written against this page; lifting one breaks none.
-/// A `0.x` minor can, as Cargo reads it as breaking; see [ADR-0083] (proposed).
+/// A `0.x` minor can, as Cargo reads it as breaking; see [ADR-0083].
 ///
 /// **`Codec` carries no associated `Error` type, and that is deliberate.** An
 /// associated error would add a third type parameter to every downstream
