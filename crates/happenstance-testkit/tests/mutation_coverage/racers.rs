@@ -351,6 +351,19 @@ impl Shared {
     /// That argument assumes the wait is driven to completion, which `block_on`
     /// always does. A future dropped mid-wait would leave its count raised and
     /// release a later cohort early rather than hang; nothing here drops one.
+    ///
+    /// It also assumes every contender is one of those three, and that is a
+    /// precondition on the rules rather than something this store can check.
+    /// **No rule may hold open, across a race, a handle that has never read and
+    /// does not append in that race.** A handle stops being a contender only at
+    /// its first read or when it is dropped, and an earlier append does not
+    /// release it. Such a handle counts as a contender that never arrives, so
+    /// the cohort waits for it forever, and the binary hangs until the CI
+    /// timeout without naming a rule. Every rule
+    /// meets it today. `race` moves each handle into a contender that appends
+    /// and drops it, and setup handles are dropped before the race starts.
+    /// Observers are connected after the race, and `observe_while_writing`'s
+    /// reader reads before any writer starts.
     async fn cohort(&self) {
         let cohort = self.update(|party| {
             let arrived_at = party.cohorts;

@@ -624,6 +624,18 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     count, which an oversubscribed host exhausts before the cohort arrives. Nothing in this diff touches the
     testkit. It is recorded, not fixed; a mutant that must lose a race needs a
     forced interleaving, not a retry.
+    **Fixed since, by #58 (`527dc08b`, `wi-bde4fa`):** the yield budgets are
+    gone from `racers.rs`. Each mutant store wraps a `Handle` that counts as a
+    contender from `connect` until its first read or its drop, and a cohort
+    releases when every live contender is waiting in it. A contender with no
+    other live contender is a cohort of one, released on arrival. No
+    conformance rule changed. The reasoning is at `Shared::cohort`, under *Why
+    it cannot hang*, which now also states the one precondition a new rule must
+    meet: no handle that has never read may be held open across a race unless
+    it appends in that race. Measured: 46 failures in 400 runs before, 0 in
+    600 after. A parallel fix of the same design (#56) was reconciled onto #58,
+    and also ran green 10 in 10 with a 0–35 ms sleep injected ahead of the
+    probe, where the yield-bounded version was red 3 in 3.
 - 2026-10-07 — **PR #41 merged as `4fbfefa`** (the vacuity control's record and
   `wi-13bd3b`). **The guard-plan assertion ADR-0068 left owed**, on
   `lane/p17-guard-plan`. `evaluate` in `happenstance-sqlite` now builds its
