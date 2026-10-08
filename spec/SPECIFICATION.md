@@ -3200,12 +3200,12 @@ sample was *committed to* at that poll and no longer depends on the caller
 polling again.
 
 **That is necessary and not sufficient, and the missing half is easy to miss
-because the driver this paragraph was written for supplies it for free.** Handing
+because the driver this paragraph was written for appeared to supply it.** Handing
 the work to the runtime orders the two operations *at the client*; what this clause
 needs is that the snapshot one takes precedes the commit the other makes *at the
-store*. A driver whose operations share one queue carries the client's order
-through to the store — `happenstance-postgres` relies on one `PgPool`, which
-ADR-0087 records, as reasoning, as order by queue position. A driver with **no shared
+store*. A driver whose operations share one queue still orders them at the client
+only — `happenstance-postgres`'s one `PgPool` is order by queue position, a margin
+and not a guarantee (ADR-0087, reasoning). A driver with **no shared
 ordering primitive** between its operations buys only the first, and
 `happenstance-neon` is the built case: it issues each operation as an independent
 request to a pooled proxy that hands each to whichever backend it likes, it spawns

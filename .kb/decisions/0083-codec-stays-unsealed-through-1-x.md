@@ -108,7 +108,7 @@ major (`.kb/open-questions/should-codec-be-sealed.md:101-108`).
 - **The published surface invites foreign codecs.**
   - `commit_with` is ungated (`crates/happenstance/src/lib.rs:232`), and its page is the one for
     a codec of your own (`tests/codec_extension_point.rs:175-185`).
-  - `reads_tag` exists only to serve a foreign codec (`CHANGELOG.md:1419-1432`).
+  - `reads_tag` exists only to serve a foreign codec (`CHANGELOG.md:1578-1591`).
 - **Sealing would leave a build that compiles but cannot be used.** `default-features = false`
   with no codec feature is a valid build (`crates/happenstance/Cargo.toml:105-127`). Sealed, it
   would have no implementors at all.

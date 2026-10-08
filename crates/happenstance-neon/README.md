@@ -53,8 +53,8 @@ happenstance-neon = { version = "0.3", features = ["projection-store"] }
 
 **This crate owns no socket.** `SqlTransport` takes the whole request by value,
 returns the whole response buffered, and says when earlier reads are answered
-(`ReadLedger` keeps that count); you supply the implementation. That is deliberate: a real client on the host drags in a TLS
-stack, and on `wasm32-unknown-unknown` the only way out of the sandbox is the
+(`ReadLedger` does the bookkeeping); you supply the implementation. That is
+deliberate: a real client on the host drags in a TLS stack, and on `wasm32-unknown-unknown` the only way out of the sandbox is the
 host's `fetch`. Those are two different clients and neither is what this crate is
 for. `NullTransport` ships in-tree and fails every round trip.
 
