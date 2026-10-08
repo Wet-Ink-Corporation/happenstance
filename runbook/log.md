@@ -10,6 +10,35 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — the `0.4.0` trace table, drafted
+
+*Committed on `lane/p17-trace-table`, on `4278816`.* Phase 17.
+
+`cargo semver-checks` against `0.3.2` (`--release-type minor`) reports six breaks
+in three crates. Each one, and seven hand rows the tool cannot see, is traced to its
+decision in `CHANGELOG.md`'s `[Unreleased]`. Four pending records are named. Not
+released.
+
+**Verified.** The tool run itself, `spec-trace`, `lints`, `lint-kb`. The full
+`cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — Neon's `push` narrowed (N2)
+
+*Committed on `lane/p17-neon-push`, on `12540a7`.* Phase 17.
+
+PR #47 merged as `12540a7`. `NeonWriteBatch::push` takes `&'static str` and its
+values; a computed statement goes through `push_raw_sql`; `statements` is private
+behind `statements()`. BREAKING on `happenstance-neon`, for `0.4.0`, by the owner's
+default.
+
+**Verified.** The temper gate, `happenstance-neon`'s tests and `compile_fail`
+doctests, `spec-trace`, `lints`, `lint-kb`, `lint-constitution`, `cargo xtask wasm`
+(Node 24). The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — ADR-0022 §9 reproduced; remedy B proposed (ADR-0081)
 
 *Committed on `lane/p17-runtime-seam`, on `3462bf8`.* Phase 17, lane L9. PR open.
@@ -23,6 +52,9 @@ is documented.
 **Verified.** The temper gate, both crates' `runtime_seam` tests (Postgres live),
 Postgres conformance 108/108, `spec-trace`, `lints`, `lint-constitution`, `lint-kb`.
 The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — the deployed `workerd` leg retries a Durable Object reset
 
 *Committed on `lane/p17-workerd-reset`, on `3462bf8`.* Phase 17.

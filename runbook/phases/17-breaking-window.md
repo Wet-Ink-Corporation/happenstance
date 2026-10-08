@@ -64,7 +64,7 @@ gave to this phase.
       published signature, or that 1.0 cannot promise around without an answer.
       In `.kb/open-questions/`:
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
-      - `projection-batch-sql-seam-statement-type` — the statement type a SQL
+      - `projection-batch-sql-seam-statement-type` (ADR-0084 `proposed`, #44; Neon's `push` narrowed) — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
       - `projection-id-is-unvalidated`, **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
@@ -701,3 +701,57 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   `spec-trace`, `lints`, `lint-constitution`, `lint-kb`. `temper:rust-reviewer`
   found no blocker or major on this tree, reported in prose, because its verdict
   JSON binds to the main checkout's tree rather than this worktree.
+- 2026-10-07 — **PR #47 merged as `12540a7`** (the deployed `workerd` leg retries
+  a Durable Object reset). **Neon N2: `NeonWriteBatch::push` is narrowed**, on
+  `lane/p17-neon-push`, by the owner's default that it rides `0.4.0`.
+  - **What changed.** `push` now takes `(&'static str, Vec<serde_json::Value>)`.
+    A computed statement goes through the new `push_raw_sql(SqlStatement)`. The
+    `statements` field is private, read through `statements()`, because
+    `#[non_exhaustive]` does not stop `batch.statements.push(…)`. The probes
+    moved to `push_raw_sql`, since their table name is computed.
+  - **Tests.** Three unit tests, and two `compile_fail` doctests (E0308 for an
+    interpolated `String`, E0616 for the field). A reviewer compiled both
+    snippets by hand to confirm each error code.
+  - **Records.** A BREAKING CHANGELOG entry. The shape is ADR-0084 §2.4's, which
+    is still `proposed` in #44; if the owner amends it on acceptance, this
+    follows.
+  - **Review fixes.** The review asked for six fixes, all made:
+    - the parameter-count doc names `reset`;
+    - a stale open-question citation;
+    - three spec citations into Neon's `projection_store.rs` were already off
+      target and now land (`:294`, `:430-445`, `:570-637`);
+    - the CHANGELOG's migration line;
+    - two doc nits.
+  - **Verified.**
+    - The temper gate (green on `--no-cache`, after the known `mutation_coverage`
+      racing-mutant flake).
+    - `cargo test -p happenstance-neon --all-features`.
+    - `spec-trace`, `lints`, `lint-kb`, `lint-constitution`.
+    - `cargo xtask wasm`, with Node 24 on `PATH`; Node 22 fails the Cloudflare
+      shim.
+  - **Not verified.** The probe's `push_raw_sql` path against a live endpoint
+    in this session. CI's `live-neon` runs it.
+- 2026-10-07 — **The `0.4.0` trace table is drafted, not released**, on
+  `lane/p17-trace-table`, at the end of `CHANGELOG.md`'s `[Unreleased]`.
+  - **The tool run.** `cargo semver-checks check-release --workspace
+    --baseline-version 0.3.2 --release-type minor`, cargo-semver-checks 0.51.0,
+    against `main` at `4278816`.
+  - **Clean.** `happenstance`, `happenstance-core`, `happenstance-sqlite` and
+    `happenstance-cloudflare` reported no break.
+  - **Six tool rows:**
+    - three on `happenstance-neon`: the `push` narrowing, reported as a parameter
+      count, a removed field and a hidden field (#49);
+    - two on `happenstance-postgres`: `naive-arm` and `new_naive` (lane L4);
+    - one on `happenstance-testkit`: the `k_disjoint` rename (ADR-0077).
+  - **Seven hand rows:**
+    - core's `unstable-projection`, which the tool passes over as an `unstable-*`
+      feature;
+    - the hidden emitters (ADR-0076);
+    - `planned_statement_count`'s values (ADR-0079);
+    - `Busy` replacing `Store`, and the typed retry (ADR-0077);
+    - SQLite's 15 s timeout (ADR-0065);
+    - `CommandError::Exhausted.source`'s type, and the renamed rule's changed
+      acceptance (both added in review, Greptile on #52).
+  - **Every row has a decision.** Four `proposed` records are listed as pending
+    (ADR-0081, 0082, 0084, 0087). The release box stays open: nothing is
+    published or tagged.

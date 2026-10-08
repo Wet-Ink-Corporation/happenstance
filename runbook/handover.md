@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-runtime-seam`, on `12540a7` (`main`, where PR #47 merged). 2026-10-07.
+`lane/p17-runtime-seam`, on `151f5c8` (`main`, where PR #52 merged). 2026-10-08.
 
 ## Where things are
 
@@ -38,27 +38,30 @@ An unattended overnight session (2026-10-07) is working the phase 17 queue.
 - **Merged:** #41 (`4fbfefa`, the vacuity control's record and `wi-13bd3b`), #42
   (`6235224`, the guard-plan assertion), #46 (`3462bf8`, L7: ES-17 frozen on
   `&[Event]` by ADR-0080), #47 (`12540a7`, the deployed `workerd` leg retries a
-  Durable Object reset).
+  Durable Object reset), #49 (`4278816`, Neon's `push` narrowed, BREAKING for
+  `0.4.0`), #52 (`151f5c8`, the `0.4.0` trace table, drafted).
 - **This PR (open, not to merge until the owner accepts ADR-0081):** L9 —
   ADR-0022 §9 reproduced; stores prefer the runtime they are called on.
+- **Open for the owner:** #51, ADR-0087 (the ES-11 fence works on Neon; spike
+  draft #50, never merged); #53, L10 (`ProjectionId` validated; needs one H-05
+  approval).
 - **Open for the owner** (each a `proposed` record): #43 ADR-0083 (codec stays
   unsealed), #44 ADR-0084 (the SQL seam is final; proposes a Postgres
   parameter-count check), #45 ADR-0086 (Postgres and Neon keep mint-once).
-- **Also open:** #47, the deployed `workerd` leg retries a Durable Object reset.
-- **In flight:** L10 (`ProjectionId`), Neon's `push` narrowing, L8 last.
+- **In flight:** the exit pass.
 - **Pre-existing:** the testkit's racing-mutant flake under load; the default-features
   doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link.
 
 ## Next action
 
-1. L10, the Neon `push` narrowing, L8's fence spike, then the `0.4.0` trace table
-   and the exit pass.
+1. The exit pass. L8 (#50, #51), L9 (this PR) and L10 (#53) wait on the owner; the
+   trace table's pending rows join as their records are accepted.
 
 ## Waiting on the owner
 
 - Accept or decline the `proposed` records: ADR-0081 (this PR; remedy B, and whether
   the documented Postgres pool obligation is enough), ADR-0083 (#43), ADR-0084 (#44),
-  ADR-0086 (#45).
+  ADR-0086 (#45), ADR-0087 (#51).
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; `ProjectionId`
   refuses the full ADR-0015 set with a generic reserved prefix; Neon's `push`
