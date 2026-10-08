@@ -77,7 +77,7 @@ extends to `Busy`, that is, whether a store may refuse commands that share nothi
 reports the refusal as transient. ADR-0077 records the narrowing and leaves that question here.
 
 This is one of **three** entries held in `UNCLAIMED_PENDING_ADR`
-(`xtask/src/spec_trace.rs:2845-2897`), a list that prints on every green `cargo xtask spec-trace`
+(`xtask/src/spec_trace.rs:2923-2975`), a list that prints on every green `cargo xtask spec-trace`
 run. It was two when this record was written — this gap and the model-family gap
 (`kb-open-question-model-family-rule-no-clause-001`) — and the read-fault gap
 (`kb-open-question-read-fault-rule-no-clause-001`) has since joined them. The list has a mechanism

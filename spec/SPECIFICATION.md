@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 203 clause IDs, of which 196 are normative:
-**153 `[FROZEN]`**, **31 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+As assembled, this document carries 205 clause IDs, of which 198 are normative:
+**154 `[FROZEN]`**, **32 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -1497,6 +1497,76 @@ three enums into one `InvalidInput` was the alternative and it loses: the three
 are returned by three different constructors and matching on which one failed is
 worth keeping, `#[non_exhaustive]` enums are cheap, and the conversion direction
 is unambiguous because a query can contain tags and a tag cannot contain a query.
+
+#### VT-35 — ProjectionId is validated: VT-14's rules, a byte bound, and a reserved namespace
+
+`ProjectionId::new` MUST return `Result<ProjectionId, InvalidProjectionId>` and
+MUST refuse, in this order: an empty value; a value longer than
+`MAX_PROJECTION_ID_LEN` (255) bytes; a value containing a character in Unicode
+`Cc` or one of VT-14's explicit bidirectional controls, reporting whichever comes
+first reading left to right; and a value beginning with `happenstance/` or
+`sync/`, compared as exact bytes, with no case folding, trimming or
+normalisation. It MUST refuse nothing else, and in particular MUST accept `Cf`
+other than those controls. An accepted id's `as_str()` MUST be byte-identical to
+its input. `ProjectionId::from_static` MUST be a `const fn` accepting exactly the
+values `new` accepts, through one validator. `Eq`, `Ord` and `Hash` MUST agree
+with `str`'s, and `Borrow<str>` MUST be implemented. No infallible conversion from
+a string into `ProjectionId` may exist: no `From<&str>`, no `From<String>`, and
+no unchecked constructor, hidden or not. `ProjectionId::sync_watermark(peer)` is
+the only constructor of a `sync/` id, and its output MUST be exactly `sync/`
+followed by `peer`'s 32 lowercase hex digits, 37 bytes in all; that format is
+frozen with this clause, because changing it orphans every persisted watermark.
+
+`[FROZEN]` by [ADR-0082](../.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md).
+`Rule:` unit tests `projection_id_refuses_what_vt_14_refuses`,
+`projection_id_accepts_the_format_characters_scripts_need`,
+`projection_id_refuses_the_reserved_prefixes_by_exact_bytes`,
+`projection_id_accepts_the_neighbours_of_the_reserved_prefixes`,
+`projection_id_from_static_and_new_agree`,
+`projection_id_from_static_rejects_a_reserved_prefix`,
+`projection_id_from_static_rejects_a_bidirectional_control`,
+`projection_id_from_static_rejects_a_c1_control`,
+`projection_id_is_const_constructible`,
+`sync_watermark_is_reserved_and_otherwise_valid`,
+`sync_watermarks_of_distinct_peers_are_distinct`,
+`a_map_keyed_by_projection_id_is_probed_by_str`,
+`projection_id_conversions_all_validate` and
+`invalid_projection_id_messages_carry_their_context` in `projection.rs`; the
+property test `new_agrees_with_a_char_level_oracle` in happenstance-core's
+integration tests, which composes VT-14's walk with the reservation against an
+oracle written in `char` predicates; and two `compile_fail` doctests on
+`ProjectionId`, one converting a string literal with `Into` and one building a
+`sync/` literal through `ProjectionId::from_static` at a free `const`, each beside
+a passing control that differs only where the failure should. The store's half
+is PS-39's rule.
+`Cases:` none — a case is owed. No case in `E2E-CASES.md` builds a `ProjectionId`
+from a value its caller does not control, such as an id read from configuration
+or a URL and refused at that edge rather than at `commit`; the case PS-39 cites
+is about reset scoping, not validation. CF-35 asks every clause for its
+cases, so this one is a debt the clause records rather than hides.
+`Rejects:` a `new` that checks only ASCII C0 (`char::is_ascii_control`) and so
+accepts U+0085; one that skips the bidirectional arm, or bans `Cf` wholesale and
+so refuses U+200C and U+200D, or draws either bidirectional run one codepoint too
+wide; one that truncates at the bound instead of refusing, or whose `TooLong`
+reports the bound instead of the length. A prefix test written as `contains`, as
+`starts_with("sync")` without the slash, after case folding, or after a trim. A
+`from_static` with a second, simplified copy of the rules, or without the
+reservation, or without `const`. A watermark rendered with `Debug`, with UUID
+dashes or in uppercase hex, or from a truncated `StoreId`, and a watermark built
+by any path `new` would also accept. A `Borrow<str>` whose `Hash`, `Eq` or `Ord`
+disagrees with `str`'s. And an infallible `From<&str>` re-added for convenience,
+which is ADR-0015's defect D2 — two doors with different rules, and an invalid
+value reachable through the weaker one — and the reason ADR-0015 §10 declined to
+add a second constructor rather than replace the first.
+
+VT-32 and VT-33 are not extended to cover this type. Both are `[FROZEN]` and their
+subject is `EventType` and `Tag`; widening a frozen clause's subject is a
+supersession, and a new clause costs nothing a supersession would not. VT-35
+restates for `ProjectionId` what those two require of its siblings, and adds the
+bound, the reservation and the watermark. VT-14 stays `[PROVISIONAL]`
+(freeze-by-17b) and keeps its own subject; VT-35 applies VT-14's character rules
+by reference, so a change to VT-14's set reaches `ProjectionId` through this
+clause.
 
 ---
 
@@ -5150,7 +5220,7 @@ port exists to defend read-model write and checkpoint write in one transaction
 (`projection.rs:53-63`); a suite built on that port could test only the second
 conjunct, and by CLAUDE.md's own corollary — *"a rule that no adapter can fail
 is decorative"* — was decorative in the exact place it mattered. ADR-0017
-answered it with `ProjectionProbe` (`projection.rs:609-712`), the write seam
+answered it with `ProjectionProbe` (`projection.rs:932-1035`), the write seam
 PS-11 makes mandatory, and `commit_is_atomic_with_the_read_model` is the rule a
 store that commits the checkpoint and silently drops the read-model write now
 fails by name. What the probe's *own* signatures still cannot observe is PS-2's
@@ -5796,7 +5866,7 @@ in the workspace today, and chunk size is the first thing an operator turns.
 
 `commit` accepts a batch begun on a *different store of the same type*: nothing
 in `batch: Self::Batch`
-(`crates/happenstance-core/src/projection.rs:506-512`) ties the parameter to
+(`crates/happenstance-core/src/projection.rs:829-835`) ties the parameter to
 `&self` — the explanation used to be an elided lifetime, ADR-0017 removed it,
 and the hole is exactly where it was — so `b.commit(a.begin(), …)` type-checks
 and a runner holding a `HashMap<DepotId, SqliteProjectionStore>` can *write* the
@@ -5833,7 +5903,7 @@ leave both stores unchanged.**
 [ADR-0075](../.kb/decisions/0075-the-projection-ports-1-0-clauses.md) at phase 17,
 by the route ADR-0066 prescribed for it: the MUST narrows to `commit` and `reset`,
 which are the calls its rules check. The MUST named `rollback` too, but `rollback`
-returns `Result<(), Self::Error>` (`crates/happenstance-core/src/projection.rs:544`)
+returns `Result<(), Self::Error>` (`crates/happenstance-core/src/projection.rs:867`)
 and cannot carry the port-level variant, and no rule checked that leg. `rollback`
 is now outside the MUST, and what follows about it is non-normative: a foreign
 rollback changes neither store's durable state under any in-tree shape, because a
@@ -5940,10 +6010,10 @@ sync compensation.
 **Evaluated at the typed layer's phase exit, and two things had changed — only
 one of them expected.** The typed layer's planning pass recorded this clause's
 subject as *absent from the tree*, and that is no longer true: `reset` is a
-method on the port (`crates/happenstance-core/src/projection.rs:529`),
+method on the port (`crates/happenstance-core/src/projection.rs:852`),
 `ResetError::Refused` is a variant (`:287`), and
 `refused_reset_changes_nothing` is a real rule registered in the projection
-suite (`crates/happenstance-testkit/src/projection.rs:1411`, `:1962`). The
+suite (`crates/happenstance-testkit/src/projection.rs:1573`, `:2128`). The
 mechanism and its instrument are both here.
 
 **What is still absent is an adapter, and the count is therefore unavailable
@@ -6033,7 +6103,7 @@ batch at a position the store's event log actually assigned, assert success and
 assert the checkpoint advanced.
 **Cases:** E2E-23.
 **Rejects:** an adapter that validates. That is a perfectly reasonable reading of
-"moves `id`'s checkpoint to `position`" (`projection.rs:493`), it would be
+"moves `id`'s checkpoint to `position`" (`projection.rs:816`), it would be
 equally conformant today, and it makes a narrow projection re-scan the same
 range forever on every restart —
 Norvant's `cold_chain_certificate_expiry` matches about 40 of 37,000 events a
@@ -6200,7 +6270,10 @@ the frozen `commit`. The narrowed-query case is served by explicit adoption thro
 the existing port — `begin`, then `commit` of the empty batch under the new derived
 id at the old checkpoint's position, which PS-21 permits — rather than by a digest
 check that would refuse it. The digest is a 64-bit FNV-1a over the sorted item
-encodings, rendered in hex, and the runner exposes the id it derives.
+encodings, rendered in hex, and the runner exposes the id it derives. The derived
+id is a `ProjectionId` and is bound by VT-35: [ADR-0082](../.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md)
+§D5 caps the projection name at 238 bytes, refused at derivation and never
+truncated or hashed, and requires a separator that occurs in no reserved prefix.
 **Rule:** the new `changed_query_starts_a_new_checkpoint` — commit under one
 query's derived id, then read the checkpoint under a second query's derived id and
 assert `NeverRun`. Contract-level only once `Query` has a canonical encoding;
@@ -6228,6 +6301,38 @@ guarantees order does not change the match set, it needs no wire change, and it
 is available today. What is *not* available is hashing the serialised `Query`
 verbatim, which is unstable across two runners that built the same query from
 different iteration orders.
+
+**PS-39 — A store MUST key a checkpoint on the `ProjectionId`'s exact bytes. Any
+id `ProjectionId::new` accepts MUST round-trip through `commit`, `checkpoint` and
+`reset`, and two ids that differ in any byte MUST be two checkpoints.**
+`[PROVISIONAL — falsified by a backing store whose key column cannot hold a
+MAX_PROJECTION_ID_LEN-byte UTF-8 key byte-faithfully and cannot be configured to.
+If one is real, VT-35's bound or character set narrows to what every store can
+hold. Freeze-by-17b, once the rule has run green against live Neon as well as
+against memory, SQLite and Postgres, where it ran green at phase 17.]`
+Minted by [ADR-0082](../.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md),
+as the store's half of VT-35: the constructor promises it folds, trims and
+normalises nothing, and that promise is worth nothing if the store keying the
+checkpoint does any of it.
+**Rule:** `projection_ids_round_trip_by_bytes` — seven pairs of ids, each distinct
+by bytes and equal under one lossy key mapping (case; two 255-byte ids differing
+only in their final codepoint; Persian with U+200C against U+200D; two emoji ZWJ
+sequences; a hyphen against an underscore; a trailing space against none; U+00E9
+against `e` + U+0301), committed at strictly increasing positions and read back
+through a fresh handle; then the second id of each pair is reset and the first
+must not move.
+**Cases:** E2E-18.
+**Rejects:** a key column that folds case — SQLite's `COLLATE NOCASE`, Postgres's
+`citext`, a nondeterministic ICU collation; a `VARCHAR(64)` column under a server
+that truncates rather than refuses; a `latin1` or ASCII column behind a lossy
+client conversion; an adapter that maps the id onto a SQL identifier or a file
+name; a `CHAR(n)` column or `PAD SPACE` collation that compares the id
+right-padded, or an adapter that trims it before binding; and a nondeterministic
+collation, or an adapter that normalises to NFC, under which canonically
+equivalent ids are one. Each is a registered mutant. A store keyed on a cryptographic or wide
+hash of the id is lossy and forbidden too, but no fixed set of ids can show it,
+because showing it needs two ids that collide; the mutant registry names it
+rather than registering it.
 
 ---
 
@@ -6386,7 +6491,7 @@ runner (one read, one decode, twenty applies) and the safe runner (twenty
 **Evaluated at the typed layer's phase exit: the fan-out runner is not built,
 and the obstacle is now stronger than *"nobody got round to it"*.** The port's
 `Batch` stopped being a generic associated type and became a plain **owned** one
-(`crates/happenstance-core/src/projection.rs:436`), so a write set cannot be
+(`crates/happenstance-core/src/projection.rs:759`), so a write set cannot be
 shared between tasks at all — and moving one into a `tokio::spawn` would
 additionally require `Send`, which the flavour that exists for `wasm32` cannot
 promise. `happenstance::run_projection`
@@ -6654,12 +6759,12 @@ whoever adds the first defaulted method rather than by whoever designed it.
 
 ### 4.11 The suite this section obliges
 
-Seventeen rules, emitted by `projection_store_conformance!` through the same
+Eighteen rules, emitted by `projection_store_conformance!` through the same
 registry macro `event_store_conformance!` uses, so it inherits the tokio,
 blocking and wasm flavours without a second mechanism.
 
-**All seventeen now exist.** `for_each_projection_store_rule`
-(`crates/happenstance-testkit/src/projection.rs:1937-1972`) is the single
+**All eighteen now exist.** `for_each_projection_store_rule`
+(`crates/happenstance-testkit/src/projection.rs:2100-2138`) is the single
 enumeration they are emitted from, and `no_orphan_projection_rules` holds that
 list and the module's own rules to each other in both directions — so the table
 below is checkable against one place rather than counted by hand. Two sentences
@@ -6678,6 +6783,7 @@ daggered in §7.2.
 | `rollback_leaves_both_unchanged` | PS-8 | a rollback that only discards the buffer |
 | `dropped_batch_leaves_store_usable` | PS-7 | a pooled connection `Drop` never returns |
 | `distinct_projections_advance_independently` | PS-23 | a single-row checkpoint table |
+| `projection_ids_round_trip_by_bytes` | PS-39 | a `NOCASE`, `VARCHAR(64)`, `CHAR(n)` or `latin1` key column |
 | `commit_accepts_a_position_the_batch_did_not_write` | PS-21 | an adapter that validates the position |
 | `commit_rejects_a_regressing_position` | PS-22 | unconditional `UPDATE checkpoint SET position = ?` |
 | `commit_rejects_a_foreign_batch` | PS-15 | every adapter writable today |
@@ -6983,7 +7089,7 @@ Cases: E2E-42.
 one by origin timestamp or by origin position, so that a replicated event lands
 where it "belongs". It is the intuitive merge and it silently destroys every
 projection on the store: `ProjectionStore::checkpoint` is one scalar that
-`ReadOptions::from` resumes at (`projection.rs:477-478`), so an event inserted
+`ReadOptions::from` resumes at (`projection.rs:800-801`), so an event inserted
 below an existing checkpoint is never read, never applied, and never reported
 missing. The port has never chosen between the two, and this is the choice.
 
@@ -7786,18 +7892,18 @@ transaction. A watermark outside the port means the schedule rows and the
 confirmation column live in two transactions that can disagree at an instant.
 
 And it rejects the objection that there is no seam. There is: the watermark **is**
-a local position, so `commit(batch, &ProjectionId::new("sync/<peer>"), local_position)`
-type-checks against `projection.rs:126-131` today. What genuinely does not work
-is a *generic* sync runner writing rows into a *generic* `Batch`, because
-`type Batch<'a>` carries no trait bounds (`projection.rs:97-99`) — which is the
-projection port's apply-seam question, and it is section 4's. PS-9 answers it:
-the port does **not** grow a universal write vocabulary, so a generic sync runner
-cannot write a read model beside the watermark. It writes the watermark through
-the concrete adapter's inherent API, in the same batch, or it is not generic —
-which is a constraint on the runner rather than a blocker on this clause, and it
-is why the falsifier above is about handles rather than about bounds. The
-signature also gains a fourth argument in section 4; the watermark supplies
-`Authority::Live`.
+a local position, so `commit(batch, &ProjectionId::sync_watermark(peer),
+local_position, Authority::Live)` type-checks today, and every other constructor
+refuses `sync/` (VT-35, ADR-0082), so no application id can collide with a
+watermark. What genuinely does not work is a *generic* sync runner writing rows
+into a *generic* `Batch`, because `type Batch<'a>` carries no trait bounds
+(`projection.rs:97-99`) — which is the projection port's apply-seam question, and
+it is section 4's. PS-9 answers it: the port does **not** grow a universal write
+vocabulary, so a generic sync runner cannot write a read model beside the
+watermark. It writes the watermark through the concrete adapter's inherent API,
+in the same batch, or it is not generic — which is a constraint on the runner
+rather than a blocker on this clause, and it is why the falsifier above is about
+handles rather than about bounds.
 
 ---
 
@@ -9687,7 +9793,7 @@ this section's terms: three of the six projection rules the roadmap specifies �
 rollback leaves both unchanged, a dropped batch leaves both unchanged, a failed
 commit leaves the store unchanged — cannot observe the read model at all, because
 generic suite code holding a `P::Batch<'_>` can only pass it to `commit` or
-`rollback` (`projection.rs:535-544`). By CF-1 those three are decorative until
+`rollback` (`projection.rs:858-867`). By CF-1 those three are decorative until
 something can write a row. That is not an argument about ergonomics; it is the
 reason a suite that can test only the checkpoint half of a two-write invariant
 cannot reject an adapter that commits the checkpoint and silently drops the
@@ -9791,13 +9897,13 @@ between them because its *shape* does not wait on a transport but its
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 34 | 25 | 8 | 0 | 1 |
+| §2.1–§2.6 value types | `VT` | 35 | 26 | 8 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 36 | 6 | 1 | 0 |
-| §4 `ProjectionStore` | `PS` | 38 | 26 | 4 | 3 | 5 |
+| §4 `ProjectionStore` | `PS` | 39 | 26 | 5 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **203** | **153** | **31** | **12** | **7** |
+| **Total** | | **205** | **154** | **32** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9839,6 +9945,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-32 | FROZEN | unit tests `from_static_and_new_agree`, `from_static_rejects_a_bidirectional_c… | E2E-40, E2E-51 |
 | VT-33 | FROZEN | unit tests `a_borrowed_and_an_owned_tag_are_one_value`, `a_map_keyed_by_event_… | E2E-40, E2E-51 |
 | VT-34 | FROZEN | `read_from_is_inclusive` | *(none — see clause)* |
+| VT-35 | FROZEN | unit tests `projection_id_refuses_what_vt_14_refuses`, `projection_id_accepts_… | *(none — see clause)* |
 
 #### `WF` — wire format (§2.7)
 
@@ -9947,6 +10054,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-36 | FROZEN | *(none — see clause)* | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
 | PS-38 | PROVISIONAL | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-17, E2E-23 |
+| PS-39 | PROVISIONAL | `projection_ids_round_trip_by_bytes` | E2E-18 |
 
 #### `SY` — the `SyncPeer` port (§5)
 

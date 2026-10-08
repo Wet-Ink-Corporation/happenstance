@@ -51,9 +51,9 @@ struct Tally {
 }
 
 impl Tally {
-    fn new(name: &str) -> Self {
+    fn new(name: &'static str) -> Self {
         Self {
-            id: ProjectionId::new(name),
+            id: ProjectionId::from_static(name),
             scope: scope(),
             seen: Arc::default(),
             counts: std::collections::BTreeMap::new(),
@@ -196,7 +196,7 @@ async fn the_provided_on_error_halts_and_reports_the_projections_own_error() {
 
     assert_eq!(
         models
-            .checkpoint(&ProjectionId::new("halting"))
+            .checkpoint(&ProjectionId::from_static("halting"))
             .await
             .unwrap(),
         Checkpoint::NeverRun,
@@ -231,7 +231,7 @@ async fn an_override_skips_both_failures_and_commits_its_record_with_the_checkpo
     assert_eq!(models.get("skipped"), Some(2), "the skip record committed");
     assert_eq!(
         models
-            .checkpoint(&ProjectionId::new("skipping"))
+            .checkpoint(&ProjectionId::from_static("skipping"))
             .await
             .unwrap(),
         Checkpoint::Live { through: head },

@@ -48,8 +48,10 @@ pub const ATTEMPTS: u32 = 8;
 /// How many events one projection chunk commits at a time.
 pub const CHUNK: usize = 16;
 
-/// The read model the runner maintains and the API serves.
-pub const PROJECTION: &str = "seat_holder";
+/// The read model the runner maintains and the API serves, validated by the
+/// compiler: a free `const` built by `ProjectionId::from_static` is checked at
+/// `cargo check`, so an invalid id here is a build error rather than a crash.
+pub const PROJECTION: ProjectionId = ProjectionId::from_static("seat_holder");
 
 /// The read-model table this application owns.
 ///
@@ -595,7 +597,7 @@ impl SeatHolders {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            id: ProjectionId::new(PROJECTION),
+            id: PROJECTION,
             scope: Tags::empty(),
         }
     }
@@ -664,7 +666,7 @@ pub fn seat_rows(app: &Connection) -> rusqlite::Result<Vec<(String, String)>> {
 pub async fn checkpoint_through(
     models: &SqliteProjectionStore,
 ) -> Result<Option<u64>, SqliteProjectionStoreError> {
-    let id = ProjectionId::new(PROJECTION);
+    let id = PROJECTION;
 
     Ok(match models.checkpoint(&id).await? {
         Checkpoint::Live { through } => Some(through.get()),

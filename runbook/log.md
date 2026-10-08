@@ -10,6 +10,20 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — `ProjectionId` is validated (ADR-0082)
+
+*Committed on `lane/p17-projection-id`, on `151f5c8`.* Phase 17, lane L10. PR open.
+
+PR #52 merged as `151f5c8`. `ProjectionId::new` is fallible and refuses VT-14's set,
+more than 255 bytes and the `happenstance/` and `sync/` prefixes; `sync_watermark`
+builds the only `sync/` id. BREAKING on `happenstance-core` and `happenstance`. Open
+for one H-05 approval: `#[expect(clippy::panic)]` on `from_static`.
+
+**Verified.** The temper gate on the merged tree, `spec-trace`, `lints`, `lint-kb`,
+PS-39 on memory, SQLite and live Postgres. The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — the `0.4.0` trace table, drafted
 
 *Committed on `lane/p17-trace-table`, on `4278816`.* Phase 17.
