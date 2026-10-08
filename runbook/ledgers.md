@@ -36,6 +36,10 @@ measurement against `happenstance-cloudflare` (`experiments/append-batch-ownersh
 Lane L10 wrote 0082: `ProjectionId` is validated, `sync/` and `happenstance/` are reserved, VT-35 and PS-39 are minted.
 0083 answers a breaking open question, accepted by the owner on 2026-10-08: `Codec` stays
 unsealed through 1.x and `UnknownTag` is not split (`should-codec-be-sealed`).
+The breaking-questions lane wrote 0084, **accepted** by the owner on 2026-10-08: the projection batch's SQL seam is
+`&'static str` plus a named escape hatch at 1.0, `LivePostgresBatch::execute` included, and the
+parameter count is stated once, with an adapter-side count check proposed for Postgres. Neon's `0.4.0` narrowing
+is the owner's default; the record proposes its shape, and its code lands in its own lane PR.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.

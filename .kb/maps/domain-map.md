@@ -631,7 +631,7 @@ compensation-based atomicity, not every counter-assigning store),
 `kb-open-question-probe-read-through-signature-001` (added 2026-09-07 — whether
 `ProjectionProbe::probe_read_through` moves to `&mut Self::Batch` / async / fallible before
 phase 10, corroborating ADR-0036's part-2-unmet finding with a second causal reading),
-`kb-open-question-projection-batch-sql-statement-type-001` (added 2026-09-07 — whether
+`kb-open-question-projection-batch-sql-statement-type-001` (**superseded** 2026-10-08 by `kb-decision-0084`; added 2026-09-07 — whether
 `SqliteBatch::push`'s landed `&'static str` narrowing is the seam's final shape or a minted
 `Statement` newtype follows once `ProjectionStore` freezes),
 `kb-open-question-projection-runner-chunk-observation-001` (added 2026-09-07 — the chunk type and
