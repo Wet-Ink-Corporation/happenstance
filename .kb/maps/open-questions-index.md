@@ -590,11 +590,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `BEGIN IMMEDIATE` and refuses a stale handle with `IdentityMoved` (`8900697`, `f719b2a`). The gap
   it sat beside is the new entry below,
   `kb-open-question-postgres-neon-store-id-no-restore-001`.
-- **Open** — [`postgres-neon-store-id-has-no-restore-detection.md`](../open-questions/postgres-neon-store-id-has-no-restore-detection.md)
+- **Superseded** — [`postgres-neon-store-id-has-no-restore-detection.md`](../open-questions/postgres-neon-store-id-has-no-restore-detection.md)
   (`kb-open-question-postgres-neon-store-id-no-restore-001`) — `happenstance-postgres` and
   `happenstance-neon` mint their `StoreId` once, in their first migration, and take neither branch
   VT-6 requires of mint-once, so a `pg_restore` or a Neon branch re-issues identities already
   issued. Owned by phase 13; a switch to mint-per-open would be phase 17's. Added 2026-09-29.
+  Superseded 2026-10-08 by `kb-decision-0086`: both keep mint-once; phase 13 builds the additive arms.
 - **Superseded** — [`query-plan-parameter-chunking-incomplete.md`](../open-questions/query-plan-parameter-chunking-incomplete.md)
   (`kb-open-question-query-plan-parameter-chunking-001`) — the
   30,000-parameter budget is enforced on `write_tag_rows`'s insert path but

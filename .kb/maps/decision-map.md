@@ -635,6 +635,11 @@ stated once. SQLite's driver enforces it both ways; Postgres enforces only too f
 proposes an adapter-side count check there. It proposes the shape of Neon's `0.4.0`
 narrowing, whose release the owner had already set as a default. It supersedes
 `kb-open-question-projection-batch-sql-statement-type-001`; the Postgres count check it proposes is owed.
+ADR-0086, accepted by the owner on 2026-10-08, settles VT-6's phase-17 half for the two server adapters: neither mints per
+open, both keep mint-once and earn it through a documented re-mint, and default-refusing detection
+is ruled out after 1.0. It supersedes
+`kb-open-question-postgres-neon-store-id-no-restore-001`. It corrects the claim that mint-per-open
+fails `reopened_store_does_not_reissue_an_event_id`.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -654,6 +659,7 @@ narrowing, whose release the owner had already set as a default. It supersedes
 | ADR-0082 | [`kb-decision-0082`](../decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | ProjectionId is validated: VT-14's set, 255 bytes, and happenstance/ and sync/ reserved | accepted | 17 | partly supersedes `kb-decision-0015` (§10) |
 | ADR-0083 | [`kb-decision-0083`](../decisions/0083-codec-stays-unsealed-through-1-x.md) | Codec stays unsealed through 1.x, and CodecError::UnknownTag is not split | accepted | 17 | — |
 | ADR-0084 | [`kb-decision-0084`](../decisions/0084-the-projection-batch-sql-seam-is-final.md) | The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once | accepted | 17 | supersedes `kb-open-question-projection-batch-sql-statement-type-001` on acceptance |
+| ADR-0086 | [`kb-decision-0086`](../decisions/0086-postgres-and-neon-keep-mint-once.md) | Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined | accepted | 17 | — |
 
 ## Adding a row
 
