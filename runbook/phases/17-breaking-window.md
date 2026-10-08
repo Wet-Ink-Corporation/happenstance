@@ -64,6 +64,8 @@ gave to this phase.
       published signature, or that 1.0 cannot promise around without an answer.
       In `.kb/open-questions/`:
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
+        Answered by [ADR-0083](../../.kb/decisions/0083-codec-stays-unsealed-through-1-x.md),
+        accepted by the owner on 2026-10-08.
       - `projection-batch-sql-seam-statement-type` (ADR-0084 accepted, #44; Neon's `push` narrowed) — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
         Answered by [ADR-0084](../../.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md),

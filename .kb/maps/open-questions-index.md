@@ -848,10 +848,11 @@ the decision and reference atoms this domain also owns.
   (`kb-open-question-tuple-boundary-event-type-001`) — `composition.rs`'s macro-generated tuple
   impls bind every member to the first member's `Event` type, unwritten in ADR-0020's decision text,
   the signed-off design (which contradicts itself about it), or `standards/rust/`. Added 2026-09-07.
-- **Open** — [`should-codec-be-sealed.md`](../open-questions/should-codec-be-sealed.md)
+- **Superseded** — [`should-codec-be-sealed.md`](../open-questions/should-codec-be-sealed.md)
   (`kb-open-question-seal-the-codec-001`) — whether `Codec` is later sealed, now that `0.2.0` is
   live and the window to do so for free has closed; bundles the `UnknownTag`-split and
   `Boundary::absorb` sub-questions ADR-0049 left undone. Added 2026-09-07.
+  Superseded 2026-10-08 by `kb-decision-0083`: `Codec` stays unsealed through 1.x.
 - **Superseded** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
   (`kb-open-question-apply-synchronous-live-store-001`) — `Projection::apply` is synchronous
   (`crates/happenstance/src/domain.rs:249`) and `run_projection` folds events through it before
