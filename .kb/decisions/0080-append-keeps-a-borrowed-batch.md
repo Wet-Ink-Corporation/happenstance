@@ -117,7 +117,7 @@ ADR-0012 (`:93-160`) already foreclosed the other two shapes: an `EventBatch` ne
   replica arms instead (Weigh-In `wi-8b2786`): B0 equals the real adapter, heap operations and
   bytes, at all 72 points, and nothing under `crates/` changed.
 - **(b)** Postgres copies too: `insert_batch` takes `.to_owned()` and `.to_vec()` per event
-  (`crates/happenstance-postgres/src/event_store.rs:1025-1030`). Not measured.
+  (`crates/happenstance-postgres/src/event_store.rs:1048-1053`). Not measured.
 - **(c)** ADR-0055's four corrected doc sites were two (`experiments/event-clone-allocations/README.md:19-26`).
   This record fixes the specification's; the ADR-0012 long form waits on the correction-policy
   question.

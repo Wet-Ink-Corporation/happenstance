@@ -58,7 +58,7 @@ L8's superseding ADR records ES-11 and ES-12 together.
 ## Evidence
 
 - `spec/SPECIFICATION.md:3214`: ES-12 [PROVISIONAL], says the rule passes
-- `runbook/ledgers.md:284`: falsifier: query_items_share_one_snapshot red on one-shot HTTP
+- `runbook/ledgers.md:191`: ES-11 and ES-12 frozen at 17 by ADR-0087 (the row this cited, ES-12's falsifier, is struck)
 - `PR #36 run 37504851570 (attempt 2)`: query_items_share_one_snapshot ... FAILED
 
 ## Decision outcome

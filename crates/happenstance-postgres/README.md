@@ -106,6 +106,23 @@ for the event log and `migration::MIGRATION_2` for the projection checkpoint.
 They are applied separately on purpose: an application using only the event store
 gets no `projection_checkpoint` table.
 
+**Open the pool on a runtime that lives at least as long as the pool.** A pooled
+connection's socket belongs to the I/O driver of the tokio runtime that opened
+it. Once that runtime is dropped, `sqlx` does not see the connection as broken,
+and a query handed it ends in `PoolTimedOut` or does not finish. Neither store
+can rebuild your pool, so this one is yours to keep. A pool opens connections
+lazily, inside the call that needs one, so the runtimes you call the stores on
+should outlive the pool too. The usual way to break it is a pool in a `static`,
+initialised inside one `#[tokio::test]` and used by the next, each test on its
+own runtime.
+
+**Call the event store from a runtime with tokio's drivers enabled** —
+`enable_all`, as `#[tokio::main]` and `#[tokio::test]` do. `PostgresEventStore`
+runs each operation on the runtime it is called on (ADR-0081), and `sqlx`
+acquires every connection under `tokio::time::timeout`, so a call from a runtime
+built without `enable_time` fails as `PostgresEventStoreError::Worker` carrying a
+panicked `JoinError`. `PostgresEventStore::new` documents both under *Runtimes*.
+
 ## What the projection batch is, and what it costs you
 
 `PostgresProjectionBatch` is an **owned buffered write set**, not a live

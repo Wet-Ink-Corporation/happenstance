@@ -12,9 +12,9 @@ categories.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/happenstance-neon"
 readme = "README.md"
-# Published from `0.2.0`, with one open clause question stated in the crate
-# root rather than hidden: ES-11's falsifier fired on this adapter, and the
-# clause is `[PROVISIONAL]` pending an ADR. The release set was re-opened at
+# Published from `0.2.0`. ES-11's falsifier fired on this adapter, and from
+# `0.4.0` it meets the clause through `SqlTransport::reads_settled` (ADR-0087,
+# stated in the crate root). The release set was re-opened at
 # the release review and settled at seven; see `SESSION-DECISIONS-0.2.0.md`'s
 # D-04.
 
@@ -56,7 +56,7 @@ happenstance-testkit = { workspace = true, features = ["proptest"] }
 # `rt-multi-thread` is not decoration: the concurrency family starts `CONTENDERS`
 # contenders, and a current-thread runtime turns that family from a race into a
 # queue.
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 # --- the live transport, and why it is here and not behind a feature ---
 #
