@@ -2,11 +2,11 @@
 id: kb-open-question-adr-0022-falsifiers-fired-001
 title: Two of ADR-0022's falsifiers have fired, a third cannot fire as written, and nobody has re-opened
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0081
 authority_tier: note
 summary: >-
-  ADR-0022 wrote three conditions under which it would be re-opened. The 2026-09-03
-  pre-publication review checked all three, two have fired and the third is unfireable as written,
+  ADR-0022 wrote three conditions under which it would be re-opened. The 2026-09-03 pre-publication review checked all three, two have fired and the third is unfireable as written,
   and one of the three has since been re-opened in part: section 11, by kb-decision-0065 on
   2026-09-21. The other two have not. Section 11 said re-open if any run ever reports busy > 0; busy > 0
   was observed at the shipped CONTENDERS = 64, one launch in seven, the first nonzero busy count
@@ -139,7 +139,7 @@ Two consequences follow, and neither is settled here. Section 8 item 1 makes
 most-selective-tag-first probing a **requirement** and `tag_cardinality` a requirement with it; on
 the shape that ships that ordering is measured 38.1x–44.0x *backwards* across two runs, because the
 chained subquery is uncorrelated and the shipped sort materialises the larger set. And ES-27's
-`Rejects:` prose (`spec/SPECIFICATION.md:3985-3988`) quotes the aggregate's "roughly 200x" to
+`Rejects:` prose (`spec/SPECIFICATION.md:4055-4058`) quotes the aggregate's "roughly 200x" to
 justify the chain — repairing that number is a **`[FROZEN]` clause edit**, which CLAUDE.md routes
 through a new decision rather than a documentation sweep, and the honest repair states the
 order-of-magnitude gap rather than pinning another warm-cache one-host multiple that will rot the
@@ -209,7 +209,7 @@ remedy.
 **Sections 8 and 16 stand, and the repair is a decision rather than a documentation sweep.** The
 falsifier still cannot fire as written, and the repair path still runs through a `[FROZEN]` clause:
 ES-27's `Rejects:` prose quoting the aggregate's "roughly 200x". That citation has drifted — it now
-reads at `spec/SPECIFICATION.md:4272-4277`, with the figure itself on `:4065`, not the
+reads at `spec/SPECIFICATION.md:4342-4347`, with the figure itself on `:4065`, not the
 `:3902-3905` the paragraph above cites. Repoint by the anchor rather than the offset, which moves
 every wave.
 
@@ -239,7 +239,7 @@ most-selective-first is a 2.0x–2.2x *win* rather than the
 ordering requirement and `tag_cardinality`, and changes the reason for them to the correlation.
 §16's falsifier for §8 goes with those items, and is replaced by one that has an instrument that can
 fire it: a `LIST SUBQUERY` in the multi-tag guard's plan, or least-selective-first measuring
-cheaper on the correlated chain. ES-27's "roughly 200x" (`spec/SPECIFICATION.md:4272-4277`) is a
+cheaper on the correlated chain. ES-27's "roughly 200x" (`spec/SPECIFICATION.md:4342-4347`) is a
 `[FROZEN]` clause's prose, and `kb-decision-0068` authorises its replacement text. Sections 1–7,
 10 and 12–15 are ratified, with each falsifier's state recorded against it.
 
@@ -297,3 +297,10 @@ call**, so this atom stays `accepted` and open, and `kb-decision-0022` is not to
 §9, its last open section, when ADR-0081 is accepted. The frontmatter is left as it was, apart from
 `last_reviewed`, because `references/adr/0068-adr-0022-sections-8-9-16-settled.md:29` cites this
 body by line. No accepted decision was edited.
+
+## Closed — 2026-10-08
+
+**Superseded by `kb-decision-0081`**, accepted by the owner on 2026-10-08, which settles §9,
+this atom's last open section; §8 and §16 were settled by `kb-decision-0068`. The body above is
+unchanged, because `references/adr/0068-adr-0022-sections-8-9-16-settled.md:29` cites it by line;
+one summary line was joined so that the added `superseded_by` key moves nothing below it.

@@ -41,6 +41,7 @@ depends_on:
 related:
   - kb-decision-0012
   - kb-playbook-repair-frozen-clause-001
+  - kb-decision-0082
 source_paths:
   - .kb/_intake/0015-validated-identifiers-and-store-limits.md
   - references/adr/0015-validated-identifiers-and-store-limits.md

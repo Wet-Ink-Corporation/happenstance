@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-runtime-seam`, on `151f5c8` (`main`, where PR #52 merged). 2026-10-08.
+`lane/p17-runtime-seam`, on `5ff913d` (`main`, where PR #53 merged). 2026-10-08.
 
 ## Where things are
 
@@ -39,9 +39,10 @@ An unattended overnight session (2026-10-07) is working the phase 17 queue.
   (`6235224`, the guard-plan assertion), #46 (`3462bf8`, L7: ES-17 frozen on
   `&[Event]` by ADR-0080), #47 (`12540a7`, the deployed `workerd` leg retries a
   Durable Object reset), #49 (`4278816`, Neon's `push` narrowed, BREAKING for
-  `0.4.0`), #52 (`151f5c8`, the `0.4.0` trace table, drafted).
-- **This PR (open, not to merge until the owner accepts ADR-0081):** L9 —
-  ADR-0022 §9 reproduced; stores prefer the runtime they are called on.
+  `0.4.0`), #52 (`151f5c8`, the `0.4.0` trace table, drafted), #53 (`5ff913d`, L10:
+  `ProjectionId` validated, ADR-0082).
+- **This PR:** L9 — ADR-0022 §9 reproduced; stores prefer the runtime they are called on
+  (ADR-0081, accepted by the owner on 2026-10-08).
 - **Open for the owner:** #51, ADR-0087 (the ES-11 fence works on Neon; spike
   draft #50, never merged); #53, L10 (`ProjectionId` validated; needs one H-05
   approval).
@@ -54,8 +55,8 @@ An unattended overnight session (2026-10-07) is working the phase 17 queue.
 
 ## Next action
 
-1. The exit pass. L8 (#50, #51), L9 (this PR) and L10 (#53) wait on the owner; the
-   trace table's pending rows join as their records are accepted.
+1. Enact the owner's 2026-10-08 decisions: merge the accepted records, land the ES-11
+   fence (ADR-0087), rewrite the racing mutants, then re-run the full gate.
 
 ## Waiting on the owner
 

@@ -1663,7 +1663,7 @@ pub(crate) const TESTKIT_LIB: &str = "crates/happenstance-testkit/src/lib.rs";
 
 /// The claim C2-07 is named for. `happenstance-testkit` has been on
 /// crates.io at `0.2.0-alpha.1` since `448e1ac` (2026-08-16, recorded at
-/// `CHANGELOG.md:2310`), so a reader meeting this sentence on the rendered
+/// `CHANGELOG.md:2364`), so a reader meeting this sentence on the rendered
 /// page meets a claim the registry already contradicted the day it shipped.
 pub(crate) const STALE_NOTHING_PUBLISHED: &str = "nothing in this workspace is published yet";
 
@@ -1741,7 +1741,7 @@ pub(crate) fn stale_publication_claims(
     if lib.contains(STALE_NOTHING_PUBLISHED) {
         problems.push(format!(
             "{TESTKIT_LIB} — claims `{STALE_NOTHING_PUBLISHED}`, but happenstance-testkit has \
-             been on crates.io at 0.2.0-alpha.1 since 448e1ac (2026-08-16, CHANGELOG.md:2310). \
+             been on crates.io at 0.2.0-alpha.1 since 448e1ac (2026-08-16, CHANGELOG.md:2364). \
              Ground the `factory =` justification in {FACTORY_INTRODUCED} and {FACTORY_REMOVED} \
              instead (C2-07)."
         ));

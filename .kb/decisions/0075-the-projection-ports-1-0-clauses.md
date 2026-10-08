@@ -63,7 +63,7 @@ move none. It is paired with ADR-0074, which settles the typed layer's clauses.
 
 **What was wrong with it.** The MUST named `commit`, `reset` **and** `rollback`, refusing
 *"through `CommitError::ForeignBatch` / `ResetError::ForeignBatch`"*. But `rollback` returns
-`Result<(), Self::Error>` (`crates/happenstance-core/src/projection.rs:544`), so it cannot return
+`Result<(), Self::Error>` (`crates/happenstance-core/src/projection.rs:867`), so it cannot return
 either port-level variant. No rule checks a rollback leg: `commit_rejects_a_foreign_batch`
 checks `commit`, and `reset_clears_rows_and_checkpoint_together` checks `reset`
 (`crates/happenstance-testkit/src/projection.rs:896`, `:1201-1204`). ADR-0066 refuted a freeze
@@ -115,7 +115,7 @@ allows, for the reasons above.
 ## PS-23 — exactly one `ProjectionId` per commit, frozen
 
 `commit(&self, batch, id: &ProjectionId, position, authority)`
-(`crates/happenstance-core/src/projection.rs:506-512`) is frozen by ADR-0063, and PS-38's text
+(`crates/happenstance-core/src/projection.rs:829-835`) is frozen by ADR-0063, and PS-38's text
 embeds the one-id commit. The marker's falsifier is a pair of read models in one store that must
 be mutually consistent at every observable instant. Norvant's control tower is named as a
 candidate, but it is a scenario and not a consumer. The in-tree evidence runs the other way:
@@ -143,7 +143,7 @@ one mechanical condition, and this record adds one design choice the spike did n
    this record's choice, not a condition the spike tested: its README left it *"recorded, not
    decided"*, and the separate type was never compiled or semver-checked. `CommitError` and `ResetError` are separate so that *"a
    caller matching `commit`'s result never has to consider `Refused`, which `commit` cannot
-   produce"* (`crates/happenstance-core/src/projection.rs:265-270`). An `Unsupported` variant on
+   produce"* (`crates/happenstance-core/src/projection.rs:588-593`). An `Unsupported` variant on
    `CommitError` would give every `commit` caller a variant `commit` cannot produce, which is the
    same defect in the other direction. The spike's variant also broke an exhaustive in-crate match.
    The type's name and shape are left to whoever adds `commit_all`, and so is compiling it. A new
@@ -157,7 +157,7 @@ answered additively. Phase 18's fan-out runner (PS-30) is where such a pair woul
 ## PS-24 — `Authority::Rebuilding` is kept, frozen
 
 `Authority::{Live, Rebuilding}` and `Checkpoint::Rebuilding` are published in
-`happenstance-core` 0.3.x (`Checkpoint` at `crates/happenstance-core/src/projection.rs:184`,
+`happenstance-core` 0.3.x (`Checkpoint` at `crates/happenstance-core/src/projection.rs:507`,
 `Authority` at `:216`), and
 `rebuilding_is_distinguishable_from_live` passes on every adapter. The marker's falsifier is
 rebuild-in-place turning out to be always wrong. Its discriminating measurement, a store that

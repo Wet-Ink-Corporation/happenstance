@@ -140,7 +140,7 @@ async fn a_position_above_bigint_is_refused_at_the_write() {
         <PostgresProjectionFixture as happenstance_testkit::ProjectionFixture>::connect(&fixture)
             .await;
 
-    let id = ProjectionId::new("above-bigint");
+    let id = ProjectionId::from_static("above-bigint");
     let too_large = SequencePosition::new(u64::MAX).expect("u64::MAX is non-zero");
 
     let outcome = store
@@ -179,7 +179,7 @@ async fn the_stored_authority_round_trips() {
             .await;
     let pool = fixture.pool_for_test().await;
 
-    let id = ProjectionId::new("authority-round-trip");
+    let id = ProjectionId::from_static("authority-round-trip");
     store
         .commit(
             store.begin().await.unwrap(),

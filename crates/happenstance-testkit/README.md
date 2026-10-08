@@ -38,7 +38,7 @@ pass.
 >   published crate — so that name on the registry is only a `0.0.0` reservation.
 >
 > The `ProjectionStore`
-> suite is all seventeen rules the specification names, each with a wrong
+> suite is all eighteen rules the specification names, each with a wrong
 > store in this crate's `tests/` that fails it — and the port it checks is
 > frozen since ADR-0063. Four adapters over storage this workspace does not
 > fully control clear it, and since ADR-0062 they stand at both ends of the
@@ -169,7 +169,7 @@ rather than to stdout, which does not exist on `wasm32-unknown-unknown`. The
 default module name differs from the event-store family's, so one file may invoke
 both. `fixtures::MemoryProjectionFixture` is the worked example.
 
-**All seventeen rules §4.11 names, today**, each with a wrong store in this
+**All eighteen rules §4.11 names, today**, each with a wrong store in this
 crate's own `tests/` that fails it and is asserted to fail *exactly* the rules its
 registry row declares. The port is frozen since ADR-0063, on this suite going
 green against adapters at both ends of its batch-shape axis — a bar neither

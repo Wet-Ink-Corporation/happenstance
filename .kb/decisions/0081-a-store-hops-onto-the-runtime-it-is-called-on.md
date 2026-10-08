@@ -2,7 +2,7 @@
 id: kb-decision-0081
 title: A store hops onto the runtime it is called on, and the handle it captured is the fallback
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0081
 reversibility: medium
@@ -47,7 +47,7 @@ source_paths:
   - spec/SPECIFICATION.md
   - .github/workflows/ci.yml
   - references/adr/0081-a-store-hops-onto-the-runtime-it-is-called-on.md
-last_reviewed: 2026-10-07
+last_reviewed: 2026-10-08
 ---
 
 # A store hops onto the runtime it is called on, and the handle it captured is the fallback

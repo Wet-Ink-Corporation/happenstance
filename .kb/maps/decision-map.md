@@ -153,7 +153,7 @@ strength.
 | ADR-0012 | [`kb-decision-0012`](../decisions/0012-append-shape-and-preconditions.md) | append keeps its borrowed batch, and phase 4 declines what it cannot measure | accepted | 4 | — |
 | ADR-0013 | [`kb-decision-0013`](../decisions/0013-position-assignment-and-visibility.md) | Positions are assigned once and become visible in order | accepted | 4 | — |
 | ADR-0014 | [`kb-decision-0014`](../decisions/0014-event-identity-and-recorded-time.md) | The store mints identity, records a time, and the caller supplies neither | accepted | 4 | — |
-| ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted | 4 | — |
+| ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted (partly superseded) | 4 | partly superseded by `kb-decision-0082` (§10, where it declined to validate `ProjectionId`) |
 | ADR-0016 | [`kb-decision-0016`](../decisions/0016-the-wire-format.md) | The wire format is happenstance's own, and an unknown version is refused before the message is read | accepted | 5 | — |
 | ADR-0029 | [`kb-decision-0029`](../decisions/0029-msrv-raised-to-1-97-1.md) | The MSRV is 1.97.1 | accepted | 2 | amends `kb-decision-0004`; amended by `kb-decision-0037` |
 
@@ -618,7 +618,12 @@ ADR-0080 is lane L7's: on the two-build measurement ADR-0012's falsifier asked f
 `happenstance-cloudflare` with calibrated replica arms, `append` keeps `&[Event]` and ES-17 is
 frozen. It rests on ADR-0012 and ADR-0055 without superseding either, records what neither can
 say, and supersedes `kb-open-question-es-17-two-adapter-measurement-001`.
-ADR-0081, proposed, is lane L9's: ADR-0022 §9's reproduction, which ADR-0068 assigned to phase 17.
+ADR-0082 is lane L10's: `ProjectionId::new` becomes fallible and refuses VT-14's set, more than
+255 bytes, and the reserved prefixes `happenstance/` and `sync/`; `sync_watermark(StoreId)` is the
+only way to a `sync/` id; VT-35 is minted `[FROZEN]` and PS-39, the store's half, `[PROVISIONAL]`.
+It partly supersedes ADR-0015 at §10 only, so `kb-decision-0015` stays accepted and its row gains
+the annotation, and it supersedes `kb-open-question-projection-id-unvalidated-001`.
+ADR-0081, accepted by the owner on 2026-10-08, is lane L9's: ADR-0022 §9's reproduction, which ADR-0068 assigned to phase 17.
 A store built on one runtime and driven from another after the first is gone reported
 `Worker(JoinError::Cancelled)`, never `NoRuntime`, so the stores now prefer the executing runtime
 and fall back to the captured handle (remedy B), a behaviour change on `happenstance-sqlite` and
@@ -641,7 +646,8 @@ row is unchanged.
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
 | ADR-0080 | [`kb-decision-0080`](../decisions/0080-append-keeps-a-borrowed-batch.md) | append keeps its borrowed batch, and ES-17 is frozen on the two-build measurement | accepted | 17 | — |
-| ADR-0081 | [`kb-decision-0081`](../decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | A store hops onto the runtime it is called on, and the handle it captured is the fallback | proposed | 17 | — |
+| ADR-0082 | [`kb-decision-0082`](../decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | ProjectionId is validated: VT-14's set, 255 bytes, and happenstance/ and sync/ reserved | accepted | 17 | partly supersedes `kb-decision-0015` (§10) |
+| ADR-0081 | [`kb-decision-0081`](../decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | A store hops onto the runtime it is called on, and the handle it captured is the fallback | accepted | 17 | — |
 
 ## Adding a row
 

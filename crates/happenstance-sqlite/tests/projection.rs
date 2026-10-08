@@ -257,7 +257,7 @@ async fn commit_one(store: &SqliteProjectionStore, id: &ProjectionId, position: 
 async fn the_fixture_backs_the_suite_with_a_real_file_and_real_connections() {
     let fixture = SqliteProjectionFixture::new();
     let writer = fixture.connect().await;
-    let id = ProjectionId::new("the_fixture_backs_the_suite_with_a_real_file");
+    let id = ProjectionId::from_static("the_fixture_backs_the_suite_with_a_real_file");
 
     commit_one(&writer, &id, SequencePosition::FIRST).await;
 
@@ -295,7 +295,7 @@ async fn the_fixture_backs_the_suite_with_a_real_file_and_real_connections() {
 async fn a_corrupt_stored_position_is_reported_rather_than_defaulted() {
     let fixture = SqliteProjectionFixture::new();
     let store = fixture.connect().await;
-    let id = ProjectionId::new("a_corrupt_stored_position");
+    let id = ProjectionId::from_static("a_corrupt_stored_position");
 
     commit_one(&store, &id, SequencePosition::FIRST).await;
 
@@ -326,7 +326,7 @@ async fn a_corrupt_stored_position_is_reported_rather_than_defaulted() {
 async fn a_corrupt_stored_authority_is_reported_rather_than_assumed_live() {
     let fixture = SqliteProjectionFixture::new();
     let store = fixture.connect().await;
-    let id = ProjectionId::new("a_corrupt_stored_authority");
+    let id = ProjectionId::from_static("a_corrupt_stored_authority");
 
     commit_one(&store, &id, SequencePosition::FIRST).await;
 
@@ -366,7 +366,7 @@ async fn a_cloned_store_accepts_the_batch_its_origin_began() {
     let fixture = SqliteProjectionFixture::new();
     let origin = fixture.connect().await;
     let clone = origin.clone();
-    let id = ProjectionId::new("a_cloned_store_accepts_its_origins_batch");
+    let id = ProjectionId::from_static("a_cloned_store_accepts_its_origins_batch");
 
     let mut batch = origin.begin().await.unwrap();
     origin.probe_write(&mut batch, KEY, VALUE).await.unwrap();
@@ -404,7 +404,7 @@ async fn a_batch_from_another_handle_is_refused_by_every_method_that_takes_one()
     let fixture = SqliteProjectionFixture::new();
     let origin = fixture.connect().await;
     let stranger = fixture.connect().await;
-    let id = ProjectionId::new("a_batch_from_another_handle");
+    let id = ProjectionId::from_static("a_batch_from_another_handle");
 
     let mut batch = origin.begin().await.unwrap();
     origin.probe_write(&mut batch, KEY, VALUE).await.unwrap();

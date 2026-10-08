@@ -62,8 +62,8 @@ This atom is minted from the 2026-09-10 intake brief for a decision taken on
 form the brief names — `references/adr/0062-the-probe-seam-moves-and-the-far-end-is-built.md`
 — is not present in this checkout, `ProjectionStore::begin` is still
 synchronous (`fn begin(&self) -> Self::Batch`,
-`crates/happenstance-core/src/projection.rs:460`), and PS-6's MUST at
-`spec/SPECIFICATION.md:5449` is unrewritten. This record states what the lane
+`crates/happenstance-core/src/projection.rs:783`), and PS-6's MUST at
+`spec/SPECIFICATION.md:5519` is unrewritten. This record states what the lane
 binds when it lands, mirroring `kb-decision-0037`'s precedent for a decision
 recorded ahead of its code landing on the branch that carries it.
 

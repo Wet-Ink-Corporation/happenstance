@@ -184,7 +184,7 @@ async fn apply_awaits_statements_through_a_live_transaction() {
     let pool = pool("live").await;
     let store = LivePostgresProjectionStore::new(pool.clone());
     let tally = LiveTally {
-        id: ProjectionId::new("live-tally"),
+        id: ProjectionId::from_static("live-tally"),
         scope: scope(),
     };
 
@@ -221,10 +221,12 @@ async fn apply_awaits_statements_through_a_live_transaction() {
     // And the checkpoint is committed at the head, read back through a fresh
     // store over the same server rather than taken from the runner's report.
     let reread = LivePostgresProjectionStore::new(pool.clone());
-    let checkpoint =
-        happenstance::SendProjectionStore::checkpoint(&reread, &ProjectionId::new("live-tally"))
-            .await
-            .unwrap();
+    let checkpoint = happenstance::SendProjectionStore::checkpoint(
+        &reread,
+        &ProjectionId::from_static("live-tally"),
+    )
+    .await
+    .unwrap();
     assert_eq!(
         checkpoint,
         happenstance::Checkpoint::Live {
@@ -249,7 +251,7 @@ async fn a_server_side_failure_leaves_nothing_for_on_error_to_write_into() {
     let pool = pool("poisoned").await;
     let store = LivePostgresProjectionStore::new(pool.clone());
     let mut tally = LiveTally {
-        id: ProjectionId::new("poisoned"),
+        id: ProjectionId::from_static("poisoned"),
         scope: scope(),
     };
 
@@ -282,10 +284,12 @@ async fn a_server_side_failure_leaves_nothing_for_on_error_to_write_into() {
 
     // And the checkpoint did not move: nothing was ever committed for it.
     let reread = LivePostgresProjectionStore::new(pool.clone());
-    let checkpoint =
-        happenstance::SendProjectionStore::checkpoint(&reread, &ProjectionId::new("poisoned"))
-            .await
-            .unwrap();
+    let checkpoint = happenstance::SendProjectionStore::checkpoint(
+        &reread,
+        &ProjectionId::from_static("poisoned"),
+    )
+    .await
+    .unwrap();
     assert_eq!(
         checkpoint,
         happenstance::Checkpoint::NeverRun,

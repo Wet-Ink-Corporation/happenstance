@@ -158,7 +158,7 @@ mod projection_store {
     use super::{first_runtime, second_runtime};
 
     fn id() -> ProjectionId {
-        ProjectionId::new("runtime-seam")
+        ProjectionId::new("runtime-seam").expect("a valid literal id")
     }
 
     fn position(raw: u64) -> SequencePosition {

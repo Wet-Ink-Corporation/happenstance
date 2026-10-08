@@ -62,7 +62,7 @@ use crate::projection::{
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn core::error::Error>> {
 /// let store = MemoryProjectionStore::new();
-/// let id = ProjectionId::new("van_stock");
+/// let id = ProjectionId::new("van_stock")?;
 ///
 /// // Never run: the enum says so, and no `Option` is involved.
 /// assert_eq!(store.checkpoint(&id).await?, Checkpoint::NeverRun);
