@@ -1,0 +1,376 @@
+   Compiling append-batch-ownership v0.0.0 (/home/user/wt-es17/experiments/append-batch-ownership)
+    Finished `release` profile [optimized] target(s) in 0.70s
+     Running tests/measure_cloudflare.rs (target/wasm32-unknown-unknown/release/deps/measure_cloudflare-e49d27bef06b7f43.wasm)
+running 3 tests
+Invoking test: sweep_batch_16
+== cloudflare sweep, batch=16, warmup=3, n=21 ==
+batch=16   tags=1   payload=64      regime=vec    arm=adapter heap_ops=361..361 per_event=22 bytes=9954..9954 median_us=536.6       q1_us=500.5       q3_us=908.5       n=21
+batch=16   tags=1   payload=64      regime=vec    arm=B0      heap_ops=361..361 per_event=22 bytes=9954..9954 median_us=546.9       q1_us=506.7       q3_us=929.9       n=21
+batch=16   tags=1   payload=64      regime=vec    arm=B1      heap_ops=264..264 per_event=16 bytes=7442..7442 median_us=531.3       q1_us=500.0       q3_us=1036.3      n=21
+batch=16   tags=1   payload=64      regime=vec    arm=O1      heap_ops=232..232 per_event=14 bytes=5906..5906 median_us=561.5       q1_us=466.5       q3_us=1096.5      n=21
+batch=16   tags=1   payload=64      regime=vec    rule: O1 vs B1 saving=-5.7% o1_median<b1_q1=false fires=false
+batch=16   tags=8   payload=64      regime=vec    arm=adapter heap_ops=1145..1145 per_event=71 bytes=26306..26306 median_us=1547.5      q1_us=1484.1      q3_us=1586.1      n=21
+batch=16   tags=8   payload=64      regime=vec    arm=B0      heap_ops=1145..1145 per_event=71 bytes=26306..26306 median_us=1543.2      q1_us=1410.6      q3_us=1648.4      n=21
+batch=16   tags=8   payload=64      regime=vec    arm=B1      heap_ops=824..824 per_event=51 bytes=19650..19650 median_us=1569.3      q1_us=1401.8      q3_us=3125.5      n=21
+batch=16   tags=8   payload=64      regime=vec    arm=O1      heap_ops=792..792 per_event=49 bytes=18114..18114 median_us=1522.6      q1_us=1379.7      q3_us=1701.9      n=21
+batch=16   tags=8   payload=64      regime=vec    rule: O1 vs B1 saving=3.0% o1_median<b1_q1=false fires=false
+batch=16   tags=64  payload=64      regime=vec    arm=adapter heap_ops=7417..7417 per_event=463 bytes=157122..157122 median_us=13164.7     q1_us=9124.2      q3_us=19621.6     n=21
+batch=16   tags=64  payload=64      regime=vec    arm=B0      heap_ops=7417..7417 per_event=463 bytes=157122..157122 median_us=9780.1      q1_us=8703.6      q3_us=19948.9     n=21
+batch=16   tags=64  payload=64      regime=vec    arm=B1      heap_ops=5304..5304 per_event=331 bytes=117314..117314 median_us=8964.5      q1_us=8707.9      q3_us=16030.5     n=21
+batch=16   tags=64  payload=64      regime=vec    arm=O1      heap_ops=5272..5272 per_event=329 bytes=115778..115778 median_us=9046.9      q1_us=8776.7      q3_us=16615.8     n=21
+batch=16   tags=64  payload=64      regime=vec    rule: O1 vs B1 saving=-0.9% o1_median<b1_q1=false fires=false
+batch=16   tags=1   payload=1024    regime=vec    arm=adapter heap_ops=361..361 per_event=22 bytes=40674..40674 median_us=557.7       q1_us=532.8       q3_us=575.4       n=21
+batch=16   tags=1   payload=1024    regime=vec    arm=B0      heap_ops=361..361 per_event=22 bytes=40674..40674 median_us=534.3       q1_us=495.5       q3_us=571.7       n=21
+batch=16   tags=1   payload=1024    regime=vec    arm=B1      heap_ops=264..264 per_event=16 bytes=22802..22802 median_us=524.8       q1_us=490.3       q3_us=549.9       n=21
+batch=16   tags=1   payload=1024    regime=vec    arm=O1      heap_ops=232..232 per_event=14 bytes=5906..5906 median_us=554.5       q1_us=524.4       q3_us=607.4       n=21
+batch=16   tags=1   payload=1024    regime=vec    rule: O1 vs B1 saving=-5.6% o1_median<b1_q1=false fires=false
+batch=16   tags=8   payload=1024    regime=vec    arm=adapter heap_ops=1145..1145 per_event=71 bytes=57026..57026 median_us=1530.0      q1_us=1460.0      q3_us=1576.8      n=21
+batch=16   tags=8   payload=1024    regime=vec    arm=B0      heap_ops=1145..1145 per_event=71 bytes=57026..57026 median_us=1511.2      q1_us=1418.8      q3_us=1593.3      n=21
+batch=16   tags=8   payload=1024    regime=vec    arm=B1      heap_ops=824..824 per_event=51 bytes=35010..35010 median_us=1475.3      q1_us=1396.4      q3_us=1569.8      n=21
+batch=16   tags=8   payload=1024    regime=vec    arm=O1      heap_ops=792..792 per_event=49 bytes=18114..18114 median_us=1509.4      q1_us=1392.9      q3_us=1546.2      n=21
+batch=16   tags=8   payload=1024    regime=vec    rule: O1 vs B1 saving=-2.3% o1_median<b1_q1=false fires=false
+batch=16   tags=64  payload=1024    regime=vec    arm=adapter heap_ops=7417..7417 per_event=463 bytes=187842..187842 median_us=9284.4      q1_us=8864.2      q3_us=9638.6      n=21
+batch=16   tags=64  payload=1024    regime=vec    arm=B0      heap_ops=7417..7417 per_event=463 bytes=187842..187842 median_us=9445.6      q1_us=9078.4      q3_us=10734.8     n=21
+batch=16   tags=64  payload=1024    regime=vec    arm=B1      heap_ops=5304..5304 per_event=331 bytes=132674..132674 median_us=9367.4      q1_us=8810.3      q3_us=9902.7      n=21
+batch=16   tags=64  payload=1024    regime=vec    arm=O1      heap_ops=5272..5272 per_event=329 bytes=115778..115778 median_us=9033.6      q1_us=8794.7      q3_us=9680.3      n=21
+batch=16   tags=64  payload=1024    regime=vec    rule: O1 vs B1 saving=3.6% o1_median<b1_q1=false fires=false
+batch=16   tags=1   payload=16384   regime=vec    arm=adapter heap_ops=361..361 per_event=22 bytes=532194..532194 median_us=722.3       q1_us=652.5       q3_us=792.8       n=21
+batch=16   tags=1   payload=16384   regime=vec    arm=B0      heap_ops=361..361 per_event=22 bytes=532194..532194 median_us=652.2       q1_us=617.8       q3_us=794.1       n=21
+batch=16   tags=1   payload=16384   regime=vec    arm=B1      heap_ops=264..264 per_event=16 bytes=268562..268562 median_us=735.4       q1_us=658.7       q3_us=833.2       n=21
+batch=16   tags=1   payload=16384   regime=vec    arm=O1      heap_ops=232..232 per_event=14 bytes=5906..5906 median_us=669.7       q1_us=614.7       q3_us=728.6       n=21
+batch=16   tags=1   payload=16384   regime=vec    rule: O1 vs B1 saving=8.9% o1_median<b1_q1=false fires=false
+batch=16   tags=8   payload=16384   regime=vec    arm=adapter heap_ops=1145..1145 per_event=71 bytes=548546..548546 median_us=2100.6      q1_us=1885.3      q3_us=3671.8      n=21
+batch=16   tags=8   payload=16384   regime=vec    arm=B0      heap_ops=1145..1145 per_event=71 bytes=548546..548546 median_us=1922.9      q1_us=1838.7      q3_us=3677.6      n=21
+batch=16   tags=8   payload=16384   regime=vec    arm=B1      heap_ops=824..824 per_event=51 bytes=280770..280770 median_us=1891.8      q1_us=1792.5      q3_us=3379.5      n=21
+batch=16   tags=8   payload=16384   regime=vec    arm=O1      heap_ops=792..792 per_event=49 bytes=18114..18114 median_us=1930.7      q1_us=1735.7      q3_us=3604.5      n=21
+batch=16   tags=8   payload=16384   regime=vec    rule: O1 vs B1 saving=-2.1% o1_median<b1_q1=false fires=false
+batch=16   tags=64  payload=16384   regime=vec    arm=adapter heap_ops=7417..7417 per_event=463 bytes=679362..679362 median_us=10027.9     q1_us=9426.6      q3_us=10389.5     n=21
+batch=16   tags=64  payload=16384   regime=vec    arm=B0      heap_ops=7417..7417 per_event=463 bytes=679362..679362 median_us=9643.5      q1_us=9306.3      q3_us=10011.6     n=21
+batch=16   tags=64  payload=16384   regime=vec    arm=B1      heap_ops=5304..5304 per_event=331 bytes=378434..378434 median_us=9595.8      q1_us=9190.0      q3_us=9853.4      n=21
+batch=16   tags=64  payload=16384   regime=vec    arm=O1      heap_ops=5272..5272 per_event=329 bytes=115778..115778 median_us=9624.0      q1_us=9024.5      q3_us=10351.3     n=21
+batch=16   tags=64  payload=16384   regime=vec    rule: O1 vs B1 saving=-0.3% o1_median<b1_q1=false fires=false
+batch=16   tags=1   payload=262144  regime=vec    arm=adapter heap_ops=361..361 per_event=22 bytes=8396514..8396514 median_us=4312.7      q1_us=4123.5      q3_us=5039.9      n=21
+batch=16   tags=1   payload=262144  regime=vec    arm=B0      heap_ops=361..361 per_event=22 bytes=8396514..8396514 median_us=4350.9      q1_us=4163.4      q3_us=5264.6      n=21
+batch=16   tags=1   payload=262144  regime=vec    arm=B1      heap_ops=264..264 per_event=16 bytes=4200722..4200722 median_us=4212.4      q1_us=3952.1      q3_us=4917.5      n=21
+batch=16   tags=1   payload=262144  regime=vec    arm=O1      heap_ops=232..232 per_event=14 bytes=5906..5906 median_us=4076.7      q1_us=3732.7      q3_us=4448.4      n=21
+batch=16   tags=1   payload=262144  regime=vec    rule: O1 vs B1 saving=3.2% o1_median<b1_q1=false fires=false
+batch=16   tags=8   payload=262144  regime=vec    arm=adapter heap_ops=1145..1145 per_event=71 bytes=8412866..8412866 median_us=5748.7      q1_us=5242.9      q3_us=11447.1     n=21
+batch=16   tags=8   payload=262144  regime=vec    arm=B0      heap_ops=1145..1145 per_event=71 bytes=8412866..8412866 median_us=5531.8      q1_us=5230.0      q3_us=5986.6      n=21
+batch=16   tags=8   payload=262144  regime=vec    arm=B1      heap_ops=824..824 per_event=51 bytes=4212930..4212930 median_us=5165.4      q1_us=5099.7      q3_us=5268.3      n=21
+batch=16   tags=8   payload=262144  regime=vec    arm=O1      heap_ops=792..792 per_event=49 bytes=18114..18114 median_us=4941.6      q1_us=4768.9      q3_us=5182.2      n=21
+batch=16   tags=8   payload=262144  regime=vec    rule: O1 vs B1 saving=4.3% o1_median<b1_q1=true fires=false
+batch=16   tags=64  payload=262144  regime=vec    arm=adapter heap_ops=7417..7417 per_event=463 bytes=8543682..8543682 median_us=13672.3     q1_us=13222.8     q3_us=16635.0     n=21
+batch=16   tags=64  payload=262144  regime=vec    arm=B0      heap_ops=7417..7417 per_event=463 bytes=8543682..8543682 median_us=13724.3     q1_us=13051.7     q3_us=14545.8     n=21
+batch=16   tags=64  payload=262144  regime=vec    arm=B1      heap_ops=5304..5304 per_event=331 bytes=4310594..4310594 median_us=13806.6     q1_us=13064.4     q3_us=14262.3     n=21
+batch=16   tags=64  payload=262144  regime=vec    arm=O1      heap_ops=5272..5272 per_event=329 bytes=115778..115778 median_us=13837.0     q1_us=12882.0     q3_us=16031.5     n=21
+batch=16   tags=64  payload=262144  regime=vec    rule: O1 vs B1 saving=-0.2% o1_median<b1_q1=false fires=false
+batch=16   tags=1   payload=64      regime=static arm=adapter heap_ops=361..361 per_event=22 bytes=9954..9954 median_us=527.3       q1_us=494.1       q3_us=545.7       n=21
+batch=16   tags=1   payload=64      regime=static arm=B0      heap_ops=361..361 per_event=22 bytes=9954..9954 median_us=519.7       q1_us=448.4       q3_us=544.7       n=21
+batch=16   tags=1   payload=64      regime=static arm=B1      heap_ops=264..264 per_event=16 bytes=7442..7442 median_us=470.0       q1_us=442.1       q3_us=522.0       n=21
+batch=16   tags=1   payload=64      regime=static arm=O1      heap_ops=264..264 per_event=16 bytes=7442..7442 median_us=486.6       q1_us=442.0       q3_us=506.7       n=21
+batch=16   tags=1   payload=64      regime=static rule: O1 vs B1 saving=-3.5% o1_median<b1_q1=false fires=false
+batch=16   tags=8   payload=64      regime=static arm=adapter heap_ops=1145..1145 per_event=71 bytes=26306..26306 median_us=1438.5      q1_us=1371.5      q3_us=1472.5      n=21
+batch=16   tags=8   payload=64      regime=static arm=B0      heap_ops=1145..1145 per_event=71 bytes=26306..26306 median_us=1415.7      q1_us=1370.6      q3_us=1488.1      n=21
+batch=16   tags=8   payload=64      regime=static arm=B1      heap_ops=824..824 per_event=51 bytes=19650..19650 median_us=1407.1      q1_us=1348.6      q3_us=1509.2      n=21
+batch=16   tags=8   payload=64      regime=static arm=O1      heap_ops=824..824 per_event=51 bytes=19650..19650 median_us=1384.7      q1_us=1344.1      q3_us=1450.2      n=21
+batch=16   tags=8   payload=64      regime=static rule: O1 vs B1 saving=1.6% o1_median<b1_q1=false fires=false
+batch=16   tags=64  payload=64      regime=static arm=adapter heap_ops=7417..7417 per_event=463 bytes=157122..157122 median_us=9572.7      q1_us=8982.6      q3_us=10513.0     n=21
+batch=16   tags=64  payload=64      regime=static arm=B0      heap_ops=7417..7417 per_event=463 bytes=157122..157122 median_us=9178.4      q1_us=8723.4      q3_us=9664.3      n=21
+batch=16   tags=64  payload=64      regime=static arm=B1      heap_ops=5304..5304 per_event=331 bytes=117314..117314 median_us=9063.1      q1_us=8740.5      q3_us=9804.4      n=21
+batch=16   tags=64  payload=64      regime=static arm=O1      heap_ops=5304..5304 per_event=331 bytes=117314..117314 median_us=9068.3      q1_us=8850.5      q3_us=9980.2      n=21
+batch=16   tags=64  payload=64      regime=static rule: O1 vs B1 saving=-0.1% o1_median<b1_q1=false fires=false
+batch=16   tags=1   payload=1024    regime=static arm=adapter heap_ops=361..361 per_event=22 bytes=40674..40674 median_us=480.9       q1_us=469.3       q3_us=518.3       n=21
+batch=16   tags=1   payload=1024    regime=static arm=B0      heap_ops=361..361 per_event=22 bytes=40674..40674 median_us=473.6       q1_us=464.3       q3_us=528.6       n=21
+batch=16   tags=1   payload=1024    regime=static arm=B1      heap_ops=264..264 per_event=16 bytes=22802..22802 median_us=485.7       q1_us=467.8       q3_us=547.5       n=21
+batch=16   tags=1   payload=1024    regime=static arm=O1      heap_ops=264..264 per_event=16 bytes=22802..22802 median_us=487.8       q1_us=461.6       q3_us=554.4       n=21
+batch=16   tags=1   payload=1024    regime=static rule: O1 vs B1 saving=-0.4% o1_median<b1_q1=false fires=false
+batch=16   tags=8   payload=1024    regime=static arm=adapter heap_ops=1145..1145 per_event=71 bytes=57026..57026 median_us=1681.0      q1_us=1614.3      q3_us=1819.2      n=21
+batch=16   tags=8   payload=1024    regime=static arm=B0      heap_ops=1145..1145 per_event=71 bytes=57026..57026 median_us=1684.0      q1_us=1601.7      q3_us=1780.6      n=21
+batch=16   tags=8   payload=1024    regime=static arm=B1      heap_ops=824..824 per_event=51 bytes=35010..35010 median_us=1674.5      q1_us=1528.3      q3_us=1810.5      n=21
+batch=16   tags=8   payload=1024    regime=static arm=O1      heap_ops=824..824 per_event=51 bytes=35010..35010 median_us=1620.8      q1_us=1503.8      q3_us=1774.7      n=21
+batch=16   tags=8   payload=1024    regime=static rule: O1 vs B1 saving=3.2% o1_median<b1_q1=false fires=false
+batch=16   tags=64  payload=1024    regime=static arm=adapter heap_ops=7417..7417 per_event=463 bytes=187842..187842 median_us=9167.9      q1_us=8858.2      q3_us=9779.0      n=21
+batch=16   tags=64  payload=1024    regime=static arm=B0      heap_ops=7417..7417 per_event=463 bytes=187842..187842 median_us=9201.3      q1_us=8825.4      q3_us=9396.9      n=21
+batch=16   tags=64  payload=1024    regime=static arm=B1      heap_ops=5304..5304 per_event=331 bytes=132674..132674 median_us=9018.8      q1_us=8721.5      q3_us=9345.4      n=21
+batch=16   tags=64  payload=1024    regime=static arm=O1      heap_ops=5304..5304 per_event=331 bytes=132674..132674 median_us=8966.9      q1_us=8617.7      q3_us=9182.6      n=21
+batch=16   tags=64  payload=1024    regime=static rule: O1 vs B1 saving=0.6% o1_median<b1_q1=false fires=false
+batch=16   tags=1   payload=16384   regime=static arm=adapter heap_ops=361..361 per_event=22 bytes=532194..532194 median_us=824.7       q1_us=665.5       q3_us=1051.9      n=21
+batch=16   tags=1   payload=16384   regime=static arm=B0      heap_ops=361..361 per_event=22 bytes=532194..532194 median_us=894.4       q1_us=722.9       q3_us=1036.7      n=21
+batch=16   tags=1   payload=16384   regime=static arm=B1      heap_ops=264..264 per_event=16 bytes=268562..268562 median_us=893.5       q1_us=642.8       q3_us=1011.7      n=21
+batch=16   tags=1   payload=16384   regime=static arm=O1      heap_ops=264..264 per_event=16 bytes=268562..268562 median_us=984.1       q1_us=618.4       q3_us=1120.1      n=21
+batch=16   tags=1   payload=16384   regime=static rule: O1 vs B1 saving=-10.1% o1_median<b1_q1=false fires=false
+batch=16   tags=8   payload=16384   regime=static arm=adapter heap_ops=1145..1145 per_event=71 bytes=548546..548546 median_us=1694.2      q1_us=1660.4      q3_us=1784.1      n=21
+batch=16   tags=8   payload=16384   regime=static arm=B0      heap_ops=1145..1145 per_event=71 bytes=548546..548546 median_us=1697.9      q1_us=1616.7      q3_us=1751.7      n=21
+batch=16   tags=8   payload=16384   regime=static arm=B1      heap_ops=824..824 per_event=51 bytes=280770..280770 median_us=1707.5      q1_us=1646.5      q3_us=1750.0      n=21
+batch=16   tags=8   payload=16384   regime=static arm=O1      heap_ops=824..824 per_event=51 bytes=280770..280770 median_us=1661.6      q1_us=1620.0      q3_us=1748.3      n=21
+batch=16   tags=8   payload=16384   regime=static rule: O1 vs B1 saving=2.7% o1_median<b1_q1=false fires=false
+batch=16   tags=64  payload=16384   regime=static arm=adapter heap_ops=7417..7417 per_event=463 bytes=679362..679362 median_us=9566.3      q1_us=9137.2      q3_us=10946.9     n=21
+batch=16   tags=64  payload=16384   regime=static arm=B0      heap_ops=7417..7417 per_event=463 bytes=679362..679362 median_us=9539.1      q1_us=8877.8      q3_us=9875.5      n=21
+batch=16   tags=64  payload=16384   regime=static arm=B1      heap_ops=5304..5304 per_event=331 bytes=378434..378434 median_us=9589.5      q1_us=9252.4      q3_us=9750.6      n=21
+batch=16   tags=64  payload=16384   regime=static arm=O1      heap_ops=5304..5304 per_event=331 bytes=378434..378434 median_us=9557.8      q1_us=8887.4      q3_us=10110.3     n=21
+batch=16   tags=64  payload=16384   regime=static rule: O1 vs B1 saving=0.3% o1_median<b1_q1=false fires=false
+batch=16   tags=1   payload=262144  regime=static arm=adapter heap_ops=361..361 per_event=22 bytes=8396514..8396514 median_us=4262.5      q1_us=4011.5      q3_us=5231.2      n=21
+batch=16   tags=1   payload=262144  regime=static arm=B0      heap_ops=361..361 per_event=22 bytes=8396514..8396514 median_us=4337.6      q1_us=4047.1      q3_us=5089.9      n=21
+batch=16   tags=1   payload=262144  regime=static arm=B1      heap_ops=264..264 per_event=16 bytes=4200722..4200722 median_us=3881.7      q1_us=3802.9      q3_us=4891.3      n=21
+batch=16   tags=1   payload=262144  regime=static arm=O1      heap_ops=264..264 per_event=16 bytes=4200722..4200722 median_us=3924.6      q1_us=3766.0      q3_us=4514.2      n=21
+batch=16   tags=1   payload=262144  regime=static rule: O1 vs B1 saving=-1.1% o1_median<b1_q1=false fires=false
+batch=16   tags=8   payload=262144  regime=static arm=adapter heap_ops=1145..1145 per_event=71 bytes=8412866..8412866 median_us=5027.2      q1_us=5003.3      q3_us=5196.7      n=21
+batch=16   tags=8   payload=262144  regime=static arm=B0      heap_ops=1145..1145 per_event=71 bytes=8412866..8412866 median_us=5053.2      q1_us=4957.0      q3_us=5278.1      n=21
+batch=16   tags=8   payload=262144  regime=static arm=B1      heap_ops=824..824 per_event=51 bytes=4212930..4212930 median_us=4834.7      q1_us=4731.4      q3_us=5092.1      n=21
+batch=16   tags=8   payload=262144  regime=static arm=O1      heap_ops=824..824 per_event=51 bytes=4212930..4212930 median_us=4834.8      q1_us=4689.5      q3_us=4930.9      n=21
+batch=16   tags=8   payload=262144  regime=static rule: O1 vs B1 saving=-0.0% o1_median<b1_q1=false fires=false
+batch=16   tags=64  payload=262144  regime=static arm=adapter heap_ops=7417..7417 per_event=463 bytes=8543682..8543682 median_us=13099.8     q1_us=12797.0     q3_us=15429.0     n=21
+batch=16   tags=64  payload=262144  regime=static arm=B0      heap_ops=7417..7417 per_event=463 bytes=8543682..8543682 median_us=14094.5     q1_us=12819.1     q3_us=29361.5     n=21
+batch=16   tags=64  payload=262144  regime=static arm=B1      heap_ops=5304..5304 per_event=331 bytes=4310594..4310594 median_us=13148.3     q1_us=12270.3     q3_us=15044.1     n=21
+batch=16   tags=64  payload=262144  regime=static arm=O1      heap_ops=5304..5304 per_event=331 bytes=4310594..4310594 median_us=13484.0     q1_us=12324.3     q3_us=14701.1     n=21
+batch=16   tags=64  payload=262144  regime=static rule: O1 vs B1 saving=-2.6% o1_median<b1_q1=false fires=false
+test sweep_batch_16 ... ok
+Invoking test: sweep_batch_128
+== cloudflare sweep, batch=128, warmup=3, n=21 ==
+batch=128  tags=1   payload=64      regime=vec    arm=adapter heap_ops=2825..2825 per_event=22 bytes=75362..75362 median_us=3769.8      q1_us=3630.4      q3_us=3939.2      n=21
+batch=128  tags=1   payload=64      regime=vec    arm=B0      heap_ops=2825..2825 per_event=22 bytes=75362..75362 median_us=3734.8      q1_us=3603.8      q3_us=3968.6      n=21
+batch=128  tags=1   payload=64      regime=vec    arm=B1      heap_ops=2056..2056 per_event=16 bytes=55378..55378 median_us=3658.2      q1_us=3477.6      q3_us=3886.1      n=21
+batch=128  tags=1   payload=64      regime=vec    arm=O1      heap_ops=1800..1800 per_event=14 bytes=43090..43090 median_us=3665.3      q1_us=3532.9      q3_us=3842.4      n=21
+batch=128  tags=1   payload=64      regime=vec    rule: O1 vs B1 saving=-0.2% o1_median<b1_q1=false fires=false
+batch=128  tags=8   payload=64      regime=vec    arm=adapter heap_ops=9097..9097 per_event=71 bytes=206178..206178 median_us=11119.5     q1_us=10946.0     q3_us=11707.3     n=21
+batch=128  tags=8   payload=64      regime=vec    arm=B0      heap_ops=9097..9097 per_event=71 bytes=206178..206178 median_us=11334.7     q1_us=10950.0     q3_us=12180.8     n=21
+batch=128  tags=8   payload=64      regime=vec    arm=B1      heap_ops=6536..6536 per_event=51 bytes=153042..153042 median_us=11100.8     q1_us=10786.3     q3_us=11743.3     n=21
+batch=128  tags=8   payload=64      regime=vec    arm=O1      heap_ops=6280..6280 per_event=49 bytes=140754..140754 median_us=11009.9     q1_us=10872.9     q3_us=11680.8     n=21
+batch=128  tags=8   payload=64      regime=vec    rule: O1 vs B1 saving=0.8% o1_median<b1_q1=false fires=false
+batch=128  tags=64  payload=64      regime=vec    arm=adapter heap_ops=59273..59273 per_event=463 bytes=1252706..1252706 median_us=92791.0     q1_us=70428.8     q3_us=98508.7     n=21
+batch=128  tags=64  payload=64      regime=vec    arm=B0      heap_ops=59273..59273 per_event=463 bytes=1252706..1252706 median_us=96757.8     q1_us=69843.8     q3_us=101982.8    n=21
+batch=128  tags=64  payload=64      regime=vec    arm=B1      heap_ops=42376..42376 per_event=331 bytes=934354..934354 median_us=96040.9     q1_us=80338.8     q3_us=108090.7    n=21
+batch=128  tags=64  payload=64      regime=vec    arm=O1      heap_ops=42120..42120 per_event=329 bytes=922066..922066 median_us=84948.7     q1_us=69717.3     q3_us=97805.6     n=21
+batch=128  tags=64  payload=64      regime=vec    rule: O1 vs B1 saving=11.5% o1_median<b1_q1=false fires=false
+batch=128  tags=1   payload=1024    regime=vec    arm=adapter heap_ops=2825..2825 per_event=22 bytes=321122..321122 median_us=4335.1      q1_us=4174.4      q3_us=4384.2      n=21
+batch=128  tags=1   payload=1024    regime=vec    arm=B0      heap_ops=2825..2825 per_event=22 bytes=321122..321122 median_us=4217.4      q1_us=4179.0      q3_us=4291.7      n=21
+batch=128  tags=1   payload=1024    regime=vec    arm=B1      heap_ops=2056..2056 per_event=16 bytes=178258..178258 median_us=4179.1      q1_us=4071.5      q3_us=4211.9      n=21
+batch=128  tags=1   payload=1024    regime=vec    arm=O1      heap_ops=1800..1800 per_event=14 bytes=43090..43090 median_us=4212.7      q1_us=4128.2      q3_us=4306.7      n=21
+batch=128  tags=1   payload=1024    regime=vec    rule: O1 vs B1 saving=-0.8% o1_median<b1_q1=false fires=false
+batch=128  tags=8   payload=1024    regime=vec    arm=adapter heap_ops=9097..9097 per_event=71 bytes=451938..451938 median_us=11237.0     q1_us=11077.5     q3_us=12464.4     n=21
+batch=128  tags=8   payload=1024    regime=vec    arm=B0      heap_ops=9097..9097 per_event=71 bytes=451938..451938 median_us=11326.4     q1_us=11093.1     q3_us=12492.0     n=21
+batch=128  tags=8   payload=1024    regime=vec    arm=B1      heap_ops=6536..6536 per_event=51 bytes=275922..275922 median_us=12026.8     q1_us=10910.9     q3_us=13411.7     n=21
+batch=128  tags=8   payload=1024    regime=vec    arm=O1      heap_ops=6280..6280 per_event=49 bytes=140754..140754 median_us=11256.0     q1_us=11065.6     q3_us=12834.6     n=21
+batch=128  tags=8   payload=1024    regime=vec    rule: O1 vs B1 saving=6.4% o1_median<b1_q1=false fires=false
+batch=128  tags=64  payload=1024    regime=vec    arm=adapter heap_ops=59273..59273 per_event=463 bytes=1498466..1498466 median_us=97213.7     q1_us=69945.0     q3_us=98595.8     n=21
+batch=128  tags=64  payload=1024    regime=vec    arm=B0      heap_ops=59273..59273 per_event=463 bytes=1498466..1498466 median_us=96946.9     q1_us=70472.0     q3_us=98868.5     n=21
+batch=128  tags=64  payload=1024    regime=vec    arm=B1      heap_ops=42376..42376 per_event=331 bytes=1057234..1057234 median_us=72879.1     q1_us=69234.8     q3_us=99595.4     n=21
+batch=128  tags=64  payload=1024    regime=vec    arm=O1      heap_ops=42120..42120 per_event=329 bytes=922066..922066 median_us=95189.1     q1_us=69864.5     q3_us=97456.3     n=21
+batch=128  tags=64  payload=1024    regime=vec    rule: O1 vs B1 saving=-30.6% o1_median<b1_q1=false fires=false
+batch=128  tags=1   payload=16384   regime=vec    arm=adapter heap_ops=2825..2825 per_event=22 bytes=4253282..4253282 median_us=5633.1      q1_us=5482.0      q3_us=8733.5      n=21
+batch=128  tags=1   payload=16384   regime=vec    arm=B0      heap_ops=2825..2825 per_event=22 bytes=4253282..4253282 median_us=5743.6      q1_us=5462.6      q3_us=10141.8     n=21
+batch=128  tags=1   payload=16384   regime=vec    arm=B1      heap_ops=2056..2056 per_event=16 bytes=2144338..2144338 median_us=5569.1      q1_us=5351.0      q3_us=6335.3      n=21
+batch=128  tags=1   payload=16384   regime=vec    arm=O1      heap_ops=1800..1800 per_event=14 bytes=43090..43090 median_us=5404.4      q1_us=5239.2      q3_us=6184.3      n=21
+batch=128  tags=1   payload=16384   regime=vec    rule: O1 vs B1 saving=3.0% o1_median<b1_q1=false fires=false
+batch=128  tags=8   payload=16384   regime=vec    arm=adapter heap_ops=9097..9097 per_event=71 bytes=4384098..4384098 median_us=12779.7     q1_us=12574.4     q3_us=12923.1     n=21
+batch=128  tags=8   payload=16384   regime=vec    arm=B0      heap_ops=9097..9097 per_event=71 bytes=4384098..4384098 median_us=12727.0     q1_us=12565.8     q3_us=12805.4     n=21
+batch=128  tags=8   payload=16384   regime=vec    arm=B1      heap_ops=6536..6536 per_event=51 bytes=2242002..2242002 median_us=12431.6     q1_us=12339.3     q3_us=12842.9     n=21
+batch=128  tags=8   payload=16384   regime=vec    arm=O1      heap_ops=6280..6280 per_event=49 bytes=140754..140754 median_us=12540.6     q1_us=12335.0     q3_us=12816.5     n=21
+batch=128  tags=8   payload=16384   regime=vec    rule: O1 vs B1 saving=-0.9% o1_median<b1_q1=false fires=false
+batch=128  tags=64  payload=16384   regime=vec    arm=adapter heap_ops=59273..59273 per_event=463 bytes=5430626..5430626 median_us=73397.5     q1_us=73054.3     q3_us=101035.9    n=21
+batch=128  tags=64  payload=16384   regime=vec    arm=B0      heap_ops=59273..59273 per_event=463 bytes=5430626..5430626 median_us=100160.0    q1_us=73527.7     q3_us=101915.8    n=21
+batch=128  tags=64  payload=16384   regime=vec    arm=B1      heap_ops=42376..42376 per_event=331 bytes=3023314..3023314 median_us=101152.4    q1_us=74153.3     q3_us=102563.2    n=21
+batch=128  tags=64  payload=16384   regime=vec    arm=O1      heap_ops=42120..42120 per_event=329 bytes=922066..922066 median_us=98733.2     q1_us=72175.2     q3_us=100424.5    n=21
+batch=128  tags=64  payload=16384   regime=vec    rule: O1 vs B1 saving=2.4% o1_median<b1_q1=false fires=false
+batch=128  tags=1   payload=262144  regime=vec    arm=adapter heap_ops=2825..2825 per_event=22 bytes=67167842..67167842 median_us=38206.2     q1_us=36504.0     q3_us=43656.8     n=21
+batch=128  tags=1   payload=262144  regime=vec    arm=B0      heap_ops=2825..2825 per_event=22 bytes=67167842..67167842 median_us=41665.9     q1_us=36529.7     q3_us=43375.2     n=21
+batch=128  tags=1   payload=262144  regime=vec    arm=B1      heap_ops=2056..2056 per_event=16 bytes=33601618..33601618 median_us=35846.2     q1_us=34476.4     q3_us=41592.7     n=21
+batch=128  tags=1   payload=262144  regime=vec    arm=O1      heap_ops=1800..1800 per_event=14 bytes=43090..43090 median_us=38760.0     q1_us=32979.6     q3_us=40076.6     n=21
+batch=128  tags=1   payload=262144  regime=vec    rule: O1 vs B1 saving=-8.1% o1_median<b1_q1=false fires=false
+batch=128  tags=8   payload=262144  regime=vec    arm=adapter heap_ops=9097..9097 per_event=71 bytes=67298658..67298658 median_us=50903.3     q1_us=43743.9     q3_us=52234.0     n=21
+batch=128  tags=8   payload=262144  regime=vec    arm=B0      heap_ops=9097..9097 per_event=71 bytes=67298658..67298658 median_us=45386.3     q1_us=43837.9     q3_us=52613.4     n=21
+batch=128  tags=8   payload=262144  regime=vec    arm=B1      heap_ops=6536..6536 per_event=51 bytes=33699282..33699282 median_us=48823.1     q1_us=41795.8     q3_us=50088.4     n=21
+batch=128  tags=8   payload=262144  regime=vec    arm=O1      heap_ops=6280..6280 per_event=49 bytes=140754..140754 median_us=41569.9     q1_us=40262.9     q3_us=48357.1     n=21
+batch=128  tags=8   payload=262144  regime=vec    rule: O1 vs B1 saving=14.9% o1_median<b1_q1=true fires=true
+batch=128  tags=64  payload=262144  regime=vec    arm=adapter heap_ops=59273..59273 per_event=463 bytes=68345186..68345186 median_us=146606.6    q1_us=142014.9    q3_us=181954.3    n=21
+batch=128  tags=64  payload=262144  regime=vec    arm=B0      heap_ops=59273..59273 per_event=463 bytes=68345186..68345186 median_us=177312.9    q1_us=142519.2    q3_us=183194.2    n=21
+batch=128  tags=64  payload=262144  regime=vec    arm=B1      heap_ops=42376..42376 per_event=331 bytes=34480594..34480594 median_us=148481.4    q1_us=139120.4    q3_us=179858.9    n=21
+batch=128  tags=64  payload=262144  regime=vec    arm=O1      heap_ops=42120..42120 per_event=329 bytes=922066..922066 median_us=172156.0    q1_us=139214.8    q3_us=178715.4    n=21
+batch=128  tags=64  payload=262144  regime=vec    rule: O1 vs B1 saving=-15.9% o1_median<b1_q1=false fires=false
+batch=128  tags=1   payload=64      regime=static arm=adapter heap_ops=2825..2825 per_event=22 bytes=75362..75362 median_us=3753.3      q1_us=3668.3      q3_us=3898.4      n=21
+batch=128  tags=1   payload=64      regime=static arm=B0      heap_ops=2825..2825 per_event=22 bytes=75362..75362 median_us=3713.6      q1_us=3667.2      q3_us=3787.3      n=21
+batch=128  tags=1   payload=64      regime=static arm=B1      heap_ops=2056..2056 per_event=16 bytes=55378..55378 median_us=3649.7      q1_us=3609.4      q3_us=3792.1      n=21
+batch=128  tags=1   payload=64      regime=static arm=O1      heap_ops=2056..2056 per_event=16 bytes=55378..55378 median_us=3716.4      q1_us=3599.7      q3_us=3869.1      n=21
+batch=128  tags=1   payload=64      regime=static rule: O1 vs B1 saving=-1.8% o1_median<b1_q1=false fires=false
+batch=128  tags=8   payload=64      regime=static arm=adapter heap_ops=9097..9097 per_event=71 bytes=206178..206178 median_us=10936.3     q1_us=10855.6     q3_us=11138.1     n=21
+batch=128  tags=8   payload=64      regime=static arm=B0      heap_ops=9097..9097 per_event=71 bytes=206178..206178 median_us=10942.3     q1_us=10894.3     q3_us=11413.7     n=21
+batch=128  tags=8   payload=64      regime=static arm=B1      heap_ops=6536..6536 per_event=51 bytes=153042..153042 median_us=10835.2     q1_us=10725.7     q3_us=11160.2     n=21
+batch=128  tags=8   payload=64      regime=static arm=O1      heap_ops=6536..6536 per_event=51 bytes=153042..153042 median_us=10797.8     q1_us=10671.3     q3_us=11087.9     n=21
+batch=128  tags=8   payload=64      regime=static rule: O1 vs B1 saving=0.3% o1_median<b1_q1=false fires=false
+batch=128  tags=64  payload=64      regime=static arm=adapter heap_ops=59273..59273 per_event=463 bytes=1252706..1252706 median_us=99351.2     q1_us=81321.0     q3_us=101716.6    n=21
+batch=128  tags=64  payload=64      regime=static arm=B0      heap_ops=59273..59273 per_event=463 bytes=1252706..1252706 median_us=99923.4     q1_us=71917.8     q3_us=104536.8    n=21
+batch=128  tags=64  payload=64      regime=static arm=B1      heap_ops=42376..42376 per_event=331 bytes=934354..934354 median_us=91616.5     q1_us=71234.4     q3_us=102497.0    n=21
+batch=128  tags=64  payload=64      regime=static arm=O1      heap_ops=42376..42376 per_event=331 bytes=934354..934354 median_us=73680.9     q1_us=69499.4     q3_us=99665.2     n=21
+batch=128  tags=64  payload=64      regime=static rule: O1 vs B1 saving=19.6% o1_median<b1_q1=false fires=false
+batch=128  tags=1   payload=1024    regime=static arm=adapter heap_ops=2825..2825 per_event=22 bytes=321122..321122 median_us=3954.4      q1_us=3920.2      q3_us=4039.5      n=21
+batch=128  tags=1   payload=1024    regime=static arm=B0      heap_ops=2825..2825 per_event=22 bytes=321122..321122 median_us=3938.2      q1_us=3889.7      q3_us=3999.8      n=21
+batch=128  tags=1   payload=1024    regime=static arm=B1      heap_ops=2056..2056 per_event=16 bytes=178258..178258 median_us=3884.8      q1_us=3846.7      q3_us=3929.8      n=21
+batch=128  tags=1   payload=1024    regime=static arm=O1      heap_ops=2056..2056 per_event=16 bytes=178258..178258 median_us=3917.3      q1_us=3863.8      q3_us=3965.2      n=21
+batch=128  tags=1   payload=1024    regime=static rule: O1 vs B1 saving=-0.8% o1_median<b1_q1=false fires=false
+batch=128  tags=8   payload=1024    regime=static arm=adapter heap_ops=9097..9097 per_event=71 bytes=451938..451938 median_us=11336.9     q1_us=11273.4     q3_us=11503.6     n=21
+batch=128  tags=8   payload=1024    regime=static arm=B0      heap_ops=9097..9097 per_event=71 bytes=451938..451938 median_us=11316.1     q1_us=11236.3     q3_us=11488.2     n=21
+batch=128  tags=8   payload=1024    regime=static arm=B1      heap_ops=6536..6536 per_event=51 bytes=275922..275922 median_us=11147.4     q1_us=11091.9     q3_us=11229.3     n=21
+batch=128  tags=8   payload=1024    regime=static arm=O1      heap_ops=6536..6536 per_event=51 bytes=275922..275922 median_us=11184.5     q1_us=11116.3     q3_us=11378.4     n=21
+batch=128  tags=8   payload=1024    regime=static rule: O1 vs B1 saving=-0.3% o1_median<b1_q1=false fires=false
+batch=128  tags=64  payload=1024    regime=static arm=adapter heap_ops=59273..59273 per_event=463 bytes=1498466..1498466 median_us=98706.1     q1_us=70926.4     q3_us=100594.0    n=21
+batch=128  tags=64  payload=1024    regime=static arm=B0      heap_ops=59273..59273 per_event=463 bytes=1498466..1498466 median_us=72461.6     q1_us=71011.0     q3_us=99847.7     n=21
+batch=128  tags=64  payload=1024    regime=static arm=B1      heap_ops=42376..42376 per_event=331 bytes=1057234..1057234 median_us=98857.4     q1_us=70768.3     q3_us=99613.8     n=21
+batch=128  tags=64  payload=1024    regime=static arm=O1      heap_ops=42376..42376 per_event=331 bytes=1057234..1057234 median_us=97894.5     q1_us=70396.1     q3_us=99742.1     n=21
+batch=128  tags=64  payload=1024    regime=static rule: O1 vs B1 saving=1.0% o1_median<b1_q1=false fires=false
+batch=128  tags=1   payload=16384   regime=static arm=adapter heap_ops=2825..2825 per_event=22 bytes=4253282..4253282 median_us=5464.5      q1_us=5372.6      q3_us=5655.9      n=21
+batch=128  tags=1   payload=16384   regime=static arm=B0      heap_ops=2825..2825 per_event=22 bytes=4253282..4253282 median_us=5493.1      q1_us=5293.5      q3_us=5614.1      n=21
+batch=128  tags=1   payload=16384   regime=static arm=B1      heap_ops=2056..2056 per_event=16 bytes=2144338..2144338 median_us=5404.1      q1_us=5338.7      q3_us=5714.6      n=21
+batch=128  tags=1   payload=16384   regime=static arm=O1      heap_ops=2056..2056 per_event=16 bytes=2144338..2144338 median_us=5520.2      q1_us=5330.5      q3_us=5892.7      n=21
+batch=128  tags=1   payload=16384   regime=static rule: O1 vs B1 saving=-2.1% o1_median<b1_q1=false fires=false
+batch=128  tags=8   payload=16384   regime=static arm=adapter heap_ops=9097..9097 per_event=71 bytes=4384098..4384098 median_us=12862.2     q1_us=12595.3     q3_us=13189.5     n=21
+batch=128  tags=8   payload=16384   regime=static arm=B0      heap_ops=9097..9097 per_event=71 bytes=4384098..4384098 median_us=12792.8     q1_us=12528.0     q3_us=12998.0     n=21
+batch=128  tags=8   payload=16384   regime=static arm=B1      heap_ops=6536..6536 per_event=51 bytes=2242002..2242002 median_us=12633.8     q1_us=12457.2     q3_us=12839.1     n=21
+batch=128  tags=8   payload=16384   regime=static arm=O1      heap_ops=6536..6536 per_event=51 bytes=2242002..2242002 median_us=12641.8     q1_us=12375.7     q3_us=12902.6     n=21
+batch=128  tags=8   payload=16384   regime=static rule: O1 vs B1 saving=-0.1% o1_median<b1_q1=false fires=false
+batch=128  tags=64  payload=16384   regime=static arm=adapter heap_ops=59273..59273 per_event=463 bytes=5430626..5430626 median_us=102724.3    q1_us=76083.5     q3_us=105125.7    n=21
+batch=128  tags=64  payload=16384   regime=static arm=B0      heap_ops=59273..59273 per_event=463 bytes=5430626..5430626 median_us=104021.6    q1_us=75225.0     q3_us=109433.7    n=21
+batch=128  tags=64  payload=16384   regime=static arm=B1      heap_ops=42376..42376 per_event=331 bytes=3023314..3023314 median_us=102621.1    q1_us=75246.9     q3_us=106348.0    n=21
+batch=128  tags=64  payload=16384   regime=static arm=O1      heap_ops=42376..42376 per_event=331 bytes=3023314..3023314 median_us=102955.6    q1_us=74815.4     q3_us=105480.9    n=21
+batch=128  tags=64  payload=16384   regime=static rule: O1 vs B1 saving=-0.3% o1_median<b1_q1=false fires=false
+batch=128  tags=1   payload=262144  regime=static arm=adapter heap_ops=2825..2825 per_event=22 bytes=67167842..67167842 median_us=40532.4     q1_us=34606.4     q3_us=41392.4     n=21
+batch=128  tags=1   payload=262144  regime=static arm=B0      heap_ops=2825..2825 per_event=22 bytes=67167842..67167842 median_us=39505.5     q1_us=34426.0     q3_us=40909.1     n=21
+batch=128  tags=1   payload=262144  regime=static arm=B1      heap_ops=2056..2056 per_event=16 bytes=33601618..33601618 median_us=37863.1     q1_us=31894.8     q3_us=38955.2     n=21
+batch=128  tags=1   payload=262144  regime=static arm=O1      heap_ops=2056..2056 per_event=16 bytes=33601618..33601618 median_us=33121.4     q1_us=31834.0     q3_us=38275.3     n=21
+batch=128  tags=1   payload=262144  regime=static rule: O1 vs B1 saving=12.5% o1_median<b1_q1=false fires=false
+batch=128  tags=8   payload=262144  regime=static arm=adapter heap_ops=9097..9097 per_event=71 bytes=67298658..67298658 median_us=53149.6     q1_us=47684.1     q3_us=56058.2     n=21
+batch=128  tags=8   payload=262144  regime=static arm=B0      heap_ops=9097..9097 per_event=71 bytes=67298658..67298658 median_us=52236.7     q1_us=45603.9     q3_us=55896.0     n=21
+batch=128  tags=8   payload=262144  regime=static arm=B1      heap_ops=6536..6536 per_event=51 bytes=33699282..33699282 median_us=49961.1     q1_us=43897.0     q3_us=52286.8     n=21
+batch=128  tags=8   payload=262144  regime=static arm=O1      heap_ops=6536..6536 per_event=51 bytes=33699282..33699282 median_us=45506.1     q1_us=43861.5     q3_us=52082.7     n=21
+batch=128  tags=8   payload=262144  regime=static rule: O1 vs B1 saving=8.9% o1_median<b1_q1=false fires=false
+batch=128  tags=64  payload=262144  regime=static arm=adapter heap_ops=59273..59273 per_event=463 bytes=68345186..68345186 median_us=180246.8    q1_us=153325.1    q3_us=208367.4    n=21
+batch=128  tags=64  payload=262144  regime=static arm=B0      heap_ops=59273..59273 per_event=463 bytes=68345186..68345186 median_us=177869.7    q1_us=156581.4    q3_us=223033.1    n=21
+batch=128  tags=64  payload=262144  regime=static arm=B1      heap_ops=42376..42376 per_event=331 bytes=34480594..34480594 median_us=180034.5    q1_us=149300.3    q3_us=202832.4    n=21
+batch=128  tags=64  payload=262144  regime=static arm=O1      heap_ops=42376..42376 per_event=331 bytes=34480594..34480594 median_us=183002.5    q1_us=161247.8    q3_us=201173.4    n=21
+batch=128  tags=64  payload=262144  regime=static rule: O1 vs B1 saving=-1.6% o1_median<b1_q1=false fires=false
+test sweep_batch_128 ... ok
+Invoking test: sweep_batch_1
+== cloudflare sweep, batch=1, warmup=3, n=21 ==
+batch=1    tags=1   payload=64      regime=vec    arm=adapter heap_ops=31..31 per_event=31 bytes=1194..1194 median_us=43.2        q1_us=42.0        q3_us=49.2        n=21
+batch=1    tags=1   payload=64      regime=vec    arm=B0      heap_ops=31..31 per_event=31 bytes=1194..1194 median_us=45.1        q1_us=41.1        q3_us=53.3        n=21
+batch=1    tags=1   payload=64      regime=vec    arm=B1      heap_ops=24..24 per_event=24 bytes=1022..1022 median_us=44.6        q1_us=42.0        q3_us=72.0        n=21
+batch=1    tags=1   payload=64      regime=vec    arm=O1      heap_ops=22..22 per_event=22 bytes=926..926 median_us=43.3        q1_us=40.7        q3_us=52.8        n=21
+batch=1    tags=1   payload=64      regime=vec    rule: O1 vs B1 saving=2.9% o1_median<b1_q1=false fires=false
+batch=1    tags=8   payload=64      regime=vec    arm=adapter heap_ops=80..80 per_event=80 bytes=2216..2216 median_us=131.4       q1_us=114.3       q3_us=142.8       n=21
+batch=1    tags=8   payload=64      regime=vec    arm=B0      heap_ops=80..80 per_event=80 bytes=2216..2216 median_us=121.0       q1_us=108.8       q3_us=155.8       n=21
+batch=1    tags=8   payload=64      regime=vec    arm=B1      heap_ops=59..59 per_event=59 bytes=1785..1785 median_us=130.5       q1_us=112.8       q3_us=144.4       n=21
+batch=1    tags=8   payload=64      regime=vec    arm=O1      heap_ops=57..57 per_event=57 bytes=1689..1689 median_us=112.5       q1_us=106.7       q3_us=152.4       n=21
+batch=1    tags=8   payload=64      regime=vec    rule: O1 vs B1 saving=13.8% o1_median<b1_q1=true fires=true
+batch=1    tags=64  payload=64      regime=vec    arm=adapter heap_ops=472..472 per_event=472 bytes=10392..10392 median_us=682.3       q1_us=635.1       q3_us=742.0       n=21
+batch=1    tags=64  payload=64      regime=vec    arm=B0      heap_ops=472..472 per_event=472 bytes=10392..10392 median_us=691.8       q1_us=649.4       q3_us=747.8       n=21
+batch=1    tags=64  payload=64      regime=vec    arm=B1      heap_ops=339..339 per_event=339 bytes=7889..7889 median_us=695.8       q1_us=644.2       q3_us=730.7       n=21
+batch=1    tags=64  payload=64      regime=vec    arm=O1      heap_ops=337..337 per_event=337 bytes=7793..7793 median_us=671.9       q1_us=654.8       q3_us=692.8       n=21
+batch=1    tags=64  payload=64      regime=vec    rule: O1 vs B1 saving=3.4% o1_median<b1_q1=false fires=false
+batch=1    tags=1   payload=1024    regime=vec    arm=adapter heap_ops=31..31 per_event=31 bytes=3114..3114 median_us=48.0        q1_us=46.2        q3_us=59.1        n=21
+batch=1    tags=1   payload=1024    regime=vec    arm=B0      heap_ops=31..31 per_event=31 bytes=3114..3114 median_us=49.9        q1_us=44.5        q3_us=62.3        n=21
+batch=1    tags=1   payload=1024    regime=vec    arm=B1      heap_ops=24..24 per_event=24 bytes=1982..1982 median_us=46.8        q1_us=44.1        q3_us=62.7        n=21
+batch=1    tags=1   payload=1024    regime=vec    arm=O1      heap_ops=22..22 per_event=22 bytes=926..926 median_us=48.0        q1_us=43.9        q3_us=53.4        n=21
+batch=1    tags=1   payload=1024    regime=vec    rule: O1 vs B1 saving=-2.6% o1_median<b1_q1=false fires=false
+batch=1    tags=8   payload=1024    regime=vec    arm=adapter heap_ops=80..80 per_event=80 bytes=4136..4136 median_us=120.5       q1_us=105.7       q3_us=146.0       n=21
+batch=1    tags=8   payload=1024    regime=vec    arm=B0      heap_ops=80..80 per_event=80 bytes=4136..4136 median_us=107.4       q1_us=103.0       q3_us=134.2       n=21
+batch=1    tags=8   payload=1024    regime=vec    arm=B1      heap_ops=59..59 per_event=59 bytes=2745..2745 median_us=120.0       q1_us=106.1       q3_us=136.7       n=21
+batch=1    tags=8   payload=1024    regime=vec    arm=O1      heap_ops=57..57 per_event=57 bytes=1689..1689 median_us=108.7       q1_us=102.8       q3_us=133.3       n=21
+batch=1    tags=8   payload=1024    regime=vec    rule: O1 vs B1 saving=9.4% o1_median<b1_q1=false fires=false
+batch=1    tags=64  payload=1024    regime=vec    arm=adapter heap_ops=472..472 per_event=472 bytes=12312..12312 median_us=647.6       q1_us=620.4       q3_us=720.7       n=21
+batch=1    tags=64  payload=1024    regime=vec    arm=B0      heap_ops=472..472 per_event=472 bytes=12312..12312 median_us=656.1       q1_us=630.2       q3_us=719.0       n=21
+batch=1    tags=64  payload=1024    regime=vec    arm=B1      heap_ops=339..339 per_event=339 bytes=8849..8849 median_us=659.1       q1_us=607.3       q3_us=736.0       n=21
+batch=1    tags=64  payload=1024    regime=vec    arm=O1      heap_ops=337..337 per_event=337 bytes=7793..7793 median_us=640.6       q1_us=603.7       q3_us=685.8       n=21
+batch=1    tags=64  payload=1024    regime=vec    rule: O1 vs B1 saving=2.8% o1_median<b1_q1=false fires=false
+batch=1    tags=1   payload=16384   regime=vec    arm=adapter heap_ops=31..31 per_event=31 bytes=33834..33834 median_us=59.6        q1_us=57.4        q3_us=72.2        n=21
+batch=1    tags=1   payload=16384   regime=vec    arm=B0      heap_ops=31..31 per_event=31 bytes=33834..33834 median_us=57.9        q1_us=53.2        q3_us=85.9        n=21
+batch=1    tags=1   payload=16384   regime=vec    arm=B1      heap_ops=24..24 per_event=24 bytes=17342..17342 median_us=56.7        q1_us=55.3        q3_us=68.7        n=21
+batch=1    tags=1   payload=16384   regime=vec    arm=O1      heap_ops=22..22 per_event=22 bytes=926..926 median_us=54.6        q1_us=52.3        q3_us=70.7        n=21
+batch=1    tags=1   payload=16384   regime=vec    rule: O1 vs B1 saving=3.7% o1_median<b1_q1=true fires=false
+batch=1    tags=8   payload=16384   regime=vec    arm=adapter heap_ops=80..80 per_event=80 bytes=34856..34856 median_us=133.8       q1_us=115.4       q3_us=163.9       n=21
+batch=1    tags=8   payload=16384   regime=vec    arm=B0      heap_ops=80..80 per_event=80 bytes=34856..34856 median_us=118.7       q1_us=112.9       q3_us=132.2       n=21
+batch=1    tags=8   payload=16384   regime=vec    arm=B1      heap_ops=59..59 per_event=59 bytes=18105..18105 median_us=119.9       q1_us=112.0       q3_us=139.0       n=21
+batch=1    tags=8   payload=16384   regime=vec    arm=O1      heap_ops=57..57 per_event=57 bytes=1689..1689 median_us=116.6       q1_us=111.1       q3_us=166.9       n=21
+batch=1    tags=8   payload=16384   regime=vec    rule: O1 vs B1 saving=2.8% o1_median<b1_q1=false fires=false
+batch=1    tags=64  payload=16384   regime=vec    arm=adapter heap_ops=472..472 per_event=472 bytes=43032..43032 median_us=682.9       q1_us=657.3       q3_us=719.8       n=21
+batch=1    tags=64  payload=16384   regime=vec    arm=B0      heap_ops=472..472 per_event=472 bytes=43032..43032 median_us=708.3       q1_us=662.9       q3_us=749.9       n=21
+batch=1    tags=64  payload=16384   regime=vec    arm=B1      heap_ops=339..339 per_event=339 bytes=24209..24209 median_us=672.6       q1_us=650.1       q3_us=706.6       n=21
+batch=1    tags=64  payload=16384   regime=vec    arm=O1      heap_ops=337..337 per_event=337 bytes=7793..7793 median_us=684.2       q1_us=648.6       q3_us=713.8       n=21
+batch=1    tags=64  payload=16384   regime=vec    rule: O1 vs B1 saving=-1.7% o1_median<b1_q1=false fires=false
+batch=1    tags=1   payload=262144  regime=vec    arm=adapter heap_ops=31..31 per_event=31 bytes=525354..525354 median_us=344.1       q1_us=310.9       q3_us=474.9       n=21
+batch=1    tags=1   payload=262144  regime=vec    arm=B0      heap_ops=31..31 per_event=31 bytes=525354..525354 median_us=356.5       q1_us=311.4       q3_us=519.0       n=21
+batch=1    tags=1   payload=262144  regime=vec    arm=B1      heap_ops=24..24 per_event=24 bytes=263102..263102 median_us=316.1       q1_us=285.7       q3_us=417.8       n=21
+batch=1    tags=1   payload=262144  regime=vec    arm=O1      heap_ops=22..22 per_event=22 bytes=926..926 median_us=320.2       q1_us=289.3       q3_us=424.3       n=21
+batch=1    tags=1   payload=262144  regime=vec    rule: O1 vs B1 saving=-1.3% o1_median<b1_q1=false fires=false
+batch=1    tags=8   payload=262144  regime=vec    arm=adapter heap_ops=80..80 per_event=80 bytes=526376..526376 median_us=440.3       q1_us=358.3       q3_us=483.6       n=21
+batch=1    tags=8   payload=262144  regime=vec    arm=B0      heap_ops=80..80 per_event=80 bytes=526376..526376 median_us=371.1       q1_us=349.8       q3_us=511.3       n=21
+batch=1    tags=8   payload=262144  regime=vec    arm=B1      heap_ops=59..59 per_event=59 bytes=263865..263865 median_us=413.9       q1_us=323.7       q3_us=538.4       n=21
+batch=1    tags=8   payload=262144  regime=vec    arm=O1      heap_ops=57..57 per_event=57 bytes=1689..1689 median_us=423.5       q1_us=326.4       q3_us=528.0       n=21
+batch=1    tags=8   payload=262144  regime=vec    rule: O1 vs B1 saving=-2.3% o1_median<b1_q1=false fires=false
+batch=1    tags=64  payload=262144  regime=vec    arm=adapter heap_ops=472..472 per_event=472 bytes=534552..534552 median_us=1060.6      q1_us=914.0       q3_us=1228.9      n=21
+batch=1    tags=64  payload=262144  regime=vec    arm=B0      heap_ops=472..472 per_event=472 bytes=534552..534552 median_us=989.1       q1_us=948.4       q3_us=1056.1      n=21
+batch=1    tags=64  payload=262144  regime=vec    arm=B1      heap_ops=339..339 per_event=339 bytes=269969..269969 median_us=942.0       q1_us=881.8       q3_us=1000.9      n=21
+batch=1    tags=64  payload=262144  regime=vec    arm=O1      heap_ops=337..337 per_event=337 bytes=7793..7793 median_us=997.1       q1_us=932.5       q3_us=1061.4      n=21
+batch=1    tags=64  payload=262144  regime=vec    rule: O1 vs B1 saving=-5.9% o1_median<b1_q1=false fires=false
+batch=1    tags=1   payload=64      regime=static arm=adapter heap_ops=31..31 per_event=31 bytes=1194..1194 median_us=45.9        q1_us=43.3        q3_us=47.5        n=21
+batch=1    tags=1   payload=64      regime=static arm=B0      heap_ops=31..31 per_event=31 bytes=1194..1194 median_us=42.5        q1_us=41.3        q3_us=48.9        n=21
+batch=1    tags=1   payload=64      regime=static arm=B1      heap_ops=24..24 per_event=24 bytes=1022..1022 median_us=43.6        q1_us=40.8        q3_us=50.3        n=21
+batch=1    tags=1   payload=64      regime=static arm=O1      heap_ops=24..24 per_event=24 bytes=1022..1022 median_us=43.8        q1_us=41.5        q3_us=48.2        n=21
+batch=1    tags=1   payload=64      regime=static rule: O1 vs B1 saving=-0.6% o1_median<b1_q1=false fires=false
+batch=1    tags=8   payload=64      regime=static arm=adapter heap_ops=80..80 per_event=80 bytes=2216..2216 median_us=109.5       q1_us=103.4       q3_us=138.0       n=21
+batch=1    tags=8   payload=64      regime=static arm=B0      heap_ops=80..80 per_event=80 bytes=2216..2216 median_us=116.9       q1_us=105.8       q3_us=142.7       n=21
+batch=1    tags=8   payload=64      regime=static arm=B1      heap_ops=59..59 per_event=59 bytes=1785..1785 median_us=107.9       q1_us=101.2       q3_us=117.9       n=21
+batch=1    tags=8   payload=64      regime=static arm=O1      heap_ops=59..59 per_event=59 bytes=1785..1785 median_us=105.4       q1_us=100.9       q3_us=121.2       n=21
+batch=1    tags=8   payload=64      regime=static rule: O1 vs B1 saving=2.3% o1_median<b1_q1=false fires=false
+batch=1    tags=64  payload=64      regime=static arm=adapter heap_ops=472..472 per_event=472 bytes=10392..10392 median_us=666.0       q1_us=649.6       q3_us=692.2       n=21
+batch=1    tags=64  payload=64      regime=static arm=B0      heap_ops=472..472 per_event=472 bytes=10392..10392 median_us=648.3       q1_us=630.6       q3_us=684.0       n=21
+batch=1    tags=64  payload=64      regime=static arm=B1      heap_ops=339..339 per_event=339 bytes=7889..7889 median_us=654.5       q1_us=608.2       q3_us=700.2       n=21
+batch=1    tags=64  payload=64      regime=static arm=O1      heap_ops=339..339 per_event=339 bytes=7889..7889 median_us=642.5       q1_us=625.5       q3_us=671.3       n=21
+batch=1    tags=64  payload=64      regime=static rule: O1 vs B1 saving=1.8% o1_median<b1_q1=false fires=false
+batch=1    tags=1   payload=1024    regime=static arm=adapter heap_ops=31..31 per_event=31 bytes=3114..3114 median_us=43.6        q1_us=41.9        q3_us=48.1        n=21
+batch=1    tags=1   payload=1024    regime=static arm=B0      heap_ops=31..31 per_event=31 bytes=3114..3114 median_us=43.2        q1_us=40.8        q3_us=50.5        n=21
+batch=1    tags=1   payload=1024    regime=static arm=B1      heap_ops=24..24 per_event=24 bytes=1982..1982 median_us=42.6        q1_us=40.8        q3_us=45.1        n=21
+batch=1    tags=1   payload=1024    regime=static arm=O1      heap_ops=24..24 per_event=24 bytes=1982..1982 median_us=43.2        q1_us=41.1        q3_us=46.1        n=21
+batch=1    tags=1   payload=1024    regime=static rule: O1 vs B1 saving=-1.4% o1_median<b1_q1=false fires=false
+batch=1    tags=8   payload=1024    regime=static arm=adapter heap_ops=80..80 per_event=80 bytes=4136..4136 median_us=109.5       q1_us=102.3       q3_us=143.0       n=21
+batch=1    tags=8   payload=1024    regime=static arm=B0      heap_ops=80..80 per_event=80 bytes=4136..4136 median_us=112.7       q1_us=101.7       q3_us=124.8       n=21
+batch=1    tags=8   payload=1024    regime=static arm=B1      heap_ops=59..59 per_event=59 bytes=2745..2745 median_us=107.6       q1_us=101.3       q3_us=129.1       n=21
+batch=1    tags=8   payload=1024    regime=static arm=O1      heap_ops=59..59 per_event=59 bytes=2745..2745 median_us=107.4       q1_us=101.4       q3_us=139.9       n=21
+batch=1    tags=8   payload=1024    regime=static rule: O1 vs B1 saving=0.3% o1_median<b1_q1=false fires=false
+batch=1    tags=64  payload=1024    regime=static arm=adapter heap_ops=472..472 per_event=472 bytes=12312..12312 median_us=676.9       q1_us=639.7       q3_us=703.7       n=21
+batch=1    tags=64  payload=1024    regime=static arm=B0      heap_ops=472..472 per_event=472 bytes=12312..12312 median_us=701.6       q1_us=622.2       q3_us=726.1       n=21
+batch=1    tags=64  payload=1024    regime=static arm=B1      heap_ops=339..339 per_event=339 bytes=8849..8849 median_us=668.4       q1_us=641.4       q3_us=685.4       n=21
+batch=1    tags=64  payload=1024    regime=static arm=O1      heap_ops=339..339 per_event=339 bytes=8849..8849 median_us=668.2       q1_us=659.0       q3_us=692.2       n=21
+batch=1    tags=64  payload=1024    regime=static rule: O1 vs B1 saving=0.0% o1_median<b1_q1=false fires=false
+batch=1    tags=1   payload=16384   regime=static arm=adapter heap_ops=31..31 per_event=31 bytes=33834..33834 median_us=51.2        q1_us=49.8        q3_us=54.4        n=21
+batch=1    tags=1   payload=16384   regime=static arm=B0      heap_ops=31..31 per_event=31 bytes=33834..33834 median_us=52.1        q1_us=49.2        q3_us=52.5        n=21
+batch=1    tags=1   payload=16384   regime=static arm=B1      heap_ops=24..24 per_event=24 bytes=17342..17342 median_us=49.2        q1_us=48.4        q3_us=52.0        n=21
+batch=1    tags=1   payload=16384   regime=static arm=O1      heap_ops=24..24 per_event=24 bytes=17342..17342 median_us=49.2        q1_us=48.1        q3_us=52.8        n=21
+batch=1    tags=1   payload=16384   regime=static rule: O1 vs B1 saving=0.1% o1_median<b1_q1=false fires=false
+batch=1    tags=8   payload=16384   regime=static arm=adapter heap_ops=80..80 per_event=80 bytes=34856..34856 median_us=131.3       q1_us=109.9       q3_us=169.4       n=21
+batch=1    tags=8   payload=16384   regime=static arm=B0      heap_ops=80..80 per_event=80 bytes=34856..34856 median_us=122.2       q1_us=112.9       q3_us=154.8       n=21
+batch=1    tags=8   payload=16384   regime=static arm=B1      heap_ops=59..59 per_event=59 bytes=18105..18105 median_us=126.1       q1_us=113.4       q3_us=167.4       n=21
+batch=1    tags=8   payload=16384   regime=static arm=O1      heap_ops=59..59 per_event=59 bytes=18105..18105 median_us=114.5       q1_us=108.4       q3_us=158.9       n=21
+batch=1    tags=8   payload=16384   regime=static rule: O1 vs B1 saving=9.2% o1_median<b1_q1=false fires=false
+batch=1    tags=64  payload=16384   regime=static arm=adapter heap_ops=472..472 per_event=472 bytes=43032..43032 median_us=788.9       q1_us=689.1       q3_us=888.7       n=21
+batch=1    tags=64  payload=16384   regime=static arm=B0      heap_ops=472..472 per_event=472 bytes=43032..43032 median_us=765.2       q1_us=675.2       q3_us=839.0       n=21
+batch=1    tags=64  payload=16384   regime=static arm=B1      heap_ops=339..339 per_event=339 bytes=24209..24209 median_us=781.2       q1_us=725.0       q3_us=851.4       n=21
+batch=1    tags=64  payload=16384   regime=static arm=O1      heap_ops=339..339 per_event=339 bytes=24209..24209 median_us=765.0       q1_us=683.1       q3_us=836.3       n=21
+batch=1    tags=64  payload=16384   regime=static rule: O1 vs B1 saving=2.1% o1_median<b1_q1=false fires=false
+batch=1    tags=1   payload=262144  regime=static arm=adapter heap_ops=31..31 per_event=31 bytes=525354..525354 median_us=411.7       q1_us=297.5       q3_us=544.3       n=21
+batch=1    tags=1   payload=262144  regime=static arm=B0      heap_ops=31..31 per_event=31 bytes=525354..525354 median_us=347.0       q1_us=289.5       q3_us=468.7       n=21
+batch=1    tags=1   payload=262144  regime=static arm=B1      heap_ops=24..24 per_event=24 bytes=263102..263102 median_us=381.3       q1_us=253.5       q3_us=505.5       n=21
+batch=1    tags=1   payload=262144  regime=static arm=O1      heap_ops=24..24 per_event=24 bytes=263102..263102 median_us=347.2       q1_us=247.5       q3_us=500.1       n=21
+batch=1    tags=1   payload=262144  regime=static rule: O1 vs B1 saving=8.9% o1_median<b1_q1=false fires=false
+batch=1    tags=8   payload=262144  regime=static arm=adapter heap_ops=80..80 per_event=80 bytes=526376..526376 median_us=588.0       q1_us=485.8       q3_us=694.7       n=21
+batch=1    tags=8   payload=262144  regime=static arm=B0      heap_ops=80..80 per_event=80 bytes=526376..526376 median_us=573.0       q1_us=487.3       q3_us=638.4       n=21
+batch=1    tags=8   payload=262144  regime=static arm=B1      heap_ops=59..59 per_event=59 bytes=263865..263865 median_us=493.8       q1_us=396.8       q3_us=575.9       n=21
+batch=1    tags=8   payload=262144  regime=static arm=O1      heap_ops=59..59 per_event=59 bytes=263865..263865 median_us=594.0       q1_us=416.1       q3_us=650.6       n=21
+batch=1    tags=8   payload=262144  regime=static rule: O1 vs B1 saving=-20.3% o1_median<b1_q1=false fires=false
+batch=1    tags=64  payload=262144  regime=static arm=adapter heap_ops=472..472 per_event=472 bytes=534552..534552 median_us=1159.6      q1_us=1088.8      q3_us=1266.7      n=21
+batch=1    tags=64  payload=262144  regime=static arm=B0      heap_ops=472..472 per_event=472 bytes=534552..534552 median_us=1311.7      q1_us=1254.8      q3_us=1384.3      n=21
+batch=1    tags=64  payload=262144  regime=static arm=B1      heap_ops=339..339 per_event=339 bytes=269969..269969 median_us=1257.6      q1_us=1019.7      q3_us=1355.4      n=21
+batch=1    tags=64  payload=262144  regime=static arm=O1      heap_ops=339..339 per_event=339 bytes=269969..269969 median_us=1228.1      q1_us=1029.9      q3_us=1363.7      n=21
+batch=1    tags=64  payload=262144  regime=static rule: O1 vs B1 saving=2.3% o1_median<b1_q1=false fires=false
+test sweep_batch_1 ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 1 filtered out; finished in 143.48s
+
