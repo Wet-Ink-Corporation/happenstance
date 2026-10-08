@@ -623,6 +623,11 @@ ADR-0082 is lane L10's: `ProjectionId::new` becomes fallible and refuses VT-14's
 only way to a `sync/` id; VT-35 is minted `[FROZEN]` and PS-39, the store's half, `[PROVISIONAL]`.
 It partly supersedes ADR-0015 at §10 only, so `kb-decision-0015` stays accepted and its row gains
 the annotation, and it supersedes `kb-open-question-projection-id-unvalidated-001`.
+ADR-0083, accepted by the owner on 2026-10-08, answers `kb-open-question-seal-the-codec-001`: `Codec` stays unsealed through
+1.x, because sealing later is the major and unsealing is additive, and `CodecError::UnknownTag` is
+not split. It corrects `Codec`'s rustdoc, which stated the asymmetry backwards, and records that
+ADR-0049's atom shows `reads_tag` defaulting to `false` where the code defaults to the codec's own
+tag. It supersedes nothing and closes the open question.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -640,6 +645,7 @@ the annotation, and it supersedes `kb-open-question-projection-id-unvalidated-00
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
 | ADR-0080 | [`kb-decision-0080`](../decisions/0080-append-keeps-a-borrowed-batch.md) | append keeps its borrowed batch, and ES-17 is frozen on the two-build measurement | accepted | 17 | — |
 | ADR-0082 | [`kb-decision-0082`](../decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | ProjectionId is validated: VT-14's set, 255 bytes, and happenstance/ and sync/ reserved | accepted | 17 | partly supersedes `kb-decision-0015` (§10) |
+| ADR-0083 | [`kb-decision-0083`](../decisions/0083-codec-stays-unsealed-through-1-x.md) | Codec stays unsealed through 1.x, and CodecError::UnknownTag is not split | accepted | 17 | — |
 
 ## Adding a row
 
