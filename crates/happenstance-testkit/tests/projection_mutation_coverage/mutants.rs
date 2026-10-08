@@ -30,7 +30,7 @@ use crate::correct::{Defect, MutantBatch, MutantError, State, apply};
 
 /// Commits the checkpoint and discards the write set.
 ///
-/// The store `spec/SPECIFICATION.md:5979-5986` names, and the natural shape for
+/// The store `spec/SPECIFICATION.md:6049-6056` names, and the natural shape for
 /// any adapter whose read model lives somewhere other than its checkpoint table:
 /// the checkpoint write goes through the adapter's own connection and the read
 /// model's writes were handed to something else — a second pool, a queue, a
@@ -73,7 +73,7 @@ impl Defect for CheckpointOnlyStore {
 /// write — which is why every rule in this family reads back through a fresh
 /// handle.
 ///
-/// It is the store `spec/SPECIFICATION.md:5960` leaves an em-dash for.
+/// It is the store `spec/SPECIFICATION.md:6030` leaves an em-dash for.
 /// `commit_advances_the_checkpoint` is the only rule that rejects it, and that is
 /// the interesting part: PS-1's MUST is a **coupling** rather than a progress
 /// obligation, so "neither" satisfies the clause through its "or not at all" arm
@@ -172,7 +172,7 @@ impl Defect for UnrolledBackStore {
 /// A batch whose `Drop` returns its pooled connection to nothing.
 ///
 /// The defect a reviewer's probe actually found
-/// (`spec/SPECIFICATION.md:5164-5176`): `begin` checks a connection out of the
+/// (`spec/SPECIFICATION.md:5234-5246`): `begin` checks a connection out of the
 /// pool, `commit` and `rollback` both return it, and the path nobody wrote a test
 /// for — dropping the batch bare — leaks it. The store answers `Busy` from then
 /// on. It is the store that makes PS-7's *second* half enforceable, because it
@@ -213,7 +213,7 @@ impl Defect for TypeStampedBatchStore {
 /// A `commit` that validates `position` against what the batch wrote.
 ///
 /// Named by the specification for this rule
-/// (`spec/SPECIFICATION.md:5981-5986`), and the reason it is worth registering is
+/// (`spec/SPECIFICATION.md:6051-6056`), and the reason it is worth registering is
 /// that it is **reasonable**: "advances `id`'s checkpoint to `position`" reads
 /// like a claim about applied work, and without PS-21's rule an adapter that
 /// enforced it would be exactly as conformant as one that did not. Two stores
@@ -437,7 +437,7 @@ impl Defect for RefusalAfterTheFactStore {
 /// A missing checkpoint row resolved as `Live { through: FIRST }`.
 ///
 /// The specification names this shape itself, and names it as the *natural* one
-/// rather than a contrivance (`spec/SPECIFICATION.md:5566-5582`): an adapter
+/// rather than a contrivance (`spec/SPECIFICATION.md:5636-5652`): an adapter
 /// whose `reset` records an explicit `NeverRun` and whose `checkpoint` resolves a
 /// missing row with `.unwrap_or(…)` has to put *something* in the `unwrap_or`,
 /// and `Live { through: FIRST }` is what an author writes when the checkpoint
@@ -457,7 +457,7 @@ impl Defect for RefusalAfterTheFactStore {
 /// the direction a mutant registry cannot see. What brought it back is a clause,
 /// not a re-reading — ADR-0030 minted PS-38, whose second sentence is *"a
 /// `ProjectionId` no successful `commit` has named MUST read as
-/// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5731-5747`). This store
+/// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5801-5817`). This store
 /// answers `Live { through: FIRST }` for exactly such an id, so it is
 /// non-conformant against a `MUST` that exists rather than against a rule that
 /// reached past one. Its conformant neighbour on the same seam is
@@ -545,5 +545,123 @@ impl Defect for LiveOnlyCheckpointStore {
         // The whole defect: the claim is read and dropped.
         let _ = authority;
         Checkpoint::Live { through: position }
+    }
+}
+
+/// A checkpoint key column that folds case.
+///
+/// SQLite's `COLLATE NOCASE` on `projection_id`, Postgres's `citext`, or a
+/// nondeterministic ICU collation: the schema an author reaches for when ids
+/// "should not depend on capitalisation". `Van_Stock` and `van_stock` are two
+/// valid ids (VT-35 folds nothing), and this store files both under one row, so
+/// the second projection to commit overwrites the first's checkpoint.
+pub(crate) struct CaseFoldingKeyStore;
+
+impl Defect for CaseFoldingKeyStore {
+    const NAME: &'static str = "CaseFoldingKeyStore";
+
+    fn checkpoint_key(id: &ProjectionId) -> String {
+        // The whole defect: the collation, applied before the key is used.
+        id.as_str().to_lowercase()
+    }
+}
+
+/// A checkpoint key column narrower than the id it is handed.
+///
+/// `VARCHAR(64)` under a server that truncates rather than refuses, or an
+/// adapter that cuts the id to fit a column it sized by guess. Two ids of
+/// `MAX_PROJECTION_ID_LEN` bytes that share their first 64 share a checkpoint.
+pub(crate) struct TruncatingKeyStore;
+
+impl Defect for TruncatingKeyStore {
+    const NAME: &'static str = "TruncatingKeyStore";
+
+    fn checkpoint_key(id: &ProjectionId) -> String {
+        // The whole defect: the longest prefix of at most 64 bytes that ends on
+        // a char boundary, which is what a character-safe truncation keeps.
+        let value = id.as_str();
+        value[..value.floor_char_boundary(64)].to_owned()
+    }
+}
+
+/// A checkpoint key column that cannot hold what is not ASCII.
+///
+/// A `latin1` or ASCII column behind a lossy client conversion: every character
+/// the column cannot represent arrives as `?`. Persian with a non-joiner and
+/// Persian with a joiner, or two emoji ZWJ sequences, are each two valid ids
+/// that land on one row.
+pub(crate) struct AsciiOnlyKeyStore;
+
+impl Defect for AsciiOnlyKeyStore {
+    const NAME: &'static str = "AsciiOnlyKeyStore";
+
+    fn checkpoint_key(id: &ProjectionId) -> String {
+        // The whole defect: the conversion the column's charset forces.
+        id.as_str()
+            .chars()
+            .map(|c| if c.is_ascii() { c } else { '?' })
+            .collect()
+    }
+}
+
+/// A checkpoint keyed on a slug of the id.
+///
+/// The adapter that maps the id onto something with a narrower alphabet: a SQL
+/// identifier (one table per projection), a file name, an object-store key.
+/// Every character outside `[A-Za-z0-9_]` becomes `_`, so `van-stock` and
+/// `van_stock` are one projection to it.
+pub(crate) struct SluggedKeyStore;
+
+impl Defect for SluggedKeyStore {
+    const NAME: &'static str = "SluggedKeyStore";
+
+    fn checkpoint_key(id: &ProjectionId) -> String {
+        // The whole defect: an identifier-safe spelling, used as the key.
+        id.as_str()
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect()
+    }
+}
+
+/// A checkpoint key compared without its trailing spaces.
+///
+/// A `CHAR(n)` key column, which stores the id right-padded and compares it
+/// padded, a `PAD SPACE` collation, or an adapter that trims the id "to be
+/// safe" before binding it. `van_stock` and `van_stock ` are two valid ids
+/// (VT-35 trims nothing), and this store files both under one row.
+pub(crate) struct TrailingSpaceKeyStore;
+
+impl Defect for TrailingSpaceKeyStore {
+    const NAME: &'static str = "TrailingSpaceKeyStore";
+
+    fn checkpoint_key(id: &ProjectionId) -> String {
+        // The whole defect: the padding a `CHAR(n)` comparison ignores.
+        id.as_str().trim_end_matches(' ').to_owned()
+    }
+}
+
+/// A checkpoint key column that compares canonically equivalent strings equal.
+///
+/// A nondeterministic ICU collation on `projection_id`, or an adapter that
+/// normalises the id to NFC before binding it. `café` spelled with U+00E9 and
+/// `café` spelled `e` + U+0301 render alike and are two valid ids, because
+/// VT-35 normalises nothing. The mapping is the one composition PS-39's pair
+/// needs, written by hand: a full normaliser would be a new dependency to model
+/// a defect one `replace` models.
+pub(crate) struct CanonicalEquivalenceKeyStore;
+
+impl Defect for CanonicalEquivalenceKeyStore {
+    const NAME: &'static str = "CanonicalEquivalenceKeyStore";
+
+    fn checkpoint_key(id: &ProjectionId) -> String {
+        // The whole defect: `e` + U+0301 composed to U+00E9, as NFC would.
+        id.as_str().replace("e\u{301}", "\u{e9}")
     }
 }

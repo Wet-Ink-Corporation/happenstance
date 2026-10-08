@@ -140,7 +140,7 @@ against `happenstance-cloudflare`, through an experiment crate or a tag-count pa
 on it, or it freezes `&[Event]` by a record that says why the measurement is not owed.
 
 ES-7's freeze is decided in the same phase, and the ledger groups the two clauses
-(`runbook/ledgers.md:162`). **Owner now: phase 17.**
+(`runbook/ledgers.md:172-173`). **Owner now: phase 17.**
 
 ## Closed — 2026-10-07
 

@@ -58,15 +58,19 @@ gave to this phase.
       handed an `EventId` and never a `SequencePosition` — because
       `apply`'s arguments are that clause's surface, and phase 13, which owns the
       rule, runs too late to shape a signature this phase decides.~~
-- [ ] **The breaking open questions phase 16 listed**, each answered in its own
+- [x] **The breaking open questions phase 16 listed**, each answered in its own
       record or closed with a reason. Phase 16 classified every candidate the
       split named (ADR-0066), and these are the ones whose answer can change a
       published signature, or that 1.0 cannot promise around without an answer.
       In `.kb/open-questions/`:
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
-      - `projection-batch-sql-seam-statement-type` (ADR-0084 `proposed`, #44; Neon's `push` narrowed) — the statement type a SQL
+        Answered by [ADR-0083](../../.kb/decisions/0083-codec-stays-unsealed-through-1-x.md),
+        accepted by the owner on 2026-10-08.
+      - `projection-batch-sql-seam-statement-type` (ADR-0084 accepted, #44; Neon's `push` narrowed) — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
-      - `projection-id-is-unvalidated`, **with SY-31's reserved `sync/` prefix**:
+        Answered by [ADR-0084](../../.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md),
+        accepted by the owner on 2026-10-08.
+      - `projection-id-is-unvalidated` (closed by ADR-0082, lane L10), **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
         the sync runner's reservation is decided here, not at phase 13.
       - ~~`es-17-two-adapter-measurement-is-unscheduled` — take ADR-0055's restated
@@ -102,12 +106,12 @@ gave to this phase.
       `cloudflare-worker-feature-gate` was closed at phase 16: the crate has no
       features table to gate. And `adapter-version-lockstep-and-cf-32` was closed
       by ADR-0066's versioning section rather than sent on.
-- [ ] **ADR-0022 §9's reproduction** (ADR-0068). A store built on one runtime
+- [x] **ADR-0022 §9's reproduction** (ADR-0068; reproduced, ADR-0081 accepted 2026-10-08). A store built on one runtime
       and read after that runtime is gone, against both adapters that capture a
       runtime `Handle` at construction — `happenstance-sqlite`
       (`crates/happenstance-sqlite/src/event_store.rs:513`,
       `projection_store.rs:234`) and `happenstance-postgres`
-      (`crates/happenstance-postgres/src/event_store.rs:314`). About twenty lines,
+      (`crates/happenstance-postgres/src/event_store.rs:337`). About twenty lines,
       and they decide the classification: if the remedy changes what the existing
       `open` / `new` capture, or which variant a stranded read reports, it is a
       behaviour change on two published adapters and lands in `0.4.0`; if it is a
@@ -125,7 +129,7 @@ gave to this phase.
       phase 16.)
 - [ ] ~~**ADR-0069's total `QueryItem` constructor.**~~ Moved to
       [phase 17b](17b-after-the-window.md) by ADR-0072: additive.
-- [ ] **VT-6 for Postgres and Neon: mint-per-open, or not**
+- [x] **VT-6 for Postgres and Neon: mint-per-open, or not**
       (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`).
       Phase 13 closes the restore gap, but it runs after this window, and
       mint-per-open is the one remedy that changes behaviour on a published
@@ -134,6 +138,9 @@ gave to this phase.
       adapter takes mint-per-open, the session log says so and phase 13 builds
       only the additive arms; mint-per-open after this window is a post-1.0
       major.
+      Answered by [ADR-0086](../../.kb/decisions/0086-postgres-and-neon-keep-mint-once.md),
+      accepted by the owner on 2026-10-08: neither adapter mints per open, so phase 13
+      builds only the additive arms.
 - [x] **Execute ADR-0057 — the testkit version key is dropped.** Done in lane L4:
       the workspace entry for `happenstance-testkit` carries no `version`, and
       `cargo xtask package-check` refuses a publishable crate whose testkit
@@ -159,7 +166,7 @@ gave to this phase.
       under it. The item read: ~~removed, or declared outside semver in the crate
       root and on ADR-0066's exemption list. A stranger can turn it on, so 1.0
       either promises it or says in writing that it does not.~~
-- [ ] **The ES-11 record, settling ES-11 and ES-12 together.** It supersedes
+- [x] **The ES-11 record, settling ES-11 and ES-12 together** (ADR-0087, accepted 2026-10-08: the fence held, 0 red of 1,500). It supersedes
       ADR-0061's choice to keep ES-11 `[PROVISIONAL]` — a reasonable choice while
       `happenstance-neon` was held out of the release set, and not one that
       survives Neon being one of 1.0's nine crates. It decides whether Neon's
@@ -167,7 +174,7 @@ gave to this phase.
       a one-shot-HTTP shape that satisfies ES-11 exists; ES-12 is frozen on the
       same axis, with `query_items_share_one_snapshot` red on a one-shot-HTTP
       adapter as its falsifier (fired: CI run 37504851570). When it lands, the owner re-adds `conformance against a live Neon endpoint` to the `Protect main` ruleset (id 22926481) and confirms it is required again (`wi-0f1291`).
-- [ ] **A `workerd` sibling job** in `.github/workflows/ci.yml`, shaped like
+- [x] **A `workerd` sibling job** in `.github/workflows/ci.yml`, shaped like
       `live-postgres` and `live-neon`: a sibling of `gate`, never a step inside it
       (`.kb/open-questions/no-workerd-class-runner-in-the-gate.md`). ADR-0066 makes
       `happenstance-cloudflare`'s 1.0 claim *conformance on the real runtime*, and
@@ -179,7 +186,7 @@ gave to this phase.
       `MAX_QUERY_PARAMETERS_PER_STATEMENT`, measured so far only against the shim.
 - [ ] ~~**A minimal-versions CI job.**~~ Moved to
       [phase 17b](17b-after-the-window.md) by ADR-0072: it changes no surface.
-- [ ] **The clause follow-ups phase 16 gave this phase.** Each `freeze-by-17` row
+- [x] **The clause follow-ups phase 16 gave this phase.** Each `freeze-by-17` row
       in [the 1.0 dispositions](../ledgers.md), and what freezes it:
       - **VT-10** — the foreign-identity spike above, with SQLite implementing
         `IngestStore` beside `append`. It must not foreclose SY-14's
@@ -264,22 +271,22 @@ tool passed over, and the renamed `#[doc(hidden)]` emitters. The tool does repor
       any clause, and anticipated a renewal that phase 16 did not give.)*
 - [x] The foreign-identity question is answered against a compiling spike
       (ADR-0073).
-- [ ] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
+- [x] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
       `happenstance-postgres`, and a record classifies its remedy as additive or
       breaking; a breaking remedy has landed.
 - [x] The guard-plan `LIST SUBQUERY` assertion (ADR-0068) is in the tree.
       (`QueryItem`'s total constructor moved to 17b with ADR-0072.)
 - [x] The `apply` record is accepted (ADR-0074).
-- [ ] Every open question phase 16 classified as breaking is answered or closed.
+- [x] Every open question phase 16 classified as breaking is answered or closed.
 - [ ] `0.4.0` is released and its semver findings are fully traced.
 - [x] The `workerd` job exists, has been watched failing once, and the SQL-text
       wall and partition widths are recorded as measured on `workerd`, locally
       and on a deployed Durable Object. (The minimal-versions job moved to 17b
       with ADR-0072.)
-- [ ] Every `freeze-by-17` clause in [`ledgers.md`](../ledgers.md)'s 1.0
+- [x] Every `freeze-by-17` clause in [`ledgers.md`](../ledgers.md)'s 1.0
       dispositions is `[FROZEN]`, or re-dispositioned by a record that says why.
       VT-14, VT-30 and ES-7 were re-dispositioned to `freeze-by-17b` by ADR-0072.
-- [ ] The specification is reconciled against this phase's changes (session
+- [x] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
 
 **Estimate.** ~~5–8 days.~~ **25–30 days**, re-estimated at the phase's start
@@ -679,6 +686,28 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   reset, or a `404` carrying the same words, is still a failure. Red first: the new
   case failed against the old matcher (1 of 6), then 6 of 6. Verified: vitest on
   `test/platform-miss.test.ts`, `spec-trace`, `lints`, `lint-kb`. No Rust changed.
+- 2026-10-07 — **L9: ADR-0022 §9 is reproduced, and its remedy is breaking**, on
+  `lane/p17-runtime-seam`, PR open and **not to be merged until the owner accepts
+  [ADR-0081](../../.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md)**,
+  which is `proposed`. A store built on one runtime and driven from another after
+  the first is dropped reported `Worker(JoinError::Cancelled)`, never `NoRuntime`:
+  a `happenstance-sqlite` read and every `SqliteProjectionStore` method, and every
+  `PostgresEventStore` operation (a read hung while the capturing runtime was alive
+  but undriven). Remedy B prefers `Handle::try_current()` and falls back to the
+  captured handle at four sites; no signature changes, so it is a behaviour change
+  on two published crates and rides `0.4.0`. ADR-0068's falsifier did not fire.
+  **Not fixed by B:** a pooled `sqlx` connection opened on a dropped runtime ends in
+  `PoolTimedOut` or hangs; ADR-0081 makes it a documented obligation and asks the
+  owner whether that is enough. The review added one disclosure: on Postgres the
+  calling runtime now needs tokio's time and I/O drivers. Tests:
+  `tests/runtime_seam.rs` in both crates (Postgres's `#[ignore]` and live, run by a
+  new list/run/assert trio in `live-postgres`). Verified: temper gate green
+  (`fbf30a6067548135`, before the merge of `main` and the disclosure); sqlite
+  `runtime_seam` 4/4, `concurrency` 10/10, `read` 20/20; Postgres live
+  `runtime_seam` 4/4 six times and `postgres_conformance` 108/108;
+  `spec-trace`, `lints`, `lint-constitution`, `lint-kb`. `temper:rust-reviewer`
+  found no blocker or major on this tree, reported in prose, because its verdict
+  JSON binds to the main checkout's tree rather than this worktree.
 - 2026-10-07 — **PR #47 merged as `12540a7`** (the deployed `workerd` leg retries
   a Durable Object reset). **Neon N2: `NeonWriteBatch::push` is narrowed**, on
   `lane/p17-neon-push`, by the owner's default that it rides `0.4.0`.
@@ -709,6 +738,47 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
       shim.
   - **Not verified.** The probe's `push_raw_sql` path against a live endpoint
     in this session. CI's `live-neon` runs it.
+- 2026-10-07 — **PR #49 merged as `4278816`** (Neon's `push` narrowed). **L8: the
+  ES-11 fence works on Neon, and ADR-0087 is `proposed`**, on
+  `lane/p17-adr-0087-es11`. Not merged until the owner decides it.
+  - **The spike.** Draft PR #50, `lane/p17-es11-fence`, head `1177cfc`. It is
+    never merged; the branch is kept.
+    - It adds a required `SqlTransport::reads_settled()`, and a std-only
+      `ReadLedger` whose release comes from the transport's own I/O, so the
+      rule's single task cannot deadlock it.
+    - `NeonEventStore::append` waits once for every read its transport
+      dispatched earlier.
+    - Offline tests reproduce the race over a hand-polled fake transport. A1 was
+      red before the wait.
+  - **The rule, and its amendment.** Pre-registered in
+    `experiments/es-11-fence/README.md` before any run, then amended before the
+    first counted run. The review's finding W1 was that a frontier-lagged
+    `before` scored as a false falsifier. The first attempt, run 37591126575,
+    is a pilot excluded by name, and the README says who saw its rows.
+  - **Measured.** CI's live-neon job, run 37594816236, attempts 1–3:
+    - baseline: 172 red of 1,500 (92 in es11, 80 in es12), all C2, Clopper–Pearson
+      95% 9.9–13.2%;
+    - fence: 0 red of 1,500, rule-of-three 95% bound 0.20%;
+    - 0 anchors, 0 errors;
+    - both racing rules green in all three attempts, and the live suite 109/109
+      each time.
+  - **Owner decisions** (ADR-0087 §11):
+    - D1: the fence shape, a semver-major break of `SqlTransport`;
+    - D2: publish the ledger types;
+    - D6: freeze ES-11/ES-12 when the fence lands on `main`;
+    - D8: restore `wi-0f1291`'s required check when the fence lands, not when
+      the record does;
+    - D10: mark ADR-0061 superseded on acceptance;
+    - D11: correct "Postgres gets both halves";
+    - D12: land the break in `0.4.0`.
+  - **Not measured.**
+    - A wasm32 `fetch` transport; reasoning only.
+    - The cross-handle and cross-process case.
+    - Contention under the fence.
+  - **Verified.** `spec-trace`, `lints`, `lint-kb` (xtask rebuilt in this
+    worktree first), and `run.sh tally` regenerating the committed tally byte for
+    byte. The spike: temper gate `--no-cache` green, two independent reviews (the
+    first requested the W1–W7 fixes), `cargo xtask wasm`.
 - 2026-10-07 — **The `0.4.0` trace table is drafted, not released**, on
   `lane/p17-trace-table`, at the end of `CHANGELOG.md`'s `[Unreleased]`.
   - **The tool run.** `cargo semver-checks check-release --workspace
@@ -733,30 +803,86 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   - **Every row has a decision.** Four `proposed` records are listed as pending
     (ADR-0081, 0082, 0084, 0087). The release box stays open: nothing is
     published or tagged.
-- 2026-10-08 — **The exit pass, on `151f5c8`: no exit criterion moves.** All
-  five open criteria wait on the owner.
-  - **§9.** ADR-0022 §9 is reproduced and its remedy classified breaking; the
-    remedy lands in #48 once ADR-0081 is accepted.
-  - **The breaking open questions.** Each is answered by a record: ADR-0082 in
-    #53, and ADR-0083, 0084 and 0086 in #43, #44 and #45. Only ADR-0082 is
-    accepted, and it is not on `main`.
-  - **`0.4.0`.** Not released. The trace table is drafted in `[Unreleased]`
-    (#52), with four rows pending their records.
-  - **`freeze-by-17`.** ES-11 and ES-12 wait on ADR-0087 (#51), whose fence
-    held 0 red of 1,500 on the live endpoint against 172 of 1,500 unfenced.
-  - **The specification.** `spec-trace` passes on `main`; reconciling it
-    against the unmerged lanes follows their merges.
-  - **The full gate.** `cargo xtask ci` on `151f5c8` failed twice at the test
-    step, on `happenstance-testkit`'s
-    `mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim`.
-    `RacingProbeStore` passed `exactly_one_of_n_contenders_commits`. The test
-    passes 5 of 5 alone and fails under the whole workspace's load; it also went
-    red once in CI's MSRV job on #52. Making its rendezvous deterministic is a
-    test rewrite, which is the owner's (H-16); the `RACERS` table is untouched.
-    The steps after the test step, run one by one, are green: `wasm`,
-    `spec-trace`, `lints`, `lint-kb`, `lint-constitution`, `package-check`, and
-    `cargo doc` under `-D warnings`. `cargo deny` is not installed on this host.
-  - **The deployed `workerd` leg** met a new answer on #51:
-    `two_handles_observe_each_others_appends` got a Cloudflare HTML `500` that
-    the exact-match retry does not know. Only its first line was logged.
-    Proposed: print the page's `<title>` on a failure, then classify it.
+- 2026-10-07 — **PR #52 merged as `151f5c8`** (the `0.4.0` trace table, drafted).
+  **L10: `ProjectionId` is validated (ADR-0082, `accepted`)**, on
+  `lane/p17-projection-id`. The PR stays open, and is not to merge until the owner
+  approves the one lint exception below (H-05).
+  - **What `ProjectionId::new` does now.**
+    - It returns `Result<ProjectionId, InvalidProjectionId>`.
+    - It refuses VT-14's set: empty, a `Cc` control, or a bidirectional control.
+      Refusals are reported left to right, in the order `validate::check` walks.
+    - It refuses more than 255 bytes (`MAX_PROJECTION_ID_LEN`).
+    - It refuses the reserved prefixes `happenstance/` and `sync/`, compared as
+      exact bytes (`wi-2155ac`).
+    - An accepted id is kept byte for byte.
+  - **New constructors and conversions.**
+    - `const fn from_static` goes through the same validator, so a literal id is
+      checked at compile time.
+    - `sync_watermark(StoreId)` is the only way to a `sync/` id (`wi-279dbb`).
+    - There is no `From<&str>` or `From<String>`; `TryFrom` and `FromStr`
+      validate.
+  - **Spec.** VT-35 `[FROZEN]`, and PS-39 `[PROVISIONAL]`: the testkit rule
+    `projection_ids_round_trip_by_bytes`, seven id pairs and six new mutants
+    (case, truncation, `latin1`, slug, trailing space, canonical equivalence; the
+    last two added in review).
+  - **The lint exception (H-05).** `from_static`'s const-context `panic!` needs
+    `#[expect(clippy::panic)]`, the form the temper hook offers. `event.rs` has the
+    same panic without the attribute.
+  - **Records.** `projection-id-is-unvalidated` is closed. The CHANGELOG's
+    BREAKING entry carries a SQL recipe for checkpoint rows stranded under a
+    now-invalid id (option A).
+  - **Merging `main`.** Five conflicts resolved by hand. The clause counts are
+    now 205 IDs: 154 frozen, 32 provisional, 12 deferred.
+  - **Verified.**
+    - Temper gate green, uncached, on the merged tree (`093568961dabf253`, after
+      review). Two independent reviews: the first requested F1–F8 (the major one:
+      PS-39 tested no trim or normalisation), the second verified all eight and
+      found four citation slips (W1–W4), fixed here. Its remaining blocker is the
+      H-05 approval.
+    - `spec-trace`, `lints` and `lint-kb`.
+    - PS-39 on memory, SQLite and both Postgres stores, the last two against a
+      live 17.10.
+  - **Not verified.** Neon's PS-39 (CI runs it), and the wasm32 Durable Object
+    run on this host's Node 22.
+- 2026-10-08 — **The owner's decisions are enacted, and the exit pass is green.**
+  The owner decided four questions in a Weigh-In sitting (#55):
+  - accept ADR-0081, 0083, 0084 and 0086;
+  - approve the `#[expect]` on `ProjectionId::from_static`;
+  - accept ADR-0087, scoped to one transport (D3);
+  - rewrite the racing mutants.
+  - **Merged, in order:**
+    - #53 (`5ff913d`): L10, `ProjectionId` validated (ADR-0082).
+    - #43 (`e4eecac`): ADR-0083 accepted.
+    - #55 (`d1bd3c9`): the decision intake.
+    - #44 (`344583f`): ADR-0084 accepted.
+    - #45 (`5e01958`): ADR-0086 accepted.
+    - #48 (`00c7ebe`): L9, ADR-0081 accepted. Merging `main` broke its new test,
+      which still treated `ProjectionId::new` as infallible; the gate caught it.
+    - #51 (`6876f53`): ADR-0087 accepted, ADR-0061 superseded.
+    - #57 (`6411311`): the ES-11 fence lands, and ES-11 and ES-12 are frozen;
+      156 clauses are frozen and 30 provisional.
+    - #58 (`527dc08`): the racing mutants wait for a counted party. Before, 46
+      failures in 400 loaded runs; after, 0 in 600.
+  - **Spike #50** is closed unmerged, as planned.
+  - **Every open question each record answered** is closed as superseded.
+  - **The full gate.** `cargo xtask ci` on `527dc08` passes: *all checks
+    passed*. The racing-mutant test, red twice there before #58, is green
+    under the whole suite. Five optional steps did not run because their
+    tools are not on this host: `cargo hack` (two), `cargo deny`, and the
+    two nightly docs.rs builds.
+  - **Exit criteria ticked:**
+    - ADR-0022 §9 (the remedy landed in #48);
+    - the breaking open questions (each answered by an accepted record);
+    - the `freeze-by-17` clauses (no row remains);
+    - the specification reconciled (`spec-trace` passes on `527dc08`).
+  - **Boxes ticked:**
+    - the breaking open questions;
+    - the `workerd` sibling job (its exit criterion was already met);
+    - the clause follow-ups (VT-10, ES-11 and ES-12 are all frozen).
+  - **One exit criterion is open:** `0.4.0` released. The trace table carries
+    one pending row, ADR-0084's Postgres parameter-count check, which is
+    accepted and not yet built.
+  - **The owner's, outstanding:**
+    - re-add `conformance against a live Neon endpoint` to the `Protect main`
+      ruleset now that the fence is on `main` (ADR-0087 D8, `wi-0f1291`);
+    - the `0.4.0` release itself.

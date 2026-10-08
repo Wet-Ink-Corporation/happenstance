@@ -159,7 +159,7 @@ struct Shreds {
 impl Shreds {
     fn new(panic_on: Option<&str>) -> Self {
         Self {
-            id: ProjectionId::new("shreds"),
+            id: ProjectionId::from_static("shreds"),
             scope: Tags::empty(),
             counts: BTreeMap::new(),
             panic_on: panic_on.map(ToOwned::to_owned),
@@ -391,7 +391,7 @@ fn no_fan_out_runner_catches_a_panic() {
         );
         assert_eq!(
             models
-                .checkpoint(&ProjectionId::new("shreds"))
+                .checkpoint(&ProjectionId::from_static("shreds"))
                 .await
                 .unwrap(),
             Checkpoint::NeverRun,

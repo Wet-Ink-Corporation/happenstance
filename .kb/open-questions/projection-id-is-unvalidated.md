@@ -2,12 +2,15 @@
 id: kb-open-question-projection-id-unvalidated-001
 title: ProjectionId::new is infallible, and that was never decided
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0082
 authority_tier: note
 summary: >-
   ProjectionId::new is infallible and unvalidated: the empty string succeeds and becomes a checkpoint row's primary key. ADR-0015 validated every other identifier in the crate and declined to validate this one, for two stated reasons — there is no conformance suite for ProjectionStore, which is provisional and freezes at phase 6, and calling the type 'deliberately opaque' in its docstring would be false, because there was never a decision, only an omission. The docstring says instead that the question is open and names its owner. What is not decided is whether a projection id is validated at all, and if so against what: the identifier rules ADR-0015 applies to EventType and Tag are about wire safety and byte equality, and a checkpoint key's constraints come from the stores that persist it. Forced by phase 6, the ProjectionStore freeze, after which the type is on a frozen port. Settled in practice by the first projection store whose backing table rejects a key the constructor accepts.
+  Resolved 2026-10-07 by kb-decision-0082: ProjectionId::new returns Result and refuses VT-14's set, more than 255 bytes (MAX_PROJECTION_ID_LEN), and the reserved prefixes happenstance/ and sync/ matched as exact bytes; a const from_static enforces the same rules, ProjectionId::sync_watermark(StoreId) is the only constructor of a sync/ id, and no infallible conversion remains. VT-35 is minted FROZEN and PS-39, a store keys a checkpoint on the id's exact bytes, PROVISIONAL.
 depends_on: []
 related:
+  - kb-decision-0082
   - kb-decision-0015
   - kb-decision-0007
   - kb-open-question-projection-batch-no-apply-001
@@ -16,7 +19,7 @@ source_paths:
   - references/adr/0015-validated-identifiers-and-store-limits.md
   - crates/happenstance-core/src/projection.rs
   - RUNBOOK.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-07
 ---
 
 # ProjectionId::new is infallible, and that was never decided
@@ -100,7 +103,7 @@ character the store's collation treats specially.
 **Classification: breaking-if-answered → phase 17, with SY-31's reserved `sync/` prefix**
 (`runbook/phases/17-breaking-window.md`; `kb-decision-0066`). The forcing event, the
 `ProjectionStore` freeze, passed at `kb-decision-0063` without an answer. `ProjectionId::new` is
-still infallible (`crates/happenstance-core/src/projection.rs:157`) on a frozen port type. A
+still infallible (`crates/happenstance-core/src/projection.rs:209`) on a frozen port type. A
 validating constructor that mirrors `EventType` and `Tag` returns `Result`, which is a break. So
 is refusing ids that are valid today, which is what reserving `sync/` for the sync runner's
 watermark would do. That is why SY-31's reservation limb is decided here and not at phase 13.
@@ -108,3 +111,27 @@ watermark would do. That is why SY-31's reservation limb is decided here and not
 Keeping `new` infallible and recording *deliberately opaque*, with any constraint left to the
 adapter boundary as a capacity limit (ADR-0015 §6), closes the atom with no break. **Owner now:
 phase 17.**
+
+## Closed — 2026-10-07
+
+**Superseded by `kb-decision-0082`** (phase 17, lane L10), which validates the type. Both of
+ADR-0015 §10's reasons for declining are gone: the projection suite exists and can fail a rule
+about the id, and the record replaces the only constructor rather than adding a second one beside
+it, so defect D2 does not reopen.
+
+- **Sub-question 1 — a validated constructor, or validation at the adapter boundary?** A validated
+  constructor. `ProjectionId::new` returns `Result<ProjectionId, InvalidProjectionId>`;
+  `from_static` is its `const` twin through one validator; there is no `From<&str>`, no
+  `From<String>` and no unchecked constructor (VT-35).
+- **Sub-question 2 — a validity invariant or a capacity limit?** A validity invariant, enforced by
+  the constructor: VT-14's character rules, a 255-byte bound (`MAX_PROJECTION_ID_LEN`), and the
+  reserved prefixes `happenstance/` and `sync/`, matched as exact bytes (`wi-2155ac`). The
+  store's half is PS-39, a conformance rule: a store keys a checkpoint on the id's exact bytes, so
+  a key column that folds case, truncates or cannot hold UTF-8 fails it.
+- **Sub-question 3 — a fixture-level declaration, as CF-40 has?** No. One validator and one bound
+  serve every store; PS-39 is `[PROVISIONAL]` until live Neon has run it, and its falsifier is a
+  store whose key column cannot hold a 255-byte UTF-8 id byte-faithfully.
+
+SY-31's reservation limb is settled with it: `ProjectionId::sync_watermark(StoreId)` is the only
+way to a `sync/` id (`wi-279dbb`). `ProjectionId::new` is now fallible at
+`crates/happenstance-core/src/projection.rs:209`.

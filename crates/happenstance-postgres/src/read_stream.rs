@@ -160,10 +160,10 @@ type Fetched = (Box<PgCursor>, Result<Vec<PgRow>, sqlx::Error>);
 #[derive(Debug)]
 struct CursorPlan {
     pool: PgPool,
-    /// The runtime captured by the store that produced this plan.
+    /// The runtime captured by the store that produced this plan: the fallback.
     ///
-    /// Carried rather than looked up, for the reason the store's own field
-    /// documents: a read may be polled on a thread with no runtime at all --
+    /// Carried for when the poll's own runtime cannot be looked up, which the
+    /// store's field documents: a read may be polled on a thread with none --
     /// the conformance suite's concurrency family does exactly that -- and
     /// `Handle::try_current` there finds nothing.
     runtime: Option<Handle>,
@@ -379,11 +379,11 @@ impl Stream for PgReadStream {
                     // `spawn` needs a runtime, and `read` may legally be called
                     // outside one. `NoRuntime` is the honest answer there rather
                     // than a panic from inside a library.
-                    // The store's captured handle first, then the caller's own,
-                    // and only then an error. A read polled from a raw thread
-                    // has no current runtime, which is not hypothetical: the
-                    // concurrency family's contenders are exactly that.
-                    let handle = plan.runtime.clone().or_else(|| Handle::try_current().ok());
+                    // The caller's own runtime first (ADR-0081, on ADR-0022 §9),
+                    // then the store's captured handle, and only then an error.
+                    // A read polled from a raw thread has no current runtime:
+                    // the concurrency family's contenders are exactly that.
+                    let handle = Handle::try_current().ok().or_else(|| plan.runtime.clone());
                     let Some(handle) = handle else {
                         this.state = ReadState::Done;
                         return Poll::Ready(Some(Err(PostgresEventStoreError::NoRuntime)));
@@ -466,8 +466,8 @@ async fn open_cursor(plan: CursorPlan) -> Opened {
     // outside a runtime — and a store built outside one is ordinary, not exotic.
     //
     // Recording the store's handle alone was a defect with a specific victim.
-    // The poll site computes `plan.runtime.or_else(Handle::try_current)` and
-    // spawns on the result, so the spawn succeeds on the caller's runtime while
+    // The poll site may find its runtime through `Handle::try_current` and
+    // spawn on it, so the spawn succeeds on the caller's runtime while
     // the cursor records `None`. `Drop` then falls back to `Handle::try_current`
     // a second time — on whatever thread the drop happens on, which for the
     // concurrency family is a raw OS thread with no runtime at all — finds

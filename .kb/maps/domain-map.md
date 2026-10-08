@@ -511,7 +511,8 @@ shipped adapter measures no discriminating steady-state cost, and the residual m
 `kb-decision-0024`, whose own successor question, `kb-open-question-off-poll-visibility-defect-001`,
 carries the residual: an off-poll adapter has no suspension point a poll-based schedule can reach),
 `kb-open-question-es-38-and-gap-read-unowned-001`,
-`kb-open-question-projection-id-unvalidated-001`,
+`kb-open-question-projection-id-unvalidated-001` (**superseded** 2026-10-07 by
+`kb-decision-0082`: `ProjectionId` is validated, and `sync/` and `happenstance/` are reserved),
 `kb-open-question-cf-40-ownership-001`,
 `kb-open-question-dcb-no-published-format-001`,
 `kb-open-question-human-readable-encoding-limits-001`,
@@ -559,7 +560,7 @@ test never actually restores or clones a store, so VT-6's `[PROVISIONAL]` marker
 same-process assertion rather than the cross-instance one its text describes. **Superseded**
 2026-09-29: every append re-reads the persisted identity and refuses a stale handle
 (`f719b2a`); the gap beside it is the successor entry below),
-`kb-open-question-postgres-neon-store-id-no-restore-001` (added 2026-09-29 — `happenstance-postgres`
+`kb-open-question-postgres-neon-store-id-no-restore-001` (**superseded** 2026-10-08 by `kb-decision-0086`; added 2026-09-29 — `happenstance-postgres`
 and `happenstance-neon` mint their `StoreId` once and take neither branch VT-6 requires of mint-once,
 so a restore or a Neon branch re-issues identities; owned by phase 13),
 `kb-open-question-query-plan-parameter-chunking-001` (added 2026-09-04 — the 30,000-parameter
@@ -570,7 +571,7 @@ conservative enough" branch is refuted by measurement — 400 items at `MAX_TAGS
 51,200 bound parameters against SQLite's 32,766 ceiling — and the chunking mechanism now takes a
 fourth `per_arm_extra` parameter this question did not describe; `Selectivity::read_for`'s own
 unpartitioned failure mode, found in the same pass, is the residual),
-`kb-open-question-adr-0022-falsifiers-fired-001` (added 2026-09-04 — two of ADR-0022's own three
+`kb-open-question-adr-0022-falsifiers-fired-001` (**superseded** 2026-10-08 by `kb-decision-0081`; added 2026-09-04 — two of ADR-0022's own three
 named re-open conditions have fired and the third cannot fire as written, and nobody has yet
 decided whether the decision is superseded, re-opened, or ratified as still correct with the
 firings recorded against it. Amended 2026-09-07 with the shipped-adapter remeasurement's sharper
@@ -630,7 +631,7 @@ compensation-based atomicity, not every counter-assigning store),
 `kb-open-question-probe-read-through-signature-001` (added 2026-09-07 — whether
 `ProjectionProbe::probe_read_through` moves to `&mut Self::Batch` / async / fallible before
 phase 10, corroborating ADR-0036's part-2-unmet finding with a second causal reading),
-`kb-open-question-projection-batch-sql-statement-type-001` (added 2026-09-07 — whether
+`kb-open-question-projection-batch-sql-statement-type-001` (**superseded** 2026-10-08 by `kb-decision-0084`; added 2026-09-07 — whether
 `SqliteBatch::push`'s landed `&'static str` narrowing is the seam's final shape or a minted
 `Statement` newtype follows once `ProjectionStore` freezes),
 `kb-open-question-projection-runner-chunk-observation-001` (added 2026-09-07 — the chunk type and
@@ -659,7 +660,8 @@ projection port ADR-0047's fix does not reach),
 asynchronous-driver sufficiency condition and recorded that `happenstance-neon` does not satisfy it;
 open is whether any one-shot-HTTP shape can, since the transport offers exactly one ordering
 primitive and nothing else in a pooled-proxy path orders one backend's snapshot against another's
-commit).
+commit; **superseded** 2026-10-08 by `kb-decision-0087`: a read-settlement fence on the transport
+meets it, and ES-11 and ES-12 are frozen).
 
 ## The typed layer: decision models, codecs, and payload evolution
 
@@ -771,7 +773,7 @@ new ceremony measurement strengthens instead),
 `kb-open-question-tuple-boundary-event-type-001` (added 2026-09-07 — `composition.rs`'s
 macro-generated tuple impls bind every member to the first member's `Event` type, unwritten in
 ADR-0020's decision text or the signed-off design),
-`kb-open-question-seal-the-codec-001` (added 2026-09-07 — whether `Codec` is later sealed now that
+`kb-open-question-seal-the-codec-001` (**superseded** 2026-10-08 by `kb-decision-0083`; added 2026-09-07 — whether `Codec` is later sealed now that
 `0.2.0` is live and the window to do so for free has closed; bundles the `UnknownTag`-split and
 `Boundary::absorb` sub-questions ADR-0049 left undone).
 

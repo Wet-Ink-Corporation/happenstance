@@ -1003,7 +1003,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 47] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 63] = [
     // ---- VT: value types -------------------------------------------------
     (
         "VT-5",
@@ -1126,6 +1126,84 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 47] = [
         "owned_into_iterator_yields_canonical_order",
         Unresolvable::Elsewhere("crates/happenstance-core/src/tag.rs"),
     ),
+    // VT-35's unit tests sit beside the type they pin, as VT-32's and VT-33's do,
+    // and its property test is an integration test of the contract crate.
+    (
+        "VT-35",
+        "projection_id_refuses_what_vt_14_refuses",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_accepts_the_format_characters_scripts_need",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_refuses_the_reserved_prefixes_by_exact_bytes",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_accepts_the_neighbours_of_the_reserved_prefixes",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_from_static_and_new_agree",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_from_static_rejects_a_reserved_prefix",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_from_static_rejects_a_bidirectional_control",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_from_static_rejects_a_c1_control",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_is_const_constructible",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "sync_watermark_is_reserved_and_otherwise_valid",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "sync_watermarks_of_distinct_peers_are_distinct",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "a_map_keyed_by_projection_id_is_probed_by_str",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "projection_id_conversions_all_validate",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "invalid_projection_id_messages_carry_their_context",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-35",
+        "new_agrees_with_a_char_level_oracle",
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/projection_id.rs"),
+    ),
+    ("VT-35", "compile_fail", Unresolvable::NotARuleName),
     // ---- WF: the wire format ---------------------------------------------
     (
         "WF-12",
@@ -3319,7 +3397,7 @@ mod tests {
 
     /// The only test that touches the real tree, and it touches it through the
     /// existing helpers rather than around them. `ES-1` and `VT-1` are declared
-    /// at `spec/SPECIFICATION.md:2559` and `:626`.
+    /// at `spec/SPECIFICATION.md:2629` and `:626`.
     #[test]
     fn clause_ids_reads_the_pinned_specification() {
         let ids = clause_ids(&workspace_root().unwrap())

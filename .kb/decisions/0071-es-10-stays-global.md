@@ -72,10 +72,10 @@ supplies that argument.
 **ES-10 stays global and `[FROZEN]`.** The premise is now frozen at every seam it touches:
 
 - `ProjectionStore::commit` takes exactly one `position: SequencePosition`
-  (`crates/happenstance-core/src/projection.rs:506-512`).
+  (`crates/happenstance-core/src/projection.rs:829-835`).
 - `Checkpoint::Live` and `Checkpoint::Rebuilding` each carry one `through: SequencePosition`
-  (`projection.rs:193-206`).
-- PS-17 fixes a checkpoint per `(store, ProjectionId)` (`spec/SPECIFICATION.md:5908-5910`), and
+  (`projection.rs:516-529`).
+- PS-17 fixes a checkpoint per `(store, ProjectionId)` (`spec/SPECIFICATION.md:5978-5980`), and
   PS-20 resumes strictly after that one position (`:5702-5705`). Both are `[FROZEN]`.
 - ADR-0063 put the whole port under semver, `Checkpoint` included
   (`references/adr/0063-the-projection-port-is-frozen.md:25-37`).
@@ -87,7 +87,7 @@ Three reasons stand without citing ES-10.
 
 1. **ES-30's reason is about cost, not visibility.** `head()` is unscoped because "a narrow
    projection's problem is that it cannot advance past events it examined and did not match; the
-   global head is what lets it checkpoint past them" (`spec/SPECIFICATION.md:4410-4413`). That
+   global head is what lets it checkpoint past them" (`spec/SPECIFICATION.md:4480-4483`). That
    sentence is about polling cost. It would be just as true under a per-boundary invariant, and it
    is what makes one global resume point the natural shape.
 2. **A per-boundary checkpoint is an open-ended set.** A projection reading one event type across
@@ -114,7 +114,7 @@ boundary-scoped, or that carries more than one position a runner resumes from. A
 `commit`, or as a set of positions in place of `through`, the change is breaking for the frozen
 port, and it would arrive through ADR-0063's own reopening condition
 (`references/adr/0063-the-projection-port-is-frozen.md:146-153`) and not as a quiet redesign.
-There is one semver subtlety. `Checkpoint` is `#[non_exhaustive]` (`projection.rs:183`), so a new
+There is one semver subtlety. `Checkpoint` is `#[non_exhaustive]` (`projection.rs:506`), so a new
 variant, or a new method with a default body, could arrive without a major version. If a
 boundary-scoped checkpoint arrived that way, it would fire this falsifier just as surely. What
 decides whether this record reopens is the checkpoint's shape, not the semver class of the change.
@@ -127,7 +127,7 @@ does not take them.
   one answers it first.
 - **Sub-question 3**: whether reopening ES-10 reopens `AppendCondition`'s boundary semantics.
   ADR-0013's own argument says a per-boundary invariant keeps the condition sound. ES-25 and ES-26
-  are built on ES-10 (`spec/SPECIFICATION.md:3013-3016`), though, so a reopening has to re-read
+  are built on ES-10 (`spec/SPECIFICATION.md:3083-3086`), though, so a reopening has to re-read
   them rather than assume they are unaffected.
 - **Sub-question 4**: a hybrid, with a per-boundary checkpoint plus a global watermark. Evaluating
   it on paper is free. Building it is the checkpoint-shape change above.

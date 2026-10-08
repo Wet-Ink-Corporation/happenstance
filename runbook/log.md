@@ -10,17 +10,31 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
-## 2026-10-08 — phase 17's exit pass: nothing moves, and the full gate is blocked
+## 2026-10-08 — the owner's decisions enacted; phase 17's exit pass is green
 
-*Committed on `lane/p17-exit-pass`, on `151f5c8`.* Phase 17.
+*Committed on `lane/p17-exit-pass`, on `527dc08`.* Phase 17.
 
-The five open exit criteria all wait on the owner's records (ADR-0081, 0083, 0084,
-0086, 0087) and on L10 (#53). `cargo xtask ci` on `main` failed twice on the
-testkit's racing-mutant test, which passes alone; its rewrite is the owner's. The
-gate's later steps, run one by one, are green.
+Nine PRs merged: #53, #43, #55, #44, #45, #48, #51, #57 and #58. They carry
+ADR-0081, 0083, 0084, 0086 and 0087 accepted, the ES-11 fence on `main`, ES-11
+and ES-12 frozen, and the racing mutants made deterministic. `cargo xtask ci` on
+`527dc08` passes. Every phase 17 exit criterion but the `0.4.0` release is met.
 
-**Verified.** The two full-gate runs, the steps after the tests one by one, and the
-exit criteria read against `main`.
+**Verified.** The full `cargo xtask ci` on `527dc08`. Optional steps whose tools
+are absent were skipped: `cargo hack`, `cargo deny`, nightly docs.rs.
+
+---
+
+## 2026-10-07 — `ProjectionId` is validated (ADR-0082)
+
+*Committed on `lane/p17-projection-id`, on `151f5c8`.* Phase 17, lane L10. PR open.
+
+PR #52 merged as `151f5c8`. `ProjectionId::new` is fallible and refuses VT-14's set,
+more than 255 bytes and the `happenstance/` and `sync/` prefixes; `sync_watermark`
+builds the only `sync/` id. BREAKING on `happenstance-core` and `happenstance`. Open
+for one H-05 approval: `#[expect(clippy::panic)]` on `from_static`.
+
+**Verified.** The temper gate on the merged tree, `spec-trace`, `lints`, `lint-kb`,
+PS-39 on memory, SQLite and live Postgres. The full `cargo xtask ci` was not run.
 
 ---
 
@@ -38,6 +52,21 @@ released.
 
 ---
 
+## 2026-10-07 — ES-11's fence works on Neon; ADR-0087 proposed (L8)
+
+*Committed on `lane/p17-adr-0087-es11`, on `4278816`.* Phase 17, lane L8. PR open.
+
+PR #49 merged as `4278816`. The spike (draft #50, never merged) fences an append
+behind its transport's earlier reads. On the live endpoint: baseline 172 red of
+1,500, fence 0 of 1,500, both racing rules green in three attempts, under a rule
+written before the first counted run. ADR-0087 supersedes ADR-0061 on acceptance;
+landing the fence breaks `SqlTransport` and is the owner's call.
+
+**Verified.** `spec-trace`, `lints`, `lint-kb`, the tally regenerated from the
+committed rows. The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — Neon's `push` narrowed (N2)
 
 *Committed on `lane/p17-neon-push`, on `12540a7`.* Phase 17.
@@ -50,6 +79,22 @@ default.
 **Verified.** The temper gate, `happenstance-neon`'s tests and `compile_fail`
 doctests, `spec-trace`, `lints`, `lint-kb`, `lint-constitution`, `cargo xtask wasm`
 (Node 24). The full `cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — ADR-0022 §9 reproduced; remedy B proposed (ADR-0081)
+
+*Committed on `lane/p17-runtime-seam`, on `3462bf8`.* Phase 17, lane L9. PR open.
+
+A store outliving the runtime it was built in reported `Worker(JoinError::Cancelled)`
+on `happenstance-sqlite` and `happenstance-postgres`. The stores now prefer the
+executing runtime; a behaviour change on two published crates, so ADR-0081 is
+`proposed` and the PR waits for the owner. The Postgres pool strand is not fixed and
+is documented.
+
+**Verified.** The temper gate, both crates' `runtime_seam` tests (Postgres live),
+Postgres conformance 108/108, `spec-trace`, `lints`, `lint-constitution`, `lint-kb`.
+The full `cargo xtask ci` was not run.
 
 ---
 

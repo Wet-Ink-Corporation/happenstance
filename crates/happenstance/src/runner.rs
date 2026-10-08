@@ -408,7 +408,7 @@ where
 ///
 /// let models = MemoryProjectionStore::new();
 /// let mut sold = Sold {
-///     id: ProjectionId::new("seats_sold"),
+///     id: ProjectionId::new("seats_sold")?,
 ///     scope: Tags::empty(),
 ///     sold: 0,
 /// };
