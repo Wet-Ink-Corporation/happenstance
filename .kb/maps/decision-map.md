@@ -482,7 +482,7 @@ map.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0025 | [`kb-decision-0025`](../decisions/0025-the-ladybug-projection-adapter.md) | The Ladybug projection adapter — a checkpoint node, raw Cypher, and a blocking driver | accepted | 11 | — |
 | ADR-0060 | [`kb-decision-0060`](../decisions/0060-ps-2s-axis-re-evaluated.md) | The projection port keeps its gate, and the reason ADR-0036 gave has expired | accepted | 11 | — |
-| ADR-0061 | [`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md) | ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none | accepted | 10 | — |
+| ADR-0061 | [`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md) | ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none | superseded | 10 | superseded by ADR-0087 |
 
 ## 2026-09-11 intake: the probe seam moves, the port freezes, and the measurement host gets declared conditions (ADR-0062, ADR-0063, ADR-0064)
 
@@ -646,6 +646,13 @@ A store built on one runtime and driven from another after the first is gone rep
 and fall back to the captured handle (remedy B), a behaviour change on `happenstance-sqlite` and
 `happenstance-postgres` for `0.4.0`. It partly supersedes ADR-0022 at §9's "prefer it", the
 ADR-0065 shape, and `kb-decision-0022`'s row carries the annotation.
+ADR-0087 is lane L8's, accepted by the owner on 2026-10-08: on a sweep against the
+live Neon endpoint (`experiments/es-11-fence/`; baseline 172 red of 1,500, fence 0 of 1,500, under a
+rule fixed before the first counted run), `happenstance-neon` meets ES-11 and ES-12 by holding an
+append until every read its transport dispatched earlier has been answered, through a required
+`SqlTransport::reads_settled`, scoped to one transport (D3). It supersedes `kb-decision-0061`,
+whose row and frontmatter now read `superseded`. The fence itself lands as a separate change, and
+ES-11 and ES-12 freeze with it.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -667,6 +674,7 @@ ADR-0065 shape, and `kb-decision-0022`'s row carries the annotation.
 | ADR-0084 | [`kb-decision-0084`](../decisions/0084-the-projection-batch-sql-seam-is-final.md) | The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once | accepted | 17 | supersedes `kb-open-question-projection-batch-sql-statement-type-001` on acceptance |
 | ADR-0086 | [`kb-decision-0086`](../decisions/0086-postgres-and-neon-keep-mint-once.md) | Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined | accepted | 17 | — |
 | ADR-0081 | [`kb-decision-0081`](../decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | A store hops onto the runtime it is called on, and the handle it captured is the fallback | accepted | 17 | partly supersedes `kb-decision-0022` (§9) |
+| ADR-0087 | [`kb-decision-0087`](../decisions/0087-es-11-is-met-on-one-shot-http-by-a-read-settlement-fence.md) | ES-11 is met on one-shot HTTP by a read-settlement fence | accepted | 17 | supersedes `kb-decision-0061` |
 
 ## Adding a row
 

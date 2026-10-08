@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-runtime-seam`, on `5ff913d` (`main`, where PR #53 merged). 2026-10-08.
+`lane/p17-adr-0087-es11`, on `00c7ebe` (`main`, where PR #48 merged). 2026-10-08.
 
 ## Where things are
 
@@ -62,7 +62,7 @@ An unattended overnight session (2026-10-07) is working the phase 17 queue.
 
 - Accept or decline the `proposed` records: ADR-0081 (this PR; remedy B, and whether
   the documented Postgres pool obligation is enough), ADR-0083 (#43), ADR-0084 (#44),
-  ADR-0086 (#45), ADR-0087 (#51).
+  ADR-0086 (#45), ADR-0087 (this PR; D1–D12 and D3 in its §11).
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; `ProjectionId`
   refuses the full ADR-0015 set with a generic reserved prefix; Neon's `push`

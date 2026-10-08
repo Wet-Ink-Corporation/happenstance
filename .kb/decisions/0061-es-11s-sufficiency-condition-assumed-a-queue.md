@@ -2,13 +2,13 @@
 id: kb-decision-0061
 title: ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none
 kind: decision
-status: accepted
+status: superseded
 authority_tier: decision
 adr_id: ADR-0061
 reversibility: medium
 phase: 10
 supersedes: null
-superseded_by: null
+superseded_by: kb-decision-0087
 summary: >-
   ES-11's [PROVISIONAL] marker named the adapter that would falsify it — the
   first one-shot-HTTP adapter that cannot meet this in one round trip — and
