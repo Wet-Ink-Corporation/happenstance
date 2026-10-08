@@ -29,7 +29,7 @@ last_reviewed: 2026-09-07
 `AppendCondition::after_opt` keeps its blanket scope: it rewrites the `after` field of
 *every* guard the builder currently holds, discarding whatever boundary `and_guard` had
 attached to each one. That is not incidental — VT-30 `[PROVISIONAL]`
-(`spec/SPECIFICATION.md:1911-1917`) says `after`/`after_opt` "MUST continue to apply the
+(`spec/SPECIFICATION.md:1981-1987`) says `after`/`after_opt` "MUST continue to apply the
 given boundary to every guard," and a `[PROVISIONAL]` clause binds until the thing that
 would falsify it happens (`spec/SPECIFICATION.md:207-210`). ADR-0012 §9 restates the same
 sentence in an accepted, immutable record (`references/adr/0012-append-shape-and-preconditions.md:604-608`).
@@ -66,7 +66,7 @@ option this decision exists to foreclose — contradicts a binding `[PROVISIONAL
 its restatement in `kb-decision-0012`, and it is precisely the edit the new pin tests are
 written to reject. **A hard rename** (`after_every_guard`, breaking) was declined in favour
 of the deprecated alias: it spends a break for a warning rather than a compile error, and
-the workspace's own precedent against deprecated arms (`CHANGELOG.md:1806-1809`) rested on
+the workspace's own precedent against deprecated arms (`CHANGELOG.md:1860-1863`) rested on
 a premise — nothing yet published — that has since expired, which argues for reconsidering
 the taste, not for repeating the refusal. **Reshaping `AppendCondition` so the blanket
 setter is unreachable after any guard is added** (a builder-state change making the

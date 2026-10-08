@@ -119,43 +119,188 @@
 //! assert!(matches!(refused, ResetError::Refused));
 //! assert!(matches!(foreign, CommitError::ForeignBatch));
 //!
-//! let _rebuild = (ProjectionId::new("van_stock"), Authority::Rebuilding);
+//! let _rebuild = (ProjectionId::from_static("van_stock"), Authority::Rebuilding);
 //! ```
 
-use alloc::boxed::Box;
+use alloc::borrow::Cow;
 use alloc::string::String;
 #[cfg(feature = "conformance")]
 use core::future::Future;
 
 use crate::event::SequencePosition;
+use crate::identity::StoreId;
+use crate::validate;
+
+/// Longest permitted projection identifier, in bytes.
+///
+/// The same bound as [`MAX_EVENT_TYPE_LEN`](crate::MAX_EVENT_TYPE_LEN) and
+/// [`MAX_TAG_LEN`](crate::MAX_TAG_LEN), and it applies to every
+/// [`ProjectionId`], including one a runner derives from a projection's name
+/// (ADR-0082 §D5).
+pub const MAX_PROJECTION_ID_LEN: usize = 255;
+
+/// The prefix [`ProjectionId::sync_watermark`] renders, and one of the two
+/// [`RESERVED`] entries.
+const SYNC_PREFIX: &str = "sync/";
+
+/// Prefixes no caller-supplied id may begin with, matched as exact bytes.
+///
+/// Private: the list is documented on [`ProjectionId::new`] and in VT-35, and
+/// widening it later refuses ids that are valid today, which is a behaviour
+/// break whatever this constant's visibility.
+const RESERVED: [&str; 2] = ["happenstance/", SYNC_PREFIX];
 
 /// Names a read model within a projection store.
 ///
 /// Distinct projections advance independently, so each needs its own
-/// checkpoint.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ProjectionId(Box<str>);
+/// checkpoint, and the id is that checkpoint's key: a store keeps it byte for
+/// byte (PS-39).
+///
+/// Validated, like its siblings [`EventType`](crate::EventType) and
+/// [`Tag`](crate::Tag), by the same rules plus one (VT-35, ADR-0082). There
+/// is no infallible way in, because two constructors enforcing different rules
+/// is the defect that makes an invalid value reachable through the weaker one.
+///
+/// # Examples
+///
+/// ```
+/// use happenstance_core::ProjectionId;
+///
+/// let id = ProjectionId::new("van_stock")?;
+/// assert_eq!(id.as_str(), "van_stock");
+/// # Ok::<(), happenstance_core::InvalidProjectionId>(())
+/// ```
+///
+/// A string does not become an id by conversion alone. There is no
+/// `From<&str>`, because an infallible door would bypass the rules:
+///
+/// ```compile_fail
+/// use happenstance_core::ProjectionId;
+///
+/// let id: ProjectionId = "van_stock".into();
+/// # let _ = id;
+/// ```
+///
+/// Backed by `Cow<'static, str>` rather than `Box<str>` so that
+/// [`from_static`](Self::from_static) can build one in a `const` without
+/// allocating, the trade VT-32 records for [`EventType`](crate::EventType).
+#[derive(Debug, Clone)]
+pub struct ProjectionId(Cow<'static, str>);
 
 impl ProjectionId {
     /// Creates a projection identifier.
     ///
-    /// **Infallible, and that is an open question rather than a decision.**
-    /// Both sibling identifiers — [`EventType`](crate::EventType) and
-    /// [`Tag`](crate::Tag) — validate and return a `Result`; this one accepts
-    /// anything, including the empty string, and the value becomes the primary
-    /// key of a checkpoint row.
+    /// The value is kept exactly as given: nothing is trimmed, folded or
+    /// normalised, so an accepted id's [`as_str`](Self::as_str) is byte for
+    /// byte its input.
     ///
-    /// Do not read the inconsistency as a deliberate "opaque operator-chosen
-    /// key" design. There is no decision behind it. It is left standing because
-    /// no conformance rule checks what a validating constructor would enforce
-    /// — so one would be exactly the decorative rule this project's discipline
-    /// exists to prevent — and because adding validation to a frozen port's
-    /// constructor is a decision record, not a line edit. Adding a
-    /// fallible `parse` beside this constructor would be worse than either
-    /// choice: two constructors enforcing different rules is the defect that
-    /// makes an invalid value reachable through the weaker one.
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into().into_boxed_str())
+    /// # Errors
+    ///
+    /// Returns [`InvalidProjectionId`], checking in this order, if the value is
+    /// empty; longer than [`MAX_PROJECTION_ID_LEN`] bytes; contains a character
+    /// in Unicode general category `Cc` or one of the explicit bidirectional
+    /// formatting controls U+202A–U+202E or U+2066–U+2069, reporting whichever
+    /// comes first; or begins with one of the reserved prefixes `happenstance/`
+    /// and `sync/`, compared as exact bytes. `Cf` in general is accepted, so the
+    /// joiners U+200C and U+200D that Persian, Hindi and emoji sequences need
+    /// are kept.
+    ///
+    /// A `sync/` id is built only by [`sync_watermark`](Self::sync_watermark).
+    pub fn new(value: impl Into<String>) -> Result<Self, InvalidProjectionId> {
+        let value = value.into();
+        match refusal(&value) {
+            None => Ok(Self(Cow::Owned(value))),
+            Some(refused) => Err(refused),
+        }
+    }
+
+    /// Creates a projection identifier from a string literal, validating at
+    /// compile time.
+    ///
+    /// Enforces exactly the rules [`new`](Self::new) enforces — one function
+    /// checks both — so a `ProjectionId` is always a validated value, with some
+    /// of that validation having happened before the program ran.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value would be rejected by [`new`](Self::new). **Where
+    /// that panic surfaces depends on the call site, and the difference is
+    /// sharp enough to be worth stating:**
+    ///
+    /// | Call site | When the invalid value is caught |
+    /// |---|---|
+    /// | a free `const` | `cargo check`, as `error[E0080]` |
+    /// | an associated `const` that is read somewhere | `cargo build` |
+    /// | an associated `const` that is never read | **never** |
+    /// | a `let` binding | at run time, as a panic |
+    ///
+    /// The third row is the one to design around: an associated const is
+    /// evaluated lazily, so an invalid one that nothing reads survives `check`,
+    /// `clippy`, `build` and `test`. Prefer a free `const` for anything whose
+    /// validity you want the compiler to guarantee:
+    ///
+    /// ```
+    /// use happenstance_core::ProjectionId;
+    ///
+    /// const VAN_STOCK: ProjectionId = ProjectionId::from_static("van_stock");
+    /// # let _ = VAN_STOCK;
+    /// ```
+    ///
+    /// An invalid value at the same free `const` site is a compile error, and
+    /// a reserved prefix is invalid:
+    ///
+    /// ```compile_fail
+    /// use happenstance_core::ProjectionId;
+    ///
+    /// const X: ProjectionId = ProjectionId::from_static("sync/x");
+    /// # let _ = X;
+    /// ```
+    ///
+    /// Spelled bare `compile_fail` rather than `compile_fail,E0080`: rustdoc on
+    /// 1.97.1 silently ignores an error-code annotation it cannot match, so the
+    /// stricter-looking spelling is the weaker check. It is also deliberately
+    /// weaker than a `trybuild` snapshot — it does not pin the diagnostic — and
+    /// ADR-0015 records that phase 6 owns the `trybuild` dependency decision.
+    /// The passing example above it is the control: the two differ only in the
+    /// literal, so the failure is the validator's and nothing else's.
+    #[must_use]
+    pub const fn from_static(value: &'static str) -> Self {
+        match refusal(value) {
+            None => Self(Cow::Borrowed(value)),
+            #[expect(
+                clippy::panic,
+                reason = "the sanctioned const construction path (VT-35, as VT-32's \
+                          `EventType::from_static`): at a free `const` this panic is a \
+                          compile error, and `new` is the fallible door"
+            )]
+            Some(refused) => panic!("{}", refused.const_message()),
+        }
+    }
+
+    /// The replication watermark for `peer`: `sync/` followed by the peer's
+    /// [`StoreId`] as 32 lowercase hex digits, 37 bytes in all.
+    ///
+    /// The **only** constructor of a `sync/` id (SY-31, VT-35). Every other one
+    /// refuses the prefix, so no application projection can collide with a
+    /// watermark, and the reservation is enforced rather than advised: there is
+    /// no unchecked constructor behind it.
+    ///
+    /// The rendered format is part of VT-35 and frozen, because changing it
+    /// orphans every persisted watermark. A peer restored from a backup
+    /// re-mints its `StoreId` and so gets a new watermark, which is correct: a
+    /// new incarnation is new history.
+    ///
+    /// ```
+    /// use happenstance_core::{ProjectionId, StoreId};
+    ///
+    /// let peer = StoreId::from_bytes([0xab; 16]);
+    /// let watermark = ProjectionId::sync_watermark(peer);
+    /// assert_eq!(watermark.as_str(), "sync/abababababababababababababababab");
+    /// assert!(ProjectionId::new(watermark.as_str()).is_err());
+    /// ```
+    #[must_use]
+    pub fn sync_watermark(peer: StoreId) -> Self {
+        Self(Cow::Owned(alloc::format!("{SYNC_PREFIX}{peer}")))
     }
 
     /// The identifier as a string slice.
@@ -165,9 +310,187 @@ impl ProjectionId {
     }
 }
 
+/// The one validator both of [`ProjectionId`]'s checking doors call (RS-11-1):
+/// VT-14's rules through [`validate::check`], then the reserved prefixes.
+const fn refusal(value: &str) -> Option<InvalidProjectionId> {
+    match validate::check(value, MAX_PROJECTION_ID_LEN) {
+        validate::Refusal::Accepted => match reserved_prefix(value) {
+            Some(prefix) => Some(InvalidProjectionId::Reserved { prefix }),
+            None => None,
+        },
+        validate::Refusal::Empty => Some(InvalidProjectionId::Empty),
+        validate::Refusal::TooLong => Some(InvalidProjectionId::TooLong { len: value.len() }),
+        validate::Refusal::ControlCharacter => Some(InvalidProjectionId::ControlCharacter),
+        validate::Refusal::BidirectionalControl => Some(InvalidProjectionId::BidirectionalControl),
+    }
+}
+
+/// The [`RESERVED`] entry `value` begins with, compared as exact bytes.
+///
+/// `while` loops rather than `starts_with`, which is not `const` (RS-11-3).
+/// Every index is below a length checked first, the shape `validate.rs` uses.
+const fn reserved_prefix(value: &str) -> Option<&'static str> {
+    let bytes = value.as_bytes();
+    let mut k = 0;
+    while k < RESERVED.len() {
+        let prefix = RESERVED[k].as_bytes();
+        if prefix.len() <= bytes.len() {
+            let mut i = 0;
+            let mut matched = true;
+            while i < prefix.len() {
+                if bytes[i] != prefix[i] {
+                    matched = false;
+                    break;
+                }
+                i += 1;
+            }
+            if matched {
+                return Some(RESERVED[k]);
+            }
+        }
+        k += 1;
+    }
+    None
+}
+
+// `Eq`, `Ord` and `Hash` are written out rather than derived, for the reason
+// `EventType`'s are: `Borrow<str>` promises the borrowed form hashes and
+// compares identically to the owner, and these bodies are where that promise
+// is discharged.
+impl PartialEq for ProjectionId {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for ProjectionId {}
+
+impl PartialOrd for ProjectionId {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ProjectionId {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl core::hash::Hash for ProjectionId {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+impl core::borrow::Borrow<str> for ProjectionId {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl AsRef<str> for ProjectionId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl core::fmt::Display for ProjectionId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.as_str())
+    }
+}
+
+impl TryFrom<&str> for ProjectionId {
+    type Error = InvalidProjectionId;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<String> for ProjectionId {
+    type Error = InvalidProjectionId;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl core::str::FromStr for ProjectionId {
+    type Err = InvalidProjectionId;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::new(value)
+    }
+}
+
+/// A [`ProjectionId`] failed validation (VT-35).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum InvalidProjectionId {
+    /// The id was empty. It is the primary key of a checkpoint row, and an
+    /// empty key names nothing.
+    #[error("a projection id must not be empty")]
+    Empty,
+    /// The id exceeded [`MAX_PROJECTION_ID_LEN`] bytes.
+    #[error("a projection id must be at most {max} bytes, got {len}", max = MAX_PROJECTION_ID_LEN)]
+    TooLong {
+        /// The rejected length, in bytes.
+        len: usize,
+    },
+    /// The id contained a control character (Unicode `Cc`), NUL among them,
+    /// which a Postgres `text` column refuses at `commit`.
+    #[error("a projection id must not contain control characters")]
+    ControlCharacter,
+    /// The id contained one of the explicit bidirectional formatting controls:
+    /// U+202A–U+202E or U+2066–U+2069.
+    ///
+    /// Separate from [`ControlCharacter`](Self::ControlCharacter) for the reason
+    /// [`InvalidTag::BidirectionalControl`](crate::InvalidTag::BidirectionalControl)
+    /// gives.
+    #[error("a projection id must not contain bidirectional formatting controls")]
+    BidirectionalControl,
+    /// The id began with a reserved prefix, compared as exact bytes.
+    ///
+    /// `sync/` belongs to SY-31's replication watermark and is minted only by
+    /// [`ProjectionId::sync_watermark`]. `happenstance/` is held for ids this
+    /// library may mint later, so that minting one is not a breaking change.
+    #[error("a projection id must not begin with the reserved prefix `{prefix}`")]
+    Reserved {
+        /// The reserved prefix the value began with, verbatim.
+        prefix: &'static str,
+    },
+}
+
+impl InvalidProjectionId {
+    /// The message [`ProjectionId::from_static`] panics with: a literal per
+    /// variant, because a `const` panic cannot format a field.
+    const fn const_message(&self) -> &'static str {
+        match self {
+            Self::Empty => "a projection id must not be empty",
+            Self::TooLong { .. } => "a projection id must be at most MAX_PROJECTION_ID_LEN bytes",
+            Self::ControlCharacter => "a projection id must not contain control characters",
+            Self::BidirectionalControl => {
+                "a projection id must not contain bidirectional formatting controls"
+            }
+            Self::Reserved { .. } => {
+                "a projection id must not begin with a reserved prefix (`happenstance/` or `sync/`)"
+            }
+        }
+    }
+}
+
+impl From<core::convert::Infallible> for InvalidProjectionId {
+    /// Lets a caller accept `impl TryInto<ProjectionId, Error: Into<InvalidProjectionId>>`
+    /// and so take both a `&str`, which converts fallibly, and an already-built
+    /// [`ProjectionId`], whose conversion cannot fail, with no second error
+    /// type.
+    ///
+    /// The match has no arms because [`Infallible`](core::convert::Infallible)
+    /// has no values, which the compiler accepts as exhaustive.
+    fn from(never: core::convert::Infallible) -> Self {
+        match never {}
     }
 }
 
@@ -407,7 +730,7 @@ pub enum ResetError<E> {
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn core::error::Error>> {
 /// let store = ToyStore::default();
-/// let id = ProjectionId::new("toy");
+/// let id = ProjectionId::new("toy")?;
 ///
 /// let mut batch = store.begin().await?;
 /// batch.rows.push(("depot-7".to_owned(), 12));
@@ -719,8 +1042,12 @@ mod tests {
 
     use alloc::rc::Rc;
 
+    use alloc::string::{String, ToString};
+
     use super::{Authority, Checkpoint, CommitError, ProjectionId, ProjectionStore, ResetError};
+    use super::{InvalidProjectionId, MAX_PROJECTION_ID_LEN};
     use crate::event::SequencePosition;
+    use crate::identity::StoreId;
 
     /// The witness store's error. Real, so `Self::Error`'s bound is discharged
     /// by something other than `!`.
@@ -792,7 +1119,7 @@ mod tests {
     #[tokio::test]
     async fn the_port_is_implementable_with_an_owned_batch() {
         let store = Witness;
-        let id = ProjectionId::new("witness");
+        let id = ProjectionId::from_static("witness");
 
         assert_eq!(store.checkpoint(&id).await.unwrap(), Checkpoint::NeverRun);
 
@@ -920,6 +1247,303 @@ mod tests {
     fn a_non_send_batch_still_implements_the_bare_flavour() {
         fn accepts_the_bare_flavour<P: ProjectionStore>() {}
         accepts_the_bare_flavour::<Witness>();
+    }
+
+    /// VT-35. Every refusal VT-14 makes for the sibling identifiers, made here
+    /// too, each with its own variant.
+    ///
+    /// Rejects a `new` that checks only ASCII C0 (`char::is_ascii_control`) and
+    /// so misses U+0085; one that skips the bidirectional arm; one that
+    /// truncates to the bound instead of refusing; and one whose `TooLong`
+    /// reports the bound rather than the length. The NUL case is the one
+    /// Postgres and Neon used to report at `commit`, far from the constructor
+    /// that accepted it.
+    #[test]
+    fn projection_id_refuses_what_vt_14_refuses() {
+        assert_eq!(ProjectionId::new(""), Err(InvalidProjectionId::Empty));
+        assert_eq!(
+            ProjectionId::new("a\nb"),
+            Err(InvalidProjectionId::ControlCharacter)
+        );
+        assert_eq!(
+            ProjectionId::new("a\0b"),
+            Err(InvalidProjectionId::ControlCharacter)
+        );
+        assert_eq!(
+            ProjectionId::new("a\u{85}b"),
+            Err(InvalidProjectionId::ControlCharacter)
+        );
+        assert_eq!(
+            ProjectionId::new("a\u{202E}b"),
+            Err(InvalidProjectionId::BidirectionalControl)
+        );
+        assert_eq!(
+            ProjectionId::new("x".repeat(MAX_PROJECTION_ID_LEN + 1)),
+            Err(InvalidProjectionId::TooLong {
+                len: MAX_PROJECTION_ID_LEN + 1
+            })
+        );
+
+        let longest = ProjectionId::new("x".repeat(MAX_PROJECTION_ID_LEN)).unwrap();
+        assert_eq!(longest.as_str().len(), MAX_PROJECTION_ID_LEN);
+    }
+
+    /// VT-35 keeps VT-14's refusal of a blanket `Cf` ban: the joiners scripts
+    /// need are accepted, and so are the four neighbours of the two closed
+    /// bidirectional runs.
+    ///
+    /// Rejects a blanket `Cf` ban, and a bidirectional range one codepoint too
+    /// wide either way.
+    #[test]
+    fn projection_id_accepts_the_format_characters_scripts_need() {
+        for value in [
+            "a\u{200C}b",
+            "a\u{200D}b",
+            "a\u{200B}b",
+            "a\u{2029}b",
+            "a\u{202F}b",
+            "a\u{2065}b",
+            "a\u{206A}b",
+        ] {
+            assert_eq!(ProjectionId::new(value).unwrap().as_str(), value);
+        }
+    }
+
+    /// The two reserved prefixes are refused, bare and followed by more.
+    ///
+    /// Rejects a `contains` test, and a test that refuses only the bare prefix
+    /// or only a longer value.
+    #[test]
+    fn projection_id_refuses_the_reserved_prefixes_by_exact_bytes() {
+        for value in ["sync/", "sync/peer"] {
+            assert_eq!(
+                ProjectionId::new(value),
+                Err(InvalidProjectionId::Reserved { prefix: "sync/" })
+            );
+        }
+        for value in ["happenstance/", "happenstance/x"] {
+            assert_eq!(
+                ProjectionId::new(value),
+                Err(InvalidProjectionId::Reserved {
+                    prefix: "happenstance/"
+                })
+            );
+        }
+    }
+
+    /// The reservation is an exact byte prefix: nothing near it is refused,
+    /// and nothing accepted is altered.
+    ///
+    /// Rejects `starts_with("sync")` without the slash; case folding before the
+    /// compare; a trim before the check; and a `contains`.
+    #[test]
+    fn projection_id_accepts_the_neighbours_of_the_reserved_prefixes() {
+        for value in [
+            "sync",
+            "syncope",
+            "sync_jobs",
+            "sync-x",
+            "Sync/x",
+            "SYNC/x",
+            " sync/x",
+            "x/sync/y",
+            "happenstance",
+            "happenstance-x",
+            "Happenstance/x",
+        ] {
+            assert_eq!(ProjectionId::new(value).unwrap().as_str(), value);
+        }
+    }
+
+    /// VT-35's MUST that the `const` door is exactly as strong as the runtime
+    /// one, asserted on the accepting side. The refusing side is the
+    /// `should_panic` tests below.
+    ///
+    /// Rejects a `const` path with a second, simplified copy of the rules
+    /// (RS-11-1).
+    #[test]
+    fn projection_id_from_static_and_new_agree() {
+        const LONGEST: &str = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
+                               xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
+                               xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
+                               xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+        assert_eq!(LONGEST.len(), MAX_PROJECTION_ID_LEN);
+
+        for value in [
+            "van_stock",
+            LONGEST,
+            "a\u{200C}b",
+            "a\u{200D}b",
+            "a\u{200B}b",
+            "a\u{2029}b",
+            "a\u{202F}b",
+            "a\u{2065}b",
+            "a\u{206A}b",
+            "sync",
+            "syncope",
+            "sync_jobs",
+            "sync-x",
+            "Sync/x",
+            "SYNC/x",
+            " sync/x",
+            "x/sync/y",
+            "happenstance",
+            "happenstance-x",
+            "Happenstance/x",
+        ] {
+            let runtime = ProjectionId::new(value).unwrap();
+            assert_eq!(ProjectionId::from_static(value).as_str(), runtime.as_str());
+        }
+    }
+
+    /// `from_static` refuses a reserved prefix, which is the refusal VT-35 adds
+    /// on top of VT-14 and so the one a copied `const` path would lack.
+    #[test]
+    #[should_panic(expected = "reserved prefix")]
+    fn projection_id_from_static_rejects_a_reserved_prefix() {
+        let _ = ProjectionId::from_static("sync/x");
+    }
+
+    #[test]
+    #[should_panic(expected = "bidirectional formatting controls")]
+    fn projection_id_from_static_rejects_a_bidirectional_control() {
+        let _ = ProjectionId::from_static("a\u{202E}b");
+    }
+
+    #[test]
+    #[should_panic(expected = "control characters")]
+    fn projection_id_from_static_rejects_a_c1_control() {
+        let _ = ProjectionId::from_static("a\u{85}b");
+    }
+
+    /// `from_static` is a `const fn`, which is what makes a free `const` the
+    /// compile-time-validated spelling the examples teach.
+    ///
+    /// Rejects dropping `const` from `from_static`: nothing else notices
+    /// (RS-11-3).
+    #[test]
+    fn projection_id_is_const_constructible() {
+        const VAN_STOCK: ProjectionId = ProjectionId::from_static("van_stock");
+
+        assert_eq!(VAN_STOCK.as_str(), "van_stock");
+        assert_eq!(VAN_STOCK, ProjectionId::new("van_stock").unwrap());
+    }
+
+    /// The watermark is `sync/` and the peer's 32 lowercase hex digits, and it
+    /// passes every VT-14 rule: `new` refuses it **only** for its prefix, and
+    /// the reservation is checked last.
+    ///
+    /// Rejects a watermark rendered with `Debug` (`StoreId([..])`), with UUID
+    /// dashes, or in uppercase hex (a second spelling of one peer); and one
+    /// built by a path that `new` would also accept, which would make the
+    /// reservation advisory.
+    #[test]
+    fn sync_watermark_is_reserved_and_otherwise_valid() {
+        let zero = ProjectionId::sync_watermark(StoreId::from_bytes([0x00; 16]));
+        let ones = ProjectionId::sync_watermark(StoreId::from_bytes([0xff; 16]));
+        let mixed = ProjectionId::sync_watermark(StoreId::from_bytes([
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
+            0xcd, 0xef,
+        ]));
+
+        assert_eq!(zero.as_str(), "sync/00000000000000000000000000000000");
+        assert_eq!(ones.as_str(), "sync/ffffffffffffffffffffffffffffffff");
+        assert_eq!(mixed.as_str(), "sync/0123456789abcdef0123456789abcdef");
+
+        for watermark in [&zero, &ones, &mixed] {
+            assert_eq!(watermark.as_str().len(), 37);
+            assert_eq!(
+                ProjectionId::new(watermark.as_str()),
+                Err(InvalidProjectionId::Reserved { prefix: "sync/" })
+            );
+        }
+    }
+
+    /// Two peers never share a watermark.
+    ///
+    /// Rejects a rendering of a truncated `StoreId`, such as its first eight
+    /// bytes.
+    #[test]
+    fn sync_watermarks_of_distinct_peers_are_distinct() {
+        let ids = [
+            ProjectionId::sync_watermark(StoreId::from_bytes([0x00; 16])),
+            ProjectionId::sync_watermark(StoreId::from_bytes([0xff; 16])),
+            ProjectionId::sync_watermark(StoreId::from_bytes([
+                0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
+                0xcd, 0xef,
+            ])),
+        ];
+        for (i, left) in ids.iter().enumerate() {
+            for right in ids.iter().skip(i + 1) {
+                assert_ne!(left, right);
+            }
+        }
+
+        let mut last = [0x5a; 16];
+        let before = ProjectionId::sync_watermark(StoreId::from_bytes(last));
+        last[15] = 0x5b;
+        let after = ProjectionId::sync_watermark(StoreId::from_bytes(last));
+        assert_ne!(before, after);
+    }
+
+    /// `Borrow<str>` hashes, compares and orders as the owner does, so both map
+    /// kinds can be probed by `&str`.
+    ///
+    /// Rejects a `Borrow<str>` whose `Hash`, `Eq` or `Ord` disagrees with
+    /// `str`'s (RS-12-1). Gated on `std` because `HashMap` is `std`'s.
+    #[cfg(feature = "std")]
+    #[test]
+    fn a_map_keyed_by_projection_id_is_probed_by_str() {
+        let mut hashed = std::collections::HashMap::new();
+        hashed.insert(ProjectionId::from_static("van_stock"), 1);
+        assert_eq!(hashed.get("van_stock"), Some(&1));
+        assert!(hashed.contains_key(&ProjectionId::new("van_stock").unwrap()));
+
+        let mut ordered = alloc::collections::BTreeMap::new();
+        ordered.insert(ProjectionId::from_static("van_stock"), 2);
+        ordered.insert(ProjectionId::from_static("order_status"), 3);
+        assert_eq!(ordered.get("van_stock"), Some(&2));
+        assert_eq!(ordered.get("order_status"), Some(&3));
+        assert!(ordered.contains_key(&ProjectionId::new("van_stock").unwrap()));
+    }
+
+    /// Every conversion from a string validates, with the verdict `new` gives.
+    ///
+    /// Rejects a conversion that forwards to an unchecked path.
+    #[test]
+    fn projection_id_conversions_all_validate() {
+        for (value, refusal) in [
+            ("", InvalidProjectionId::Empty),
+            ("sync/x", InvalidProjectionId::Reserved { prefix: "sync/" }),
+        ] {
+            assert_eq!(ProjectionId::try_from(value), Err(refusal.clone()));
+            assert_eq!(
+                ProjectionId::try_from(String::from(value)),
+                Err(refusal.clone())
+            );
+            assert_eq!(value.parse::<ProjectionId>(), Err(refusal));
+        }
+
+        let expected = ProjectionId::from_static("van_stock");
+        assert_eq!(ProjectionId::try_from("van_stock"), Ok(expected.clone()));
+        assert_eq!(
+            ProjectionId::try_from(String::from("van_stock")),
+            Ok(expected.clone())
+        );
+        assert_eq!("van_stock".parse::<ProjectionId>(), Ok(expected));
+    }
+
+    /// The messages carry the bound, the length and the prefix.
+    ///
+    /// Rejects a message that drops any of them.
+    #[test]
+    fn invalid_projection_id_messages_carry_their_context() {
+        let too_long = InvalidProjectionId::TooLong { len: 256 }.to_string();
+        assert!(too_long.contains("255"), "{too_long}");
+        assert!(too_long.contains("256"), "{too_long}");
+
+        let reserved = InvalidProjectionId::Reserved { prefix: "sync/" }.to_string();
+        assert!(reserved.contains("`sync/`"), "{reserved}");
     }
 }
 

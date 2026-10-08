@@ -37,7 +37,7 @@ last_reviewed: 2026-09-30
 
 ## What is true today
 
-CF-23 (`spec/SPECIFICATION.md:8852-8863`, `[FROZEN]`) requires that
+CF-23 (`spec/SPECIFICATION.md:8958-8969`, `[FROZEN]`) requires that
 `happenstance-testkit` "MUST NOT emit any runtime-specific attribute from its
 own expansion; the per-test wrapper MUST be a parameter supplied by the
 adapter." The twelve `__emit_*` macros the crate ships are the only concrete

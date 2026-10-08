@@ -856,7 +856,7 @@ mod tests {
     };
 
     fn projection_id() -> ProjectionId {
-        ProjectionId::new("p")
+        ProjectionId::from_static("p")
     }
 
     fn store() -> NeonProjectionStore<NullTransport> {

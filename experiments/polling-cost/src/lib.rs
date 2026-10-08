@@ -32,9 +32,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use happenstance::{
-    Codec, CodecError, DomainEvent, Event, EventStore, EventType, Json, MemoryEventStore,
-    MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError, Progressed,
-    Projection, ProjectionId, ProjectionStore, SequencePosition, Tags,
+    Codec, CodecError, DomainEvent, Event, EventStore, EventType, InvalidProjectionId, Json,
+    MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
+    Progressed, Projection, ProjectionId, ProjectionStore, SequencePosition, Tags,
 };
 use serde::{Deserialize, Serialize};
 
@@ -262,7 +262,7 @@ struct View {
 }
 
 impl View {
-    fn new(index: usize, arm: Arm, fan_out: usize) -> Self {
+    fn new(index: usize, arm: Arm, fan_out: usize) -> Result<Self, InvalidProjectionId> {
         let scope = match arm {
             // Every view selects the whole log: the query nominates by event
             // type alone, so no tag narrows it.
@@ -271,12 +271,12 @@ impl View {
             // and it is the same `Query` vocabulary either way.
             Arm::Disjoint => shard_tags(u32::try_from(index % fan_out.max(1)).unwrap_or(0)),
         };
-        Self {
-            id: ProjectionId::new(format!("view_{index}")),
+        Ok(Self {
+            id: ProjectionId::new(format!("view_{index}"))?,
             key: format!("view_{index}"),
             scope,
             applied: 0,
-        }
+        })
     }
 }
 
@@ -452,6 +452,8 @@ pub enum HarnessError {
     Run(String),
     /// A pass could not be written, or its tag already existed.
     Write(String),
+    /// A view's projection id was refused by `ProjectionId::new`.
+    View(String),
 }
 
 impl std::fmt::Display for HarnessError {
@@ -460,6 +462,7 @@ impl std::fmt::Display for HarnessError {
             Self::Seed(why) => write!(f, "seeding the log failed: {why}"),
             Self::Run(why) => write!(f, "the runner failed: {why}"),
             Self::Write(why) => write!(f, "writing the pass failed: {why}"),
+            Self::View(why) => write!(f, "a view's projection id was refused: {why}"),
         }
     }
 }
@@ -522,7 +525,8 @@ fn amplification(cell: &Cell) -> Result<Record, HarnessError> {
 
     let mut views: Vec<View> = (0..cell.fan_out)
         .map(|index| View::new(index, cell.arm, cell.fan_out))
-        .collect();
+        .collect::<Result<_, _>>()
+        .map_err(|e| HarnessError::View(e.to_string()))?;
 
     let started = Instant::now();
     let mut applied_total = 0u64;
@@ -577,7 +581,8 @@ fn staleness(cell: &Cell) -> Result<Record, HarnessError> {
 
     let mut views: Vec<View> = (0..cell.fan_out)
         .map(|index| View::new(index, cell.arm, cell.fan_out))
-        .collect();
+        .collect::<Result<_, _>>()
+        .map_err(|e| HarnessError::View(e.to_string()))?;
 
     // Catch every view up first: staleness is about what an already-running
     // deployment sees, not about a cold replay. The counters are then reset, so

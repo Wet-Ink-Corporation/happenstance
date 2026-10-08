@@ -13,7 +13,7 @@
 //!
 //! # The refusal
 //!
-//! `spec/SPECIFICATION.md:7859-7862` names `PRAGMA synchronous = OFF` **by name**
+//! `spec/SPECIFICATION.md:7965-7968` names `PRAGMA synchronous = OFF` **by name**
 //! as a wrong implementation CF-14's reopen rule exists to reject. A figure taken
 //! under it is not merely optimistic — it is a figure for a store that fails
 //! conformance. `experiments/position-visibility/setup.sh` aborts under
