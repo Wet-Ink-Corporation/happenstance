@@ -153,7 +153,7 @@ strength.
 | ADR-0012 | [`kb-decision-0012`](../decisions/0012-append-shape-and-preconditions.md) | append keeps its borrowed batch, and phase 4 declines what it cannot measure | accepted | 4 | — |
 | ADR-0013 | [`kb-decision-0013`](../decisions/0013-position-assignment-and-visibility.md) | Positions are assigned once and become visible in order | accepted | 4 | — |
 | ADR-0014 | [`kb-decision-0014`](../decisions/0014-event-identity-and-recorded-time.md) | The store mints identity, records a time, and the caller supplies neither | accepted | 4 | — |
-| ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted | 4 | — |
+| ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted (partly superseded) | 4 | partly superseded by `kb-decision-0082` (§10, where it declined to validate `ProjectionId`) |
 | ADR-0016 | [`kb-decision-0016`](../decisions/0016-the-wire-format.md) | The wire format is happenstance's own, and an unknown version is refused before the message is read | accepted | 5 | — |
 | ADR-0029 | [`kb-decision-0029`](../decisions/0029-msrv-raised-to-1-97-1.md) | The MSRV is 1.97.1 | accepted | 2 | amends `kb-decision-0004`; amended by `kb-decision-0037` |
 
@@ -618,9 +618,14 @@ ADR-0080 is lane L7's: on the two-build measurement ADR-0012's falsifier asked f
 `happenstance-cloudflare` with calibrated replica arms, `append` keeps `&[Event]` and ES-17 is
 frozen. It rests on ADR-0012 and ADR-0055 without superseding either, records what neither can
 say, and supersedes `kb-open-question-es-17-two-adapter-measurement-001`.
-ADR-0086, proposed, settles VT-6's phase-17 half for the two server adapters: neither mints per
+ADR-0082 is lane L10's: `ProjectionId::new` becomes fallible and refuses VT-14's set, more than
+255 bytes, and the reserved prefixes `happenstance/` and `sync/`; `sync_watermark(StoreId)` is the
+only way to a `sync/` id; VT-35 is minted `[FROZEN]` and PS-39, the store's half, `[PROVISIONAL]`.
+It partly supersedes ADR-0015 at §10 only, so `kb-decision-0015` stays accepted and its row gains
+the annotation, and it supersedes `kb-open-question-projection-id-unvalidated-001`.
+ADR-0086, accepted by the owner on 2026-10-08, settles VT-6's phase-17 half for the two server adapters: neither mints per
 open, both keep mint-once and earn it through a documented re-mint, and default-refusing detection
-is ruled out after 1.0. On acceptance it supersedes
+is ruled out after 1.0. It supersedes
 `kb-open-question-postgres-neon-store-id-no-restore-001`. It corrects the claim that mint-per-open
 fails `reopened_store_does_not_reissue_an_event_id`.
 
@@ -639,7 +644,8 @@ fails `reopened_store_does_not_reissue_an_event_id`.
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
 | ADR-0080 | [`kb-decision-0080`](../decisions/0080-append-keeps-a-borrowed-batch.md) | append keeps its borrowed batch, and ES-17 is frozen on the two-build measurement | accepted | 17 | — |
-| ADR-0086 | [`kb-decision-0086`](../decisions/0086-postgres-and-neon-keep-mint-once.md) | Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined | proposed | 17 | — |
+| ADR-0082 | [`kb-decision-0082`](../decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | ProjectionId is validated: VT-14's set, 255 bytes, and happenstance/ and sync/ reserved | accepted | 17 | partly supersedes `kb-decision-0015` (§10) |
+| ADR-0086 | [`kb-decision-0086`](../decisions/0086-postgres-and-neon-keep-mint-once.md) | Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined | accepted | 17 | — |
 
 ## Adding a row
 

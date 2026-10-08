@@ -511,7 +511,8 @@ shipped adapter measures no discriminating steady-state cost, and the residual m
 `kb-decision-0024`, whose own successor question, `kb-open-question-off-poll-visibility-defect-001`,
 carries the residual: an off-poll adapter has no suspension point a poll-based schedule can reach),
 `kb-open-question-es-38-and-gap-read-unowned-001`,
-`kb-open-question-projection-id-unvalidated-001`,
+`kb-open-question-projection-id-unvalidated-001` (**superseded** 2026-10-07 by
+`kb-decision-0082`: `ProjectionId` is validated, and `sync/` and `happenstance/` are reserved),
 `kb-open-question-cf-40-ownership-001`,
 `kb-open-question-dcb-no-published-format-001`,
 `kb-open-question-human-readable-encoding-limits-001`,
@@ -559,7 +560,7 @@ test never actually restores or clones a store, so VT-6's `[PROVISIONAL]` marker
 same-process assertion rather than the cross-instance one its text describes. **Superseded**
 2026-09-29: every append re-reads the persisted identity and refuses a stale handle
 (`f719b2a`); the gap beside it is the successor entry below),
-`kb-open-question-postgres-neon-store-id-no-restore-001` (added 2026-09-29 — `happenstance-postgres`
+`kb-open-question-postgres-neon-store-id-no-restore-001` (**superseded** 2026-10-08 by `kb-decision-0086`; added 2026-09-29 — `happenstance-postgres`
 and `happenstance-neon` mint their `StoreId` once and take neither branch VT-6 requires of mint-once,
 so a restore or a Neon branch re-issues identities; owned by phase 13),
 `kb-open-question-query-plan-parameter-chunking-001` (added 2026-09-04 — the 30,000-parameter

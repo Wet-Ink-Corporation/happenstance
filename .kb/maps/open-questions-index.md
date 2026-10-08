@@ -423,10 +423,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   ES-38's rule against CF-27's instrument and, through a defaulted-declined `Fixture` removal
   capability, against every real adapter. No further instrument decision is owed. It stays open
   for sub-question 2: whether a frozen clause may name a rule with no owning phase.
-- **Open** — [`projection-id-is-unvalidated.md`](../open-questions/projection-id-is-unvalidated.md)
+- **Superseded** — [`projection-id-is-unvalidated.md`](../open-questions/projection-id-is-unvalidated.md)
   (`kb-open-question-projection-id-unvalidated-001`) — `ProjectionId::new` is
   infallible and unvalidated; ADR-0015 declined to validate it, on the
   ground that the omission was never a decision. Forced by phase 6.
+  **Resolved 2026-10-07** by ADR-0082 (`kb-decision-0082`): `new` is fallible and refuses
+  VT-14's set, more than 255 bytes, and the prefixes `happenstance/` and `sync/` (VT-35).
 - **Superseded** — [`cf-40-fixture-limits-ownership.md`](../open-questions/cf-40-fixture-limits-ownership.md)
   (`kb-open-question-cf-40-ownership-001`) — ADR-0015 both claims and
   disclaims ownership of CF-40 in its own text; ADR-0012 is the other
@@ -588,12 +590,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `BEGIN IMMEDIATE` and refuses a stale handle with `IdentityMoved` (`8900697`, `f719b2a`). The gap
   it sat beside is the new entry below,
   `kb-open-question-postgres-neon-store-id-no-restore-001`.
-- **Open** — [`postgres-neon-store-id-has-no-restore-detection.md`](../open-questions/postgres-neon-store-id-has-no-restore-detection.md)
+- **Superseded** — [`postgres-neon-store-id-has-no-restore-detection.md`](../open-questions/postgres-neon-store-id-has-no-restore-detection.md)
   (`kb-open-question-postgres-neon-store-id-no-restore-001`) — `happenstance-postgres` and
   `happenstance-neon` mint their `StoreId` once, in their first migration, and take neither branch
   VT-6 requires of mint-once, so a `pg_restore` or a Neon branch re-issues identities already
   issued. Owned by phase 13; a switch to mint-per-open would be phase 17's. Added 2026-09-29.
-  Answered by `kb-decision-0086`, `proposed`, pending the owner's call.
+  Superseded 2026-10-08 by `kb-decision-0086`: both keep mint-once; phase 13 builds the additive arms.
 - **Superseded** — [`query-plan-parameter-chunking-incomplete.md`](../open-questions/query-plan-parameter-chunking-incomplete.md)
   (`kb-open-question-query-plan-parameter-chunking-001`) — the
   30,000-parameter budget is enforced on `write_tag_rows`'s insert path but
@@ -723,7 +725,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
-  their live lines (`spec/SPECIFICATION.md:9389-9414`, `:9021-9034`), both stale as previously cited.
+  their live lines (`spec/SPECIFICATION.md:9495-9520`, `:9029-9042`), both stale as previously cited.
 - **Open** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the

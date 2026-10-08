@@ -283,7 +283,7 @@ struct Declared {
 ///   which is a statement about this registry and not about the port. The six
 ///   runner-dependent rules CF-36 moves to the workspace e2e crate have no store
 ///   to be wrong in, so nothing here says anything about them
-///   (`spec/SPECIFICATION.md:5995-6004`).
+///   (`spec/SPECIFICATION.md:6065-6074`).
 /// * **A fixture whose `arm_commit_fault` does nothing.** `PartialCommitStore`
 ///   is a wrong *store*; the wrong *fixture* — one that declares `COMMIT_FAULT`
 ///   and arms nothing, so `failed_commit_leaves_both_unchanged` passes over a
@@ -297,6 +297,12 @@ struct Declared {
 ///   transaction manager. That limitation is the event-store family's too
 ///   (`tests/mutation_coverage.rs`, "Real faults"), and it is stated so that a
 ///   green run here is not read as evidence about durability.
+/// * **A checkpoint keyed on a cryptographic or wide hash of the id.** It is
+///   lossy, and PS-39 forbids it, but no fixed set of ids can show it: a rule
+///   would need two ids that collide, and finding them is the hash's whole
+///   reason to exist. The six lossy key mappings PS-39's rule *can* see have
+///   rows (`CaseFoldingKeyStore` to `CanonicalEquivalenceKeyStore`); this one
+///   is named rather than registered.
 const REGISTRY: &[Declared] = &[
     Declared {
         name: "CheckpointOnlyStore",
@@ -363,6 +369,10 @@ const REGISTRY: &[Declared] = &[
             // reader to recognise a rebuild in, so the first `Rebuilding`
             // assertion sees `NeverRun`.
             "rebuilding_is_distinguishable_from_live",
+            // The eighth, from ADR-0082's PS-39, at the same anchor: a store
+            // that commits nothing reads every id's checkpoint as `NeverRun`,
+            // so the first id fails to read its own commit.
+            "projection_ids_round_trip_by_bytes",
         ],
         provenance: "an adapter whose `commit` executes the batch inside a transaction it \
                      never commits — the statements go out, the connection returns to the \
@@ -461,7 +471,7 @@ const REGISTRY: &[Declared] = &[
                      return it, so only the path nobody writes a test for leaks — and the \
                      store answers `Busy` for ever after. This is not hypothetical: a \
                      reviewer's probe found exactly this store, which is why PS-7 carries \
-                     a second half at all (`spec/SPECIFICATION.md:5164-5176`)",
+                     a second half at all (`spec/SPECIFICATION.md:5234-5246`)",
         mode: FailureMode::Assertion,
         expect: &[("dropped_batch_leaves_store_usable", "commit should succeed")],
     },
@@ -515,7 +525,7 @@ const REGISTRY: &[Declared] = &[
         ],
         provenance: "an adapter that validates `position` against what the batch wrote — \
                      named by the specification itself for this rule \
-                     (`spec/SPECIFICATION.md:5981-5986`). The point of registering it is \
+                     (`spec/SPECIFICATION.md:6051-6056`). The point of registering it is \
                      that the misreading is *reasonable*: \"advances `id`'s checkpoint to \
                      `position`\" reads like a claim about applied work, and without \
                      PS-21's rule this store would be exactly as conformant as the oracle. \
@@ -560,6 +570,10 @@ const REGISTRY: &[Declared] = &[
         fails: &[
             "distinct_projections_advance_independently",
             "reset_is_scoped_to_one_projection",
+            // The third, from ADR-0082's PS-39, and its own defect at its
+            // limit: a table with no key column is the lossiest key mapping
+            // there is, so every pair of ids reads back as one checkpoint.
+            "projection_ids_round_trip_by_bytes",
         ],
         provenance: "a checkpoint table with one row, one position column and no key — \
                      what a store that has only ever run one projection will write. Every \
@@ -619,10 +633,15 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "TruncatingResetStore",
         kind: Kind::Mutant,
-        // Exactly one, and it is the rule that needs a sibling id to be
-        // failable at all: this store resets the projection it was asked about
-        // perfectly, so every rule holding one projection passes it.
-        fails: &["reset_is_scoped_to_one_projection"],
+        // The rules that need a sibling id to be failable at all: this store
+        // resets the projection it was asked about perfectly, so every rule
+        // holding one projection passes it. The second arrived with ADR-0082's
+        // PS-39, whose reset half asks that resetting one id leave its
+        // byte-neighbour alone, and a reset with no `WHERE` leaves nothing alone.
+        fails: &[
+            "reset_is_scoped_to_one_projection",
+            "projection_ids_round_trip_by_bytes",
+        ],
         provenance: "a `SqliteProjectionStore::reset()` that truncates the checkpoint table — \
                      one statement, no `WHERE`, and obviously correct until a second projection \
                      shares the file. §4.11 names it. What it destroys in the field is the \
@@ -731,7 +750,7 @@ const REGISTRY: &[Declared] = &[
                      `.unwrap_or(Checkpoint::Live { through: FIRST })`, which is what an author \
                      writes when the position column is `NOT NULL DEFAULT 1`. The specification \
                      names this shape itself and names it as the natural one rather than a \
-                     contrivance (`spec/SPECIFICATION.md:5566-5582`): paired with a `reset` that \
+                     contrivance (`spec/SPECIFICATION.md:5636-5652`): paired with a `reset` that \
                      records an explicit `NeverRun`, it satisfies PS-19's MUST verbatim and \
                      still tells a runner that a read model nobody has ever built is \
                      authoritative. PS-38's second sentence is the MUST it violates, and it is a \
@@ -800,7 +819,7 @@ const REGISTRY: &[Declared] = &[
                      `commit` and is dropped, so every checkpoint claims the rows are \
                      authoritative. It is the obvious reading of the port and the only one \
                      `Option<SequencePosition>` could express before `Checkpoint` had three \
-                     variants (`spec/SPECIFICATION.md:5626-5634`). A reader asking whether the \
+                     variants (`spec/SPECIFICATION.md:5696-5704`). A reader asking whether the \
                      rows in front of it can be trusted is told yes over a half-built read model. \
                      It preserves `NeverRun` for an id it has never seen, because its defect is \
                      that `Rebuilding` is unrepresentable rather than that a missing row reads \
@@ -809,6 +828,92 @@ const REGISTRY: &[Declared] = &[
         expect: &[(
             "rebuilding_is_distinguishable_from_live",
             "must leave a checkpoint a reader can recognise as a rebuild",
+        )],
+    },
+    Declared {
+        name: "CaseFoldingKeyStore",
+        kind: Kind::Mutant,
+        fails: &["projection_ids_round_trip_by_bytes"],
+        provenance: "a checkpoint key column that folds case: SQLite's `COLLATE NOCASE` on \
+                     `projection_id`, Postgres's `citext`, or a nondeterministic ICU collation. \
+                     `Van_Stock` and `van_stock` are two valid ids, because VT-35 folds nothing, \
+                     and this store files both under one row",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "projection_ids_round_trip_by_bytes",
+            "two ids that differ in any byte are two checkpoints",
+        )],
+    },
+    Declared {
+        name: "TruncatingKeyStore",
+        kind: Kind::Mutant,
+        fails: &["projection_ids_round_trip_by_bytes"],
+        provenance: "a checkpoint key column narrower than the id: `VARCHAR(64)` under a server \
+                     that truncates rather than refuses, or an adapter that cuts the id to fit a \
+                     column it sized by guess. Two `MAX_PROJECTION_ID_LEN`-byte ids that share \
+                     their first 64 bytes share a checkpoint",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "projection_ids_round_trip_by_bytes",
+            "two ids that differ in any byte are two checkpoints",
+        )],
+    },
+    Declared {
+        name: "AsciiOnlyKeyStore",
+        kind: Kind::Mutant,
+        fails: &["projection_ids_round_trip_by_bytes"],
+        provenance: "a `latin1` or ASCII checkpoint key column behind a lossy client conversion, \
+                     where every character the column cannot hold arrives as `?`. Persian with a \
+                     non-joiner and with a joiner, or two emoji ZWJ sequences, each land on one \
+                     row",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "projection_ids_round_trip_by_bytes",
+            "two ids that differ in any byte are two checkpoints",
+        )],
+    },
+    Declared {
+        name: "SluggedKeyStore",
+        kind: Kind::Mutant,
+        fails: &["projection_ids_round_trip_by_bytes"],
+        provenance: "an adapter that maps the id onto a narrower alphabet before using it as a \
+                     key: a SQL identifier (one table per projection), a file name, an \
+                     object-store key. Every character outside `[A-Za-z0-9_]` becomes `_`, so \
+                     `van-stock` and `van_stock` are one projection",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "projection_ids_round_trip_by_bytes",
+            "two ids that differ in any byte are two checkpoints",
+        )],
+    },
+    Declared {
+        name: "TrailingSpaceKeyStore",
+        kind: Kind::Mutant,
+        fails: &["projection_ids_round_trip_by_bytes"],
+        provenance: "a checkpoint key compared without its trailing spaces: a `CHAR(n)` column \
+                     that stores and compares the id right-padded, a `PAD SPACE` collation, or \
+                     an adapter that trims the id before binding it. `van_stock` and \
+                     `van_stock ` are two valid ids, because VT-35 trims nothing, and this store \
+                     files both under one row",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "projection_ids_round_trip_by_bytes",
+            "two ids that differ in any byte are two checkpoints",
+        )],
+    },
+    Declared {
+        name: "CanonicalEquivalenceKeyStore",
+        kind: Kind::Mutant,
+        fails: &["projection_ids_round_trip_by_bytes"],
+        provenance: "a checkpoint key column that compares canonically equivalent strings \
+                     equal: a nondeterministic ICU collation, or an adapter that normalises the \
+                     id to NFC before binding it. `café` precomposed (U+00E9) and `café` \
+                     decomposed (`e` + U+0301) are two valid ids, because VT-35 normalises \
+                     nothing, and this store files both under one row",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "projection_ids_round_trip_by_bytes",
+            "two ids that differ in any byte are two checkpoints",
         )],
     },
     Declared {
@@ -877,7 +982,7 @@ const REGISTRY: &[Declared] = &[
                      (`references/adapter-shapes.md`). PS-4 names the shape and permits it \
                      outright — PS-1 *\"is satisfiable by opening the transaction inside \
                      `commit` around a buffered write set\"* \
-                     (`spec/SPECIFICATION.md:5115-5122`) — and §4.11 assigns the projection \
+                     (`spec/SPECIFICATION.md:5185-5192`) — and §4.11 assigns the projection \
                      family's CF-5 variant to exactly it (`:5686-5691`). It is the far end of \
                      §6's batch-shape axis from the reference store's materialised delta, and \
                      the reason a green projection run is evidence about the port rather than \
@@ -915,6 +1020,13 @@ macro_rules! for_each_projection_mutant {
             crate::correct::MutantFixture<crate::mutants::CommittedReadBatchStore>,
             crate::correct::MutantFixture<crate::mutants::FirstWriteWinsBatchStore>,
             crate::correct::MutantFixture<crate::mutants::LiveOnlyCheckpointStore>,
+
+            crate::correct::MutantFixture<crate::mutants::CaseFoldingKeyStore>,
+            crate::correct::MutantFixture<crate::mutants::TruncatingKeyStore>,
+            crate::correct::MutantFixture<crate::mutants::AsciiOnlyKeyStore>,
+            crate::correct::MutantFixture<crate::mutants::SluggedKeyStore>,
+            crate::correct::MutantFixture<crate::mutants::TrailingSpaceKeyStore>,
+            crate::correct::MutantFixture<crate::mutants::CanonicalEquivalenceKeyStore>,
 
             crate::correct::MutantFixture<crate::variants::NoBatchReadStore>,
             crate::correct::MutantFixture<crate::variants::AbsentAfterResetStore>,

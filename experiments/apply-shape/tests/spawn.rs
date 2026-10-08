@@ -119,7 +119,7 @@ async fn the_runner_spawns_from_code_generic_over_the_projection() {
     ]));
     let models = Arc::new(MemoryProjectionStore::new());
     let count = Count {
-        id: ProjectionId::new("count"),
+        id: ProjectionId::from_static("count"),
         scope: scope(),
         total: 0,
     };

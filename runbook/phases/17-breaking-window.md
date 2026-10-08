@@ -66,7 +66,7 @@ gave to this phase.
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
       - `projection-batch-sql-seam-statement-type` (ADR-0084 `proposed`, #44; Neon's `push` narrowed) — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
-      - `projection-id-is-unvalidated`, **with SY-31's reserved `sync/` prefix**:
+      - `projection-id-is-unvalidated` (closed by ADR-0082, lane L10), **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
         the sync runner's reservation is decided here, not at phase 13.
       - ~~`es-17-two-adapter-measurement-is-unscheduled` — take ADR-0055's restated
@@ -125,7 +125,7 @@ gave to this phase.
       phase 16.)
 - [ ] ~~**ADR-0069's total `QueryItem` constructor.**~~ Moved to
       [phase 17b](17b-after-the-window.md) by ADR-0072: additive.
-- [ ] **VT-6 for Postgres and Neon: mint-per-open, or not**
+- [x] **VT-6 for Postgres and Neon: mint-per-open, or not**
       (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`).
       Phase 13 closes the restore gap, but it runs after this window, and
       mint-per-open is the one remedy that changes behaviour on a published
@@ -135,7 +135,8 @@ gave to this phase.
       only the additive arms; mint-per-open after this window is a post-1.0
       major.
       Answered by [ADR-0086](../../.kb/decisions/0086-postgres-and-neon-keep-mint-once.md),
-      `proposed`, pending the owner's call.
+      accepted by the owner on 2026-10-08: neither adapter mints per open, so phase 13
+      builds only the additive arms.
 - [x] **Execute ADR-0057 — the testkit version key is dropped.** Done in lane L4:
       the workspace entry for `happenstance-testkit` carries no `version`, and
       `cargo xtask package-check` refuses a publishable crate whose testkit
@@ -735,3 +736,44 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   - **Every row has a decision.** Four `proposed` records are listed as pending
     (ADR-0081, 0082, 0084, 0087). The release box stays open: nothing is
     published or tagged.
+- 2026-10-07 — **PR #52 merged as `151f5c8`** (the `0.4.0` trace table, drafted).
+  **L10: `ProjectionId` is validated (ADR-0082, `accepted`)**, on
+  `lane/p17-projection-id`. The PR stays open, and is not to merge until the owner
+  approves the one lint exception below (H-05).
+  - **What `ProjectionId::new` does now.**
+    - It returns `Result<ProjectionId, InvalidProjectionId>`.
+    - It refuses VT-14's set: empty, a `Cc` control, or a bidirectional control.
+      Refusals are reported left to right, in the order `validate::check` walks.
+    - It refuses more than 255 bytes (`MAX_PROJECTION_ID_LEN`).
+    - It refuses the reserved prefixes `happenstance/` and `sync/`, compared as
+      exact bytes (`wi-2155ac`).
+    - An accepted id is kept byte for byte.
+  - **New constructors and conversions.**
+    - `const fn from_static` goes through the same validator, so a literal id is
+      checked at compile time.
+    - `sync_watermark(StoreId)` is the only way to a `sync/` id (`wi-279dbb`).
+    - There is no `From<&str>` or `From<String>`; `TryFrom` and `FromStr`
+      validate.
+  - **Spec.** VT-35 `[FROZEN]`, and PS-39 `[PROVISIONAL]`: the testkit rule
+    `projection_ids_round_trip_by_bytes`, seven id pairs and six new mutants
+    (case, truncation, `latin1`, slug, trailing space, canonical equivalence; the
+    last two added in review).
+  - **The lint exception (H-05).** `from_static`'s const-context `panic!` needs
+    `#[expect(clippy::panic)]`, the form the temper hook offers. `event.rs` has the
+    same panic without the attribute.
+  - **Records.** `projection-id-is-unvalidated` is closed. The CHANGELOG's
+    BREAKING entry carries a SQL recipe for checkpoint rows stranded under a
+    now-invalid id (option A).
+  - **Merging `main`.** Five conflicts resolved by hand. The clause counts are
+    now 205 IDs: 154 frozen, 32 provisional, 12 deferred.
+  - **Verified.**
+    - Temper gate green, uncached, on the merged tree (`093568961dabf253`, after
+      review). Two independent reviews: the first requested F1–F8 (the major one:
+      PS-39 tested no trim or normalisation), the second verified all eight and
+      found four citation slips (W1–W4), fixed here. Its remaining blocker is the
+      H-05 approval.
+    - `spec-trace`, `lints` and `lint-kb`.
+    - PS-39 on memory, SQLite and both Postgres stores, the last two against a
+      live 17.10.
+  - **Not verified.** Neon's PS-39 (CI runs it), and the wasm32 Durable Object
+    run on this host's Node 22.

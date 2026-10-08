@@ -971,11 +971,15 @@ struct StockOnHand {
     scope: Tags,
 }
 
+/// The stock view's projection id. A free `const`, so the compiler validates
+/// it: an invalid id here is a build error, not a crash at start-up.
+const STOCK_ON_HAND: ProjectionId = ProjectionId::from_static("stock_on_hand");
+
 impl StockOnHand {
     /// The view over every SKU.
     fn new() -> Self {
         Self {
-            id: ProjectionId::new("stock_on_hand"),
+            id: STOCK_ON_HAND,
             scope: Tags::empty(),
         }
     }
@@ -1029,11 +1033,14 @@ struct OrderStatus {
     scope: Tags,
 }
 
+/// The order view's projection id.
+const ORDER_STATUS: ProjectionId = ProjectionId::from_static("order_status");
+
 impl OrderStatus {
     /// The view over every order.
     fn new() -> Self {
         Self {
-            id: ProjectionId::new("order_status"),
+            id: ORDER_STATUS,
             scope: Tags::empty(),
         }
     }
@@ -1151,11 +1158,18 @@ enum Counting {
     Units,
 }
 
+/// The first attempt's projection id.
+const DAILY_DISPATCHES: ProjectionId = ProjectionId::from_static("daily_dispatches");
+
+/// The replacement's projection id, kept across the promotion: the checkpoint
+/// travels with the id, not with the table.
+const DAILY_DISPATCHES_V2: ProjectionId = ProjectionId::from_static("daily_dispatches_v2");
+
 impl DailyDispatches {
     /// The first attempt: one per order.
     fn counting_orders() -> Self {
         Self {
-            id: ProjectionId::new("daily_dispatches"),
+            id: DAILY_DISPATCHES,
             scope: Tags::empty(),
             upsert: UPSERT_DAILY_DISPATCHES,
             counting: Counting::Orders,
@@ -1165,7 +1179,7 @@ impl DailyDispatches {
     /// The replacement, backfilled beside the first into its own table.
     fn counting_units() -> Self {
         Self {
-            id: ProjectionId::new("daily_dispatches_v2"),
+            id: DAILY_DISPATCHES_V2,
             scope: Tags::empty(),
             upsert: UPSERT_DAILY_DISPATCHES_V2,
             counting: Counting::Units,
@@ -1175,7 +1189,7 @@ impl DailyDispatches {
     /// The replacement after the swap: the same id, the promoted table.
     fn promoted() -> Self {
         Self {
-            id: ProjectionId::new("daily_dispatches_v2"),
+            id: DAILY_DISPATCHES_V2,
             scope: Tags::empty(),
             upsert: UPSERT_DAILY_DISPATCHES,
             counting: Counting::Units,
@@ -1234,11 +1248,14 @@ struct Couriered {
     scope: Tags,
 }
 
+/// The courier view's projection id.
+const COURIERED: ProjectionId = ProjectionId::from_static("couriered");
+
 impl Couriered {
     /// The view over every dispatch.
     fn new() -> Self {
         Self {
-            id: ProjectionId::new("couriered"),
+            id: COURIERED,
             scope: Tags::empty(),
         }
     }

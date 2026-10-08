@@ -36,8 +36,6 @@
 //! sweeps tag count as well as payload size, and why `src/bin/allocations.rs`
 //! reports the encode path in heap operations rather than in nanoseconds.
 
-use std::sync::LazyLock;
-
 use happenstance::bytes::Bytes;
 use happenstance::{
     Codec, CodecError, DecisionModel, DomainEvent, EventType, InvalidTag, Projection, ProjectionId,
@@ -194,13 +192,16 @@ impl DecisionModel for Total {
 }
 
 /// The projection id every arm here uses.
-static BENCH_PROJECTION: LazyLock<ProjectionId> =
-    LazyLock::new(|| ProjectionId::new("benchmark-totals"));
+///
+/// A `static` rather than a `const` because both `id` methods below return a
+/// borrow of it that outlives the call, and a `const` of a type with drop glue
+/// is not promoted to `'static`. `from_static` runs at compile time either way.
+static BENCH_PROJECTION: ProjectionId = ProjectionId::from_static("benchmark-totals");
 
 /// A read model over one account, into `happenstance-sqlite`'s deferred batch.
 ///
 /// The `apply` body is one upsert, copied in shape from
-/// `examples/transfers-on-sqlite/src/main.rs:559` — a projection that did less
+/// `examples/transfers-on-sqlite/src/main.rs:562` — a projection that did less
 /// would price the runner's loop without the write it exists to perform, and
 /// one that did more would be measuring an application's SQL rather than the
 /// port's.

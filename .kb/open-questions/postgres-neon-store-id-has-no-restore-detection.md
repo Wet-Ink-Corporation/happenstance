@@ -2,7 +2,8 @@
 id: kb-open-question-postgres-neon-store-id-no-restore-001
 title: happenstance-postgres and happenstance-neon mint their StoreId once, and take neither branch VT-6 requires of mint-once
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0086
 authority_tier: note
 summary: >-
   VT-6 lets an adapter mint its StoreId once and keep it only if it can detect that its state was
@@ -23,8 +24,10 @@ summary: >-
   trusts the pair and restored_peer_does_not_reissue_identities would be red on a Postgres-backed
   peer. A re-mint operation or a documented procedure is additive. Switching to mint-per-open is a
   behaviour change and would be phase 17's.
+  Resolved 2026-10-08 by kb-decision-0086: neither happenstance-postgres nor happenstance-neon mints per open; both keep mint-once, earned by a documented re-mint, and default-refusing detection is ruled out after 1.0. The additive arms remain phase 13's.
 depends_on: []
 related:
+  - kb-decision-0086
   - kb-decision-0014
   - kb-decision-0024
   - kb-decision-0066
@@ -38,7 +41,7 @@ source_paths:
   - crates/happenstance-neon/src/event_store.rs
   - crates/happenstance-sqlite/src/event_store.rs
   - runbook/phases/13-sync.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-08
 ---
 
 # happenstance-postgres and happenstance-neon mint their StoreId once, and take neither branch VT-6 requires of mint-once
@@ -159,4 +162,10 @@ Phase 13 (`runbook/phases/13-sync.md:66-83`).
 
 Answered by [ADR-0086](../decisions/0086-postgres-and-neon-keep-mint-once.md), `proposed`, pending the
 owner's call: neither adapter mints per open, and both keep mint-once, earned by a documented
-re-mint. This atom stays open until the record is accepted.
+re-mint.
+
+## Closed — 2026-10-08
+
+**Superseded by `kb-decision-0086`**, accepted by the owner on 2026-10-08. Phase 17's half is
+settled: neither adapter mints per open. What remains is phase 13's additive work, the re-mint
+method and documented procedure, which `runbook/phases/13-sync.md` already carries.

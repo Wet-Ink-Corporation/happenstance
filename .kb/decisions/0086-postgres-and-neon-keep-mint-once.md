@@ -2,7 +2,7 @@
 id: kb-decision-0086
 title: Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0086
 reversibility: low
@@ -66,7 +66,7 @@ source_paths:
   - runbook/phases/17-breaking-window.md
   - runbook/phases/13-sync.md
   - references/adr/0086-postgres-and-neon-keep-mint-once.md
-last_reviewed: 2026-10-07
+last_reviewed: 2026-10-08
 ---
 
 # Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined

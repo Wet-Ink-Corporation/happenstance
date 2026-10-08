@@ -146,8 +146,8 @@ pub use store::{EventStore, SendEventStore, collect, read_decision_model};
 pub use tag::{MAX_TAG_LEN, Tag, Tags};
 
 pub use projection::{
-    Authority, Checkpoint, CommitError, ProjectionId, ProjectionStore, ResetError,
-    SendProjectionStore,
+    Authority, Checkpoint, CommitError, InvalidProjectionId, MAX_PROJECTION_ID_LEN, ProjectionId,
+    ProjectionStore, ResetError, SendProjectionStore,
 };
 
 #[cfg(feature = "conformance")]
