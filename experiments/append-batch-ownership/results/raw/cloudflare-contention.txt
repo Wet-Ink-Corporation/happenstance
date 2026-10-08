@@ -1,0 +1,24 @@
+    Finished `release` profile [optimized] target(s) in 0.18s
+     Running tests/measure_cloudflare.rs (target/wasm32-unknown-unknown/release/deps/measure_cloudflare-e49d27bef06b7f43.wasm)
+running 1 test
+Invoking test: contention_k8_batch_128
+== cloudflare k=8 contention, batch=128 payload=1024 regime=vec, warmup=2, n=21 ==
+batch=128  tags=1   payload=1024    regime=vec    caller=B0Resend           attempts=36 commits=8 rejections=28 heap_ops=23005..23005 bytes=2581068..2581068 median_us=32010.6     q1_us=30988.0     q3_us=45990.6     n=21
+batch=128  tags=1   payload=1024    regime=vec    caller=B1Resend           attempts=36 commits=8 rejections=28 heap_ops=16817..16817 bytes=1437616..1437616 median_us=33092.1     q1_us=31036.2     q3_us=51369.7     n=21
+batch=128  tags=1   payload=1024    regime=vec    caller=O1ClonePerAttempt  attempts=36 commits=8 rejections=28 heap_ops=32725..32725 bytes=1890736..1890736 median_us=32047.1     q1_us=31339.8     q3_us=48595.9     n=21
+batch=128  tags=1   payload=1024    regime=vec    caller=B1Rebuild          attempts=36 commits=8 rejections=28 heap_ops=53897..53897 bytes=6934960..6934960 median_us=37295.7     q1_us=35519.1     q3_us=60656.6     n=21
+batch=128  tags=1   payload=1024    regime=vec    caller=O1Rebuild          attempts=36 commits=8 rejections=28 heap_ops=51849..51849 bytes=5853616..5853616 median_us=36484.1     q1_us=34859.0     q3_us=62151.4     n=21
+batch=128  tags=8   payload=1024    regime=vec    caller=B0Resend           attempts=36 commits=8 rejections=28 heap_ops=73181..73181 bytes=3627596..3627596 median_us=127778.9    q1_us=95445.7     q3_us=131405.6    n=21
+batch=128  tags=8   payload=1024    regime=vec    caller=B1Resend           attempts=36 commits=8 rejections=28 heap_ops=52657..52657 bytes=2218928..2218928 median_us=126220.4    q1_us=123699.1    q3_us=132921.2    n=21
+batch=128  tags=8   payload=1024    regime=vec    caller=O1ClonePerAttempt  attempts=36 commits=8 rejections=28 heap_ops=100821..100821 bytes=3413936..3413936 median_us=123204.0    q1_us=96379.1     q3_us=129846.4    n=21
+batch=128  tags=8   payload=1024    regime=vec    caller=B1Rebuild          attempts=36 commits=8 rejections=28 heap_ops=191113..191113 bytes=8937392..8937392 median_us=137387.5    q1_us=131770.5    q3_us=144273.2    n=21
+batch=128  tags=8   payload=1024    regime=vec    caller=O1Rebuild          attempts=36 commits=8 rejections=28 heap_ops=189065..189065 bytes=7856048..7856048 median_us=133990.3    q1_us=103223.9    q3_us=138918.0    n=21
+batch=128  tags=64  payload=1024    regime=vec    caller=B0Resend           attempts=36 commits=8 rejections=28 heap_ops=474589..474589 bytes=11999820..11999820 median_us=889455.9    q1_us=851040.1    q3_us=921083.5    n=21
+batch=128  tags=64  payload=1024    regime=vec    caller=B1Resend           attempts=36 commits=8 rejections=28 heap_ops=339377..339377 bytes=8469424..8469424 median_us=880486.2    q1_us=807795.0    q3_us=950862.5    n=21
+batch=128  tags=64  payload=1024    regime=vec    caller=O1ClonePerAttempt  attempts=36 commits=8 rejections=28 heap_ops=645589..645589 bytes=15599536..15599536 median_us=885408.8    q1_us=841335.6    q3_us=926283.7    n=21
+batch=128  tags=64  payload=1024    regime=vec    caller=B1Rebuild          attempts=36 commits=8 rejections=28 heap_ops=1265801..1265801 bytes=26283952..26283952 median_us=926490.2    q1_us=834553.3    q3_us=1006678.6   n=21
+batch=128  tags=64  payload=1024    regime=vec    caller=O1Rebuild          attempts=36 commits=8 rejections=28 heap_ops=1263753..1263753 bytes=25202608..25202608 median_us=936950.7    q1_us=852645.5    q3_us=975691.9    n=21
+test contention_k8_batch_128 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 3 filtered out; finished in 131.01s
+

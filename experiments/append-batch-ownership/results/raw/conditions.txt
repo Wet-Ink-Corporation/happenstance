@@ -1,0 +1,25 @@
+date: 2026-10-07T05:26:30Z
+commit: 896d48c (plus this directory, uncommitted at run time if so)
+
+Linux 6.18.44-fc-v70 #1 SMP PREEMPT_DYNAMIC @0 x86_64 GNU/Linux
+model name	: Intel(R) Xeon(R) Processor
+cpus: 4
+MemTotal:       16480968 kB
+
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: x86_64-unknown-linux-gnu
+release: 1.97.1
+LLVM version: 22.1.6
+cargo 1.97.1 (c980f4866 2026-06-30)
+node: v24.21.0
+wasm-bindgen-test-runner 0.2.126
+
+locked versions (this crate's Cargo.lock):
+  bytes 1.12.1
+  worker 0.8.5
+  wasm-bindgen 0.2.126
+  js-sys 0.3.103
+  wasm-bindgen-test 0.3.76

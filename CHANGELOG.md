@@ -36,6 +36,20 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **BREAKING (`happenstance-neon`, `projection-store` feature): `NeonWriteBatch::push`
+  takes `&'static str` and its values, the free-form spelling moved to
+  `push_raw_sql`, and `statements` is private.** A statement written in source goes
+  through `push(sql, params)`; one whose shape is computed goes through
+  `push_raw_sql(SqlStatement)`, whose name is the warning. `#[non_exhaustive]` does
+  not stop `batch.statements.push(…)` on a batch the caller holds, so the field had
+  to go private for the narrowing to mean anything; read it through `statements()`.
+  To migrate: `batch.push(SqlStatement::with_params("…", v))` becomes
+  `batch.push("…", v)`; a `format!`-built statement becomes
+  `batch.push_raw_sql(SqlStatement::with_params(format!(…), v))`; a read of
+  `batch.statements` becomes `batch.statements()` (`.to_vec()` for an owned
+  copy), and a write through it becomes `push_raw_sql`. `SqlStatement` is unchanged. The release is the
+  owner's phase 17 default; ADR-0084, proposed in PR #44, records the seam.
+
 - **`happenstance-sqlite`'s busy timeout is 15 s, was 5 s.**
   `connection::BUSY_TIMEOUT_MS` moves on measurement, superseding
   [ADR-0022](references/adr/0022-append-condition-strategy.md) §11 in part.
@@ -336,6 +350,17 @@ not the same as what a user needed to be told.
   conformance rule can see this, because the suite runs against one endpoint
   ([ADR-0075](.kb/decisions/0075-the-projection-ports-1-0-clauses.md), PS-38).
 
+- **`EventStore::append` keeps taking a borrowed batch, `&[Event]`, and that is
+  now a promise.** No API changed. ES-17 was provisional on one measurement:
+  whether taking `Vec<Event>` instead would make an append materially cheaper.
+  That measurement has now been taken on `happenstance-cloudflare`, the one
+  adapter that copies each payload into a row value it owns. At a batch of 128,
+  with 1 to 64 tags and payloads up to 16 KiB, owning the batch saved two heap
+  allocations per event and no time that could be told from noise. A caller
+  that resends the same batch after a refusal would instead have paid a clone
+  on every attempt. ES-17 is `[FROZEN]`, so from `1.0.0` changing it is a major
+  release ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md)).
+
 ### Removed
 
 - **BREAKING (`happenstance-core`): the empty `unstable-projection` feature is
@@ -374,6 +399,52 @@ not the same as what a user needed to be told.
   cited by line. `lbug` and its build graph leave `Cargo.lock`, and the gate's two
   Ladybug steps and the `ladybug-configured` subcommand are gone. The `0.0.0`
   name reservation on crates.io stands and is not yanked.
+
+
+### `0.4.0` trace (draft, not released)
+
+Every break `0.4.0` carries, each with the decision that caused it. Drafted
+2026-10-07 against `main` at `4278816` from `cargo semver-checks check-release
+--workspace --baseline-version 0.3.2 --release-type minor` (cargo-semver-checks
+0.51.0: 202 checks per crate). Four crates reported no break: `happenstance`,
+`happenstance-core`, `happenstance-sqlite` and `happenstance-cloudflare`. Three
+reported six, listed below as **tool** rows. The **hand** rows are breaks the tool
+cannot see, found by reading every BREAKING entry above against the tool's output. A row whose decision is still `proposed` is listed under *Pending* and
+is not part of `0.4.0` until the owner accepts it.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| T1 | `happenstance-neon` | `NeonWriteBatch::push` takes 2 parameters, was 1 (`method_parameter_count_changed`) | tool | the owner's phase 17 default (Neon's narrowing rides `0.4.0`); #49 | Changed |
+| T2 | `happenstance-neon` | `NeonWriteBatch::statements` is no longer a public field (`struct_pub_field_missing`) | tool | as T1 | Changed |
+| T3 | `happenstance-neon` | the same field, reported as hidden (`struct_pub_field_now_doc_hidden`) | tool | as T1; one change, reported twice | Changed |
+| T4 | `happenstance-postgres` | the `naive-arm` feature is gone (`feature_missing`) | tool | phase 17 lane L4, the `naive-arm` item | Removed |
+| T5 | `happenstance-postgres` | `PostgresEventStore::new_naive` is gone from every feature-selected build (`inherent_method_missing`) | tool | as T4 | Removed |
+| T6 | `happenstance-testkit` | `k_disjoint_boundaries_admit_exactly_k_commits` renamed `k_disjoint_boundaries_never_conflict` (`function_missing`); the rule also changed what it accepts: a contender refused as busy no longer fails it (behaviour, which the tool cannot see) | tool and hand | [ADR-0077](.kb/decisions/0077-appenderror-busy.md) | Changed |
+| H1 | `happenstance-core` | the empty `unstable-projection` feature is removed; the tool passes over `unstable-*` features | hand | [ADR-0063](.kb/decisions/0063-the-projection-port-is-frozen.md), ADR-0066 | Removed |
+| H2 | `happenstance-testkit` | the `#[doc(hidden)]` conformance emitters are renamed and promised; the tool skips hidden items | hand | [ADR-0076](.kb/decisions/0076-the-cf-23-emitters-are-public-api.md) | Changed |
+| H3 | `happenstance-cloudflare` | `planned_statement_count` returns different values for the same query (`n.div_ceil(5)`); signature unchanged | hand | [ADR-0079](.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | Changed |
+| H4 | `happenstance-sqlite`, `happenstance-postgres`, `happenstance-neon` | a busy refusal arrives as `AppendError::Busy`, was `AppendError::Store` (behaviour) | hand | ADR-0077 | Changed |
+| H5 | `happenstance` | `commit` and `commit_with` retry a busy store (behaviour) | hand | ADR-0077 | Changed |
+| H6 | `happenstance-sqlite` | the busy timeout is 15 s, was 5 s (behaviour) | hand | ADR-0065 | Changed |
+| H7 | `happenstance` | `CommandError::Exhausted`'s `source` field is `AppendError<E>`, was `ConditionViolated`; cargo-semver-checks has no lint for a changed field type | hand | ADR-0077 | Changed |
+
+**Not a break, recorded so the absence is a decision:** `EventStore::append`
+keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md));
+`AppendError::Busy` is an added variant on a `#[non_exhaustive]` enum (Added).
+
+**Pending — each joins this table only if the owner accepts its record:**
+
+- `happenstance-sqlite`, `happenstance-postgres`: a store runs on the runtime it is
+  called on (behaviour; ADR-0081, `proposed`, #48).
+- `happenstance-core`: `ProjectionId::new` becomes fallible and refuses the ADR-0015
+  set and the reserved prefixes (ADR-0082, lane L10, in flight).
+- `happenstance-neon`: `SqlTransport` gains the required method `reads_settled`
+  (ADR-0087, `proposed`, #51; the spike is #50).
+- `happenstance-postgres`: a projection batch's parameter count is checked at
+  `commit` (behaviour; ADR-0084, `proposed`, #44).
+
+Every tool row and every hand row has a decision, and no break was found without
+one.
 
 ## [0.3.2] — 2026-09-20
 

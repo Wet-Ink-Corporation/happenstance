@@ -135,7 +135,12 @@ fn mint_stamp() -> u64 {
 #[non_exhaustive]
 pub struct NeonWriteBatch {
     /// The statements to run, in order, inside one server-side transaction.
-    pub statements: Vec<SqlStatement>,
+    ///
+    /// Private, because the narrowing of [`push`](Self::push) depends
+    /// on it: `#[non_exhaustive]` stops a struct literal outside this crate, not
+    /// `batch.statements.push(…)` on a batch the caller already holds. Read it
+    /// through [`statements`](Self::statements).
+    statements: Vec<SqlStatement>,
     /// The identity of the store that began this batch.
     ///
     /// Private, and that is the whole of the foreign-batch defence:
@@ -178,9 +183,83 @@ impl NeonWriteBatch {
         }
     }
 
-    /// Queues a statement.
-    pub fn push(&mut self, statement: SqlStatement) {
+    /// Queues a statement written in source, with its values bound beside it.
+    ///
+    /// # Security
+    ///
+    /// The text is fixed and the values are **bound**, never interpolated. A
+    /// statement assembled out of event data at run time is a SQL injection
+    /// whose source is the log, and it commits in the same request that
+    /// advances the checkpoint, so the projection never replays those events
+    /// and nothing re-derives the rows it corrupted. `&'static str` makes that
+    /// a type obligation: a literal, a `const` or a `concat!` is accepted, and
+    /// an interpolated `String` does not compile.
+    ///
+    /// ```compile_fail,E0308
+    /// use happenstance_neon::NeonWriteBatch;
+    ///
+    /// fn queue(batch: &mut NeonWriteBatch, account: &str) {
+    ///     batch.push(
+    ///         format!("DELETE FROM balance WHERE account = '{account}'"),
+    ///         Vec::new(),
+    ///     );
+    /// }
+    /// ```
+    ///
+    /// Where the *shape* of a statement genuinely depends on a run-time value,
+    /// reach for [`push_raw_sql`](Self::push_raw_sql) deliberately.
+    ///
+    /// # Parameter count
+    ///
+    /// The values must match the placeholders `sql` uses, one for one. Nothing
+    /// counts them here; the endpoint sees them only at `commit` or `reset`
+    /// ([`ProjectionStore`]). What it refuses is [`CommitError::Store`] or
+    /// [`ResetError::Store`], and nothing moves. **Which mismatches it refuses is
+    /// unmeasured** (ADR-0084): do not rely on a surplus value being refused,
+    /// because one may commit.
+    pub fn push(&mut self, sql: &'static str, params: Vec<serde_json::Value>) {
+        self.push_raw_sql(SqlStatement::with_params(sql, params));
+    }
+
+    /// Queues a statement this crate cannot see the provenance of.
+    ///
+    /// The unconstrained twin of [`push`](Self::push), for a statement whose
+    /// text is computed at run time. This crate's own example is the
+    /// conformance probe, whose table name is rendered from the configured
+    /// schema.
+    ///
+    /// # Security
+    ///
+    /// The obligation [`push`](Self::push) discharges in the type system moves
+    /// to the caller here, in full, and this method's name is the whole of the
+    /// warning: **no value may be interpolated into the statement's text**.
+    /// Compute placeholders, quote any computed identifier, and bind every
+    /// value through [`SqlStatement::with_params`].
+    ///
+    /// # Parameter count
+    ///
+    /// As for [`push`](Self::push).
+    pub fn push_raw_sql(&mut self, statement: SqlStatement) {
         self.statements.push(statement);
+    }
+
+    /// The queued statements, in the order they will run.
+    ///
+    /// Read-only. A statement enters a batch through [`push`](Self::push) or
+    /// [`push_raw_sql`](Self::push_raw_sql) and no other way:
+    ///
+    /// ```compile_fail,E0616
+    /// use happenstance_neon::{NeonWriteBatch, SqlStatement};
+    ///
+    /// fn queue(batch: &mut NeonWriteBatch, account: &str) {
+    ///     batch
+    ///         .statements
+    ///         .push(SqlStatement::new(format!("DELETE FROM balance WHERE account = '{account}'")));
+    /// }
+    /// ```
+    #[must_use]
+    pub fn statements(&self) -> &[SqlStatement] {
+        &self.statements
     }
 
     /// How many statements are queued.
@@ -673,7 +752,9 @@ impl<T: SqlTransport> happenstance_core::ProjectionProbe for NeonProjectionStore
         key: &str,
         value: u64,
     ) -> Result<(), Self::Error> {
-        batch.push(SqlStatement::with_params(
+        // `push_raw_sql`, because the table name is rendered from the
+        // configured schema; every value is still bound.
+        batch.push_raw_sql(SqlStatement::with_params(
             format!(
                 "INSERT INTO {} (k, v) VALUES ($1, $2::bigint) \
                  ON CONFLICT (k) DO UPDATE SET v = excluded.v",
@@ -694,7 +775,7 @@ impl<T: SqlTransport> happenstance_core::ProjectionProbe for NeonProjectionStore
     /// [`reset`](happenstance_core::ProjectionStore::reset) can be checked
     /// without the suite knowing what a read model is.
     async fn probe_delete_all(&self, batch: &mut Self::Batch) -> Result<(), Self::Error> {
-        batch.push(SqlStatement::new(format!(
+        batch.push_raw_sql(SqlStatement::new(format!(
             "DELETE FROM {}",
             qualified_probe(&self.config)
         )));
@@ -875,7 +956,7 @@ mod tests {
     fn a_commit_appends_the_upsert_and_the_regression_guard() {
         let store = store();
         let mut batch = poll_once(store.begin()).expect("opening a buffer cannot fail");
-        batch.push(crate::transport::SqlStatement::new("SELECT 1"));
+        batch.push("SELECT 1", Vec::new());
         let request = store.commit_request(
             batch,
             &projection_id(),
@@ -896,6 +977,57 @@ mod tests {
                     .contains(r#""hsp_1"."projection_checkpoint""#)
             );
         }
+    }
+
+    /// `push` stores the text it was given and the values beside it, unchanged.
+    #[test]
+    fn push_stores_the_static_text_and_its_values() {
+        let mut batch = NeonWriteBatch::new();
+        batch.push(
+            "DELETE FROM balance WHERE account = $1",
+            vec![serde_json::json!("acc-1")],
+        );
+        let [statement] = batch.statements() else {
+            panic!("one push queues one statement: {batch:?}");
+        };
+        assert_eq!(statement.query, "DELETE FROM balance WHERE account = $1");
+        assert_eq!(statement.params, vec![serde_json::json!("acc-1")]);
+    }
+
+    /// `push_raw_sql` takes a statement whose text was computed at run time,
+    /// which `push`'s `&'static str` refuses, and queues it as built.
+    #[test]
+    fn push_raw_sql_stores_a_computed_statement() {
+        let table = String::from(r#""hsp_1"."balance""#);
+        let mut batch = NeonWriteBatch::new();
+        batch.push_raw_sql(crate::transport::SqlStatement::with_params(
+            format!("DELETE FROM {table} WHERE account = $1"),
+            vec![serde_json::json!("acc-2")],
+        ));
+        let [statement] = batch.statements() else {
+            panic!("one push_raw_sql queues one statement: {batch:?}");
+        };
+        assert_eq!(
+            statement.query,
+            r#"DELETE FROM "hsp_1"."balance" WHERE account = $1"#
+        );
+        assert_eq!(statement.params, vec![serde_json::json!("acc-2")]);
+    }
+
+    /// Both doors feed one list, read back in the order it was filled.
+    #[test]
+    fn statements_returns_every_push_in_order() {
+        let mut batch = NeonWriteBatch::new();
+        batch.push("SELECT 1", Vec::new());
+        batch.push_raw_sql(crate::transport::SqlStatement::new(format!("SELECT {}", 2)));
+        batch.push("SELECT 3", Vec::new());
+        let queries: Vec<&str> = batch
+            .statements()
+            .iter()
+            .map(|statement| statement.query.as_str())
+            .collect();
+        assert_eq!(queries, ["SELECT 1", "SELECT 2", "SELECT 3"]);
+        assert_eq!(batch.len(), 3);
     }
 
     /// The body the guard's failing cast actually produces, recorded from the
