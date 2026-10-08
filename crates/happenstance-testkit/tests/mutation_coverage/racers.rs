@@ -347,6 +347,10 @@ impl Shared {
     /// once the remaining contenders are all in it. No contender can be
     /// rejected by a commit *in* this cohort, because nobody commits until it is
     /// released.
+    ///
+    /// That argument assumes the wait is driven to completion, which `block_on`
+    /// always does. A future dropped mid-wait would leave its count raised and
+    /// release a later cohort early rather than hang; nothing here drops one.
     async fn cohort(&self) {
         let cohort = self.update(|party| {
             let arrived_at = party.cohorts;
