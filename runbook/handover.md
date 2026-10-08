@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-guard-plan`, on `4fbfefa` (`main`, where PR #41 merged). 2026-10-07.
+`lane/p17-exit-pass`, on `527dc08` (`main`, where PR #58 merged). 2026-10-08.
 
 ## Where things are
 
@@ -28,39 +28,43 @@ Phase 17 keeps what breaks or changes behaviour on a published crate, plus the
 
 **The owner's calls at kickoff:** spike the ES-11 fence on Neon (ask again if it
 fails); promise `AppendError::Busy`, with the typed commit loop retrying it inside
-`Retry`. **The live Neon job is not a required check until L8 lands** (`wi-0f1291`,
-#39): a Neon red from the known ES-11/ES-12 race does not block a merge; any other
-Neon failure does.
+`Retry`. **L8 has landed** (#57, the ES-11 fence), so the live Neon job's known
+race is fixed on `main`; it becomes a required check again when the owner re-adds
+it to the ruleset (`wi-0f1291`).
 
 ## In flight
 
-An unattended overnight session (2026-10-07) is working the phase 17 queue in
-order, one PR per item.
-- **Merged:** #41 (`4fbfefa`): the vacuity control's record (draft PR #40, run
-  37570009097, red by name on both `workerd` legs, closed unmerged) and
-  `wi-13bd3b`'s `declared_excludes` fixes.
-- **This PR:** the guard-plan `LIST SUBQUERY` assertion (ADR-0068 §16, limb 1); the
-  falsifier did not fire.
-- **Next, in flight:** L7's measurement, `experiments/append-batch-ownership/`.
-- **A pre-existing flake** in `happenstance-testkit`'s
-  `the_concurrency_rules_reject_exactly_what_they_claim` (the racing mutants'
-  yield-bounded rendezvous) turns the local gate red under load. It is recorded in
-  the phase log; fixing it rewrites a test instrument, which is the owner's call.
+Nothing. Phase 17's work is on `main`; only the `0.4.0` release is left.
+- **Merged on 2026-10-07:** #41, #42, #46, #47, #49, #52.
+- **Merged on 2026-10-08:**
+  - #53 (L10, ADR-0082);
+  - #43 (ADR-0083), #44 (ADR-0084), #45 (ADR-0086);
+  - #55 (the owner's decision intake);
+  - #48 (L9, ADR-0081);
+  - #51 (ADR-0087; ADR-0061 superseded);
+  - #57 (the ES-11 fence; ES-11 and ES-12 frozen);
+  - #58 (deterministic racing mutants).
+- **Closed unmerged, as planned:** spike #50.
+- **The full gate** passes on `527dc08`.
+- **Known, not this phase's:** the default-features doc build of `happenstance`
+  fails on `lib.rs:111`'s `Projection::apply` link. The deployed `workerd` leg met
+  one unclassified Cloudflare HTML 500 on #51; it passed on re-run. Printing the
+  page `<title>` on a failure is the proposed follow-up.
 
 ## Next action
 
-1. L7 (ES-17), L9 (ADR-0022 §9), L10 (`ProjectionId`), the breaking open
-   questions, VT-6, then L8's Neon fence spike last, then the `0.4.0` trace table.
+1. Release `0.4.0`. The trace table in `CHANGELOG.md`'s `[Unreleased]` carries every
+   break; its one pending row, ADR-0084's Postgres parameter-count check, is accepted
+   and owed, and either lands first or is recorded as left for after the release.
 
 ## Waiting on the owner
 
+- Re-add `conformance against a live Neon endpoint` to the `Protect main` ruleset
+  (id 22926481) as a required check (ADR-0087 D8).
+- Decide whether ADR-0084's Postgres parameter-count check lands before `0.4.0`.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
-  keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; `ProjectionId`
-  refuses the full ADR-0015 set with a generic reserved prefix; Neon's `push`
-  narrowing rides `0.4.0`; VT-30 is a deprecated alias; new CI jobs are not
-  required checks.
-- When L8 lands, the owner re-adds `conformance against a live Neon endpoint` to
-  the `Protect main` ruleset (id 22926481).
+  keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; VT-30 is a
+  deprecated alias; new CI jobs are not required checks.
 - Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open

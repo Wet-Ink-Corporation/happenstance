@@ -64,7 +64,7 @@ crate and not the surrounding `spec/`, `references/` or `.kb/` directories a
 GitHub's own web view softens this for a reader who followed the `repository`
 link and is browsing there: it recognises a `#L123`-style fragment and a raw
 `path:line` string is at least findable by search within that view. docs.rs
-gives no such affordance — a citation into `spec/SPECIFICATION.md:9062` on a
+gives no such affordance — a citation into `spec/SPECIFICATION.md:9168` on a
 docs.rs page is prose with no destination a click can reach.
 
 ## What is not decided

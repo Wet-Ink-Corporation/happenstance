@@ -2,7 +2,8 @@
 id: kb-open-question-es-17-two-adapter-measurement-001
 title: The two-build measurement ES-17's falsifier requires is scheduled by nobody
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0080
 authority_tier: note
 summary: >-
   ADR-0012 kept append's events &[Event] and declined to lift the clause to frozen, naming phase 8
@@ -22,8 +23,14 @@ summary: >-
   The deadline is earlier than this atom first recorded: happenstance-core has been published at
   0.2.0-alpha.1 since 2026-08-16, and what phase 12 removes is the pre-release exemption, not the
   first exposure. The KB half is this record; the queue row it also needs belongs to .bklg/.
+  Resolved 2026-10-07 by kb-decision-0080: phase 17's lane L7 took the two-build measurement on
+  happenstance-cloudflare (experiments/append-batch-ownership/), through calibrated replica arms
+  because event_store_benchmarks! is compiled out on wasm32, under a rule written before the run.
+  0 of 9 realistic cells fired; owning the batch saves 2 heap operations per event, and a raw
+  caller resending under by-value pays +90-95%. append keeps &[Event] and ES-17 is FROZEN.
 depends_on: []
 related:
+  - kb-decision-0080
   - kb-decision-0012
   - kb-decision-0022
   - kb-decision-0055
@@ -38,7 +45,7 @@ source_paths:
   - references/adr/0012-append-shape-and-preconditions.md
   - references/adr/0022-append-condition-strategy.md
   - RUNBOOK.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-07
 ---
 
 # The two-build measurement ES-17's falsifier requires is scheduled by nobody
@@ -133,4 +140,23 @@ against `happenstance-cloudflare`, through an experiment crate or a tag-count pa
 on it, or it freezes `&[Event]` by a record that says why the measurement is not owed.
 
 ES-7's freeze is decided in the same phase, and the ledger groups the two clauses
-(`runbook/ledgers.md:162`). **Owner now: phase 17.**
+(`runbook/ledgers.md:172-173`). **Owner now: phase 17.**
+
+## Closed — 2026-10-07
+
+**Superseded by `kb-decision-0080`** (phase 17, lane L7), which records the measurement this atom
+found owned by nobody and freezes ES-17 on it.
+
+- **Who took it, and how.** `experiments/append-batch-ownership/`, against
+  `happenstance-cloudflare`, the subject ADR-0055 named. Not through `event_store_benchmarks!`,
+  which is compiled out on wasm32 (`crates/happenstance-testkit/src/lib.rs:438`): four arms — the
+  adapter, a replica of its write path verified to allocate identically at all 72 sweep points, the
+  same statements without the binding clone, and an owned `Vec<Event>` arm. The harness's one-tag
+  limit and shared-batch contention scenario, both named above, were sidestepped rather than fixed:
+  the sweep ran at 1, 8 and 64 tags, and the contention scenario has five caller behaviours.
+- **What it found.** Under a rule fixed before the run, 0 of 9 cells at batch 128 fired. Owning
+  the batch saves exactly 2 heap operations per event; a raw caller resending one batch under
+  by-value pays +90–95% heap operations in a k = 8 contended run.
+- **What is left.** Nothing of this question. Removing Cloudflare's own binding clone, an internal
+  change with no API effect, is a follow-up the record names and does not decide; whether the
+  testkit harness gains a tag-count parameter stays the separable question it was.

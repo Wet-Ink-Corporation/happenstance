@@ -167,9 +167,9 @@ skipped, and `results/test-postgres.txt` is the transcript.
 | C1 | **Held.** First compile, no expansion errors. | `src/shape.rs:174-232`; `results/clippy.txt` |
 | C2 | **Held.** | `tests/memory.rs:169`, `:212` |
 | C3 | **Held.** 3 applied, 2 skipped. Rows and skip records are read back from the file, and the checkpoint is at the head. | `tests/sqlite.rs:130`; `results/test-default.txt` |
-| C4 | **Held, against a live server.** `apply` awaits `batch.execute(..).await?` inside the live transaction. 3 applied, 2 skipped, rows and skip records committed, and the checkpoint read back through a fresh store is `Live` at the head. | `tests/postgres.rs:98-109`, `:175`, `:230`; `results/test-postgres.txt` |
+| C4 | **Held, against a live server.** `apply` awaits `batch.execute(..).await?` inside the live transaction. 3 applied, 2 skipped, rows and skip records committed, and the checkpoint read back through a fresh store is `Live` at the head. | `tests/postgres.rs:98-109`, `:175`, `:232`; `results/test-postgres.txt` |
 | C5 | **Held, with the caller-side bounds below.** The one spawner drives all three stores. | `tests/common/mod.rs:22-25`; `tests/spawn.rs:114` |
-| C6 | **Held.** | `results/wasm32-check.txt`; `src/edge.rs:252`; `tests/edge.rs:15` |
+| C6 | **Held.** | `results/wasm32-check.txt`; `src/edge.rs:257`; `tests/edge.rs:15` |
 | C7 | **Held.** `error[E0599]: no method named position found for reference &Delivered<u8>`. | `results/refusals.txt`; `src/shape.rs:63` |
 | C8 | **Held on all three batch shapes.** `MemoryProjectionBatch::write`, `SqliteBatch::push`, `LivePostgresBatch::execute`. The runner names `Batch` only as `StoreBatch<P>`, with no bound. | `tests/memory.rs`; `tests/sqlite.rs:83`; `tests/postgres.rs:113-130`; `src/runner.rs` |
 | C9 | **Held.** The runner, `run` over the two memory stores, returns `Poll::Ready(Ok(..))` on the first poll of a `Waker::noop` context. Polling `apply` alone could not fail, because an `apply` with no await is ready by async-fn semantics; the runner can, and a yield inserted before the `apply` await turned it red. | `tests/memory.rs:151` |

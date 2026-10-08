@@ -105,8 +105,8 @@
 //! # One crate, one runtime seam
 //!
 //! Every method that reaches SQLite hops onto a blocking thread through the
-//! [`tokio::runtime::Handle`] captured at construction, falling back to
-//! [`Handle::try_current`] and reporting
+//! runtime it is executing on ([`Handle::try_current`]), falling back to the
+//! [`tokio::runtime::Handle`] captured at construction and reporting
 //! [`NoRuntime`](SqliteProjectionStoreError::NoRuntime) when there is neither.
 //! That is ADR-0022 §9's decision for the event store's read path, applied here
 //! unchanged: a second, different answer inside one crate is the defect. It is
@@ -204,10 +204,10 @@ pub struct SqliteProjectionStore {
     /// connection and the file, so it *is* the same store and must accept the
     /// batches its origin began.
     stamp: u64,
-    /// The runtime every blocking hop lands on, captured here rather than looked
-    /// up at each call.
+    /// The runtime a blocking hop lands on when its caller is executing on none:
+    /// the executing runtime is preferred, and this is the fallback.
     ///
-    /// ADR-0022 §9, and the same reasoning the event store records: a store
+    /// ADR-0022 §9 as ADR-0081 ordered it, the event store's reasoning: a store
     /// constructed inside a test's runtime carries a handle out to callers that
     /// are bare OS threads, where `Handle::try_current()` finds nothing. A
     /// [`Handle`] is `Clone`, `Send`, `Sync` and `Unpin`, so carrying one costs
@@ -223,9 +223,9 @@ impl SqliteProjectionStore {
     /// is given, so a caller reaching this constructor directly should have
     /// opened it through [`crate::connection::open_configured`].
     ///
-    /// This is where the batch stamp is minted and where the runtime handle is
-    /// captured, because it is the point at which a caller is most likely to be
-    /// inside a runtime.
+    /// This is where the batch stamp is minted and where the fallback runtime
+    /// handle is captured, for calls later made from no runtime at all: it is
+    /// the point at which a caller is most likely to be inside one.
     #[must_use]
     pub fn new(connection: Connection) -> Self {
         Self {
@@ -333,8 +333,8 @@ impl SqliteProjectionStore {
 
     /// The runtime this store's blocking work hops onto.
     ///
-    /// The handle captured at construction wins; [`Handle::try_current`] is the
-    /// fallback for a store built outside a runtime and driven inside one.
+    /// The runtime the caller is executing on wins ([`Handle::try_current`]); the
+    /// handle captured at construction is the fallback for a bare-thread caller.
     ///
     /// # Errors
     ///
@@ -342,9 +342,9 @@ impl SqliteProjectionStore {
     /// both constructed *and* driven with no runtime anywhere, which is what
     /// keeps that variant meaning something.
     fn runtime(&self) -> Result<Handle, SqliteProjectionStoreError> {
-        match &self.runtime {
-            Some(runtime) => Ok(runtime.clone()),
-            None => Ok(Handle::try_current()?),
+        match Handle::try_current() {
+            Ok(current) => Ok(current),
+            Err(none) => self.runtime.clone().ok_or_else(|| none.into()),
         }
     }
 

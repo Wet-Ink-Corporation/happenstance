@@ -271,14 +271,9 @@ feature.** CF-33 is `[FROZEN]` and a watchdog is a clock. Liveness rests on the
 CI job timeout; the cost is that a deadlocking adapter hangs rather than naming a
 rule, and that cost is accepted rather than overlooked. If you find yourself
 wanting `thread::sleep` to make a race reproducible, what you want is a
-**rendezvous** that waits on an exact condition, never a count or a clock. A
-yield budget looks like a safe middle ground and is not: on a loaded host it
-runs out before the cohort arrives, and the wrong store proceeds alone and
-passes. `Shared::rendezvous` in `racers.rs` waits for every open contender
-handle, which the rule declares by how many it opens. That file's module doc,
-*The rendezvous, and why it cannot time out*, records the four versions of
-the idea, why the first three were wrong, and the one precondition a new rule
-has to meet so that the wait cannot hang.
+**rendezvous** that waits for a known party, not for a count of yields: a yield
+bound is a timeout and loses under load. `Shared::cohort` in `racers.rs` records
+four versions of that idea and why the first three were wrong.
 
 **Start the contenders at a barrier.** Spawning N threads in a loop does not
 start them together, and it was measured: the first contenders finished before

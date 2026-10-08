@@ -33,62 +33,56 @@
 //! and records that `Handle::enter` is the smaller move that does not work: its
 //! `EnterGuard` is `!Send`.
 //!
-//! The second is ES-11, and this is the honest part of the file.
+//! The second is ES-11, and this file is where the adapter's half of it is
+//! bought.
 //!
-//! # ES-11 is not bought here, and the numbers say by how much
+//! # ES-11 is bought here, by the read ledger, and not by spawn order
 //!
 //! `read_result_is_stable_under_concurrent_append` polls the read's stream once
 //! and then appends. Spawning at the first poll puts the `SELECT` on the wire
 //! before `append` is even called, which is the earliest an adapter is permitted
-//! to fix its state, and the specification's conformance path for an
-//! asynchronous driver states its own sufficiency condition one sentence later:
-//! *a read spawned at its first poll and an append spawned afterwards land in the
-//! same queue in that order, so the snapshot precedes the append*.
+//! to fix its state. On its own that is not enough here: a read and an append
+//! are two independent requests to a proxy that hands each one to whichever
+//! backend it likes, and nothing in the protocol orders the snapshot one takes
+//! against the commit the other makes. Before the fence, both racing rules
+//! reddened intermittently against the live endpoint, always in the direction
+//! that matters — the drained stream carried the `Later` event the rule forbids.
 //!
-//! **That condition is false here by construction.** `happenstance-postgres`
-//! satisfies it because both operations enter one `PgPool`. A read and an append
-//! from this adapter are two independent requests to a proxy that hands each one
-//! to whichever backend it likes, and nothing in the protocol orders the
-//! snapshot one takes against the commit the other makes.
+//! The specification's sufficiency condition asks for an order *the store
+//! itself honours* (ADR-0061), and the one available is **an answer follows
+//! execution**. So [`HyperTransport::dispatch`] registers every read-only
+//! request in a [`ReadLedger`] **before `round_trip` returns**, and moves the
+//! [`ReadTicket`] into the spawned task. The task ending — answered, failed,
+//! timed out at [`ROUND_TRIP_TIMEOUT`], panicked or cancelled — drops the ticket
+//! and settles the read. `NeonEventStore::append` awaits
+//! [`SqlTransport::reads_settled`] before its first attempt, so its request is
+//! written only after every earlier read on this transport has been answered.
 //!
-//! It is not a theoretical gap. Running the two ES-11 rules repeatedly against
-//! the live endpoint at `--test-threads=1` reddens both configurations
-//! intermittently, and HTTP/2 over one connection reddens **markedly less often**
-//! than HTTP/1.1 over a default pool — which is the whole reason the reference
-//! transport below is built the way it is.
+//! The release is driven by **the runtime's worker finishing the read's task**,
+//! never by anyone polling the read stream. That is the whole design problem: the
+//! rule runs on one task, which is parked inside `append` while the stream sits
+//! polled once, so a release that lived in the stream would never happen
+//! (ADR-0087 §2.2 calls that shape F0, and `tests/es11_fence.rs` rejects it).
 //!
-//! **The counts those runs produced are not quoted, here or anywhere.** They were
-//! taken during phase 10b bring-up and no raw output survives; this tree's own
-//! discipline is that a measurement lives beside its log under `experiments/`,
-//! and the ES-11 figures were the one set that never did. Restoring a citable
-//! rate means running the sweep again and committing what it prints — which is
-//! worth doing, and is not worth asserting in the meantime.
+//! The thirty-second bound exists because of the fence. A read that never
+//! answers would otherwise hold every later append on this transport for ever,
+//! turning one hung request into a hung suite (H-13).
 //!
-//! The failure is always the same and always in the direction that matters: the
-//! read's snapshot is taken *after* the append commits, so the drained stream
-//! carries the `Later` event the rule requires it not to.
+//! **The ordering domain is one transport value.** Clones share one ledger;
+//! [`HyperTransport::shared`] builds a fresh one per call, so the fixture's
+//! domain is one `connect()`, and the concurrency family's contenders — which
+//! connect separately — never wait on each other's reads. Two handles over two
+//! transports are not ordered against each other, which no rule observes
+//! through the port and which ADR-0087 states as the limit of the claim.
 //!
-//! HTTP/2 is therefore not a performance choice — it is the only ordering
-//! primitive available. Two nearly simultaneous requests become two streams
-//! written in order down **one** TCP connection, so the proxy at least *receives*
-//! them in the order they were issued; over HTTP/1.1 they take two connections
-//! and even that is a coin toss. `pool_max_idle_per_host(1)` is half of it: with
-//! several warm connections the pool picks one per request and the ordering h2
-//! buys is given straight back.
+//! HTTP/2 over one connection is kept, and is still not a performance choice:
+//! it narrowed the race before the fence existed, and the fence does not depend
+//! on it. `pool_max_idle_per_host(1)` is its other half — with several warm
+//! connections the pool picks one per request and the ordering h2 buys is lost.
 //!
-//! What remains is a **capability limit of this adapter**, not a flake to retry
-//! away. Receiving two requests in order does not make one backend's snapshot
-//! precede another backend's commit, and no configuration of this client can
-//! make it. **Nothing here suppresses it** — the rule is mounted, it is not gated
-//! by a capability, and a run that loses the race is red.
-//!
-//! The residual belonged to the clause's owner rather than to this file, and
-//! **ADR-0061 settled it**: the sufficiency sentence quoted above is corrected to
-//! say *spawned at the first poll, **and** ordered against a later append by
-//! something the store itself honours* — a narrowing, since it removes spawn order
-//! alone as a route to a conformance claim — and `happenstance-neon` does not
-//! satisfy ES-11. The MUST did not move and no capability was minted, which is why
-//! this file still mounts the rule and still goes red when it loses.
+//! **Nothing here suppresses a failure.** Both racing rules are mounted, neither
+//! is gated by a capability, and a run that loses the race is red — which, with
+//! the fence, is the falsifier ADR-0087 names rather than a known flake.
 //!
 //! # It owns a runtime, and the shape that looks right does not work
 //!
@@ -131,8 +125,10 @@
 #![allow(dead_code)]
 
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use happenstance_core::bytes::Bytes;
+use happenstance_neon::transport::{ReadLedger, ReadTicket};
 use happenstance_neon::{HttpResponse, SqlRequest, SqlTransport};
 use http_body_util::{BodyExt, Full};
 use hyper::Uri;
@@ -174,9 +170,15 @@ struct Shared {
 }
 
 /// A one-shot HTTPS transport onto Neon's `/sql` endpoint.
+///
+/// Clones share one [`ReadLedger`], so every store built over clones of one
+/// transport is one ES-11 ordering domain. [`HyperTransport::shared`] builds a
+/// fresh ledger per call, which makes the fixture's domain one `connect()`.
 #[derive(Clone)]
 pub(crate) struct HyperTransport {
     shared: &'static Shared,
+    /// The reads this transport has sent and the endpoint has not answered.
+    ledger: ReadLedger,
 }
 
 impl core::fmt::Debug for HyperTransport {
@@ -187,6 +189,7 @@ impl core::fmt::Debug for HyperTransport {
         f.debug_struct("HyperTransport")
             .field("uri", &self.shared.uri)
             .field("connection", &"<redacted>")
+            .field("ledger", &self.ledger)
             .finish()
     }
 }
@@ -213,6 +216,7 @@ impl HyperTransport {
     pub(crate) fn shared() -> Self {
         Self {
             shared: SHARED.get_or_init(build_shared),
+            ledger: ReadLedger::new(),
         }
     }
 
@@ -343,7 +347,25 @@ pub(crate) enum HyperTransportError {
     /// The spawned task panicked or was cancelled.
     #[error("the task carrying the /sql round trip did not finish")]
     Join(#[source] tokio::task::JoinError),
+
+    /// No answer arrived within [`ROUND_TRIP_TIMEOUT`]. The request was
+    /// abandoned, and a read was settled, so nothing queued behind it waits on.
+    #[error("the /sql round trip got no answer within {after:?}")]
+    Timeout {
+        /// The bound that elapsed.
+        after: Duration,
+    },
 }
+
+/// How long one round trip may take before this transport gives up on it.
+///
+/// Since the fence, a read that never answers holds back every later append on
+/// the same transport, so an unbounded exchange would turn one hung request into
+/// a hung suite (H-13). Thirty seconds is about three hundred of this endpoint's
+/// 80–100 ms round trips: far past anything a healthy request takes, including
+/// the concurrency family's contended appends, and short enough that a hang
+/// reports as a failed rule rather than as a job killed at its own limit.
+const ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl SqlTransport for HyperTransport {
     type Error = HyperTransportError;
@@ -364,6 +386,13 @@ impl SqlTransport for HyperTransport {
                 Err(error) => Err(error),
             }
         }
+    }
+
+    /// The ledger's horizon is taken here, at the call. The wait itself is
+    /// released by the runtime's worker finishing each earlier read's task,
+    /// never by anyone polling a read stream.
+    fn reads_settled(&self) -> impl Future<Output = ()> {
+        self.ledger.settled()
     }
 }
 
@@ -403,26 +432,94 @@ impl HyperTransport {
             .body(Full::new(Bytes::from(body)))
             .map_err(|_| HyperTransportError::Request)?;
 
+        // Registered here, synchronously, before `round_trip` returns, and
+        // moved into the task: the task ending — answered, failed, panicked or
+        // cancelled — drops the ticket and settles the read. A request that
+        // failed to build above was never sent and is never registered.
+        let ticket = request.read_only.then(|| self.ledger.dispatch());
+        // A cheap handle moved into the task: the client is an `Arc`-backed pool.
         let client = self.shared.client.clone();
         Ok(self.shared.runtime.spawn(async move {
-            let response = client
-                .request(http_request)
-                .await
-                .map_err(HyperTransportError::Http)?;
-            let status = response.status().as_u16();
-            let collected = response
-                .into_body()
-                .collect()
-                .await
-                .map_err(HyperTransportError::Body)?;
-            Ok(HttpResponse::new(status, collected.to_bytes()))
+            let exchange = exchange(&client, http_request);
+            bounded(exchange, ROUND_TRIP_TIMEOUT, ticket).await
         }))
     }
 }
 
+/// Runs one exchange to an answer, a failure or `limit`, whichever comes
+/// first, then settles its read.
+///
+/// The ticket is consumed here, after the outcome is known, so every way the
+/// exchange can end — answered, failed, timed out — settles the read. A panic
+/// or a cancelled task drops it too, by unwinding through this frame.
+async fn bounded(
+    exchange: impl Future<Output = Result<HttpResponse, HyperTransportError>>,
+    limit: Duration,
+    ticket: Option<ReadTicket>,
+) -> Result<HttpResponse, HyperTransportError> {
+    let outcome = match tokio::time::timeout(limit, exchange).await {
+        Ok(outcome) => outcome,
+        Err(_elapsed) => Err(HyperTransportError::Timeout { after: limit }),
+    };
+    drop(ticket);
+    outcome
+}
+
+/// Sends one request and buffers the whole answer.
+async fn exchange(
+    client: &Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
+    http_request: hyper::Request<Full<Bytes>>,
+) -> Result<HttpResponse, HyperTransportError> {
+    let response = client
+        .request(http_request)
+        .await
+        .map_err(HyperTransportError::Http)?;
+    let status = response.status().as_u16();
+    let collected = response
+        .into_body()
+        .collect()
+        .await
+        .map_err(HyperTransportError::Body)?;
+    Ok(HttpResponse::new(status, collected.to_bytes()))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::host_of;
+    use core::pin::pin;
+    use core::task::{Context, Poll, Waker};
+    use std::time::Duration;
+
+    use happenstance_neon::transport::ReadLedger;
+
+    use super::{HyperTransportError, bounded, host_of};
+
+    /// W7: a read the endpoint never answers is given up on after the bound,
+    /// reported as a timeout, and settled — so the appends queued behind it
+    /// proceed instead of hanging with it.
+    ///
+    /// Rejects: an unbounded exchange (this test never returns), and a timeout
+    /// that reports the error but keeps the read registered.
+    #[tokio::test]
+    async fn a_hung_read_times_out_and_settles() {
+        let ledger = ReadLedger::new();
+        let ticket = ledger.dispatch();
+        let mut settled = pin!(ledger.settled());
+        let mut cx = Context::from_waker(Waker::noop());
+        assert_eq!(settled.as_mut().poll(&mut cx), Poll::Pending);
+
+        let limit = Duration::from_millis(1);
+        let outcome = bounded(core::future::pending(), limit, Some(ticket)).await;
+
+        assert!(
+            matches!(outcome, Err(HyperTransportError::Timeout { after }) if after == limit),
+            "got {outcome:?}"
+        );
+        assert_eq!(
+            settled.poll(&mut cx),
+            Poll::Ready(()),
+            "the timed-out read is settled"
+        );
+    }
 
     /// The pooler URL's shape, without any real one.
     #[test]

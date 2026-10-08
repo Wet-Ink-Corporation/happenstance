@@ -138,17 +138,17 @@ impl Fixture for NeonFixture {
     /// This adapter runs the same `xact_id < pg_snapshot_xmin(...)` predicate
     /// as `happenstance-postgres`, because it is the same server reached through
     /// a proxy, so the frontier behaves identically and for identical reasons.
-    /// It is worth separating from this crate's *other* visibility limitation:
-    /// ES-11 is about two independent HTTP requests having no ordering between
-    /// them, and is a property of the **transport**; this is about the frontier,
+    /// It is worth separating from ES-11, this crate's *other* visibility
+    /// question: ES-11 is about ordering two independent HTTP requests, which the
+    /// **transport's** read-settlement fence buys; this is about the frontier,
     /// and would hold over a direct connection too.
     const READ_YOUR_OWN_WRITES: Capability = Capability::declined(
         "the endpoint is PostgreSQL, so reads carry the same \
          `xact_id < pg_snapshot_xmin(pg_current_snapshot())` frontier the \
          direct adapter uses: an append this caller was just told succeeded is \
          not visible to it until every transaction open anywhere on the server \
-         when it committed has ended. Distinct from this crate's ES-11 \
-         limitation, which is about transport ordering, not visibility.",
+         when it committed has ended. Distinct from ES-11, which is about \
+         transport ordering, not visibility, and which the transport's fence buys.",
     );
 
     /// Supported, and armed for real.

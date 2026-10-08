@@ -10,6 +10,123 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-08 — the owner's decisions enacted; phase 17's exit pass is green
+
+*Committed on `lane/p17-exit-pass`, on `527dc08`.* Phase 17.
+
+Nine PRs merged: #53, #43, #55, #44, #45, #48, #51, #57 and #58. They carry
+ADR-0081, 0083, 0084, 0086 and 0087 accepted, the ES-11 fence on `main`, ES-11
+and ES-12 frozen, and the racing mutants made deterministic. `cargo xtask ci` on
+`527dc08` passes. Every phase 17 exit criterion but the `0.4.0` release is met.
+
+**Verified.** The full `cargo xtask ci` on `527dc08`. Optional steps whose tools
+are absent were skipped: `cargo hack`, `cargo deny`, nightly docs.rs.
+
+---
+
+## 2026-10-07 — `ProjectionId` is validated (ADR-0082)
+
+*Committed on `lane/p17-projection-id`, on `151f5c8`.* Phase 17, lane L10. PR open.
+
+PR #52 merged as `151f5c8`. `ProjectionId::new` is fallible and refuses VT-14's set,
+more than 255 bytes and the `happenstance/` and `sync/` prefixes; `sync_watermark`
+builds the only `sync/` id. BREAKING on `happenstance-core` and `happenstance`. Open
+for one H-05 approval: `#[expect(clippy::panic)]` on `from_static`.
+
+**Verified.** The temper gate on the merged tree, `spec-trace`, `lints`, `lint-kb`,
+PS-39 on memory, SQLite and live Postgres. The full `cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — the `0.4.0` trace table, drafted
+
+*Committed on `lane/p17-trace-table`, on `4278816`.* Phase 17.
+
+`cargo semver-checks` against `0.3.2` (`--release-type minor`) reports six breaks
+in three crates. Each one, and seven hand rows the tool cannot see, is traced to its
+decision in `CHANGELOG.md`'s `[Unreleased]`. Four pending records are named. Not
+released.
+
+**Verified.** The tool run itself, `spec-trace`, `lints`, `lint-kb`. The full
+`cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — ES-11's fence works on Neon; ADR-0087 proposed (L8)
+
+*Committed on `lane/p17-adr-0087-es11`, on `4278816`.* Phase 17, lane L8. PR open.
+
+PR #49 merged as `4278816`. The spike (draft #50, never merged) fences an append
+behind its transport's earlier reads. On the live endpoint: baseline 172 red of
+1,500, fence 0 of 1,500, both racing rules green in three attempts, under a rule
+written before the first counted run. ADR-0087 supersedes ADR-0061 on acceptance;
+landing the fence breaks `SqlTransport` and is the owner's call.
+
+**Verified.** `spec-trace`, `lints`, `lint-kb`, the tally regenerated from the
+committed rows. The full `cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — Neon's `push` narrowed (N2)
+
+*Committed on `lane/p17-neon-push`, on `12540a7`.* Phase 17.
+
+PR #47 merged as `12540a7`. `NeonWriteBatch::push` takes `&'static str` and its
+values; a computed statement goes through `push_raw_sql`; `statements` is private
+behind `statements()`. BREAKING on `happenstance-neon`, for `0.4.0`, by the owner's
+default.
+
+**Verified.** The temper gate, `happenstance-neon`'s tests and `compile_fail`
+doctests, `spec-trace`, `lints`, `lint-kb`, `lint-constitution`, `cargo xtask wasm`
+(Node 24). The full `cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — ADR-0022 §9 reproduced; remedy B proposed (ADR-0081)
+
+*Committed on `lane/p17-runtime-seam`, on `3462bf8`.* Phase 17, lane L9. PR open.
+
+A store outliving the runtime it was built in reported `Worker(JoinError::Cancelled)`
+on `happenstance-sqlite` and `happenstance-postgres`. The stores now prefer the
+executing runtime; a behaviour change on two published crates, so ADR-0081 is
+`proposed` and the PR waits for the owner. The Postgres pool strand is not fixed and
+is documented.
+
+**Verified.** The temper gate, both crates' `runtime_seam` tests (Postgres live),
+Postgres conformance 108/108, `spec-trace`, `lints`, `lint-constitution`, `lint-kb`.
+The full `cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — the deployed `workerd` leg retries a Durable Object reset
+
+*Committed on `lane/p17-workerd-reset`, on `3462bf8`.* Phase 17.
+
+PR #46 merged as `3462bf8`. Cloudflare's `500 Durable Object reset because its code
+was updated.` failed one rule on #44 and on #46; the deployed leg now retries it
+once on a fresh object, as it already did `Worker not found.`
+
+**Verified.** vitest on `test/platform-miss.test.ts` (red 1 of 6, then 6 of 6),
+`spec-trace`, `lints` and `lint-kb`. No Rust changed; the full `cargo xtask ci` was
+not run.
+
+---
+
+## 2026-10-07 — ES-17 frozen on `&[Event]` (ADR-0080)
+
+*Committed on `lane/p17-es17`, on `6235224`.* Phase 17, lane L7.
+
+The measurement is committed under `experiments/append-batch-ownership/`; its
+pre-declared rule fired in none of nine cells, so `append` keeps its borrowed batch
+and ES-17 is `[FROZEN]`. Three `proposed` records went up for the owner as #43, #44
+and #45.
+
+**Verified.** The experiment's own checks, `spec-trace`, `lints` and `lint-kb`. The
+workspace gate is unaffected (nothing outside `experiments/` and the records
+changed). The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — the guard-plan assertion (ADR-0068)
 
 *Committed on `lane/p17-guard-plan`, on `4fbfefa`.* Phase 17.

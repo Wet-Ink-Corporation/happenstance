@@ -48,7 +48,7 @@ that way explicitly: WF-3 reverses a documented serialisation intent for
 human-readable payloads — none is a compatibility break, "because there is
 nothing to be compatible with." The ADR also caught and corrected an inverted
 claim in the specification about the shape of the (non-existent) divergence:
-`SPECIFICATION.md:1900-1904` had the reference and happenstance's
+`SPECIFICATION.md:1970-1974` had the reference and happenstance's
 match-all-query encodings backwards, which W7's direct reading corrected.
 
 What W7 explicitly could *not* settle, and the ADR is careful to name rather

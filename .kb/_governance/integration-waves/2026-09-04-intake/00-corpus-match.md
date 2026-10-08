@@ -163,7 +163,7 @@ it is false against the tree:
 
 ```
 Cargo.toml:15       version = "0.2.0-alpha.1"
-CHANGELOG.md:306    ## [0.2.0-alpha.1] — 2026-08-16      ← the only version cut
+CHANGELOG.md:340    ## [0.2.0-alpha.1] — 2026-08-16      ← the only version cut
 RUNBOOK.md:163      | 12 | Publish 0.2.0 | 7, 8 | not started |
 ```
 

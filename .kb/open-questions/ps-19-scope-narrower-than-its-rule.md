@@ -53,7 +53,7 @@ last_reviewed: 2026-08-15
 
 ## What is true today
 
-PS-19 (`spec/SPECIFICATION.md:5484`) is `[FROZEN]` and reads: "After a successful `reset`,
+PS-19 (`spec/SPECIFICATION.md:5554`) is `[FROZEN]` and reads: "After a successful `reset`,
 `checkpoint(id)` MUST return `Checkpoint::NeverRun`, and this MUST be distinguishable from
 `commit(empty_batch, id, SequencePosition::FIRST, Live)`." §4.11 assigns it two rules:
 `reset_is_not_commit_at_first` and `fresh_projection_has_no_checkpoint`. The second asks about an
@@ -122,7 +122,7 @@ writing the rule to the clause's *intent* rather than to its *sentence*, distrib
 family, not one table's population.
 
 **This atom's own finding is confirmed, not corrected.** The sweep re-derived it from
-`spec/SPECIFICATION.md:5484-5489` before re-reading this atom, and named the exposing store more
+`spec/SPECIFICATION.md:5554-5559` before re-reading this atom, and named the exposing store more
 sharply: `checkpoint` is `SELECT position, authority FROM checkpoints WHERE id = ?`, the missing
 row resolves through `.unwrap_or(Checkpoint::Live { through: FIRST })` — the cheapest default,
 `SequencePosition` being `NonZeroU64` with `FIRST` as its minimum — and `reset` writes an explicit
@@ -150,7 +150,7 @@ reader arriving here needs sending on.
 
 **Sub-question 1 is answered: a new clause, not a widening.** PS-19 keeps its scope, *after a
 successful `reset`*, and its `MUST` is byte-identical across the decision
-(`spec/SPECIFICATION.md:5554-5556`, with phase 6's answer recorded beneath it at `:5311-5317`). The
+(`spec/SPECIFICATION.md:5624-5626`, with phase 6's answer recorded beneath it at `:5311-5317`). The
 never-seen-id half becomes PS-38's **second** sentence — *a `ProjectionId` no successful `commit`
 has named MUST read as `Checkpoint::NeverRun`* (`:5447-5449`) — which is why the
 `.unwrap_or(Checkpoint::Live { through: FIRST })` store this atom named is now rejected by a clause

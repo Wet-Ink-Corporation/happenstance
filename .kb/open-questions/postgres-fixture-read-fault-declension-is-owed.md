@@ -67,7 +67,7 @@ Phase 10's remainder. Until this is built, `happenstance-postgres`'s fixture pri
 
 This was answered in code at phase 10b, and nobody came back to update this atom. Commit `2ed06b4`
 (*"arm READ_FAULT, which this fixture is the one that owed"*) landed on 2026-09-07 and shipped in
-`0.2.0`; the entry is `CHANGELOG.md:435-449`, under `[0.2.0]`.
+`0.2.0`; the entry is `CHANGELOG.md:469-483`, under `[0.2.0]`.
 `crates/happenstance-postgres/tests/support/mod.rs:488` declares
 `READ_FAULT: Capability = Capability::SUPPORTED`. `arm_read_fault` and its documentation
 (`:540-592`) run `READ_FAULT_INJECTION` (`:621-634`), which renames `event` aside and puts a view

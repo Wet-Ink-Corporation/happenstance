@@ -526,11 +526,14 @@ struct Balances {
     scope: Tags,
 }
 
+/// The projection's name, validated by the compiler.
+const ACCOUNT_BALANCE: ProjectionId = ProjectionId::from_static("account_balance");
+
 impl Balances {
     /// The projection over every account.
     fn new() -> Self {
         Self {
-            id: ProjectionId::new("account_balance"),
+            id: ACCOUNT_BALANCE,
             scope: Tags::empty(),
         }
     }

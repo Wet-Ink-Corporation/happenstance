@@ -44,7 +44,7 @@ fn next(position: SequencePosition) -> SequencePosition {
 #[tokio::test]
 async fn store_is_reachable_from_the_public_surface() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
 
     assert_eq!(
         store.checkpoint(&id).await.expect("checkpoint reads"),
@@ -106,7 +106,7 @@ fn the_store_and_its_batch_are_send_and_sync() {
 #[tokio::test]
 async fn open_batch_is_invisible_until_commit() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let position = SequencePosition::FIRST;
 
     let mut batch = store.begin().await.unwrap();
@@ -132,7 +132,7 @@ async fn open_batch_is_invisible_until_commit() {
 #[tokio::test]
 async fn commit_installs_rows_and_checkpoint_together() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let position = SequencePosition::FIRST;
 
     let mut batch = store.begin().await.unwrap();
@@ -157,8 +157,8 @@ async fn commit_installs_rows_and_checkpoint_together() {
 #[tokio::test]
 async fn commit_records_the_authority_it_was_given() {
     let store = MemoryProjectionStore::new();
-    let live = ProjectionId::new("live_one");
-    let rebuilding = ProjectionId::new("rebuilding_one");
+    let live = ProjectionId::from_static("live_one");
+    let rebuilding = ProjectionId::from_static("rebuilding_one");
     let position = SequencePosition::FIRST;
 
     store
@@ -197,7 +197,7 @@ async fn commit_records_the_authority_it_was_given() {
 #[tokio::test]
 async fn empty_batch_still_advances_the_checkpoint() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let position = SequencePosition::FIRST;
 
     // Nothing written: the position is the one *considered*, not the one
@@ -216,7 +216,7 @@ async fn empty_batch_still_advances_the_checkpoint() {
 #[tokio::test]
 async fn regressing_position_is_rejected_and_changes_nothing() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let first = SequencePosition::FIRST;
     let second = next(first);
 
@@ -257,8 +257,8 @@ async fn regressing_position_is_rejected_and_changes_nothing() {
 #[tokio::test]
 async fn distinct_projections_advance_independently() {
     let store = MemoryProjectionStore::new();
-    let one = ProjectionId::new("one");
-    let two = ProjectionId::new("two");
+    let one = ProjectionId::from_static("one");
+    let two = ProjectionId::from_static("two");
     let position = SequencePosition::FIRST;
 
     store
@@ -290,7 +290,7 @@ async fn distinct_projections_advance_independently() {
 async fn commit_rejects_a_foreign_batch() {
     let a = MemoryProjectionStore::new();
     let b = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let position = SequencePosition::FIRST;
 
     // `b.commit(a.begin(), ..)` still type-checks: a lifetime names a region,
@@ -316,7 +316,7 @@ async fn commit_rejects_a_foreign_batch() {
 async fn reset_rejects_a_foreign_batch() {
     let a = MemoryProjectionStore::new();
     let b = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let position = SequencePosition::FIRST;
 
     let mut seeded = b.begin().await.unwrap();
@@ -354,7 +354,7 @@ async fn reset_rejects_a_foreign_batch() {
 async fn commit_rejects_a_foreign_batch_from_default_stores() {
     let a = MemoryProjectionStore::default();
     let b = MemoryProjectionStore::default();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
 
     let mut foreign = a.begin().await.unwrap();
     foreign.write("depot-7", 12);
@@ -380,7 +380,7 @@ async fn commit_rejects_a_foreign_batch_from_default_stores() {
 async fn reset_rejects_a_foreign_batch_from_default_stores() {
     let a = MemoryProjectionStore::default();
     let b = MemoryProjectionStore::default();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let position = SequencePosition::FIRST;
 
     let mut seeded = b.begin().await.unwrap();
@@ -413,7 +413,7 @@ async fn reset_rejects_a_foreign_batch_from_default_stores() {
 #[tokio::test]
 async fn dropped_batch_leaves_store_usable() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let position = SequencePosition::FIRST;
 
     {
@@ -444,7 +444,7 @@ async fn dropped_batch_leaves_store_usable() {
 #[tokio::test]
 async fn rollback_leaves_both_unchanged() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
 
     let mut batch = store.begin().await.unwrap();
     batch.write("depot-7", 99);
@@ -464,7 +464,7 @@ async fn rollback_leaves_both_unchanged() {
 #[tokio::test]
 async fn reset_clears_rows_and_checkpoint_together() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let position = SequencePosition::FIRST;
 
     let mut seeded = store.begin().await.unwrap();
@@ -490,7 +490,7 @@ async fn reset_clears_rows_and_checkpoint_together() {
 #[tokio::test]
 async fn reset_returns_the_projection_to_never_run() {
     let store = MemoryProjectionStore::new();
-    let id = ProjectionId::new("van_stock");
+    let id = ProjectionId::from_static("van_stock");
     let first = SequencePosition::FIRST;
 
     store
@@ -520,8 +520,8 @@ async fn reset_returns_the_projection_to_never_run() {
 #[tokio::test]
 async fn reset_is_scoped_to_one_projection() {
     let store = MemoryProjectionStore::new();
-    let one = ProjectionId::new("one");
-    let two = ProjectionId::new("two");
+    let one = ProjectionId::from_static("one");
+    let two = ProjectionId::from_static("two");
     let position = SequencePosition::FIRST;
 
     store
@@ -590,7 +590,7 @@ mod probe {
     #[tokio::test]
     async fn probe_round_trip_through_the_traits_only() {
         let store = MemoryProjectionStore::new();
-        let id = ProjectionId::new("van_stock");
+        let id = ProjectionId::from_static("van_stock");
 
         let value = round_trip(&store, &id, SequencePosition::FIRST)
             .await
@@ -635,7 +635,7 @@ mod probe {
     #[tokio::test]
     async fn probe_read_through_layers_pending_over_committed() {
         let store = MemoryProjectionStore::new();
-        let id = ProjectionId::new("van_stock");
+        let id = ProjectionId::from_static("van_stock");
         let first = SequencePosition::FIRST;
 
         let mut seeded = store.begin().await.unwrap();
@@ -670,7 +670,7 @@ mod probe {
     #[tokio::test]
     async fn probe_delete_all_supports_reset() {
         let store = MemoryProjectionStore::new();
-        let id = ProjectionId::new("van_stock");
+        let id = ProjectionId::from_static("van_stock");
         let first = SequencePosition::FIRST;
         let second = next(first);
 

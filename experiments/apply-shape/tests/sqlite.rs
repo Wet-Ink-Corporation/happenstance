@@ -143,7 +143,7 @@ async fn a_buffered_sql_projection_applies_and_skips_through_the_spawned_runner(
     let path = database("buffered");
     let store = SqliteProjectionStore::open(&path).unwrap();
     let tally = SqlTally {
-        id: ProjectionId::new("sql-tally"),
+        id: ProjectionId::from_static("sql-tally"),
         scope: scope(),
     };
 
@@ -175,10 +175,12 @@ async fn a_buffered_sql_projection_applies_and_skips_through_the_spawned_runner(
 
     // And the checkpoint moved past both, in the same transaction.
     let reopened = SqliteProjectionStore::open(&path).unwrap();
-    let checkpoint =
-        happenstance::SendProjectionStore::checkpoint(&reopened, &ProjectionId::new("sql-tally"))
-            .await
-            .unwrap();
+    let checkpoint = happenstance::SendProjectionStore::checkpoint(
+        &reopened,
+        &ProjectionId::from_static("sql-tally"),
+    )
+    .await
+    .unwrap();
     assert_eq!(
         checkpoint,
         happenstance::Checkpoint::Live {

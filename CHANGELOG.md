@@ -36,6 +36,69 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **BREAKING (`happenstance-neon`, `projection-store` feature): `NeonWriteBatch::push`
+  takes `&'static str` and its values, the free-form spelling moved to
+  `push_raw_sql`, and `statements` is private.** A statement written in source goes
+  through `push(sql, params)`; one whose shape is computed goes through
+  `push_raw_sql(SqlStatement)`, whose name is the warning. `#[non_exhaustive]` does
+  not stop `batch.statements.push(…)` on a batch the caller holds, so the field had
+  to go private for the narrowing to mean anything; read it through `statements()`.
+  To migrate: `batch.push(SqlStatement::with_params("…", v))` becomes
+  `batch.push("…", v)`; a `format!`-built statement becomes
+  `batch.push_raw_sql(SqlStatement::with_params(format!(…), v))`; a read of
+  `batch.statements` becomes `batch.statements()` (`.to_vec()` for an owned
+  copy), and a write through it becomes `push_raw_sql`. `SqlStatement` is unchanged. The release is the
+  owner's phase 17 default; ADR-0084, proposed in PR #44, records the seam.
+
+- **BREAKING (`happenstance-neon`): `SqlTransport` has a second required method,
+  `reads_settled`, and `NeonEventStore::append` waits on it.** It resolves once
+  every read-only request the transport dispatched before the call has been
+  answered or has failed; `append` awaits it once, before its first attempt, so
+  no write leaves while an earlier read on the same transport is unanswered. That
+  is how this adapter meets ES-11 and ES-12, which it failed intermittently up to
+  `0.3.2`: an answer follows execution, so the read's snapshot precedes the
+  append's commit. There is deliberately no default, because a default that
+  resolved at once would compile in every transport and leave the ordering
+  silently unmet. **To migrate a transport:** hold a `ReadLedger`, call
+  `dispatch()` for every request whose `SqlRequest::read_only` is set **before**
+  `round_trip` returns, move the `ReadTicket` to whatever observes the answer (a
+  spawned task on the host, a `fetch` promise's callback on `wasm32`), and return
+  `self.ledger.settled()` from `reads_settled`. Settlement must be driven by the
+  transport and never by polling `round_trip`'s future, or an `append` behind a
+  read polled once and set aside deadlocks. A transport that never dispatches
+  anything returns `core::future::ready(())`, as `NullTransport` does. An append
+  with no read in flight does not wait; one that does waits up to one read round
+  trip. The ordering domain is one transport value: two transports with separate
+  ledgers are not ordered against each other, which is the stated limit of the
+  claim. ES-11 and ES-12 are `[FROZEN]` from this release (ADR-0087, accepted
+  2026-10-08, superseding ADR-0061).
+
+- **BREAKING (`happenstance-core`, `happenstance`): `ProjectionId::new` returns
+  `Result<ProjectionId, InvalidProjectionId>`.** It refuses an empty id, one
+  longer than 255 bytes (`MAX_PROJECTION_ID_LEN`), one containing a control
+  character (Unicode `Cc`) or a bidirectional formatting control, and one
+  beginning with `happenstance/` or `sync/`, compared as exact bytes: `Sync/x`
+  and `syncope` are still valid. An accepted id is kept byte for byte. `sync/`
+  is the replication watermark's (SY-31), built only by the new
+  `ProjectionId::sync_watermark`; `happenstance/` is held for ids this library
+  may mint later. There is no infallible conversion from a string any more.
+  To migrate, add `?`, or write a literal id as a free `const` built by
+  `ProjectionId::from_static`, which the compiler validates
+  ([ADR-0082](.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md),
+  VT-35).
+
+  **A checkpoint row written at 0.3.x under an id that is now invalid can no
+  longer be named.** It stays in the table, unreachable: no conformant code path
+  reads or resets it, and a runner using a valid id starts that projection from
+  `NeverRun`. If you have one, rename it in SQL before upgrading, with
+  `UPDATE projection_checkpoint SET projection_id = '<new>' WHERE projection_id
+  = '<old>'`. On Neon the checkpoint table is configurable and every statement
+  is schema-qualified (`NeonConfig`'s `schema` and `checkpoint_table`,
+  `"public"."projection_checkpoint"` by default;
+  `crates/happenstance-neon/src/config.rs:98`), so name the table your
+  `NeonConfig` names. Postgres and Neon could never store an id containing NUL in
+  any case: their `text` column refused it at `commit`.
+
 - **`happenstance-sqlite`'s busy timeout is 15 s, was 5 s.**
   `connection::BUSY_TIMEOUT_MS` moves on measurement, superseding
   [ADR-0022](references/adr/0022-append-condition-strategy.md) §11 in part.
@@ -209,6 +272,43 @@ not the same as what a user needed to be told.
   inside its `Retry` bound, per the entry above
   ([ADR-0077](.kb/decisions/0077-appenderror-busy.md), ES-43).
 
+- **BREAKING, behaviour only (`happenstance-sqlite`, `happenstance-postgres`):
+  a store runs its work on the runtime it is called on, and the runtime it was
+  built on is the fallback.** *Pending the acceptance of
+  [ADR-0081](.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md),
+  which is proposed; this entry leaves with the change if it is declined.*
+  Both stores in `happenstance-sqlite` and `PostgresEventStore` capture a tokio
+  `Handle` at construction, and used to prefer it at every use. A store that
+  outlived the runtime it was built in — a `static` initialised inside the first
+  `#[tokio::test]` is the usual shape — sent its work to that dead runtime, and
+  tokio cancelled it unrun:
+
+  - `happenstance-sqlite`: a `read` yielded one
+    `Err(SqliteEventStoreError::Worker(JoinError::Cancelled))` and ended, and
+    every `SqliteProjectionStore` method failed the same way. `append` and `head`
+    were unaffected, because they run inline.
+  - `happenstance-postgres`: every `PostgresEventStore` operation failed as
+    `Worker(JoinError::Cancelled)`, and with the capturing runtime alive but
+    undriven, a read hung until that runtime was dropped.
+
+  Each now prefers `Handle::try_current()` and falls back to the captured
+  handle only when the caller is on no runtime, which is what keeps the
+  concurrency family's bare-thread contenders working. `NoRuntime` keeps its
+  meaning: no runtime at construction and none at use. **No signature changes**,
+  so this compiles unchanged; what changes is which runtime runs a store's work.
+  A caller that relied on a store's work staying on the runtime it was built in,
+  while calling it from another, no longer gets that. On `happenstance-postgres`
+  the calling runtime now needs tokio's timer, so build it with `enable_all`:
+  `sqlx` acquires every connection under `tokio::time::timeout`, and a call from
+  a runtime without a timer, which used to run on the captured runtime, now
+  fails as `Worker(JoinError::Panic)`. Opening a new connection needs I/O too.
+
+  **Not fixed by this, on `happenstance-postgres`:** a pooled `sqlx` connection
+  opened on a runtime that has since been dropped is not seen as broken, and a
+  query on it ends in `PoolTimedOut` or does not finish. Open a `PgPool`, and
+  call the stores, on runtimes that live at least as long as the pool. ADR-0081
+  measures both (`tests/runtime_seam.rs`); `PostgresEventStore::new` says so.
+
 - **`happenstance-cloudflare` evaluates any query inside a real Durable Object.**
   `workerd` sets four statement limits on every database it opens: 5 compound
   `SELECT` terms, 100 bound parameters, 100,000-byte statements and an
@@ -247,6 +347,42 @@ not the same as what a user needed to be told.
     exercises the multi-statement merge.
 
 ### Added
+
+- **`happenstance-neon`: `ReadLedger`, `ReadTicket` and `ReadsSettled`**, in
+  `happenstance_neon::transport` and re-exported from the crate root: the
+  bookkeeping a transport needs for `SqlTransport::reads_settled`.
+  `ReadLedger::dispatch` registers a read and returns a `ReadTicket`, whose drop
+  (or `settle()`) settles it; `ReadLedger::settled` returns a `ReadsSettled`
+  future that waits only for reads dispatched before it was created, so later
+  reads cannot starve an append. A `std::sync::Mutex` and a table of wakers, with
+  no executor, timer or runtime, so it works unchanged on
+  `wasm32-unknown-unknown`; clones share one ledger, and one ledger is one
+  ordering domain (ADR-0087).
+
+- **`happenstance-core`: `ProjectionId` validates, and has the surface its
+  siblings have.** `ProjectionId::from_static`, a `const fn` that enforces
+  exactly what `new` does and is a compile error at a free `const`;
+  `ProjectionId::sync_watermark(StoreId)`, the only constructor of a `sync/` id,
+  rendering `sync/` and the peer's 32 lowercase hex digits;
+  `MAX_PROJECTION_ID_LEN`; `InvalidProjectionId`, `#[non_exhaustive]`; and
+  `TryFrom<&str>`, `TryFrom<String>`, `FromStr`, `AsRef<str>` and
+  `Borrow<str>` for `ProjectionId`, so a map keyed by it is probed by `&str`.
+  `happenstance` re-exports `InvalidProjectionId` and `MAX_PROJECTION_ID_LEN`
+  ([ADR-0082](.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md),
+  VT-35).
+
+- **`happenstance-testkit`: `projection_ids_round_trip_by_bytes`, the
+  projection family's eighteenth rule** (PS-39). A store must key a checkpoint
+  on the id's exact bytes: it commits seven pairs of ids that are distinct by
+  bytes and equal under one lossy key mapping each (case, a 255-byte id cut at
+  64 bytes, a `latin1` column (two pairs), an identifier-safe slug, a trailing
+  space, and canonical equivalence), reads every checkpoint back through a fresh handle,
+  and resets one of each pair without moving the other. **A new rule can turn a
+  passing adapter red** (CF-32): an adapter whose checkpoint key column folds
+  case, truncates, trims, normalises or cannot hold UTF-8 fails it. Run
+  your suite before upgrading. `happenstance-sqlite` and both
+  `happenstance-postgres` stores pass it unchanged, and the Postgres and Neon
+  migrations' comment, *"the contract validates the identifier"*, is now true.
 
 - **`happenstance-cloudflare`: several logs in one Durable Object.**
   `CloudflareEventStore::namespaced(sql, &namespace)` keeps a log in its own
@@ -336,6 +472,17 @@ not the same as what a user needed to be told.
   conformance rule can see this, because the suite runs against one endpoint
   ([ADR-0075](.kb/decisions/0075-the-projection-ports-1-0-clauses.md), PS-38).
 
+- **`EventStore::append` keeps taking a borrowed batch, `&[Event]`, and that is
+  now a promise.** No API changed. ES-17 was provisional on one measurement:
+  whether taking `Vec<Event>` instead would make an append materially cheaper.
+  That measurement has now been taken on `happenstance-cloudflare`, the one
+  adapter that copies each payload into a row value it owns. At a batch of 128,
+  with 1 to 64 tags and payloads up to 16 KiB, owning the batch saved two heap
+  allocations per event and no time that could be told from noise. A caller
+  that resends the same batch after a refusal would instead have paid a clone
+  on every attempt. ES-17 is `[FROZEN]`, so from `1.0.0` changing it is a major
+  release ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md)).
+
 ### Removed
 
 - **BREAKING (`happenstance-core`): the empty `unstable-projection` feature is
@@ -374,6 +521,54 @@ not the same as what a user needed to be told.
   cited by line. `lbug` and its build graph leave `Cargo.lock`, and the gate's two
   Ladybug steps and the `ladybug-configured` subcommand are gone. The `0.0.0`
   name reservation on crates.io stands and is not yanked.
+
+
+### `0.4.0` trace (draft, not released)
+
+Every break `0.4.0` carries, each with the decision that caused it. Drafted
+2026-10-07 against `main` at `4278816` from `cargo semver-checks check-release
+--workspace --baseline-version 0.3.2 --release-type minor` (cargo-semver-checks
+0.51.0: 202 checks per crate). Four crates reported no break: `happenstance`,
+`happenstance-core`, `happenstance-sqlite` and `happenstance-cloudflare`; three
+reported six, listed below as **tool** rows, and a run of the same command on
+`happenstance-neon` alone, on lane L8's tree, added a seventh (T7). "No break" is the tool's verdict on
+`main` before lane L10, not this table's: all four carry hand rows below, and
+`happenstance-core` and `happenstance` gained L10's (H8, H9) after the run. The **hand** rows are breaks the tool
+cannot see, found by reading every BREAKING entry above against the tool's output. A row whose decision is still `proposed` is listed under *Pending* and
+is not part of `0.4.0` until the owner accepts it.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| T1 | `happenstance-neon` | `NeonWriteBatch::push` takes 2 parameters, was 1 (`method_parameter_count_changed`) | tool | the owner's phase 17 default (Neon's narrowing rides `0.4.0`); #49 | Changed |
+| T2 | `happenstance-neon` | `NeonWriteBatch::statements` is no longer a public field (`struct_pub_field_missing`) | tool | as T1 | Changed |
+| T3 | `happenstance-neon` | the same field, reported as hidden (`struct_pub_field_now_doc_hidden`) | tool | as T1; one change, reported twice | Changed |
+| T4 | `happenstance-postgres` | the `naive-arm` feature is gone (`feature_missing`) | tool | phase 17 lane L4, the `naive-arm` item | Removed |
+| T5 | `happenstance-postgres` | `PostgresEventStore::new_naive` is gone from every feature-selected build (`inherent_method_missing`) | tool | as T4 | Removed |
+| T6 | `happenstance-testkit` | `k_disjoint_boundaries_admit_exactly_k_commits` renamed `k_disjoint_boundaries_never_conflict` (`function_missing`); the rule also changed what it accepts: a contender refused as busy no longer fails it (behaviour, which the tool cannot see) | tool and hand | [ADR-0077](.kb/decisions/0077-appenderror-busy.md) | Changed |
+| T7 | `happenstance-neon` | `SqlTransport` gains the required method `reads_settled` (`trait_method_added`); `append` also waits on it, which the tool cannot see (behaviour) | tool and hand | ADR-0087, accepted 2026-10-08 (#51) | Changed |
+| H1 | `happenstance-core` | the empty `unstable-projection` feature is removed; the tool passes over `unstable-*` features | hand | [ADR-0063](.kb/decisions/0063-the-projection-port-is-frozen.md), ADR-0066 | Removed |
+| H2 | `happenstance-testkit` | the `#[doc(hidden)]` conformance emitters are renamed and promised; the tool skips hidden items | hand | [ADR-0076](.kb/decisions/0076-the-cf-23-emitters-are-public-api.md) | Changed |
+| H3 | `happenstance-cloudflare` | `planned_statement_count` returns different values for the same query (`n.div_ceil(5)`); signature unchanged | hand | [ADR-0079](.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | Changed |
+| H4 | `happenstance-sqlite`, `happenstance-postgres`, `happenstance-neon` | a busy refusal arrives as `AppendError::Busy`, was `AppendError::Store` (behaviour) | hand | ADR-0077 | Changed |
+| H5 | `happenstance` | `commit` and `commit_with` retry a busy store (behaviour) | hand | ADR-0077 | Changed |
+| H6 | `happenstance-sqlite` | the busy timeout is 15 s, was 5 s (behaviour) | hand | ADR-0065 | Changed |
+| H7 | `happenstance` | `CommandError::Exhausted`'s `source` field is `AppendError<E>`, was `ConditionViolated`; cargo-semver-checks has no lint for a changed field type | hand | ADR-0077 | Changed |
+| H8 | `happenstance-core` | `ProjectionId::new` returns `Result<ProjectionId, InvalidProjectionId>`, was `ProjectionId`, and refuses the ADR-0015 set and the reserved prefixes; there is no `From<&str>` or `From<String>` to migrate through | hand (L10 postdates the tool run) | [ADR-0082](.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | Changed |
+| H9 | `happenstance` | the same `ProjectionId::new`, through the facade's re-export | hand, as H8 | ADR-0082 | Changed |
+| H11 | `happenstance-sqlite`, `happenstance-postgres` | a store runs on the runtime it is called on, preferring `Handle::try_current()` over the handle it captured (behaviour) | hand | [ADR-0081](.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | Changed |
+| H10 | `happenstance-testkit` | a new conformance rule, `projection_ids_round_trip_by_bytes` (PS-39), which an adapter that keys a checkpoint lossily now fails (behaviour; CF-32) | hand | ADR-0082 | Added |
+
+**Not a break, recorded so the absence is a decision:** `EventStore::append`
+keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md));
+`AppendError::Busy` is an added variant on a `#[non_exhaustive]` enum (Added).
+
+**Pending — each joins this table when its change lands:**
+
+- `happenstance-postgres`: a projection batch's parameter count is checked at
+  `commit` (behaviour; ADR-0084, accepted 2026-10-08; the check is owed).
+
+Every tool row and every hand row has a decision, and no break was found without
+one.
 
 ## [0.3.2] — 2026-09-20
 

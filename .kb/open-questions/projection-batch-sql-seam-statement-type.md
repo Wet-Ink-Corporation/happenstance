@@ -2,7 +2,8 @@
 id: kb-open-question-projection-batch-sql-statement-type-001
 title: Is &'static str the projection batch's final SQL seam, or does a minted Statement type follow?
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0084
 authority_tier: note
 summary: >-
   X-4 of the pre-publication review found SqliteBatch::push took impl
@@ -29,15 +30,17 @@ summary: >-
   happenstance-ladybug, so the arity-check obligation cannot be answered
   once for all three by construction — only stated once, which it is not
   yet.
+  Resolved 2026-10-08 by kb-decision-0084: &'static str plus a named escape hatch is the projection batch's 1.0 SQL seam for SQLite and Postgres, LivePostgresBatch::execute included; a minted Statement type is declined, the parameter-count obligation is stated once, and an adapter-side count check in happenstance-postgres is owed.
 depends_on: []
 related:
+  - kb-decision-0084
   - kb-decision-0036
   - kb-decision-0017
   - kb-open-question-projection-batch-no-apply-001
   - kb-decision-0078
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/projection-batch-sql-seam.md
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-08
 ---
 
 # Is &'static str the projection batch's final SQL seam, or does a minted Statement type follow?
@@ -72,7 +75,7 @@ list sized by a variable key count, for instance). A `compile_fail,E0308`
 doctest on `push` holds the narrowing, checked by `cargo test -p
 happenstance-sqlite --all-features`. Every in-tree caller — the crate's
 own `probe_write`, `probe_delete_all`, and `examples/transfers-on-
-sqlite/src/main.rs:562` — already passed a literal, so the narrowing cost
+sqlite/src/main.rs:565` — already passed a literal, so the narrowing cost
 nothing today; that is evidence about current usage, not proof no
 consumer will ever need `push_raw_sql`.
 
@@ -151,8 +154,8 @@ is a contract-level question this atom does not reach.
 published: `crates/happenstance-sqlite/src/projection_store.rs:487` and
 `crates/happenstance-postgres/src/projection_store.rs:252`. Option B changes that parameter's type,
 so only `0.4.0` can absorb it. Recording *Option A is final* closes the atom without a break.
-Either record also says whether Neon's `push(SqlStatement)`
-(`crates/happenstance-neon/src/projection_store.rs:182`) owes the same narrowing. Ladybug's
+Either record also says whether Neon's `push` (then `push(SqlStatement)`, now `push_raw_sql`,
+`crates/happenstance-neon/src/projection_store.rs:242`) owes the same narrowing. Ladybug's
 `push_raw_cypher` is outside 1.0 under `kb-decision-0066`'s crate set. **Owner now: phase 17.**
 
 ## Amendment — 2026-09-30
@@ -161,3 +164,25 @@ Either record also says whether Neon's `push(SqlStatement)`
 its leg of this question is moot: whether `LadybugProjectionStore`'s write vocabulary owes the
 narrowing, and the note on `push_raw_cypher`, no longer bind anything. What phase 17 still owes is
 the SQLite and Postgres `push` signature and Neon's `push(SqlStatement)`.
+
+## Amendment — 2026-10-07: an answer is proposed
+
+Answered by ADR-0084 (`kb-decision-0084`), `proposed`, pending the owner's call. It proposes
+Option A as the 1.0 seam. It covers two entry points that this atom and the phase-16 section above
+both missed: `LivePostgresBatch::execute` and `execute_raw_sql`
+(`crates/happenstance-postgres/src/live_projection_store.rs:114-142`). It also states the arity
+obligation once. SQLite's driver refuses a mismatch in either direction at commit. The Postgres
+server refuses too few values. Too many is not enforced: it is accepted or refused depending on the
+connection's statement cache. The record proposes an adapter-side count check in
+`happenstance-postgres` to close that half. Neon is unmeasured.
+
+That Neon narrows in `0.4.0` is the owner's default already in force (`runbook/handover.md:57-61`);
+the record proposes its shape. 
+
+One correction to "What is true today": `push` is at `projection_store.rs:487`, not `:473`.
+
+## Closed — 2026-10-08
+
+**Superseded by `kb-decision-0084`**, accepted by the owner on 2026-10-08. Option A is the
+1.0 seam. What it leaves owed is code, not a question: the adapter-side parameter-count check in
+`happenstance-postgres` that closes the too-many half, which lands as its own change.

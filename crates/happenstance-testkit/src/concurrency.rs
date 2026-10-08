@@ -349,9 +349,9 @@ impl Attempt {
 /// A barrier is the right instrument for that and a `sleep` is not: it
 /// synchronises on the other threads rather than on a wall clock, so it is
 /// exact on a sixteen-core host and on a loaded single-core runner alike, and
-/// there is nothing in it for CF-33 to object to. It cannot deadlock, because
-/// its party count is the number of threads [`std::thread::scope`] is about to
-/// guarantee have been spawned.
+/// there is nothing in it for CF-33 to object to. It cannot deadlock: its party
+/// is the threads [`std::thread::scope`] spawns. No handle outside `stores` may
+/// be live and idle meanwhile; the proof artefact's racers wait for every one.
 fn race<S, T, B>(stores: Vec<S>, body: B) -> Vec<T>
 where
     S: Send,
@@ -991,9 +991,9 @@ pub mod rules {
     /// to. What it can do is fail to catch a genuine defect on an unlucky run,
     /// which is why the proof artefact's `RowAtATimeStore` does not rely on luck:
     /// it holds each partial batch open until the reader has completed a read
-    /// that started after the partial write, or has closed. The wait is on that
-    /// exact condition, never a yield budget or a clock, so the rejection is a
-    /// rendezvous rather than a race, and load cannot turn it into a pass.
+    /// that started after the partial write, counted under a mutex the writers
+    /// wait on, so the rejection is a rendezvous rather than a
+    /// race.
     ///
     /// That rendezvous needs the reader to *exist* before the first writer runs,
     /// and a spawned thread is not a scheduled one. `observe_while_writing`

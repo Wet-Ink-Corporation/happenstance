@@ -28,13 +28,13 @@ last_reviewed: 2026-09-07
 ## Decision
 
 `EventStore::append` keeps `events: &[Event]` for the `0.2.0` release. ES-17
-`[PROVISIONAL]` (`spec/SPECIFICATION.md:3424-3432`) is not lifted, and `kb-decision-0012`
+`[PROVISIONAL]` (`spec/SPECIFICATION.md:3494-3502`) is not lifted, and `kb-decision-0012`
 — accepted and immutable — is not superseded: this decision rests on it rather than
 correcting it, in the same posture ADR-0029 uses to amend ADR-0004 without superseding it.
 
 **The documentation is wrong and is corrected.** Four sites in the corpus state a clone's
 cost as "one `Box<str>` and one boxed tag slice" — roughly two allocations —
-(`crates/happenstance-core/src/event.rs:409-412`, `spec/SPECIFICATION.md:3449-3452`,
+(`crates/happenstance-core/src/event.rs:409-412`, `spec/SPECIFICATION.md:3519-3522`,
 `references/adr/0012-append-shape-and-preconditions.md:172-174`, and, without a count,
 `crates/happenstance-core/src/memory.rs:30-31`). Both the type and the count are stale:
 `EventType` and `Tag` back onto `Cow<'static, str>` since ADR-0015, and `Tags` is
@@ -48,7 +48,7 @@ sites are corrected to the measured figures and the current field types.
 
 **ES-17's falsifier is restated, not fired.** As written it names "the SQLite adapter's
 multi-row insert benchmark" as the measurement that would lift the marker
-(`spec/SPECIFICATION.md:3429-3430`). But ADR-0012 item 4 already says only a store that
+(`spec/SPECIFICATION.md:3499-3500`). But ADR-0012 item 4 already says only a store that
 *moves the payload into an owned row it keeps* can benefit from owning the batch — a SQL
 adapter that binds parameters from a borrow, which is exactly what
 `crates/happenstance-sqlite/src/event_store.rs:901-922`'s `write_batch` does, cannot. The
