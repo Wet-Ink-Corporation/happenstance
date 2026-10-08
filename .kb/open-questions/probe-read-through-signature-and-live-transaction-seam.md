@@ -62,7 +62,7 @@ summary: >-
   with it — the brief records LivePostgresProjectionStore declaring READS_THROUGH_BATCH
   = true as a true statement and passing 20 of 20, so the two ends of PS-2's axis are
   now distinguishable and its MUST is met as written. At this worktree's HEAD (86a410c)
-  begin is still synchronous at crates/happenstance-core/src/projection.rs:460; the
+  begin is still synchronous at crates/happenstance-core/src/projection.rs:783; the
   decision is recorded on lane/projection-probe-seam and binds when it lands.
 depends_on: []
 related:
@@ -287,7 +287,7 @@ port's, and it is open at `kb-open-question-apply-synchronous-live-store-001`.
 
 **Tense.** At this worktree's `HEAD` (`86a410c`) none of this has landed:
 `fn begin(&self) -> Self::Batch` still stands at
-`crates/happenstance-core/src/projection.rs:460`, `probe_read_through` at
+`crates/happenstance-core/src/projection.rs:783`, `probe_read_through` at
 `:710` still takes `&Self::Batch`, and the long form
 `references/adr/0062-the-probe-seam-moves-and-the-far-end-is-built.md` the
 brief names is not in this checkout. The decision is recorded on

@@ -2,7 +2,7 @@
 id: kb-decision-0087
 title: ES-11 is met on one-shot HTTP by a read-settlement fence
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0087
 reversibility: medium
@@ -55,7 +55,7 @@ source_paths:
   - spec/SPECIFICATION.md
   - .kb/_intake/decisions/wi-0f1291-the-live-neon-job-is-a-required-check-and.md
   - references/adr/0087-es-11-is-met-on-one-shot-http-by-a-read-settlement-fence.md
-last_reviewed: 2026-10-07
+last_reviewed: 2026-10-08
 ---
 
 # ES-11 is met on one-shot HTTP by a read-settlement fence

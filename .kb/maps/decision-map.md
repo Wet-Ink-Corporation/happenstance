@@ -153,7 +153,7 @@ strength.
 | ADR-0012 | [`kb-decision-0012`](../decisions/0012-append-shape-and-preconditions.md) | append keeps its borrowed batch, and phase 4 declines what it cannot measure | accepted | 4 | — |
 | ADR-0013 | [`kb-decision-0013`](../decisions/0013-position-assignment-and-visibility.md) | Positions are assigned once and become visible in order | accepted | 4 | — |
 | ADR-0014 | [`kb-decision-0014`](../decisions/0014-event-identity-and-recorded-time.md) | The store mints identity, records a time, and the caller supplies neither | accepted | 4 | — |
-| ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted | 4 | — |
+| ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted (partly superseded) | 4 | partly superseded by `kb-decision-0082` (§10, where it declined to validate `ProjectionId`) |
 | ADR-0016 | [`kb-decision-0016`](../decisions/0016-the-wire-format.md) | The wire format is happenstance's own, and an unknown version is refused before the message is read | accepted | 5 | — |
 | ADR-0029 | [`kb-decision-0029`](../decisions/0029-msrv-raised-to-1-97-1.md) | The MSRV is 1.97.1 | accepted | 2 | amends `kb-decision-0004`; amended by `kb-decision-0037` |
 
@@ -482,7 +482,7 @@ map.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0025 | [`kb-decision-0025`](../decisions/0025-the-ladybug-projection-adapter.md) | The Ladybug projection adapter — a checkpoint node, raw Cypher, and a blocking driver | accepted | 11 | — |
 | ADR-0060 | [`kb-decision-0060`](../decisions/0060-ps-2s-axis-re-evaluated.md) | The projection port keeps its gate, and the reason ADR-0036 gave has expired | accepted | 11 | — |
-| ADR-0061 | [`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md) | ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none | accepted | 10 | — |
+| ADR-0061 | [`kb-decision-0061`](../decisions/0061-es-11s-sufficiency-condition-assumed-a-queue.md) | ES-11's sufficiency condition assumed a queue, and one-shot HTTP has none | superseded | 10 | superseded by ADR-0087 |
 
 ## 2026-09-11 intake: the probe seam moves, the port freezes, and the measurement host gets declared conditions (ADR-0062, ADR-0063, ADR-0064)
 
@@ -618,13 +618,18 @@ ADR-0080 is lane L7's: on the two-build measurement ADR-0012's falsifier asked f
 `happenstance-cloudflare` with calibrated replica arms, `append` keeps `&[Event]` and ES-17 is
 frozen. It rests on ADR-0012 and ADR-0055 without superseding either, records what neither can
 say, and supersedes `kb-open-question-es-17-two-adapter-measurement-001`.
-ADR-0087 is lane L8's, and the one row in this section that is `proposed`: on a sweep against the
+ADR-0082 is lane L10's: `ProjectionId::new` becomes fallible and refuses VT-14's set, more than
+255 bytes, and the reserved prefixes `happenstance/` and `sync/`; `sync_watermark(StoreId)` is the
+only way to a `sync/` id; VT-35 is minted `[FROZEN]` and PS-39, the store's half, `[PROVISIONAL]`.
+It partly supersedes ADR-0015 at §10 only, so `kb-decision-0015` stays accepted and its row gains
+the annotation, and it supersedes `kb-open-question-projection-id-unvalidated-001`.
+ADR-0087 is lane L8's, accepted by the owner on 2026-10-08: on a sweep against the
 live Neon endpoint (`experiments/es-11-fence/`; baseline 172 red of 1,500, fence 0 of 1,500, under a
 rule fixed before the first counted run), `happenstance-neon` meets ES-11 and ES-12 by holding an
 append until every read its transport dispatched earlier has been answered, through a required
-`SqlTransport::reads_settled`. It supersedes `kb-decision-0061` only on the owner's acceptance, so
-that atom's row is not flipped here and its frontmatter stays `accepted`. The fence itself lands as
-a separate change, and ES-11 and ES-12 freeze with it.
+`SqlTransport::reads_settled`, scoped to one transport (D3). It supersedes `kb-decision-0061`,
+whose row and frontmatter now read `superseded`. The fence itself lands as a separate change, and
+ES-11 and ES-12 freeze with it.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -641,7 +646,8 @@ a separate change, and ES-11 and ES-12 freeze with it.
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
 | ADR-0080 | [`kb-decision-0080`](../decisions/0080-append-keeps-a-borrowed-batch.md) | append keeps its borrowed batch, and ES-17 is frozen on the two-build measurement | accepted | 17 | — |
-| ADR-0087 | [`kb-decision-0087`](../decisions/0087-es-11-is-met-on-one-shot-http-by-a-read-settlement-fence.md) | ES-11 is met on one-shot HTTP by a read-settlement fence | proposed | 17 | supersedes `kb-decision-0061` on acceptance; that row is unchanged until then |
+| ADR-0082 | [`kb-decision-0082`](../decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | ProjectionId is validated: VT-14's set, 255 bytes, and happenstance/ and sync/ reserved | accepted | 17 | partly supersedes `kb-decision-0015` (§10) |
+| ADR-0087 | [`kb-decision-0087`](../decisions/0087-es-11-is-met-on-one-shot-http-by-a-read-settlement-fence.md) | ES-11 is met on one-shot HTTP by a read-settlement fence | accepted | 17 | supersedes `kb-decision-0061` |
 
 ## Adding a row
 

@@ -350,5 +350,5 @@ around a parameter that has to come back out.
 
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1569 (Carried as a unit variant rather than wrapping)` ·
 `crates/happenstance-sqlite/src/event_store.rs:1571 (it is neither)` ·
-`crates/happenstance-core/src/store.rs:166 (type Error: core::error::Error + 'static)` · `crates/happenstance-core/src/projection.rs:428 (type Error: core::error::Error + 'static)` ·
+`crates/happenstance-core/src/store.rs:166 (type Error: core::error::Error + 'static)` · `crates/happenstance-core/src/projection.rs:751 (type Error: core::error::Error + 'static)` ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)

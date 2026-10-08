@@ -101,7 +101,7 @@ inputs — is logged as defect candidate D-1 for AC-012's log, with VT-18
 line edit, as its route.
 
 The exactly-one-path claim is the contract crate's own words, at
-`crates/happenstance-core/src/projection.rs:152-154`: "two constructors enforcing different rules
+`crates/happenstance-core/src/projection.rs:161-162`: "two constructors enforcing different rules
 is the defect that makes an invalid value reachable through the weaker one." `ProjectionId::new`
 was decided against that reasoning; `Boundary::query` is built out of the same premise applied to
 `Query`.
@@ -126,6 +126,6 @@ Tags` by value** (a fallible construction inside an infallible signature, forcin
 (caller-visible ceremony where a tuple would do).
 
 Two citations were repaired before staging, not amended: the two-constructor sentence is at
-`projection.rs:152-154`, not the `:47-61` still carried in `.bklg`'s decomposition and design
+`projection.rs:161-162`, not the `:47-61` still carried in `.bklg`'s decomposition and design
 artifacts; `RUNBOOK.md`'s AC-013 row is at `:525`, not `:524`. Neither changes the admitted set of
 implementations.
