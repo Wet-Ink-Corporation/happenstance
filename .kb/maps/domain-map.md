@@ -511,7 +511,8 @@ shipped adapter measures no discriminating steady-state cost, and the residual m
 `kb-decision-0024`, whose own successor question, `kb-open-question-off-poll-visibility-defect-001`,
 carries the residual: an off-poll adapter has no suspension point a poll-based schedule can reach),
 `kb-open-question-es-38-and-gap-read-unowned-001`,
-`kb-open-question-projection-id-unvalidated-001`,
+`kb-open-question-projection-id-unvalidated-001` (**superseded** 2026-10-07 by
+`kb-decision-0082`: `ProjectionId` is validated, and `sync/` and `happenstance/` are reserved),
 `kb-open-question-cf-40-ownership-001`,
 `kb-open-question-dcb-no-published-format-001`,
 `kb-open-question-human-readable-encoding-limits-001`,
@@ -771,7 +772,7 @@ new ceremony measurement strengthens instead),
 `kb-open-question-tuple-boundary-event-type-001` (added 2026-09-07 — `composition.rs`'s
 macro-generated tuple impls bind every member to the first member's `Event` type, unwritten in
 ADR-0020's decision text or the signed-off design),
-`kb-open-question-seal-the-codec-001` (added 2026-09-07 — whether `Codec` is later sealed now that
+`kb-open-question-seal-the-codec-001` (**superseded** 2026-10-08 by `kb-decision-0083`; added 2026-09-07 — whether `Codec` is later sealed now that
 `0.2.0` is live and the window to do so for free has closed; bundles the `UnknownTag`-split and
 `Boundary::absorb` sub-questions ADR-0049 left undone).
 

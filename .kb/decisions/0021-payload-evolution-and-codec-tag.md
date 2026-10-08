@@ -136,7 +136,7 @@ legal route is application-level re-emission — minting new identities and leav
 in place forever.
 
 Rejected: the tag in `Tags` (see falsifier); "either home is fine" (two admissible constructions
-of one value is exactly `projection.rs:152-154`'s defect — an invalid value reachable through the
+of one value is exactly `projection.rs:161-162`'s defect — an invalid value reachable through the
 weaker constructor); `happenstance` owning the whole of `metadata` (removes the field an
 application wants, with no replacement in the contract); a `serde`-encoded framing region
 (unreadable under `--no-default-features`, and a `postcard`-only build could not read a

@@ -95,9 +95,11 @@ renews them with the disposition phase 16 gave.
       the function and the encoding with golden values, because they become a
       1.0 promise. **Expose the derived id** (`happenstance::checkpoint_id`, or
       the name chosen here), and move `tickets-over-http` and
-      `rebuilding-read-models`' `print_checkpoints` onto it. Its format must pass
-      the `ProjectionId` validation phase 17's `projection-id-is-unvalidated`
-      record adopts, and stay clear of SY-31's reserved `sync/` prefix. Document
+      `rebuilding-read-models`' `print_checkpoints` onto it. Its format is bound
+      by [ADR-0082](../../.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md)
+      §D5: VT-35's 255 bytes, so a name of at most 238 bytes, refused at
+      derivation and never truncated or hashed; and a one-byte printable ASCII
+      separator in no reserved prefix (`@` recommended), pinned here. Document
       the **adoption procedure**: `begin`, then `commit(empty_batch, derived_id,
       through, authority)` at the old checkpoint's position (PS-21), for a
       deployment whose query did not change. It is a behaviour change: a

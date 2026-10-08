@@ -135,7 +135,7 @@ async fn a_refused_checkpoint_takes_the_read_model_down_with_it() {
 
     let fixture = NeonProjectionFixture::new();
     let store = fixture.connect().await;
-    let id = ProjectionId::new("regression-probe");
+    let id = ProjectionId::from_static("regression-probe");
 
     let mut batch = store.begin().await.unwrap();
     store.probe_write(&mut batch, "k", 1).await.unwrap();

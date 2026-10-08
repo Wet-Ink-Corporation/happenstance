@@ -423,10 +423,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   ES-38's rule against CF-27's instrument and, through a defaulted-declined `Fixture` removal
   capability, against every real adapter. No further instrument decision is owed. It stays open
   for sub-question 2: whether a frozen clause may name a rule with no owning phase.
-- **Open** — [`projection-id-is-unvalidated.md`](../open-questions/projection-id-is-unvalidated.md)
+- **Superseded** — [`projection-id-is-unvalidated.md`](../open-questions/projection-id-is-unvalidated.md)
   (`kb-open-question-projection-id-unvalidated-001`) — `ProjectionId::new` is
   infallible and unvalidated; ADR-0015 declined to validate it, on the
   ground that the omission was never a decision. Forced by phase 6.
+  **Resolved 2026-10-07** by ADR-0082 (`kb-decision-0082`): `new` is fallible and refuses
+  VT-14's set, more than 255 bytes, and the prefixes `happenstance/` and `sync/` (VT-35).
 - **Superseded** — [`cf-40-fixture-limits-ownership.md`](../open-questions/cf-40-fixture-limits-ownership.md)
   (`kb-open-question-cf-40-ownership-001`) — ADR-0015 both claims and
   disclaims ownership of CF-40 in its own text; ADR-0012 is the other
@@ -722,7 +724,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
-  their live lines (`spec/SPECIFICATION.md:9389-9414`, `:9021-9034`), both stale as previously cited.
+  their live lines (`spec/SPECIFICATION.md:9495-9520`, `:9029-9042`), both stale as previously cited.
 - **Open** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the
@@ -843,11 +845,11 @@ the decision and reference atoms this domain also owns.
   (`kb-open-question-tuple-boundary-event-type-001`) — `composition.rs`'s macro-generated tuple
   impls bind every member to the first member's `Event` type, unwritten in ADR-0020's decision text,
   the signed-off design (which contradicts itself about it), or `standards/rust/`. Added 2026-09-07.
-- **Open** — [`should-codec-be-sealed.md`](../open-questions/should-codec-be-sealed.md)
+- **Superseded** — [`should-codec-be-sealed.md`](../open-questions/should-codec-be-sealed.md)
   (`kb-open-question-seal-the-codec-001`) — whether `Codec` is later sealed, now that `0.2.0` is
   live and the window to do so for free has closed; bundles the `UnknownTag`-split and
   `Boundary::absorb` sub-questions ADR-0049 left undone. Added 2026-09-07.
-  Answered by `kb-decision-0083`, `proposed`, pending the owner's call.
+  Superseded 2026-10-08 by `kb-decision-0083`: `Codec` stays unsealed through 1.x.
 - **Superseded** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
   (`kb-open-question-apply-synchronous-live-store-001`) — `Projection::apply` is synchronous
   (`crates/happenstance/src/domain.rs:249`) and `run_projection` folds events through it before

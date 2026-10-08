@@ -1,6 +1,6 @@
 # Does `append` keep `&[Event]`? The ES-17 two-build measurement
 
-ES-17 (`spec/SPECIFICATION.md:3563-3571`) is `[PROVISIONAL]` on one measurement:
+ES-17 (`spec/SPECIFICATION.md:3633-3641`) is `[PROVISIONAL]` on one measurement:
 *a real adapter showing the per-event clone is a material fraction of append
 cost*. ADR-0012's falsifier (`references/adr/0012-append-shape-and-preconditions.md:244-266`)
 says what that measurement must be — two builds of the same adapter differing only

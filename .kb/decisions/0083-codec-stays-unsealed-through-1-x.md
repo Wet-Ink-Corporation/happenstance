@@ -2,7 +2,7 @@
 id: kb-decision-0083
 title: Codec stays unsealed through 1.x, and CodecError::UnknownTag is not split
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0083
 reversibility: low
@@ -52,7 +52,7 @@ source_paths:
   - crates/happenstance/tests/composition.rs
   - standards/rust/40-public-surface-and-evolution.md
   - references/adr/0083-codec-stays-unsealed-through-1-x.md
-last_reviewed: 2026-10-07
+last_reviewed: 2026-10-08
 ---
 
 # Codec stays unsealed through 1.x, and CodecError::UnknownTag is not split

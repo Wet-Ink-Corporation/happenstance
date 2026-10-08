@@ -110,7 +110,7 @@ async fn the_shipped_runner_spawns_from_generic_code_when_the_store_is_a_type_pa
     ]));
     let models = Arc::new(MemoryProjectionStore::new());
     let count = Count {
-        id: ProjectionId::new("count"),
+        id: ProjectionId::from_static("count"),
         scope: scope(),
         total: 0,
     };

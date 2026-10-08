@@ -503,7 +503,7 @@ mod shadowing {
         let _ = facade_store_bound::<happenstance_core::MemoryEventStore> as fn();
         #[cfg(feature = "unstable-projection")]
         {
-            let id = happenstance_core::projection::ProjectionId::new("van_stock");
+            let id = happenstance_core::projection::ProjectionId::from_static("van_stock");
             assert_eq!(same_projection_id(id).as_str(), "van_stock");
         }
 

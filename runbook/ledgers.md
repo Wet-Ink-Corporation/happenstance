@@ -33,8 +33,9 @@ The ladybug lane wrote 0078 (`happenstance-ladybug` retired on the owner's call,
 lane L6b wrote 0079 (a Cloudflare query item binds constant parameters; widths 5 and 90).
 Lane L7 wrote 0080: `append` keeps its borrowed batch, and ES-17 is frozen on the two-build
 measurement against `happenstance-cloudflare` (`experiments/append-batch-ownership/`).
-0083 is proposed for the breaking open questions: `Codec` stays unsealed through 1.x and
-`UnknownTag` is not split (`should-codec-be-sealed`); it is accepted on the owner's call.
+Lane L10 wrote 0082: `ProjectionId` is validated, `sync/` and `happenstance/` are reserved, VT-35 and PS-39 are minted.
+0083 answers a breaking open question, accepted by the owner on 2026-10-08: `Codec` stays
+unsealed through 1.x and `UnknownTag` is not split (`should-codec-be-sealed`).
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.
@@ -146,12 +147,12 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 31 `[PROVISIONAL]` clauses
+### The 32 `[PROVISIONAL]` clauses
 
 Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, VT-10 at phase 17
 by ADR-0073, ES-41 and PS-22 at phase 17 by ADR-0028, PS-9 and PS-11 at phase 17
 by ADR-0074, PS-15, PS-23 and PS-24 at phase 17 by ADR-0075, and ES-17 at phase 17 by
-ADR-0080. Their rows stay, struck,
+ADR-0080. PS-39 was minted provisional at phase 17 by ADR-0082. Their rows stay, struck,
 because rule 4 keeps it; `cargo xtask lints` now checks the count in this
 heading against §7.2 rather than matching it, so the next freeze changes one number
 here and nothing in the lint.
@@ -180,6 +181,7 @@ separate open questions overstated the exposure by that factor.
 | Checkpoint regression | ~~PS-22~~ | ~~a legitimate need to move a checkpoint backwards without clearing rows; a compacting store that renumbers~~ | **frozen at 17 — ADR-0028.** ES-38 forbids renumbering, and retention never rewinds a checkpoint over kept rows |
 | Compensation's shape and the merge rule's details | SY-7, SY-10, SY-20 – SY-23, SY-29, SY-30 | two unlike peers that cannot both express it | 13 |
 | Where a per-peer watermark lives | SY-31 | a peer with no transaction to put it in | 13 |
+| Projection-id keys | PS-39 | a store whose key column cannot hold a 255-byte UTF-8 id byte-faithfully | 17b |
 | Membership as a port operation | ~~ES-41~~ | ~~an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip~~ | **frozen at 17 — ADR-0028.** Neon meets the transport wording's letter: its probe is one extra read-only round trip, over the pair VT-8 indexes, and passes live. It is accepted because no required path pays it — ingest deduplicates inside the write (`crates/happenstance-sync/src/ingest.rs:97-101`) — and ADR-0066:160 dispositioned the half as answered. The completeness half is settled by decision: `false` is store-relative. Held-versus-visible under ES-10's frontier is left open, to phase 13 |
 | Checkpoint visibility after commit | PS-38 | a store answering `checkpoint` from a replica that may lag its own `commit` — the shape a projection store over an eventually-consistent read model has. If real, the obligation narrows to "a subsequent read through the same handle" and every rule downstream gains a handle constraint | 7 — the first projection adapter over storage this workspace does not control |
 | A fixture's fault-injection promise | ~~CF-39~~ | ~~a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep~~ | **frozen at 16 — ADR-0066.** Owned by 8 and 10, whose row read *"no adapter has armed a fault yet"*; three now do — `happenstance-postgres`, `happenstance-neon` and `happenstance-cloudflare` |
@@ -296,10 +298,11 @@ says why.
 | PS-6 | renew-past-1.0: an adapter that must reserve server state at `begin` and cannot afford the round trip | The original falsifier fired at phase 10b on sqlx's `BEGIN` (ADR-0062) and the port absorbed it. Firing the residual would relax an adapter obligation, not change a signature |
 | PS-16 | freeze-by-18 | A typed-runner rebuild through `reset` against a multi-table or graph read model, with the reset-refusal clause composed |
 | PS-18 | freeze-by-18 | A refusable reset implemented by at least one adapter, a CF-39-shaped clause and a `NoopProtectFixture` mutant. If 18 does not deliver, renew past 1.0 as additive |
-| PS-25 | freeze-by-18 | Built before `unstable-projection` lifts. Remedy chosen at 17 by ADR-0074: the derived id, with a 64-bit FNV-1a digest in hex, an exposed `checkpoint_id` and a documented adoption procedure, because the digest-in-checkpoint alternative changes the frozen port's `commit` |
+| PS-25 | freeze-by-18 | Built before `unstable-projection` lifts. Remedy chosen at 17 by ADR-0074: the derived id, with a 64-bit FNV-1a digest in hex, an exposed `checkpoint_id` and a documented adoption procedure, because the digest-in-checkpoint alternative changes the frozen port's `commit`; the derived id's constraints (238-byte name cap, separator in no reserved prefix) are ADR-0082 §D5's |
 | PS-27 | freeze-by-18 | Phase 18 builds the failure-policy seam and `skip_and_record_is_atomic` with a mutant. ADR-0074 fixed the seam's shape at 17: a provided `on_error` defaulting to halt, handed the failure and the batch; a skip after a server-side failure on a live batch needs a savepoint |
 | PS-30 | freeze-by-18 | With `panicking_apply_rolls_back` and a mutant, if 18 builds the fan-out runner. If it does not, this row becomes `outside-1.0`: a conditional MUST on a runner 1.0 does not ship |
 | PS-38 | freeze-by-18 | Settled against the fan-out runner. ADR-0075 froze PS-23 and documented the no-lagging-replica obligation at 17, on `ProjectionStore::checkpoint` and on `happenstance-neon`'s README and constructor |
+| PS-39 | freeze-by-17b | Green on memory, SQLite and Postgres at 17; freezes once live Neon has run it green (not a required check until L8) |
 | SY-7 | freeze-by-13 | ADR-0027. The falsification test is buildable with `MemorySyncPeer` and two adjudicator configurations |
 | SY-10 | freeze-by-13 | Phase 13's exit criteria already require both topologies to be expressible. Fallback: renew against the marker's own test, since a firing makes the permission redundant, not wrong |
 | SY-14 | freeze-by-13 | Measured against the Neon peer. Phase 17's foreign-identity spike must not foreclose a bounded-round-trip ingest path |
@@ -312,7 +315,7 @@ says why.
 | SY-28 | freeze-by-13 | Immediately after SY-27, and with the same sequencing hazard |
 | SY-29 | freeze-by-13 | Jointly with SY-27, because a peer-supplied `Query` exists on the port only if replication is scoped |
 | SY-30 | freeze-by-13 | Where the two unlike real peers, Durable Object and Neon, push real envelopes |
-| SY-31 | freeze-by-13 | The runner half. The reserved-`ProjectionId` half is phase 17's `projection-id-is-unvalidated`, since reserving `sync/` refuses ids valid today |
+| SY-31 | freeze-by-13 | The runner half. The reserved-`ProjectionId` half is settled by ADR-0082: core refuses `sync/` and mints it only through `ProjectionId::sync_watermark` |
 | SY-32 | freeze-by-14 | Surface decided at 17 by ADR-0028: the scalar floor means resumability, not completeness. Built and frozen at 14, whose exit criteria require it no longer `[DEFERRED]` |
 | CF-14 | renew-past-1.0: phase 19a's REOPEN verdict for memory, IndexedDB or OPFS storage, or a workerd run observing a real Durable Object eviction, cannot be expressed with the one reopen shape | Four adapters express `REOPEN` with one shape. Since phase 17 the three reopen rules also pass under workerd and on a deployed object, but as a fresh handle off the object's state, not an eviction (`evictDurableObject` is reachable only from the runner, between requests). The eviction instrument is unbuilt, and 19a's comes after 1.0. Freeze jointly with CF-17 |
 | CF-17 | renew-past-1.0: a durable adapter cannot express even a reopen through this contract — the candidates are phase 19a's browser storage and the first workerd-class run observing a real eviction | Cloudflare's `REOPEN` now runs under workerd as well as the shim (phase 17's job), still as a fresh handle rather than an observed eviction. So the instrument that could fire it is not yet built |
