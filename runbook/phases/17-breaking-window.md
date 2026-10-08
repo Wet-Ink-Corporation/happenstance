@@ -626,12 +626,13 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     forced interleaving, not a retry.
     **Fixed since, by #58 (`527dc08b`, `wi-bde4fa`):** the yield budgets are
     gone from `racers.rs`. Each mutant store wraps a `Handle` that counts as a
-    contender from `connect` until it is dropped, and a cohort releases when
-    every live contender is waiting in it. A store nobody joins is a cohort of
-    one, released on arrival. No conformance rule changed. The reasoning is at
-    `Shared::cohort`, under *Why it cannot hang*, which now also states the one
-    precondition a new rule must meet: no handle that never reads may be held
-    open, idle, across a race. Measured: 46 failures in 400 runs before, 0 in
+    contender from `connect` until its first read or its drop, and a cohort
+    releases when every live contender is waiting in it. A contender with no
+    other live contender is a cohort of one, released on arrival. No
+    conformance rule changed. The reasoning is at `Shared::cohort`, under *Why
+    it cannot hang*, which now also states the one precondition a new rule must
+    meet: no handle that has never read may be held open across a race unless
+    it appends in that race. Measured: 46 failures in 400 runs before, 0 in
     600 after. A parallel fix of the same design (#56) was reconciled onto #58,
     and also ran green 10 in 10 with a 0–35 ms sleep injected ahead of the
     probe, where the yield-bounded version was red 3 in 3.
