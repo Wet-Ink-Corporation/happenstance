@@ -64,8 +64,12 @@ gave to this phase.
       published signature, or that 1.0 cannot promise around without an answer.
       In `.kb/open-questions/`:
       - `should-codec-be-sealed` — sealing a public trait after 1.0 is a major.
-      - `projection-batch-sql-seam-statement-type` (ADR-0084 `proposed`, #44; Neon's `push` narrowed) — the statement type a SQL
+        Answered by [ADR-0083](../../.kb/decisions/0083-codec-stays-unsealed-through-1-x.md),
+        accepted by the owner on 2026-10-08.
+      - `projection-batch-sql-seam-statement-type` (ADR-0084 accepted, #44; Neon's `push` narrowed) — the statement type a SQL
         batch exposes becomes a published promise the moment the runner ungates.
+        Answered by [ADR-0084](../../.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md),
+        accepted by the owner on 2026-10-08.
       - `projection-id-is-unvalidated` (closed by ADR-0082, lane L10), **with SY-31's reserved `sync/` prefix**:
         refusing an id that is valid today is a break to `happenstance-core`, so
         the sync runner's reservation is decided here, not at phase 13.
@@ -102,12 +106,12 @@ gave to this phase.
       `cloudflare-worker-feature-gate` was closed at phase 16: the crate has no
       features table to gate. And `adapter-version-lockstep-and-cf-32` was closed
       by ADR-0066's versioning section rather than sent on.
-- [ ] **ADR-0022 §9's reproduction** (ADR-0068). A store built on one runtime
+- [x] **ADR-0022 §9's reproduction** (ADR-0068; reproduced, ADR-0081 accepted 2026-10-08). A store built on one runtime
       and read after that runtime is gone, against both adapters that capture a
       runtime `Handle` at construction — `happenstance-sqlite`
       (`crates/happenstance-sqlite/src/event_store.rs:513`,
       `projection_store.rs:234`) and `happenstance-postgres`
-      (`crates/happenstance-postgres/src/event_store.rs:314`). About twenty lines,
+      (`crates/happenstance-postgres/src/event_store.rs:337`). About twenty lines,
       and they decide the classification: if the remedy changes what the existing
       `open` / `new` capture, or which variant a stranded read reports, it is a
       behaviour change on two published adapters and lands in `0.4.0`; if it is a
@@ -125,7 +129,7 @@ gave to this phase.
       phase 16.)
 - [ ] ~~**ADR-0069's total `QueryItem` constructor.**~~ Moved to
       [phase 17b](17b-after-the-window.md) by ADR-0072: additive.
-- [ ] **VT-6 for Postgres and Neon: mint-per-open, or not**
+- [x] **VT-6 for Postgres and Neon: mint-per-open, or not**
       (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`).
       Phase 13 closes the restore gap, but it runs after this window, and
       mint-per-open is the one remedy that changes behaviour on a published
@@ -134,6 +138,9 @@ gave to this phase.
       adapter takes mint-per-open, the session log says so and phase 13 builds
       only the additive arms; mint-per-open after this window is a post-1.0
       major.
+      Answered by [ADR-0086](../../.kb/decisions/0086-postgres-and-neon-keep-mint-once.md),
+      accepted by the owner on 2026-10-08: neither adapter mints per open, so phase 13
+      builds only the additive arms.
 - [x] **Execute ADR-0057 — the testkit version key is dropped.** Done in lane L4:
       the workspace entry for `happenstance-testkit` carries no `version`, and
       `cargo xtask package-check` refuses a publishable crate whose testkit
@@ -679,6 +686,28 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   reset, or a `404` carrying the same words, is still a failure. Red first: the new
   case failed against the old matcher (1 of 6), then 6 of 6. Verified: vitest on
   `test/platform-miss.test.ts`, `spec-trace`, `lints`, `lint-kb`. No Rust changed.
+- 2026-10-07 — **L9: ADR-0022 §9 is reproduced, and its remedy is breaking**, on
+  `lane/p17-runtime-seam`, PR open and **not to be merged until the owner accepts
+  [ADR-0081](../../.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md)**,
+  which is `proposed`. A store built on one runtime and driven from another after
+  the first is dropped reported `Worker(JoinError::Cancelled)`, never `NoRuntime`:
+  a `happenstance-sqlite` read and every `SqliteProjectionStore` method, and every
+  `PostgresEventStore` operation (a read hung while the capturing runtime was alive
+  but undriven). Remedy B prefers `Handle::try_current()` and falls back to the
+  captured handle at four sites; no signature changes, so it is a behaviour change
+  on two published crates and rides `0.4.0`. ADR-0068's falsifier did not fire.
+  **Not fixed by B:** a pooled `sqlx` connection opened on a dropped runtime ends in
+  `PoolTimedOut` or hangs; ADR-0081 makes it a documented obligation and asks the
+  owner whether that is enough. The review added one disclosure: on Postgres the
+  calling runtime now needs tokio's time and I/O drivers. Tests:
+  `tests/runtime_seam.rs` in both crates (Postgres's `#[ignore]` and live, run by a
+  new list/run/assert trio in `live-postgres`). Verified: temper gate green
+  (`fbf30a6067548135`, before the merge of `main` and the disclosure); sqlite
+  `runtime_seam` 4/4, `concurrency` 10/10, `read` 20/20; Postgres live
+  `runtime_seam` 4/4 six times and `postgres_conformance` 108/108;
+  `spec-trace`, `lints`, `lint-constitution`, `lint-kb`. `temper:rust-reviewer`
+  found no blocker or major on this tree, reported in prose, because its verdict
+  JSON binds to the main checkout's tree rather than this worktree.
 - 2026-10-07 — **PR #47 merged as `12540a7`** (the deployed `workerd` leg retries
   a Durable Object reset). **Neon N2: `NeonWriteBatch::push` is narrowed**, on
   `lane/p17-neon-push`, by the owner's default that it rides `0.4.0`.

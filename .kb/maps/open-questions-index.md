@@ -590,11 +590,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `BEGIN IMMEDIATE` and refuses a stale handle with `IdentityMoved` (`8900697`, `f719b2a`). The gap
   it sat beside is the new entry below,
   `kb-open-question-postgres-neon-store-id-no-restore-001`.
-- **Open** — [`postgres-neon-store-id-has-no-restore-detection.md`](../open-questions/postgres-neon-store-id-has-no-restore-detection.md)
+- **Superseded** — [`postgres-neon-store-id-has-no-restore-detection.md`](../open-questions/postgres-neon-store-id-has-no-restore-detection.md)
   (`kb-open-question-postgres-neon-store-id-no-restore-001`) — `happenstance-postgres` and
   `happenstance-neon` mint their `StoreId` once, in their first migration, and take neither branch
   VT-6 requires of mint-once, so a `pg_restore` or a Neon branch re-issues identities already
   issued. Owned by phase 13; a switch to mint-per-open would be phase 17's. Added 2026-09-29.
+  Superseded 2026-10-08 by `kb-decision-0086`: both keep mint-once; phase 13 builds the additive arms.
 - **Superseded** — [`query-plan-parameter-chunking-incomplete.md`](../open-questions/query-plan-parameter-chunking-incomplete.md)
   (`kb-open-question-query-plan-parameter-chunking-001`) — the
   30,000-parameter budget is enforced on `write_tag_rows`'s insert path but
@@ -607,7 +608,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   mechanism now takes a fourth `per_arm_extra` parameter this question did not describe.
   `Selectivity::read_for`'s own unpartitioned failure mode, found in the same pass, is the
   residual.
-- **Open** — [`adr-0022-falsifiers-have-fired.md`](../open-questions/adr-0022-falsifiers-have-fired.md)
+- **Superseded** — [`adr-0022-falsifiers-have-fired.md`](../open-questions/adr-0022-falsifiers-have-fired.md)
   (`kb-open-question-adr-0022-falsifiers-fired-001`) — ADR-0022 named three
   conditions under which it would be re-opened; the 2026-09-03
   pre-publication review found two fired (`busy > 0` observed, and the
@@ -749,10 +750,13 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   ADR-0062 (`kb-decision-0062`): the whole seam moves, `begin` with it, `LivePostgresProjectionStore`
   runs 20 of 20 against a live PostgreSQL, and PS-2's MUST is met as written; the apply-side residual
   the resolution hands on is `kb-open-question-apply-synchronous-live-store-001`.
-- **Open** — [`projection-batch-sql-seam-statement-type.md`](../open-questions/projection-batch-sql-seam-statement-type.md)
+- **Superseded** — [`projection-batch-sql-seam-statement-type.md`](../open-questions/projection-batch-sql-seam-statement-type.md)
   (`kb-open-question-projection-batch-sql-statement-type-001`) — whether `SqliteBatch::push`'s
   landed `&'static str` narrowing is the seam's final shape or a minted `Statement` newtype follows
-  once `ProjectionStore` freezes under PS-2. Added 2026-09-07.
+  once `ProjectionStore` freezes under PS-2. Added 2026-09-07. Amended 2026-10-07: answered by
+  `kb-decision-0084`, accepted 2026-10-08, which supersedes it. It takes Option A as final, covers
+  `LivePostgresBatch::execute`, states the parameter-count obligation once, and proposes the shape
+  of Neon's `0.4.0` narrowing (the release is the owner's default).
 - **Superseded** — [`projection-runner-chunk-type-and-observation-seam.md`](../open-questions/projection-runner-chunk-type-and-observation-seam.md)
   (`kb-open-question-projection-runner-chunk-observation-001`) — a named chunk type plus its default,
   and the runner's observation seam; both priced at zero code-cost-of-delay by ADR-0036's exemption,
@@ -845,10 +849,11 @@ the decision and reference atoms this domain also owns.
   (`kb-open-question-tuple-boundary-event-type-001`) — `composition.rs`'s macro-generated tuple
   impls bind every member to the first member's `Event` type, unwritten in ADR-0020's decision text,
   the signed-off design (which contradicts itself about it), or `standards/rust/`. Added 2026-09-07.
-- **Open** — [`should-codec-be-sealed.md`](../open-questions/should-codec-be-sealed.md)
+- **Superseded** — [`should-codec-be-sealed.md`](../open-questions/should-codec-be-sealed.md)
   (`kb-open-question-seal-the-codec-001`) — whether `Codec` is later sealed, now that `0.2.0` is
   live and the window to do so for free has closed; bundles the `UnknownTag`-split and
   `Boundary::absorb` sub-questions ADR-0049 left undone. Added 2026-09-07.
+  Superseded 2026-10-08 by `kb-decision-0083`: `Codec` stays unsealed through 1.x.
 - **Superseded** — [`projection-apply-is-synchronous-against-a-live-store.md`](../open-questions/projection-apply-is-synchronous-against-a-live-store.md)
   (`kb-open-question-apply-synchronous-live-store-001`) — `Projection::apply` is synchronous
   (`crates/happenstance/src/domain.rs:249`) and `run_projection` folds events through it before

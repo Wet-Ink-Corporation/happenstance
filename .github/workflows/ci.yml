@@ -587,6 +587,45 @@ jobs:
             exit 1
           fi
 
+      # ADR-0022 §9's reproduction, `tests/runtime_seam.rs`: a store built on one
+      # runtime and driven from another after the first is gone or idle. Its own
+      # list/run/assert trio for the projection trio's reason -- one target, one
+      # transcript, one count -- and STRICT, because each case is bounded inside
+      # the test (fifteen seconds) and a failure is a finding, not noise.
+      #
+      # `--test-threads=1` for the pool arithmetic the event-store run gives.
+      - name: Every gated runtime-seam test is present in the binary
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test runtime_seam -- --ignored --list | tee gated-runtime-seam.txt
+
+      - name: The runtime-seam reproduction against a live Postgres
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test runtime_seam -- --ignored --show-output --test-threads=1 \
+            | tee runtime-seam-run.txt
+
+      - name: The runtime-seam run executed and passed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' runtime-seam-run.txt; then
+            echo "::error::no test result line; the runtime-seam reproduction did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-runtime-seam.txt)
+          result=$(grep -E '^test result:' runtime-seam-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
       # The suite must be green, and the failure list is empty on purpose.
       #
       # An earlier draft of this step asserted that two rules

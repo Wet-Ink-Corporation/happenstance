@@ -130,7 +130,7 @@ variant of `Self::Error` to match on, so the retry path the port's error model
 exists for is unreachable.
 
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:33 (turns that from a panic into an)` ·
-`crates/happenstance-sqlite/src/event_store.rs:2387 (None => match Handle::try_current())` ·
+`crates/happenstance-sqlite/src/event_store.rs:2385 (let runtime = match Handle::try_current())` ·
 `crates/happenstance-sqlite/src/event_store.rs:1586 (no tokio runtime is available)` ·
 `crates/happenstance-testkit/src/registry.rs:341 (deliberately not bounded on)` ·
 [CF-23](../../spec/SPECIFICATION.md)

@@ -138,7 +138,7 @@ break. Every published adapter forgets outside the port, where no adapter code r
   (`crates/happenstance-sqlite/src/event_store.rs:286`,
   `crates/happenstance-cloudflare/src/event_store.rs:202`).
 - **Postgres and Neon** allocate from a sequence read explicitly
-  (`crates/happenstance-postgres/src/event_store.rs:990`,
+  (`crates/happenstance-postgres/src/event_store.rs:1013`,
   `crates/happenstance-neon/src/config.rs:96`).
 - A raw `DELETE`, a Postgres `TRUNCATE` (which fires no row trigger) and a Durable Object's
   `delete_all()` (`worker-0.8.5/src/durable.rs:449`) are all invisible to the adapter.
