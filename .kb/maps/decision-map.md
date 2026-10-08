@@ -238,7 +238,7 @@ nothing, since ADR-0020 published its own contrary prediction as explicitly fals
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted (partly superseded) | 8 | partly superseded by `kb-decision-0065`, `kb-decision-0068` |
+| ADR-0022 | [`kb-decision-0022`](../decisions/0022-append-condition-strategy.md) | The append condition is a max(position) guard inside BEGIN IMMEDIATE, and tags live in a join table keyed (tag, position) | accepted (partly superseded) | 8 | partly superseded by `kb-decision-0065`, `kb-decision-0068`, `kb-decision-0081` (§9) |
 | ADR-0031 | [`kb-decision-0031`](../decisions/0031-the-runner-collapses-upward.md) | One runner, in happenstance — the checkpoint pump collapses upward | accepted | 7 | partly supersedes `kb-decision-0007` |
 | ADR-0032 | [`kb-decision-0032`](../decisions/0032-adr-0021-serde-attribution-correction.md) | The serde-encoded framing region is rejected on two grounds, and ADR-0003 was never one of them | accepted | 7 | supersedes `kb-decision-0021` |
 | ADR-0033 | [`kb-decision-0033`](../decisions/0033-happenstance-macros-out-of-scope-for-0-1.md) | happenstance-macros is out of scope for 0.1 | accepted | 7 | — |
@@ -640,6 +640,12 @@ open, both keep mint-once and earn it through a documented re-mint, and default-
 is ruled out after 1.0. It supersedes
 `kb-open-question-postgres-neon-store-id-no-restore-001`. It corrects the claim that mint-per-open
 fails `reopened_store_does_not_reissue_an_event_id`.
+ADR-0081, accepted by the owner on 2026-10-08, is lane L9's: ADR-0022 §9's reproduction, which ADR-0068 assigned to phase 17.
+A store built on one runtime and driven from another after the first is gone reported
+`Worker(JoinError::Cancelled)`, never `NoRuntime`, so the stores now prefer the executing runtime
+and fall back to the captured handle (remedy B), a behaviour change on `happenstance-sqlite` and
+`happenstance-postgres` for `0.4.0`. It partly supersedes ADR-0022 at §9's "prefer it", the
+ADR-0065 shape, and `kb-decision-0022`'s row carries the annotation.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -660,6 +666,7 @@ fails `reopened_store_does_not_reissue_an_event_id`.
 | ADR-0083 | [`kb-decision-0083`](../decisions/0083-codec-stays-unsealed-through-1-x.md) | Codec stays unsealed through 1.x, and CodecError::UnknownTag is not split | accepted | 17 | — |
 | ADR-0084 | [`kb-decision-0084`](../decisions/0084-the-projection-batch-sql-seam-is-final.md) | The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once | accepted | 17 | supersedes `kb-open-question-projection-batch-sql-statement-type-001` on acceptance |
 | ADR-0086 | [`kb-decision-0086`](../decisions/0086-postgres-and-neon-keep-mint-once.md) | Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined | accepted | 17 | — |
+| ADR-0081 | [`kb-decision-0081`](../decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | A store hops onto the runtime it is called on, and the handle it captured is the fallback | accepted | 17 | partly supersedes `kb-decision-0022` (§9) |
 
 ## Adding a row
 

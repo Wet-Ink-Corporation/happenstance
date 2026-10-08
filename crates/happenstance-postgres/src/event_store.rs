@@ -181,7 +181,7 @@ pub struct PostgresEventStore {
     /// benign race is two handles reading the same committed row and one
     /// `set` losing, which costs a round trip and changes no value.
     store_id: Arc<OnceLock<StoreId>>,
-    /// The runtime every operation hops onto, captured at construction.
+    /// The runtime an operation hops onto when its caller is executing on none.
     ///
     /// # Why a store needs this at all
     ///
@@ -194,10 +194,10 @@ pub struct PostgresEventStore {
     /// bridge, every rule in that family panics inside `sqlx`'s `missing_rt`,
     /// which is exactly what the first run of it did.
     ///
-    /// Captured here rather than looked up per call because a store is
-    /// *constructed* inside the harness's runtime and *used* outside it. The
-    /// same shape `happenstance-sqlite` carries, for the same reason one layer
-    /// down.
+    /// Captured at construction as the **fallback**, because a store is built
+    /// inside the harness's runtime and used outside it; the executing runtime
+    /// is preferred (ADR-0081, reordering ADR-0022 §9; `tests/runtime_seam.rs`). The same
+    /// shape `happenstance-sqlite` carries, for the same reason one layer down.
     ///
     /// # Why `spawn` and not `Handle::enter`
     ///
@@ -302,6 +302,29 @@ impl PostgresEventStore {
     /// Takes a pool rather than a connection string because pool sizing,
     /// timeouts and TLS are the application's business, and because a store that
     /// builds its own pool cannot share one with the projection store beside it.
+    ///
+    /// # Runtimes
+    ///
+    /// Every operation runs on the tokio runtime it is **called** on. The runtime
+    /// current here, at construction, is used only by a call made from a thread
+    /// with no runtime at all (ADR-0081). Two obligations follow, and both are
+    /// the application's, because it builds the pool and the runtimes:
+    ///
+    /// * **Call the store from a runtime with tokio's drivers enabled**:
+    ///   `enable_all`, as `#[tokio::main]` and `#[tokio::test]` do. `sqlx`
+    ///   acquires every connection under `tokio::time::timeout`, so a call from a
+    ///   runtime built without `enable_time` fails as
+    ///   [`Worker`](PostgresEventStoreError::Worker) carrying a panicked
+    ///   `JoinError`, and opening a new connection needs `enable_io` as well.
+    /// * **Open `pool` on a runtime that lives at least as long as the pool.** A
+    ///   pooled connection's socket belongs to the I/O driver of the runtime that
+    ///   opened it. Once that runtime is dropped, `sqlx` does not see the
+    ///   connection as broken, and a query handed it ends in
+    ///   [`PoolTimedOut`](sqlx::Error::PoolTimedOut) or does not finish. A pool
+    ///   opens connections lazily, inside the call that needs one, so the
+    ///   runtimes this store is called on should outlive the pool too. A pool in
+    ///   a `static` initialised inside one `#[tokio::test]` and used by the next,
+    ///   each on its own runtime, is the usual way to break this.
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
@@ -353,18 +376,18 @@ impl PostgresEventStore {
 
     /// The runtime this store's work runs on.
     ///
-    /// The handle captured at construction first, then the caller's current one,
-    /// and only then an error. The second chance matters: a store built outside
-    /// a runtime and used inside one is a legitimate wiring order.
+    /// The caller's current runtime first, then the handle captured at construction,
+    /// and only then an error. Current-first is ADR-0081's, on ADR-0022 §9: a store that
+    /// outlives its runtime hops onto the live one, not the dead one's closed tasks.
     ///
     /// # Errors
     ///
     /// [`PostgresEventStoreError::NoRuntime`] when there is no runtime in either
     /// place.
     fn runtime(&self) -> Result<Handle, PostgresEventStoreError> {
-        self.runtime
-            .clone()
-            .or_else(|| Handle::try_current().ok())
+        Handle::try_current()
+            .ok()
+            .or_else(|| self.runtime.clone())
             .ok_or(PostgresEventStoreError::NoRuntime)
     }
 

@@ -571,7 +571,7 @@ conservative enough" branch is refuted by measurement — 400 items at `MAX_TAGS
 51,200 bound parameters against SQLite's 32,766 ceiling — and the chunking mechanism now takes a
 fourth `per_arm_extra` parameter this question did not describe; `Selectivity::read_for`'s own
 unpartitioned failure mode, found in the same pass, is the residual),
-`kb-open-question-adr-0022-falsifiers-fired-001` (added 2026-09-04 — two of ADR-0022's own three
+`kb-open-question-adr-0022-falsifiers-fired-001` (**superseded** 2026-10-08 by `kb-decision-0081`; added 2026-09-04 — two of ADR-0022's own three
 named re-open conditions have fired and the third cannot fire as written, and nobody has yet
 decided whether the decision is superseded, re-opened, or ratified as still correct with the
 firings recorded against it. Amended 2026-09-07 with the shipped-adapter remeasurement's sharper

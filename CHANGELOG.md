@@ -249,6 +249,43 @@ not the same as what a user needed to be told.
   inside its `Retry` bound, per the entry above
   ([ADR-0077](.kb/decisions/0077-appenderror-busy.md), ES-43).
 
+- **BREAKING, behaviour only (`happenstance-sqlite`, `happenstance-postgres`):
+  a store runs its work on the runtime it is called on, and the runtime it was
+  built on is the fallback.** *Pending the acceptance of
+  [ADR-0081](.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md),
+  which is proposed; this entry leaves with the change if it is declined.*
+  Both stores in `happenstance-sqlite` and `PostgresEventStore` capture a tokio
+  `Handle` at construction, and used to prefer it at every use. A store that
+  outlived the runtime it was built in — a `static` initialised inside the first
+  `#[tokio::test]` is the usual shape — sent its work to that dead runtime, and
+  tokio cancelled it unrun:
+
+  - `happenstance-sqlite`: a `read` yielded one
+    `Err(SqliteEventStoreError::Worker(JoinError::Cancelled))` and ended, and
+    every `SqliteProjectionStore` method failed the same way. `append` and `head`
+    were unaffected, because they run inline.
+  - `happenstance-postgres`: every `PostgresEventStore` operation failed as
+    `Worker(JoinError::Cancelled)`, and with the capturing runtime alive but
+    undriven, a read hung until that runtime was dropped.
+
+  Each now prefers `Handle::try_current()` and falls back to the captured
+  handle only when the caller is on no runtime, which is what keeps the
+  concurrency family's bare-thread contenders working. `NoRuntime` keeps its
+  meaning: no runtime at construction and none at use. **No signature changes**,
+  so this compiles unchanged; what changes is which runtime runs a store's work.
+  A caller that relied on a store's work staying on the runtime it was built in,
+  while calling it from another, no longer gets that. On `happenstance-postgres`
+  the calling runtime now needs tokio's timer, so build it with `enable_all`:
+  `sqlx` acquires every connection under `tokio::time::timeout`, and a call from
+  a runtime without a timer, which used to run on the captured runtime, now
+  fails as `Worker(JoinError::Panic)`. Opening a new connection needs I/O too.
+
+  **Not fixed by this, on `happenstance-postgres`:** a pooled `sqlx` connection
+  opened on a runtime that has since been dropped is not seen as broken, and a
+  query on it ends in `PoolTimedOut` or does not finish. Open a `PgPool`, and
+  call the stores, on runtimes that live at least as long as the pool. ADR-0081
+  measures both (`tests/runtime_seam.rs`); `PostgresEventStore::new` says so.
+
 - **`happenstance-cloudflare` evaluates any query inside a real Durable Object.**
   `workerd` sets four statement limits on every database it opens: 5 compound
   `SELECT` terms, 100 bound parameters, 100,000-byte statements and an
@@ -482,6 +519,7 @@ is not part of `0.4.0` until the owner accepts it.
 | H7 | `happenstance` | `CommandError::Exhausted`'s `source` field is `AppendError<E>`, was `ConditionViolated`; cargo-semver-checks has no lint for a changed field type | hand | ADR-0077 | Changed |
 | H8 | `happenstance-core` | `ProjectionId::new` returns `Result<ProjectionId, InvalidProjectionId>`, was `ProjectionId`, and refuses the ADR-0015 set and the reserved prefixes; there is no `From<&str>` or `From<String>` to migrate through | hand (L10 postdates the tool run) | [ADR-0082](.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | Changed |
 | H9 | `happenstance` | the same `ProjectionId::new`, through the facade's re-export | hand, as H8 | ADR-0082 | Changed |
+| H11 | `happenstance-sqlite`, `happenstance-postgres` | a store runs on the runtime it is called on, preferring `Handle::try_current()` over the handle it captured (behaviour) | hand | [ADR-0081](.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | Changed |
 | H10 | `happenstance-testkit` | a new conformance rule, `projection_ids_round_trip_by_bytes` (PS-39), which an adapter that keys a checkpoint lossily now fails (behaviour; CF-32) | hand | ADR-0082 | Added |
 
 **Not a break, recorded so the absence is a decision:** `EventStore::append`
@@ -490,8 +528,6 @@ keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md
 
 **Pending — each joins this table only if the owner accepts its record:**
 
-- `happenstance-sqlite`, `happenstance-postgres`: a store runs on the runtime it is
-  called on (behaviour; ADR-0081, `proposed`, #48).
 - `happenstance-neon`: `SqlTransport` gains the required method `reads_settled`
   (ADR-0087, `proposed`, #51; the spike is #50).
 - `happenstance-postgres`: a projection batch's parameter count is checked at

@@ -608,7 +608,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   mechanism now takes a fourth `per_arm_extra` parameter this question did not describe.
   `Selectivity::read_for`'s own unpartitioned failure mode, found in the same pass, is the
   residual.
-- **Open** — [`adr-0022-falsifiers-have-fired.md`](../open-questions/adr-0022-falsifiers-have-fired.md)
+- **Superseded** — [`adr-0022-falsifiers-have-fired.md`](../open-questions/adr-0022-falsifiers-have-fired.md)
   (`kb-open-question-adr-0022-falsifiers-fired-001`) — ADR-0022 named three
   conditions under which it would be re-opened; the 2026-09-03
   pre-publication review found two fired (`busy > 0` observed, and the
