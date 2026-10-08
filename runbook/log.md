@@ -10,6 +10,20 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-08 — phase 17's exit pass: nothing moves, and the full gate is blocked
+
+*Committed on `lane/p17-exit-pass`, on `151f5c8`.* Phase 17.
+
+The five open exit criteria all wait on the owner's records (ADR-0081, 0083, 0084,
+0086, 0087) and on L10 (#53). `cargo xtask ci` on `main` failed twice on the
+testkit's racing-mutant test, which passes alone; its rewrite is the owner's. The
+gate's later steps, run one by one, are green.
+
+**Verified.** The two full-gate runs, the steps after the tests one by one, and the
+exit criteria read against `main`.
+
+---
+
 ## 2026-10-07 — the `0.4.0` trace table, drafted
 
 *Committed on `lane/p17-trace-table`, on `4278816`.* Phase 17.

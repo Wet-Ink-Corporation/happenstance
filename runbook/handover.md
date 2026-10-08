@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-trace-table`, on `4278816` (`main`, where PR #49 merged). 2026-10-07.
+`lane/p17-exit-pass`, on `151f5c8` (`main`, where PR #52 merged). 2026-10-08.
 
 ## Where things are
 
@@ -40,25 +40,30 @@ An unattended overnight session (2026-10-07) is working the phase 17 queue.
   `&[Event]` by ADR-0080), #47 (`12540a7`, the deployed `workerd` leg retries a
   Durable Object reset), #49 (`4278816`, Neon's `push` narrowed, BREAKING for
   `0.4.0`).
-- **This PR:** the `0.4.0` trace table, drafted in `[Unreleased]` (not released).
+- **This PR:** phase 17's exit pass. No criterion moves; the full gate is blocked
+  on the testkit's racing-mutant test (its rewrite is the owner's).
 - **Open for the owner:** #51, ADR-0087 (the ES-11 fence works on Neon; spike
-  draft #50, never merged).
+  draft #50, never merged); #53, L10 (`ProjectionId` validated; one H-05 approval).
 - **Open, not to merge until the owner accepts ADR-0081:** #48, L9 (ADR-0022 §9
   reproduced; stores prefer the runtime they are called on).
 - **Open for the owner** (each a `proposed` record): #43 ADR-0083 (codec stays
   unsealed), #44 ADR-0084 (the SQL seam is final; proposes a Postgres
   parameter-count check), #45 ADR-0086 (Postgres and Neon keep mint-once).
-- **In flight:** L10 (`ProjectionId`), then the exit pass.
+- **In flight:** nothing. Every lane is a PR waiting on the owner.
 - **Pre-existing:** the testkit's racing-mutant flake under load; the default-features
   doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link.
 
 ## Next action
 
-1. L10, then the exit pass. L8's spike (#50) and record (#51) are done and wait on the
-   owner; the trace table's pending rows join as their records are accepted.
+1. The owner's decisions below. Then merge the accepted lanes, re-run the full gate,
+   and tick the exit criteria they meet; the trace table's pending rows join as their
+   records are accepted, and `0.4.0` is released.
 
 ## Waiting on the owner
 
+- H-16: rewrite `mutation_coverage`'s racing mutants to a deterministic rendezvous;
+  the full gate on `main` failed twice on it.
+- H-05: approve `#[expect(clippy::panic)]` on `ProjectionId::from_static` (#53).
 - Accept or decline the `proposed` records: ADR-0081 (#48; remedy B, and whether
   the documented Postgres pool obligation is enough), ADR-0083 (#43), ADR-0084 (#44),
   ADR-0086 (#45), ADR-0087 (#51).

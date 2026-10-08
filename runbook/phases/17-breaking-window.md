@@ -733,3 +733,30 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   - **Every row has a decision.** Four `proposed` records are listed as pending
     (ADR-0081, 0082, 0084, 0087). The release box stays open: nothing is
     published or tagged.
+- 2026-10-08 — **The exit pass, on `151f5c8`: no exit criterion moves.** All
+  five open criteria wait on the owner.
+  - **§9.** ADR-0022 §9 is reproduced and its remedy classified breaking; the
+    remedy lands in #48 once ADR-0081 is accepted.
+  - **The breaking open questions.** Each is answered by a record: ADR-0082 in
+    #53, and ADR-0083, 0084 and 0086 in #43, #44 and #45. Only ADR-0082 is
+    accepted, and it is not on `main`.
+  - **`0.4.0`.** Not released. The trace table is drafted in `[Unreleased]`
+    (#52), with four rows pending their records.
+  - **`freeze-by-17`.** ES-11 and ES-12 wait on ADR-0087 (#51), whose fence
+    held 0 red of 1,500 on the live endpoint against 172 of 1,500 unfenced.
+  - **The specification.** `spec-trace` passes on `main`; reconciling it
+    against the unmerged lanes follows their merges.
+  - **The full gate.** `cargo xtask ci` on `151f5c8` failed twice at the test
+    step, on `happenstance-testkit`'s
+    `mutation_coverage::the_concurrency_rules_reject_exactly_what_they_claim`.
+    `RacingProbeStore` passed `exactly_one_of_n_contenders_commits`. The test
+    passes 5 of 5 alone and fails under the whole workspace's load; it also went
+    red once in CI's MSRV job on #52. Making its rendezvous deterministic is a
+    test rewrite, which is the owner's (H-16); the `RACERS` table is untouched.
+    The steps after the test step, run one by one, are green: `wasm`,
+    `spec-trace`, `lints`, `lint-kb`, `lint-constitution`, `package-check`, and
+    `cargo doc` under `-D warnings`. `cargo deny` is not installed on this host.
+  - **The deployed `workerd` leg** met a new answer on #51:
+    `two_handles_observe_each_others_appends` got a Cloudflare HTML `500` that
+    the exact-match retry does not know. Only its first line was logged.
+    Proposed: print the page's `<title>` on a failure, then classify it.
