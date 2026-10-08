@@ -17,35 +17,116 @@
 //! by the same two directions CF-3 asks for: every store fails every rule it
 //! declares, and passes every rule it does not.
 //!
-//! # The rendezvous, and why it is not a sleep
+//! # The rendezvous, and why it cannot time out
 //!
 //! A wrong store that is *sometimes* caught is worse than useless in a proof
 //! artefact: it turns the meta-test into a coin toss and teaches the next
 //! reader to re-run. Every window below is therefore closed by a **rendezvous**
-//! rather than by luck — an atomic counter and [`std::thread::yield_now`], with
-//! the wait bounded by a number of yields so that a store which is never joined
-//! proceeds instead of hanging.
+//! rather than by luck, and the rendezvous waits on an exact condition, with no
+//! budget of any kind.
 //!
-//! That bound is a count of *yields*, not of milliseconds, and nothing asserts
-//! on it. CF-33 constrains conformance **rules** — no clock, no elapsed time, no
-//! assertion on an operation count — and these are instruments rather than
-//! rules; but the reason CF-33 exists applies here too, which is why the
-//! mechanism is a rendezvous with an escape hatch and not `thread::sleep(10ms)`.
-//! A sleep would be both slower and less reliable: it would still be a race, run
-//! against a wall clock on a loaded runner.
+//! ## What it replaced, and how that failed
+//!
+//! Until 2026-10-07 the wait was an atomic counter and
+//! [`std::thread::yield_now`], bounded by a number of yields (8,000 to meet,
+//! 512 to settle) so that a store nobody joined would proceed rather than hang.
+//! On an oversubscribed host the bound was the bug. The waiting thread kept
+//! being scheduled while its cohort was not, so the budget ran out first. The
+//! mutant then proceeded alone, never raced, and *passed* the rule it exists to
+//! fail. On 2026-10-07, on a 4-core host with `CARGO_BUILD_JOBS=2` and a
+//! second cargo build running, it was:
+//!
+//! * red 3 runs in 3 under the workspace tests;
+//! * red 1 in 4 for the whole binary run alone (1 in 2 in the run the phase-17
+//!   runbook records);
+//! * red 0 in 4 for the filtered test.
+//!
+//! The two rows seen were `RacingProbeStore` passing
+//! `exactly_one_of_n_contenders_commits`, and `GlobalVersionStore` passing
+//! `k_disjoint_boundaries_never_conflict`.
+//!
+//! A host's load is not reproducible on demand, so the decisive measurement
+//! takes the host out of it. A 0–35 ms sleep was added at the top of
+//! `RacingProbeStore`'s and `GlobalVersionStore`'s `append`, standing in for a
+//! contender the scheduler has not run yet, and both were measured with it:
+//!
+//! * **The yield-bounded version** was red 3 runs in 3, on exactly those rows.
+//! * **The census below** was green 10 runs in 10, and 3 in 3 at ten times the
+//!   delay.
+//!
+//! The sleep was an experiment and was never committed.
+//!
+//! Neither obvious repair is one. A larger budget moves the load at which the
+//! pass happens and does not remove it. A bounded wait whose expiry panics turns
+//! a silent pass into a loud one, which is better, but it is still a flake: the
+//! verdict still depends on whether the cohort beats a count. A sleep is the same
+//! race run against a wall clock. CF-33 forbids clocks and operation counts in
+//! **rules**, not in instruments, but the reason CF-33 exists applies here too.
+//!
+//! ## What it waits for instead
+//!
+//! The cohort is now known exactly, and no rule had to change for that to be
+//! true. **A rule declares its cohort by the handles it opens.** Each handle
+//! joins a census on `connect` and leaves it on `Drop`. A handle that has never
+//! read counts as a *contender*. One that has read counts as an *observer*,
+//! which is the only role a reader in this family plays. A rendezvous releases
+//! its cohort when every open contender has arrived, and the count it compares
+//! against falls as contenders close. Nothing counts yields and nothing reads a
+//! clock, so load can make the meeting slower and cannot make it not happen.
+//!
+//! ## Why it cannot hang either
+//!
+//! It still has to keep the old bound's promise: a hung proof artefact names no
+//! rule, and `harness.rs` explains why there is deliberately no watchdog.
+//!
+//! * **A store nobody joins** is a cohort of one. Its only open contender is
+//!   the one arriving, so it is released on arrival, with no wait at all. Every
+//!   setup append is this case: the setup handle is dropped before the
+//!   contenders are connected.
+//! * **A contender that never arrives** has lost: the probe rejected it before
+//!   the window, or it fell over. Either way its thread ends, its handle drops,
+//!   and the cohort it was holding open shrinks to the ones already waiting.
+//! * **A reader** marks its handle an observer on its first read.
+//!   `observe_while_writing` makes that read on the rule's own thread before any
+//!   writer is spawned, which is a happens-before, so no writer ever counts the
+//!   reader into its cohort.
+//!
+//! What remains is a precondition, and it is written here so that the author of
+//! the next rule meets it on purpose. **Every open handle that has never read
+//! must eventually append or be dropped while a cohort is waiting.** All six
+//! rules meet it. `race` moves each handle into a contender that appends once
+//! and drops it. `observe_while_writing`'s writers append once per round, all
+//! for the same number of rounds, so each round is one cohort and the last
+//! round is followed by the drop. Setup handles go out of scope before the
+//! race, and post-hoc observers are connected after it. A rule that held an
+//! idle, never-read handle open across a race would hang this binary: the CI
+//! timeout would catch it, and it would name no rule. That is loud, which the
+//! old failure mode never was.
+//!
+//! A second, narrower rule follows from the counting: **an observer must not
+//! append into a window.** It would count as an arrival without counting as a
+//! contender, so a cohort could release one contender short. No rule here
+//! appends through a handle it has read from.
+//!
+//! The wait is a [`Future`] that registers its waker, not a spin loop. The
+//! testkit's `block_on` parks the contender's thread until a census change
+//! wakes it, so a waiting contender gives its core to the ones it is waiting
+//! for, which is the point on a host with no core to spare.
 //!
 //! # How to add one
 //!
-//! 1. Write the store here, wrong in exactly one way, `Send + Sync`, and close
-//!    its window with a rendezvous.
+//! 1. Write the store here, wrong in exactly one way, `Send + Sync`, wrapping a
+//!    [`Handle`], and close its window with [`Shared::rendezvous`] or another
+//!    [`Until`] over the census. Never with a count or a clock.
 //! 2. Add its fixture to `for_each_racer!` in `tests/mutation_coverage.rs`.
 //! 3. Add its row to `RACERS` in the same file, naming the exact set of
 //!    concurrency rules it fails and the real adapter shape it comes from.
 
 use core::future::Future;
+use core::ops::Deref;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use core::task::{Context, Poll};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use core::task::{Context, Poll, Waker};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use futures_core::Stream;
@@ -61,21 +142,6 @@ use crate::harness::Subject;
 // =====================================================================
 // The shared mechanism
 // =====================================================================
-
-/// How many times a rendezvous yields before giving up and proceeding.
-///
-/// Bounded so that a store nobody joined finishes rather than hanging — a hung
-/// proof artefact names no rule, which is the failure `harness.rs` explains
-/// there is deliberately no watchdog for. Large enough that two threads which
-/// are genuinely running concurrently will always meet; small enough that a
-/// store which waits alone costs milliseconds rather than seconds.
-const RENDEZVOUS_YIELDS: usize = 8_000;
-
-/// How many yields a rendezvous waits for its company to *stop growing*.
-///
-/// See [`Shared::wait_for_company`] for why waiting for a count rather than for
-/// a settled count is not enough, and why the count has to be cumulative.
-const SETTLE_YIELDS: usize = 512;
 
 /// One backing store, shared by every handle of one fixture.
 ///
@@ -93,19 +159,81 @@ pub(crate) struct Shared {
     /// A position counter maintained outside `events`, as `SELECT
     /// max(position)` before `BEGIN` is. Zero means "nothing yet".
     head: AtomicU64,
-    /// How many appends have **ever** entered a store's window.
-    ///
-    /// Cumulative rather than an occupancy count, which is the third version of
-    /// this field and the first that works. See [`Shared::wait_for_company`].
-    arrivals: AtomicUsize,
-    /// Completed reads, so a writer can wait for a reader rather than for a
-    /// clock.
-    reads: AtomicU64,
+    /// Who is open onto this store, and who is waiting for whom. Every
+    /// rendezvous below is a predicate over it. See the module documentation.
+    census: Mutex<Census>,
     /// How many appends have **written**, counted under the log's lock so the
     /// ordinal follows commit order. `BusyAfterWriteStore` lies on the odd
     /// ones, which makes which batches it lies about a property of the order
     /// they committed in rather than of the scheduler.
     writes: AtomicUsize,
+}
+
+/// The handles open onto one [`Shared`], and the waits suspended on them.
+///
+/// One mutex over all of it rather than an atomic per field. That is the fix,
+/// not a style choice. A release reads the arrivals and the contender count
+/// together, and a contender that closes between those two reads is the kind
+/// of interleaving the yield-bounded version kept losing to. Under one lock the
+/// question "is everybody in?" has one answer at a time.
+#[derive(Debug, Default)]
+struct Census {
+    /// Open handles that have never read: the cohort a rendezvous waits for.
+    contenders: usize,
+    /// Open handles that have read. A reader is not a contender.
+    observers: usize,
+    /// Contenders that have arrived at the rendezvous now filling.
+    arrived: usize,
+    /// Turns each time a rendezvous releases its cohort, so a waiter can tell
+    /// "my cohort has gone" from "the next one is filling".
+    generation: u64,
+    /// Completed reads, so a writer can wait for a reader rather than for a
+    /// clock.
+    reads: u64,
+    /// Every wait suspended on a change to the fields above.
+    ///
+    /// Bounded by the number of waits, because [`Census::park`] does not push a
+    /// waker that is already here. At most one per open handle.
+    waiting: Vec<Waker>,
+}
+
+impl Census {
+    /// Releases the cohort now filling, if every open contender is in it.
+    ///
+    /// Called wherever either side of the comparison moves: on an arrival, and
+    /// on a contender closing or becoming an observer. The second is what lets
+    /// a cohort with a lost contender release without that contender.
+    fn settle(&mut self) {
+        if self.arrived > 0 && self.arrived >= self.contenders {
+            self.arrived = 0;
+            self.generation = self.generation.wrapping_add(1);
+        }
+    }
+
+    /// Takes every suspended wait, for the caller to wake once it has dropped
+    /// the census lock.
+    ///
+    /// Every wait is woken, not only the ones whose predicate now holds. That
+    /// keeps the predicates in one place, their futures, and a wait woken early
+    /// parks again. At most sixty-three are ever suspended at once (sixty-four
+    /// contenders, the last of whom releases the rest), so this costs nothing
+    /// measurable.
+    ///
+    /// They are woken *after* the lock is released, never under it. Each one is
+    /// a contender that will take this lock as soon as it runs, so waking it
+    /// while still holding the lock sends it straight into contention. A waker
+    /// that polled inline would also deadlock.
+    fn take_waiting(&mut self) -> Vec<Waker> {
+        core::mem::take(&mut self.waiting)
+    }
+
+    /// Registers a suspended wait, once.
+    fn park(&mut self, waker: &Waker) {
+        if !self.waiting.iter().any(|parked| parked.will_wake(waker)) {
+            // Stored, so cloned: the census outlives this poll.
+            self.waiting.push(waker.clone());
+        }
+    }
 }
 
 impl Shared {
@@ -116,6 +244,14 @@ impl Shared {
     /// data behind the lock is a `Vec` with no invariant a panic could break.
     fn log(&self) -> MutexGuard<'_, Vec<SequencedEvent>> {
         self.events.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Locks the census, ignoring poisoning for [`Shared::log`]'s reason.
+    ///
+    /// Nothing panics while holding this lock. Every update under it is a
+    /// saturating count, a `Vec` push, or a `mem::take` of the waiters.
+    fn census(&self) -> MutexGuard<'_, Census> {
+        self.census.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// The highest position currently committed.
@@ -137,14 +273,14 @@ impl Shared {
         correct::contains(&self.log(), id)
     }
 
-    /// Announces this append's arrival at a window, then waits — bounded — until
-    /// at least `want` have arrived **and no more are still arriving**.
+    /// Announces this append's arrival at a window. The future it returns is
+    /// ready once **every open contender** has arrived too, or has closed.
     ///
-    /// # Three versions, and why the first two were wrong
+    /// # Four versions, and why the first three were wrong
     ///
-    /// This is the only genuinely subtle thing in the file, and both wrong
-    /// versions failed the same way: the store went on being rejected *most* of
-    /// the time, which is the worst possible failure mode for an instrument
+    /// This is the only genuinely subtle thing in the file. All three wrong
+    /// versions failed the same way: the store went on being rejected *most*
+    /// of the time. That is the worst possible failure mode for an instrument,
     /// because it looks like success.
     ///
     /// **Wait for two.** Contenders then meet in *pairs*: the first two rendezvous,
@@ -160,94 +296,173 @@ impl Shared {
     /// three is four boundaries with one winner each, which is exactly what a
     /// conformant store produces.
     ///
-    /// **Cumulative arrivals.** A counter that never goes down cannot shrink
-    /// under a late arrival: every straggler bumps it and re-arms everybody still
-    /// waiting, so the cohort cannot close until the last contender is in it.
-    /// That is the version below.
+    /// **Cumulative arrivals, settled over a yield budget.** A counter that
+    /// never goes down cannot shrink under a late arrival, so the cohort could
+    /// not close early on an idle host. But "settled" meant "512 yields with no
+    /// new arrival", and the whole wait was bounded at 8,000 yields. On a loaded
+    /// host both ran out while the rest of the cohort was still unscheduled,
+    /// and the store proceeded alone. The module documentation has the numbers.
     ///
-    /// The settle window is a heuristic and is allowed to be one: this is an
-    /// instrument rather than a rule, nothing asserts on the number, and the
-    /// whole loop is bounded so a store nobody joins proceeds rather than
-    /// hanging.
-    fn wait_for_company(&self, want: usize) {
-        let mut seen = self.arrivals.fetch_add(1, Ordering::AcqRel) + 1;
-        let mut still = 0;
-        for _ in 0..RENDEZVOUS_YIELDS {
-            let now = self.arrivals.load(Ordering::Acquire);
-            if now > seen {
-                seen = now;
-                still = 0;
-            } else {
-                still += 1;
-            }
-            if seen >= want && still >= SETTLE_YIELDS {
-                return;
-            }
-            std::thread::yield_now();
+    /// **Every open contender.** The version below. It needs no guess at the
+    /// cohort's size and no guess at how long it takes to gather, because the
+    /// census counts the cohort exactly and releases it on that count and
+    /// nothing else. Why that cannot hang is in the module documentation.
+    fn rendezvous(&self) -> Until<'_, impl Fn(&Census) -> bool> {
+        let (mine, woken) = {
+            let mut census = self.census();
+            census.arrived = census.arrived.saturating_add(1);
+            let mine = census.generation;
+            census.settle();
+            (mine, census.take_waiting())
+        };
+        woken.into_iter().for_each(Waker::wake);
+        Until {
+            shared: self,
+            ready: move |census: &Census| census.generation != mine,
         }
     }
 
-    /// Waits, bounded, until the committed log holds more than `len` events.
-    fn wait_for_growth(&self, len: usize) {
-        for _ in 0..RENDEZVOUS_YIELDS {
-            if self.log().len() > len {
-                return;
-            }
-            std::thread::yield_now();
-        }
-    }
-
-    /// Waits, bounded, until a read that *started after this call* has finished.
+    /// Ready once a read that *started after this call* has finished, or once
+    /// no reader is open.
     ///
     /// Two completions rather than one: a read already in flight when this is
     /// called may have sampled the store before the partial write, so only the
-    /// second completion is guaranteed to have seen it.
+    /// second completion is guaranteed to have seen it. That holds because
+    /// there is exactly one reader. With two, both completions could belong to
+    /// reads that were already in flight.
     ///
-    /// Returns immediately when nothing has ever read, which is every rule but
-    /// one — there is no reader to rendezvous with, and waiting would cost the
-    /// whole budget per batch for nothing.
+    /// Ready immediately when no observer is open, which is every rule but one.
+    /// There is no reader to meet, and no reader can arrive later: a reader
+    /// becomes an observer by reading, and `observe_while_writing` makes its
+    /// reader read once before any writer is spawned. The same count ends the
+    /// wait when the reader closes, so a writer can never outlive the reader it
+    /// is waiting for.
     ///
-    /// # What that early-out cannot tell apart, and who fixed it
+    /// # The early-out it replaced
     ///
-    /// `reads == 0` means *no read has completed*, which covers both "this rule
-    /// has no reader" and "the reader exists but has not been scheduled yet".
-    /// The second was measured on an oversubscribed host: the writer phase of
-    /// `a_concurrent_reader_never_sees_a_partial_batch` is a few dozen appends
-    /// of in-memory work, so every writer could finish before the reader thread
-    /// ran once, every rendezvous was skipped, and this store went unrejected on
-    /// ten runs in twenty-four. An instrument that stops demonstrating anything
-    /// while still passing is the worst failure mode a proof artefact has.
-    ///
-    /// The fix is not here, and deliberately not: dropping the early-out would
-    /// make every other rule pay the whole yield budget per row for a reader
-    /// that does not exist, and no counter this store can see distinguishes the
-    /// two cases — a reader announces itself only by reading.
-    /// `observe_while_writing` in the testkit now completes one read on the
-    /// rule's own thread before any writer is spawned, which is a happens-before
-    /// no scheduler can take away. That belongs in the rule for the rule's own
-    /// sake: without it the live half of that rule samples an already-quiescent
-    /// store and silently degenerates into the post-hoc half.
-    fn wait_for_a_reader(&self) {
-        let start = self.reads.load(Ordering::Acquire);
-        if start == 0 {
-            return;
+    /// The early-out used to be "no read has completed", with the wait bounded
+    /// by yields. Two things went wrong with that. First, the check could not
+    /// tell "this rule has no reader" from "the reader has not been scheduled
+    /// yet". On an oversubscribed host every writer finished before the reader
+    /// thread ran once, and this store went unrejected on ten runs in
+    /// twenty-four. `observe_while_writing`'s first read on the rule's own
+    /// thread fixed that, and it belongs in the rule for the rule's own sake.
+    /// Second, the yield budget had the same flaw as
+    /// [`Shared::rendezvous`]'s. Counting observers closes both, and it leaves
+    /// nothing to time out.
+    fn wait_for_a_reader(&self) -> Until<'_, impl Fn(&Census) -> bool> {
+        let start = self.census().reads;
+        Until {
+            shared: self,
+            ready: move |census: &Census| {
+                census.observers == 0 || census.reads >= start.saturating_add(2)
+            },
         }
-        for _ in 0..RENDEZVOUS_YIELDS {
-            if self.reads.load(Ordering::Acquire) >= start + 2 {
-                return;
-            }
-            std::thread::yield_now();
+    }
+}
+
+/// A wait for a predicate over the [`Census`] to hold.
+///
+/// Every rendezvous in this file is one of these, so there is one place where a
+/// wait parks and one place where it is woken. A `Mutex` guard is taken and
+/// dropped inside each `poll` and never held across a suspension.
+#[must_use = "a rendezvous that is not awaited waits for nothing"]
+struct Until<'shared, P> {
+    shared: &'shared Shared,
+    ready: P,
+}
+
+impl<P: Fn(&Census) -> bool> Future for Until<'_, P> {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let mut census = self.shared.census();
+        if (self.ready)(&census) {
+            return Poll::Ready(());
+        }
+        census.park(cx.waker());
+        Poll::Pending
+    }
+}
+
+/// One handle's membership of the [`Census`]: a contender from `connect` until
+/// its first read, an observer after it, and gone on `Drop`.
+///
+/// This is the field every store below wraps, in place of a bare
+/// `Arc<Shared>`. Joining on construction and leaving on `Drop` is the only way
+/// to make the census exact. A handle can be dropped from any thread at any
+/// point, including during an unwind, and `Drop` runs in all of those cases.
+///
+/// It dereferences to [`Shared`] so the store bodies read `self.0.log()` as
+/// they always have. That is `Deref` on a handle type whose only job is to be a
+/// counted `Arc`, which is the case `Deref` exists for.
+#[derive(Debug)]
+struct Handle {
+    shared: Arc<Shared>,
+    /// Whether this handle has read. Swapped only under the census lock, which
+    /// orders it, so `Relaxed` is enough: nothing else synchronises through it.
+    /// `Drop` has `&mut self` and reads it without an atomic operation at all.
+    observer: AtomicBool,
+}
+
+impl Handle {
+    /// Opens a handle onto `shared`, counted as a contender.
+    fn join(shared: &Arc<Shared>) -> Self {
+        let mut census = shared.census();
+        census.contenders = census.contenders.saturating_add(1);
+        drop(census);
+        Self {
+            shared: Arc::clone(shared),
+            observer: AtomicBool::new(false),
         }
     }
 
-    /// The read every store here shares: a snapshot, plus the counter that lets
-    /// a writer wait for one.
+    /// The read every store here shares: a snapshot, plus the census update
+    /// that lets a writer wait for one.
+    ///
+    /// The first read moves this handle from contender to observer, which can
+    /// complete a cohort that was waiting only for it. The read is counted
+    /// after the log is released, so a writer waiting on the count knows the
+    /// read is over rather than merely started.
     fn snapshot(&self, query: &Query, options: ReadOptions) -> Snapshot {
-        let selected = correct::select(&self.log(), query, options);
-        // Incremented after the log is released, so a writer waiting on it knows
-        // the read is over rather than merely started.
-        self.reads.fetch_add(1, Ordering::Release);
+        let selected = correct::select(&self.shared.log(), query, options);
+        let woken = {
+            let mut census = self.shared.census();
+            if !self.observer.swap(true, Ordering::Relaxed) {
+                census.contenders = census.contenders.saturating_sub(1);
+                census.observers = census.observers.saturating_add(1);
+                census.settle();
+            }
+            census.reads = census.reads.saturating_add(1);
+            census.take_waiting()
+        };
+        woken.into_iter().for_each(Waker::wake);
         Snapshot::new(Ok(selected))
+    }
+}
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        let observer = *self.observer.get_mut();
+        let woken = {
+            let mut census = self.shared.census();
+            if observer {
+                census.observers = census.observers.saturating_sub(1);
+            } else {
+                census.contenders = census.contenders.saturating_sub(1);
+                census.settle();
+            }
+            census.take_waiting()
+        };
+        woken.into_iter().for_each(Waker::wake);
+    }
+}
+
+impl Deref for Handle {
+    type Target = Shared;
+
+    fn deref(&self) -> &Shared {
+        &self.shared
     }
 }
 
@@ -290,7 +505,7 @@ macro_rules! racing_fixture {
                 Capability::declined("this instrument exists for the concurrency axis only");
 
             async fn connect(&self) -> Self::Store {
-                $store(Arc::clone(&self.0))
+                $store(Handle::join(&self.0))
             }
         }
 
@@ -320,7 +535,7 @@ macro_rules! racing_fixture {
 /// itself — which is why `happenstance-postgres`, whose writers are *not*
 /// serialised, is the instrument the runbook still owes.
 #[derive(Debug)]
-pub(crate) struct LockedStore(Arc<Shared>);
+pub(crate) struct LockedStore(Handle);
 
 impl SendEventStore for LockedStore {
     type Error = LogError;
@@ -388,7 +603,7 @@ racing_fixture!(LockedFixture, LockedStore, "LockedStore");
 /// rule is stated in prose — a concurrency rule's wrong store goes in
 /// `racers.rs` and `RACERS` precisely because it can have no `REGISTRY` row.
 #[derive(Debug)]
-pub(crate) struct RacingProbeStore(Arc<Shared>);
+pub(crate) struct RacingProbeStore(Handle);
 
 impl SendEventStore for RacingProbeStore {
     type Error = LogError;
@@ -427,9 +642,10 @@ impl SendEventStore for RacingProbeStore {
             )));
         }
 
-        // THE DEFECT: the window between the answer and the act.
+        // THE DEFECT: the window between the answer and the act. Every
+        // contender's probe has been answered before any of them acts on it.
         YieldOnce(false).await;
-        self.0.wait_for_company(2);
+        self.0.rendezvous().await;
 
         // The insert, with the probe's verdict already spent.
         let mut log = self.0.log();
@@ -474,7 +690,7 @@ racing_fixture!(RacingProbeFixture, RacingProbeStore, "RacingProbeStore");
 /// `exactly_one_of_n_contenders_commits`: it passes the second, because one
 /// winner out of eight on **one** boundary is exactly what it produces.
 #[derive(Debug)]
-pub(crate) struct GlobalVersionStore(Arc<Shared>);
+pub(crate) struct GlobalVersionStore(Handle);
 
 impl SendEventStore for GlobalVersionStore {
     type Error = LogError;
@@ -513,9 +729,10 @@ impl SendEventStore for GlobalVersionStore {
         };
 
         // The transaction doing its work. The rendezvous is what makes the
-        // rejection below happen on every run rather than on a lucky one.
+        // rejection below happen on every run rather than on a lucky one: every
+        // contender has read its version before the first of them commits.
         YieldOnce(false).await;
-        self.0.wait_for_company(2);
+        self.0.rendezvous().await;
 
         let mut log = self.0.log();
         // THE DEFECT: the commit-time check is *did anything at all land*, not
@@ -568,7 +785,7 @@ racing_fixture!(
 /// `positions_are_unique` reads a quiescent store after a single writer, which
 /// is why it cannot see it.
 #[derive(Debug)]
-pub(crate) struct RacingSequenceStore(Arc<Shared>);
+pub(crate) struct RacingSequenceStore(Handle);
 
 impl SendEventStore for RacingSequenceStore {
     type Error = LogError;
@@ -595,7 +812,7 @@ impl SendEventStore for RacingSequenceStore {
         let stale = SequencePosition::new(self.0.head.load(Ordering::Acquire));
 
         YieldOnce(false).await;
-        self.0.wait_for_company(2);
+        self.0.rendezvous().await;
 
         // Probe and insert under one lock, so the decision is atomic and this
         // store is wrong about exactly one thing.
@@ -659,7 +876,7 @@ racing_fixture!(
 /// from it, and either way silently skips every event another writer landed in
 /// between.
 #[derive(Debug)]
-pub(crate) struct GlobalHeadStore(Arc<Shared>);
+pub(crate) struct GlobalHeadStore(Handle);
 
 impl SendEventStore for GlobalHeadStore {
     type Error = LogError;
@@ -677,17 +894,20 @@ impl SendEventStore for GlobalHeadStore {
         events: &[Event],
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
-        let (mine, len) = {
-            let mut log = self.0.log();
-            let mine = correct::commit(&mut log, events, condition, dense)?;
-            (mine, log.len())
-        };
+        let mine = correct::commit(&mut self.0.log(), events, condition, dense)?;
 
-        // The gap between the two statements. The rendezvous waits for somebody
-        // else's rows to land, which is the only thing that makes the second
-        // statement's answer differ from the first's.
+        // The gap between the two statements. The rendezvous waits until every
+        // other contender has committed or lost, which is the only thing that
+        // makes the second statement's answer differ from the first's. Every
+        // committer but the last is then handed somebody else's position, on
+        // every run.
+        //
+        // This used to wait, bounded by yields, for the log to grow past this
+        // append. That had the module documentation's flaw on a loaded host,
+        // and it left the store's verdict resting on one contender out of
+        // sixty-four still landing in time.
         YieldOnce(false).await;
-        self.0.wait_for_growth(len);
+        self.0.rendezvous().await;
 
         // THE DEFECT: `max(position)` over the whole table, which is whoever
         // committed last rather than whoever is asking.
@@ -720,7 +940,7 @@ racing_fixture!(GlobalHeadFixture, GlobalHeadStore, "GlobalHeadStore");
 /// append still makes its decision atomically. This store is wrong about
 /// visibility during a batch and about nothing else.
 #[derive(Debug)]
-pub(crate) struct RowAtATimeStore(Arc<Shared>);
+pub(crate) struct RowAtATimeStore(Handle);
 
 impl SendEventStore for RowAtATimeStore {
     type Error = LogError;
@@ -765,7 +985,7 @@ impl SendEventStore for RowAtATimeStore {
             // THE DEFECT: the batch is visible part-written here. The wait is
             // for a *reader*, not for a duration, so the sighting happens on
             // every run rather than on a lucky one.
-            self.0.wait_for_a_reader();
+            self.0.wait_for_a_reader().await;
             YieldOnce(false).await;
 
             let mut log = self.0.log();
@@ -813,7 +1033,7 @@ racing_fixture!(RowAtATimeFixture, RowAtATimeStore, "RowAtATimeStore");
 /// counted. So in every rule the first contender to commit after the setup
 /// append is the one it lies to, and the verdict is the same on every run.
 #[derive(Debug)]
-pub(crate) struct BusyAfterWriteStore(Arc<Shared>);
+pub(crate) struct BusyAfterWriteStore(Handle);
 
 impl SendEventStore for BusyAfterWriteStore {
     type Error = LogError;

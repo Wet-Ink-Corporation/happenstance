@@ -991,9 +991,9 @@ pub mod rules {
     /// to. What it can do is fail to catch a genuine defect on an unlucky run,
     /// which is why the proof artefact's `RowAtATimeStore` does not rely on luck:
     /// it holds each partial batch open until the reader has completed a read
-    /// that started after the partial write, using an atomic counter and
-    /// `std::thread::yield_now`, so the rejection is a rendezvous rather than a
-    /// race.
+    /// that started after the partial write, or has closed. The wait is on that
+    /// exact condition, never a yield budget or a clock, so the rejection is a
+    /// rendezvous rather than a race, and load cannot turn it into a pass.
     ///
     /// That rendezvous needs the reader to *exist* before the first writer runs,
     /// and a spawned thread is not a scheduled one. `observe_while_writing`

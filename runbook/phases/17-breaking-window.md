@@ -617,6 +617,17 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     count, which an oversubscribed host exhausts before the cohort arrives. Nothing in this diff touches the
     testkit. It is recorded, not fixed; a mutant that must lose a race needs a
     forced interleaving, not a retry.
+    **Fixed since:** the yield budgets are gone from `racers.rs`. Each handle
+    now joins a census when it connects and leaves it when dropped. A
+    rendezvous releases its cohort when every open contender handle has
+    arrived, so a store nobody joins is a cohort of one and is released on
+    arrival. The design, its liveness precondition and the measurements are in
+    that file's module documentation, under *The rendezvous, and why it cannot
+    time out*. No conformance rule changed.
+    `CONTRIBUTING.md`'s rendezvous paragraph now says the same, and so does the
+    rustdoc on `a_concurrent_reader_never_sees_a_partial_batch`. That was a
+    doc-only edit to `src/`, which the owner allowed (`wi-b56b44`); the rule
+    body is untouched.
 - 2026-10-07 — **PR #41 merged as `4fbfefa`** (the vacuity control's record and
   `wi-13bd3b`). **The guard-plan assertion ADR-0068 left owed**, on
   `lane/p17-guard-plan`. `evaluate` in `happenstance-sqlite` now builds its
