@@ -248,7 +248,7 @@ async fn a_contended_append_stalls_the_whole_reactor() {
             "2. CONTROL 1: SHIPPED SqliteProjectionStore::commit, write lock held",
             || async {
                 let holder = WriteLockHolder::hold(&path, HOLD);
-                let id = ProjectionId::new("one-connection-latency");
+                let id = ProjectionId::from_static("one-connection-latency");
                 let position = SequencePosition::new(1).expect("1 is a position");
                 projection
                     .commit(projection.begin(), &id, position, Authority::Live)

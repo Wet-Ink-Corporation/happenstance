@@ -423,10 +423,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   ES-38's rule against CF-27's instrument and, through a defaulted-declined `Fixture` removal
   capability, against every real adapter. No further instrument decision is owed. It stays open
   for sub-question 2: whether a frozen clause may name a rule with no owning phase.
-- **Open** — [`projection-id-is-unvalidated.md`](../open-questions/projection-id-is-unvalidated.md)
+- **Superseded** — [`projection-id-is-unvalidated.md`](../open-questions/projection-id-is-unvalidated.md)
   (`kb-open-question-projection-id-unvalidated-001`) — `ProjectionId::new` is
   infallible and unvalidated; ADR-0015 declined to validate it, on the
   ground that the omission was never a decision. Forced by phase 6.
+  **Resolved 2026-10-07** by ADR-0082 (`kb-decision-0082`): `new` is fallible and refuses
+  VT-14's set, more than 255 bytes, and the prefixes `happenstance/` and `sync/` (VT-35).
 - **Superseded** — [`cf-40-fixture-limits-ownership.md`](../open-questions/cf-40-fixture-limits-ownership.md)
   (`kb-open-question-cf-40-ownership-001`) — ADR-0015 both claims and
   disclaims ownership of CF-40 in its own text; ADR-0012 is the other
@@ -722,7 +724,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
-  their live lines (`spec/SPECIFICATION.md:9389-9414`, `:9021-9034`), both stale as previously cited.
+  their live lines (`spec/SPECIFICATION.md:9495-9520`, `:9029-9042`), both stale as previously cited.
 - **Open** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the
@@ -747,11 +749,11 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   ADR-0062 (`kb-decision-0062`): the whole seam moves, `begin` with it, `LivePostgresProjectionStore`
   runs 20 of 20 against a live PostgreSQL, and PS-2's MUST is met as written; the apply-side residual
   the resolution hands on is `kb-open-question-apply-synchronous-live-store-001`.
-- **Open** — [`projection-batch-sql-seam-statement-type.md`](../open-questions/projection-batch-sql-seam-statement-type.md)
+- **Superseded** — [`projection-batch-sql-seam-statement-type.md`](../open-questions/projection-batch-sql-seam-statement-type.md)
   (`kb-open-question-projection-batch-sql-statement-type-001`) — whether `SqliteBatch::push`'s
   landed `&'static str` narrowing is the seam's final shape or a minted `Statement` newtype follows
   once `ProjectionStore` freezes under PS-2. Added 2026-09-07. Amended 2026-10-07: answered by
-  `kb-decision-0084`, `proposed`, pending the owner's call. It takes Option A as final, covers
+  `kb-decision-0084`, accepted 2026-10-08, which supersedes it. It takes Option A as final, covers
   `LivePostgresBatch::execute`, states the parameter-count obligation once, and proposes the shape
   of Neon's `0.4.0` narrowing (the release is the owner's default).
 - **Superseded** — [`projection-runner-chunk-type-and-observation-seam.md`](../open-questions/projection-runner-chunk-type-and-observation-seam.md)

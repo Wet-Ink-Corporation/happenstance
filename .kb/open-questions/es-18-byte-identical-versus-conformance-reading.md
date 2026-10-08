@@ -42,7 +42,7 @@ last_reviewed: 2026-09-07
 
 ## What is true today
 
-ES-18 (`spec/SPECIFICATION.md:3519-3525`, `[FROZEN]`) reads: "Either every
+ES-18 (`spec/SPECIFICATION.md:3589-3595`, `[FROZEN]`) reads: "Either every
 event in the batch lands or none does. A rejected append MUST leave the
 store byte-identical." The pre-publication review's `Q-01` found
 `happenstance-cloudflare` in a reachable, tested, documented state where a

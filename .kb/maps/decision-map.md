@@ -153,7 +153,7 @@ strength.
 | ADR-0012 | [`kb-decision-0012`](../decisions/0012-append-shape-and-preconditions.md) | append keeps its borrowed batch, and phase 4 declines what it cannot measure | accepted | 4 | — |
 | ADR-0013 | [`kb-decision-0013`](../decisions/0013-position-assignment-and-visibility.md) | Positions are assigned once and become visible in order | accepted | 4 | — |
 | ADR-0014 | [`kb-decision-0014`](../decisions/0014-event-identity-and-recorded-time.md) | The store mints identity, records a time, and the caller supplies neither | accepted | 4 | — |
-| ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted | 4 | — |
+| ADR-0015 | [`kb-decision-0015`](../decisions/0015-validated-identifiers-and-store-limits.md) | Validated identifiers, byte equality, and the two kinds of bound | accepted (partly superseded) | 4 | partly superseded by `kb-decision-0082` (§10, where it declined to validate `ProjectionId`) |
 | ADR-0016 | [`kb-decision-0016`](../decisions/0016-the-wire-format.md) | The wire format is happenstance's own, and an unknown version is refused before the message is read | accepted | 5 | — |
 | ADR-0029 | [`kb-decision-0029`](../decisions/0029-msrv-raised-to-1-97-1.md) | The MSRV is 1.97.1 | accepted | 2 | amends `kb-decision-0004`; amended by `kb-decision-0037` |
 
@@ -618,13 +618,18 @@ ADR-0080 is lane L7's: on the two-build measurement ADR-0012's falsifier asked f
 `happenstance-cloudflare` with calibrated replica arms, `append` keeps `&[Event]` and ES-17 is
 frozen. It rests on ADR-0012 and ADR-0055 without superseding either, records what neither can
 say, and supersedes `kb-open-question-es-17-two-adapter-measurement-001`.
-ADR-0084, proposed, answers the projection batch's SQL seam. `&'static str` plus a named escape
+ADR-0082 is lane L10's: `ProjectionId::new` becomes fallible and refuses VT-14's set, more than
+255 bytes, and the reserved prefixes `happenstance/` and `sync/`; `sync_watermark(StoreId)` is the
+only way to a `sync/` id; VT-35 is minted `[FROZEN]` and PS-39, the store's half, `[PROVISIONAL]`.
+It partly supersedes ADR-0015 at §10 only, so `kb-decision-0015` stays accepted and its row gains
+the annotation, and it supersedes `kb-open-question-projection-id-unvalidated-001`.
+ADR-0084, accepted by the owner on 2026-10-08, answers the projection batch's SQL seam. `&'static str` plus a named escape
 hatch is final for SQLite and Postgres at 1.0, and that includes `LivePostgresBatch::execute`. A
 minted `Statement` is declined as a replacement for `push`. The parameter-count obligation is
 stated once. SQLite's driver enforces it both ways; Postgres enforces only too few, so the record
 proposes an adapter-side count check there. It proposes the shape of Neon's `0.4.0`
-narrowing, whose release the owner had already set as a default. On acceptance it supersedes
-`kb-open-question-projection-batch-sql-statement-type-001`.
+narrowing, whose release the owner had already set as a default. It supersedes
+`kb-open-question-projection-batch-sql-statement-type-001`; the Postgres count check it proposes is owed.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
@@ -641,7 +646,8 @@ narrowing, whose release the owner had already set as a default. On acceptance i
 | — | [`kb-decision-wi-630032`](../decisions/wi-630032-keep-happenstance-ladybug-in-the-workspace-or.md) | Abandon happenstance-ladybug: exclude it from the workspace, keep the directory as a frozen record (owner, Weigh-In) | accepted | 17 | — |
 | ADR-0079 | [`kb-decision-0079`](../decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | A query item binds a constant number of parameters, and happenstance-cloudflare's widths are workerd's | accepted | 17 | — |
 | ADR-0080 | [`kb-decision-0080`](../decisions/0080-append-keeps-a-borrowed-batch.md) | append keeps its borrowed batch, and ES-17 is frozen on the two-build measurement | accepted | 17 | — |
-| ADR-0084 | [`kb-decision-0084`](../decisions/0084-the-projection-batch-sql-seam-is-final.md) | The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once | proposed | 17 | supersedes `kb-open-question-projection-batch-sql-statement-type-001` on acceptance |
+| ADR-0082 | [`kb-decision-0082`](../decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | ProjectionId is validated: VT-14's set, 255 bytes, and happenstance/ and sync/ reserved | accepted | 17 | partly supersedes `kb-decision-0015` (§10) |
+| ADR-0084 | [`kb-decision-0084`](../decisions/0084-the-projection-batch-sql-seam-is-final.md) | The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once | accepted | 17 | supersedes `kb-open-question-projection-batch-sql-statement-type-001` on acceptance |
 
 ## Adding a row
 

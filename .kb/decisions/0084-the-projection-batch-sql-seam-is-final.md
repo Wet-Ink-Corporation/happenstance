@@ -2,7 +2,7 @@
 id: kb-decision-0084
 title: The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0084
 reversibility: medium
@@ -68,7 +68,7 @@ source_paths:
   - examples/transfers-on-sqlite/src/main.rs
   - spec/SPECIFICATION.md
   - references/adr/0084-the-projection-batch-sql-seam-is-final.md
-last_reviewed: 2026-10-07
+last_reviewed: 2026-10-08
 ---
 
 # The projection batch's SQL seam is &'static str plus a named escape hatch at 1.0, and the parameter count is stated once

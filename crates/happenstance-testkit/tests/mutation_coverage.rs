@@ -4497,7 +4497,7 @@ mod mutation_coverage {
     /// The projection family's [`MUST_REJECT`]: every projection rule that
     /// spells `must!` rather than `require!`.
     ///
-    /// Thirteen of the family's seventeen rules are on it, and every one belongs
+    /// Fourteen of the family's eighteen rules are on it, and every one belongs
     /// there rather than being gated with `require!`, because every one reads
     /// the read model or the checkpoint back through a **fresh handle**. A
     /// projection fixture that cannot open a second handle cannot observe PS-1 —
@@ -4542,6 +4542,7 @@ mod mutation_coverage {
         "commit_accepts_a_position_the_batch_did_not_write",
         "commit_rejects_a_regressing_position",
         "distinct_projections_advance_independently",
+        "projection_ids_round_trip_by_bytes",
         "reset_clears_rows_and_checkpoint_together",
         "reset_is_scoped_to_one_projection",
         "refused_reset_changes_nothing",

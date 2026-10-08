@@ -511,7 +511,8 @@ shipped adapter measures no discriminating steady-state cost, and the residual m
 `kb-decision-0024`, whose own successor question, `kb-open-question-off-poll-visibility-defect-001`,
 carries the residual: an off-poll adapter has no suspension point a poll-based schedule can reach),
 `kb-open-question-es-38-and-gap-read-unowned-001`,
-`kb-open-question-projection-id-unvalidated-001`,
+`kb-open-question-projection-id-unvalidated-001` (**superseded** 2026-10-07 by
+`kb-decision-0082`: `ProjectionId` is validated, and `sync/` and `happenstance/` are reserved),
 `kb-open-question-cf-40-ownership-001`,
 `kb-open-question-dcb-no-published-format-001`,
 `kb-open-question-human-readable-encoding-limits-001`,
@@ -630,7 +631,7 @@ compensation-based atomicity, not every counter-assigning store),
 `kb-open-question-probe-read-through-signature-001` (added 2026-09-07 — whether
 `ProjectionProbe::probe_read_through` moves to `&mut Self::Batch` / async / fallible before
 phase 10, corroborating ADR-0036's part-2-unmet finding with a second causal reading),
-`kb-open-question-projection-batch-sql-statement-type-001` (added 2026-09-07 — whether
+`kb-open-question-projection-batch-sql-statement-type-001` (**superseded** 2026-10-08 by `kb-decision-0084`; added 2026-09-07 — whether
 `SqliteBatch::push`'s landed `&'static str` narrowing is the seam's final shape or a minted
 `Statement` newtype follows once `ProjectionStore` freezes),
 `kb-open-question-projection-runner-chunk-observation-001` (added 2026-09-07 — the chunk type and

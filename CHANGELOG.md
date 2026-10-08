@@ -50,6 +50,32 @@ not the same as what a user needed to be told.
   copy), and a write through it becomes `push_raw_sql`. `SqlStatement` is unchanged. The release is the
   owner's phase 17 default; ADR-0084, proposed in PR #44, records the seam.
 
+- **BREAKING (`happenstance-core`, `happenstance`): `ProjectionId::new` returns
+  `Result<ProjectionId, InvalidProjectionId>`.** It refuses an empty id, one
+  longer than 255 bytes (`MAX_PROJECTION_ID_LEN`), one containing a control
+  character (Unicode `Cc`) or a bidirectional formatting control, and one
+  beginning with `happenstance/` or `sync/`, compared as exact bytes: `Sync/x`
+  and `syncope` are still valid. An accepted id is kept byte for byte. `sync/`
+  is the replication watermark's (SY-31), built only by the new
+  `ProjectionId::sync_watermark`; `happenstance/` is held for ids this library
+  may mint later. There is no infallible conversion from a string any more.
+  To migrate, add `?`, or write a literal id as a free `const` built by
+  `ProjectionId::from_static`, which the compiler validates
+  ([ADR-0082](.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md),
+  VT-35).
+
+  **A checkpoint row written at 0.3.x under an id that is now invalid can no
+  longer be named.** It stays in the table, unreachable: no conformant code path
+  reads or resets it, and a runner using a valid id starts that projection from
+  `NeverRun`. If you have one, rename it in SQL before upgrading, with
+  `UPDATE projection_checkpoint SET projection_id = '<new>' WHERE projection_id
+  = '<old>'`. On Neon the checkpoint table is configurable and every statement
+  is schema-qualified (`NeonConfig`'s `schema` and `checkpoint_table`,
+  `"public"."projection_checkpoint"` by default;
+  `crates/happenstance-neon/src/config.rs:98`), so name the table your
+  `NeonConfig` names. Postgres and Neon could never store an id containing NUL in
+  any case: their `text` column refused it at `commit`.
+
 - **`happenstance-sqlite`'s busy timeout is 15 s, was 5 s.**
   `connection::BUSY_TIMEOUT_MS` moves on measurement, superseding
   [ADR-0022](references/adr/0022-append-condition-strategy.md) §11 in part.
@@ -262,6 +288,31 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-core`: `ProjectionId` validates, and has the surface its
+  siblings have.** `ProjectionId::from_static`, a `const fn` that enforces
+  exactly what `new` does and is a compile error at a free `const`;
+  `ProjectionId::sync_watermark(StoreId)`, the only constructor of a `sync/` id,
+  rendering `sync/` and the peer's 32 lowercase hex digits;
+  `MAX_PROJECTION_ID_LEN`; `InvalidProjectionId`, `#[non_exhaustive]`; and
+  `TryFrom<&str>`, `TryFrom<String>`, `FromStr`, `AsRef<str>` and
+  `Borrow<str>` for `ProjectionId`, so a map keyed by it is probed by `&str`.
+  `happenstance` re-exports `InvalidProjectionId` and `MAX_PROJECTION_ID_LEN`
+  ([ADR-0082](.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md),
+  VT-35).
+
+- **`happenstance-testkit`: `projection_ids_round_trip_by_bytes`, the
+  projection family's eighteenth rule** (PS-39). A store must key a checkpoint
+  on the id's exact bytes: it commits seven pairs of ids that are distinct by
+  bytes and equal under one lossy key mapping each (case, a 255-byte id cut at
+  64 bytes, a `latin1` column (two pairs), an identifier-safe slug, a trailing
+  space, and canonical equivalence), reads every checkpoint back through a fresh handle,
+  and resets one of each pair without moving the other. **A new rule can turn a
+  passing adapter red** (CF-32): an adapter whose checkpoint key column folds
+  case, truncates, trims, normalises or cannot hold UTF-8 fails it. Run
+  your suite before upgrading. `happenstance-sqlite` and both
+  `happenstance-postgres` stores pass it unchanged, and the Postgres and Neon
+  migrations' comment, *"the contract validates the identifier"*, is now true.
+
 - **`happenstance-cloudflare`: several logs in one Durable Object.**
   `CloudflareEventStore::namespaced(sql, &namespace)` keeps a log in its own
   tables, `{namespace}_event`, `{namespace}_event_tag` and
@@ -407,8 +458,10 @@ Every break `0.4.0` carries, each with the decision that caused it. Drafted
 2026-10-07 against `main` at `4278816` from `cargo semver-checks check-release
 --workspace --baseline-version 0.3.2 --release-type minor` (cargo-semver-checks
 0.51.0: 202 checks per crate). Four crates reported no break: `happenstance`,
-`happenstance-core`, `happenstance-sqlite` and `happenstance-cloudflare`. Three
-reported six, listed below as **tool** rows. The **hand** rows are breaks the tool
+`happenstance-core`, `happenstance-sqlite` and `happenstance-cloudflare`; three
+reported six, listed below as **tool** rows. "No break" is the tool's verdict on
+`main` before lane L10, not this table's: all four carry hand rows below, and
+`happenstance-core` and `happenstance` gained L10's (H8, H9) after the run. The **hand** rows are breaks the tool
 cannot see, found by reading every BREAKING entry above against the tool's output. A row whose decision is still `proposed` is listed under *Pending* and
 is not part of `0.4.0` until the owner accepts it.
 
@@ -427,6 +480,9 @@ is not part of `0.4.0` until the owner accepts it.
 | H5 | `happenstance` | `commit` and `commit_with` retry a busy store (behaviour) | hand | ADR-0077 | Changed |
 | H6 | `happenstance-sqlite` | the busy timeout is 15 s, was 5 s (behaviour) | hand | ADR-0065 | Changed |
 | H7 | `happenstance` | `CommandError::Exhausted`'s `source` field is `AppendError<E>`, was `ConditionViolated`; cargo-semver-checks has no lint for a changed field type | hand | ADR-0077 | Changed |
+| H8 | `happenstance-core` | `ProjectionId::new` returns `Result<ProjectionId, InvalidProjectionId>`, was `ProjectionId`, and refuses the ADR-0015 set and the reserved prefixes; there is no `From<&str>` or `From<String>` to migrate through | hand (L10 postdates the tool run) | [ADR-0082](.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md) | Changed |
+| H9 | `happenstance` | the same `ProjectionId::new`, through the facade's re-export | hand, as H8 | ADR-0082 | Changed |
+| H10 | `happenstance-testkit` | a new conformance rule, `projection_ids_round_trip_by_bytes` (PS-39), which an adapter that keys a checkpoint lossily now fails (behaviour; CF-32) | hand | ADR-0082 | Added |
 
 **Not a break, recorded so the absence is a decision:** `EventStore::append`
 keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md));
@@ -436,8 +492,6 @@ keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md
 
 - `happenstance-sqlite`, `happenstance-postgres`: a store runs on the runtime it is
   called on (behaviour; ADR-0081, `proposed`, #48).
-- `happenstance-core`: `ProjectionId::new` becomes fallible and refuses the ADR-0015
-  set and the reserved prefixes (ADR-0082, lane L10, in flight).
 - `happenstance-neon`: `SqlTransport` gains the required method `reads_settled`
   (ADR-0087, `proposed`, #51; the spike is #50).
 - `happenstance-postgres`: a projection batch's parameter count is checked at

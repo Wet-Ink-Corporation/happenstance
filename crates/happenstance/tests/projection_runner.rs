@@ -131,7 +131,7 @@ struct VanStock {
 impl VanStock {
     fn for_depot(depot: &str) -> Self {
         Self {
-            id: ProjectionId::new("van_stock"),
+            id: ProjectionId::from_static("van_stock"),
             scope: depot_tags(depot),
             seen: Vec::new(),
             totals: BTreeMap::new(),

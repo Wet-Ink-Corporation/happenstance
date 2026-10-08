@@ -163,7 +163,7 @@ async fn a_refused_statement_poisons_the_batch_and_commit_says_so() {
     let fixture = LivePostgresProjectionFixture::new();
     let pool = fixture.pool_for_test().await;
     let store = fixture.connect().await;
-    let id = ProjectionId::new("poisoned");
+    let id = ProjectionId::from_static("poisoned");
 
     // A constraint the probe write will violate: `v` must be small.
     sqlx::query("ALTER TABLE projection_probe ADD CONSTRAINT v_is_small CHECK (v < 100)")

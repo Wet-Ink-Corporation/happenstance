@@ -67,7 +67,7 @@ That closes `postgres-fixture-read-fault-declension-is-owed`, and it lifts optio
 `[PROVISIONAL]`-at-most this atom assumed — it is the read-side twin of the evidence on which
 `kb-decision-0066` freezes CF-39.
 
-The rule is still the third `UNCLAIMED_PENDING_ADR` entry (`xtask/src/spec_trace.rs:2887`,
+The rule is still the third `UNCLAIMED_PENDING_ADR` entry (`xtask/src/spec_trace.rs:2965`,
 `:2882`); sub-questions 1–3 stay open. **Owner now: phase 21 at the latest**, whose clause audit
 runs against `spec-trace`, which prints the unclaimed count on every green run. The one ADR over
 all three unclaimed entries (sub-question 1) may be taken by any phase before it. Not phase 17's:
