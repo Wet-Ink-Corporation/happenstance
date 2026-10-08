@@ -58,7 +58,7 @@ gave to this phase.
       handed an `EventId` and never a `SequencePosition` — because
       `apply`'s arguments are that clause's surface, and phase 13, which owns the
       rule, runs too late to shape a signature this phase decides.~~
-- [ ] **The breaking open questions phase 16 listed**, each answered in its own
+- [x] **The breaking open questions phase 16 listed**, each answered in its own
       record or closed with a reason. Phase 16 classified every candidate the
       split named (ADR-0066), and these are the ones whose answer can change a
       published signature, or that 1.0 cannot promise around without an answer.
@@ -174,7 +174,7 @@ gave to this phase.
       a one-shot-HTTP shape that satisfies ES-11 exists; ES-12 is frozen on the
       same axis, with `query_items_share_one_snapshot` red on a one-shot-HTTP
       adapter as its falsifier (fired: CI run 37504851570). When it lands, the owner re-adds `conformance against a live Neon endpoint` to the `Protect main` ruleset (id 22926481) and confirms it is required again (`wi-0f1291`).
-- [ ] **A `workerd` sibling job** in `.github/workflows/ci.yml`, shaped like
+- [x] **A `workerd` sibling job** in `.github/workflows/ci.yml`, shaped like
       `live-postgres` and `live-neon`: a sibling of `gate`, never a step inside it
       (`.kb/open-questions/no-workerd-class-runner-in-the-gate.md`). ADR-0066 makes
       `happenstance-cloudflare`'s 1.0 claim *conformance on the real runtime*, and
@@ -186,7 +186,7 @@ gave to this phase.
       `MAX_QUERY_PARAMETERS_PER_STATEMENT`, measured so far only against the shim.
 - [ ] ~~**A minimal-versions CI job.**~~ Moved to
       [phase 17b](17b-after-the-window.md) by ADR-0072: it changes no surface.
-- [ ] **The clause follow-ups phase 16 gave this phase.** Each `freeze-by-17` row
+- [x] **The clause follow-ups phase 16 gave this phase.** Each `freeze-by-17` row
       in [the 1.0 dispositions](../ledgers.md), and what freezes it:
       - **VT-10** — the foreign-identity spike above, with SQLite implementing
         `IngestStore` beside `append`. It must not foreclose SY-14's
@@ -271,22 +271,22 @@ tool passed over, and the renamed `#[doc(hidden)]` emitters. The tool does repor
       any clause, and anticipated a renewal that phase 16 did not give.)*
 - [x] The foreign-identity question is answered against a compiling spike
       (ADR-0073).
-- [ ] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
+- [x] ADR-0022 §9's reproduction runs against `happenstance-sqlite` and
       `happenstance-postgres`, and a record classifies its remedy as additive or
       breaking; a breaking remedy has landed.
 - [x] The guard-plan `LIST SUBQUERY` assertion (ADR-0068) is in the tree.
       (`QueryItem`'s total constructor moved to 17b with ADR-0072.)
 - [x] The `apply` record is accepted (ADR-0074).
-- [ ] Every open question phase 16 classified as breaking is answered or closed.
+- [x] Every open question phase 16 classified as breaking is answered or closed.
 - [ ] `0.4.0` is released and its semver findings are fully traced.
 - [x] The `workerd` job exists, has been watched failing once, and the SQL-text
       wall and partition widths are recorded as measured on `workerd`, locally
       and on a deployed Durable Object. (The minimal-versions job moved to 17b
       with ADR-0072.)
-- [ ] Every `freeze-by-17` clause in [`ledgers.md`](../ledgers.md)'s 1.0
+- [x] Every `freeze-by-17` clause in [`ledgers.md`](../ledgers.md)'s 1.0
       dispositions is `[FROZEN]`, or re-dispositioned by a record that says why.
       VT-14, VT-30 and ES-7 were re-dispositioned to `freeze-by-17b` by ADR-0072.
-- [ ] The specification is reconciled against this phase's changes (session
+- [x] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
 
 **Estimate.** ~~5–8 days.~~ **25–30 days**, re-estimated at the phase's start
@@ -844,3 +844,45 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
       live 17.10.
   - **Not verified.** Neon's PS-39 (CI runs it), and the wasm32 Durable Object
     run on this host's Node 22.
+- 2026-10-08 — **The owner's decisions are enacted, and the exit pass is green.**
+  The owner decided four questions in a Weigh-In sitting (#55):
+  - accept ADR-0081, 0083, 0084 and 0086;
+  - approve the `#[expect]` on `ProjectionId::from_static`;
+  - accept ADR-0087, scoped to one transport (D3);
+  - rewrite the racing mutants.
+  - **Merged, in order:**
+    - #53 (`5ff913d`): L10, `ProjectionId` validated (ADR-0082).
+    - #43 (`e4eecac`): ADR-0083 accepted.
+    - #55 (`d1bd3c9`): the decision intake.
+    - #44 (`344583f`): ADR-0084 accepted.
+    - #45 (`5e01958`): ADR-0086 accepted.
+    - #48 (`00c7ebe`): L9, ADR-0081 accepted. Merging `main` broke its new test,
+      which still treated `ProjectionId::new` as infallible; the gate caught it.
+    - #51 (`6876f53`): ADR-0087 accepted, ADR-0061 superseded.
+    - #57 (`6411311`): the ES-11 fence lands, and ES-11 and ES-12 are frozen;
+      156 clauses are frozen and 30 provisional.
+    - #58 (`527dc08`): the racing mutants wait for a counted party. Before, 46
+      failures in 400 loaded runs; after, 0 in 600.
+  - **Spike #50** is closed unmerged, as planned.
+  - **Every open question each record answered** is closed as superseded.
+  - **The full gate.** `cargo xtask ci` on `527dc08` passes: *all checks
+    passed*. The racing-mutant test, red twice there before #58, is green
+    under the whole suite. Five optional steps did not run because their
+    tools are not on this host: `cargo hack` (two), `cargo deny`, and the
+    two nightly docs.rs builds.
+  - **Exit criteria ticked:**
+    - ADR-0022 §9 (the remedy landed in #48);
+    - the breaking open questions (each answered by an accepted record);
+    - the `freeze-by-17` clauses (no row remains);
+    - the specification reconciled (`spec-trace` passes on `527dc08`).
+  - **Boxes ticked:**
+    - the breaking open questions;
+    - the `workerd` sibling job (its exit criterion was already met);
+    - the clause follow-ups (VT-10, ES-11 and ES-12 are all frozen).
+  - **One exit criterion is open:** `0.4.0` released. The trace table carries
+    one pending row, ADR-0084's Postgres parameter-count check, which is
+    accepted and not yet built.
+  - **The owner's, outstanding:**
+    - re-add `conformance against a live Neon endpoint` to the `Protect main`
+      ruleset now that the fence is on `main` (ADR-0087 D8, `wi-0f1291`);
+    - the `0.4.0` release itself.

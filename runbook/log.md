@@ -10,6 +10,20 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-08 — the owner's decisions enacted; phase 17's exit pass is green
+
+*Committed on `lane/p17-exit-pass`, on `527dc08`.* Phase 17.
+
+Nine PRs merged: #53, #43, #55, #44, #45, #48, #51, #57 and #58. They carry
+ADR-0081, 0083, 0084, 0086 and 0087 accepted, the ES-11 fence on `main`, ES-11
+and ES-12 frozen, and the racing mutants made deterministic. `cargo xtask ci` on
+`527dc08` passes. Every phase 17 exit criterion but the `0.4.0` release is met.
+
+**Verified.** The full `cargo xtask ci` on `527dc08`. Optional steps whose tools
+are absent were skipped: `cargo hack`, `cargo deny`, nightly docs.rs.
+
+---
+
 ## 2026-10-07 — `ProjectionId` is validated (ADR-0082)
 
 *Committed on `lane/p17-projection-id`, on `151f5c8`.* Phase 17, lane L10. PR open.
