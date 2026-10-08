@@ -14,14 +14,14 @@
 //! which would have told a docs.rs reader that the crate they were reading was
 //! unpublished.
 //!
-//! It ships carrying **one conformance rule it does not pass**, and that is
-//! stated here rather than left to be found in CI:
-//! `read_result_is_stable_under_concurrent_append` reddens intermittently,
-//! because a read and an append are two independent HTTP requests with no
-//! ordering primitive the *store* honours between them. ES-11 is `[PROVISIONAL]`
-//! and its own marker named a one-shot-HTTP adapter as the thing that would
-//! falsify it; this is that adapter, and a provisional clause is precisely one a
-//! published crate may fail to satisfy. The README carries the account.
+//! **From `0.4.0` it meets ES-11 and ES-12**, which it failed intermittently
+//! before: a read and an append are two independent HTTP requests, and nothing
+//! the *store* honours ordered them. [`SqlTransport::reads_settled`] is now a
+//! required method, and `append` waits on it until every read the same
+//! transport sent earlier has been **answered** — an answer follows execution,
+//! so the read's snapshot precedes the write (ADR-0087). The ordering domain is
+//! one transport value: two transports are not ordered against each other, and
+//! that is the claim's stated limit. The README carries the account.
 //!
 //! It also **declines `READ_YOUR_OWN_WRITES`** in its conformance fixture, which
 //! is a different limitation with a different cause: the endpoint is PostgreSQL,
@@ -36,7 +36,7 @@
 //!
 //! # It owns no HTTP client, and that is still true
 //!
-//! [`SqlTransport`] is a one-method trait and [`NullTransport`] is the only
+//! [`SqlTransport`] is a two-method trait and [`NullTransport`] is the only
 //! implementation in `src/`. See the [`transport`] module for why: a real client
 //! needs a TLS stack on the host and `wasm-bindgen`'s `fetch` on `wasm32`, they
 //! are two different clients, and neither is what this crate is here to prove.
@@ -178,7 +178,7 @@ pub use config::NeonConfig;
 pub use error::{NeonError, NeonSqlError};
 pub use transport::{
     HttpResponse, IsolationLevel, MAX_RESPONSE_BYTES, NullTransport, NullTransportError,
-    SqlRequest, SqlStatement, SqlTransport,
+    ReadLedger, ReadTicket, ReadsSettled, SqlRequest, SqlStatement, SqlTransport,
 };
 
 #[cfg(feature = "event-store")]

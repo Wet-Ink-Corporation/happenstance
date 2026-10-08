@@ -660,7 +660,8 @@ projection port ADR-0047's fix does not reach),
 asynchronous-driver sufficiency condition and recorded that `happenstance-neon` does not satisfy it;
 open is whether any one-shot-HTTP shape can, since the transport offers exactly one ordering
 primitive and nothing else in a pooled-proxy path orders one backend's snapshot against another's
-commit).
+commit; **superseded** 2026-10-08 by `kb-decision-0087`: a read-settlement fence on the transport
+meets it, and ES-11 and ES-12 are frozen).
 
 ## The typed layer: decision models, codecs, and payload evolution
 
