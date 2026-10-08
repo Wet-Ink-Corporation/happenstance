@@ -791,16 +791,16 @@ impl<T: SqlTransport> EventStore for NeonEventStore<T> {
     ///
     /// # What `Ok(P)` does and does not promise
     ///
-    /// It promises that the batch is committed, at positions ending at *P*, and
-    /// that the append condition held when it was evaluated.
+    /// The batch is committed at positions ending at *P*, and the condition held
+    /// when evaluated. **Read-your-own-writes is not promised**: the next
+    /// [`head`](EventStore::head) may trail *P*, as the visibility frontier trails
+    /// assigned positions — by sub-milliseconds, a margin and not a guarantee.
     ///
-    /// It does **not** promise that the next [`head`](EventStore::head) is at or
-    /// above *P*. This store reports a visibility frontier, the frontier trails
-    /// the positions already assigned, and **read-your-own-writes is not
-    /// promised**. Measured against this endpoint the margin is large — the
-    /// frontier's lag is sub-millisecond against a round trip of 80-100 ms — but
-    /// it is a margin rather than a guarantee, and a caller who needs the
-    /// position should keep the one this method returned.
+    /// # Ordering against reads (ES-11)
+    ///
+    /// The first attempt waits for [`SqlTransport::reads_settled`], so no write
+    /// leaves while a read this transport sent earlier is unanswered: up to one
+    /// read round trip when one is in flight, and nothing otherwise.
     ///
     /// # Errors
     ///
@@ -808,9 +808,8 @@ impl<T: SqlTransport> EventStore for NeonEventStore<T> {
     /// is evaluated; [`AppendError::ExceedsStoreLimit`] for a batch over one of
     /// this store's stated ceilings, refused before anything reaches the wire;
     /// [`AppendError::ConditionViolated`] when the condition found a matching
-    /// event, which is not an adapter failure; [`AppendError::Busy`] for a
-    /// `40001` that survived
-    /// [`SERIALISATION_ATTEMPTS`](NeonEventStore::SERIALISATION_ATTEMPTS)
+    /// event, which is not an adapter failure; [`AppendError::Busy`] for a `40001`
+    /// that survived [`SERIALISATION_ATTEMPTS`](NeonEventStore::SERIALISATION_ATTEMPTS)
     /// attempts, each of which the endpoint aborted whole, so nothing was
     /// written; and [`AppendError::Store`] for anything else the transport or the
     /// endpoint reports — a round trip that got no answer included, because it
@@ -820,12 +819,13 @@ impl<T: SqlTransport> EventStore for NeonEventStore<T> {
         events: &[Event],
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
-        // ES-18 is explicit that this precedes condition evaluation, so a
-        // zero-event call is never an expensive no-op.
+        // ES-18: refused before the condition is evaluated, never an expensive no-op.
         if events.is_empty() {
             return Err(AppendError::NoEvents);
         }
         Self::check_ceilings(events)?;
+        // ES-11, once: a retry needs no second wait, its horizon has passed.
+        self.transport.reads_settled().await;
 
         let mut attempt = 0;
         let outcome = loop {
@@ -1295,43 +1295,43 @@ fn as_i64(position: SequencePosition) -> i64 {
 /// where issuing a `fetch` outside a polled future is not merely wasteful but
 /// happens off the event loop the runtime owns.
 ///
-/// # What this adapter cannot promise about ES-11
+/// # ES-11: what is free, and what the transport's fence buys
 ///
-/// Half of ES-11 is free here and the other half is not, and the difference is
-/// worth stating where a caller meets it. **One read is one statement**, so there
-/// is no second sample for the answer to drift against: the paging defect ES-11
-/// is mostly about — a store that re-queries per page and grows under the
+/// Half of ES-11 is free here and the other half is bought, and the difference
+/// is worth stating where a caller meets it. **One read is one statement**, so
+/// there is no second sample for the answer to drift against: the paging defect
+/// ES-11 is mostly about — a store that re-queries per page and grows under the
 /// caller's feet — is unreachable by construction.
 ///
-/// What is *not* promised is that the snapshot the endpoint takes precedes an
-/// `append` this caller issues immediately afterwards. The request is dispatched
-/// at the first poll, which is the earliest the port permits, and then it is one
-/// of two independent requests to a proxy that hands each to whichever backend it
-/// likes. There is no session, no queue and no protocol ordering between them.
+/// The other half is that the snapshot the endpoint takes precedes an `append`
+/// this caller issues immediately afterwards. The request is dispatched at the
+/// first poll, the earliest the port permits, and on its own it is one of two
+/// independent requests to a proxy that hands each to whichever backend it
+/// likes: no session, no queue and no protocol ordering between them.
 ///
-/// This is observed rather than hedged: over the conformance transport,
-/// `read_result_is_stable_under_concurrent_append` fails **intermittently**, and
-/// it fails less often over a single multiplexed HTTP/2 connection than over
-/// HTTP/1.1 with a default pool — which is why the reference transport uses the
-/// former. Every observed failure was in the same direction, with the read
-/// seeing an event appended after it was issued.
+/// So the order is bought at the transport instead. A conforming
+/// [`SqlTransport`] registers this read when the first poll dispatches it and
+/// settles it when the endpoint answers, and
+/// [`append`](EventStore::append) waits on
+/// [`SqlTransport::reads_settled`] before it sends anything. An answer follows
+/// the statement's execution, so the snapshot precedes the write: an order the
+/// endpoint honours, which ADR-0061 requires and spawn order alone never gave.
 ///
-/// **No rate is stated here, and the omission is deliberate.** Frequencies were
-/// counted during phase 10b bring-up, but no raw log of that session was
-/// retained, and every other measurement this project cites lives beside its own
-/// output under `experiments/`. Stating a ratio no committed artefact backs would
-/// make this page the one place that rule is broken, on the number carried
-/// furthest. What a caller needs is the direction and the fact of intermittency,
-/// and both are above. A caller that needs the two operations ordered must
-/// sequence them itself; this store has nothing it could do about it.
+/// The release is driven by the transport, never by polling this stream — a
+/// stream polled once and set aside does not hold an append back forever. An
+/// unpolled stream has dispatched nothing and costs an append nothing.
 ///
-/// ADR-0061 settled the clause question those numbers raised. ES-11's sufficiency
-/// condition for an asynchronous driver — *"a read spawned at its first poll and
-/// an append spawned afterwards land in the same queue in that order"* — was a
-/// fact about pooled drivers stated as one about async drivers generally, and it
-/// is corrected to require an ordering primitive the *store* honours rather than
-/// only the client. **This store does not satisfy ES-11**, and that is a stated
-/// limitation rather than a defect awaiting a fix.
+/// Without the fence the race was observed: over the conformance transport
+/// `read_result_is_stable_under_concurrent_append` failed **intermittently**,
+/// always with the read seeing an event appended after it was issued. ADR-0087
+/// records the live sweep that measured the race with the fence and without it,
+/// and the rate it found; the fence is what this crate ships since `0.4.0`.
+///
+/// The ordering domain is one transport value: reads and appends through
+/// clones of one transport are ordered, and those through independent
+/// transports are **not** — a stated limit of this store's ES-11 claim, which
+/// no rule can observe through the port. ADR-0087 records the claim as met for
+/// operations that share one transport, and stated as such.
 pub struct NeonReadStream<'a, T: SqlTransport> {
     state: ReadState<'a, T>,
     max_response_bytes: usize,
@@ -2115,6 +2115,10 @@ mod tests {
         ) -> impl Future<Output = Result<HttpResponse, Self::Error>> {
             self.round_trips.set(self.round_trips.get() + 1);
             core::future::ready(Ok(HttpResponse::new(self.status, self.body)))
+        }
+
+        fn reads_settled(&self) -> impl Future<Output = ()> {
+            core::future::ready(())
         }
     }
 

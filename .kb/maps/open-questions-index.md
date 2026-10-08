@@ -806,7 +806,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-scope-coverage-helper-projection-gap-001`) — the additive, enum-total
   `assert_scope_covered` test helper ADR-0047 endorses but sequences after this, and the identical
   unchecked tags/scope pair on the projection port ADR-0047's fix does not reach. Added 2026-09-07.
-- **Open** — [`one-shot-http-conformance-to-es-11.md`](../open-questions/one-shot-http-conformance-to-es-11.md)
+- **Superseded** — [`one-shot-http-conformance-to-es-11.md`](../open-questions/one-shot-http-conformance-to-es-11.md)
   (`kb-open-question-one-shot-http-es-11-001`) — ADR-0061 narrowed ES-11's asynchronous-driver
   sufficiency condition to require ordering against a later append by something the store itself
   honours, and recorded that `happenstance-neon` does not satisfy it. Open is not whether this
@@ -815,6 +815,9 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   narrows the race without closing it) and nothing else in a pooled-proxy path orders one backend's
   snapshot against another's commit. Nothing forces an answer today, because `NEON_CONNECTION` is
   not a repository secret and the live-neon job is gated on it. Added 2026-09-09.
+  **Resolved 2026-10-08** by ADR-0087 (`kb-decision-0087`): yes — `happenstance-neon` holds an
+  append until its transport's earlier reads are answered (`SqlTransport::reads_settled`), so ES-11
+  and ES-12 are frozen, with the claim scoped to one transport value.
 
 ## The typed layer: decision models, codecs, and payload evolution
 

@@ -8,10 +8,10 @@ storage-agnostic event sourcing library built on the
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant with one open clause question, and in the `0.3.2` release
-> set.** 124 gated tests pass against a live Neon endpoint. One does not, and it
-> is stated here rather than hidden — see *The one rule this adapter does not
-> pass*, below. It has been on crates.io since `0.2.0`.
+> **Status: conformant, and on crates.io since `0.2.0`.** Up to `0.3.2` two rules
+> lost a race intermittently against a live Neon endpoint; from `0.4.0` a
+> read-settlement fence closes it, within one transport — see *ES-11, and the
+> fence that meets it*, below.
 
 ## Which crate do I want?
 
@@ -51,9 +51,9 @@ happenstance-neon = "0.3"
 happenstance-neon = { version = "0.3", features = ["projection-store"] }
 ```
 
-**This crate owns no socket.** `SqlTransport` is a one-method trait taking the
-whole request by value and returning the whole response buffered, and you supply
-the implementation. That is deliberate: a real client on the host drags in a TLS
+**This crate owns no socket.** `SqlTransport` takes the whole request by value,
+returns the whole response buffered, and says when earlier reads are answered
+(`ReadLedger` keeps that count); you supply the implementation. That is deliberate: a real client on the host drags in a TLS
 stack, and on `wasm32-unknown-unknown` the only way out of the sandbox is the
 host's `fetch`. Those are two different clients and neither is what this crate is
 for. `NullTransport` ships in-tree and fails every round trip.
@@ -61,39 +61,38 @@ for. `NullTransport` ships in-tree and fails every round trip.
 The crate compiles for **both** the host and `wasm32-unknown-unknown`, and
 implements the **bare** `EventStore` flavour so that one source file serves both.
 
-## The one rule this adapter does not pass
+## ES-11, and the fence that meets it
 
-`read_result_is_stable_under_concurrent_append`, intermittently. It fails less
-often over a single multiplexed HTTP/2 connection than over HTTP/1.1 with a
-default pool, which is why the reference transport uses the former, and every
-observed failure was in the same direction: the read saw an event appended after
-it was issued.
+Up to `0.3.2`, `read_result_is_stable_under_concurrent_append` and
+`query_items_share_one_snapshot` failed **intermittently**, always in the same
+direction: the read saw an event appended after it was issued. It was a
+**network race**: a read and an append are two independent requests to a pooled
+proxy, and nothing ordered one backend's snapshot against another backend's
+commit. ES-11 asks for an order *the store itself honours* (ADR-0061), and spawn
+order at the client is not one.
 
-**No failure rate is quoted here.** Frequencies were counted during phase 10b
-bring-up and no raw log of that session was retained; every other measurement
-this project cites lives beside its own output under `experiments/`, and a ratio
-with nothing behind it does not belong on the page a reader trusts most.
+**From `0.4.0` the order is the read's answer.** `SqlTransport::reads_settled`
+is a required method, and `NeonEventStore::append` waits on it, once, before it
+sends anything: it resolves when every read-only request the same transport
+dispatched earlier has been answered. An answer follows the statement's
+execution, so the read's snapshot precedes the append's commit. Measured against
+the live endpoint (ADR-0087): 172 of 1,500 trials of the racing shape red
+without the fence, 0 of 1,500 with it, and both rules green in every attempt.
+ES-11 and ES-12 are `[FROZEN]` on that record.
 
-It is a **network race, not a bug we have not found yet.** A read and an append
-are two independent requests to a pooled proxy, and nothing orders one backend's
-snapshot against another backend's commit. The specification's ES-11 tells an
-asynchronous driver that *"a read spawned at its first poll and an append spawned
-afterwards land in the same queue in that order"* — true where both operations
-enter one pool, and false by construction where there is no queue at all.
+**If you write a transport**, its obligations are on the trait: register every
+read-only request in a `ReadLedger` *before* `round_trip` returns, and settle it
+from whatever drives your I/O — a spawned task on the host, a `fetch` promise's
+callback on `wasm32` — **never** from polling `round_trip`'s future. A transport
+whose I/O advances only while that future is polled deadlocks an append behind a
+read the caller polled once and set aside. `ReadLedger::settled` is the method's
+body; a transport that never sends anything returns a ready future.
 
-ES-11 is `[PROVISIONAL]`, and its own marker named a one-shot-HTTP adapter as the
-thing that would falsify it. This is that adapter. ADR-0061 settled what follows:
-the clause's sufficiency condition is corrected to say *spawned at the first poll,
-**and** ordered against a later append by something the store itself honours* —
-which removes spawn order alone as a route to a conformance claim rather than
-weakening what a store must do — and **this crate does not claim ES-11**. The
-conformance job that checks it is deliberately kept strict rather than taught to
-tolerate a named failure.
-
-Neither race rule is reliably green: `query_items_share_one_snapshot` appends after
-the first poll and asserts the drained set unchanged, which is structurally the same
-race, and it has lost it against live Neon (2026-09-28; CI run 37504851570,
-2026-10-06). Both rules pass on most runs and fail intermittently; ES-12 is open too.
+**The ordering domain is one transport value.** Stores built over clones of one
+transport are ordered; two transports with separate ledgers are not, and no
+conformance rule can observe the difference. That is the stated limit of this
+crate's ES-11 claim. An append with no read in flight on its transport does not
+wait; one that does waits up to one read round trip.
 
 ## Things the endpoint does that will surprise you
 
@@ -160,8 +159,8 @@ the numbers were not re-measured after the fixes, so they are not restated.
 
 The same frontier is why the conformance fixture declines
 `READ_YOUR_OWN_WRITES`, which makes the generated model family report a stated
-skip rather than run. That is a property of the *server*, and distinct from the
-ES-11 limitation above, which is a property of the *transport*.
+skip rather than run. That is a property of the *server*, and distinct from
+ES-11 above, which is a property of the *transport* and which the fence meets.
 
 ## Licence
 

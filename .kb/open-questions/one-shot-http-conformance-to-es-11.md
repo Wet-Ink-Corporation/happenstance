@@ -2,7 +2,8 @@
 id: kb-open-question-one-shot-http-es-11-001
 title: Whether any one-shot-HTTP adapter can satisfy ES-11, now that the first one cannot
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0087
 authority_tier: note
 summary: >-
   ADR-0061 amended ES-11's asynchronous-driver sufficiency condition to
@@ -27,8 +28,15 @@ summary: >-
   prints its own proves-NOTHING notice and stops — which is also why the
   decision to keep that job strict should be re-read the day someone adds
   the secret rather than before it.
+  Resolved 2026-10-08 by kb-decision-0087: yes, a one-shot-HTTP adapter can
+  satisfy ES-11, by ordering on the read's answer rather than on the request.
+  happenstance-neon holds an append until every read its transport dispatched
+  earlier has been answered, through the required SqlTransport::reads_settled
+  (0.4.0); live, 172 of 1,500 trials red without the fence and 0 of 1,500 with
+  it. ES-11 and ES-12 are FROZEN, and the claim is scoped to one transport value.
 depends_on: []
 related:
+  - kb-decision-0087
   - kb-decision-0061
   - kb-open-question-es-11-sqlite-ceiling-sample-cost-001
   - kb-open-question-provisional-falsifiers-001
@@ -39,7 +47,7 @@ source_paths:
   - .kb/_intake/2026-09-08-es-11s-falsifier-fired-on-the-adapter-it-named.md
   - crates/happenstance-neon/src/lib.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-09
+last_reviewed: 2026-10-08
 ---
 
 # Whether any one-shot-HTTP adapter can satisfy ES-11, now that the first one cannot
@@ -114,3 +122,28 @@ It is also not a request for a `Capability` the fixture could decline;
 `Capability` states what a fixture can arm, not whether a store provides a
 guarantee, and using it here would print "skipped" where the honest word is
 either "conforms" or "does not."
+
+## Closed — 2026-10-08
+
+**Superseded by `kb-decision-0087`** (phase 17, lane L8, accepted by the owner on 2026-10-08),
+which takes the first shape under *What would answer it*: a one-shot-HTTP adapter that supplies a
+store-honoured ordering primitive. The primitive is not one the endpoint exposes. It is the read's
+**answer**: `happenstance-neon` holds an `append` until every read its transport dispatched
+earlier has been answered, and an answer follows the statement's execution, so the read's
+snapshot precedes the append's commit at the store.
+
+- **The title's question — can any one-shot-HTTP adapter satisfy ES-11?** Yes. Measured on the
+  live endpoint under a rule fixed before the first counted run: without the fence 172 of 1,500
+  trials red, every one in the same direction; with it 0 of 1,500, and both racing rules green in
+  every attempt.
+- **The mechanism.** `SqlTransport::reads_settled`, a required method from `0.4.0` (a
+  semver-major break of the trait), with `ReadLedger`, `ReadTicket` and `ReadsSettled` public in
+  `happenstance_neon::transport`. Settlement is driven by the transport's own I/O, never by
+  polling the read stream, so the rule's one task cannot deadlock itself.
+- **What the answer does not reach.** The ordering domain is one transport value: two handles
+  over separate transports are not ordered against each other, which no rule observes through the
+  port, and the claim states it as its limit. A `wasm32` `fetch` transport settling a read from a
+  promise callback is reasoning, not measurement.
+
+ES-11 and ES-12 are `[FROZEN]` with the fence on `main`, and ES-11's sufficiency paragraph names
+the read's answer preceding the append's dispatch as the second store-honoured order.

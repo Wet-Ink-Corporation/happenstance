@@ -115,6 +115,6 @@ The marker is staler than this atom recorded: it still calls the Postgres adapte
 ADR-0054's `after_every_guard` has not landed — `after` and `after_opt` carry no `#[deprecated]`
 (`crates/happenstance-core/src/append.rs:187`, `:201`) — so adding the alias is additive and
 retiring the old names is a break only phase 17 can take. The ledger row naming phase 4
-(`runbook/ledgers.md:170`) is outranked by the disposition row (`runbook/ledgers.md:286`), which
+(`runbook/ledgers.md:172`) is outranked by the disposition row (`runbook/ledgers.md:289`), which
 names phase 17. Sub-questions 1 and 2 go with the freeze; 3 is answered by the Postgres adapter
 existing. **Owner now: phase 17.**

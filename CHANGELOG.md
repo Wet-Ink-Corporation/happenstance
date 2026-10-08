@@ -50,6 +50,29 @@ not the same as what a user needed to be told.
   copy), and a write through it becomes `push_raw_sql`. `SqlStatement` is unchanged. The release is the
   owner's phase 17 default; ADR-0084, proposed in PR #44, records the seam.
 
+- **BREAKING (`happenstance-neon`): `SqlTransport` has a second required method,
+  `reads_settled`, and `NeonEventStore::append` waits on it.** It resolves once
+  every read-only request the transport dispatched before the call has been
+  answered or has failed; `append` awaits it once, before its first attempt, so
+  no write leaves while an earlier read on the same transport is unanswered. That
+  is how this adapter meets ES-11 and ES-12, which it failed intermittently up to
+  `0.3.2`: an answer follows execution, so the read's snapshot precedes the
+  append's commit. There is deliberately no default, because a default that
+  resolved at once would compile in every transport and leave the ordering
+  silently unmet. **To migrate a transport:** hold a `ReadLedger`, call
+  `dispatch()` for every request whose `SqlRequest::read_only` is set **before**
+  `round_trip` returns, move the `ReadTicket` to whatever observes the answer (a
+  spawned task on the host, a `fetch` promise's callback on `wasm32`), and return
+  `self.ledger.settled()` from `reads_settled`. Settlement must be driven by the
+  transport and never by polling `round_trip`'s future, or an `append` behind a
+  read polled once and set aside deadlocks. A transport that never dispatches
+  anything returns `core::future::ready(())`, as `NullTransport` does. An append
+  with no read in flight does not wait; one that does waits up to one read round
+  trip. The ordering domain is one transport value: two transports with separate
+  ledgers are not ordered against each other, which is the stated limit of the
+  claim. ES-11 and ES-12 are `[FROZEN]` from this release (ADR-0087, accepted
+  2026-10-08, superseding ADR-0061).
+
 - **BREAKING (`happenstance-core`, `happenstance`): `ProjectionId::new` returns
   `Result<ProjectionId, InvalidProjectionId>`.** It refuses an empty id, one
   longer than 255 bytes (`MAX_PROJECTION_ID_LEN`), one containing a control
@@ -288,6 +311,17 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-neon`: `ReadLedger`, `ReadTicket` and `ReadsSettled`**, in
+  `happenstance_neon::transport` and re-exported from the crate root: the
+  bookkeeping a transport needs for `SqlTransport::reads_settled`.
+  `ReadLedger::dispatch` registers a read and returns a `ReadTicket`, whose drop
+  (or `settle()`) settles it; `ReadLedger::settled` returns a `ReadsSettled`
+  future that waits only for reads dispatched before it was created, so later
+  reads cannot starve an append. A `std::sync::Mutex` and a table of wakers, with
+  no executor, timer or runtime, so it works unchanged on
+  `wasm32-unknown-unknown`; clones share one ledger, and one ledger is one
+  ordering domain (ADR-0087).
+
 - **`happenstance-core`: `ProjectionId` validates, and has the surface its
   siblings have.** `ProjectionId::from_static`, a `const fn` that enforces
   exactly what `new` does and is a compile error at a free `const`;
@@ -459,7 +493,8 @@ Every break `0.4.0` carries, each with the decision that caused it. Drafted
 --workspace --baseline-version 0.3.2 --release-type minor` (cargo-semver-checks
 0.51.0: 202 checks per crate). Four crates reported no break: `happenstance`,
 `happenstance-core`, `happenstance-sqlite` and `happenstance-cloudflare`; three
-reported six, listed below as **tool** rows. "No break" is the tool's verdict on
+reported six, listed below as **tool** rows, and a run of the same command on
+`happenstance-neon` alone, on lane L8's tree, added a seventh (T7). "No break" is the tool's verdict on
 `main` before lane L10, not this table's: all four carry hand rows below, and
 `happenstance-core` and `happenstance` gained L10's (H8, H9) after the run. The **hand** rows are breaks the tool
 cannot see, found by reading every BREAKING entry above against the tool's output. A row whose decision is still `proposed` is listed under *Pending* and
@@ -473,6 +508,7 @@ is not part of `0.4.0` until the owner accepts it.
 | T4 | `happenstance-postgres` | the `naive-arm` feature is gone (`feature_missing`) | tool | phase 17 lane L4, the `naive-arm` item | Removed |
 | T5 | `happenstance-postgres` | `PostgresEventStore::new_naive` is gone from every feature-selected build (`inherent_method_missing`) | tool | as T4 | Removed |
 | T6 | `happenstance-testkit` | `k_disjoint_boundaries_admit_exactly_k_commits` renamed `k_disjoint_boundaries_never_conflict` (`function_missing`); the rule also changed what it accepts: a contender refused as busy no longer fails it (behaviour, which the tool cannot see) | tool and hand | [ADR-0077](.kb/decisions/0077-appenderror-busy.md) | Changed |
+| T7 | `happenstance-neon` | `SqlTransport` gains the required method `reads_settled` (`trait_method_added`); `append` also waits on it, which the tool cannot see (behaviour) | tool and hand | ADR-0087, accepted 2026-10-08 (#51) | Changed |
 | H1 | `happenstance-core` | the empty `unstable-projection` feature is removed; the tool passes over `unstable-*` features | hand | [ADR-0063](.kb/decisions/0063-the-projection-port-is-frozen.md), ADR-0066 | Removed |
 | H2 | `happenstance-testkit` | the `#[doc(hidden)]` conformance emitters are renamed and promised; the tool skips hidden items | hand | [ADR-0076](.kb/decisions/0076-the-cf-23-emitters-are-public-api.md) | Changed |
 | H3 | `happenstance-cloudflare` | `planned_statement_count` returns different values for the same query (`n.div_ceil(5)`); signature unchanged | hand | [ADR-0079](.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | Changed |
@@ -492,8 +528,6 @@ keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md
 
 - `happenstance-sqlite`, `happenstance-postgres`: a store runs on the runtime it is
   called on (behaviour; ADR-0081, `proposed`, #48).
-- `happenstance-neon`: `SqlTransport` gains the required method `reads_settled`
-  (ADR-0087, `proposed`, #51; the spike is #50).
 - `happenstance-postgres`: a projection batch's parameter count is checked at
   `commit` (behaviour; ADR-0084, `proposed`, #44).
 
