@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0080.** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0088; 0081–0087 are reserved by phase 17 lanes in flight.** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
@@ -31,6 +31,8 @@ Lane L5 wrote 0077: `AppendError::Busy` is promised at 1.0, the typed commit loo
 inside the same `Retry` bound, and ES-43 is minted.
 The ladybug lane wrote 0078 (`happenstance-ladybug` retired on the owner's call, `wi-630032`), and
 lane L6b wrote 0079 (a Cloudflare query item binds constant parameters; widths 5 and 90).
+Lane L7 wrote 0080: `append` keeps its borrowed batch, and ES-17 is frozen on the two-build
+measurement against `happenstance-cloudflare` (`experiments/append-batch-ownership/`).
 The breaking-questions lane wrote 0084, **proposed**: the projection batch's SQL seam is
 `&'static str` plus a named escape hatch at 1.0, `LivePostgresBatch::execute` included, and the
 parameter count is stated once, with an adapter-side count check proposed for Postgres. Neon's `0.4.0` narrowing
@@ -58,7 +60,7 @@ table when an ADR or a clause settles it, and the archive keeps it either way.
 |---|---|---|
 | ~~`conflicting_position`: a promise every adapter owes, or a hint one may omit~~ | 16 | **settled at 16** — a hint, and already so: ES-25 is `[FROZEN]` and ADR-0012 §8 says it. Neon-over-HTTP was the forcing case |
 | ~~Is ES-10's global visibility statement what happenstance needs, or would a per-boundary one do~~ | 16 | **settled at 16 — ADR-0071**: ES-10 stays global, because ADR-0063 froze a single-position checkpoint (PS-17, PS-20). Raised by the phase-2 measurement |
-| `append`'s ownership of its batch — two builds of the same adapter differing only in ownership (ADR-0012's falsifier item 1, escalated by ADR-0022 §13) | 17 | open — ES-17 stays `[PROVISIONAL]` until measured or renewed; ADR-0055 kept the borrowed batch at `0.2.0` |
+| ~~`append`'s ownership of its batch — two builds of the same adapter differing only in ownership (ADR-0012's falsifier item 1, escalated by ADR-0022 §13)~~ | 17 | **settled at 17 — [ADR-0080](../.kb/decisions/0080-append-keeps-a-borrowed-batch.md)**: `&[Event]` kept and ES-17 frozen. The two builds were taken on `happenstance-cloudflare` and a rule fixed before the run fired in 0 of 9 cells; owning saves 2 heap operations per event, and a raw caller resending under by-value pays +90–95% |
 | ADR-0022's falsifiers have fired: supersede, re-open (scoped) or ratify its pragma and runtime-seam sections | 17 | **§8 and §16 settled at 16 — ADR-0068**; §9 (the runtime seam, the captured `Handle`) stays open, owned by phase 17's reproduction, which decides whether its remedy is additive or breaking (`adr-0022-falsifiers-have-fired`, still accepted). Forced by phase 12 |
 | ~~Whether the 2026-09-06 `msrv-premise` ratification supersedes ADR-0037, and what the floor is~~ | 16 | **settled at 16 — ADR-0067**: the floor holds at 1.97.1 and the ratification, never executed, is withdrawn (`msrv-ratification-conflicts-with-the-accepted-floor`) |
 | ~~Whether a workerd-class runner enters `cargo xtask ci`, and which platform clauses stay unproven without one~~ | 16 | **settled at 16 — ADR-0066**: a workerd sibling CI job, not a gate step, lands before 1.0 as phase 17's work (`no-workerd-class-runner-in-the-gate`) |
@@ -146,11 +148,12 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 32 `[PROVISIONAL]` clauses
+### The 31 `[PROVISIONAL]` clauses
 
 Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, VT-10 at phase 17
 by ADR-0073, ES-41 and PS-22 at phase 17 by ADR-0028, PS-9 and PS-11 at phase 17
-by ADR-0074, and PS-15, PS-23 and PS-24 at phase 17 by ADR-0075. Their rows stay, struck,
+by ADR-0074, PS-15, PS-23 and PS-24 at phase 17 by ADR-0075, and ES-17 at phase 17 by
+ADR-0080. Their rows stay, struck,
 because rule 4 keeps it; `cargo xtask lints` now checks the count in this
 heading against §7.2 rather than matching it, so the next freeze changes one number
 here and nothing in the lint.
@@ -169,7 +172,8 @@ separate open questions overstated the exposure by that factor.
 | Store limits | VT-21 – VT-24 | a real adapter that cannot honour a stated minimum | 5, tested 8 and 10 |
 | Per-item boundaries on a condition | VT-30 | E2E-04 and E2E-05 still unwritable after phase 4 | 4 |
 | `Bytes`' human-readable form | WF-11 | a peer that cannot buffer a payload through any human-readable encoder | 9 |
-| The `!Send` flavour and `append` ownership | ES-7, ES-17 | the Cloudflare adapter, and `dynosaur` failing to erase a generic `append` | 1 and 4, confirmed 9 |
+| The `!Send` flavour and `append` ownership | ES-7 | the Cloudflare adapter, and `dynosaur` failing to erase a generic `append`. The row read *"ES-7, ES-17"* until ES-17 was frozen; its struck row follows | 1 and 4, confirmed 9 |
+| `append`'s ownership of its batch | ~~ES-17~~ | ~~two builds of one owning adapter differing only in ownership~~ | **frozen at 17 — ADR-0080.** Taken on `happenstance-cloudflare` with replica arms; 0 of 9 pre-registered cells fired. Reopened by a `workerd` run where allocation dominates, or a large realistic payload |
 | No tail seam at 0.1 | ES-32 | a Durable Object making one cheap enough to reopen | 9 (verdict), post-0.1 — **answered**; the one-paragraph verdict is in phase 9's session log. It answers *this* falsifier only: the clause's own benchmark-shaped one — E2E-32's fan-out runner holding N views within their staleness budget — is untouched and stays phase 7's |
 | `begin`'s round trip | PS-6 | an adapter that must reserve something from its server and cannot afford the round trip. The row read *"PS-6, PS-9, PS-11, PS-15"* until those three were frozen; their struck row follows | 6, re-tested 11, narrowed 12 |
 | The write seam's consumers and the foreign-batch hazard | ~~PS-9, PS-11, PS-15~~ | ~~a second generic consumer (PS-9, PS-11); a zero-cost instance-naming construction (PS-15)~~ | **frozen at 17.** PS-9 and PS-11 by ADR-0074, on `experiments/apply-shape`: a provided `on_error` wrote a skip row through `SqliteBatch` and a live `LivePostgresBatch` with no bound on `Batch`. PS-15 by ADR-0075, narrowed to `commit` and `reset` by ADR-0066's own route, with `rollback` left outside the MUST; its falsifier could fire only as a major, so it is restated as a post-1.0 reopening |
@@ -250,7 +254,8 @@ record, is the live copy, because an accepted record's body cannot change and th
 rows will move every time a phase freezes a clause. CF-39 is not here: ADR-0066
 froze it. Nor is VT-10: ADR-0073 froze it at phase 17. Nor are ES-41 and PS-22:
 ADR-0028 froze both at phase 17. Nor are PS-9 and PS-11, which ADR-0074 froze at
-phase 17, nor PS-15, PS-23 and PS-24, which ADR-0075 froze at phase 17.
+phase 17, nor PS-15, PS-23 and PS-24, which ADR-0075 froze at phase 17, nor ES-17, which
+ADR-0080 froze at phase 17.
 
 **This is the schedule; the owner columns above are history.** Rule 4 keeps those
 rows, and most of them name phases long `done` — they record who owned a
@@ -283,10 +288,9 @@ says why.
 | VT-30 | freeze-by-17b | Moved from 17 by ADR-0072, additive. ADR-0054's alias and builder-state decided in one pass; limb 2 retired by a record or by a multi-guard bench scenario |
 | WF-1 | renew-past-1.0: a DCB implementation publishes a wire-level encoding, or a user needs to read another implementation's log | The format is private and WF-8 versions it, so a bridge is additive: a separate `happenstance-dcb-interop` crate with its own ADR. Phase 13 records the renewal in ADR-0026 |
 | WF-11 | renew-past-1.0: a workerd-class isolate must forward a payload another store accepted, at or above about 36.6 MB under a 128 MiB cap (peak is payload × 11/3) | `serialize_str` makes a human-readable encoder hold the whole payload. Phase 17's workerd job exists and runs every event-store rule under workerd and on a deployed object. It does not run the WF-11 memory probe, which is still `tests/wf11_memory_ceiling.rs` on the shim. The row wall it measured, 8,388,637 B deployed, bounds what a Durable Object stores, not what a peer must forward. Phase 13 confirms which encoding the sync transport uses |
-| ES-7 | freeze-by-17b | Moved from 17 by ADR-0072, additive under the recommended caret answer; an exact pin is taken at 17 instead. Frozen in the record that answers `trait-variant-caret-resolves-past-the-locked-gate` and ES-17's ownership, its falsifier restated to cover a consumer's unlocked resolve |
+| ES-7 | freeze-by-17b | Moved from 17 by ADR-0072, additive under the recommended caret answer; an exact pin is taken at 17 instead. Frozen in the record that answers `trait-variant-caret-resolves-past-the-locked-gate`, its falsifier restated to cover a consumer's unlocked resolve. ES-17's ownership, once grouped with it, was answered alone by ADR-0080 |
 | ES-11 | freeze-by-17 | A record superseding ADR-0061's choice to keep the marker, now that `happenstance-neon` is in the 1.0 set; settles ES-11 and ES-12 together for the one-shot-HTTP shape |
 | ES-12 | freeze-by-17 | The same record as ES-11. Falsifier: `query_items_share_one_snapshot` red on a one-shot-HTTP adapter |
-| ES-17 | freeze-by-17 | Already on phase 17's work list: take ADR-0055's two-build measurement and act on it, or freeze the borrowed batch by a record |
 | ES-32 | renew-past-1.0: the `experiments/polling-cost` harness, re-run over a round-trip adapter with a stated staleness budget, shows 2N idle reads per interval breaking that budget at realistic N | A tail seam would be an added method, so renewing is additive. Phase 18's fan-out runner (PS-30) is the natural producer of the measurement |
 | ES-35 | renew-past-1.0: an adapter fixture arms a real fault against a real medium — a process killed mid-commit, a disk lying about fsync — and observes what survives | The marker's own fault falsifier. The reopen end is answered by four adapters. The fault end is unbuilt, and CF-39's armed faults do not build it: the Postgres, Neon and Cloudflare fixtures raise an in-store trigger that aborts a batch before it is acknowledged, while ES-35 is falsified only by a medium that loses a write after `append` returned `Ok`. `happenstance-postgres` killing a backend mid-commit is the cheapest candidate |
 | ES-39 | freeze-by-14 | Decided at 17 by ADR-0028: the refusal plus an additive reservation, so no trait change in `0.4.0`. Frozen at 14 against the CF-27 instrument, as the refusal or with a provided method defaulting to `Unknown`. If 14 slips past 1.0 the row may become renew-past-1.0, because firing it is additive |

@@ -10,6 +10,64 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-07 — the `0.4.0` trace table, drafted
+
+*Committed on `lane/p17-trace-table`, on `4278816`.* Phase 17.
+
+`cargo semver-checks` against `0.3.2` (`--release-type minor`) reports six breaks
+in three crates. Each one, and seven hand rows the tool cannot see, is traced to its
+decision in `CHANGELOG.md`'s `[Unreleased]`. Four pending records are named. Not
+released.
+
+**Verified.** The tool run itself, `spec-trace`, `lints`, `lint-kb`. The full
+`cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — Neon's `push` narrowed (N2)
+
+*Committed on `lane/p17-neon-push`, on `12540a7`.* Phase 17.
+
+PR #47 merged as `12540a7`. `NeonWriteBatch::push` takes `&'static str` and its
+values; a computed statement goes through `push_raw_sql`; `statements` is private
+behind `statements()`. BREAKING on `happenstance-neon`, for `0.4.0`, by the owner's
+default.
+
+**Verified.** The temper gate, `happenstance-neon`'s tests and `compile_fail`
+doctests, `spec-trace`, `lints`, `lint-kb`, `lint-constitution`, `cargo xtask wasm`
+(Node 24). The full `cargo xtask ci` was not run.
+
+---
+
+## 2026-10-07 — the deployed `workerd` leg retries a Durable Object reset
+
+*Committed on `lane/p17-workerd-reset`, on `3462bf8`.* Phase 17.
+
+PR #46 merged as `3462bf8`. Cloudflare's `500 Durable Object reset because its code
+was updated.` failed one rule on #44 and on #46; the deployed leg now retries it
+once on a fresh object, as it already did `Worker not found.`
+
+**Verified.** vitest on `test/platform-miss.test.ts` (red 1 of 6, then 6 of 6),
+`spec-trace`, `lints` and `lint-kb`. No Rust changed; the full `cargo xtask ci` was
+not run.
+
+---
+
+## 2026-10-07 — ES-17 frozen on `&[Event]` (ADR-0080)
+
+*Committed on `lane/p17-es17`, on `6235224`.* Phase 17, lane L7.
+
+The measurement is committed under `experiments/append-batch-ownership/`; its
+pre-declared rule fired in none of nine cells, so `append` keeps its borrowed batch
+and ES-17 is `[FROZEN]`. Three `proposed` records went up for the owner as #43, #44
+and #45.
+
+**Verified.** The experiment's own checks, `spec-trace`, `lints` and `lint-kb`. The
+workspace gate is unaffected (nothing outside `experiments/` and the records
+changed). The full `cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-07 — the guard-plan assertion (ADR-0068)
 
 *Committed on `lane/p17-guard-plan`, on `4fbfefa`.* Phase 17.

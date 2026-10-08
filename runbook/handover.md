@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-guard-plan`, on `4fbfefa` (`main`, where PR #41 merged). 2026-10-07.
+`lane/p17-trace-table`, on `4278816` (`main`, where PR #49 merged). 2026-10-07.
 
 ## Where things are
 
@@ -34,26 +34,34 @@ Neon failure does.
 
 ## In flight
 
-An unattended overnight session (2026-10-07) is working the phase 17 queue in
-order, one PR per item.
-- **Merged:** #41 (`4fbfefa`): the vacuity control's record (draft PR #40, run
-  37570009097, red by name on both `workerd` legs, closed unmerged) and
-  `wi-13bd3b`'s `declared_excludes` fixes.
-- **This PR:** the guard-plan `LIST SUBQUERY` assertion (ADR-0068 §16, limb 1); the
-  falsifier did not fire.
-- **Next, in flight:** L7's measurement, `experiments/append-batch-ownership/`.
-- **A pre-existing flake** in `happenstance-testkit`'s
-  `the_concurrency_rules_reject_exactly_what_they_claim` (the racing mutants'
-  yield-bounded rendezvous) turns the local gate red under load. It is recorded in
-  the phase log; fixing it rewrites a test instrument, which is the owner's call.
+An unattended overnight session (2026-10-07) is working the phase 17 queue.
+- **Merged:** #41 (`4fbfefa`, the vacuity control's record and `wi-13bd3b`), #42
+  (`6235224`, the guard-plan assertion), #46 (`3462bf8`, L7: ES-17 frozen on
+  `&[Event]` by ADR-0080), #47 (`12540a7`, the deployed `workerd` leg retries a
+  Durable Object reset), #49 (`4278816`, Neon's `push` narrowed, BREAKING for
+  `0.4.0`).
+- **This PR:** the `0.4.0` trace table, drafted in `[Unreleased]` (not released).
+- **Open for the owner:** #51, ADR-0087 (the ES-11 fence works on Neon; spike
+  draft #50, never merged).
+- **Open, not to merge until the owner accepts ADR-0081:** #48, L9 (ADR-0022 §9
+  reproduced; stores prefer the runtime they are called on).
+- **Open for the owner** (each a `proposed` record): #43 ADR-0083 (codec stays
+  unsealed), #44 ADR-0084 (the SQL seam is final; proposes a Postgres
+  parameter-count check), #45 ADR-0086 (Postgres and Neon keep mint-once).
+- **In flight:** L10 (`ProjectionId`), then the exit pass.
+- **Pre-existing:** the testkit's racing-mutant flake under load; the default-features
+  doc build of `happenstance` fails on `lib.rs:111`'s `Projection::apply` link.
 
 ## Next action
 
-1. L7 (ES-17), L9 (ADR-0022 §9), L10 (`ProjectionId`), the breaking open
-   questions, VT-6, then L8's Neon fence spike last, then the `0.4.0` trace table.
+1. L10, then the exit pass. L8's spike (#50) and record (#51) are done and wait on the
+   owner; the trace table's pending rows join as their records are accepted.
 
 ## Waiting on the owner
 
+- Accept or decline the `proposed` records: ADR-0081 (#48; remedy B, and whether
+  the documented Postgres pool obligation is enough), ADR-0083 (#43), ADR-0084 (#44),
+  ADR-0086 (#45), ADR-0087 (#51).
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; `ProjectionId`
   refuses the full ADR-0015 set with a generic reserved prefix; Neon's `push`

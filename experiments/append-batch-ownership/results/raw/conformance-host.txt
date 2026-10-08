@@ -1,0 +1,28 @@
+   Compiling append-batch-ownership v0.0.0 (/home/user/wt-es17/experiments/append-batch-ownership)
+    Finished `release` profile [optimized] target(s) in 1.03s
+     Running tests/contention.rs (target/release/deps/contention-80b33f948482b252)
+
+running 2 tests
+test a_failed_attempt_ends_the_run ... ok
+test eight_contenders_make_thirty_six_attempts_of_which_twenty_eight_are_refused ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/exact.rs (target/release/deps/exact-b19caec791933522)
+
+running 1 test
+test safe_integers_convert_exactly_and_nothing_else_does ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/host.rs (target/release/deps/host-acc0a814e6bea51e)
+
+running 5 tests
+test borrowed_log_matches_memory_store_allocations ... ok
+test both_logs_hold_what_the_memory_store_holds ... ok
+test owned_log_saves_exactly_the_clone ... ok
+test static_bytes_into_vec_copies ... ok
+test vec_backed_bytes_into_vec_moves_without_allocating ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

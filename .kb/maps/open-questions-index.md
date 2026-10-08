@@ -469,7 +469,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `happenstance::run_projection`; `kb-decision-0007` stays accepted because
   its three shape decisions are implemented as written, and the pump
   sub-question is answered in the negative — no pump is written.
-- **Open** — [`es-17-two-adapter-measurement-is-unscheduled.md`](../open-questions/es-17-two-adapter-measurement-is-unscheduled.md)
+- **Superseded** — [`es-17-two-adapter-measurement-is-unscheduled.md`](../open-questions/es-17-two-adapter-measurement-is-unscheduled.md)
   (`kb-open-question-es-17-two-adapter-measurement-001`) — ADR-0012's
   falsifier item 1 asks for two builds of one SQLite adapter differing only
   in `append`'s batch ownership; the phase-8 append-condition experiment
@@ -480,6 +480,10 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-decision-0055`) fixes the subject (`append` keeps its borrowed batch at `0.2.0`) and
   restates the falsifier to name adapter shape, tag regime and tag count; the two-build
   measurement is now scheduled against `happenstance-cloudflare`, not SQLite.
+  **Resolved 2026-10-07** by `kb-decision-0080`: the two builds were taken on
+  `happenstance-cloudflare` through replica arms (`experiments/append-batch-ownership/`), a rule
+  fixed before the run fired in 0 of 9 realistic cells, `append` keeps `&[Event]`, and ES-17 is
+  `[FROZEN]`.
 - **Superseded** — [`no-workerd-class-runner-in-the-gate.md`](../open-questions/no-workerd-class-runner-in-the-gate.md)
   (`kb-open-question-workerd-runner-absent-001`) — the whole Cloudflare
   conformance suite executes on `wasm32-unknown-unknown` under
