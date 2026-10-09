@@ -1558,7 +1558,7 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // `lints.rs:627` and `:693` by line and `lint-constitution` checks those
     // citations resolve; inserting above them moves the anchors out from under a
     // file this change may not correct.
-    runbook_status_matches_the_registry()?;
+    tracker::runbook_status_and_tracking()?;
 
     // V-6 (`references/evaluation/review-pre-publication-2026-09-03.md`): a
     // second, unrelated document-held-to-the-tree check, bundled for exactly
@@ -4599,3 +4599,7 @@ macro_rules! for_each_fake_rule {
         );
     }
 }
+
+// Declared last so no line above moves: this file's lines are cited by number
+// from `references/adr/`, `.kb/` and `standards/rust/`.
+mod tracker;
