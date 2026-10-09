@@ -73,8 +73,16 @@ breaking release, and only the milestone that release names may carry it.
    in [`README.md`](README.md) for everything the repository still owns: exit
    criteria, the status row, and `log.md`. Progress narrative goes in the issue
    and the PR, not in a phase file's session log.
-5. **Merge policy.** A session opens its PR and leaves it for review. `wi-ab0a5a`
-   granted self-merge on green to phase 15 only, and nothing has extended it.
+5. **Merge policy (`wi-1fde8c`).** A session squash-merges its own PR once every
+   check is green, **unless** the issue carries `door:one-way`. A one-way PR is
+   opened and left for the owner. This extends `wi-ab0a5a` beyond phase 15, and
+   its retry rule comes with it:
+   - If a check fails in code the PR did not touch, re-run only the failed jobs,
+     once.
+   - A second failure, or any failure in code the PR touched, stops that leaf:
+     leave the PR open, comment why, and take the next issue.
+   - A `semver:` leaf may self-merge, because `cargo-semver-checks` runs on the PR.
+     Its `CHANGELOG.md` entry is part of the leaf, not a follow-up.
 
 ## Filing what you find
 
