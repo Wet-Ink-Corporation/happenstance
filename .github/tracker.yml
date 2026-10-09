@@ -1,0 +1,68 @@
+# The issue tracker's vocabulary: labels, milestones and issue types.
+#
+# GitHub Issues is where work items are tracked: who is on what, what blocks
+# it, and the bugs and findings an unattended session files. The plan of record
+# stays in runbook/: phase goals, exit criteria and the clause ledgers. This
+# file is the one place the tracker's vocabulary is written down.
+# `scripts/tracker-apply.sh` creates or updates the labels and milestones from
+# it, and running it twice does nothing new. Issue types are org-level and need
+# an org admin; until they exist, the `type:*` labels stand in for them.
+#
+# Within each label group below, an issue carries exactly one label, unless the
+# group says otherwise.
+
+labels:
+  # type — the fallback for org Issue Types. Remove these once the types exist.
+  - { name: "type:epic",    color: "3E4B9E", description: "One runbook phase. Parent of features; closes with the PR that ticks its exit criteria." }
+  - { name: "type:feature", color: "5319E7", description: "One observable outcome, 1-5 PRs. Parent of tasks when it needs more than one PR." }
+  - { name: "type:task",    color: "8A63D2", description: "One PR." }
+  - { name: "type:bug",     color: "D73A4A", description: "Something does other than what it says it does." }
+
+  # status — a triage state machine. Exactly one per open issue.
+  - { name: "status:needs-triage",    color: "FBCA04", description: "New, not yet shaped or placed. Unattended sessions file here." }
+  - { name: "status:needs-owner",     color: "B60205", description: "Waits on an owner decision or authority: semver, a frozen clause, an ADR, publishing, repo settings." }
+  - { name: "status:ready-for-agent", color: "0E8A16", description: "Brief complete, two-way door, unblocked. An unattended session may take it." }
+  - { name: "status:ready-for-human", color: "1D76DB", description: "Shaped and unblocked, but needs a person: judgement, credentials, or an epic." }
+  - { name: "status:blocked",         color: "6A737D", description: "Waits on another open issue, named by a blocked-by link." }
+
+  # door — present only when it is one-way. No label means two-way.
+  - { name: "door:one-way", color: "000000", description: "Hard to reverse: published API, a FROZEN clause, an accepted ADR, a tag or publish, branch deletion. Never closed by an agent." }
+
+  # semver — only for changes a published crate's consumer can observe.
+  - { name: "semver:breaking", color: "E99695", description: "Breaks a published crate's API or behaviour. Ships in a breaking release only." }
+  - { name: "semver:additive", color: "C2E0C6", description: "Adds to a published crate's API without breaking it." }
+
+  # area — one or more.
+  - { name: "area:core",       color: "C5DEF5", description: "happenstance-core: the contract." }
+  - { name: "area:typed",      color: "C5DEF5", description: "happenstance: the typed layer." }
+  - { name: "area:testkit",    color: "C5DEF5", description: "happenstance-testkit: the conformance suite." }
+  - { name: "area:sqlite",     color: "C5DEF5", description: "happenstance-sqlite." }
+  - { name: "area:cloudflare", color: "C5DEF5", description: "happenstance-cloudflare and harness/workerd." }
+  - { name: "area:postgres",   color: "C5DEF5", description: "happenstance-postgres." }
+  - { name: "area:neon",       color: "C5DEF5", description: "happenstance-neon." }
+  - { name: "area:sync",       color: "C5DEF5", description: "happenstance-sync and its testkit." }
+  - { name: "area:ci",         color: "BFD4F2", description: "xtask, the gate, workflows." }
+  - { name: "area:docs",       color: "BFD4F2", description: "docs/, READMEs, rustdoc." }
+  - { name: "area:site",       color: "BFD4F2", description: "site/ and the Pages deployment." }
+  - { name: "area:spec",       color: "BFD4F2", description: "spec/: clauses, maturity markers, E2E cases." }
+  - { name: "area:kb",         color: "BFD4F2", description: ".kb/, runbook/, references/: the record." }
+  - { name: "area:release",    color: "BFD4F2", description: "Versioning, CHANGELOG, publishing, crates.io." }
+
+  # source — where the item came from. Exactly one.
+  - { name: "source:runbook",       color: "EDEDED", description: "A work item in runbook/phases/." }
+  - { name: "source:audit",         color: "EDEDED", description: "A finding in references/evaluation/." }
+  - { name: "source:review",        color: "EDEDED", description: "A PR review or a reviewer's comment." }
+  - { name: "source:afk",           color: "EDEDED", description: "Filed by an unattended agent session." }
+  - { name: "source:open-question", color: "EDEDED", description: "An accepted question in .kb/open-questions/ with a forcing event." }
+
+milestones:
+  - { title: "0.4.0",      description: "The breaking window: phase 17. Everything that must ship before the 0.4.0 tag." }
+  - { title: "1.0.0-rc.1", description: "The road to the release candidate: phases 17b, 18, 13, 14, 20 and 22." }
+  - { title: "1.0.0",      description: "Phase 21: the clause audit, the soak, and the release." }
+
+issue_types:
+  # Org-level. Settings → Planning → Issue types (needs an org admin).
+  - { name: "Epic",    description: "One runbook phase." }
+  - { name: "Feature", description: "One observable outcome, 1-5 PRs." }
+  - { name: "Task",    description: "One PR." }
+  - { name: "Bug",     description: "Something does other than what it says it does." }

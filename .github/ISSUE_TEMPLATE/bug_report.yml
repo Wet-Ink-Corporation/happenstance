@@ -1,6 +1,6 @@
 name: Bug report
 description: A published crate does something other than what it says it does.
-labels: ["bug"]
+labels: ["bug", "type:bug", "status:needs-triage"]
 body:
   - type: markdown
     attributes:

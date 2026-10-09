@@ -1,0 +1,59 @@
+name: Agent finding
+description: >-
+  Something an unattended session noticed outside the work it was doing — a bug,
+  a stale record, a citation that no longer resolves, a check that cannot fail.
+labels: ["status:needs-triage", "source:afk"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        runbook/afk.md § *Filing what you find* says how to use this form. Search
+        first and comment on an existing issue rather than opening a duplicate.
+        Leave parent and milestone unset: triage places it.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - "Bug: something does other than what it says"
+        - "Stale record: a document says something the tree no longer does"
+        - "Vacuous check: a gate step or rule that cannot fail"
+        - "Missing work: something the plan needs that no issue covers"
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >-
+        `path:line` at a named commit, and what is there. Name the wrong behaviour
+        you saw, not only the right one.
+      placeholder: |
+        At 07215eb, `runbook/ledgers.md:312` marks PS-39 freeze-by-17b, and
+        `runbook/phases/17b-after-the-window.md` never mentions PS-39.
+    validations:
+      required: true
+
+  - type: textarea
+    id: consequence
+    attributes:
+      label: What goes wrong if nobody acts
+      description: The failure a reader, a consumer or the gate meets.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed fix
+      description: >-
+        Optional. If the fix is one-way (published API, a FROZEN clause, an
+        accepted ADR), say so, and say which fact would change the answer.
+
+  - type: input
+    id: found-while
+    attributes:
+      label: Found while working on
+      description: The issue or PR the session was on, as #N.

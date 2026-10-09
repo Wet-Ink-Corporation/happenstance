@@ -2,7 +2,7 @@ name: A conformance rule is wrong, or my adapter cannot pass it
 description: >-
   The suite rejects an implementation you believe is correct, or demands
   something the storage cannot do.
-labels: ["conformance"]
+labels: ["conformance", "status:needs-triage"]
 body:
   - type: markdown
     attributes:
