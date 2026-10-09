@@ -2,7 +2,7 @@ name: The documentation taught the wrong thing
 description: >-
   A page, rustdoc item or example was accurate but misleading, out of date, or
   missing the thing you actually needed.
-labels: ["documentation"]
+labels: ["documentation", "status:needs-triage"]
 body:
   - type: markdown
     attributes:

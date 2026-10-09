@@ -38,7 +38,7 @@ indistinguishable from a young one at every value in §2.
       refusal, with an additive reservation. Deletion is out of scope for
       `EventStore` through 1.x, ES-38 is what a deleted-from store may look like, and
       ES-40's vacuous pass is specified. Nothing here adds a required method.
-- [ ] **The completeness instrument** (CF-27). A testkit decorator over any
+- [ ] #144 · **The completeness instrument** (CF-27). A testkit decorator over any
       `EventStore` that holds an **arbitrary retained set** of its log, a suffix
       or a scattered subset, so that a runner or an ingest path can be run against
       a holed log and its behaviour recorded. It reports what it
@@ -49,32 +49,32 @@ indistinguishable from a young one at every value in §2.
       said the opposite of what the refusal specifies), asserts two things:
       the suite passes, so indistinguishability at the port is the specified
       outcome, and the instrument's report is accurate.
-- [ ] **A removal capability on `Fixture`**, defaulted to declined on
+- [ ] #147 · **A removal capability on `Fixture`**, defaulted to declined on
       `MID_BATCH_FAULT`'s precedent. Through it, a fixture removes events outside
       the port with a raw `DELETE` on SQLite, Cloudflare, Postgres and Neon; the
       name is this phase's. Cloudflare's decline reason, or its support, must say
       whether a Durable Object wiped by `delete_all()` is the same store (VT-6).
-- [ ] `positions_are_not_reused_after_removal` (ES-38), against the instrument
+- [ ] #151 · `positions_are_not_reused_after_removal` (ES-38), against the instrument
       and against every real adapter through that capability. Its named wrong
       implementation is a SQLite table declared `INTEGER PRIMARY KEY` without
       `AUTOINCREMENT`, which reuses the deleted tail's highest rowid.
-- [ ] `condition_over_removed_history_does_not_reject` (ES-40), an asserted and
+- [ ] #154 · `condition_over_removed_history_does_not_reject` (ES-40), an asserted and
       documented outcome: the condition passes vacuously. ~~A condition over
       destroyed history must refuse rather than pass.~~ ADR-0028 rejected that
       third outcome for 1.x.
-- [ ] **The reader experiment** (ES-39). Write an ingest path and a projection
+- [ ] #156 · **The reader experiment** (ES-39). Write an ingest path and a projection
       runner against the instrument, and record whether either needs a port-level
       report. If one does, add it as a **provided** `EventStore` method whose
       default answers `Unknown`, never `Complete`, in ES-4's spelling (see
       `experiments/provided-method-spike/`), with the rule
       `a_store_reports_the_history_it_does_not_hold`. If neither does, freeze ES-39
       as the refusal.
-- [ ] Retention across the peer set (SY-32): the scalar floor means the lowest
+- [ ] #158 · Retention across the peer set (SY-32): the scalar floor means the lowest
       resume point a peer can satisfy, not completeness. Build the 120-day-offline
       against 90-day-window case and show the gap is reported, not silent.
 - [x] Redaction (E2E-49). **Answered by ADR-0028**: a tag cannot be redacted
       through the port, and a crypto-shred of `data` moves no position.
-- [ ] **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-14` row
+- [ ] #163 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-14` row
       in [the 1.0 dispositions](../ledgers.md). All four are *decided* at phase 17,
       in ADR-0028, and *built and frozen* here against the suffix store:
       - **ES-39** — the rules of ADR-0028's written refusal (ES-38's and ES-40's),

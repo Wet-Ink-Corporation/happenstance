@@ -54,7 +54,7 @@ and its correctness bar, unchanged.
       Verified with `html_no_source` left in place: the scraped snippets link
       into the example crates' own source pages, which exist, so the attribute
       the earlier specs asked not to flip in passing is not flipped.
-- [ ] rustdoc logo and favicon on the seven published crates — the badge, from
+- [ ] #173 · rustdoc logo and favicon on the seven published crates — the badge, from
       `assets/brand/favicon.svg` on `main`, which the public repository serves.
       Built and seen rendering, then **withdrawn**: an attribute block above a
       crate root's items moves every line under it, and `standards/rust/` alone
@@ -65,23 +65,23 @@ and its correctness bar, unchanged.
 - [x] `.github/workflows/pages.yml` — build on a pull request, deploy from
       `main`; SHA-pinned and read-only at the top level, as `cargo xtask
       lint-workflows` requires. `site/` is inert to `cargo xtask affected`.
-- [ ] Repoint the two crate-doc links into `docs/` at the site, **after the
+- [ ] #174 · Repoint the two crate-doc links into `docs/` at the site, **after the
       first deploy** — `crates/happenstance/src/lib.rs`'s front-door sentence and
       `crates/happenstance/src/domain.rs`'s bridge link. Both point at GitHub
       today, which always resolves; a link to a site that is not yet up would
       ship broken on the next docs.rs render. Same sentence, same link text: the
       pointer policy (`xtask/src/pointers.rs`) allows one front door, and a
       second sentence is the defect it names.
-- [ ] The first how-to pages in `docs/`, under `standards/pages/`, each
+- [ ] #175 · The first how-to pages in `docs/`, under `standards/pages/`, each
       registered in `xtask/src/narrative.rs` and `site.rs`'s reading order:
       `choose-a-store`, `rebuild-a-read-model`, `retry-a-command`,
       `pass-the-conformance-suite`, `run-on-a-durable-object`. On a follow-up
       branch, after the site merges (`wi-269e5a`).
-- [ ] `boundaries-not-aggregates.md`, the prior-model bridge. It argues against
+- [ ] #176 · `boundaries-not-aggregates.md`, the prior-model bridge. It argues against
       the DDD aggregate, matching the landing page's second beat (`wi-3c4f18`,
       the owner, 2026-09-29).
-- [ ] Search. Zola builds the index; the client library has to be vendored.
-- [ ] The owner sets the repository's Pages source to *GitHub Actions*.
+- [ ] #178 · Search. Zola builds the index; the client library has to be vendored.
+- [ ] #168 · The owner sets the repository's Pages source to *GitHub Actions*.
 
 ## Exit criteria
 

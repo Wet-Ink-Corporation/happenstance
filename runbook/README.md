@@ -75,39 +75,39 @@ handover is rewritten whole each time, so a stale one is visibly stale — its
 
 ## Status
 
-| # | Phase | Depends on | State | Proof artefact |
-|---|---|---|---|---|
-| 0 | [Ground clear](../RUNBOOK.md#phase-0--ground-clear) | — | done | a `.crate` carrying its licences and README; `cargo xtask spec-trace` failing on a broken clause |
-| 1 | [The `!Send` proof](../RUNBOOK.md#phase-1--the-send-proof-and-the-derivation-decision) | 0 | done | one provided body type-checking under both flavours; every rule green against a `!Send` store on `wasm32` |
-| 2 | [The instrument portfolio](../RUNBOOK.md#phase-2--the-instrument-portfolio) | 1 | done | six crates compiling on their real targets with real associated types |
-| 3 | [The suite becomes an instrument](../RUNBOOK.md#phase-3--the-suite-becomes-an-instrument) | 1 | done | the mutant registry: every rule has a mutant that fails it |
-| 4 | [Freeze the contract](../RUNBOOK.md#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | done | `frozen_signatures.rs`, and a `compile_fail` doctest pinning what does not compile |
-| 5 | [Freeze the wire format](../RUNBOOK.md#phase-5--freeze-the-wire-format) | 4 | done | two `wire.rs` files across `happenstance-core` and `happenstance-sync`, with negative controls asserted by name |
-| 6 | [Freeze `ProjectionStore`](../RUNBOOK.md#phase-6--freeze-projectionstore) | 4 | done | `CheckpointOnlyStore` failing the projection suite, and two unlike batch shapes passing it |
-| 7 | [The typed layer and the example](../RUNBOOK.md#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | done | a `trybuild` compile-fail case: add an event variant, and the fold stops compiling |
-| — | **`0.2.0-alpha.1`** | 7 | — | released 2026-08-16, since yanked |
-| 8 | [`happenstance-sqlite`](../RUNBOOK.md#phase-8--happenstance-sqlite) | 4, 6, 7 | done | the concurrency macro green at 64 contenders; an acknowledged write surviving a reopen |
-| 9 | [Cloudflare Durable Object](../RUNBOOK.md#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green on `wasm32` against a `node:sqlite` `DurableObjectState` shim — not `workerd`, whose run is phase 17's sibling job (ADR-0066) — with a real `worker::Error`-carrying error type |
-| 10a | [Postgres event store](../RUNBOOK.md#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | done | the concurrency macro green on a store that does not serialise its writers, with the visibility cost measured |
-| 10b | [Postgres projections, and Neon](../RUNBOOK.md#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | done | no `todo!()` left on either crate; Neon's capability declines stated; `LivePostgresProjectionStore` passing all seventeen rules |
-| 11 | [Ladybug projection store](../RUNBOOK.md#phase-11--ladybug-projection-store) | 6 | done | the projection suite green on a non-SQL batch against the real driver. Finished, and cannot publish: `lbug` does not build on docs.rs. Retired at phase 17, ADR-0078 |
-| 12 | [Publish `0.2.0`](../RUNBOOK.md#phase-12--publish-020) | 7, 8, 10a | done | seven crates on crates.io and rendering on docs.rs; `cargo-semver-checks` against a registry baseline |
-| — | **`0.2.0`** | 12 | — | released 2026-09-10 — seven crates |
-| — | **`0.3.0`** | 10b, 12 | — | released 2026-09-11 — the projection port frozen (ADR-0063) |
-| — | **`0.3.1`** | 12 | — | released 2026-09-11 — descriptions only |
-| — | **`0.3.2`** | 12 | — | released 2026-09-20 — a dependency advisory (`rustls`) |
-| 15 | [Reconcile the record](phases/15-reconcile.md) | 12 | done | the status lint failing on the pre-split table and passing on this one |
-| 16 | [Define 1.0](phases/16-define-1-0.md) | 15 | done | the 1.0 charter, with a disposition for every non-frozen clause on a promised surface |
-| 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | 16 | in progress | `0.4.0` released, every semver break traced to a decision |
-| 17b | [After the window — the additive half](phases/17b-after-the-window.md) | 17 | not started | VT-14, VT-30 and ES-7 frozen; the minimal-versions and floating-dependency jobs watched failing once |
-| 18 | [The typed runner leaves its gate](phases/18-typed-runner.md) | 17 | not started | the rebuild example compiled with no unstable feature in its graph |
-| 13 | [`happenstance-sync` and its testkit](phases/13-sync.md) | 5, 8, 9, 10a, 10b, 12, 17, 18 | not started | one suite green against three peers, two of them unlike, and a byte-identical round trip |
-| 14 | [Retention and completeness](phases/14-retention.md) | 13, 17 | not started | a completeness instrument over an arbitrary retained set, the suite's pass list against it recorded, and the reader experiment's outcome |
-| 19a | [SQLite on `wasm32` — skeleton](phases/19-sqlite-on-wasm.md) | 15 | not started | a skeleton building for `wasm32` in the gate, with a verdict on driver, storage and CI |
-| 19b | [SQLite on `wasm32` — the adapter](phases/19-sqlite-on-wasm.md) | 17, 19a | not started | both conformance suites green on `wasm32`, in the gate |
-| 20 | [Documentation that teaches](phases/20-docs-that-teach.md) | 15 | in progress | the docs initiative's Definition of Done, re-observed from a clean checkout |
-| 22 | [The documentation site](phases/22-docs-site.md) | 15 | in progress | the site deployed from `main`, with scraped examples in its API and its guide rendered from the gate-compiled `docs/` |
-| 21 | [`1.0.0`](phases/21-one-point-oh.md) | 13, 14, 16, 17, 17b, 18, 20 | not started | the promised crates at `1.0.0`, and the clause audit clean |
+| # | Phase | Depends on | State | Proof artefact | Tracker |
+|---|---|---|---|---|---|
+| 0 | [Ground clear](../RUNBOOK.md#phase-0--ground-clear) | — | done | a `.crate` carrying its licences and README; `cargo xtask spec-trace` failing on a broken clause | — |
+| 1 | [The `!Send` proof](../RUNBOOK.md#phase-1--the-send-proof-and-the-derivation-decision) | 0 | done | one provided body type-checking under both flavours; every rule green against a `!Send` store on `wasm32` | — |
+| 2 | [The instrument portfolio](../RUNBOOK.md#phase-2--the-instrument-portfolio) | 1 | done | six crates compiling on their real targets with real associated types | — |
+| 3 | [The suite becomes an instrument](../RUNBOOK.md#phase-3--the-suite-becomes-an-instrument) | 1 | done | the mutant registry: every rule has a mutant that fails it | — |
+| 4 | [Freeze the contract](../RUNBOOK.md#phase-4--freeze-the-contract-signatures-value-types-and-identity) | 2, 3 | done | `frozen_signatures.rs`, and a `compile_fail` doctest pinning what does not compile | — |
+| 5 | [Freeze the wire format](../RUNBOOK.md#phase-5--freeze-the-wire-format) | 4 | done | two `wire.rs` files across `happenstance-core` and `happenstance-sync`, with negative controls asserted by name | — |
+| 6 | [Freeze `ProjectionStore`](../RUNBOOK.md#phase-6--freeze-projectionstore) | 4 | done | `CheckpointOnlyStore` failing the projection suite, and two unlike batch shapes passing it | — |
+| 7 | [The typed layer and the example](../RUNBOOK.md#phase-7--the-typed-layer-and-the-worked-example) | 4, 6 | done | a `trybuild` compile-fail case: add an event variant, and the fold stops compiling | — |
+| — | **`0.2.0-alpha.1`** | 7 | — | released 2026-08-16, since yanked | — |
+| 8 | [`happenstance-sqlite`](../RUNBOOK.md#phase-8--happenstance-sqlite) | 4, 6, 7 | done | the concurrency macro green at 64 contenders; an acknowledged write surviving a reopen | — |
+| 9 | [Cloudflare Durable Object](../RUNBOOK.md#phase-9--cloudflare-durable-object) | 2, 4 | done | every rule green on `wasm32` against a `node:sqlite` `DurableObjectState` shim — not `workerd`, whose run is phase 17's sibling job (ADR-0066) — with a real `worker::Error`-carrying error type | — |
+| 10a | [Postgres event store](../RUNBOOK.md#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | done | the concurrency macro green on a store that does not serialise its writers, with the visibility cost measured | — |
+| 10b | [Postgres projections, and Neon](../RUNBOOK.md#phase-10--happenstance-postgres-and-happenstance-neon) | 2, 4, 6 | done | no `todo!()` left on either crate; Neon's capability declines stated; `LivePostgresProjectionStore` passing all seventeen rules | — |
+| 11 | [Ladybug projection store](../RUNBOOK.md#phase-11--ladybug-projection-store) | 6 | done | the projection suite green on a non-SQL batch against the real driver. Finished, and cannot publish: `lbug` does not build on docs.rs. Retired at phase 17, ADR-0078 | — |
+| 12 | [Publish `0.2.0`](../RUNBOOK.md#phase-12--publish-020) | 7, 8, 10a | done | seven crates on crates.io and rendering on docs.rs; `cargo-semver-checks` against a registry baseline | — |
+| — | **`0.2.0`** | 12 | — | released 2026-09-10 — seven crates | — |
+| — | **`0.3.0`** | 10b, 12 | — | released 2026-09-11 — the projection port frozen (ADR-0063) | — |
+| — | **`0.3.1`** | 12 | — | released 2026-09-11 — descriptions only | — |
+| — | **`0.3.2`** | 12 | — | released 2026-09-20 — a dependency advisory (`rustls`) | — |
+| 15 | [Reconcile the record](phases/15-reconcile.md) | 12 | done | the status lint failing on the pre-split table and passing on this one | — |
+| 16 | [Define 1.0](phases/16-define-1-0.md) | 15 | done | the 1.0 charter, with a disposition for every non-frozen clause on a promised surface | — |
+| 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | 16 | in progress | `0.4.0` released, every semver break traced to a decision | #61 |
+| 17b | [After the window — the additive half](phases/17b-after-the-window.md) | 17 | not started | VT-14, VT-30 and ES-7 frozen; the minimal-versions and floating-dependency jobs watched failing once | #62 |
+| 18 | [The typed runner leaves its gate](phases/18-typed-runner.md) | 17 | not started | the rebuild example compiled with no unstable feature in its graph | #63 |
+| 13 | [`happenstance-sync` and its testkit](phases/13-sync.md) | 5, 8, 9, 10a, 10b, 12, 17, 18 | not started | one suite green against three peers, two of them unlike, and a byte-identical round trip | #64 |
+| 14 | [Retention and completeness](phases/14-retention.md) | 13, 17 | not started | a completeness instrument over an arbitrary retained set, the suite's pass list against it recorded, and the reader experiment's outcome | #65 |
+| 19a | [SQLite on `wasm32` — skeleton](phases/19-sqlite-on-wasm.md) | 15 | not started | a skeleton building for `wasm32` in the gate, with a verdict on driver, storage and CI | #69 |
+| 19b | [SQLite on `wasm32` — the adapter](phases/19-sqlite-on-wasm.md) | 17, 19a | not started | both conformance suites green on `wasm32`, in the gate | #70 |
+| 20 | [Documentation that teaches](phases/20-docs-that-teach.md) | 15 | in progress | the docs initiative's Definition of Done, re-observed from a clean checkout | #66 |
+| 22 | [The documentation site](phases/22-docs-site.md) | 15 | in progress | the site deployed from `main`, with scraped examples in its API and its guide rendered from the gate-compiled `docs/` | #67 |
+| 21 | [`1.0.0`](phases/21-one-point-oh.md) | 13, 14, 16, 17, 17b, 18, 20 | not started | the promised crates at `1.0.0`, and the clause audit clean | #68 |
 
 State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in place.
 A milestone row names a released version and the phase it waited on;

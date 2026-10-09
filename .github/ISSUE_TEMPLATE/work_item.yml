@@ -1,0 +1,75 @@
+name: Work item
+description: >-
+  A feature or task on the roadmap: one observable outcome, written as a brief an
+  unattended session can pick up without asking.
+labels: ["status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        A feature is one observable outcome, 1-5 PRs. A task is one PR, and exists
+        only when its feature needs more than one. Attach it to its parent epic or
+        feature with the sub-issue control. runbook/afk.md has the rest.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: >-
+        Why this exists, in two or three lines. Name the phase, clause, ADR or
+        finding it comes from.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is in, and what is deliberately out.
+      value: |
+        **In:**
+        **Out:**
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: >-
+        A checklist a reviewer can tick from the diff and the gate. A new
+        conformance rule names the wrong implementation it rejects.
+      value: |
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: proof
+    attributes:
+      label: Proof
+      description: >-
+        The artefact that shows it is done: a test seen failing and then passing,
+        a run URL, a page.
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: >-
+        `path:line`, clause ids, ADR numbers, `wi-` ids, and related issues or PRs.
+
+  - type: dropdown
+    id: door
+    attributes:
+      label: Door
+      description: >-
+        One-way means published API or semver, a FROZEN clause, an accepted ADR,
+        a tag or publish, or deleting a branch. Add the door:one-way label too.
+      options:
+        - two-way
+        - one-way
+    validations:
+      required: true
