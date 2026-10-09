@@ -4,14 +4,19 @@ title: "Self-merge any green leaf except door:one-way"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Should unattended sessions be allowed to self-merge on green, as wi-ab0a5a allowed for phase 15 only?\", facing whether an unattended session may merge its own green PR decides how much it can finish without you, we decided for Self-merge any green leaf except door:one-way and neglected Review required; Self-merge two-way, non-semver leaves, on the premise that semver-checks and the gate are trusted, accepting that if wrong: an unreviewed API addition reaches a release."
 depends_on: []
-related: []
-source_paths: []
+related:
+  - kb-decision-wi-ab0a5a
+  - kb-decision-0088
+source_paths:
+  - runbook/afk.md
+  - .kb/_intake/decisions/wi-1fde8c-should-unattended-sessions-be-allowed-to-self.md
 last_reviewed: "2026-10-09"
 reversibility: low
 phase: null
-supersedes: []
+supersedes: null
 superseded_by: null
 weighin_item: "wi-1fde8c"
 question: "Should unattended sessions be allowed to self-merge on green, as wi-ab0a5a allowed for phase 15 only?"
@@ -33,7 +38,7 @@ Should unattended sessions be allowed to self-merge on green, as wi-ab0a5a allow
 
 Whether an unattended session may merge its own green PR decides how much it can finish without you.
 
-Raised by an agent (marker) as a assumption and captured by Weigh-In as `wi-1fde8c`. Anchor: `runbook/afk.md:84`.
+Raised by an agent (marker) as a assumption and captured by Weigh-In as `wi-1fde8c`. Anchor: `runbook/afk.md:79`.
 
 ## Decision drivers
 

@@ -545,7 +545,7 @@ this map. They are dated by `decided_at`, which Weigh-In writes in UTC, so three
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| — | [`kb-decision-wi-016abe`](../decisions/wi-016abe-reconcile-hs-i0006-by-closing-it-as-is-and.md) | Close HS-I0006 and re-plan | accepted | 15 | — |
+| — | [`kb-decision-wi-016abe`](../decisions/wi-016abe-reconcile-hs-i0006-by-closing-it-as-is-and.md) | Close HS-I0006 and re-plan | superseded | 15 | superseded by `kb-decision-0088` (`.bklg/` stays frozen) |
 | — | [`kb-decision-wi-052920`](../decisions/wi-052920-do-changelog-unreleased-s-entries-sqlite-busy.md) | Do CHANGELOG [Unreleased]'s entries (SQLite busy timeout, ADR-0065; FaultyStore::contend_next) ship as 0.3.3 or ride 0.4.0: Ride 0.4.0 | accepted | 15 | — |
 | — | [`kb-decision-wi-38373d`](../decisions/wi-38373d-what-checks-kb-frontmatter-and-accepted-atom.md) | What checks .kb frontmatter and accepted-atom immutability until redkiln-rs: xtask lint | accepted | 15 | — |
 | — | [`kb-decision-wi-40b321`](../decisions/wi-40b321-does-v1-0-include-happenstance-sync-or-does-1-0.md) | Sync inside 1.0 | accepted | 15 | — |
@@ -675,6 +675,24 @@ ES-11 and ES-12 freeze with it.
 | ADR-0086 | [`kb-decision-0086`](../decisions/0086-postgres-and-neon-keep-mint-once.md) | Postgres and Neon keep mint-once, earned by a documented re-mint, and mint-per-open is declined | accepted | 17 | — |
 | ADR-0081 | [`kb-decision-0081`](../decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | A store hops onto the runtime it is called on, and the handle it captured is the fallback | accepted | 17 | partly supersedes `kb-decision-0022` (§9) |
 | ADR-0087 | [`kb-decision-0087`](../decisions/0087-es-11-is-met-on-one-shot-http-by-a-read-settlement-fence.md) | ES-11 is met on one-shot HTTP by a read-settlement fence | accepted | 17 | supersedes `kb-decision-0061` |
+
+## 2026-10-09: GitHub Issues is the tracker, written by hand
+
+ADR-0088 makes GitHub Issues the tracker and keeps `runbook/` as the plan of record that the
+offline lints read. It supersedes `kb-decision-wi-016abe` for that atom's premise that the runbook
+tracks the remaining work. `.bklg/` stays frozen, the half carried forward. `kb-decision-wi-016abe`'s
+frontmatter now reads `superseded`, and its body is unchanged. `kb-decision-wi-1fde8c` is the
+owner's Weigh-In call on merge authority under the new tracker. Unattended sessions self-merge on
+green unless the issue carries `door:one-way`. That extends `kb-decision-wi-ab0a5a` beyond phase
+15 without superseding it. It was moved from `.kb/_intake/decisions/` in phase 15's shape, with
+`phase: null` because it binds no one phase. Its body is verbatim except for its anchor, which is
+repointed from `runbook/afk.md:84` to `:79` because the blockquote above it was removed.
+ADR-0085 is an unused gap in the sequence, and 0088 deliberately does not reuse it (`wi-dea8db`).
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0088 | [`kb-decision-0088`](../decisions/0088-github-issues-is-the-tracker.md) | GitHub Issues is the tracker, and the runbook is the plan of record | accepted | — | supersedes `kb-decision-wi-016abe` |
+| — | [`kb-decision-wi-1fde8c`](../decisions/wi-1fde8c-should-unattended-sessions-be-allowed-to-self.md) | Self-merge any green leaf except door:one-way | accepted | — | extends `kb-decision-wi-ab0a5a` beyond phase 15 |
 
 ## Adding a row
 

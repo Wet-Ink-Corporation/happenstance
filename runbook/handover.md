@@ -12,7 +12,11 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`lane/p17-exit-pass`, on `527dc08` (`main`, where PR #58 merged). 2026-10-08.
+`feature/confident-gauss-6dbnsw`, on `c04cb91` (`main`, where PR #60 merged). 2026-10-09.
+
+**GitHub Issues is now the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
+Per-item progress is in issues #61–#214. This file, the status table and the phase files
+are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
@@ -53,12 +57,23 @@ Nothing. Phase 17's work is on `main`; only the `0.4.0` release is left.
 
 ## Next action
 
+Take the first issue the ready-for-agent query returns ([`afk.md`](afk.md) § *Taking work*):
+
+```
+repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
+```
+
+Work milestone `0.4.0` first. The release itself is epic #61, and it is the owner's:
+
 1. Release `0.4.0`. The trace table in `CHANGELOG.md`'s `[Unreleased]` carries every
    break; its one pending row, ADR-0084's Postgres parameter-count check, is accepted
    and owed, and either lands first or is recorded as left for after the release.
 
 ## Waiting on the owner
 
+- **Apply the dependency links** once, with your own `gh` login (agent tools cannot):
+  `scripts/tracker-dependencies.sh references/evaluation/backlog-2026-10-09/dependencies.tsv`.
+  Until then, `status:blocked` labels are the only record of what blocks what.
 - Re-add `conformance against a live Neon endpoint` to the `Protect main` ruleset
   (id 22926481) as a required check (ADR-0087 D8).
 - Decide whether ADR-0084's Postgres parameter-count check lands before `0.4.0`.
@@ -81,7 +96,9 @@ record, and the owner.
 - ES-10 stays global — ADR-0071.
 - `happenstance-sync` is inside 1.0 — D-1, `wi-40b321`.
 - Redkiln is retired until `redkiln-rs`; `.bklg/` is frozen and not advanced —
-  D-2, `wi-016abe`.
+  D-2, `wi-016abe`, carried forward by ADR-0088.
+- GitHub Issues is the tracker; exit criteria stay in the phase files — ADR-0088, D-5.
+- Unattended sessions self-merge on green unless `door:one-way` — `wi-1fde8c`.
 - Ingest is unconditional, with compensation — SY-1 – SY-7.
 - The projection port is frozen — ADR-0063.
 - `happenstance-macros` is out of scope — ADR-0033.

@@ -2,7 +2,7 @@
 id: "kb-decision-wi-016abe"
 title: "Close HS-I0006 and re-plan"
 kind: decision
-status: accepted
+status: superseded
 authority_tier: decision
 adr_id: null
 summary: "In the context of \"Reconcile HS-I0006 by closing it as-is and replanning phases 13–14 as a new initiative, or by advancing all 190 stories through the CLI?\", facing the backlog reports 0 of 190 stories done, so redkiln status and next route to shipped work, we decided for Close HS-I0006 and re-plan and neglected Walk all 190 forward; Close reviewed projects only, on the premise that git history and the runbook are an adequate record of what shipped, accepting that if wrong: per-story gate records for the shipped work never exist."
@@ -14,7 +14,7 @@ last_reviewed: "2026-09-28"
 reversibility: high
 phase: 15
 supersedes: null
-superseded_by: null
+superseded_by: kb-decision-0088
 weighin_item: "wi-016abe"
 question: "Reconcile HS-I0006 by closing it as-is and replanning phases 13–14 as a new initiative, or by advancing all 190 stories through the CLI?"
 door: two-way
