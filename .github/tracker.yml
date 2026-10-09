@@ -7,6 +7,7 @@
 # `scripts/tracker-apply.sh` creates or updates the labels and milestones from
 # it, and running it twice does nothing new. Issue types are org-level and need
 # an org admin; until they exist, the `type:*` labels stand in for them.
+# GitHub refuses a label description over 100 characters; the script checks first.
 #
 # Within each label group below, an issue carries exactly one label, unless the
 # group says otherwise.
@@ -26,7 +27,7 @@ labels:
   - { name: "status:blocked",         color: "6A737D", description: "Waits on another open issue, named by a blocked-by link." }
 
   # door — present only when it is one-way. No label means two-way.
-  - { name: "door:one-way", color: "000000", description: "Hard to reverse: published API, a FROZEN clause, an accepted ADR, a tag or publish, branch deletion. Never closed by an agent." }
+  - { name: "door:one-way", color: "000000", description: "Hard to reverse: public API, FROZEN clause, accepted ADR, publish, deletion. Agents never close." }
 
   # semver — only for changes a published crate's consumer can observe.
   - { name: "semver:breaking", color: "E99695", description: "Breaks a published crate's API or behaviour. Ships in a breaking release only." }

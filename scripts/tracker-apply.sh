@@ -46,6 +46,15 @@ for tool in gh yq; do
     command -v "$tool" >/dev/null || { echo "error: $tool is not installed" >&2; exit 1; }
 done
 
+# GitHub refuses a label description over 100 characters, and refuses it part way
+# through the run. Check every one first, so a long description fails before
+# anything has changed rather than after half the labels exist.
+too_long="$(yq -r '.labels[] | select((.description | length) > 100) | .name' "$FILE")"
+if [[ -n "$too_long" ]]; then
+    echo "error: label descriptions over 100 characters: $too_long" >&2
+    exit 1
+fi
+
 echo "labels → $REPO"
 count="$(yq '.labels | length' "$FILE")"
 for ((i = 0; i < count; i++)); do
