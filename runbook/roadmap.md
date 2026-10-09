@@ -142,6 +142,19 @@ with a decision atom in `.kb/decisions/` (staged in `.kb/_intake/` until phase 1
   call for Postgres and Neon, none of which its estimate yet counts; phases 13, 14, 17 and 18 each gained an exit criterion naming the
   clauses they freeze; and every open phase gained one requiring the
   specification reconciled against its own changes.
+- **D-5 — GitHub Issues is the tracker** (ADR-0088, decided 2026-10-09; it
+  supersedes `wi-016abe`, and so D-2's *"this runbook tracks the rest"*). `.bklg/`
+  stays frozen. This directory keeps the plan of record — the status table, each
+  phase's goal, exit criteria and proof artefact, [`ledgers.md`](ledgers.md) and
+  this file — and GitHub holds per-item progress: 154 issues, #61–#214, seeded from
+  [`references/evaluation/backlog-2026-10-09/`](../references/evaluation/backlog-2026-10-09/gap-report.md),
+  one epic per live row (#61–#70) and the rest as sub-issues under the milestones
+  `0.4.0`, `1.0.0-rc.1` and `1.0.0`. Exit criteria stay here and are not issues; an
+  epic closes only in the PR that ticks them. `cargo xtask lints` checks the
+  `Tracker` column and the `#N` on every open box, offline; CI never calls the
+  GitHub API. Unattended sessions take work by [`afk.md`](afk.md) and self-merge on
+  green unless the issue is `door:one-way` (`wi-1fde8c`). The order above did not
+  move. Reconsidered when `redkiln-rs` is live.
 
 ## What is deliberately not on this roadmap
 

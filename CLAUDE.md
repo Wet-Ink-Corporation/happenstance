@@ -97,10 +97,10 @@ site/                            the documentation site's shell: Zola templates,
                                  system's tokens and components, routing pages. presentation
                                  only; its guide is docs/, rendered by `cargo xtask site`, and
                                  .github/workflows/pages.yml deploys it. phase 22.
-runbook/                         the plan of record, and how far it has got. start a
-                                 session at runbook/handover.md, then the status table in
-                                 runbook/README.md. one file per open phase; the roadmap
-                                 to 1.0 in runbook/roadmap.md.
+runbook/                         the plan of record: status table, phase goals, exit
+                                 criteria, ledgers, roadmap. start at runbook/handover.md.
+                                 progress lives in GitHub Issues (ADR-0088): unattended
+                                 sessions read runbook/afk.md; .github/tracker.yml.
 RUNBOOK.md                       the frozen monolith the runbook was split from. phases
                                  0–12 in full. never shrink it: ~2,250 `RUNBOOK.md:N`
                                  citations resolve against its line numbers.
@@ -169,15 +169,15 @@ never waits on replication.
 
 ## Where the work lives
 
-**Redkiln is retired in this repository as of 2026-09-28.** Tracking is manual
-until `redkiln-rs` is live, which is after happenstance's 1.0. Do not run
-`redkiln` commands or the `/redkiln:*` skills here: the trees they wrote are now
-records, and a command run against them re-opens a process nobody is following.
+**GitHub Issues is the tracker** ([ADR-0088](.kb/decisions/0088-github-issues-is-the-tracker.md)) until `redkiln-rs` is live.
+Redkiln is retired here (2026-09-28): never run `redkiln` or `/redkiln:*`; its trees are records.
 
-- **[`runbook/`](runbook/README.md) — what is being done, and how far it has got.**
-  The only tracker. Start at `runbook/handover.md`; the status table in
-  `runbook/README.md` is held to the changelog and the registry by
-  `cargo xtask lints`.
+- **GitHub Issues — per-item progress.** Work items, assignment, blockers, bugs and
+  findings, and the session narrative in issue comments and PR bodies; a leaf PR
+  says `Closes #N`. Vocabulary: `.github/tracker.yml`. Unattended: `runbook/afk.md`.
+- **[`runbook/`](runbook/README.md) — the plan of record.** Start at `handover.md`.
+  Status table, phase goals, exit criteria, ledgers, roadmap: held offline by
+  `cargo xtask lints`, and CI never calls the GitHub API. An epic closes with its row.
 - **`.kb/` — what is settled.** Durable knowledge as *atoms*: markdown with
   frontmatter. **An accepted decision atom is immutable** — correcting one means
   writing a new atom that supersedes it, never editing the body. Atoms are now

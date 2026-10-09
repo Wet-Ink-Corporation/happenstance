@@ -1,10 +1,10 @@
 # Runbook
 
-The plan for finishing happenstance, and the record of how far it has got.
+The plan of record for finishing happenstance. How far each item has got is in GitHub Issues.
 
 **Starting a session? Read [`handover.md`](handover.md) first**, then the status
-table below. Those two are the whole of what a session needs before it picks up
-work; everything else in this directory is read when the work in hand reaches it.
+table below, then your issue. Those are the whole of what a session needs before it
+picks up work; an unattended session takes its issue by [`afk.md`](afk.md) (ADR-0088).
 
 ## Why this is a directory
 
@@ -24,7 +24,7 @@ sends you there; do not edit it except to correct a single line in place.
 | File | What it carries | Read it |
 |---|---|---|
 | [`handover.md`](handover.md) | Where the work actually is, the next action, what is waiting on the owner, and the traps | at the start of every session |
-| this file | How to use the runbook, the session protocol, the status table | at the start of every session |
+| this file | How to use the runbook, the session protocol, the status table; [`afk.md`](afk.md) is the unattended form | at the start of every session |
 | [`roadmap.md`](roadmap.md) | Why the remaining phases are in the order they are, and the decisions pending the owner | when choosing or re-ordering work |
 | [`ledgers.md`](ledgers.md) | The ADR queue, the open decisions, and the provisional and deferred clause ledgers `cargo xtask lints` holds to the specification | when a clause moves, an ADR is written, or a phase exits |
 | [`log.md`](log.md) | Dated session log, newest first | when you need to know what happened, not what is planned |
@@ -33,11 +33,11 @@ sends you there; do not edit it except to correct a single line in place.
 
 ## How to use this
 
-1. **The runbook is updated in the same commit as the work it describes** — the
-   phase file's boxes and session log, the status row, and the handover.
-2. **A phase is done when its proof artefact exists in the repository and every
-   exit criterion is ticked.** Not when the gate is green. A green gate is a
-   precondition for looking at the exit criteria, never one of them.
+1. **Progress lives in the issue; the plan moves in the commit that moves it.**
+   A leaf PR says `Closes #N`; the PR that ticks a phase's exit criteria sets its
+   row to `done` and closes its epic. Exit criteria are never issues (ADR-0088).
+2. **A phase is done when its proof artefact exists and every exit criterion is
+   ticked** — not when the gate is green, which is a precondition, never a criterion.
 3. **The specification is current truth; ADRs are history.** Changing a
    `[FROZEN]` clause takes a new ADR, not an edit. Where any file here and
    `spec/SPECIFICATION.md` disagree, the specification wins and the file here is
@@ -53,19 +53,19 @@ sends you there; do not edit it except to correct a single line in place.
 ## Session protocol
 
 ```
-1. Read handover.md, then the status table, then `git log --oneline -10`.
+1. Read handover.md, the status table, your issue, then `git log --oneline -10`.
 2. Run `cargo xtask ci`. Establish the baseline is green before touching anything.
-3. Take the handover's next action. If there is none, pick the first phase that is
-   not `done` and whose dependencies are `done`.
+3. Take an issue: the handover's next action, else the `status:ready-for-agent`
+   queue (afk.md). Assign it to yourself and name the branch in a comment.
 4. Write the phase's ADRs first. Then the code they constrain.
-5. Build the phase's proof artefact. If you cannot, the phase is not done — say so
-   in its session log rather than ticking the box.
+5. Build the proof artefact. If you cannot, the phase is not done — say so in the
+   issue rather than ticking the box. A new phase-file box leads with its `#N · `.
 6. Reconcile the specification against the code the phase just wrote — the prose
    and citations under the MUSTs, not only the MUSTs.
-7. Re-run the gate. Tick the phase file's exit criteria.
-8. Before committing, write the handover (the whole file, in its template), add a
-   dated line to the phase's session log and to log.md, and move the status row.
-9. Commit the code and the runbook together.
+7. Re-run the gate. Tick exit criteria only in the PR that finishes the phase.
+8. Before committing, write the handover (the whole file, in its template). A PR
+   that moves the plan adds a dated line to log.md and to the phase's session log.
+9. Commit code and plan together. The PR body says `Closes #N` and carries the narrative.
 ```
 
 Step 8 is the one the monolith did not have, and it is the one that failed: the
@@ -113,6 +113,11 @@ State is one of `not started`, `in progress`, `blocked`, `done`. Edit it in plac
 A milestone row names a released version and the phase it waited on;
 `cargo xtask lints` refuses a released version with no row here, and a milestone
 whose prerequisites are not all `done`.
+
+`Tracker` names the row's epic issue. `cargo xtask lints` requires a unique `#N` on
+every live row that is not a milestone; a `done` or milestone row may carry `—`.
+Every unticked box in a phase file outside its exit criteria leads with `#N · ` (or
+`#N, #M · `); struck and ticked boxes are exempt. The lint reads files, never GitHub.
 
 Rows are in the order the work is expected to run, not in number order: phases 13
 and 14 were numbered before the decision window in front of them existed, and

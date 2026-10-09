@@ -4,11 +4,6 @@ How an unattended (AFK) session takes work from GitHub Issues, does it, and repo
 back. It is the general form of [`phase-15-afk-prompt.md`](phase-15-afk-prompt.md),
 which was written for one phase and one night.
 
-> **Status: proposed.** This protocol governs once the backlog is seeded and the
-> decision making GitHub Issues the tracker is recorded (ADR-0088, not yet
-> written). Until then, `runbook/README.md`'s session protocol governs, and this
-> file is the draft it will point at.
-
 **Where things live.** GitHub Issues holds the work items: what is open, who has
 it, what blocks it, and the bugs and findings a session files. This repository
 holds the plan of record: the status table in [`README.md`](README.md), each phase
@@ -32,9 +27,9 @@ only when the second PR becomes real, not in advance.
 
 ## Labels: a state machine, not a tag cloud
 
-Every open issue carries exactly one `status:`, one `source:` and one `type:` label.
-Every label is defined in `tracker.yml`. The `type:` labels go away once the
-organisation's Issue Types are enabled.
+Every open issue has an issue type (Epic, Feature, Task or Bug) and exactly one
+`status:` and one `source:` label. Every label is defined in `tracker.yml`; the
+`type:*` labels there are a fallback the seeded issues do not use.
 
 | Status | Means | An unattended session… |
 |---|---|---|
@@ -91,7 +86,7 @@ that no longer resolves, a check that cannot fail — becomes an issue. Do not w
 the PR.
 
 - Use the **Agent finding** form. If you file through the API, it amounts to
-  `type:bug` or `type:feature`, `status:needs-triage` and `source:afk`.
+  issue type Bug or Feature, `status:needs-triage` and `source:afk`.
 - Search first (`is:issue in:title <clause or file>`) and comment on an existing
   issue rather than opening a duplicate.
 - Give the evidence as `path:line` at a named commit, and name the wrong behaviour
