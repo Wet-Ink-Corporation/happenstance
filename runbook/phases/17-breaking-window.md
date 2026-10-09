@@ -236,7 +236,7 @@ gave to this phase.
       (phase 18 freezes it with PS-23) — **written by ADR-0075** into
       `ProjectionStore::checkpoint`'s rustdoc and `happenstance-neon`'s README and
       constructor.
-- [ ] **Release `0.4.0`.** `cargo-semver-checks` against the `0.3.x` registry
+- [ ] #87 · **Release `0.4.0`.** `cargo-semver-checks` against the `0.3.x` registry
       baseline reports breaks, and each one it reports traces to a decision above.
       `CHANGELOG.md`'s `[Unreleased]` entries — SQLite's fifteen-second busy
       timeout (ADR-0065) and `FaultyStore::contend_next` — ship in `0.4.0`;
@@ -897,4 +897,4 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
   - **The owner's, outstanding:**
     - re-add `conformance against a live Neon endpoint` to the `Protect main`
       ruleset now that the fence is on `main` (ADR-0087 D8, `wi-0f1291`);
-    - the `0.4.0` release itself.
+    - #97 · the `0.4.0` release itself.

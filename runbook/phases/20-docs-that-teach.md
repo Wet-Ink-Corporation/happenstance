@@ -22,7 +22,7 @@ reach-and-adapter-path (blocked, after a `changes-requested` slice),
 
 **Work carried in from phase 16**
 
-- [ ] **ES-23's adapter half, for the next adapter author**
+- [ ] #149 · **ES-23's adapter half, for the next adapter author**
       (`.kb/open-questions/es-23-frozen-doc-musts-adapter-half.md`). All four
       published event-store adapters now carry their own `# Cancellation`
       section, so ES-23 is met; what nothing does is point a new adapter author
@@ -41,7 +41,7 @@ what its terminal project `HS-P0025` was specified to do.
 
 - [ ] `HS-P0023`, `HS-P0024` and `HS-P0025` done, each against its stories'
       `spec.md` acceptance criteria, ticked in this file's session log.
-- [ ] `HS-P0020` – `HS-P0022`, which sat at review when `.bklg/` froze, confirmed
+- [ ] #150 · `HS-P0020` – `HS-P0022`, which sat at review when `.bklg/` froze, confirmed
       shipped or reopened here.
 - [ ] The narrative tree's checks are in `cargo xtask ci`, and have been watched
       failing on a deliberately broken page.

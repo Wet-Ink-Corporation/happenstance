@@ -21,7 +21,7 @@ spelling, settled by compiling it.
 
 **Work**
 
-- [ ] **ADR-0069's total `QueryItem` constructor.** An infallible constructor
+- [ ] #83 · **ADR-0069's total `QueryItem` constructor.** An infallible constructor
       taking a first `EventType` as its own parameter, any further types and a
       `Tags`, canonicalising exactly as `QueryItem::new` does
       (`crates/happenstance-core/src/query.rs:56-76`) through one shared private
@@ -30,7 +30,7 @@ spelling, settled by compiling it.
       its doc contrasts it with the fallible `of_types`. Check
       `crates/happenstance-core/tests/frozen_signatures.rs` for an enumeration it
       must join.
-- [ ] **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
+- [ ] #85 · **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
       research recommends: `after_every_guard` and `after_every_guard_opt`, with
       `after` / `after_opt` deprecated since the release that carries them and
       kept through 1.x; the two pin tests and doc sentences ADR-0054 names;
@@ -39,13 +39,13 @@ spelling, settled by compiling it.
       deprecation into an error — so this lands **last** among 17b's code items.
       Limb 2 retired by the record or by a multi-guard `fragmented_boundary`
       bench scenario.
-- [ ] **VT-14 — the RTL identifier corpus check.** A standalone
+- [ ] #86 · **VT-14 — the RTL identifier corpus check.** A standalone
       `experiments/identifier-validation/` with a path dependency on
       `happenstance-core`: the E11 reproduction run against the shipped validator
       (every `char`, alone and embedded), and an Arabic, Hebrew and Persian corpus
       with mixed LTR, its "empty" criterion pre-registered in the README before the
       run. Freeze VT-14 if it comes back empty.
-- [ ] **ES-7 — frozen in the record that answers
+- [ ] #88 · **ES-7 — frozen in the record that answers
       `trait-variant-caret-resolves-past-the-locked-gate`.** The research
       recommends keeping the caret, and buying the protection with a derivation
       contract compiled into `happenstance-core`'s library code (a `const _`
@@ -54,7 +54,7 @@ spelling, settled by compiling it.
       schedule. The falsifier is restated to cover a consumer's unlocked resolve.
       An exact `=0.1.3` pin is the alternative, and the owner may prefer to take
       it inside phase 17 (ADR-0072's borderline rule).
-- [ ] **A minimal-versions CI job.** After a lockstep `1.0.0` the crates version
+- [ ] #90 · **A minimal-versions CI job.** After a lockstep `1.0.0` the crates version
       independently (ADR-0066), and each adapter declares the core it needs as
       `happenstance-core = "1.N"`. A lower bound nothing ever resolves against is
       a guess, so a sibling job builds the workspace at its minimal versions.
@@ -63,14 +63,14 @@ spelling, settled by compiling it.
       `happenstance-neon`, run red once before any floor is raised; leg 2 resolves
       against the published `0.4.0`. A sibling rather than a gate step: it needs a
       nightly resolver.
-- [ ] **CF-40's `MetadataLen`, built under ADR-0043.** `StoreLimit::MetadataLen`
+- [ ] #92 · **CF-40's `MetadataLen`, built under ADR-0043.** `StoreLimit::MetadataLen`
       in `happenstance-core`; a defaulted `MAX_METADATA_LEN` on the testkit's
       `Fixture`; a metadata branch in `append_reports_exceeded_store_limits`; its
       wrong implementations in the testkit's `tests/`. `happenstance-cloudflare`'s
       ceiling is carved from the row budget measured by phase 17's deployed
       Durable Object leg, because local `workerd` does not enforce the production
       row limit. Phase 13 then decides the budget unit.
-- [ ] **The two typed-layer closures**, each in its own record:
+- [ ] #93 · **The two typed-layer closures**, each in its own record:
       - `tuple-boundary-heterogeneous-event-type` — option A taken deliberately:
         one DCB boundary folds one domain enum; a `compile_fail` doctest fences it,
         and `boundary.rs:72-74` is corrected.
@@ -91,7 +91,7 @@ in this file's session log.
       watched failing once.
 - [ ] CF-40's `MetadataLen` is built, with a named wrong implementation per branch.
 - [ ] Both typed-layer open questions are closed.
-- [ ] `cargo-semver-checks` against `0.4.0` reports no major finding.
+- [ ] #95 · `cargo-semver-checks` against `0.4.0` reports no major finding.
 - [ ] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
 

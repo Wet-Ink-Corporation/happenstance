@@ -26,19 +26,19 @@ that is not an adapter — an unnumbered row in the [ADR queue](../ledgers.md#th
 
 Depends on 15 only. Run it alongside 16 and 17.
 
-- [ ] Turn the seed's problem statement into this file's plan. There is no backlog
+- [ ] #200 · Turn the seed's problem statement into this file's plan. There is no backlog
       to put it in: tracking is this file, by D-2.
-- [ ] A skeleton crate: real associated types, `todo!()` bodies, `publish = false`,
+- [ ] #202 · A skeleton crate: real associated types, `todo!()` bodies, `publish = false`,
       and a scoped `#![allow(clippy::todo)]` naming 19b as the phase that removes
       it — the convention `CLAUDE.md` defines for a skeleton.
-- [ ] **The driver.** Whether `rusqlite` reaches a wasm-capable backend with the
+- [ ] #204 · **The driver.** Whether `rusqlite` reaches a wasm-capable backend with the
       right features, or the crate drives `sqlite-wasm-rs` directly. Answered by
       something that compiles.
-- [ ] **The storage and its capabilities.** For each of memory, IndexedDB-backed
+- [ ] #206 · **The storage and its capabilities.** For each of memory, IndexedDB-backed
       and origin-private file system storage, what `REOPEN` and `SECOND_HANDLE`
       answer and why. The file system's synchronous handles exist only in a
       dedicated worker and are exclusive to one opener.
-- [ ] **The gate.** Whether a headless browser in CI is affordable, or a
+- [ ] #208 · **The gate.** Whether a headless browser in CI is affordable, or a
       memory-backed run under the existing `wasm-bindgen-test` wiring
       (`xtask/src/proof.rs`, `WASM_UNIT_TARGETS`) is the bar, with durability
       checked some other way.
@@ -54,15 +54,15 @@ a written verdict on each of the three questions in the crate root.
 Depends on 17 and 19a: it is written against the `0.4.0` surface, not one about to
 change.
 
-- [ ] The event store and the projection store, on the bare `EventStore` flavour,
+- [ ] #211 · The event store and the projection store, on the bare `EventStore` flavour,
       `!Send` and held through `Rc` as `happenstance-cloudflare` does
       (`crates/happenstance-cloudflare/src/sql_storage.rs:1-36`).
-- [ ] Atomicity provided by the adapter. A Durable Object holds other requests
+- [ ] #212 · Atomicity provided by the adapter. A Durable Object holds other requests
       back while storage work is in flight; a browser does not, so every append is
       an explicit transaction completed within one synchronous `poll`, and the
       suite's fault rules are what prove it.
-- [ ] Both conformance suites green on `wasm32`, in the gate.
-- [ ] If it is ready when phase 13 is, it is offered as one of that phase's three
+- [ ] #213 · Both conformance suites green on `wasm32`, in the gate.
+- [ ] #214 · If it is ready when phase 13 is, it is offered as one of that phase's three
       peers.
 
 **Proof artefact (19b).** `event_store_conformance!` and the projection suite green
