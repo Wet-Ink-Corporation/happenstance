@@ -77,8 +77,6 @@ In milestone `0.4.0`, #82 (the 0.3 to 0.4 migration guide) and #91 (or merging
 ## Waiting on the owner
 
 - **Merge #89 and #78** once each is open and green (above).
-- **#80** — a `0.3.3` carrying SQLite's 15 s busy timeout. `wi-052920` already says
-  there is no `0.3.3`; closing #80 against it is the likely answer.
 - **#73** — `assets/brand/happenstance-mark.png` is in no commit and absent from a
   fresh clone. If it exists only on your machine, commit it or discard it.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
