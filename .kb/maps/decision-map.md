@@ -694,6 +694,39 @@ ADR-0085 is an unused gap in the sequence, and 0088 deliberately does not reuse 
 | ADR-0088 | [`kb-decision-0088`](../decisions/0088-github-issues-is-the-tracker.md) | GitHub Issues is the tracker, and the runbook is the plan of record | accepted | — | supersedes `kb-decision-wi-016abe` |
 | — | [`kb-decision-wi-1fde8c`](../decisions/wi-1fde8c-should-unattended-sessions-be-allowed-to-self.md) | Self-merge any green leaf except door:one-way | accepted | — | extends `kb-decision-wi-ab0a5a` beyond phase 15 |
 
+## 2026-10-10: the Weigh-In intake, filed by hand (#76)
+
+The 21 owner decisions staged in `.kb/_intake/decisions/` between 2026-09-30 and 2026-10-10 are
+moved here in phase 15's shape, with bodies verbatim. Each gains `source_paths` naming its intake
+path. `kb-decision-wi-0f1291`, which took the live Neon job out of the required checks until L8,
+is superseded by `kb-decision-wi-6ae424`, which put it back once the fence merged. The owner
+re-added it on 2026-10-10 (#75). `kb-decision-wi-7e9a97` and `kb-decision-wi-f267f3` agree:
+ADR-0084's check lands before `0.4.0`, and #78 lands with it.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| — | [`kb-decision-wi-06b54f`](../decisions/wi-06b54f-fix-the-pre-existing-embedded-spaces-assertion.md) | Fix the embedded-spaces assertion messages in the records commit | accepted | 17 | — |
+| — | [`kb-decision-wi-09d0ff`](../decisions/wi-09d0ff-accept-adr-0087-land-the-es-11-fence-as-a.md) | Accept ADR-0087: the ES-11 fence as a required SqlTransport::reads_settled in 0.4.0, scoped to one transport | accepted | 17 | — |
+| — | [`kb-decision-wi-0f1291`](../decisions/wi-0f1291-the-live-neon-job-is-a-required-check-and.md) | The live Neon job is non-required until L8 | superseded | 17 | superseded by `kb-decision-wi-6ae424` |
+| — | [`kb-decision-wi-172d33`](../decisions/wi-172d33-may-i-edit-the-protect-main-ruleset-via-gh-api.md) | The agent may edit the Protect main ruleset via gh api to drop the Neon check | accepted | 17 | — |
+| — | [`kb-decision-wi-269e5a`](../decisions/wi-269e5a-should-the-first-how-to-pages-choose-a-store.md) | The first how-to pages are written in a follow-up branch | accepted | 22 | — |
+| — | [`kb-decision-wi-3c4f18`](../decisions/wi-3c4f18-which-prior-mental-model-should-boundaries-not.md) | boundaries-not-aggregates.md argues against DDD aggregates | accepted | 22 | — |
+| — | [`kb-decision-wi-468719`](../decisions/wi-468719-accept-or-decline-adr-0081-48-stores-run-on-the.md) | Accept ADR-0081, ADR-0083, ADR-0084 and ADR-0086 | accepted | 17 | — |
+| — | [`kb-decision-wi-51f0e9`](../decisions/wi-51f0e9-add-tokio-s-test-util-feature-to-happenstance.md) | Add tokio's test-util to happenstance-neon's dev-dependency | accepted | 17 | — |
+| — | [`kb-decision-wi-557b41`](../decisions/wi-557b41-should-the-deployed-leg-wait-for-the-cloudflare.md) | Fix the Cloudflare token's IP filter, re-run, then merge | accepted | 17 | — |
+| — | [`kb-decision-wi-642765`](../decisions/wi-642765-approve-the-two-lint-exceptions-in-xtask-src.md) | Accept the two xtask lint exceptions as pre-existing | accepted | 22 | — |
+| — | [`kb-decision-wi-6ae424`](../decisions/wi-6ae424-once-the-fence-merges-will-you-re-add.md) | Re-add the live Neon check to Protect main once the fence merges | accepted | 17 | supersedes `kb-decision-wi-0f1291` |
+| — | [`kb-decision-wi-76ce06`](../decisions/wi-76ce06-delete-the-48-merged-closed-branches-on-the.md) | The agent may delete the 48 merged branches | accepted | 17 | — |
+| — | [`kb-decision-wi-7e9a97`](../decisions/wi-7e9a97-should-adr-0084-s-adapter-side-postgres.md) | ADR-0084's Postgres parameter-count check lands before 0.4.0 | accepted | 17 | — |
+| — | [`kb-decision-wi-863ab8`](../decisions/wi-863ab8-es-12-s-falsifier-query-items-share-one.md) | Record ES-12's fired falsifier in a docs PR now | accepted | 17 | — |
+| — | [`kb-decision-wi-8cdf0a`](../decisions/wi-8cdf0a-should-the-four-reconciled-personas-be-promoted.md) | The four reconciled personas stay a draft until phase 20 observes one | accepted | 22 | — |
+| — | [`kb-decision-wi-924849`](../decisions/wi-924849-add-trybuild-as-a-dev-dependency-so-the-compile.md) | The compile_fail doctests stay hand-verified; no trybuild | accepted | 17 | — |
+| — | [`kb-decision-wi-aaeb7a`](../decisions/wi-aaeb7a-approve-the.md) | Approve #[expect(clippy::panic)] on ProjectionId::from_static's panicking arm | accepted | 17 | — |
+| — | [`kb-decision-wi-bde4fa`](../decisions/wi-bde4fa-approve-rewriting-the-racing-mutants-in.md) | Rewrite the racing mutants to a deterministic rendezvous (TST-10) | accepted | 17 | — |
+| — | [`kb-decision-wi-c11a24`](../decisions/wi-c11a24-is-the-namespaced-store-api-shaped-right-for-a.md) | The namespaced-store API is kept as built for 1.0 | accepted | 17 | — |
+| — | [`kb-decision-wi-d09adc`](../decisions/wi-d09adc-should-the-deployed-green-run-record-transcript.md) | The deployed green-run record lands in #35 before merge | accepted | 17 | — |
+| — | [`kb-decision-wi-f267f3`](../decisions/wi-f267f3-does-adr-0084-s-postgres-parameter-count-check.md) | #89 and #78 both land before 0.4.0 | accepted | 17 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

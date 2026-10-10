@@ -4,10 +4,12 @@ title: "Docs PR now"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"ES-12's falsifier (query_items_share_one_snapshot red on Neon) has fired in CI but the spec marker, Neon's README and the open question still say it passes. Record that now in a small docs PR, or leave it for L8's ADR?\", facing ES-12's falsifier has fired, but the spec marker and Neon's README still say the rule passes, we decided for Docs PR now and neglected Leave for L8, on the premise that The spec should say what is true now, accepting that if wrong: L8's ADR rewrites the same lines."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-863ab8-es-12-s-falsifier-query-items-share-one.md
 last_reviewed: "2026-10-07"
 reversibility: high
 phase: null

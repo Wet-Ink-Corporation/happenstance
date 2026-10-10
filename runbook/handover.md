@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`feature/friendly-wright-9lsxua`, on `f25fa10` (`main`, where PR #215 merged). 2026-10-10.
+`feature/friendly-wright-9lsxua`, on `1fe405a` (`main`, where PR #217 merged). 2026-10-10.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in issues #61–#214. This file, the status table and the phase files
@@ -79,20 +79,6 @@ In milestone `0.4.0`, #82 (the 0.3 to 0.4 migration guide) and #91 (or merging
 - **Merge #89 and #78** once each is open and green (above).
 - **#80** — a `0.3.3` carrying SQLite's 15 s busy timeout. `wi-052920` already says
   there is no `0.3.3`; closing #80 against it is the likely answer.
-- **#74 — delete the 48 merged `lane/*` and `feature/*` branches on the remote.**
-  The owner allowed the agent to do it (`wi-76ce06`), but the session's git proxy
-  accepts pushes to its own branch only, so it still needs your login.
-  Checked on 2026-10-10: every one of them points at exactly the head of a merged
-  PR, or of spike #40 or #50, closed as planned, and each tip stays reachable as
-  `refs/pull/N/head`. Agent sessions are refused the delete. Use your own login:
-  `git push origin --delete` with the names from `git ls-remote --heads origin`,
-  keeping `main` and any branch with an open PR.
-- **#75** — re-add `conformance against a live Neon endpoint` to the `Protect main`
-  ruleset (id 22926481) as a required check (ADR-0087 D8). L8 has landed.
-- **Apply the dependency links** once, with your own `gh` login (agent tools cannot):
-  `scripts/tracker-dependencies.sh references/evaluation/backlog-2026-10-09/dependencies.tsv`.
-  Until then, `status:blocked` labels are the only record of what blocks what.
-- **#76** — the Weigh-In digest from phase 15.
 - **#73** — `assets/brand/happenstance-mark.png` is in no commit and absent from a
   fresh clone. If it exists only on your machine, commit it or discard it.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
@@ -137,7 +123,7 @@ record, and the owner.
 - **Rebasing over a lane that repointed the same citations:** take `main`'s version of each file whose diff is citation-only, recompute the shift from `main`'s copies, and apply it once. Hand-fix ranges whose endpoints fell in deleted text.
 - **Git Bash mangles `rev:path`.** Set `MSYS_NO_PATHCONV=1` for `git show REV:path`.
 - **A hook refuses shell edits whose command text mentions a `.rs` path,** even in markdown. Use the Edit tool.
-- **Live Neon is not a required check yet.** L8's ES-11 fence landed in #57, which fixed the race behind `query_items_share_one_snapshot` and `read_result_is_stable_under_concurrent_append`. The job stays out of the `Protect main` ruleset (id 22926481, `wi-0f1291`) until the owner re-adds it (#75). A Neon red on a PR still needs a look before merging.
+- **Live Neon is a required check again** (#75, 2026-10-10, ADR-0087 D8). A Neon outage or an expired `NEON_*` secret now blocks merges; fix the endpoint or secret rather than dropping the check, which would need the owner.
 - **The CI base-commit semver step is advisory** while `0.4.0` is unpublished (a crates.io probe). The release trace comes from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`.
 
 - **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal, the hidden emitter renames, and `happenstance-cloudflare`'s `planned_statement_count` values (ADR-0079).

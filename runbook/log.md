@@ -10,6 +10,22 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-10 — the owner's list, worked through
+
+*Committed on `feature/friendly-wright-9lsxua`, on `1fe405a`.* Phase 17.
+
+The owner deleted the 49 merged branches; only `main` remains (#74). They re-added the live Neon
+check to the `Protect main` ruleset (#75). The dependency-links script reported all 155 links
+already present, so the handover's line asking for it was stale. The 21 Weigh-In atoms staged in
+`.kb/_intake/decisions/` are filed into `.kb/decisions/` with a decision-map section, and
+`wi-0f1291` is superseded by `wi-6ae424` (#76).
+
+**Verified.** `git ls-remote --heads origin`; the script's output as the owner pasted it;
+`cargo xtask lints` and `cargo xtask lint-kb`. The ruleset change rests on the owner's word: no
+agent tool here reads rulesets.
+
+---
+
 ## 2026-10-10 — housekeeping before the `0.4.0` release
 
 *Committed on `feature/friendly-wright-9lsxua`, on `f25fa10`.* Phase 17.

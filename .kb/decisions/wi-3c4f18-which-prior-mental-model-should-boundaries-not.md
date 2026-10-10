@@ -4,10 +4,12 @@ title: "DDD aggregates"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Which prior mental model should boundaries-not-aggregates.md argue against — DDD aggregates, stream-per-entity, or none stated?\", facing the prior-model page is HS-I0007's open question; the landing page already contrasts with aggregates, we decided for DDD aggregates and neglected Stream-per-entity; None stated, on the premise that most readers come from DDD, accepting that if wrong: stream-per-entity readers find no bridge."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-3c4f18-which-prior-mental-model-should-boundaries-not.md
 last_reviewed: "2026-09-30"
 reversibility: high
 phase: null

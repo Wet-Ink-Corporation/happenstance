@@ -4,10 +4,12 @@ title: "Approve the: A: approve #[expect(clippy::panic)] on from_static's panick
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Approve the\", facing the question an agent raised, we decided for A: approve #[expect(clippy::panic)] on from_static's panicking arm."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-aaeb7a-approve-the.md
 last_reviewed: "2026-10-08"
 reversibility: high
 phase: null

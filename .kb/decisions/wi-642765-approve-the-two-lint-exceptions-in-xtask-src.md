@@ -4,10 +4,12 @@ title: "Accept as pre-existing"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Approve the two lint exceptions in xtask/src/lints.rs (lines 3166 and 3862, from commit 230065f on main), or move the temper gate's comparison point to 230065f?\", facing the temper gate scan is red only on two exceptions that came with 230065f, not with this branch, we decided for Accept as pre-existing and neglected Revert the citation fix; Fix them here, on the premise that they are 230065f's to answer for, accepting that if wrong: two unreviewed exceptions stay approved."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-642765-approve-the-two-lint-exceptions-in-xtask-src.md
 last_reviewed: "2026-09-30"
 reversibility: high
 phase: null
