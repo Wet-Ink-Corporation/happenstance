@@ -4,10 +4,12 @@ title: "Keep hand-verified"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Add `trybuild` as a dev-dependency so the `compile_fail` doctests on SqliteBatch::push and NeonWriteBatch::push pin their error codes (E0308/E0616), which stable rustdoc does not check?\", facing stable rustdoc does not check compile_fail error codes; trybuild would pin them, we decided for Keep hand-verified and neglected Add trybuild, on the premise that the doctests rarely change, accepting that if wrong: a doctest fails for the wrong reason and hides a regression."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-924849-add-trybuild-as-a-dev-dependency-so-the-compile.md
 last_reviewed: "2026-10-08"
 reversibility: high
 phase: null

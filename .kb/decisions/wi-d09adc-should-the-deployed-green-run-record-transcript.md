@@ -4,10 +4,12 @@ title: "Add to #35 before merge"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Should the deployed green-run record (transcript under experiments/durable-object-limits/results/, run URL in handover and phase-17 log, exit-criterion ticks) land in PR #35 before merge, or in a later commit?\", facing the L6b plan says to record the green run, and the deployed leg just produced it, we decided for Add to #35 before merge and neglected Separate PR after merge, on the premise that #35 should close L6b completely, accepting that if wrong: One more CI run (~20 min)."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-d09adc-should-the-deployed-green-run-record-transcript.md
 last_reviewed: "2026-10-06"
 reversibility: high
 phase: null

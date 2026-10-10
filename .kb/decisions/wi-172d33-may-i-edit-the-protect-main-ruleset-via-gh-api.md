@@ -4,10 +4,12 @@ title: "I edit it via gh api"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"May I edit the \"Protect main\" ruleset via gh api to drop the live Neon check from required status checks (wi-0f1291 decided B)?\", facing wi-0f1291 decided to make the live Neon check non-required until L8, which needs an edit to the 'Protect main' ruleset, we decided for I edit it via gh api and neglected You edit it in Settings, on the premise that You're fine with me changing repository settings, accepting that if wrong: Revert with one gh api call."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-172d33-may-i-edit-the-protect-main-ruleset-via-gh-api.md
 last_reviewed: "2026-10-07"
 reversibility: high
 phase: null

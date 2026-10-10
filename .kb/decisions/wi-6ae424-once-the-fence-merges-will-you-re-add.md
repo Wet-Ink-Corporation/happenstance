@@ -4,14 +4,17 @@ title: "Re-add now"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Once the fence merges, will you re-add `conformance against a live Neon endpoint` to the `Protect main` ruleset (id 22926481) as a required check (ADR-0087 D8, wi-0f1291)?\", facing the live Neon job was dropped from required checks while ES-11 failed on it; the fence that fixes it is on main, we decided for Re-add now and neglected Keep non-required, on the premise that the job is green on main, accepting that if wrong: a Neon outage blocks merges; drop it again."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-6ae424-once-the-fence-merges-will-you-re-add.md
 last_reviewed: "2026-10-08"
 reversibility: high
 phase: null
-supersedes: []
+supersedes:
+  - kb-decision-wi-0f1291
 superseded_by: null
 weighin_item: "wi-6ae424"
 question: "Once the fence merges, will you re-add `conformance against a live Neon endpoint` to the `Protect main` ruleset (id 22926481) as a required check (ADR-0087 D8, wi-0f1291)?"

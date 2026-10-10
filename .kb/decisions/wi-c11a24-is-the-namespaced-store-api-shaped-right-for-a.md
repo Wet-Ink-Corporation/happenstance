@@ -4,10 +4,12 @@ title: "Keep as built"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Is the namespaced-store API shaped right for a 1.0 promise: CloudflareEventStore::namespaced(sql, &TableNamespace), names {ns}_event/_event_tag/_store_meta/_event_type_idx, alphabet [a-z][a-z0-9_]*, max 32 bytes, no 'sqlite' prefix?\", facing it ships in 0.4.0 and becomes a 1.0 promise; after publish, any change is breaking, we decided for Keep as built and neglected Rename or reshape before merge, on the premise that a narrow validated prefix is what tenants need, accepting that if wrong: a wider alphabet later is additive; narrowing is not."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-c11a24-is-the-namespaced-store-api-shaped-right-for-a.md
 last_reviewed: "2026-10-02"
 reversibility: low
 phase: null

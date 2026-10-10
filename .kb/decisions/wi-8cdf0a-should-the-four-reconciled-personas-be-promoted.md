@@ -4,10 +4,12 @@ title: "Keep as draft"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Should the four reconciled personas be promoted into .kb/product/ now, as the approved plan said, or stay as a draft in runbook/phases/22-docs-site.md until phase 20's friction log observes one?\", facing the approved plan said to promote personas to .kb/product/; the layer's README forbids unevidenced ones, we decided for Keep as draft and neglected Promote now, on the premise that the layer's rule stands, accepting that if wrong: the next initiative re-derives them."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-8cdf0a-should-the-four-reconciled-personas-be-promoted.md
 last_reviewed: "2026-09-30"
 reversibility: high
 phase: null

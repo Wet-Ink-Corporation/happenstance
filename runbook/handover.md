@@ -12,9 +12,9 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`feature/confident-gauss-6dbnsw`, on `c04cb91` (`main`, where PR #60 merged). 2026-10-09.
+`feature/friendly-wright-9lsxua`, on `1fe405a` (`main`, where PR #217 merged). 2026-10-10.
 
-**GitHub Issues is now the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
+**GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in issues #61–#214. This file, the status table and the phase files
 are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
@@ -22,65 +22,66 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 Seven crates are published at `0.3.2`. `EventStore` has been frozen since `0.2.0`,
 and `ProjectionStore` since `0.3.0`. Phases 0–12, 15 and 16 are done; **phase 17
-is in progress**. What remains is sequenced in [`roadmap.md`](roadmap.md): the
-breaking window released as `0.4.0` (17), its additive half (17b), then the typed
+is in progress** and its code is all on `main`: only the `0.4.0` release is left.
+Phases 20 and 22 run alongside it. What remains is sequenced in
+[`roadmap.md`](roadmap.md): `0.4.0` (17), its additive half (17b), then the typed
 runner (18), sync (13) and retention (14), and `1.0.0` (21) last.
 
 **Phase 17 is split at its release** ([ADR-0072](../.kb/decisions/0072-phase-17-is-split-at-the-release.md)).
 Phase 17 keeps what breaks or changes behaviour on a published crate, plus the
 `workerd` job, and ends at `0.4.0`. Phase 17b takes the additive items.
 
-**The owner's calls at kickoff:** spike the ES-11 fence on Neon (ask again if it
-fails); promise `AppendError::Busy`, with the typed commit loop retrying it inside
-`Retry`. **L8 has landed** (#57, the ES-11 fence), so the live Neon job's known
-race is fixed on `main`; it becomes a required check again when the owner re-adds
-it to the ruleset (`wi-0f1291`).
+**The tracker, counted on 2026-10-10:** 154 open issues. 24 are
+`status:ready-for-agent`, 7 `status:ready-for-human`, 26 `status:needs-owner`,
+2 `status:needs-triage` and 95 `status:blocked`, most of them behind the
+`0.4.0` release or phase 18. The query, not this count, is the answer.
 
 ## In flight
 
-Nothing. Phase 17's work is on `main`; only the `0.4.0` release is left.
-- **Merged on 2026-10-07:** #41, #42, #46, #47, #49, #52.
-- **Merged on 2026-10-08:**
-  - #53 (L10, ADR-0082);
-  - #43 (ADR-0083), #44 (ADR-0084), #45 (ADR-0086);
-  - #55 (the owner's decision intake);
-  - #48 (L9, ADR-0081);
-  - #51 (ADR-0087; ADR-0061 superseded);
-  - #57 (the ES-11 fence; ES-11 and ES-12 frozen);
-  - #58 (deterministic racing mutants).
-- **Closed unmerged, as planned:** spike #50.
-- **The full gate** passes on `527dc08`.
-- **Known, not this phase's:** the default-features doc build of `happenstance`
-  fails on `lib.rs:111`'s `Projection::apply` link. The deployed `workerd` leg met
-  one unclassified Cloudflare HTML 500 on #51; it passed on re-run. Printing the
-  page `<title>` on a failure is the proposed follow-up.
+Nothing on a branch. PR #216, from a fork, is open: a one-line fix for #91 (the
+`Projection::apply` link that breaks `happenstance`'s default-features doc build). It
+needs a maintainer's review and a CI run approval.
+- **Merged on 2026-10-09:** #60 (the tracker vocabulary and seeded backlog) and #215
+  (ADR-0088, held by `cargo xtask lints`).
+- **Merged on 2026-10-07 and 2026-10-08:** phase 17's last lanes. See `log.md`.
+- **Known, not this phase's:** the deployed `workerd` leg meets Cloudflare
+  propagation answers. #217 adds error 1104, "Script not found", as the fourth answer it
+  retries (`harness/workerd/platform-miss.mjs`). The HTML 500 that #51 met is still
+  unclassified; #94 prints the page `<title>` of the next one.
 
 ## Next action
 
-Take the first issue the ready-for-agent query returns ([`afk.md`](afk.md) § *Taking work*):
+The `0.4.0` release (epic #61) is the owner's. **The owner decided on 2026-10-10
+(`wi-f267f3`) that both pending breaks land first**, so the release waits on two PRs:
+
+1. **#89** — ADR-0084's Postgres parameter-count check: refuse surplus parameters on
+   a projection batch. It fills the trace table's one pending row.
+2. **#78** — `happenstance-neon` stops exporting `ProbeThenWriteStore`.
+3. Then #96 (the release PR: trace table, heading, install lines), #97 (tag and
+   publish) and #87.
+
+#89 and #78 are `door:one-way` and `semver:breaking`: each is its own PR, carries
+its `CHANGELOG.md` trace row, and is left for the owner to merge. #84 is answered
+by the same decision.
+
+Until then, an agent takes the first issue the ready-for-agent query returns
+([`afk.md`](afk.md) § *Taking work*):
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
 ```
 
-Work milestone `0.4.0` first. The release itself is epic #61, and it is the owner's:
-
-1. Release `0.4.0`. The trace table in `CHANGELOG.md`'s `[Unreleased]` carries every
-   break; its one pending row, ADR-0084's Postgres parameter-count check, is accepted
-   and owed, and either lands first or is recorded as left for after the release.
+In milestone `0.4.0`, #82 (the 0.3 to 0.4 migration guide) and #91 (or merging
+#216) should land before the release PR.
 
 ## Waiting on the owner
 
-- **Apply the dependency links** once, with your own `gh` login (agent tools cannot):
-  `scripts/tracker-dependencies.sh references/evaluation/backlog-2026-10-09/dependencies.tsv`.
-  Until then, `status:blocked` labels are the only record of what blocks what.
-- Re-add `conformance against a live Neon endpoint` to the `Protect main` ruleset
-  (id 22926481) as a required check (ADR-0087 D8).
-- Decide whether ADR-0084's Postgres parameter-count check lands before `0.4.0`.
+- **Merge #89 and #78** once each is open and green (above).
+- **#73** — `assets/brand/happenstance-mark.png` is in no commit and absent from a
+  fresh clone. If it exists only on your machine, commit it or discard it.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; VT-30 is a
   deprecated alias; new CI jobs are not required checks.
-- Still open from phase 15: the Weigh-In digest; the merged `lane/*` branches; the untracked `runbook/phase-15-afk-prompt.md` and `assets/brand/happenstance-mark.png`.
 
 ## Do not re-open
 
@@ -120,7 +121,7 @@ record, and the owner.
 - **Rebasing over a lane that repointed the same citations:** take `main`'s version of each file whose diff is citation-only, recompute the shift from `main`'s copies, and apply it once. Hand-fix ranges whose endpoints fell in deleted text.
 - **Git Bash mangles `rev:path`.** Set `MSYS_NO_PATHCONV=1` for `git show REV:path`.
 - **A hook refuses shell edits whose command text mentions a `.rs` path,** even in markdown. Use the Edit tool.
-- **Live Neon flakes on the ES-11/ES-12 race** (`query_items_share_one_snapshot`, `read_result_is_stable_under_concurrent_append`) until L8 lands its fence. Re-run it; don't chase it. **It is not a required check until then** (`wi-0f1291`, 2026-10-06: dropped from the `Protect main` ruleset, id 22926481). When L8 lands, the owner re-adds it to that ruleset and confirms it is required; a Neon red on a PR still needs a look before merging.
+- **Live Neon is a required check again** (#75, 2026-10-10, ADR-0087 D8). A Neon outage or an expired `NEON_*` secret now blocks merges; fix the endpoint or secret rather than dropping the check, which would need the owner.
 - **The CI base-commit semver step is advisory** while `0.4.0` is unpublished (a crates.io probe). The release trace comes from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`.
 
 - **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal, the hidden emitter renames, and `happenstance-cloudflare`'s `planned_statement_count` values (ADR-0079).

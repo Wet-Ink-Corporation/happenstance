@@ -2,17 +2,19 @@
 id: "kb-decision-wi-0f1291"
 title: "Non-required until L8"
 kind: decision
-status: accepted
+status: superseded
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"The live Neon job is a required check and flaked on 2 of 3 runs today (the known ES-11/ES-12 race, ADR-0061). Keep it required and re-run until L8's fence lands, make it non-required until then, or pull L8 forward?\", facing the live Neon job is a required check and fails intermittently on a race ADR-0061 already records, so it can block PRs that touch no Neon code, we decided for Non-required until L8 and neglected Keep required, re-run; Pull L8 forward, on the premise that Re-runs cost more than a real Neon regression slipping through, accepting that if wrong: A real Neon break can merge unnoticed."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-0f1291-the-live-neon-job-is-a-required-check-and.md
 last_reviewed: "2026-10-06"
 reversibility: high
 phase: null
 supersedes: []
-superseded_by: null
+superseded_by: "kb-decision-wi-6ae424"
 weighin_item: "wi-0f1291"
 question: "The live Neon job is a required check and flaked on 2 of 3 runs today (the known ES-11/ES-12 race, ADR-0061). Keep it required and re-run until L8's fence lands, make it non-required until then, or pull L8 forward?"
 door: two-way

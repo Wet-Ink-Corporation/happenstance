@@ -4,10 +4,12 @@ title: "Fix in the records commit"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Fix the pre-existing embedded-spaces assertion messages in query_sql.rs (reviewer F4) now, or leave them for a follow-up?\", facing two assertion strings embed runs of spaces from a lost line continuation, we decided for Fix in the records commit and neglected Leave for a follow-up, on the premise that A records commit goes into #35, accepting that if wrong: Rust diff grows; re-review needed."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-06b54f-fix-the-pre-existing-embedded-spaces-assertion.md
 last_reviewed: "2026-10-06"
 reversibility: high
 phase: null
