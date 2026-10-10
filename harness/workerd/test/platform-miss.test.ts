@@ -11,7 +11,12 @@ import { LISTING_ATTEMPTS, callPastPropagation, isPlatformMiss } from "../platfo
 const PROPAGATING_PAGE =
   '<!DOCTYPE html><html><head><title>Page not found</title></head><body><h1>There is nothing here yet</h1><p>If you expect something to be here, it may take some time.</p></body></html>';
 
-type Answer = { status: number; body: string };
+// The page run 38076989779 (job 114285992747) got on the listing, cut to its
+// title and code.
+const SCRIPT_NOT_FOUND_PAGE =
+  '<!DOCTYPE html><html><head><title>Script not found | happenstance-workerd-harness.example.workers.dev | Cloudflare</title></head><body><h1><span class="cf-error-type" data-translate="error">Error</span> <span class="cf-error-code">1104</span></h1><h2 class="cf-subheadline" data-translate="error_desc">Script not found</h2></body></html>';
+
+type Answer ={ status: number; body: string };
 
 // A `call` that answers from a script, one entry per request, and counts them.
 function scripted(answers: Answer[]) {
@@ -31,6 +36,13 @@ describe("isPlatformMiss", () => {
     expect(isPlatformMiss(500, "Worker not found.\n")).toBe(true);
     expect(isPlatformMiss(404, PROPAGATING_PAGE)).toBe(true);
     expect(isPlatformMiss(500, "Durable Object reset because its code was updated.")).toBe(true);
+    expect(isPlatformMiss(500, SCRIPT_NOT_FOUND_PAGE)).toBe(true);
+  });
+
+  it("matches the script-not-found page only as Cloudflare serves it", () => {
+    // A rule's own failure that merely says the words is the rule's failure.
+    expect(isPlatformMiss(500, "Rust panic: Script not found (error 1104)")).toBe(false);
+    expect(isPlatformMiss(200, SCRIPT_NOT_FOUND_PAGE)).toBe(false);
   });
 
   it("matches the reset only as the platform words it", () => {
