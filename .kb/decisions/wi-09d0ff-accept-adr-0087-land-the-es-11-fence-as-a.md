@@ -4,10 +4,12 @@ title: "Accept ADR-0087 (land the ES-11 fence as a required SqlTransport::reads_
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Accept ADR-0087 (land the ES-11 fence as a required SqlTransport::reads_settled in 0.4.0), and is a guarantee scoped to one transport enough for Neon's ES-11 claim (D3)?\", facing the question an agent raised, we decided for A: accept ADR-0087, fence as required SqlTransport::reads_settled in 0.4.0, scoped to one transport (D3)."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-09d0ff-accept-adr-0087-land-the-es-11-fence-as-a.md
 last_reviewed: "2026-10-08"
 reversibility: high
 phase: null

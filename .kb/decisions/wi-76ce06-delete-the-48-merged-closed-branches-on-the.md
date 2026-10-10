@@ -4,10 +4,12 @@ title: "Allow the agent"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Delete the 48 merged/closed branches on the remote (#74)?\", facing 48 merged or closed branches remain on the remote; the agent cannot delete them, we decided for Allow the agent and neglected You delete them; Keep them, on the premise that you want agents to prune branches routinely, accepting that if wrong: agents gain a destructive git permission beyond this task."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-76ce06-delete-the-48-merged-closed-branches-on-the.md
 last_reviewed: "2026-10-10"
 reversibility: low
 phase: null

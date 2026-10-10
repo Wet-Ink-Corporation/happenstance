@@ -4,10 +4,12 @@ title: "Follow-up branch"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Should the first how-to pages (choose-a-store, rebuild-a-read-model, retry-a-command, pass-the-conformance-suite, run-on-a-durable-object) be written on this branch before it merges, or in a follow-up?\", facing you asked for user documentation; I stopped at the infrastructure and five existing pages, we decided for Follow-up branch and neglected This branch, on the premise that a smaller reviewable merge matters, accepting that if wrong: first deploy is thin on how-tos."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-269e5a-should-the-first-how-to-pages-choose-a-store.md
 last_reviewed: "2026-09-30"
 reversibility: high
 phase: null

@@ -4,10 +4,12 @@ title: "Land before 0.4.0"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Should ADR-0084's adapter-side Postgres parameter-count check land before 0.4.0 is released, or ship after it?\", facing ADR-0084 is accepted; its Postgres parameter-count check is the trace table's one Pending row, we decided for Land before 0.4.0 and neglected Release first, on the premise that the check is small (one adapter, one test), accepting that if wrong: release slips by a PR cycle."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-7e9a97-should-adr-0084-s-adapter-side-postgres.md
 last_reviewed: "2026-10-08"
 reversibility: high
 phase: null

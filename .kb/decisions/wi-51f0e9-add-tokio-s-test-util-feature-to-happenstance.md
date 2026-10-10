@@ -4,10 +4,12 @@ title: "Add test-util"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Add tokio's `test-util` feature to happenstance-neon's dev-dependency so `a_hung_read_times_out_and_settles` runs on paused time?\", facing the reviewer flagged a 1 ms real-time tokio timeout in a test (TST-10); paused time needs tokio's test-util feature, we decided for Add test-util and neglected Keep the real timer, on the premise that you want the TST-10 rule met literally, accepting that if wrong: one more dev feature for a 1 ms wait."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-51f0e9-add-tokio-s-test-util-feature-to-happenstance.md
 last_reviewed: "2026-10-08"
 reversibility: high
 phase: null

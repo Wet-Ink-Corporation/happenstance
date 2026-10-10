@@ -4,10 +4,12 @@ title: "Accept or decline ADR-0081 (#48: stores run on the runtime they're calle
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Accept or decline ADR-0081 (#48: stores run on the runtime they're called on, and the Postgres pool limit is documented rather than fixed), and ADR-0083, ADR-0084 and ADR-0086 (#43,\", facing the question an agent raised, we decided for A: accept ADR-0081, ADR-0083, ADR-0084, ADR-0086."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-468719-accept-or-decline-adr-0081-48-stores-run-on-the.md
 last_reviewed: "2026-10-08"
 reversibility: high
 phase: null

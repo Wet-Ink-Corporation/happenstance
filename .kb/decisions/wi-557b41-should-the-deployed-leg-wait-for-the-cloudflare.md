@@ -4,10 +4,12 @@ title: "Fix the token, re-run, then merge"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Should the deployed leg wait for the Cloudflare token's IP filter to be lifted, or should\", facing the deployed leg is the only measurement of the platform row wall, and CI's token is refused by an IP filter, we decided for Fix the token, re-run, then merge and neglected Merge #34 red now; deployed leg follows, on the premise that the token fix takes minutes, accepting that if wrong: L6b waits on a credential."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-557b41-should-the-deployed-leg-wait-for-the-cloudflare.md
 last_reviewed: "2026-10-02"
 reversibility: high
 phase: null

@@ -4,10 +4,12 @@ title: "Both land before 0.4.0"
 kind: decision
 status: accepted
 authority_tier: decision
+adr_id: null
 summary: "In the context of \"Does ADR-0084's Postgres parameter-count check (#89) land before 0.4.0, and does happenstance-neon stop exporting ProbeThenWriteStore (#78) in the same release?\", facing two breaking changes are pending and 0.4.0 is the last release that can carry a break before 1.0.0, we decided for Both land before 0.4.0 and neglected #84 deferred, #78 lands; Both deferred, on the premise that you want 1.0.0's surface clean and can spare two more PRs, accepting that if wrong: release slips by two PRs for changes nobody needed."
 depends_on: []
 related: []
-source_paths: []
+source_paths:
+  - .kb/_intake/decisions/wi-f267f3-does-adr-0084-s-postgres-parameter-count-check.md
 last_reviewed: "2026-10-10"
 reversibility: low
 phase: null
