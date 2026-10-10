@@ -1,7 +1,7 @@
 # Brand assets
 
-The shipped artwork for the happenstance identity. All SVG; wordmarks are outlined
-paths, so nothing here needs a font installed at the point of use.
+The shipped artwork for the happenstance identity. All SVG but one raster export;
+wordmarks are outlined paths, so nothing here needs a font installed at the point of use.
 
 | File | Use |
 | --- | --- |
@@ -13,6 +13,7 @@ paths, so nothing here needs a font installed at the point of use.
 | `happenstance-mark-compact.svg` | Mark, compact weight. 32px and below |
 | `happenstance-mark-mono.svg` | Mark in a single inherited colour via `currentColor` |
 | `favicon.svg` | Ink badge for browser chrome, avatars and app icons |
+| `happenstance-mark.png` | The primary mark as an 800×800 transparent PNG, exported from `happenstance-mark.svg`. For places that take no SVG: rustdoc's `html_logo_url`, avatars, social cards. The SVG is the source; re-export rather than edit |
 
 ## Choosing a lockup for light and dark
 
