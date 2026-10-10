@@ -44,16 +44,25 @@ needs a maintainer's review and a CI run approval.
 - **Merged on 2026-10-09:** #60 (the tracker vocabulary and seeded backlog) and #215
   (ADR-0088, held by `cargo xtask lints`).
 - **Merged on 2026-10-07 and 2026-10-08:** phase 17's last lanes. See `log.md`.
-- **Known, not this phase's:** the deployed `workerd` leg met one unclassified
-  Cloudflare HTML 500 on #51; it passed on re-run. #94 prints the page `<title>`.
+- **Known, not this phase's:** the deployed `workerd` leg meets Cloudflare
+  propagation answers. #217 adds error 1104, "Script not found", as the fourth answer it
+  retries (`harness/workerd/platform-miss.mjs`). The HTML 500 that #51 met is still
+  unclassified; #94 prints the page `<title>` of the next one.
 
 ## Next action
 
-The `0.4.0` release (epic #61) is the owner's, and it waits on one decision:
+The `0.4.0` release (epic #61) is the owner's. **The owner decided on 2026-10-10
+(`wi-f267f3`) that both pending breaks land first**, so the release waits on two PRs:
 
-1. **Decide #84:** does ADR-0084's Postgres parameter-count check (#89) land before
-   `0.4.0`, or is it recorded as left for after? Either answer unblocks #96 (the
-   release PR), then #97 (tag and publish) and #87.
+1. **#89** — ADR-0084's Postgres parameter-count check: refuse surplus parameters on
+   a projection batch. It fills the trace table's one pending row.
+2. **#78** — `happenstance-neon` stops exporting `ProbeThenWriteStore`.
+3. Then #96 (the release PR: trace table, heading, install lines), #97 (tag and
+   publish) and #87.
+
+#89 and #78 are `door:one-way` and `semver:breaking`: each is its own PR, carries
+its `CHANGELOG.md` trace row, and is left for the owner to merge. #84 is answered
+by the same decision.
 
 Until then, an agent takes the first issue the ready-for-agent query returns
 ([`afk.md`](afk.md) § *Taking work*):
@@ -67,12 +76,12 @@ In milestone `0.4.0`, #82 (the 0.3 to 0.4 migration guide) and #91 (or merging
 
 ## Waiting on the owner
 
-- **#84** — the decision above.
-- **#78** — whether `happenstance-neon` stops exporting `ProbeThenWriteStore`. It is
-  breaking, so its only window before `1.0.0` is `0.4.0`: decide it with #84.
+- **Merge #89 and #78** once each is open and green (above).
 - **#80** — a `0.3.3` carrying SQLite's 15 s busy timeout. `wi-052920` already says
   there is no `0.3.3`; closing #80 against it is the likely answer.
 - **#74 — delete the 48 merged `lane/*` and `feature/*` branches on the remote.**
+  The owner allowed the agent to do it (`wi-76ce06`), but the session's git proxy
+  accepts pushes to its own branch only, so it still needs your login.
   Checked on 2026-10-10: every one of them points at exactly the head of a merged
   PR, or of spike #40 or #50, closed as planned, and each tip stays reachable as
   `refs/pull/N/head`. Agent sessions are refused the delete. Use your own login:

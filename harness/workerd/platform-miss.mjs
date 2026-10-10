@@ -16,7 +16,12 @@
 //   in-flight request. Runs on PR #44 and PR #46 (37580786041, job
 //   112659800922, `nothing_below_an_observed_position_appears_later`) got it
 //   on one rule each; the request was cut before the rule's result existed,
-//   which is why the retry needs a fresh object rather than the same one.
+//   which is why the retry needs a fresh object rather than the same one;
+// - a `500` HTML page carrying Cloudflare's error code 1104, "Script not
+//   found", which a run on PR #217 (38076989779, job 114285992747) got on the
+//   rule listing after the readiness probe had seen a 200 and one 404 retry.
+//   Matched on the code's own element, which only Cloudflare's error page
+//   carries.
 // Matched exactly. The harness's own 404s (`no such rule`, `no route …`,
 // `expected /do/…`) are plain text and never match, so a rule's own failure (a
 // panic, an unknown rule, a harness fault) is never retried and the strict
@@ -25,7 +30,8 @@ export function isPlatformMiss(status, body) {
   return (
     (status === 500 && body.trim() === "Worker not found.") ||
     (status === 404 && body.includes("<h1>There is nothing here yet</h1>")) ||
-    (status === 500 && body.trim() === "Durable Object reset because its code was updated.")
+    (status === 500 && body.trim() === "Durable Object reset because its code was updated.") ||
+    (status === 500 && body.includes('<span class="cf-error-code">1104</span>'))
   );
 }
 

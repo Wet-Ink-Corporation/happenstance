@@ -21,7 +21,15 @@ corrected (#161). The SY-18 ledger row's citation is repointed to
 checked against their PRs' heads. The delete was refused to the agent, so it
 waits on the owner (#74).
 
-**Verified.** `cargo xtask lints`. No Rust changed, so the gate was not run.
+The owner then decided (`wi-f267f3`) that #89 and #78 both land before `0.4.0`,
+and the handover's next action says so. The deployed `workerd` leg went red on
+this PR with Cloudflare's error 1104, "Script not found", while the fresh Worker
+was still propagating. `platform-miss.mjs` now retries it, pinned by
+`test/platform-miss.test.ts`.
+
+**Verified.** `cargo xtask lints`. `npx vitest run test/platform-miss.test.ts`: 7
+pass, and the new case fails with the matcher removed. No Rust changed, so the gate
+was not run.
 
 ---
 
