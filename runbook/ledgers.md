@@ -313,7 +313,7 @@ says why.
 | SY-7 | freeze-by-13 | ADR-0027. The falsification test is buildable with `MemorySyncPeer` and two adjudicator configurations |
 | SY-10 | freeze-by-13 | Phase 13's exit criteria already require both topologies to be expressible. Fallback: renew against the marker's own test, since a firing makes the permission redundant, not wrong |
 | SY-14 | freeze-by-13 | Measured against the Neon peer. Phase 17's foreign-identity spike must not foreclose a bounded-round-trip ingest path |
-| SY-18 | freeze-by-13 | Phase 13's work list carries a 128 KiB-capped fixture peer for it (`phases/13-sync.md:118-127`). If that peer is not built, this row is renewed past 1.0 against the Turnstile experiment, which is safe because `PeerLimits` is `#[non_exhaustive]` |
+| SY-18 | freeze-by-13 | Phase 13's work list carries a 128 KiB-capped fixture peer for it (`phases/13-sync.md:139-148`). If that peer is not built, this row is renewed past 1.0 against the Turnstile experiment, which is safe because `PeerLimits` is `#[non_exhaustive]` |
 | SY-20 | freeze-by-13 | Phase 13 lands the rule; phase 18, which ungates `Projection`, carries the convergence declaration it needs |
 | SY-21 | freeze-by-18 | Decided at 17 by ADR-0074 and reworded to the *arrival* position, `SequencedEvent::position`, because `EventId::position()` is the origin's; built and frozen at 18 on `Delivered`, with the sync rule landed at 13 |
 | SY-22 | freeze-by-13 | Phase 13 runs the cost-layers test; the declaration's placement is fixed with SY-21 |
