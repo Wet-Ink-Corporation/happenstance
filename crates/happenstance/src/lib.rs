@@ -108,7 +108,7 @@
 //! * [**The typed projection runner**][projection-runner] — decoded events into
 //!   a read model, in chunks, with the rows and the checkpoint moving in one
 //!   commit. Behind `unstable-projection` — not for the port beneath it, which
-//!   is frozen since ADR-0063, but for [`Projection::apply`] being synchronous:
+//!   is frozen since ADR-0063, but for `Projection::apply` being synchronous:
 //!   a projection can push into a buffered batch and cannot issue a statement
 //!   into a live one, and whether that shape survives is the runner's own open
 //!   axis. One call drives one projection, and it never buffers the replay.
