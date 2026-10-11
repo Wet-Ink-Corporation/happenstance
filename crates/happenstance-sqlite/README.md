@@ -7,7 +7,7 @@ storage-agnostic event sourcing library built on the
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.3.2` release set.** This is the first
+> **Status: conformant, and in the `0.4.0` release set.** This is the first
 > happenstance adapter to pass
 > [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)'s
 > conformance suite against a real file on disk — the event store family, the
@@ -31,8 +31,8 @@ storage-agnostic event sourcing library built on the
 ## Features, and the one that costs you a promise
 
 ```toml
-happenstance-sqlite = "0.3"                                # the event store
-happenstance-sqlite = { version = "0.3", features = ["projection-store"] }
+happenstance-sqlite = "0.4"                                # the event store
+happenstance-sqlite = { version = "0.4", features = ["projection-store"] }
 
 rusqlite = "0.40"                                          # only for tables of your own
 ```
