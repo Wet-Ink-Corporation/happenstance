@@ -112,6 +112,27 @@ pre[data-lang="text"], pre:has(> code[data-lang="text"]) { background: var(--mut
 .page-list span { font-size: 13px; color: var(--muted-foreground); }
 .need { margin-bottom: var(--space-2); }
 
+/* Search: the header's box, the drawer's, and the search page. Each form is
+   hidden when scripts cannot run, because without them it would lead only to a
+   page saying so. */
+.header-search { flex: 0 1 200px; min-width: 112px; }
+.header-search .hs-input { height: 32px; font-size: 13px; }
+.header-search .hs-input-wrap__icon { top: 8px; }
+.drawer__search { margin: var(--space-2) 0; }
+.search__form { display: flex; flex-direction: column; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.search__status { min-height: 21px; margin: 0 0 var(--space-4); font-size: 13px; line-height: 21px; color: var(--muted-foreground); }
+.search__results { margin: 0; }
+.search__results:empty { display: none; }
+.search__results span { overflow-wrap: anywhere; }
+.search__results mark { background: var(--sun-soft); color: var(--foreground); border-radius: 2px; }
+/* The results arrive after first paint, so nothing may sit below them on
+   screen to be pushed down: the page holds a screen's height, and in one column
+   the guide's links, which the drawer also carries, are not drawn under it. */
+.docs--search .search { min-height: calc(100vh - 60px); }
+@media (max-width: 820px) { .docs--search .docs__nav { display: none; } }
+@media (max-width: 720px) { .site-search .hs-input { font-size: 16px; } }
+@media (scripting: none) { .site-search { display: none !important; } }
+
 /* 404 */
 .lost { max-width: 72ch; margin: 0 auto; padding: var(--space-20) var(--space-8); }
 

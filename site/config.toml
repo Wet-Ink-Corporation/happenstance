@@ -12,7 +12,7 @@ default_language = "en"
 
 compile_sass = false
 minify_html = false
-build_search_index = false
+build_search_index = true
 generate_feeds = false
 generate_sitemap = true
 generate_robots_txt = true
@@ -40,6 +40,18 @@ internal_level = "error"
 # fails on an aeroplane and goes green when a registry is down.
 external_level = "warn"
 
+# The search index. Zola writes `search_index.en.js` from every page's title and
+# rendered text; `static/js/search.js` reads it with the vendored elasticlunr
+# 0.9.5, the release whose format Zola's index declares. In this format Zola also
+# writes its own minified `elasticlunr.min.js` (0.9.6) beside the index; the site
+# does not load it, because the vendored file, with its licence beside it, is the
+# one this repository can audit.
+[search]
+index_format = "elasticlunr_javascript"
+include_title = true
+include_content = true
+include_description = false
+include_path = false
 
 [extra]
 repository = "https://github.com/Wet-Ink-Corporation/happenstance"

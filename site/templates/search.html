@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} · happenstance{% endblock title %}
+{% block description %}{{ page.description }}{% endblock description %}
+
+{#- The search page. The form is an ordinary GET to this page, so the header's
+    box and a shared `?q=` link both land here; `js/search.js` reads the query,
+    runs it against the index Zola built, and fills the list. Without scripts the
+    form is hidden and the `noscript` paragraph says where every page is listed. -#}
+{% block content %}
+<div class="docs docs--search">
+  <aside class="docs__nav">{% include "partials/sidebar.html" %}</aside>
+
+  <article class="docs__main search">
+    <header class="docs__head">
+      <p class="hs-kicker">The guide</p>
+      <h1 class="title">{{ page.title }}</h1>
+      <p class="lede">{{ page.description }}</p>
+    </header>
+
+    <form class="search__form site-search" role="search" action="{{ page.permalink }}" method="get">
+      <label class="hs-label search__label" for="search-q">Search the documentation</label>
+      <span class="hs-input-wrap">
+        {{ <icon name="search" class="hs-icon hs-input-wrap__icon" /> }}
+        <input class="hs-input hs-input--icon" id="search-q" type="search" name="q" autocomplete="off" spellcheck="false" aria-describedby="search-status" aria-controls="search-results">
+      </span>
+    </form>
+    <noscript><p class="search__status">Search runs in your browser and needs JavaScript. The <a href="{{ get_url(path='@/guide/_index.md') }}">guide's overview</a> lists every page by the question it answers.</p></noscript>
+    <p class="search__status site-search" id="search-status" role="status" aria-live="polite"></p>
+    <ol class="page-list search__results" id="search-results"></ol>
+  </article>
+</div>
+{% endblock content %}
+
+{% block scripts %}
+{#- elasticlunr 0.9.5, MIT, vendored verbatim from the npm release tarball with
+    its LICENSE beside it. The index is loaded on this page only: no other page
+    pays for it. -#}
+<script src="{{ get_url(path='js/elasticlunr/elasticlunr-0.9.5.js') }}" defer></script>
+<script src="{{ get_url(path='search_index.en.js') }}" defer></script>
+<script src="{{ get_url(path='js/search.js') }}" defer></script>
+{% endblock scripts %}

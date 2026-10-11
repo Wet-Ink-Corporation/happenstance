@@ -80,7 +80,10 @@ and its correctness bar, unchanged.
 - [ ] #176 · `boundary-not-aggregate.md` (the issue's name is over `PATH_BUDGET`), the
       prior-model bridge. It argues against the DDD aggregate, matching the landing
       page's second beat (`wi-3c4f18`, the owner, 2026-09-29).
-- [ ] #178 · Search. Zola builds the index; the client library has to be vendored.
+- [x] #178 · Search. Zola builds the index (`search_index.en.js`); elasticlunr
+      0.9.5, the release that index format declares, is vendored verbatim with its
+      MIT licence under `site/static/js/elasticlunr/`. A box in the header and the
+      drawer leads to `/search/`, which alone loads the index.
 - [ ] #168 · The owner sets the repository's Pages source to *GitHub Actions*.
 
 ## Exit criteria
