@@ -1,0 +1,50 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root manifest and adopting this crate as a
+# member — the trick every neighbour under `experiments/` uses, for the same
+# reason. No entry in the root `members` list changes, the root `Cargo.lock` does
+# not move, and nothing here runs under `cargo xtask ci`: `affected.rs` and
+# `spec_trace.rs` both treat `experiments/` as reaching no package.
+[workspace]
+
+[package]
+name = "identifier-validation"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# The contract at this tree, and nothing else (#86 forbids a new dependency, and
+# none is needed: the corpus is literal text and the oracle is `core`'s
+# `char::is_control`). `std` is the only feature the constructors need; `memory`
+# is off because no store is opened here.
+happenstance-core = { path = "../../crates/happenstance-core", default-features = false, features = [
+    "std",
+] }
+
+# The workspace's lint levels, restated: an experiment cargo cannot see from the
+# root does not inherit them, and code cited as evidence is held to the bar of
+# the code it is evidence about. `expect_used`, `as_conversions` and
+# `indexing_slicing` are added because the temper standard denies them in
+# production code and nothing else here would.
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+unwrap_used = "deny"
+expect_used = "deny"
+todo = "deny"
+as_conversions = "deny"
+indexing_slicing = "deny"
+must_use_candidate = "allow"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "warn"
