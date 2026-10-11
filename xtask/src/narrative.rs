@@ -179,3 +179,12 @@ mod text_fences {
 mod upgrading_to_0_4 {
     #![doc = include_str!("../../docs/upgrading-to-0-4.md")]
 }
+
+// The first how-to. Two whole programs: the reply each exhausted or failed
+// command gets, and two deliveries of one request racing, where the second is
+// refused and its re-read finds the first. Dropping the request's item from
+// that boundary admits the second deposit and turns this module red.
+#[cfg(doctest)]
+mod retry_a_command {
+    #![doc = include_str!("../../docs/retry-a-command.md")]
+}
