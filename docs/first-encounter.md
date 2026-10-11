@@ -163,5 +163,6 @@ difference.
 
 Whether a boundary drawn by a query alone has any structure is answered under
 [tag, query, fold, guard, on where the structure is](carry-your-invariant.md#tag-query-fold-guard).
-Whether that makes DCB a modelling technique or a routing one is answered under
+Whether drawing a boundary that way is a modelling technique or a routing one
+is answered under
 [where your streams went, on modelling versus routing](carry-your-invariant.md#where-your-streams-went).

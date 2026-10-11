@@ -230,30 +230,27 @@ pub const MAX_ROWS_EVER: usize = 20;
 
 /// Every pointer installed under the policy above.
 ///
-/// It landed **empty**, and that was the design rather than an omission: each
-/// story that installs a pointer files its own row in the same change that
-/// installs it, so a pre-filled register would be a set of claims nobody had
-/// earned. The rules in [`validate`] are therefore exercised against
-/// deliberately-wrong registers rather than against this one — a rule no register
-/// can fail is decorative.
+/// **A row is filed by the change that installs its pointer, and by no other.**
+/// A row no change installed is a claim nobody earned, so the register carries
+/// only installed pointers. The rules in [`validate`] are exercised against
+/// deliberately-wrong registers as well as this one — a rule no register can fail
+/// is decorative.
 ///
-/// **P3 is the first row, and it is the one place the four forms could not name
-/// the rung.** The href ladder's third rung — a named-but-unlinked
-/// cross-reference — is not a [`PointerForm`] variant, because the enum
-/// enumerates the architecture brief's four *mechanism-table* rows and the ladder
-/// is a different list. A fifth variant would re-open the signed-off mechanism
-/// table for a rung the design's own P3 row already groups with
-/// [`PointerForm::PinnedTreeMarkdown`] ("in-tree markdown link, **or** the
-/// named-unlinked form live at `store.rs:77`"), and both share one guard. So the
-/// row is filed under that variant and the rung it actually took is stated in its
-/// `guard`, where a reviewer reads it.
+/// **P3 is the one row the four forms cannot name the rung of.** The href
+/// ladder's third rung — a named-but-unlinked cross-reference — is not a
+/// [`PointerForm`] variant, because the enum enumerates the architecture brief's
+/// four *mechanism-table* rows and the ladder is a different list. A fifth
+/// variant would re-open the signed-off mechanism table for a rung the design's
+/// own P3 row already groups with [`PointerForm::PinnedTreeMarkdown`] ("in-tree
+/// markdown link, **or** the named-unlinked form live at `store.rs:77`"), and
+/// both share one guard. So the row is filed under that variant and the rung it
+/// actually took is stated in its `guard`, where a reviewer reads it.
 ///
-/// **P4 and P5 are the evaluator's two second questions, named here before either
-/// link was written** (DR-4; `evaluator-onward-links`). The page that answers the
-/// first question is `docs/first-encounter.md`, where a reader watches a boundary
-/// refuse a write, and both questions are provoked by having watched it. Both
-/// are drawn from the three stall points research 03 records as *"named by three
-/// independent people"*, in the stall-point synthesis of
+/// **P4 and P5 carry the evaluator's two second questions** (DR-4;
+/// `evaluator-onward-links`). Both are asked from `docs/first-encounter.md`,
+/// where a reader watches a boundary refuse a write, and both are provoked by
+/// having watched it. They are two of the three stall points research 03 records
+/// as *"named by three independent people"*, in the stall-point synthesis of
 /// `.bklg/docs-that-teach/_discovery/research/03-teaching-the-aggregate-to-boundary-shift-how-dcb-events-disi.md`:
 ///
 /// * **Q-A, row P4** — *is "dynamic" just a polite word for unstructured, and
@@ -265,20 +262,51 @@ pub const MAX_ROWS_EVER: usize = 20;
 ///   answer one home, `docs/carry-your-invariant.md`'s
 ///   `## Where your streams went`.
 ///
-/// **The third stall point is not walked, on purpose.** It is the missing noun
-/// for what an aggregate used to name, and research 03 calls whether this
-/// repository's own nouns land *"a direct probe"* for the friction log — an
-/// observed reader's instrument, not an author's. Answering it here would mean
-/// writing content on a page this register does not own.
+/// **Both links sit in one paragraph of their own at the foot of the page, and
+/// that is the only placement the page's own tests leave.** The design asks for
+/// an inline link at the end of the answering passage, and anti-pattern 5 forbids
+/// a "See also" block at a page's bottom. Three checks in
+/// `xtask/tests/first_encounter.rs` and `xtask/tests/falsification_drill.rs`
+/// close every other slot:
 ///
-/// **`#[doc(alias)]` was considered for both questions and declined.** A
-/// plain-language question is not a string that rustc, the specification or a
-/// recorded reader question emits, and an alias for a concept is the synonym
-/// farming that this module's rule 4 rejects.
+/// * `every_step_closes_on_a_clause_citation` requires each step's own material to
+///   end on a specification link, so no sentence may follow a step's citation
+///   inside the step, and a sentence before it would precede the answer rather
+///   than follow it, against gate (iii).
+/// * `the_drill_is_a_subsection_at_the_bottom_of_step_three` holds the drill as
+///   step 3's last subsection, so the page's answer closes on the drill's last
+///   paragraph and nothing below it belongs to another passage.
+/// * `every_paragraph_holds_its_budget` caps a paragraph at `PARAGRAPH`, 435
+///   characters. The drill's last paragraph and the two linking sentences
+///   together exceed it, so the pair cannot join that paragraph.
 ///
-/// The claim is bounded: two *plausible* second questions now have somewhere to
-/// go. Whether they are an evaluator's real ones is for an observed walk, by
-/// someone other than the author, to say.
+/// What keeps the paragraph from being anti-pattern 5 is that it is not a
+/// block: it has no label, no heading and no list, and each sentence names the
+/// question it answers before its link, which
+/// `each_onward_link_ends_one_sentence_inside_the_word_budget` holds to one
+/// sentence of at most thirty words, ending on the link.
+///
+/// **P5's link quotes the bridge's heading, in its text and in its fragment, and
+/// it is the one line of `docs/first-encounter.md` that carries the word
+/// "streams".** The page names no prior-model vocabulary in its own words
+/// (`neither_surface_names_the_prior_model`), and Q-B's sentence keeps to that. The link text is the destination's own words
+/// on purpose: a reader following an extracted link list must recognise the
+/// heading they land on.
+///
+/// **The third stall point is not walked.** It is the missing noun for what an
+/// aggregate used to name, and research 03 makes whether this repository's own
+/// nouns land *"a direct probe"* for the friction log — an observed reader's
+/// instrument, not an author's. Answering it here would mean writing content on a
+/// page this register does not own.
+///
+/// **Neither question carries a `#[doc(alias)]`.** A plain-language question is
+/// not a string that rustc, the specification or a recorded reader question
+/// emits, and an alias for a concept is the synonym farming that this module's
+/// rule 4 rejects.
+///
+/// The claim is bounded: two *plausible* second questions have somewhere to go.
+/// Whether they are an evaluator's real ones is for an observed walk, by someone
+/// other than the author, to say.
 pub const POINTER_REGISTER: &[Pointer] = &[
     Pointer {
         id: "P3",
@@ -319,6 +347,8 @@ pub const POINTER_REGISTER: &[Pointer] = &[
                 Rung actually taken: rung 2, an in-tree markdown link with a heading fragment, \
                 because the destination is a page and not a Rust item",
         link_text: "tag, query, fold, guard, on where the structure is",
+        // The heading is `docs/carry-your-invariant.md:30`, below two whole
+        // sections, so neither it nor the cycle it names is the first screen.
         answer_on_first_screen: false,
         targets_fragment: true,
         gates: "(i) DR-4's first stall point, dynamism mistaken for chaos, recorded by research \
@@ -342,6 +372,13 @@ pub const POINTER_REGISTER: &[Pointer] = &[
                 Rung actually taken: rung 2, an in-tree markdown link with a heading fragment, \
                 because the destination is a page and not a Rust item",
         link_text: "where your streams went, on modelling versus routing",
+        // The heading is `docs/carry-your-invariant.md:17`. Above it sit the
+        // title, the answered-need declaration and all of `## Your rule, in your
+        // words` (a sentence, a quoted rule, a four-line paragraph), which fill
+        // the 1024x768 first screen `PARAGRAPH` is measured against; the two
+        // answering paragraphs, :19-:28, render below it. Estimated from the
+        // source, not a measured render, and `validate` accepts either value
+        // because `targets_fragment` lands the reader on the heading regardless.
         answer_on_first_screen: false,
         targets_fragment: true,
         gates: "(i) DR-4's second stall point, modelling technique or routing technique, \
@@ -966,8 +1003,9 @@ mod tests {
     }
 
     /// The wrong implementations [`landing_problems`] exists to reject: a heading
-    /// renamed out from under its fragment, a link never installed or installed
-    /// twice, and a page that left the harness.
+    /// renamed out from under its fragment, a link never installed, installed
+    /// twice or pointed at another passage, a row whose destination names another
+    /// fragment or another page, and a page that left the harness.
     #[test]
     fn a_landing_whose_heading_link_or_registration_moved_is_rejected() {
         let row = POINTER_REGISTER.iter().find(|row| row.id == "P5").unwrap();
@@ -990,26 +1028,52 @@ mod tests {
         let renamed = bridge.replace(heading, "## Where the streams went");
         let twice = format!("{origin} {origin}");
         let unregistered = registrations.replace("carry-your-invariant", "elsewhere");
-        for (wrong, found) in [
+        let elsewhere_on_the_page =
+            origin.replace("#where-your-streams-went", "#tag-query-fold-guard");
+        let mut wrong_fragment = *row;
+        wrong_fragment.destination = "docs/carry-your-invariant.md#tag-query-fold-guard";
+        let mut wrong_page = *row;
+        wrong_page.destination = "docs/first-encounter.md#where-your-streams-went";
+        for (wrong, reason, found) in [
             (
                 "renamed heading",
+                "no longer carries",
                 landing_problems(row, heading, &origin, &renamed, registrations),
             ),
             (
                 "no link",
+                "0 times",
                 landing_problems(row, heading, "Prose.", &bridge, registrations),
             ),
             (
                 "two links",
+                "2 times",
                 landing_problems(row, heading, &twice, &bridge, registrations),
             ),
             (
+                "surface links another fragment",
+                "0 times",
+                landing_problems(row, heading, &elsewhere_on_the_page, &bridge, registrations),
+            ),
+            (
+                "row names another fragment",
+                "does not name",
+                landing_problems(&wrong_fragment, heading, &origin, &bridge, registrations),
+            ),
+            (
+                "row names another page",
+                "does not name",
+                landing_problems(&wrong_page, heading, &origin, &bridge, registrations),
+            ),
+            (
                 "unregistered",
+                "not registered",
                 landing_problems(row, heading, &origin, &bridge, &unregistered),
             ),
         ] {
             assert_eq!(found.len(), 1, "{wrong}: {found:?}");
             assert!(found[0].starts_with("P5"), "{wrong}: {found:?}");
+            assert!(found[0].contains(reason), "{wrong}: {found:?}");
         }
     }
 
