@@ -6,18 +6,18 @@ every read the same transport dispatched before it has been answered**:
 `SqlTransport::reads_settled`, backed by `ReadLedger`, on the spike branch
 `lane/p17-es11-fence` (plan: `.temper/plans/p17-l8.md`, design F1).
 
-The record this feeds is ADR-0087 (`proposed`, superseding ADR-0061), whichever
-way the result goes.
+The record this fed is ADR-0087, accepted on 2026-10-08 (superseding ADR-0061)
+on this experiment's result.
 
-**Status: pre-registered, amended once, no counted run yet.** The decision
+**Status: pre-registered, amended once, counted, and closed.** The decision
 rule below was first written on 2026-10-07, before any trial ran. It was
 amended the same day, after a review and before the first **counted** run; the
 amendment and its reason are recorded under "Amendment, before the first
 counted run", and the rule below is the amended one. One attempt ran before the
 amendment, under the old rule. It is a **pilot**, excluded from the tally
 whatever it shows. The ordering is **self-attested**: nothing but the commit
-history vouches for it, as with `wi-95d2b2`. `results/raw/` holds no counted
-attempt yet.
+history vouches for it, as with `wi-95d2b2`. `results/tally.md` pools the three
+counted attempts in `results/raw/`, and its verdict is that the fence works.
 
 ## The instrument
 
