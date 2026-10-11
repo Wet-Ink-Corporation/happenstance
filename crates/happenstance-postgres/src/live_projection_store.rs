@@ -63,7 +63,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use crate::error::PostgresProjectionStoreError;
 use crate::projection_store::{
     AUTHORITY_LIVE, AUTHORITY_REBUILDING, PgParam, authority_to_row, bind_all, mint_stamp,
-    position_from_row, position_to_row,
+    placeholder, position_from_row, position_to_row,
 };
 
 /// A Postgres projection batch that **is** an open transaction.
@@ -85,6 +85,15 @@ pub struct LivePostgresBatch {
     transaction: Transaction<'static, Postgres>,
     /// The identity of the store that began this batch.
     stamp: u64,
+    /// How many statements `execute*` has been asked to issue, for
+    /// [`ParameterCount::statement`](PostgresProjectionStoreError::ParameterCount).
+    issued: usize,
+    /// Set when a statement was refused before it reached the server.
+    ///
+    /// A private two-state latch rather than an enum: the server aborts its own
+    /// transaction on a statement it refuses, but it never saw this one, so the
+    /// adapter has to remember that the batch may only be rolled back.
+    poisoned: bool,
 }
 
 impl LivePostgresBatch {
@@ -107,10 +116,63 @@ impl LivePostgresBatch {
     /// is the escape hatch, separately named so that reaching for it is a
     /// decision.
     ///
+    /// A statement written in source compiles:
+    ///
+    /// ```
+    /// use happenstance_postgres::error::PostgresProjectionStoreError;
+    /// use happenstance_postgres::live_projection_store::LivePostgresBatch;
+    /// use happenstance_postgres::projection_store::PgParam;
+    ///
+    /// async fn queue(
+    ///     batch: &mut LivePostgresBatch,
+    ///     account: &str,
+    /// ) -> Result<(), PostgresProjectionStoreError> {
+    ///     batch
+    ///         .execute(
+    ///             "DELETE FROM balance WHERE account = $1",
+    ///             [PgParam::text(account)],
+    ///         )
+    ///         .await
+    /// }
+    /// ```
+    ///
+    /// and the same statement with the value interpolated does not:
+    ///
+    /// ```compile_fail,E0308
+    /// use happenstance_postgres::error::PostgresProjectionStoreError;
+    /// use happenstance_postgres::live_projection_store::LivePostgresBatch;
+    /// use happenstance_postgres::projection_store::PgParam;
+    ///
+    /// async fn queue(
+    ///     batch: &mut LivePostgresBatch,
+    ///     account: &str,
+    /// ) -> Result<(), PostgresProjectionStoreError> {
+    ///     batch
+    ///         .execute(
+    ///             format!("DELETE FROM balance WHERE account = '{account}'"),
+    ///             core::iter::empty::<PgParam>(),
+    ///         )
+    ///         .await
+    /// }
+    /// ```
+    ///
+    /// # Parameter count
+    ///
+    /// The values must match the highest `$n` that `sql` uses, one for one.
+    /// This call counts them before binding and refuses a mismatch in either
+    /// direction as
+    /// [`ParameterCount`](PostgresProjectionStoreError::ParameterCount), at this
+    /// call, and the batch can then no longer commit. Nothing reaches the
+    /// server. The server alone would refuse only too few values (ADR-0084).
+    ///
     /// # Errors
     ///
-    /// [`PostgresProjectionStoreError::Driver`] if the server refused the
-    /// statement or the connection failed.
+    /// * [`ParameterCount`](PostgresProjectionStoreError::ParameterCount) if the
+    ///   values do not match the highest `$n` in `sql`;
+    /// * [`Poisoned`](PostgresProjectionStoreError::Poisoned) if an earlier
+    ///   statement in this batch was refused that way;
+    /// * [`PostgresProjectionStoreError::Driver`] if the server refused the
+    ///   statement or the connection failed.
     pub async fn execute(
         &mut self,
         sql: &'static str,
@@ -126,15 +188,36 @@ impl LivePostgresBatch {
     /// Everything [`execute`](Self::execute) says about binding still applies:
     /// values belong in `params`, never in `sql`.
     ///
+    /// # Parameter count
+    ///
+    /// As for [`execute`](Self::execute). A computed `IN (…)` list is where a
+    /// count goes wrong: build the placeholders and the values from the same
+    /// collection.
+    ///
     /// # Errors
     ///
-    /// [`PostgresProjectionStoreError::Driver`] if the server refused the
-    /// statement or the connection failed.
+    /// * [`ParameterCount`](PostgresProjectionStoreError::ParameterCount) if the
+    ///   values do not match the highest `$n` in `sql`;
+    /// * [`Poisoned`](PostgresProjectionStoreError::Poisoned) if an earlier
+    ///   statement in this batch was refused that way;
+    /// * [`PostgresProjectionStoreError::Driver`] if the server refused the
+    ///   statement or the connection failed.
     pub async fn execute_raw_sql(
         &mut self,
         sql: &str,
         params: Vec<PgParam>,
     ) -> Result<(), PostgresProjectionStoreError> {
+        if self.poisoned {
+            return Err(PostgresProjectionStoreError::Poisoned);
+        }
+        let statement = self.issued;
+        self.issued = self.issued.saturating_add(1);
+        // A refusal from the server is not latched here: the server has already
+        // aborted the transaction, and every later statement says so itself.
+        if let Err(refused) = placeholder::check_parameter_count(statement, sql, params.len()) {
+            self.poisoned = true;
+            return Err(refused);
+        }
         bind_all(sqlx::query(sql), &params)
             .execute(&mut *self.transaction)
             .await?;
@@ -193,6 +276,8 @@ impl SendProjectionStore for LivePostgresProjectionStore {
         Ok(LivePostgresBatch {
             transaction,
             stamp: self.stamp,
+            issued: 0,
+            poisoned: false,
         })
     }
 
@@ -250,6 +335,10 @@ impl SendProjectionStore for LivePostgresProjectionStore {
     ///   transaction is dropped, which rolls it back;
     /// * [`CommitError::CheckpointRegression`] if `position` is below the one
     ///   recorded;
+    /// * [`CommitError::Store`] carrying
+    ///   [`Poisoned`](PostgresProjectionStoreError::Poisoned) if a statement was
+    ///   refused before it reached the server — the transaction is rolled back
+    ///   first, and a rollback failure is reported in its place;
     /// * [`CommitError::Store`] if the driver or the server failed, including a
     ///   transaction already aborted by an earlier failed statement.
     async fn commit(
@@ -261,6 +350,15 @@ impl SendProjectionStore for LivePostgresProjectionStore {
     ) -> Result<(), CommitError<Self::Error>> {
         if batch.stamp != self.stamp {
             return Err(CommitError::ForeignBatch);
+        }
+
+        if batch.poisoned {
+            batch
+                .transaction
+                .rollback()
+                .await
+                .map_err(|error| CommitError::Store(PostgresProjectionStoreError::Driver(error)))?;
+            return Err(CommitError::Store(PostgresProjectionStoreError::Poisoned));
         }
 
         let stored_position = position_to_row(position).map_err(CommitError::Store)?;
@@ -314,6 +412,10 @@ impl SendProjectionStore for LivePostgresProjectionStore {
     ///
     /// * [`ResetError::ForeignBatch`] if `batch` was begun on a different store
     ///   instance;
+    /// * [`ResetError::Store`] carrying
+    ///   [`Poisoned`](PostgresProjectionStoreError::Poisoned) if a statement was
+    ///   refused before it reached the server — the transaction is rolled back
+    ///   first, and a rollback failure is reported in its place;
     /// * [`ResetError::Store`] if the driver or the server failed.
     ///
     /// [`ResetError::Refused`] is never returned: this store holds no protection
@@ -325,6 +427,14 @@ impl SendProjectionStore for LivePostgresProjectionStore {
     ) -> Result<(), ResetError<Self::Error>> {
         if batch.stamp != self.stamp {
             return Err(ResetError::ForeignBatch);
+        }
+        if batch.poisoned {
+            batch
+                .transaction
+                .rollback()
+                .await
+                .map_err(|error| ResetError::Store(PostgresProjectionStoreError::Driver(error)))?;
+            return Err(ResetError::Store(PostgresProjectionStoreError::Poisoned));
         }
         let mut transaction = batch.transaction;
 
@@ -403,6 +513,10 @@ impl happenstance_core::ProjectionProbe for LivePostgresProjectionStore {
 
     /// Reads one probe row **through the open transaction**: committed state,
     /// with this batch's own pending writes layered over it by the server.
+    ///
+    /// Not refused on a [`Poisoned`](PostgresProjectionStoreError::Poisoned)
+    /// batch: it is the suite's seam rather than a write, and the transaction
+    /// it reads through is still open on the server.
     async fn probe_read_through(
         &self,
         batch: &mut Self::Batch,

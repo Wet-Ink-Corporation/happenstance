@@ -173,7 +173,7 @@ skipped, and `results/test-postgres.txt` is the transcript.
 | C7 | **Held.** `error[E0599]: no method named position found for reference &Delivered<u8>`. | `results/refusals.txt`; `src/shape.rs:63` |
 | C8 | **Held on all three batch shapes.** `MemoryProjectionBatch::write`, `SqliteBatch::push`, `LivePostgresBatch::execute`. The runner names `Batch` only as `StoreBatch<P>`, with no bound. | `tests/memory.rs`; `tests/sqlite.rs:83`; `tests/postgres.rs:113-130`; `src/runner.rs` |
 | C9 | **Held.** The runner, `run` over the two memory stores, returns `Poll::Ready(Ok(..))` on the first poll of a `Waker::noop` context. Polling `apply` alone could not fail, because an `apply` with no await is ready by async-fn semantics; the runner can, and a yield inserted before the `apply` await turned it red. | `tests/memory.rs:151` |
-| C10 | **Held.** No port signature was touched. `LivePostgresBatch::execute` is the published inherent `async fn`, used as it is. | `crates/happenstance-postgres/src/live_projection_store.rs:114` |
+| C10 | **Held.** No port signature was touched. `LivePostgresBatch::execute` is the published inherent `async fn`, used as it is. | `crates/happenstance-postgres/src/live_projection_store.rs:176` |
 
 **The bounds a generic spawner writes** (`tests/common/mod.rs:22-25`). Each one
 was demanded by the compiler, and each was removed again to confirm it is

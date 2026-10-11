@@ -178,4 +178,46 @@ pub enum PostgresProjectionStoreError {
     /// refusal.
     #[error("the batch was begun on a different store instance")]
     ForeignBatch,
+
+    /// A statement's values do not match the placeholders its text uses.
+    ///
+    /// `declared` is the highest `$n` in the statement's text — quoted strings,
+    /// quoted identifiers, dollar-quoted bodies and comments are skipped — and
+    /// `supplied` is how many values were bound beside it. `statement` is the
+    /// statement's zero-based position in the batch: in queue order for a
+    /// [`PostgresProjectionBatch`](crate::projection_store::PostgresProjectionBatch),
+    /// in issue order for a
+    /// [`LivePostgresBatch`](crate::live_projection_store::LivePostgresBatch).
+    ///
+    /// Refused before anything is sent (ADR-0084). The server on its own
+    /// refuses only too few values. A surplus it accepts on a connection that
+    /// prepares the text for the first time, and the statement it then caches
+    /// refuses every later correct call of that text on that connection.
+    ///
+    /// The variant is `#[non_exhaustive]`, so a caller matches it with `..` and
+    /// it can gain a field without a break.
+    #[error(
+        "statement {statement} binds {supplied} values, and its text uses placeholders up to ${declared}"
+    )]
+    #[non_exhaustive]
+    ParameterCount {
+        /// The statement's zero-based position in the batch.
+        statement: usize,
+        /// The highest `$n` its text uses.
+        declared: usize,
+        /// How many values were bound.
+        supplied: usize,
+    },
+
+    /// A statement issued into this live batch was refused before it reached
+    /// the server, so the batch can only be rolled back.
+    ///
+    /// The server aborts its own transaction on a statement it refuses. It never
+    /// saw this one, so the adapter marks the batch instead: every later
+    /// [`execute`](crate::live_projection_store::LivePostgresBatch::execute),
+    /// and `commit` and `reset`, report this.
+    #[error(
+        "a statement in this batch was refused before it reached the server, so the batch cannot commit"
+    )]
+    Poisoned,
 }

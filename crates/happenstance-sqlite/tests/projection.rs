@@ -57,6 +57,8 @@ use happenstance_core::{
 use happenstance_sqlite::projection_store::{
     SCHEMA_VERSION, SqliteProjectionStore, SqliteProjectionStoreError,
 };
+use happenstance_sqlite::rusqlite;
+use happenstance_sqlite::rusqlite::types::Value;
 use happenstance_testkit::{Capability, ProjectionFixture};
 
 /// One fixture instance is **one temporary SQLite file**; each `connect` is one
@@ -245,6 +247,73 @@ async fn commit_one(store: &SqliteProjectionStore, id: &ProjectionId, position: 
         .commit(batch, id, position, Authority::Live)
         .await
         .expect("the commit should succeed");
+}
+
+/// A statement whose values do not match its placeholders fails the commit, in
+/// both directions, and moves nothing (ADR-0084).
+///
+/// A characterisation of the driver: `rusqlite`'s `execute` refuses both a
+/// missing and a surplus value. Each leg holds a valid probe write and then a
+/// `DELETE` aimed at the committed row, so a refactor onto an entry point that
+/// binds what it has (`raw_bind_parameter`), ignores parameters
+/// (`execute_batch`) or truncates surplus values would delete `KEY` or advance
+/// the checkpoint, rather than fail quietly in a way that looks like a pass.
+#[tokio::test]
+async fn a_statement_with_the_wrong_parameter_count_fails_the_commit_and_moves_nothing() {
+    let fixture = SqliteProjectionFixture::new();
+    let store = fixture.connect().await;
+    let id = ProjectionId::from_static("a_statement_with_the_wrong_parameter_count");
+    commit_one(&store, &id, SequencePosition::FIRST).await;
+
+    let legs: [(&str, &'static str, Vec<Value>); 2] = [
+        (
+            "too few",
+            "DELETE FROM projection_probe WHERE k = ?1 OR k = ?2",
+            vec![Value::Text(KEY.to_owned())],
+        ),
+        (
+            "too many",
+            "DELETE FROM projection_probe WHERE k = ?1",
+            vec![
+                Value::Text(KEY.to_owned()),
+                Value::Text("unused".to_owned()),
+            ],
+        ),
+    ];
+    for (leg, sql, params) in legs {
+        let mut batch = store.begin().await.unwrap();
+        store.probe_write(&mut batch, "fresh", 7).await.unwrap();
+        batch.push(sql, params);
+
+        let refused = store
+            .commit(
+                batch,
+                &id,
+                SequencePosition::new(2).expect("2 is non-zero"),
+                Authority::Live,
+            )
+            .await
+            .expect_err("a parameter-count mismatch must fail the commit");
+
+        assert!(
+            matches!(
+                refused,
+                CommitError::Store(SqliteProjectionStoreError::Sqlite(
+                    rusqlite::Error::InvalidParameterCount(..)
+                ))
+            ),
+            "{leg}: {refused:?}"
+        );
+        assert_eq!(store.probe_read(KEY).await.unwrap(), Some(VALUE), "{leg}");
+        assert_eq!(store.probe_read("fresh").await.unwrap(), None, "{leg}");
+        assert_eq!(
+            store.checkpoint(&id).await.unwrap(),
+            Checkpoint::Live {
+                through: SequencePosition::FIRST
+            },
+            "{leg}"
+        );
+    }
 }
 
 /// The suite runs against a **file**, and a second `connect` is a second
