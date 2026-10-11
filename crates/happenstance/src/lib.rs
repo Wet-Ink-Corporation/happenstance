@@ -20,6 +20,9 @@
 //!
 //! > **Answers:** `tutorial` — How do I decide, write, and hold an invariant?
 //!
+//! Guide-level documentation — what a dynamic consistency boundary is, and how
+//! to model an application with one — is at the happenstance guide, in `docs/`.
+//!
 //! One enum of events, one struct that folds them, and one call that reads,
 //! decides, appends and retries:
 //!
@@ -77,10 +80,8 @@
 //! is why the bare name is here: an application programs against typed events
 //! and decision models, so the crate it reaches for first should be the one it
 //! uses. `happenstance-core` is what *adapter* authors pin, and they are the
-//! ones who read version numbers carefully.
-//!
-//! Everything the contract crate exports is available here under the same
-//! paths.
+//! ones who read version numbers carefully. Everything the contract crate
+//! exports is available here under the same paths.
 //!
 //! # The vocabulary
 //!

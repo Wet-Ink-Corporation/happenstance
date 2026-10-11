@@ -51,7 +51,7 @@ positional check, so it cannot see a reorder — only a value absent from
 
 A second hazard rides beside it: every rendered `decode` implementation discards
 its `event_type` parameter, including the crate root's first program
-(`lib.rs:44-45`). That throws away the exact mechanism ADR-0032's carried-forward
+(`lib.rs:47-48`). That throws away the exact mechanism ADR-0032's carried-forward
 Decision 3 relies on to earn "no read-path hook is needed" — decode trying the
 current payload shape and falling back to an older one keyed on the envelope's
 own type.
