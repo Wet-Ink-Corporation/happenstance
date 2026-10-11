@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0088; 0081–0087 are reserved by phase 17 lanes in flight.** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0090; 0085 is an unused gap (`wi-dea8db`).** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
@@ -42,7 +42,7 @@ parameter count is stated once, with an adapter-side count check proposed for Po
 is the owner's default; the record proposes its shape, and its code lands in its own lane PR.
 The VT-6 lane wrote 0086, **accepted** by the owner on 2026-10-08 (Postgres and Neon keep mint-once with a documented
 re-mint; mint-per-open declined; default-refusing detection ruled out after 1.0).
-Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change.
+Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change. #86 wrote 0089, accepted by the owner on 2026-10-11: VT-14 is frozen on the RTL corpus run (`experiments/identifier-validation/`), and its explicit bidirectional controls are nine, not seven.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.
@@ -155,12 +155,12 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 30 `[PROVISIONAL]` clauses
+### The 29 `[PROVISIONAL]` clauses
 
 Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, VT-10 at phase 17
 by ADR-0073, ES-41 and PS-22 at phase 17 by ADR-0028, PS-9 and PS-11 at phase 17
 by ADR-0074, PS-15, PS-23 and PS-24 at phase 17 by ADR-0075, and ES-17 at phase 17 by
-ADR-0080, and ES-11 and ES-12 at phase 17 by ADR-0087. PS-39 was minted provisional at phase 17 by ADR-0082. Their rows stay, struck,
+ADR-0080, ES-11 and ES-12 at phase 17 by ADR-0087, and VT-14 at phase 17b by ADR-0089. PS-39 was minted provisional at phase 17 by ADR-0082. Their rows stay, struck,
 because rule 4 keeps it; `cargo xtask lints` now checks the count in this
 heading against §7.2 rather than matching it, so the next freeze changes one number
 here and nothing in the lint.
@@ -175,7 +175,7 @@ separate open questions overstated the exposure by that factor.
 |---|---|---|---|
 | Identity's queryability and store-assigned time | VT-6, VT-9 | a peer that must dedupe without parsing `metadata`, and a rule that `recorded_at` is non-decreasing with position | 5, exercised 13 |
 | The ingest seam's placement | ~~VT-10~~ | ~~a real peer needing a foreign identity through `EventStore::append` after all~~ | **frozen at 17 — ADR-0073.** The SQLite spike runs `IngestStore` through `append`'s own row writer; phase 13 confirms it on two real peers |
-| Const-constructible identifiers | VT-14 | `from_static` failing to move the `?` count in the worked example | 5 |
+| Const-constructible identifiers | ~~VT-14~~ | ~~`from_static` failing to move the `?` count in the worked example~~ | **frozen at 17b — ADR-0089.** The RTL corpus run in `experiments/identifier-validation/` came back empty: 0 disagreements in 1,112,064 per position, and 0 of 51 Arabic, Hebrew and Persian entries refused. Reopened by a legitimate identifier that requires an explicit bidirectional control |
 | Store limits | VT-21 – VT-24 | a real adapter that cannot honour a stated minimum | 5, tested 8 and 10 |
 | Per-item boundaries on a condition | VT-30 | E2E-04 and E2E-05 still unwritable after phase 4 | 4 |
 | `Bytes`' human-readable form | WF-11 | a peer that cannot buffer a payload through any human-readable encoder | 9 |
@@ -264,7 +264,7 @@ rows will move every time a phase freezes a clause. CF-39 is not here: ADR-0066
 froze it. Nor is VT-10: ADR-0073 froze it at phase 17. Nor are ES-41 and PS-22:
 ADR-0028 froze both at phase 17. Nor are PS-9 and PS-11, which ADR-0074 froze at
 phase 17, nor PS-15, PS-23 and PS-24, which ADR-0075 froze at phase 17, nor ES-17, which
-ADR-0080 froze at phase 17.
+ADR-0080 froze at phase 17, nor VT-14, which ADR-0089 froze at phase 17b.
 
 **This is the schedule; the owner columns above are history.** Rule 4 keeps those
 rows, and most of them name phases long `done` — they record who owned a
@@ -289,7 +289,6 @@ says why.
 |---|---|---|
 | VT-6 | freeze-by-13 | Sync-testkit's `restored_peer_does_not_reissue_identities` is the instrument for the marker's harm half. Phase 9 answered the eviction half: Durable Object storage outlives the isolate, so mint-once is available |
 | VT-9 | freeze-by-13 | A sync-testkit rule that ingest preserves `RecordedAt`, with a mutant. ADR-0066 restates the clock falsifier, which no longer discriminates |
-| VT-14 | freeze-by-17b | Moved from 17 by ADR-0072, additive. An RTL identifier corpus check (Arabic, Hebrew, Persian, with mixed LTR) comes back empty, with the E11 reproduction added to `experiments/` |
 | VT-21 | freeze-by-13 | SY-18 is where a floor is first compared across a peer set, and phase 13's two real peers (Durable Object, Neon over HTTP) are the tightest targets in the plan |
 | VT-22 | renew-past-1.0: a real domain event that legitimately carries more than 64 tags | The marker's own domain falsifier; the richest scenario event carries 8. A firing is answered by a store's own larger documented limit — every shipped adapter accepts 128 or more — not by raising the floor within 1.x |
 | VT-23 | renew-past-1.0: a real decision model that legitimately needs more than 128 items | The marker's own domain falsifier; the largest scenario model uses 4. A firing is answered by the store evaluating more, which every chunking adapter already does with no ceiling |

@@ -1,0 +1,25 @@
+== E11-R: every scalar value, against the oracle
+Alone / EventType: checked 1112064, disagreements 0, refused 74
+  refused U+0000..=U+001F ControlCharacter
+  refused U+007F..=U+009F ControlCharacter
+  refused U+202A..=U+202E BidirectionalControl
+  refused U+2066..=U+2069 BidirectionalControl
+  refused values inside an RTL block: 0
+Alone / Tag: checked 1112064, disagreements 0, refused 74
+  refused U+0000..=U+001F ControlCharacter
+  refused U+007F..=U+009F ControlCharacter
+  refused U+202A..=U+202E BidirectionalControl
+  refused U+2066..=U+2069 BidirectionalControl
+  refused values inside an RTL block: 0
+BetweenAscii / EventType: checked 1112064, disagreements 0, refused 74
+BetweenAscii / Tag: checked 1112064, disagreements 0, refused 74
+BetweenArabic / EventType: checked 1112064, disagreements 0, refused 74
+BetweenArabic / Tag: checked 1112064, disagreements 0, refused 74
+
+== Corpus: 51 entries, 10 pairs
+EventType: checked 51, refused 0; negative controls 1530 (10 inserts x 3 positions), escaped 0
+Tag: checked 51, refused 0; negative controls 1530 (10 inserts x 3 positions), escaped 0
+Tag::key_value: checked 10, refused 0
+Corpus shape problems: 0
+
+== Result: EMPTY
