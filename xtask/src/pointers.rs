@@ -84,11 +84,12 @@
 //! its prose**, so a *prose* pointer there is unguarded by it.
 //!
 //! The row for `crates/happenstance/README.md` therefore carries the honest guard —
-//! the mirror assertion, which does not exist yet — rather than the flattering one.
-//! The concrete ask is on record and handed to the documentation-surface project: a
-//! `check_summaries`-shaped step crossing a pinned sentence-fragment against the two
-//! front-door paths, failing the build with the reason in the message. Until it
-//! lands it is not counted as a guard.
+//! the mirror assertion — rather than the flattering one. It was asked of the
+//! documentation-surface project as a `check_summaries`-shaped step crossing a
+//! pinned sentence-fragment against the two front-door paths, and landed instead
+//! with the rows it guards, as a test in this module: the story that installed the
+//! sentence closed its own gap, as the story that filed P3 had. The README mount
+//! still counts as no guard for prose.
 //!
 //! # Considered and declined, on record
 //!
@@ -147,9 +148,7 @@ pub enum PointerForm {
     /// A markdown link on a page inside the pinned documentation tree.
     ///
     /// Guarded by that tree's registration check, which fails the build when a page
-    /// moves out from under a link. The mechanism does not exist until the
-    /// documentation-surface project lands it, so a row taking this form says so in
-    /// its guard rather than describing a check that is not there yet.
+    /// moves out from under a link. That check exists: it is `cargo xtask narrative`.
     PinnedTreeMarkdown,
 
     /// A bare URL in prose.
@@ -236,15 +235,27 @@ pub const MAX_ROWS_EVER: usize = 20;
 /// deliberately-wrong registers as well as this one — a rule no register can fail
 /// is decorative.
 ///
-/// **P3 is the one row the four forms cannot name the rung of.** The href
-/// ladder's third rung — a named-but-unlinked cross-reference — is not a
-/// [`PointerForm`] variant, because the enum enumerates the architecture brief's
-/// four *mechanism-table* rows and the ladder is a different list. A fifth
-/// variant would re-open the signed-off mechanism table for a rung the design's
-/// own P3 row already groups with [`PointerForm::PinnedTreeMarkdown`] ("in-tree
-/// markdown link, **or** the named-unlinked form live at `store.rs:77`"), and
-/// both share one guard. So the row is filed under that variant and the rung it
-/// actually took is stated in its `guard`, where a reviewer reads it.
+/// **P3 is the first row filed, and the first place the four forms could not
+/// name the rung.** The href ladder's third rung — a named-but-unlinked
+/// cross-reference — is not a [`PointerForm`] variant, because the enum
+/// enumerates the architecture brief's four *mechanism-table* rows and the ladder
+/// is a different list. A fifth variant would re-open the signed-off mechanism
+/// table for a rung the design's own P3 row already groups with
+/// [`PointerForm::PinnedTreeMarkdown`] ("in-tree markdown link, **or** the
+/// named-unlinked form live at `store.rs:77`"), and both share one guard. So the
+/// row is filed under that variant and the rung it actually took is stated in its
+/// `guard`, where a reviewer reads it.
+///
+/// **P1 and P2 took the same rung, for the same reason that P3 did**, and are
+/// filed the same way: no link form from a rustdoc page resolves into the
+/// narrative tree in all three of the gate's rustdoc builds. Their guard is
+/// their own, the mirror test named in `FRONT_DOOR_GUARD`, not P3's
+/// registration check. They are the front door — rule 1, one sentence on two
+/// surfaces — so no rule-2 gate admitted them and their `gates` cells are
+/// empty, as [`Pointer::gates`] says the front-door rows' are. P4 and P5,
+/// below, took rung 2 instead. Their destinations are pages too, as P1's and
+/// P3's are. What decides it is the surface: P4 and P5 sit on a markdown page
+/// inside the pinned tree, where a markdown link resolves.
 ///
 /// **P4 and P5 carry the evaluator's two second questions** (DR-4;
 /// `evaluator-onward-links`). Both are asked from `docs/first-encounter.md`,
@@ -387,7 +398,50 @@ pub const POINTER_REGISTER: &[Pointer] = &[
                 drill that closes the page's own answer, no heading of its own; (iv) rung 2 of \
                 the ladder, guarded by the registration check and the fragment test",
     },
+    Pointer {
+        id: "P1",
+        surface: "crates/happenstance/src/lib.rs",
+        destination: "the happenstance guide, the narrative tree at `docs/`",
+        form: PointerForm::PinnedTreeMarkdown,
+        guard: FRONT_DOOR_GUARD,
+        link_text: "the happenstance guide",
+        answer_on_first_screen: true,
+        targets_fragment: false,
+        gates: "",
+    },
+    Pointer {
+        id: "P2",
+        surface: "crates/happenstance/README.md",
+        destination: "the happenstance guide, the narrative tree at `docs/`",
+        form: PointerForm::PinnedTreeMarkdown,
+        guard: FRONT_DOOR_GUARD,
+        link_text: "the happenstance guide",
+        answer_on_first_screen: true,
+        targets_fragment: false,
+        gates: "",
+    },
 ];
+
+/// The guard rows P1 and P2 share, because they are one sentence on two
+/// surfaces and a rot on either is caught by the same test.
+///
+/// One constant rather than two copies, so the two rows cannot drift apart in
+/// what they claim catches them.
+const FRONT_DOOR_GUARD: &str = "three mechanisms. \
+    `rows_p1_and_p2_mirror_one_sentence_onto_both_front_doors`, in this file, is the \
+    mirror assertion: it fails the build when either surface stops carrying the \
+    sentence, carries it twice, lets it fall below a heading or a fence, or lets its \
+    paragraph differ by a single byte from the other surface's, wrapping included, \
+    and when the sentence or a row stops naming this \
+    destination or its link text. Its `include_str!` of `docs/README.md` fails to \
+    compile when the narrative tree's routing page is deleted or moved, and it reads \
+    `cargo xtask narrative`'s pinned tree constant, so `docs/` is the tree the gate \
+    guards. The README doctest mount compiles that file's Rust fences and not this \
+    prose, so it is not counted. Rung actually taken: the named-but-unlinked \
+    cross-reference, rung 3. No link form from a rustdoc page resolves into the \
+    narrative tree in all three of the gate's rustdoc builds, the documentation site \
+    is not yet deployed, and the README mirrors the crate root byte for byte, so it \
+    takes the same rung";
 
 /// The fewest words a self-describing link text can be built from.
 const LINK_TEXT_MINIMUM_WORDS: usize = 3;
@@ -724,6 +778,10 @@ mod tests {
     /// the story that would invert it. What survives the inversion is the half
     /// that never expires: the validator is wired to the *live* register, and the
     /// register holds only rows a story actually installed.
+    ///
+    /// The onward links filed P4 and P5 next. `front-door-pointer` installed the
+    /// fourth and fifth, P1 and P2, and grew the expected list by exactly the rows
+    /// it filed, in filing order.
     #[test]
     fn the_register_carries_only_rows_a_story_installed() {
         assert!(
@@ -733,7 +791,7 @@ mod tests {
         let filed: Vec<&str> = POINTER_REGISTER.iter().map(|row| row.id).collect();
         assert_eq!(
             filed,
-            ["P3", "P4", "P5"],
+            ["P3", "P4", "P5", "P1", "P2"],
             "the register grows one row per installed pointer: a row here that no \
              story installed is a claim nobody earned, and a missing row is a \
              pointer whose only guard is memory"
@@ -1132,6 +1190,304 @@ mod tests {
             assert!(
                 !sentence.contains([';', '(', ')']),
                 "{id}'s sentence carries a semicolon or a parenthetical: {sentence}"
+            );
+        }
+    }
+
+    /// The pinned substring of the front-door sentence: what the mirror
+    /// assertion keys on, on both surfaces.
+    const FRONT_DOOR_PIN: &str = "Guide-level documentation";
+
+    /// The crate-root doc as a reader sees it: every `//!` line, marker and one
+    /// following space stripped, so its lines compare byte for byte with the
+    /// README's.
+    fn crate_root_page(source: &str) -> Vec<&str> {
+        source
+            .lines()
+            .filter_map(|line| line.strip_prefix("//!"))
+            .map(|body| body.strip_prefix(' ').unwrap_or(body))
+            .collect()
+    }
+
+    /// Where the paragraph holding the front-door sentence starts on one page —
+    /// the line after the previous blank one, so a line prepended inside the
+    /// paragraph is part of what is compared — and its lines, trimmed and
+    /// otherwise untouched, so the comparison is byte for byte, wrapping
+    /// included, as the policy's "byte-identically" says.
+    fn front_door_paragraph<'page>(page: &[&'page str]) -> Option<(usize, Vec<&'page str>)> {
+        let pin = page.iter().position(|line| line.contains(FRONT_DOOR_PIN))?;
+        let start = page[..pin]
+            .iter()
+            .rposition(|line| line.trim().is_empty())
+            .map_or(0, |blank| blank + 1);
+        let paragraph = page[start..]
+            .iter()
+            .take_while(|line| !line.trim().is_empty())
+            .map(|line| line.trim())
+            .collect();
+        Some((start, paragraph))
+    }
+
+    /// The directory the front-door sentence and rows P1 and P2 must name.
+    const FRONT_DOOR_DESTINATION: &str = "`docs/`";
+
+    /// Everything wrong with the front door against the two surfaces it is
+    /// mirrored onto and the rows that claim it. Pure, so the tests below can
+    /// feed it pages that are wrong.
+    fn front_door_problems(root: &[&str], readme: &[&str], rows: &[Pointer]) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut paragraphs = Vec::new();
+        // The second field is how many lines of the page's own title sit above
+        // the sentence by design: the README's `# happenstance`, and nothing on
+        // the crate root.
+        for (surface, page, title_lines) in [("crate root", root, 0), ("README", readme, 1)] {
+            let carried = page.iter().filter(|l| l.contains(FRONT_DOOR_PIN)).count();
+            let Some((start, paragraph)) = front_door_paragraph(page).filter(|_| carried == 1)
+            else {
+                found.push(format!(
+                    "the {surface} carries {FRONT_DOOR_PIN:?} {carried} times. One \
+                     authoritative sentence per front door: none is the reader told \
+                     nothing, two is a second pointer"
+                ));
+                continue;
+            };
+            let above = page[..start].iter().skip(title_lines);
+            if let Some(line) = above
+                .into_iter()
+                .find(|line| line.starts_with('#') || line.starts_with("```"))
+            {
+                found.push(format!(
+                    "the {surface}'s front-door sentence sits below {line:?}. It is \
+                     the first thing a reader is told, above every section and fence"
+                ));
+            }
+            paragraphs.push(paragraph);
+        }
+
+        let [on_root, on_readme] = paragraphs.as_slice() else {
+            return found;
+        };
+        if on_root != on_readme {
+            found.push(format!(
+                "the crate root and the README say different things. Two texts are two \
+                 things to keep true, and the one nobody reads goes stale: \
+                 {on_root:?} against {on_readme:?}"
+            ));
+        }
+        // Joined only for the containment checks below, so a link text that a
+        // wrap splits across two lines is still found.
+        let on_root = on_root.join(" ");
+        for row in rows {
+            if !(on_root.contains(row.link_text)
+                && row.destination.contains(FRONT_DOOR_DESTINATION))
+            {
+                found.push(format!(
+                    "{} and the sentence disagree: the row says {:?} at {:?}, the \
+                     surface says {on_root:?}",
+                    row.id, row.link_text, row.destination
+                ));
+            }
+        }
+        if !on_root.contains(FRONT_DOOR_DESTINATION) {
+            found.push(format!(
+                "the sentence no longer names {FRONT_DOOR_DESTINATION}: {on_root}"
+            ));
+        }
+        found
+    }
+
+    /// Rows **P1** and **P2** — the one authoritative front-door sentence, on
+    /// the crate root and on the README — are filed with the rung they took.
+    ///
+    /// They are rule 1 rather than rule 2, so no gate admitted them and the
+    /// `gates` cell is empty on purpose. The two rows must agree on everything
+    /// but the surface: one sentence mirrored is one pointer with two renderers,
+    /// and two rows that disagree about its destination or its link text are
+    /// anti-pattern 2 filed as data.
+    #[test]
+    fn rows_p1_and_p2_record_the_front_door_and_the_rung_it_took() {
+        let find = |id: &str| {
+            POINTER_REGISTER
+                .iter()
+                .find(|row| row.id == id)
+                .expect("P1 and P2 are the front door's two surfaces")
+        };
+        let (p1, p2) = (find("P1"), find("P2"));
+
+        assert_eq!(p1.surface, "crates/happenstance/src/lib.rs");
+        assert_eq!(p2.surface, "crates/happenstance/README.md");
+        for row in [p1, p2] {
+            assert_eq!(row.form, PointerForm::PinnedTreeMarkdown, "{}", row.id);
+            assert!(
+                row.guard.contains("named-but-unlinked")
+                    && row.guard.contains("rows_p1_and_p2_mirror_one_sentence"),
+                "{}'s guard must name the test that fails the build and the rung \
+                 actually taken: {}",
+                row.id,
+                row.guard
+            );
+            assert!(
+                row.gates.is_empty(),
+                "{} is the front door, rule 1, and no rule-2 gate admitted it: {}",
+                row.id,
+                row.gates
+            );
+        }
+        assert_eq!(
+            (p1.destination, p1.link_text, p1.form),
+            (p2.destination, p2.link_text, p2.form),
+            "one sentence, two renderers: the rows may differ only in surface"
+        );
+    }
+
+    /// The front-door sentence is installed on both surfaces, once each, above
+    /// every section and fence, byte-identically the same paragraph — compared
+    /// line by line from its first line, wrapping included — and pointing at
+    /// the tree the gate pins.
+    ///
+    /// This is the **mirror assertion** the module doc used to record as
+    /// missing. The README doctest mount compiles that file's Rust fences and
+    /// not its prose, so without this test nothing would notice the README's
+    /// copy of the sentence being reworded, deleted or pushed below the fold.
+    ///
+    /// The three files are read with `include_str!`, so a surface or the
+    /// destination's routing page that is deleted or moved fails to compile
+    /// rather than to assert. The destination *directory* is tied to the one
+    /// `cargo xtask narrative` pins by reading that constant's declaration.
+    #[test]
+    fn rows_p1_and_p2_mirror_one_sentence_onto_both_front_doors() {
+        const CRATE_ROOT: &str = include_str!("../../crates/happenstance/src/lib.rs");
+        const README: &str = include_str!("../../crates/happenstance/README.md");
+        const ROUTING_PAGE: &str = include_str!("../../docs/README.md");
+        const TREE_PIN: &str = include_str!("lint_narrative.rs");
+
+        let root = crate_root_page(CRATE_ROOT);
+        let readme: Vec<&str> = README.lines().collect();
+        let rows: Vec<Pointer> = POINTER_REGISTER
+            .iter()
+            .filter(|r| ["P1", "P2"].contains(&r.id))
+            .copied()
+            .collect();
+        assert_eq!(rows.len(), 2, "P1 and P2 are the front door's two rows");
+
+        let found = front_door_problems(&root, &readme, &rows);
+        assert!(found.is_empty(), "{found:?}");
+        assert!(
+            TREE_PIN.contains("pub(crate) const TREE: &str = \"docs\";"),
+            "`cargo xtask narrative` no longer pins `docs`, so the tree the front \
+             door names is not the tree the gate guards"
+        );
+        assert!(
+            ROUTING_PAGE.contains("narrative tree"),
+            "docs/README.md stopped describing itself as the narrative tree's index"
+        );
+    }
+
+    /// The wrong front doors [`front_door_problems`] exists to reject, one per
+    /// rot `FRONT_DOOR_GUARD` claims it catches: the sentence missing from a
+    /// surface, carried twice, pushed below a heading or a fence, worded
+    /// differently — a word swapped, a line prepended inside its paragraph, the
+    /// same words wrapped differently — and the sentence or a row no longer
+    /// naming the destination or the link text.
+    #[test]
+    fn a_front_door_that_drifted_on_either_surface_is_rejected() {
+        const SENTENCE: &str = "Guide-level documentation — what a dynamic consistency boundary is, and how\n\
+                                to model an application with one — is at the happenstance guide, in `docs/`.";
+        let root_text =
+            format!("DCB-compliant event sourcing.\n\n{SENTENCE}\n\n```\nuse happenstance;\n```");
+        let readme_text = format!(
+            "# happenstance\n\nAn event sourcing library.\n\n{SENTENCE}\n\n## Which crate?"
+        );
+        let rows: Vec<Pointer> = POINTER_REGISTER
+            .iter()
+            .filter(|r| ["P1", "P2"].contains(&r.id))
+            .copied()
+            .collect();
+        let check = |root: &str, readme: &str, rows: &[Pointer]| {
+            let root: Vec<&str> = root.lines().collect();
+            let readme: Vec<&str> = readme.lines().collect();
+            front_door_problems(&root, &readme, rows)
+        };
+
+        assert_eq!(
+            check(&root_text, &readme_text, &rows),
+            Vec::<String>::new(),
+            "the fixture must be good before each wrong one differs from it"
+        );
+
+        let missing = readme_text.replace(&format!("{SENTENCE}\n\n"), "");
+        let twice = format!("{readme_text}\n\n{SENTENCE}");
+        let below_a_heading = readme_text.replace(SENTENCE, &format!("## Overview\n\n{SENTENCE}"));
+        let below_a_fence =
+            root_text.replace(SENTENCE, &format!("```\nlet x = 1;\n```\n\n{SENTENCE}"));
+        let reworded = readme_text.replace("dynamic consistency boundary", "DCB");
+        let prepended = readme_text.replace(SENTENCE, &format!("Start here.\n{SENTENCE}"));
+        let rewrapped = readme_text.replace(" and how\nto model", "\nand how to model");
+        let unnamed = |text: &str| text.replace(", in `docs/`.", ".");
+        let unlinked = |text: &str| text.replace("the happenstance guide", "our guide");
+        // A second register to make wrong: the good rows stay in use by every
+        // other fixture, so this is a real duplicate rather than a borrow fix.
+        let mut row_elsewhere = rows.clone();
+        if let Some(first) = row_elsewhere.first_mut() {
+            first.destination = "the happenstance guide, on a site";
+        }
+
+        for (wrong, reason, count, found) in [
+            ("missing", "0 times", 1, check(&root_text, &missing, &rows)),
+            ("twice", "2 times", 1, check(&root_text, &twice, &rows)),
+            (
+                "below a heading",
+                "sits below",
+                1,
+                check(&root_text, &below_a_heading, &rows),
+            ),
+            (
+                "below a fence",
+                "sits below",
+                1,
+                check(&below_a_fence, &readme_text, &rows),
+            ),
+            (
+                "reworded",
+                "say different things",
+                1,
+                check(&root_text, &reworded, &rows),
+            ),
+            (
+                "prepended",
+                "say different things",
+                1,
+                check(&root_text, &prepended, &rows),
+            ),
+            (
+                "rewrapped",
+                "say different things",
+                1,
+                check(&root_text, &rewrapped, &rows),
+            ),
+            (
+                "sentence names no destination",
+                "no longer names",
+                1,
+                check(&unnamed(&root_text), &unnamed(&readme_text), &rows),
+            ),
+            (
+                "sentence drops the link text",
+                "disagree",
+                2,
+                check(&unlinked(&root_text), &unlinked(&readme_text), &rows),
+            ),
+            (
+                "row names another destination",
+                "disagree",
+                1,
+                check(&root_text, &readme_text, &row_elsewhere),
+            ),
+        ] {
+            assert_eq!(found.len(), count, "{wrong}: {found:?}");
+            assert!(
+                found.iter().all(|problem| problem.contains(reason)),
+                "{wrong}: {found:?}"
             );
         }
     }

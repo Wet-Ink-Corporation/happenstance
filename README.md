@@ -211,6 +211,12 @@ anything in this workspace — five of the five database crates here declare no
 `rust-version` at all, so neither `cargo hack --rust-version` nor `resolver = "3"`
 can protect a floor against them, and only running the compiler finds it.
 
+After `1.0.0` a rise ships only in a minor release, only to a Rust stable at
+least six months old, and always with a `CHANGELOG.md` entry
+([ADR-0067](.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)). Each
+published crate's README states its own floor and the same rule, and
+`cargo xtask lints` holds them to the manifests.
+
 ```rust
 use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
 
