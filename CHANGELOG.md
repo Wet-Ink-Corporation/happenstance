@@ -62,6 +62,22 @@ not the same as what a user needed to be told.
   now say nine
   ([ADR-0089](.kb/decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md)).
 
+### Fixed
+
+- **`happenstance-sqlite`: opening one fresh file from several connections at
+  once no longer fails with `database is locked`** (#238). Converting a new file
+  to WAL asks SQLite to upgrade a read lock to a write lock, and SQLite refuses
+  that upgrade at once rather than waiting in the busy handler. The adapter
+  retried up to 64 times with no pause, which can end before the connection
+  doing the conversion has finished writing its journal. On Windows CI, three of
+  four concurrent `SqliteEventStore::open` calls failed this way. The retry now waits:
+  pauses start at 1 ms, double up to 25 ms, and stop once the busy timeout's
+  fifteen seconds
+  ([ADR-0065](.kb/decisions/0065-adr-0022-s11-busy-timeout-is-fifteen-seconds.md))
+  are spent, with an attempt ceiling as a backstop. A connection that is really
+  stuck is still reported, with SQLite's own busy error, after about fifteen
+  seconds. Opening a file that is already in WAL does not pause at all.
+
 ## [0.4.0] — 2026-10-11
 
 ### Changed
