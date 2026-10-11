@@ -1618,12 +1618,22 @@ mod tests {
         String::from_utf8(help).expect("the help text is UTF-8")
     }
 
-    /// A writer whose every write fails, as stdout does on a closed pipe.
-    struct ClosedPipe;
+    /// A stdout that closes after `budget` bytes, counting the writes it
+    /// refuses once it has.
+    struct ClosesAfter {
+        budget: usize,
+        refused: usize,
+    }
 
-    impl std::io::Write for ClosedPipe {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::ErrorKind::BrokenPipe.into())
+    impl std::io::Write for ClosesAfter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            if self.budget == 0 {
+                self.refused += 1;
+                return Err(std::io::ErrorKind::BrokenPipe.into());
+            }
+            let accepted = buf.len().min(self.budget);
+            self.budget -= accepted;
+            Ok(accepted)
         }
 
         fn flush(&mut self) -> std::io::Result<()> {
@@ -1632,16 +1642,37 @@ mod tests {
     }
 
     /// The reason `print_help` stopped using `println!`: a closed stdout is an
-    /// error the caller sees, not a panic. The wrong implementation it rejects
-    /// is one that swallows the write's result and returns `Ok`.
+    /// error the caller sees, not a panic — wherever in the text it closes.
+    ///
+    /// The pipe closes at every line of the help in turn, so each write is the
+    /// first to fail once. The wrong implementation it rejects swallows any one
+    /// write's result: the last write swallowed returns `Ok`, and any earlier
+    /// one lets a second write reach the closed pipe.
     #[test]
     fn the_help_reports_a_closed_pipe_rather_than_panicking() {
-        let err = crate::write_help(&mut ClosedPipe).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
+        let full = rendered_help();
+        let line_starts = std::iter::once(0).chain(
+            full.match_indices('\n')
+                .map(|(at, _)| at + 1)
+                .filter(|&at| at < full.len()),
+        );
+
+        for budget in line_starts {
+            let mut pipe = ClosesAfter { budget, refused: 0 };
+            let err = crate::write_help(&mut pipe).expect_err(&format!(
+                "closed after {budget} bytes, yet the help said Ok"
+            ));
+            assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
+            assert_eq!(
+                pipe.refused, 1,
+                "closed after {budget} bytes: a refused write was swallowed and writing went on"
+            );
+        }
     }
 
-    /// The `ci` entry names every documentation build the gate runs, which
-    /// since #91 includes `happenstance`'s default features, not only core's.
+    /// The `ci` entry names every stable documentation build the gate runs —
+    /// read off `REQUIRED`, so a doc step added there fails here until the help
+    /// says so. Since #91 that includes `happenstance`'s default features.
     #[test]
     fn the_ci_help_names_the_per_crate_default_feature_doc_builds() {
         let rendered = rendered_help();
@@ -1655,17 +1686,50 @@ mod tests {
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
+        let words: Vec<&str> = ci
+            .split_whitespace()
+            .map(|word| word.trim_matches(|c: char| c == ',' || c == '.'))
+            .collect();
 
+        let doc_steps: Vec<&Step> = REQUIRED
+            .iter()
+            .filter(|step| step.args.first() == Some(&"doc"))
+            .collect();
         assert!(
-            ci.contains("docs with all features, with no default features and on the default features of happenstance-core and of happenstance"),
-            "the `ci` help does not name the per-crate default-features doc builds: {ci}"
+            doc_steps.len() >= 4,
+            "fewer stable doc steps than #91 left: {}",
+            doc_steps.len()
         );
-        assert!(
-            REQUIRED
-                .iter()
-                .any(|step| step.name == "documentation (default features, happenstance)"),
-            "the help names a `happenstance` default-features doc build the gate does not run"
-        );
+
+        for step in doc_steps {
+            if step.args.contains(&"--all-features") {
+                assert!(
+                    ci.contains("all features"),
+                    "`{}` is not in the ci help: {ci}",
+                    step.name
+                );
+            } else if step.args.contains(&"--no-default-features") {
+                assert!(
+                    ci.contains("no default features"),
+                    "`{}` is not in the ci help: {ci}",
+                    step.name
+                );
+            } else {
+                let package = step
+                    .args
+                    .iter()
+                    .skip_while(|arg| **arg != "-p")
+                    .nth(1)
+                    .unwrap_or_else(|| {
+                        panic!("`{}` builds default features of no package", step.name)
+                    });
+                assert!(
+                    ci.contains("default features of") && words.contains(package),
+                    "`{}` — {package}'s default features — is not in the ci help: {ci}",
+                    step.name
+                );
+            }
+        }
     }
 
     /// The `default` line of a `[features]` table, as written.
