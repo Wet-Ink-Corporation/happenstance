@@ -87,7 +87,8 @@ jobs:
     steps:
       # Depth 2 is enough: a `pull_request` run checks out the merge of the head
       # onto the base, whose first parent is the base tip, so `HEAD^1..HEAD` is
-      # exactly the pull request's change as it would land.
+      # exactly the pull request's change as it would land. `--no-renames`,
+      # so a file moved out of `crates/` into `docs/` lists both ends.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 2
@@ -99,7 +100,7 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if ! files=$(git diff --name-only HEAD^1 HEAD) || [ -z "$files" ]; then
+          if ! files=$(git diff --name-only --no-renames HEAD^1 HEAD) || [ -z "$files" ]; then
             echo "::warning::could not list the changed paths; every job runs"
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -865,14 +866,15 @@ jobs:
     #   group below. GitHub keeps one running and ONE pending job per group and
     #   cancels an older pending one when a newer one queues, so under load this
     #   mode can report a run cancelled; that is the reason the first mode
-    #   exists, and why this mode is the fallback rather than the design.
+    #   exists, and why this mode is the fallback rather than the design. In a
+    #   merge queue a cancelled required check ejects the entry, so the queue
+    #   should not be switched on until the first mode is configured.
     #
     # Never cancel-in-progress: the delete step must get to run.
     concurrency:
       group: ${{ vars.NEON_PROJECT_ID != '' && format('live-neon-{0}-{1}', github.run_id, github.run_attempt) || 'live-neon-shared' }}
       cancel-in-progress: false
     env:
-      NEON_SHARED_CONNECTION: ${{ secrets.NEON_CONNECTION }}
       NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -895,7 +897,19 @@ jobs:
         id: endpoint
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_SHARED_CONNECTION: ${{ secrets.NEON_CONNECTION }}
         run: |
+          # The concurrency group above reads the variable alone (a secret is
+          # not visible there), so a variable without its key would run
+          # unserialised against the shared endpoint: #250 again. Refused.
+          # A fork PR sees the variable and not the key, and is told so below.
+          if [ -n "$NEON_PROJECT_ID" ] && [ -z "$NEON_API_KEY" ] \
+            && [ "${{ github.event.pull_request.head.repo.fork }}" != "true" ]; then
+            echo "::error::NEON_PROJECT_ID is set and NEON_API_KEY is not. A branch \
+          per run needs both; falling back to the shared endpoint here would run \
+          it unserialised. Set the secret, or clear the variable."
+            exit 1
+          fi
           if [ -n "$NEON_PROJECT_ID" ] && [ -n "$NEON_API_KEY" ]; then
             echo "NEON_PROJECT_ID and NEON_API_KEY are set; this run gets its own branch."
             echo "mode=branch" >> "$GITHUB_OUTPUT"
@@ -932,23 +946,37 @@ jobs:
           expires=$(date -u -d '+6 hours' +%Y-%m-%dT%H:%M:%SZ)
           body=$(jq -n --arg name "$name" --arg expires "$expires" \
             '{branch: {name: $name, expires_at: $expires}, endpoints: [{type: "read_write"}]}')
-          curl -sS --fail-with-body -X POST "$api/branches" \
+          curl -sS --max-time 30 --fail-with-body -X POST "$api/branches" \
             -H "authorization: Bearer $NEON_API_KEY" \
             -H "content-type: application/json" -d "$body" > branch.json \
             || { echo "::error::Neon refused the branch: $(head -c 400 branch.json)"; exit 1; }
-          branch_id=$(jq -r '.branch.id' branch.json)
-          endpoint_id=$(jq -r '.endpoints[0].id' branch.json)
-          connection=$(jq -r '.connection_uris[0].connection_uri // empty' branch.json)
-          test -n "$connection" || { echo "::error::Neon returned no connection URI for $name"; exit 1; }
-          echo "::add-mask::$connection"
+          # The id first, so a step that fails from here on still deletes it.
+          branch_id=$(jq -r '.branch.id // empty' branch.json)
+          test -n "$branch_id" || { echo "::error::Neon answered with no branch id"; exit 1; }
           echo "id=$branch_id" >> "$GITHUB_OUTPUT"
+          endpoint_id=$(jq -r '.endpoints[0].id // empty' branch.json)
+          # The POOLED host, because that is the path the suite was measured on
+          # (`crates/happenstance-neon/tests/support/transport.rs`: "the pooler
+          # URL"); `connection_uri` itself names the direct host. Role and
+          # password are the parent's, inherited by the branch.
+          password=$(jq -r '.connection_uris[0].connection_parameters.password // empty' branch.json)
+          test -n "$password" || { echo "::error::Neon returned no connection parameters for $name"; exit 1; }
+          echo "::add-mask::$password"
+          connection=$(jq -r '.connection_uris[0].connection_parameters
+            | "postgresql://\(.role | @uri):\(.password | @uri)@\(.pooler_host)/\(.database | @uri)?sslmode=require"' branch.json)
+          rm branch.json
+          echo "::add-mask::$connection"
           echo "NEON_CONNECTION=$connection" >> "$GITHUB_ENV"
           echo "branch $name ($branch_id), endpoint $endpoint_id, expires $expires"
+          # Up means `active`, or `idle` with nothing pending: a fresh endpoint
+          # can read `idle` with `pending_state: active` before it has started.
+          state=""
           for attempt in $(seq 1 30); do
-            state=$(curl -sS -H "authorization: Bearer $NEON_API_KEY" \
-              "$api/endpoints/$endpoint_id" | jq -r '.endpoint.current_state')
+            state=$(curl -sS --max-time 10 -H "authorization: Bearer $NEON_API_KEY" \
+              "$api/endpoints/$endpoint_id" \
+              | jq -r '.endpoint | "\(.current_state)/\(.pending_state // "")"' || true)
             echo "attempt $attempt: $state"
-            if [ "$state" = "active" ] || [ "$state" = "idle" ]; then exit 0; fi
+            if [ "$state" = "active/" ] || [ "$state" = "idle/" ]; then exit 0; fi
             sleep 2
           done
           echo "::error::the branch's compute never came up; last state: $state"
@@ -1090,10 +1118,20 @@ jobs:
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
         run: |
-          curl -sS --fail-with-body -X DELETE \
-            -H "authorization: Bearer $NEON_API_KEY" \
-            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/${{ steps.branch.outputs.id }}" \
-            > /dev/null
+          # Retried, because Neon answers 423 while an operation on the branch is
+          # still running. A delete that never lands is a warning and not a red
+          # run: the branch's expiry removes it, and the suite's verdict stands.
+          for attempt in 1 2 3 4 5; do
+            if curl -sS --max-time 30 --fail-with-body -X DELETE \
+              -H "authorization: Bearer $NEON_API_KEY" \
+              "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/${{ steps.branch.outputs.id }}" \
+              > delete.txt; then
+              echo "deleted"; exit 0
+            fi
+            echo "attempt $attempt: $(head -c 200 delete.txt)"
+            sleep $((attempt * 5))
+          done
+          echo "::warning::the Neon branch was not deleted; its expiry will remove it"
 
   # Every event-store conformance rule inside `workerd`, through a real Durable
   # Object — `happenstance-cloudflare`'s 1.0 claim is *conformance on the real
@@ -1259,6 +1297,26 @@ jobs:
           # readiness window. One atomic deploy has no such window. It is a
           # plain var rather than a secret, which is acceptable for a value
           # minted per run on a Worker deleted at the end of the same run.
+          # Sweep first. A name per run means a run killed before its delete
+          # step leaves a Worker no later deploy overwrites, so any harness
+          # Worker untouched for three hours goes here (the job times out at
+          # thirty minutes, so none of them is a live run's). Best effort: a
+          # sweep that cannot list or delete warns and the run goes on.
+          cutoff=$(date -u -d '-3 hours' +%Y-%m-%dT%H:%M:%S)
+          scripts="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts"
+          if listing=$(curl -sS --max-time 30 --fail -H "authorization: Bearer $CLOUDFLARE_API_TOKEN" "$scripts") \
+            && stale=$(jq -r --arg cutoff "$cutoff" '.result[]
+                | select(.id | test("^happenstance-workerd-harness(-[0-9]+-[0-9]+)?$"))
+                | select(.modified_on[0:19] < $cutoff) | .id' <<<"$listing"); then
+            for old in $stale; do
+              echo "sweeping $old"
+              curl -sS --max-time 30 --fail -X DELETE -H "authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                "$scripts/$old?force=true" > /dev/null || echo "::warning::could not sweep $old"
+            done
+          else
+            echo "::warning::could not list the account's Workers; nothing swept"
+          fi
+
           token=$(openssl rand -hex 32)
           echo "::add-mask::$token"
           echo "HARNESS_TOKEN=$token" >> "$GITHUB_ENV"
@@ -1277,8 +1335,8 @@ jobs:
           # and the run that follows is spread across several.
           ready=""
           streak=0
-          for attempt in $(seq 1 12); do
-            status=$(curl -s -o last.txt -w '%{http_code}' \
+          for attempt in $(seq 1 20); do
+            status=$(curl -s --max-time 10 --connect-timeout 5 -o last.txt -w '%{http_code}' \
               -H "authorization: Bearer $HARNESS_TOKEN" \
               "${{ steps.deploy.outputs.url }}/do/ready-${{ github.run_id }}/rules")
             echo "attempt $attempt: $status"
@@ -1353,8 +1411,8 @@ jobs:
         run: cargo test --workspace --all-features
 
   # Public API changes must be intentional. This fails a PR that breaks semver
-  # without a version bump. The `pull_request` guard is load-bearing: it is what
-  # makes `github.event.pull_request.base.sha` below non-empty.
+  # without a version bump. The event guard is load-bearing: it is what makes
+  # `pull_request.base.sha` or `merge_group.base_sha` below non-empty.
   semver:
     name: semver compatibility
     runs-on: ubuntu-latest
