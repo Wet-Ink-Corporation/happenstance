@@ -23,6 +23,7 @@ that shapes a page whose job is orientation.
 | The canonical DCB program, worked end to end | [`read-the-worked-example.md`](read-the-worked-example.md) |
 | Where the aggregate's consistency boundary went | [`boundary-not-aggregate.md`](boundary-not-aggregate.md) |
 | Carrying the worked example's invariant into your own domain | [`carry-your-invariant.md`](carry-your-invariant.md) |
+| Retrying a command without applying it twice | [`retry-a-command.md`](retry-a-command.md) |
 | Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
 
 | Looking for | It is at |
