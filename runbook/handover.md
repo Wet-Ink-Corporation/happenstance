@@ -56,13 +56,19 @@ The `0.4.0` release (epic #61) is the owner's. **The owner decided on 2026-10-10
 
 1. **#89** — ADR-0084's Postgres parameter-count check: refuse surplus parameters on
    a projection batch. It fills the trace table's one pending row.
-2. **#78** — `happenstance-neon` stops exporting `ProbeThenWriteStore`.
+2. **#78** — `happenstance-neon` stops exporting `ProbeThenWriteStore`. The owner chose
+   how on 2026-10-11 (`wi-17ec03`): it and `probe_request` become `#[cfg(test)]` and
+   crate-private, the root re-export goes, and the intra-doc links to it become code spans.
 3. Then #96 (the release PR: trace table, heading, install lines), #97 (tag and
    publish) and #87.
 
 #89 and #78 are `door:one-way` and `semver:breaking`: each is its own PR, carries
 its `CHANGELOG.md` trace row, and is left for the owner to merge. #84 is answered
 by the same decision.
+
+#109 (ES-41's held-versus-visible reading) is not on this path. The owner chose **held**
+on 2026-10-11 (`wi-33ab08`). That is what Postgres and Neon already answer, so the rule,
+its mutant and the ADR the frozen clause needs are additive and stay in phase 13.
 
 Until then, an agent takes the first issue the ready-for-agent query returns
 ([`afk.md`](afk.md) § *Taking work*):
