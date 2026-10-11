@@ -161,9 +161,9 @@ was the instrument for it: it would have reported "still owned" the day the
 binding became `Transaction<'a, Postgres>`, and the finding would have been the
 compile error in some downstream runner months later.
 
-**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:719 (proved nothing)` ·
-`crates/happenstance-postgres/src/projection_store.rs:724 (universally-quantified lifetime)` ·
-`crates/happenstance-postgres/src/projection_store.rs:732 (fn the_batch_does_not_borrow_the_store)` ·
+**Evidence.** `crates/happenstance-postgres/src/projection_store.rs:790 (proved nothing)` ·
+`crates/happenstance-postgres/src/projection_store.rs:795 (universally-quantified lifetime)` ·
+`crates/happenstance-postgres/src/projection_store.rs:803 (fn the_batch_does_not_borrow_the_store)` ·
 [SPECIFICATION PS-5](../../spec/SPECIFICATION.md)
 
 ---
