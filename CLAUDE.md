@@ -368,7 +368,8 @@ anything until phase 2 — docs, `cargo xtask spec-trace` over
 build of `happenstance-core` (three configurations in all with the workspace
 `--all-features` one, because a link from a `memory` page into a `conformance`
 item is broken at neither end of that range and only in the middle, which is
-where a consumer stands),
+where a consumer stands), a default-features doc build of `happenstance` for
+the same reason, a layer up (#91: a link into an `unstable-projection` item),
 and a `cargo package --list` assertion that each of the **seven** publishable
 crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
 `happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and

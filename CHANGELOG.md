@@ -522,6 +522,17 @@ not the same as what a user needed to be told.
   Ladybug steps and the `ladybug-configured` subcommand are gone. The `0.0.0`
   name reservation on crates.io stands and is not yanked.
 
+### Fixed
+
+- **`happenstance`'s crate page builds on its default features again** (#91).
+  It linked to `Projection::apply`, which exists only under
+  `unstable-projection`, so `cargo doc -p happenstance` with `-D warnings` failed
+  on the feature set `cargo add happenstance` gives. The link is now a code span
+  (#216, from Jah-yee). A fourth gate step, `documentation (default features,
+  happenstance)`, builds that configuration so the blind spot cannot reopen: the
+  workspace doc step uses `--all-features`, where every gate is open, and the
+  existing default-features step covers `happenstance-core` only.
+
 
 ### `0.4.0` trace (draft, not released)
 
