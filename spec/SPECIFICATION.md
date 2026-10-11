@@ -1204,7 +1204,7 @@ densely"* — was the exact belief that produces an exact-seek `from`.
 
 `EventType::new` and `Tag::new` MUST reject an empty value, a value longer than
 the applicable byte bound, any character in Unicode general category `Cc`, and
-the seven explicit bidirectional formatting controls (U+202A–U+202E,
+the nine explicit bidirectional formatting controls (U+202A–U+202E,
 U+2066–U+2069). They MUST NOT reject Unicode category `Cf` generally.
 
 `[PROVISIONAL — falsified by a legitimate event type or tag that requires an
@@ -1212,10 +1212,10 @@ explicit bidirectional formatting control; no such value is known and the
 scenarios contain none]`
 `Rule:` unit tests `rejects_invalid_event_types`, `rejects_invalid_tags`, and
 `validate`'s own `rejects_c0_del_and_c1_controls`,
-`rejects_all_seven_bidirectional_controls`,
+`rejects_all_nine_bidirectional_controls`,
 `accepts_the_format_characters_scripts_need` and
 `accepts_neighbours_of_the_closed_list`, which cover every arm this clause
-states — the C1 range, the seven controls, the `Cf` characters scripts need, and
+states — the C1 range, the nine controls, the `Cf` characters scripts need, and
 the four codepoints bracketing the two closed runs;
 `store_accepts_a_max_length_identifier`, which VT-20 claims too — one round trip,
 two clauses with a stake in it, and the boundary here is the boundary of
@@ -1243,7 +1243,7 @@ fix was to the prose.
 (`crates/happenstance-core/src/validate.rs`) is a single `const fn` byte walk
 shared by `EventType::new`, `EventType::from_static`, `Tag::new` and
 `Tag::from_static`, so the four constructors cannot diverge (VT-32); it rejects
-the C1 range and the seven bidirectional controls and accepts `Cf` otherwise;
+the C1 range and the nine bidirectional controls and accepts `Cf` otherwise;
 and the four doc comments now say "control characters (Unicode `Cc`)". The
 compiled finding worth keeping is that a **byte walk sees all of this**: this
 clause's own text implied a general-category predicate was the only way to reach
@@ -1255,8 +1255,8 @@ affordable, and one validator is what makes `from_static` exactly as strong as
 
 The bidirectional half is a new decision and it is narrow on purpose. U+202E in
 an event type is a log-spoofing vector — a type that renders as one thing in
-every console and matches another in every query — and the seven override and
-isolate characters are the only `Cf` codepoints no script needs. The check is a
+every console and matches another in every query — and the nine embedding, override
+and isolate characters are the only `Cf` codepoints no script needs. The check is a
 `matches!` over a closed list with no dependency, which is the reason it is
 affordable when a general-category predicate is not: `core` exposes no such
 predicate and pulling in a Unicode tables crate to get one would be the largest

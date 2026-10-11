@@ -29,7 +29,7 @@ pub(crate) enum Refusal {
     TooLong,
     /// The value contains a character in Unicode general category `Cc`.
     ControlCharacter,
-    /// The value contains one of the seven explicit bidirectional formatting
+    /// The value contains one of the nine explicit bidirectional formatting
     /// controls.
     BidirectionalControl,
 }
@@ -37,12 +37,12 @@ pub(crate) enum Refusal {
 /// Applies VT-14's rules to `value`, in a `const` context or out of one.
 ///
 /// Rejects, in this order: an empty value; one longer than `max_len` bytes; any
-/// character in Unicode general category `Cc`; and the seven explicit
+/// character in Unicode general category `Cc`; and the nine explicit
 /// bidirectional formatting controls U+202A–U+202E and U+2066–U+2069.
 ///
 /// It deliberately does **not** reject Unicode category `Cf` generally, which
 /// VT-14 forbids in terms: a blanket `Cf` ban would take U+200C and U+200D with
-/// it, and Persian, Hindi and emoji sequences require both. The seven below are
+/// it, and Persian, Hindi and emoji sequences require both. The nine below are
 /// the only `Cf` codepoints no script needs, and each is a log-spoofing vector —
 /// an event type that renders as one thing in every console and matches another
 /// in every query.
@@ -122,7 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_all_seven_bidirectional_controls() {
+    fn rejects_all_nine_bidirectional_controls() {
         for c in ['\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}'] {
             let mid = alloc::format!("a{c}b");
             assert!(matches!(check(&mid, MAX), Refusal::BidirectionalControl));
