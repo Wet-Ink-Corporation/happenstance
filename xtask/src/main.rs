@@ -1092,11 +1092,7 @@ fn main() -> ExitCode {
         Some("ci") => match std::env::args().nth(2).as_deref() {
             None => run_ci(),
             Some("--fast") => run_fast(),
-            Some(flag) => {
-                eprintln!("unknown flag for ci: {flag}");
-                print_help();
-                return ExitCode::FAILURE;
-            }
+            Some(flag) => usage(format_args!("unknown flag for ci: {flag}")),
         },
         Some("wasm") => run_steps(wasm_steps()),
         Some("affected") => match (
@@ -1105,26 +1101,14 @@ fn main() -> ExitCode {
         ) {
             (None, _) => affected::run(None),
             (Some("--base"), Some(base)) => affected::run(Some(base)),
-            (Some("--base"), None) => {
-                eprintln!("--base needs a ref");
-                print_help();
-                return ExitCode::FAILURE;
-            }
-            (Some(flag), _) => {
-                eprintln!("unknown flag for affected: {flag}");
-                print_help();
-                return ExitCode::FAILURE;
-            }
+            (Some("--base"), None) => usage(format_args!("--base needs a ref")),
+            (Some(flag), _) => usage(format_args!("unknown flag for affected: {flag}")),
         },
         Some("reserve") => reserve::run(std::env::args().nth(2).as_deref()),
         Some("spec-trace") => match std::env::args().nth(2).as_deref() {
             None => spec_trace::run(spec_trace::Mode::Check),
             Some("--write") => spec_trace::run(spec_trace::Mode::Write),
-            Some(flag) => {
-                eprintln!("unknown flag for spec-trace: {flag}");
-                print_help();
-                return ExitCode::FAILURE;
-            }
+            Some(flag) => usage(format_args!("unknown flag for spec-trace: {flag}")),
         },
         Some("package-check") => package::run(),
         Some("proof-artefact") => proof::run(),
@@ -1150,34 +1134,20 @@ fn main() -> ExitCode {
         Some("lint-pages") => match std::env::args().nth(2).as_deref() {
             None => lint_pages::run(lint_pages::Mode::Check),
             Some("--write") => lint_pages::run(lint_pages::Mode::Write),
-            Some(flag) => {
-                eprintln!("unknown flag for lint-pages: {flag}");
-                print_help();
-                return ExitCode::FAILURE;
-            }
+            Some(flag) => usage(format_args!("unknown flag for lint-pages: {flag}")),
         },
         Some("lint-constitution") => match std::env::args().nth(2).as_deref() {
             None => lint_constitution::run(lint_constitution::Mode::Check),
             Some("--write") => lint_constitution::run(lint_constitution::Mode::Write),
-            Some(flag) => {
-                eprintln!("unknown flag for lint-constitution: {flag}");
-                print_help();
-                return ExitCode::FAILURE;
-            }
+            Some(flag) => usage(format_args!("unknown flag for lint-constitution: {flag}")),
         },
-        Some(other) => {
-            eprintln!("unknown task: {other}");
-            print_help();
-            return ExitCode::FAILURE;
-        }
-        None => {
-            print_help();
-            return ExitCode::SUCCESS;
-        }
+        Some(other) => usage(format_args!("unknown task: {other}")),
+        None => print_help().context("writing the help text"),
     };
 
     match result {
         Ok(()) => ExitCode::SUCCESS,
+        Err(err) if err.is::<Usage>() => ExitCode::FAILURE,
         Err(err) => {
             eprintln!("\nxtask failed: {err:#}");
             ExitCode::FAILURE
@@ -1185,79 +1155,142 @@ fn main() -> ExitCode {
     }
 }
 
-fn print_help() {
-    println!("cargo xtask <task>");
-    println!();
-    println!("Tasks:");
-    println!("  ci [--fast]");
-    println!("         Run the full gate: fmt, clippy, tests, wasm32, docs with and");
-    println!("         without default features, spec-trace, package-check — then, when");
-    println!("         the tool is installed, the workspace and wasm32 feature powersets,");
-    println!("         cargo-deny, and a nightly `--cfg docsrs` rustdoc build. --fast runs");
-    println!("         the mandatory steps only, dropping that last group; it is the bar a");
-    println!("         non-terminal project's integration gate runs, never the release bar.");
-    println!("  affected [--base <ref>]");
-    println!("         The story-grain gate: unconditionally, every check the whole gate");
-    println!("         reads a document for, bar lint-constitution — affected's own docs");
-    println!("         argue that one. Then fmt, clippy and tests for the packages this diff");
-    println!("         could have broken and everything depending on them. Base defaults to");
-    println!("         `main`, and it errs toward more packages — the module docs say why.");
-    println!("  wasm   The whole wasm32-unknown-unknown family. Five builds — happenstance-core,");
-    println!("         the conformance harnesses, the two wasm32 adapters (cloudflare, neon)");
-    println!("         and the typed layer (happenstance, the crate a Workers application");
-    println!("         installs) — none of which says which port flavour the code bound,");
-    println!("         because Send exists on that target. Then two rows that are a");
-    println!("         different claim: every wasm32-capable conformance target is held");
-    println!("         to its own rule enumeration, and the rules are EXECUTED on the");
-    println!("         target under wasm-bindgen-test-runner. Also available on their own");
-    println!("         as wasm-conformance-enumeration and wasm-conformance.");
-    println!("  spec-trace [--write]");
-    println!("         Check the specification's clauses against the suite and the e2e");
-    println!("         cases: markers, falsifiers, rule names, case numbers, citations.");
-    println!("         Also compares SPECIFICATION.md's generated §7.1-§7.2 region against");
-    println!("         what the checker computes, and fails when they differ. --write");
-    println!("         rewrites that region; §7.3 onward is authored and never touched.");
-    println!("  lints  Run just the file-reading checks — every step that reads a document");
-    println!("         rather than compiling a package. The rows below are printed from the");
-    println!("         selection this command runs; each is also a subcommand of its own:");
+/// A command line `main` could not parse, already explained to the user.
+///
+/// A marker rather than a message: [`usage`] has printed the complaint and the
+/// help, so `main` exits failing without saying it again.
+#[derive(Debug)]
+struct Usage;
+
+impl std::fmt::Display for Usage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the command line was not understood")
+    }
+}
+
+impl std::error::Error for Usage {}
+
+/// A malformed command line: the complaint on stderr, then the help on stdout.
+///
+/// # Errors
+///
+/// Always — [`Usage`] once both are written, or the write that failed, which
+/// `main` reports like any other failure.
+fn usage(complaint: std::fmt::Arguments<'_>) -> Result<()> {
+    use std::io::Write as _;
+
+    writeln!(std::io::stderr().lock(), "{complaint}").context("writing to stderr")?;
+    print_help().context("writing the help text")?;
+    Err(Usage.into())
+}
+
+/// `cargo xtask` with no task, or with one it cannot parse, on stdout.
+///
+/// Through one locked handle rather than `println!`, which panics when stdout
+/// is a closed pipe — `cargo xtask | head -3` would otherwise abort mid-text.
+///
+/// # Errors
+///
+/// When stdout cannot be written.
+fn print_help() -> std::io::Result<()> {
+    write_help(&mut std::io::stdout().lock())
+}
+
+/// The help text, into any writer — stdout for [`print_help`], a buffer for
+/// the tests, which read what a reader sees rather than the source that says it.
+///
+/// # Errors
+///
+/// When `w` cannot be written.
+fn write_help(w: &mut impl std::io::Write) -> std::io::Result<()> {
+    w.write_all(HELP_TASKS.as_bytes())?;
     for step in lint_steps() {
         let subcommand = step.args.last().copied().unwrap_or(step.name);
-        println!("           {subcommand:<25}{}", step.name);
+        writeln!(w, "           {subcommand:<25}{}", step.name)?;
     }
-    println!("  package-check");
-    println!("         Assert that `cargo package --list` shows LICENSE-MIT, LICENSE-APACHE");
-    println!("         and README.md inside each publishable crate's artifact.");
-    println!("  proof-artefact");
-    println!("         Assert that each phase's proof artefact still holds the tests its");
-    println!(
+    w.write_all(HELP_AFTER_LINTS.as_bytes())?;
+    writeln!(
+        w,
         "         clauses name — {} across {} targets — then run them. `cargo test` exits 0",
         proof::ARTEFACTS
             .iter()
             .map(|a| a.tests.len())
             .sum::<usize>(),
         proof::ARTEFACTS.len()
-    );
-    println!("         on an empty target, so the names are checked out of `--list` first.");
-    println!("  narrative-doctests");
-    println!("         Compile every Rust example in docs/, the narrative tree, as doctests");
-    println!("         of xtask's lib target. Same argument as above, one corpus further on:");
-    println!("         a filtered `cargo test --doc` exits 0 over `running 0 tests`, so the");
-    println!("         pages are asserted out of `--list` and counted before they are run.");
-    println!("  narrative");
-    println!("         Check docs/, the narrative tree, as files: the tree is where this");
-    println!("         gate pins it and is not empty, every page is registered in");
-    println!("         xtask/src/narrative.rs, every registration names a page that still");
-    println!("         exists, and no page path is long enough to starve the report.");
-    println!("  lint-pages [--write]");
-    println!("         Check the page-need discipline: every governed page in the narrative");
-    println!("         tree declares exactly one need from the closed set, at a line number,");
-    println!("         and standards/pages/ — the rules that say so — keeps its own shape,");
-    println!("         its ceilings and a router index generated from the atoms. --write");
-    println!("         rewrites that index; nothing else in the tree is ever written.");
-    println!("  reserve <name>");
-    println!("         Generate the 0.0.0 placeholder for a crates.io name. Prints the");
-    println!("         publish command; never publishes anything itself.");
+    )?;
+    w.write_all(HELP_AFTER_PROOF.as_bytes())
 }
+
+/// The help up to the `lints` rows, which are printed from the selection itself.
+const HELP_TASKS: &str = "\
+cargo xtask <task>
+
+Tasks:
+  ci [--fast]
+         Run the full gate: fmt, clippy, tests, wasm32, docs with all features,
+         with no default features and on the default features of
+         happenstance-core and of happenstance, spec-trace, package-check — then,
+         when the tool is installed, the workspace and wasm32 feature powersets,
+         cargo-deny, and a nightly `--cfg docsrs` rustdoc build. --fast runs the
+         mandatory steps only, dropping that last group; it is the bar a
+         non-terminal project's integration gate runs, never the release bar.
+  affected [--base <ref>]
+         The story-grain gate: unconditionally, every check the whole gate
+         reads a document for, bar lint-constitution — affected's own docs
+         argue that one. Then fmt, clippy and tests for the packages this diff
+         could have broken and everything depending on them. Base defaults to
+         `main`, and it errs toward more packages — the module docs say why.
+  wasm   The whole wasm32-unknown-unknown family. Five builds — happenstance-core,
+         the conformance harnesses, the two wasm32 adapters (cloudflare, neon)
+         and the typed layer (happenstance, the crate a Workers application
+         installs) — none of which says which port flavour the code bound,
+         because Send exists on that target. Then two rows that are a
+         different claim: every wasm32-capable conformance target is held
+         to its own rule enumeration, and the rules are EXECUTED on the
+         target under wasm-bindgen-test-runner. Also available on their own
+         as wasm-conformance-enumeration and wasm-conformance.
+  spec-trace [--write]
+         Check the specification's clauses against the suite and the e2e
+         cases: markers, falsifiers, rule names, case numbers, citations.
+         Also compares SPECIFICATION.md's generated §7.1-§7.2 region against
+         what the checker computes, and fails when they differ. --write
+         rewrites that region; §7.3 onward is authored and never touched.
+  lints  Run just the file-reading checks — every step that reads a document
+         rather than compiling a package. The rows below are printed from the
+         selection this command runs; each is also a subcommand of its own:
+";
+
+/// The help from `package-check` up to the proof count, which is computed.
+const HELP_AFTER_LINTS: &str = "  package-check
+         Assert that `cargo package --list` shows LICENSE-MIT, LICENSE-APACHE
+         and README.md inside each publishable crate's artifact.
+  proof-artefact
+         Assert that each phase's proof artefact still holds the tests its
+";
+
+/// The rest of the help.
+const HELP_AFTER_PROOF: &str =
+    "         on an empty target, so the names are checked out of `--list` first.
+  narrative-doctests
+         Compile every Rust example in docs/, the narrative tree, as doctests
+         of xtask's lib target. Same argument as above, one corpus further on:
+         a filtered `cargo test --doc` exits 0 over `running 0 tests`, so the
+         pages are asserted out of `--list` and counted before they are run.
+  narrative
+         Check docs/, the narrative tree, as files: the tree is where this
+         gate pins it and is not empty, every page is registered in
+         xtask/src/narrative.rs, every registration names a page that still
+         exists, and no page path is long enough to starve the report.
+  lint-pages [--write]
+         Check the page-need discipline: every governed page in the narrative
+         tree declares exactly one need from the closed set, at a line number,
+         and standards/pages/ — the rules that say so — keeps its own shape,
+         its ceilings and a router index generated from the atoms. --write
+         rewrites that index; nothing else in the tree is ever written.
+  reserve <name>
+         Generate the 0.0.0 placeholder for a crates.io name. Prints the
+         publish command; never publishes anything itself.
+";
 
 /// The `wasm32` steps, selected by name.
 ///
@@ -1576,6 +1609,63 @@ mod tests {
         fs::read_to_string(root.join(rel))
             .unwrap_or_else(|e| panic!("reading {rel}: {e}"))
             .replace("\r\n", "\n")
+    }
+
+    /// What `cargo xtask` with no task prints, rendered into a buffer.
+    pub(crate) fn rendered_help() -> String {
+        let mut help = Vec::new();
+        crate::write_help(&mut help).expect("a Vec accepts every write");
+        String::from_utf8(help).expect("the help text is UTF-8")
+    }
+
+    /// A writer whose every write fails, as stdout does on a closed pipe.
+    struct ClosedPipe;
+
+    impl std::io::Write for ClosedPipe {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::BrokenPipe.into())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The reason `print_help` stopped using `println!`: a closed stdout is an
+    /// error the caller sees, not a panic. The wrong implementation it rejects
+    /// is one that swallows the write's result and returns `Ok`.
+    #[test]
+    fn the_help_reports_a_closed_pipe_rather_than_panicking() {
+        let err = crate::write_help(&mut ClosedPipe).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
+    }
+
+    /// The `ci` entry names every documentation build the gate runs, which
+    /// since #91 includes `happenstance`'s default features, not only core's.
+    #[test]
+    fn the_ci_help_names_the_per_crate_default_feature_doc_builds() {
+        let rendered = rendered_help();
+        let ci = rendered
+            .split("\n  ci [--fast]")
+            .nth(1)
+            .expect("no `ci` entry in the help")
+            .split("\n  affected")
+            .next()
+            .expect("the `ci` help entry runs to the end of the help")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        assert!(
+            ci.contains("docs with all features, with no default features and on the default features of happenstance-core and of happenstance"),
+            "the `ci` help does not name the per-crate default-features doc builds: {ci}"
+        );
+        assert!(
+            REQUIRED
+                .iter()
+                .any(|step| step.name == "documentation (default features, happenstance)"),
+            "the help names a `happenstance` default-features doc build the gate does not run"
+        );
     }
 
     /// The `default` line of a `[features]` table, as written.
@@ -2019,19 +2109,18 @@ mod tests {
 
     /// AC-002. `cargo xtask --help` stops claiming the wasm32 tasks only build.
     ///
-    /// Read off the source for the reason [`step_comment`] is: `print_help`
-    /// writes to stdout, and the sentence a reader is misled by is a string
-    /// literal rather than a value anything can observe at runtime.
+    /// Read off the rendered text, which is what a reader is misled by. It was
+    /// read off the source while `print_help` could only write to stdout.
     #[test]
     fn the_help_text_says_the_wasm32_tasks_execute_rules() {
-        let source = read("xtask/src/main.rs");
-        let help = source
-            .split("println!(\"  wasm")
+        let rendered = rendered_help();
+        let help = rendered
+            .split("\n  wasm ")
             .nth(1)
-            .expect("no `wasm` entry in print_help")
-            .split("println!(\"  spec-trace")
+            .expect("no `wasm` entry in the help")
+            .split("\n  spec-trace")
             .next()
-            .expect("the `wasm` help entry runs to the end of the file")
+            .expect("the `wasm` help entry runs to the end of the help")
             .to_lowercase();
 
         assert!(

@@ -2459,7 +2459,7 @@ mod tests {
             "`cargo xtask narrative` must dispatch to the checker"
         );
         assert!(
-            main.contains("println!(\"  narrative\");"),
+            crate::tests::rendered_help().contains("\n  narrative\n"),
             "`cargo xtask` with no argument must list the subcommand"
         );
     }
