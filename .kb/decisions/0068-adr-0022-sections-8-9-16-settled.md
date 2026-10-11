@@ -201,7 +201,7 @@ its own (`crates/happenstance-postgres/src/read_stream.rs:458-480`).
 - **§6's falsifier has not fired.** No deployment's dominant read is broad.
 - **§10 has no falsifier in §16**; its own re-open trigger (`0022:452-455`), Postgres or Neon
   independently needing the same per-item decomposition, has not fired. `happenstance-neon`'s
-  probe unions per guard, not per query item (`crates/happenstance-neon/src/event_store.rs:441-471`),
+  probe unions per guard, not per query item (`crates/happenstance-neon/src/event_store.rs:462-492`),
   and stays adapter-private. The merged read path (`b3c8d84`) is the decomposition staying
   adapter-private in SQLite too, which is §10's verdict.
 - **§12** supplied a number. `CONTENDERS` is now 64 (`crates/happenstance-testkit/src/concurrency.rs:271`),

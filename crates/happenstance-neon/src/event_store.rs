@@ -1460,9 +1460,9 @@ impl<T: SqlTransport> Stream for NeonReadStream<'_, T> {
 
 /// The named attempt: an `append` that **probes and writes in two round trips**.
 ///
-/// Compiled for this module's tests only, and not API: it was public up to
-/// `0.3.2`, and `0.4.0` withdrew it because a lost-update store has no caller
-/// outside the crate that should be able to build one (`wi-17ec03`).
+/// Compiled for this module's tests only, and not API (`wi-17ec03`): a
+/// lost-update store has no caller outside the crate that should be able to
+/// build one.
 ///
 /// # It compiles, and that is the finding
 ///
