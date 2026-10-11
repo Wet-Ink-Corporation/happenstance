@@ -56,10 +56,11 @@ The `0.4.0` release (epic #61) is the owner's. **The owner decided on 2026-10-10
 
 1. **#89** — ADR-0084's Postgres parameter-count check: refuse surplus parameters on
    a projection batch. It fills the trace table's one pending row.
-2. **#78** — landed on `local/78`, for the owner to merge: `happenstance-neon` no longer
-   exports `ProbeThenWriteStore`. As the owner chose on 2026-10-11 (`wi-17ec03`), it and
-   `probe_request` are `#[cfg(test)]` and crate-private, the root re-export is gone, and
-   the intra-doc links to it are code spans. Trace row T8 (`struct_missing`).
+2. **#78** — `happenstance-neon` stops exporting `ProbeThenWriteStore`. The owner chose
+   how on 2026-10-11 (`wi-17ec03`): it and `probe_request` become `#[cfg(test)]` and
+   crate-private, the root re-export goes, and the intra-doc links to it become code spans.
+   Built in its PR as trace row T8 (`struct_missing`), and the PR waits for the owner's
+   review and merge.
 3. Then #96 (the release PR: trace table, heading, install lines), #97 (tag and
    publish) and #87.
 

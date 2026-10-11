@@ -12,7 +12,7 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ## 2026-10-11 — `ProbeThenWriteStore` is test-only (#78)
 
-*Committed on `local/78`, on `40b80ac`.* Phase 17.
+*Committed on `claude/project-thread-o4ctcu-78`, on `40b80ac`.* Phase 17.
 
 `happenstance-neon` stops exporting its lost-update store, as `wi-17ec03` decided: the
 type, `probe_request` and `decode_probe_response` are `#[cfg(test)]` and private, and
