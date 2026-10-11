@@ -514,6 +514,20 @@ not the same as what a user needed to be told.
   pass empty. The same job also runs clippy under the cfg, because the gate's
   `--all-features` clippy no longer reaches these items.
 
+- **BREAKING (`happenstance-neon`, `event-store` feature): `ProbeThenWriteStore`
+  is gone from the public API**, at `happenstance_neon::ProbeThenWriteStore` and
+  at `happenstance_neon::event_store::ProbeThenWriteStore`. It is the append
+  that probes and writes in two round trips, which this endpoint runs as two
+  transactions with nothing joining them: a store that loses updates by design,
+  kept as the compiling call site the crate's documentation argues from. Being
+  `pub`, with a constructor and an `EventStore` impl, it was one import away from
+  production. It is now compiled only for the crate's own unit tests, and its
+  source and rustdoc stay where the crate documentation points. **If you named
+  it, use `NeonEventStore`**, whose append is the same two statements in one
+  request on one `SERIALIZABLE` snapshot; nothing else in this workspace built
+  it. The owner chose test-only over a feature gate,
+  `#[doc(hidden)]` and a move to the testkit (`wi-17ec03`, #78).
+
 - **`happenstance-ladybug` is retired** ([ADR-0078](.kb/decisions/0078-happenstance-ladybug-is-retired.md)).
   Informational only: the crate was never published, so no manifest can name a
   version of it. The owner abandoned it at phase 17. It is excluded from the
@@ -542,7 +556,8 @@ Every break `0.4.0` carries, each with the decision that caused it. Drafted
 0.51.0: 202 checks per crate). Four crates reported no break: `happenstance`,
 `happenstance-core`, `happenstance-sqlite` and `happenstance-cloudflare`; three
 reported six, listed below as **tool** rows, and a run of the same command on
-`happenstance-neon` alone, on lane L8's tree, added a seventh (T7). "No break" is the tool's verdict on
+`happenstance-neon` alone, on lane L8's tree, added a seventh (T7), and the same
+run on #78's tree an eighth (T8). "No break" is the tool's verdict on
 `main` before lane L10, not this table's: all four carry hand rows below, and
 `happenstance-core` and `happenstance` gained L10's (H8, H9) after the run. The **hand** rows are breaks the tool
 cannot see, found by reading every BREAKING entry above against the tool's output. A row whose decision is still `proposed` is listed under *Pending* and
@@ -557,6 +572,7 @@ is not part of `0.4.0` until the owner accepts it.
 | T5 | `happenstance-postgres` | `PostgresEventStore::new_naive` is gone from every feature-selected build (`inherent_method_missing`) | tool | as T4 | Removed |
 | T6 | `happenstance-testkit` | `k_disjoint_boundaries_admit_exactly_k_commits` renamed `k_disjoint_boundaries_never_conflict` (`function_missing`); the rule also changed what it accepts: a contender refused as busy no longer fails it (behaviour, which the tool cannot see) | tool and hand | [ADR-0077](.kb/decisions/0077-appenderror-busy.md) | Changed |
 | T7 | `happenstance-neon` | `SqlTransport` gains the required method `reads_settled` (`trait_method_added`); `append` also waits on it, which the tool cannot see (behaviour) | tool and hand | ADR-0087, accepted 2026-10-08 (#51) | Changed |
+| T8 | `happenstance-neon` | `ProbeThenWriteStore` is gone at the crate root and at `event_store::ProbeThenWriteStore` (`struct_missing`, reported once per path) | tool | [`wi-17ec03`](.kb/decisions/wi-17ec03-how-does-happenstance-neon-stop-exporting.md), #78 | Removed |
 | H1 | `happenstance-core` | the empty `unstable-projection` feature is removed; the tool passes over `unstable-*` features | hand | [ADR-0063](.kb/decisions/0063-the-projection-port-is-frozen.md), ADR-0066 | Removed |
 | H2 | `happenstance-testkit` | the `#[doc(hidden)]` conformance emitters are renamed and promised; the tool skips hidden items | hand | [ADR-0076](.kb/decisions/0076-the-cf-23-emitters-are-public-api.md) | Changed |
 | H3 | `happenstance-cloudflare` | `planned_statement_count` returns different values for the same query (`n.div_ceil(5)`); signature unchanged | hand | [ADR-0079](.kb/decisions/0079-a-query-item-binds-a-constant-number-of-parameters.md) | Changed |
