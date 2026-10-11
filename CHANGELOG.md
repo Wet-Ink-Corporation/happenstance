@@ -34,6 +34,34 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **Every published crate's README states its MSRV and the rule for raising it** (#201).
+  This is documentation only. The floor stays at 1.97.1. After `1.0.0` it rises
+  only in a minor release, only to a Rust stable at least six months old, and
+  always with an entry here naming the old floor, the new one and what forced
+  it ([ADR-0067](.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)). Each
+  README also says what protects you from a rise: your own workspace's
+  `resolver = "3"`, and `cargo update`'s *to latest Rust 1.xx compatible
+  versions* is how you can tell it is in effect. `cargo xtask lints` now fails if
+  any README in the release set has no such section, or states a floor its
+  manifest does not declare.
+
+### Changed
+
+- **What `EventType::new` and `Tag::new` refuse is now a promise, and the
+  documentation counts it correctly.** No behaviour changed. VT-14 was
+  provisional until someone showed that real right-to-left identifiers pass the
+  check. `experiments/identifier-validation/` ran the shipped validator over every
+  Unicode scalar value in three positions, with 0 disagreements, and over 51
+  Arabic, Hebrew and Persian identifiers, many mixed with Latin text, with 0
+  refused. VT-14 is `[FROZEN]`, so from `1.0.0` changing the refused set is a
+  major release. The docs said the constructors refuse "the seven explicit
+  bidirectional formatting controls". The ranges they name, U+202A–U+202E and
+  U+2066–U+2069, hold nine, and the check has always refused all nine. The docs
+  now say nine
+  ([ADR-0089](.kb/decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md)).
+
 ## [0.4.0] — 2026-10-11
 
 ### Changed

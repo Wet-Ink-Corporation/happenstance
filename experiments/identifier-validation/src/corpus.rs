@@ -128,7 +128,8 @@ impl Insertion {
 
 /// The characters inserted as negative controls, and the verdict each must draw:
 /// every codepoint of VT-14's two bidirectional ranges — nine, though the
-/// clause calls them seven — and U+0085, a C1 control.
+/// clause, at `4d18e771`, calls them seven (corrected by ADR-0089) — and
+/// U+0085, a C1 control.
 pub const NEGATIVE_INSERTS: [(char, Verdict); 10] = [
     ('\u{202A}', Verdict::BidirectionalControl),
     ('\u{202B}', Verdict::BidirectionalControl),

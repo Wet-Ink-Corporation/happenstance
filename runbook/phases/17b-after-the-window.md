@@ -39,12 +39,15 @@ spelling, settled by compiling it.
       deprecation into an error — so this lands **last** among 17b's code items.
       Limb 2 retired by the record or by a multi-guard `fragmented_boundary`
       bench scenario.
-- [ ] #86 · **VT-14 — the RTL identifier corpus check.** A standalone
+- [x] #86 · **VT-14 — the RTL identifier corpus check.** A standalone
       `experiments/identifier-validation/` with a path dependency on
       `happenstance-core`: the E11 reproduction run against the shipped validator
       (every `char`, alone and embedded), and an Arabic, Hebrew and Persian corpus
       with mixed LTR, its "empty" criterion pre-registered in the README before the
       run. Freeze VT-14 if it comes back empty.
+      **Done:** empty (PR #239), and VT-14 is `[FROZEN]` by
+      [ADR-0089](../../.kb/decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md),
+      which also corrects the clause's count of bidirectional controls from seven to nine.
 - [ ] #88 · **ES-7 — frozen in the record that answers
       `trait-variant-caret-resolves-past-the-locked-gate`.** The research
       recommends keeping the caret, and buying the protection with a derivation
@@ -100,3 +103,7 @@ in this file's session log.
 **Session log**
 
 - 2026-09-29 — Created by ADR-0072, which split it from phase 17.
+- 2026-10-11 — #86: the RTL corpus run in `experiments/identifier-validation/` came back
+  empty (PR #239). On the owner's call, VT-14 is `[FROZEN]` by ADR-0089, and "seven"
+  explicit bidirectional controls is corrected to nine wherever it was live prose. VT-30
+  and ES-7 remain, so the exit criterion stays open.

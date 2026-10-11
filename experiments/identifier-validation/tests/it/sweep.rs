@@ -41,8 +41,9 @@ fn refused_alone(constructor: Constructor) -> SweepReport {
     sweep(Position::Alone, |value| constructor.verdict(value))
 }
 
-/// 65 `Cc` and the nine codepoints of the two bidi ranges: 74. VT-14's text
-/// says "the seven", and its ranges hold nine; the ranges are the criterion.
+/// 65 `Cc` and the nine codepoints of the two bidi ranges: 74. VT-14's text,
+/// at `4d18e771`, says "the seven" (corrected by ADR-0089), and its ranges
+/// hold nine; the ranges are the criterion.
 #[test]
 fn the_refused_set_alone_is_exactly_the_clauses_ranges() {
     let c0 = ('\u{0}'..='\u{1F}').map(|c| (c, Verdict::ControlCharacter));

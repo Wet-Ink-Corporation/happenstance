@@ -135,10 +135,9 @@ assert_eq!(done.committed().expect("a seat was taken").attempts, 1);
   in these defaults, so it drops a codec and a type here and nothing of the kind
   there. If you are auditing a minimal graph, those three are what to look at —
   and `conformance` is the one switch that exists only in the contract crate.
-- MSRV 1.97.1, checked in CI. Raised from 1.85 at phase 2 by a *dependency's*
-  build script rather than by this crate's own code —
-  [ADR-0029](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0029-msrv-raised-to-1-97-1.md)
-  records the measurement and the trade.
+- MSRV 1.97.1, raised from 1.85 at phase 2 by a *dependency's* build script
+  rather than by this crate's own code. What bounds the next rise is under
+  [*Minimum supported Rust version*](#minimum-supported-rust-version).
 
 ## Design
 
@@ -146,6 +145,26 @@ The design is specified rather than described:
 [`spec/SPECIFICATION.md`](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 carries the normative clauses, each with a maturity marker, the conformance rule
 that checks it, and the wrong implementation it forbids.
+
+## Minimum supported Rust version
+
+Rust **1.97.1**, the `rust-version` this crate declares
+([ADR-0029](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0029-msrv-raised-to-1-97-1.md)).
+After `1.0.0` the floor rises only in a minor release, never a patch; only to a
+Rust stable at least six months old on the day that minor ships; and always with
+a `CHANGELOG.md` entry naming the old floor, the new one and what forced it
+([ADR-0067](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)).
+
+Before `1.0.0`, a rise ships in a `0.x` minor, which a `"0.x"` requirement never
+resolves across
+([ADR-0037](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0037-msrv-becomes-a-promise-at-0-2-0.md)).
+From `1.0.0`, what keeps a rise from reaching you is your workspace's resolver,
+not this crate's: under `resolver = "3"`, the default for an edition-2024 root,
+or with `resolver.incompatible-rust-versions = "fallback"` set, Cargo prefers
+the newest version whose `rust-version` your lowest `package.rust-version` (or
+your `rustc`, if you declare none) satisfies, and `cargo update` says so by
+printing *to latest Rust 1.xx compatible versions* where resolver 2 prints *to
+latest compatible versions*. On resolver 2, only your lockfile holds you back.
 
 ## Licence
 

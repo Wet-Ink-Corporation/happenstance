@@ -76,7 +76,7 @@
 //! commitments arrive with the version and neither is optional now: the
 //! `EventStore` clauses marked `[FROZEN]` in the specification are
 //! **semver-binding** here as everywhere, and this crate carries the workspace's
-//! **MSRV of 1.97.1**, which ADR-0029 made a promise at exactly this release.
+//! **MSRV of 1.97.1**, a promise from this release (ADR-0037), bounded by ADR-0067.
 //! `ProjectionStore` was not frozen at that release and is since ADR-0063; this
 //! crate does not implement it at all, so neither state touched it.
 //!

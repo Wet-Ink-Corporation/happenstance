@@ -29,7 +29,7 @@ pub enum InvalidTag {
     /// The tag contained a control character (Unicode `Cc`).
     #[error("a tag must not contain control characters")]
     ControlCharacter,
-    /// The tag contained one of the seven explicit bidirectional formatting
+    /// The tag contained one of the nine explicit bidirectional formatting
     /// controls: U+202A–U+202E or U+2066–U+2069.
     ///
     /// Separate from [`ControlCharacter`](Self::ControlCharacter) because the
@@ -63,7 +63,7 @@ pub enum InvalidEventType {
     /// The event type contained a control character (Unicode `Cc`).
     #[error("an event type must not contain control characters")]
     ControlCharacter,
-    /// The event type contained one of the seven explicit bidirectional
+    /// The event type contained one of the nine explicit bidirectional
     /// formatting controls: U+202A–U+202E or U+2066–U+2069.
     ///
     /// Separate from [`ControlCharacter`](Self::ControlCharacter) for the reason
