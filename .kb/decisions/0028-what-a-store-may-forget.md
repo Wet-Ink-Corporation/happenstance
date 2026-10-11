@@ -163,7 +163,7 @@ not already oblige. It had two halves.
 interactive transaction and no cursor for which the membership probe is a whole extra round trip
 it cannot fold into anything else*, naming `happenstance-cloudflare` and `happenstance-neon`.
 **`happenstance-neon` meets that wording's letter:**
-- it probes in one read-only round trip of its own (`crates/happenstance-neon/src/event_store.rs:920`),
+- it probes in one read-only round trip of its own (`crates/happenstance-neon/src/event_store.rs:942`),
   over the `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint (CI run `36638870563`,
   2026-09-29);

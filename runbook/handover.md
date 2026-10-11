@@ -60,6 +60,8 @@ The `0.4.0` release (epic #61) is the owner's. **The owner decided on 2026-10-10
 2. **#78** — `happenstance-neon` stops exporting `ProbeThenWriteStore`. The owner chose
    how on 2026-10-11 (`wi-17ec03`): it and `probe_request` become `#[cfg(test)]` and
    crate-private, the root re-export goes, and the intra-doc links to it become code spans.
+   Built in its PR as trace row T8 (`struct_missing`), and the PR waits for the owner's
+   review and merge.
 3. Then #96 (the release PR: trace table, heading, install lines), #97 (tag and
    publish) and #87.
 
