@@ -201,8 +201,20 @@ no change.
 - **The `naive-arm` feature is gone [T4, T5].** If your manifest names it,
   delete it. `PostgresEventStore::new_naive` is a negative control behind
   `--cfg happenstance_naive_arm`, and it is not API.
+- **A projection statement's values must match its `$n` [H12].** The store
+  counts the highest `$n` in each statement's text and refuses a mismatch in
+  either direction before anything is sent, as
+  `PostgresProjectionStoreError::ParameterCount`. A surplus value used to commit
+  on a fresh connection. If you passed more values than the text uses, drop the
+  extra ones. On `LivePostgresProjectionStore`, a refused `execute` poisons the
+  batch: everything after it, `commit` included, answers `Poisoned`, so roll back
+  and start a new batch.
 
 ## `happenstance-neon`
+
+- **`ProbeThenWriteStore` is gone [T8].** It was the deliberately lost-update
+  store this crate's tests build, and it is now private to them. If you named
+  it, use `NeonEventStore`.
 
 ### `NeonWriteBatch::push` takes the statement and its values **[T1–T3]**
 
