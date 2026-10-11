@@ -4523,12 +4523,23 @@ One writer at a time.
         guard_pin(&split)
             .expect("a contract row and an adapter row are two owners, not a duplicate");
 
+        // The contract sibling is what makes this case reach the duplicate
+        // check: without it the no-contract-row check fails the same input,
+        // and a guard that exempts adapter rows from the key stays green.
         let twice = [
+            pinned(
+                "ES-23",
+                "crates/happenstance-core/src/store.rs",
+                "# Cancellation",
+            ),
             adapter_owned("ES-23", TARGETS),
             adapter_owned("ES-23", TARGETS),
         ];
         let err = guard_pin(&twice).expect_err("two adapter rows for one clause absorb one");
-        assert!(err.to_string().contains("ES-23"), "got: {err}");
+        assert!(
+            err.to_string().contains("`ES-23` twice on one side"),
+            "got: {err}"
+        );
 
         let mixed = [
             pinned(
@@ -4539,7 +4550,10 @@ One writer at a time.
             excluded("ES-23"),
         ];
         let err = guard_pin(&mixed).expect_err("pinned and excluded both speak for the contract");
-        assert!(err.to_string().contains("ES-23"), "got: {err}");
+        assert!(
+            err.to_string().contains("`ES-23` twice on one side"),
+            "got: {err}"
+        );
     }
 
     /// **Rejects** `AdapterOwned { targets: &[] }`: a row that points at
