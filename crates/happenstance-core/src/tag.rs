@@ -85,7 +85,7 @@ impl Tag {
     ///
     /// Returns [`InvalidTag`] if the value is empty, longer than
     /// [`MAX_TAG_LEN`] bytes, contains a character in Unicode general category
-    /// `Cc`, or contains one of the seven explicit bidirectional formatting
+    /// `Cc`, or contains one of the nine explicit bidirectional formatting
     /// controls.
     pub fn new(value: impl Into<String>) -> Result<Self, InvalidTag> {
         let value = value.into();
