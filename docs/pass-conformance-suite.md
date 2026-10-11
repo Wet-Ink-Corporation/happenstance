@@ -54,9 +54,9 @@ One more is defaulted the other way. `READ_YOUR_OWN_WRITES` defaults to
 supported: an append you were told succeeded shows up in your next read through
 the same handle. A store whose reads can lag an acknowledged append declines
 it, with its own reason. The PostgreSQL and Neon fixtures do, because a read
-there waits for a server-wide snapshot frontier. Only the model family needs it,
-and it reports a skip without it (`Fixture::READ_YOUR_OWN_WRITES`, read by
-`ops_agree_with_the_model`).
+there shows only rows below a server-wide snapshot frontier. Only the model
+family needs it, and it reports a skip without it
+(`Fixture::READ_YOUR_OWN_WRITES`, read by `ops_agree_with_the_model`).
 
 Last come three ceilings: `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT` and
 `MAX_EVENTS_PER_BATCH`. They are facts about your store, not trades, so they
@@ -178,8 +178,8 @@ doctest is not built as a test binary, so the tests the line emits do not exist
 here. `main` runs the same rules instead, the way the `emit_blocking` harness
 does, and checks that every rule passed or was skipped, either for a
 capability the fixture declined or for the ceilings it states none of. It also
-checks that no skip carries the testkit's default wording. One emitted test has no rule behind it and so does not run
-here: `every_declined_capability_is_stated_by_this_fixture`. Your own
+checks that no skip carries the testkit's default wording. One emitted test has
+no rule behind it and so does not run here: `every_declined_capability_is_stated_by_this_fixture`. Your own
 `cargo test` runs it.
 
 The gaps cost nothing. Positions may have gaps
@@ -286,8 +286,8 @@ names it:
 
 - `emit_blocking` (`happenstance_testkit::emit_blocking`) needs no runtime at
   all.
-- `emit_wasm` (`happenstance_testkit::emit_wasm`) runs under `wasm-bindgen-test`, for a
-  `wasm32` store. The Cloudflare adapter uses it in
+- `emit_wasm` (`happenstance_testkit::emit_wasm`) runs under
+  `wasm-bindgen-test`, for a `wasm32` store. The Cloudflare adapter uses it in
   [its conformance target](../crates/happenstance-cloudflare/tests/durable_object_conformance.rs).
 
 Those names are promised: renaming one is a major release of the testkit
