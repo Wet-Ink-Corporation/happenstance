@@ -53,7 +53,7 @@ impl EventType {
     ///
     /// Returns [`InvalidEventType`] if the value is empty, longer than
     /// [`MAX_EVENT_TYPE_LEN`] bytes, contains a character in Unicode general
-    /// category `Cc`, or contains one of the seven explicit bidirectional
+    /// category `Cc`, or contains one of the nine explicit bidirectional
     /// formatting controls.
     pub fn new(value: impl Into<String>) -> Result<Self, InvalidEventType> {
         let value = value.into();
