@@ -241,3 +241,18 @@ mod choose_a_store {
 mod run_on_a_durable_object {
     #![doc = include_str!("../../docs/run-on-a-durable-object.md")]
 }
+
+// The conformance how-to. Two fences. The first is a whole fixture over
+// `GappyMemoryStore`, with the one-line suite invocation an adapter writes; its
+// `main` runs every rule `for_each_event_store_rule!` names under `block_on`, as
+// `emit_blocking` does, and asserts the skips are exactly the three
+// capabilities the fixture declined plus the ceilings it states none of, each
+// reason in the fixture's own words rather than the testkit's default. The
+// second is a fixture whose every `connect` opens a fresh store: the isolation
+// rule passes it and the second-handle rule fails it. A handle that stopped
+// sharing its store, a capability claimed and not provided, or a declension
+// left to the default wording turns this module red.
+#[cfg(doctest)]
+mod pass_conformance_suite {
+    #![doc = include_str!("../../docs/pass-conformance-suite.md")]
+}

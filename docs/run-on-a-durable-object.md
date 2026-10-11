@@ -82,8 +82,8 @@ value behind an `Rc`, and `Rc` is `!Send` whatever it holds (the crate root,
 Write the code that decides generic over `EventStore`
 ([ES-1](../spec/SPECIFICATION.md#es-1--one-definition-two-flavours-and-generic-code-binds-the-weaker-one)).
 What that buys here is one function that runs in the object and, unchanged,
-against the memory store in a host test. The program below shows that with a stand-in, because this page's examples
-cannot depend on the Cloudflare crate. `ObjectLocal` holds its storage behind an
+against the memory store in a host test. The program below shows that with a
+stand-in, because this page's examples cannot depend on the Cloudflare crate. `ObjectLocal` holds its storage behind an
 `Rc` and implements only the bare flavour, which is the shape of
 `CloudflareEventStore`:
 
