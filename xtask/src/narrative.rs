@@ -205,7 +205,7 @@ mod retry_a_command {
 // view and commits a second at the first position, and counts what each replay
 // reads; the second has a backwards commit refused and a reset take its place.
 // A reset that stopped clearing the checkpoint, or a store that accepted the
-// backwards commit, turns this module red.
+// backwards commit or wrote the row it carried, turns this module red.
 #[cfg(doctest)]
 mod rebuild_a_read_model {
     #![doc = include_str!("../../docs/rebuild-a-read-model.md")]
