@@ -94,10 +94,11 @@ The run comes back **empty** if and only if all of these hold:
 
 1. **E11-R: zero disagreements** in each of the three positions, for each of the
    two constructors — `0` of `1,112,064`, six times.
-2. **The refused set is the clause's set.** Alone, exactly 72 scalar values are
-   refused: the 65 `Cc` codepoints (U+0000–U+001F, U+007F, U+0080–U+009F) with
-   the control-character variant, and the seven bidirectional controls with the
-   bidirectional variant. None lies in an Arabic, Hebrew, Syriac, Thaana, NKo,
+2. **The refused set is the clause's set.** Alone, exactly ~~72~~ **74** scalar
+   values are refused: the 65 `Cc` codepoints (U+0000–U+001F, U+007F,
+   U+0080–U+009F) with the control-character variant, and the ~~seven~~ **nine**
+   codepoints of U+202A–U+202E and U+2066–U+2069 with the bidirectional variant.
+   None lies in an Arabic, Hebrew, Syriac, Thaana, NKo,
    Samaritan or Mandaic block, or in either RTL presentation-forms range.
 3. **The corpus: zero refusals.** Every corpus entry is accepted by both
    constructors and reads back byte-identical, and every `key:value` pair is
@@ -110,7 +111,8 @@ An empty result from a harness that cannot see a refusal is worth nothing. The
 run is **void** — neither empty nor not — if any of these fails, and it is then
 rerun after the harness is fixed, never reinterpreted:
 
-- **Negative controls.** Each of the seven bidirectional controls, and U+0085
+- **Negative controls.** Each of the ~~seven~~ **nine** bidirectional controls,
+  and U+0085
   (a C1 control), is inserted into every corpus entry at its start, its middle
   (on a character boundary) and its end. Every such value MUST be refused, with
   the bidirectional variant and the control-character variant respectively. One
@@ -120,6 +122,19 @@ rerun after the harness is fixed, never reinterpreted:
   has at least three entries that also contain an ASCII letter or digit (the
   mixed-LTR requirement).
 - **Coverage.** E11-R checks exactly 1,112,064 values per position.
+
+### Erratum, made before the run
+
+The first commit of this section said *"exactly 72"* and *"the seven
+bidirectional controls"*, taking the count from VT-14's own text. The clause's
+ranges, U+202A–U+202E and U+2066–U+2069, hold **nine** codepoints, not seven
+(five embeddings and overrides, four isolates), and `validate.rs` rejects all
+nine — its own test is named `rejects_all_seven_bidirectional_controls` and
+walks nine. The count was found wrong while writing the harness, before anything
+here was run, and corrected in its own commit with the old numbers struck
+through rather than deleted. The ranges were always the criterion; only the
+arithmetic moved. The miscount in the clause and in the prose that repeats it is
+a finding for the owner, not something this directory edits.
 
 ### What a non-empty result means
 
