@@ -14,13 +14,12 @@ it again. How you do that depends on why you are doing it.
 
 The first is quicker. The second keeps a correct answer on screen the whole
 time, if you promote it in the order
-[below](#build-the-new-version-beside-the-old) gives. Both use the same two port calls, `reset` and `commit`, and the projection
-runner, `run_projection`.
+[below](#build-the-new-version-beside-the-old) gives. Both use the same two
+port calls, `reset` and `commit`, and the projection runner, `run_projection`.
 
-The runner sits behind the `unstable-projection` feature, because the `apply`
-it ships is going to change
-([ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md)), so it makes
-no semver promise. The port beneath it,
+The runner sits behind the `unstable-projection` feature and makes no semver
+promise, because the `apply` it ships is going to change
+([ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md)). The port beneath it,
 `ProjectionStore`, is frozen. The fences on this page call only the port, on
 `MemoryProjectionStore`, so they compile without the feature.
 [The rebuilding example](../examples/rebuilding-read-models/src/main.rs) runs
@@ -253,9 +252,9 @@ already use.
 2. Pause the new view's runner.
 3. Reset the old id with a batch that carries the swap: `DROP TABLE` on the old
    table, then `ALTER TABLE … RENAME TO` the old name. On SQLite the batch is
-   replayed inside the one transaction `reset` opens, and SQLite runs both
-   statements inside a transaction, so readers see the old table until the
-   reset commits and the new one after it. A swap that fails leaves the old
+   replayed inside the one transaction `reset` opens, and SQLite's `DROP` and
+   `ALTER` are transactional, so readers see the old table until the reset
+   commits and the new one after it. A swap that fails leaves the old
    table and its checkpoint in place. Push each statement on its own: the
    batch runs one statement per `push`. No conformance rule puts DDL in a
    batch, so check your own store before you rely on this.
@@ -263,7 +262,7 @@ already use.
    table.
 
 In both routes, **keep the new id.** The checkpoint belongs to the id and not
-to the table. Renaming the id to match the promoted table throws the resume
+to the table. Changing the id on its own to match the promoted table throws the resume
 point away and replays the whole log. And never retire the old view with a
 statement that names a table after the swap: once the rename commits, the old
 name belongs to the new view, and a `DELETE` against it clears the rows you
