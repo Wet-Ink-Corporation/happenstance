@@ -55,8 +55,9 @@ cargo xtask ci
 
 That is the whole thing: formatting, clippy with `-D warnings`, tests, the
 `wasm32-unknown-unknown` build of `happenstance-core` and its feature powerset,
-documentation — with `--all-features`, again with `--no-default-features`, and
-once more on nightly under `--cfg docsrs` when a nightly toolchain is present —
+documentation — with `--all-features`, again with `--no-default-features`, on
+the default features of `happenstance-core` and of `happenstance`, and once more
+on nightly under `--cfg docsrs` when a nightly toolchain is present —
 specification traceability, a `cargo package --list` assertion that every
 publishable crate ships both licences and a README, and, when the tools are
 installed, `cargo hack` feature-powerset and `cargo deny`. It is defined once in

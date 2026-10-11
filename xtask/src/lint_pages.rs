@@ -182,7 +182,7 @@ const NEED_SET_ATOM: &str = "10-the-need-set.md";
 ///
 /// Named once, here, for the reason [`crate::lint_narrative::STEP`] is: `REQUIRED`
 /// and `lint_steps()` both depend on it by value and `steps_named` panics on a
-/// mismatch (`xtask/src/main.rs:1306-1313`). The *value* is pinned by the
+/// mismatch (`xtask/src/main.rs:1330-1337`). The *value* is pinned by the
 /// signed-off design (`_design.md`, `## Surfaces`, sign-off condition 2) and
 /// changing it is a design amendment, not an edit.
 pub(crate) const STEP: &str = "every page declares one need";

@@ -106,7 +106,7 @@ asked for.
 
 **Evidence.** `crates/happenstance-testkit/Cargo.toml:115 (optional = true)` ·
 `crates/happenstance-testkit/src/fixtures.rs:534 (feature is not target-scoped)` ·
-`xtask/src/main.rs:951 (feature is not target-scoped)`
+`xtask/src/main.rs:975 (feature is not target-scoped)`
 
 ## RS-52-3. A `cfg` covers the probe *and* its caller, or the probe is dead code on the other target.
 

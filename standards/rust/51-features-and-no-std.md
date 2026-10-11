@@ -232,5 +232,5 @@ crate makes is a build log, and the fix ships as the *next* version.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:92 (package.metadata.docs.rs)` ·
 `crates/happenstance-core/src/lib.rs:104 (feature(doc_cfg))` ·
-`xtask/src/main.rs:985 (is a cfg nobody sets except docs.rs)` ·
+`xtask/src/main.rs:1009 (is a cfg nobody sets except docs.rs)` ·
 [docs.rs metadata](https://docs.rs/about/metadata) *(checked 2026-08-09, rustc 1.97.1)*
