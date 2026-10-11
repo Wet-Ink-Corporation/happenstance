@@ -190,6 +190,16 @@ mod upgrading_to_0_4 {
     #![doc = include_str!("../../docs/upgrading-to-0-4.md")]
 }
 
+// The first how-to. Three fences: a zero `Retry` refused at compile time
+// (E0080); the reply each exhausted or failed command gets; and two deliveries
+// of one request racing, where the loser is refused and its retry and a late
+// resend both find the first. Deleting the request check in `attempt` lands
+// three deposits and turns this module red.
+#[cfg(doctest)]
+mod retry_a_command {
+    #![doc = include_str!("../../docs/retry-a-command.md")]
+}
+
 // The rebuild how-to. Two fences over the port, because the runner is behind
 // `unstable-projection` and this target does not enable it. The first resets a
 // view and commits a second at the first position, and counts what each replay
