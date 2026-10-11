@@ -1584,7 +1584,7 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // scan is this change's to edit. It is the crate-set axis of the check three
     // lines down — see `stated_crate_counts` for why one array could not serve
     // both, and for the nine documents that went stale while `reconcile` stayed
-    // green.
+    // green. `msrv::front_pages_state_the_policy` rides the same line (#201).
     stated_crate_counts().and_then(|()| msrv::front_pages_state_the_policy())?;
 
     // ADR-0059's third action, bundled here for the same reason as the three

@@ -15,7 +15,8 @@
 //! ADR-0067 and the spelling `resolver = "3"` inside the section; it does not
 //! read the sentence around them. A README that repeats an old floor *outside*
 //! the section passes, because the section is the statement and everything
-//! else is history the page may tell.
+//! else is history the page may tell. A `# ` line inside a code fence in the
+//! section would end it early, so the section carries no fences.
 //!
 //! # Why it is wired the way it is
 //!

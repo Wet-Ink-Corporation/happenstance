@@ -84,13 +84,16 @@ Rust stable at least six months old on the day that minor ships; and always with
 a `CHANGELOG.md` entry naming the old floor, the new one and what forced it
 ([ADR-0067](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)).
 
-What keeps a rise from reaching you is your workspace's resolver, not this
-crate's: under `resolver = "3"`, the default for an edition-2024 root, or with
-`resolver.incompatible-rust-versions = "fallback"` set, Cargo prefers the newest
-version whose `rust-version` your lowest `package.rust-version` (or your `rustc`,
-if you declare none) satisfies, and `cargo update` says so by printing *to latest
-Rust 1.xx compatible versions* where resolver 2 prints *to latest compatible
-versions*. On resolver 2, only your lockfile holds you back.
+Before `1.0.0`, a rise ships in a `0.x` minor, which a `"0.x"` requirement never
+resolves across
+([ADR-0037](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0037-msrv-becomes-a-promise-at-0-2-0.md)).
+From `1.0.0`, what keeps a rise from reaching you is your workspace's resolver,
+not this crate's: under `resolver = "3"`, the default for an edition-2024 root,
+or with `resolver.incompatible-rust-versions = "fallback"` set, Cargo prefers
+the newest version whose `rust-version` your lowest `package.rust-version` (or
+your `rustc`, if you declare none) satisfies, and `cargo update` says so by
+printing *to latest Rust 1.xx compatible versions* where resolver 2 prints *to
+latest compatible versions*. On resolver 2, only your lockfile holds you back.
 
 ## Licence
 

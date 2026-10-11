@@ -509,7 +509,7 @@ not the same as what a user needed to be told.
   on every attempt. ES-17 is `[FROZEN]`, so from `1.0.0` changing it is a major
   release ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md)).
 
-- **Every crate's README states its MSRV and the rule for raising it** (#201).
+- **Every published crate's README states its MSRV and the rule for raising it** (#201).
   This is documentation only. The floor stays at 1.97.1. After `1.0.0` it rises
   only in a minor release, only to a Rust stable at least six months old, and
   always with an entry here naming the old floor, the new one and what forced
