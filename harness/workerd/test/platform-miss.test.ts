@@ -5,7 +5,13 @@
 // rejects: a matcher that also swallows the harness's own 404, one that misses
 // the HTML page a real run got, a loop that never gives up or gives up early.
 import { describe, expect, it } from "vitest";
-import { LISTING_ATTEMPTS, callPastPropagation, isPlatformMiss } from "../platform-miss.mjs";
+import { LISTING_ATTEMPTS, callPastPropagation, failureLine, isPlatformMiss } from "../platform-miss.mjs";
+
+// An unclassified Cloudflare 500, in the shape of the error pages the edge
+// serves: one line of doctype, then markup whose first line says nothing. The
+// deployed leg met one on PR #51 and printed only that first line.
+const UNCLASSIFIED_PAGE =
+  '<!DOCTYPE html>\n<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->\n<head>\n<title>Worker threw exception | example.workers.dev | Cloudflare</title>\n</head><body><h1>Error 1101</h1></body></html>';
 
 // The page run 37470989256 (attempt 1) got on the listing, cut to its marker.
 const PROPAGATING_PAGE =
@@ -85,5 +91,42 @@ describe("callPastPropagation", () => {
     expect(result.status).toBe(404);
     expect(edge.calls()).toBe(LISTING_ATTEMPTS);
     expect(LISTING_ATTEMPTS).toBe(6);
+  });
+});
+
+describe("failureLine", () => {
+  // The wrong implementation each case rejects: the old first-line print, which
+  // turns every HTML page into `<!DOCTYPE html>`; one that reads the title out
+  // of a plain-text body; and one that drops the status.
+  it("names an HTML page by its title", () => {
+    expect(failureLine(500, UNCLASSIFIED_PAGE)).toBe(
+      "[500] Worker threw exception | example.workers.dev | Cloudflare  (HTML page)",
+    );
+  });
+
+  it("reads a title written in any case, across lines, with entities left as sent", () => {
+    expect(failureLine(502, "<HTML><Title>\n  Bad gateway &amp; more\n</TITLE></HTML>")).toBe(
+      "[502] Bad gateway &amp; more  (HTML page)",
+    );
+  });
+
+  it("keeps the first line of a plain-text body, as a rule's own failure reports it", () => {
+    expect(failureLine(500, "Rust panic: panicked at suite.rs:1:1\nstack...")).toBe(
+      "[500] Rust panic: panicked at suite.rs:1:1",
+    );
+    // A rule message that mentions a title tag is still the rule's own text.
+    expect(failureLine(500, "assertion failed: <title>x</title> was not expected")).toBe(
+      "[500] assertion failed: <title>x</title> was not expected",
+    );
+  });
+
+  it("falls back to the first line of an HTML page with no title", () => {
+    expect(failureLine(500, "<!DOCTYPE html>\n<html><body>oops</body></html>")).toBe(
+      "[500] <!DOCTYPE html>",
+    );
+  });
+
+  it("does not make an unclassified page retryable", () => {
+    expect(isPlatformMiss(500, UNCLASSIFIED_PAGE)).toBe(false);
   });
 });
