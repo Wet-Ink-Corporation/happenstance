@@ -43,10 +43,11 @@ use crate::spec_trace::workspace_root;
 /// own domain, then the reasoning behind the write, then how to retry that
 /// write safely, then how to rebuild what was derived from it, then which store
 /// to deploy it on, which is where the edge developer joins, then the adapter
-/// author's entry point, and last the upgrade guide, which only a reader already
-/// on an older release needs. It is written here rather than derived because an
-/// order is a decision, and [`check_coverage`] is what keeps the list from
-/// falling behind the tree.
+/// author's entry point and how that author passes the conformance suite, and
+/// last the upgrade guide, which only a reader already on an older release
+/// needs. It is written here rather than derived because an order is a
+/// decision, and [`check_coverage`] is what keeps the list from falling behind
+/// the tree.
 const READING_ORDER: &[&str] = &[
     "first-encounter.md",
     "read-the-worked-example.md",
@@ -57,6 +58,7 @@ const READING_ORDER: &[&str] = &[
     "rebuild-a-read-model.md",
     "choose-a-store.md",
     "adapter-reading-order.md",
+    "pass-conformance-suite.md",
     "upgrading-to-0-4.md",
 ];
 

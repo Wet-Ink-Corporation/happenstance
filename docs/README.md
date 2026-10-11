@@ -19,6 +19,7 @@ that shapes a page whose job is orientation.
 | Appending under a condition | [`append-conditions.md`](append-conditions.md) |
 | Watching a boundary refuse, in three runnable steps | [`first-encounter.md`](first-encounter.md) |
 | What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
+| Passing the conformance suite with your adapter | [`pass-conformance-suite.md`](pass-conformance-suite.md) |
 | Fences the compiler never sees | [`text-fences.md`](text-fences.md) |
 | The canonical DCB program, worked end to end | [`read-the-worked-example.md`](read-the-worked-example.md) |
 | Where the aggregate's consistency boundary went | [`boundary-not-aggregate.md`](boundary-not-aggregate.md) |
