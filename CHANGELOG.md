@@ -509,6 +509,17 @@ not the same as what a user needed to be told.
   on every attempt. ES-17 is `[FROZEN]`, so from `1.0.0` changing it is a major
   release ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md)).
 
+- **Every crate's README states its MSRV and the rule for raising it** (#201).
+  This is documentation only. The floor stays at 1.97.1. After `1.0.0` it rises
+  only in a minor release, only to a Rust stable at least six months old, and
+  always with an entry here naming the old floor, the new one and what forced
+  it ([ADR-0067](.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)). Each
+  README also says what protects you from a rise: your own workspace's
+  `resolver = "3"`, and `cargo update`'s *to latest Rust 1.xx compatible
+  versions* is how you can tell it is in effect. `cargo xtask lints` now fails if
+  any README in the release set has no such section, or states a floor its
+  manifest does not declare.
+
 ### Removed
 
 - **BREAKING (`happenstance-core`): the empty `unstable-projection` feature is

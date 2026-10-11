@@ -1585,7 +1585,7 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // lines down — see `stated_crate_counts` for why one array could not serve
     // both, and for the nine documents that went stale while `reconcile` stayed
     // green.
-    stated_crate_counts()?;
+    stated_crate_counts().and_then(|()| msrv::front_pages_state_the_policy())?;
 
     // ADR-0059's third action, bundled here for the same reason as the three
     // above: a document (and an example) held to the tree.
@@ -4603,3 +4603,5 @@ macro_rules! for_each_fake_rule {
 // Declared last so no line above moves: this file's lines are cited by number
 // from `references/adr/`, `.kb/` and `standards/rust/`.
 mod tracker;
+
+mod msrv;
