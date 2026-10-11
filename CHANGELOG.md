@@ -34,6 +34,8 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-11
+
 ### Changed
 
 - **BREAKING (`happenstance-neon`, `projection-store` feature): `NeonWriteBatch::push`
@@ -574,7 +576,7 @@ not the same as what a user needed to be told.
   existing default-features step covers `happenstance-core` only.
 
 
-### `0.4.0` trace (draft, not released)
+### `0.4.0` trace
 
 Every break `0.4.0` carries, each with the decision that caused it. Drafted
 2026-10-07 against `main` at `4278816` from `cargo semver-checks check-release
@@ -588,6 +590,14 @@ run on #78's tree an eighth (T8). "No break" is the tool's verdict on
 `happenstance-core` and `happenstance` gained L10's (H8, H9) after the run. The **hand** rows are breaks the tool
 cannot see, found by reading every BREAKING entry above against the tool's output. A row whose decision is still `proposed` is listed under *Pending* and
 is not part of `0.4.0` until the owner accepts it.
+
+**Re-run for the release on 2026-10-11** against `main` at `97f0f36`, with the
+same command and tool version. It reported eight findings across three crates,
+and each one is a T row below: T1–T3, T7 and T8 on `happenstance-neon`, T4 and T5
+on `happenstance-postgres`, and T6 on `happenstance-testkit`. `happenstance`,
+`happenstance-core`, `happenstance-sqlite` and `happenstance-cloudflare` again
+reported none. H13 was added on the same pass. It was raised in #222 and is the
+ES-43 twin of H10.
 
 | # | Crate | Break | Source | Decided by | Entry above |
 |---|---|---|---|---|---|
@@ -611,6 +621,7 @@ is not part of `0.4.0` until the owner accepts it.
 | H11 | `happenstance-sqlite`, `happenstance-postgres` | a store runs on the runtime it is called on, preferring `Handle::try_current()` over the handle it captured (behaviour) | hand | [ADR-0081](.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | Changed |
 | H10 | `happenstance-testkit` | a new conformance rule, `projection_ids_round_trip_by_bytes` (PS-39), which an adapter that keys a checkpoint lossily now fails (behaviour; CF-32) | hand | ADR-0082 | Added |
 | H12 | `happenstance-postgres` | a projection statement whose value count is not the highest `$n` in its text is refused before it is sent: at `commit`/`reset` (buffered) and at `execute` (live, which then cannot commit); a surplus value could commit before (behaviour) | hand | [ADR-0084](.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md), accepted 2026-10-08; landed before `0.4.0` by `wi-7e9a97` (confirmed by `wi-f267f3`) | Changed |
+| H13 | `happenstance-testkit` | a new conformance rule, `a_busy_append_left_nothing_behind` (ES-43), which an adapter that answers `Busy` after its batch was written now fails (behaviour; CF-32) | hand | [ADR-0077](.kb/decisions/0077-appenderror-busy.md) | Added |
 
 **Not a break, recorded so the absence is a decision:** `EventStore::append`
 keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md));
@@ -4204,6 +4215,7 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.3.2...v0.4.0
 [0.2.0]: https://github.com/Wet-Ink-Corporation/happenstance/releases/tag/v0.2.0
 [0.2.0-alpha.1]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main

@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`feature/friendly-wright-9lsxua`, on `1fe405a` (`main`, where PR #217 merged). 2026-10-10.
+`claude/project-thread-88m3wc`, on `97f0f36` (`main`, where PR #222 merged). 2026-10-11.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in issues #61–#214. This file, the status table and the phase files
@@ -20,74 +20,51 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-Seven crates are published at `0.3.2`. `EventStore` has been frozen since `0.2.0`,
-and `ProjectionStore` since `0.3.0`. Phases 0–12, 15 and 16 are done; **phase 17
-is in progress** and its code is all on `main`: only the `0.4.0` release is left.
-Phases 20 and 22 run alongside it. What remains is sequenced in
-[`roadmap.md`](roadmap.md): `0.4.0` (17), its additive half (17b), then the typed
-runner (18), sync (13) and retention (14), and `1.0.0` (21) last.
+**`0.4.0` is cut.** The release PR (#96) closes phase 17: it dates the changelog
+heading, re-runs the semver trace on `97f0f36` (eight tool findings, every one a
+T row, and one new hand row, H13), and moves every install and status line to
+`0.4.0`. `EventStore` has been frozen since `0.2.0`, and `ProjectionStore` since
+`0.3.0`. Phases 0–12 and 15–17 are done. Phases 20 and 22 run alongside. What
+remains is sequenced in [`roadmap.md`](roadmap.md): the additive half (17b), then
+the typed runner (18), sync (13) and retention (14), and `1.0.0` (21) last.
 
-**Phase 17 is split at its release** ([ADR-0072](../.kb/decisions/0072-phase-17-is-split-at-the-release.md)).
-Phase 17 keeps what breaks or changes behaviour on a published crate, plus the
-`workerd` job, and ends at `0.4.0`. Phase 17b takes the additive items.
-
-**The tracker, counted on 2026-10-10:** 154 open issues. 24 are
-`status:ready-for-agent`, 7 `status:ready-for-human`, 26 `status:needs-owner`,
-2 `status:needs-triage` and 95 `status:blocked`, most of them behind the
-`0.4.0` release or phase 18. The query, not this count, is the answer.
+**The tag is cut from #96's merge commit, not from a later `main`.** Publishing
+moves to crates.io trusted publishing: the owner chose this on 2026-10-11 over
+publishing by hand. A tag-triggered workflow publishes the seven crates in
+dependency order, so #97 is the tag push once that workflow is merged and each
+crate's trusted publisher is configured.
 
 ## In flight
 
-Nothing on a branch. PR #216, from a fork, is open: a one-line fix for #91 (the
-`Projection::apply` link that breaks `happenstance`'s default-features doc build). It
-needs a maintainer's review and a CI run approval.
-- **Merged on 2026-10-09:** #60 (the tracker vocabulary and seeded backlog) and #215
-  (ADR-0088, held by `cargo xtask lints`).
-- **Merged on 2026-10-07 and 2026-10-08:** phase 17's last lanes. See `log.md`.
-- **Known, not this phase's:** the deployed `workerd` leg meets Cloudflare
-  propagation answers. #217 adds error 1104, "Script not found", as the fourth answer it
-  retries (`harness/workerd/platform-miss.mjs`). The HTML 500 that #51 met is still
-  unclassified; #94 prints the page `<title>` of the next one.
+- **#96, the release PR**, is on this branch. It is left for the owner to merge,
+  because it ticks phase 17's last exit criterion.
+- **Docs and records** (#157, #159, #162 and others) are being worked in separate
+  PRs. None of them touches a crate's code or manifest.
+- **PR #226** (xtask help through a locked handle) is the owner's. It asks him to
+  acknowledge a test rewrite.
 
 ## Next action
 
-The `0.4.0` release (epic #61) is the owner's. **The owner decided on 2026-10-10
-(`wi-f267f3`) that both pending breaks land first**, so the release waits on two PRs:
-
-1. **#89** — ADR-0084's Postgres parameter-count check: refuse surplus parameters on
-   a projection batch. Built in its PR: the trace table's one pending row is now H12,
-   and the PR waits for the owner's review and merge.
-2. **#78** — `happenstance-neon` stops exporting `ProbeThenWriteStore`. The owner chose
-   how on 2026-10-11 (`wi-17ec03`): it and `probe_request` become `#[cfg(test)]` and
-   crate-private, the root re-export goes, and the intra-doc links to it become code spans.
-   Built in its PR as trace row T8 (`struct_missing`), and the PR waits for the owner's
-   review and merge.
-3. Then #96 (the release PR: trace table, heading, install lines), #97 (tag and
-   publish) and #87.
-
-#89 and #78 are `door:one-way` and `semver:breaking`: each is its own PR, carries
-its `CHANGELOG.md` trace row, and is left for the owner to merge. #84 is answered
-by the same decision.
-
-#109 (ES-41's held-versus-visible reading) is not on this path. The owner chose **held**
-on 2026-10-11 (`wi-33ab08`). That is what Postgres and Neon already answer, so the rule,
-its mutant and the ADR the frozen clause needs are additive and stay in phase 13.
-
-Until then, an agent takes the first issue the ready-for-agent query returns
-([`afk.md`](afk.md) § *Taking work*):
+1. Land the release workflow and configure trusted publishing, then merge #96 and
+   push `v0.4.0` from its merge commit (#97). Check crates.io and docs.rs for all
+   seven crates, then close #87.
+2. Phase 17b (#62): #86, #90, #77, #149 and #201 are `ready-for-agent`. Each is
+   additive by ADR-0072 and ships in a `0.4.x`.
+3. Phase 18 (#63) is unblocked by the release. Its breaking chains open as
+   `door:one-way` PRs for the owner.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
 ```
 
-In milestone `0.4.0`, #82 (the 0.3 to 0.4 migration guide) and #91 (or merging
-#216) should land before the release PR.
-
 ## Waiting on the owner
 
-- **Merge #89 and #78** once each is open and green (above).
-- **#73** — `assets/brand/happenstance-mark.png` is in no commit and absent from a
-  fresh clone. If it exists only on your machine, commit it or discard it.
+- **Trusted publishing.** Approve the release workflow PR, and add its publisher
+  on crates.io for each of the seven crates.
+- **Merge #96**, which closes phase 17.
+- **#105 and #106** (ADR-0026 and ADR-0027) gate phase 13. **#102** claims the sync
+  crate names. **#118** gates phase 18's checkpoint-id chain.
+- **#75**: re-add the live Neon check to the `Protect main` ruleset.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; VT-30 is a
   deprecated alias; new CI jobs are not required checks.
