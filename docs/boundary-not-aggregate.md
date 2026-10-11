@@ -120,8 +120,9 @@ matches on tags as well as types
 ([ES-27](../spec/SPECIFICATION.md#es-27--a-condition-matches-on-tags-not-only-on-types),
 checked for every adapter by the conformance rules
 `condition_with_an_unheld_tag_does_not_reject` and
-`condition_matches_on_every_tag_in_an_item`). Where two decisions do overlap
-and race, exactly one of them lands (the same clause, checked by
+`condition_matches_on_tags`). Where two decisions do overlap and race, exactly
+one of them lands
+([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics), checked by
 `racing_conditional_appends_elect_one_winner` and, under real contention, by
 `exactly_one_of_n_contenders_commits`).
 
@@ -154,8 +155,8 @@ the aggregate never charged you.
 The home comes back one layer up. In the typed layer a decision model is a
 value with a scope, and a tuple of decision models is one boundary: the
 worked example's `subscribe` handler composes the course's seats with one
-student's history with that course, and one append condition checks both, retaking the
-decision when that condition refuses.
+student's history with that course, and one append condition checks both,
+retaking the decision when that condition refuses.
 [The example's source](../examples/course-subscriptions/src/main.rs) is that
 handler, and its `tests/runs.rs` runs the program and asserts that it refuses
 a course that is full and a student already subscribed to it.
