@@ -236,7 +236,7 @@ gave to this phase.
       (phase 18 freezes it with PS-23) — **written by ADR-0075** into
       `ProjectionStore::checkpoint`'s rustdoc and `happenstance-neon`'s README and
       constructor.
-- [ ] #87 · **Release `0.4.0`.** `cargo-semver-checks` against the `0.3.x` registry
+- [x] #87 · **Release `0.4.0`.** `cargo-semver-checks` against the `0.3.x` registry
       baseline reports breaks, and each one it reports traces to a decision above.
       `CHANGELOG.md`'s `[Unreleased]` entries — SQLite's fifteen-second busy
       timeout (ADR-0065) and `FaultyStore::contend_next` — ship in `0.4.0`;
@@ -278,7 +278,7 @@ tool passed over, and the renamed `#[doc(hidden)]` emitters. The tool does repor
       (`QueryItem`'s total constructor moved to 17b with ADR-0072.)
 - [x] The `apply` record is accepted (ADR-0074).
 - [x] Every open question phase 16 classified as breaking is answered or closed.
-- [ ] `0.4.0` is released and its semver findings are fully traced.
+- [x] `0.4.0` is released and its semver findings are fully traced.
 - [x] The `workerd` job exists, has been watched failing once, and the SQL-text
       wall and partition widths are recorded as measured on `workerd`, locally
       and on a deployed Durable Object. (The minimal-versions job moved to 17b

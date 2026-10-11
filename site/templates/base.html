@@ -40,12 +40,28 @@
         <a class="hs-header__link" href="{{ get_url(path='api/happenstance/index.html') }}">API</a>
       </nav>
       <div class="hs-header__actions">
+        {%- if section_path != "/search/" %}
+        <form class="header-search site-search" role="search" action="{{ get_url(path='@/search.md') }}" method="get">
+          <label class="visually-hidden" for="header-search-q">Search the documentation</label>
+          <span class="hs-input-wrap">
+            {{ <icon name="search" class="hs-icon hs-input-wrap__icon" /> }}
+            <input class="hs-input hs-input--icon header-search__input" id="header-search-q" type="search" name="q" placeholder="Search" autocomplete="off" spellcheck="false">
+          </span>
+        </form>
+        {%- endif %}
         <a class="hs-btn hs-btn--ghost hs-btn--size-sm" href="{{ config.extra.repository }}">GitHub</a>
         <button class="hs-btn hs-btn--ghost hs-btn--size-icon theme-toggle" type="button" aria-label="Switch between light and dark">{{ <icon name="contrast" /> }}</button>
       </div>
       <button class="hs-btn hs-btn--ghost hs-btn--size-icon hs-header__menu" type="button" aria-expanded="false" aria-controls="drawer" aria-label="Open the menu">{{ <icon name="menu" /> }}</button>
     </div>
     <nav class="drawer" id="drawer" aria-label="Menu" hidden>
+      <form class="drawer__search site-search" role="search" action="{{ get_url(path='@/search.md') }}" method="get">
+        <label class="visually-hidden" for="drawer-search-q">Search the documentation</label>
+        <span class="hs-input-wrap">
+          {{ <icon name="search" class="hs-icon hs-input-wrap__icon" /> }}
+          <input class="hs-input hs-input--icon" id="drawer-search-q" type="search" name="q" placeholder="Search" autocomplete="off" spellcheck="false">
+        </span>
+      </form>
       <a href="{{ get_url(path='@/guide/_index.md') }}">Guide</a>
       <a href="{{ get_url(path='@/reference.md') }}">Reference</a>
       <a href="{{ get_url(path='api/happenstance/index.html') }}">API</a>
@@ -84,6 +100,7 @@
       </div>
     </div>
   </footer>
+  {%- block scripts %}{% endblock scripts %}
   <script src="{{ get_url(path='js/site.js') }}" defer></script>
 </body>
 </html>
