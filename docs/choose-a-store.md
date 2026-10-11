@@ -42,12 +42,12 @@ a host client kept in the crate's tests, so no `wasm32` transport has run the
 suite.
 
 **In a native process, choose among `MemoryEventStore`, `SqliteEventStore` and
-`PostgresEventStore`.** The next section decides between them. `SqliteEventStore`
-does not build for `wasm32-unknown-unknown` (its crate root, *The shape this
-crate represents*). Both SQL
-stores expect tokio. SQLite's reads run on a blocking task, and
-`PostgresEventStore` has to be called from a runtime with tokio's drivers
-enabled, as `#[tokio::main]` builds one (*Two roles, one pool*;
+`PostgresEventStore`.** The next section decides between them.
+`SqliteEventStore` does not build for `wasm32-unknown-unknown` (its crate root,
+*The shape this crate represents*). Both SQL stores expect tokio. SQLite's reads
+run on a blocking task, and `PostgresEventStore` has to be called from a runtime
+with tokio's drivers enabled, as `#[tokio::main]` builds one (the Postgres
+README's *Two roles, one pool*;
 [ADR-0081](../.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md)).
 
 ## Then count the writers
