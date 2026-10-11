@@ -1872,7 +1872,9 @@ fn words_an_obligation(body: &str) -> bool {
 /// side — two contract rows, or two adapter rows — which would let a dedup
 /// absorb an entry and make the derived-versus-hand-written comparison lie
 /// about which side moved; when an adapter row names no test target, which is
-/// a pointer at nothing that holds on every tree; or when an anchor names its
+/// a pointer at nothing that holds on every tree; when an adapter row's clause
+/// has no contract-side row, which the census would then not count at all; or
+/// when an anchor names its
 /// own clause id — as `main` stands, no discharge site names its clause id, so
 /// an id-as-anchor entry fails the day it lands and the repair a contributor
 /// reaches for is widening the match until it passes.
@@ -1907,6 +1909,15 @@ fn guard_pin(pin: &[DocumentationMust]) -> Result<()> {
             bail!(
                 "the pin's anchor for `{}` names the clause id; no discharge site names its \
                  id, so an id-as-anchor entry fails on every site there is",
+                entry.clause
+            );
+        }
+    }
+    for entry in pin {
+        if entry.disposition.owned_by_adapters() && !seen.contains(&(entry.clause, false)) {
+            bail!(
+                "the pin's adapter row for `{}` has no contract-side row; an adapter row is \
+                 the second half of a split clause, and the census counts only the first",
                 entry.clause
             );
         }
@@ -1958,7 +1969,16 @@ fn check_pin_census(
     derived: &BTreeSet<String>,
     problems: &mut Vec<String>,
 ) {
-    let classified: BTreeSet<&str> = pin.iter().map(|entry| entry.clause).collect();
+    // Contract-side rows only. An adapter row discharges the adapters' half of
+    // a clause and says nothing about the contract's; counting it here would
+    // let ES-23's adapter row classify the clause after its `Pinned` row was
+    // deleted. The guard refuses an adapter row with no contract sibling, so
+    // every clause an adapter row names is counted through that sibling.
+    let contract_rows = || {
+        pin.iter()
+            .filter(|entry| !entry.disposition.owned_by_adapters())
+    };
+    let classified: BTreeSet<&str> = contract_rows().map(|entry| entry.clause).collect();
 
     for id in derived {
         if !classified.contains(id.as_str()) {
@@ -1968,7 +1988,7 @@ fn check_pin_census(
             ));
         }
     }
-    for entry in pin {
+    for entry in contract_rows() {
         // An id the document no longer declares cannot be a candidate either,
         // and assertion 1 has already said so in the sentence that fits. Saying
         // it twice would give one defect two messages, the second of which
@@ -4537,6 +4557,56 @@ One writer at a time.
         );
     }
 
+    /// An adapter row speaks for the adapters' documentation and never for the
+    /// contract's, so a clause whose contract-side row is gone is a clause the
+    /// pin classifies neither way — whatever adapter row it still carries.
+    ///
+    /// **Rejects** a census that builds its classified set from every row:
+    /// under it, deleting ES-23's `Pinned` row leaves the adapter row
+    /// classifying the clause, and the port's half of ES-23 drops out of the
+    /// pin with every check green.
+    #[test]
+    fn an_adapter_row_does_not_classify_the_contract_half() {
+        const TARGETS: &[&str] = &["crates/happenstance-sqlite/tests/cancellation_statement.rs"];
+        let pin = [excluded("ES-19"), adapter_owned("ES-23", TARGETS)];
+        let spec = format!(
+            "{}#### ES-23 — a clause whose contract half nobody classified\n\n\
+             The port's documentation MUST state the thing.\n",
+            slice_for(&pin[..1])
+        );
+
+        let found = pin_problems_over(&pin, &["ES-19", "ES-23"], &spec);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("ES-23") && found[0].contains("the document grew"),
+            "the contract half is unclassified, and the document is what moved, got: {}",
+            found[0]
+        );
+    }
+
+    /// An adapter row is the second half of a split clause, never the whole of
+    /// one: the clause's contract-side row is what the census counts, so an
+    /// adapter row standing alone is a pin that has lost its other half.
+    ///
+    /// **Rejects** a guard that admits a lone adapter row. Under it, the array
+    /// [`an_adapter_row_does_not_classify_the_contract_half`] drives is
+    /// structurally legal, and the only thing between a deleted `Pinned` row
+    /// and a green gate is the census reading a clause the specification may
+    /// later stop wording as an obligation.
+    #[test]
+    fn an_adapter_row_without_a_contract_row_is_a_hard_error() {
+        const TARGETS: &[&str] = &["crates/happenstance-sqlite/tests/cancellation_statement.rs"];
+        let pin = [excluded("ES-19"), adapter_owned("ES-23", TARGETS)];
+
+        let err = guard_pin(&pin).expect_err("an adapter row with no contract row is half a split");
+
+        assert!(
+            err.to_string().contains("ES-23") && err.to_string().contains("no contract-side row"),
+            "got: {err}"
+        );
+    }
+
     /// The row cannot rot silently: renaming an adapter crate, or its test
     /// target, without editing the row is a problem the gate reports, naming
     /// the path and the clause.
@@ -4547,15 +4617,20 @@ One writer at a time.
     /// green on every tree.
     #[test]
     fn an_adapter_row_whose_target_is_gone_is_a_problem() {
-        let pin = [adapter_owned(
-            "ES-23",
-            &[
-                "crates/happenstance-sqlite/tests/cancellation_statement.rs",
-                "crates/happenstance-renamed/tests/cancellation_statement.rs",
-            ],
-        )];
+        // The contract-side sibling the guard requires, so the census counts
+        // ES-23 and the one problem left is the moved target.
+        let pin = [
+            excluded("ES-23"),
+            adapter_owned(
+                "ES-23",
+                &[
+                    "crates/happenstance-sqlite/tests/cancellation_statement.rs",
+                    "crates/happenstance-renamed/tests/cancellation_statement.rs",
+                ],
+            ),
+        ];
 
-        let found = pin_problems(&pin);
+        let found = pin_problems_over(&pin, &["ES-23"], &slice_for(&pin[..1]));
 
         assert_eq!(found.len(), 1, "got: {found:?}");
         assert!(
