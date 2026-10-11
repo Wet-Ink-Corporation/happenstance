@@ -2,7 +2,7 @@
 id: kb-open-question-es-23-adapter-half-001
 title: ES-23 carries two MUSTs on two owners; FROZEN_DOC_MUSTS has a disposition for only one of them
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ES-23 is FROZEN and requires both a port-level MUST (the contract documents cancellation
@@ -21,13 +21,20 @@ summary: >-
   point at rather than run, or whether the array's scope stays as documented and the gap is
   accepted as a known limit of what xtask can see. Recommended at medium confidence: add the
   disposition, sequenced before phase 12, owned by whoever owns xtask's narrative pin.
+  Resolved 2026-10-11 on issue #149, without a decision atom: the array gains the third
+  disposition, AdapterOwned, and ES-23 becomes its first two-row clause — one Pinned row for the
+  port, one adapter-owned row naming the four per-adapter cancellation_statement.rs targets, which
+  the narrative step checks exist and never runs. A test fails when the row goes missing or
+  disagrees with the targets on disk, and docs/adapter-reading-order.md, the adapter recipe atom
+  and CONTRIBUTING.md now point a new adapter's author at the obligation and the targets to copy.
 depends_on: []
 related:
   - kb-decision-0058
   - kb-decision-0012
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/frozen-doc-musts-and-the-adapter-half.md
-last_reviewed: 2026-09-29
+  - xtask/src/lint_narrative.rs
+last_reviewed: 2026-10-11
 ---
 
 # ES-23 carries two MUSTs on two owners; FROZEN_DOC_MUSTS has a disposition for only one of them
@@ -96,9 +103,44 @@ fourth adapter repeating it is what raises that cost from "one embarrassing gap,
 all four published event-store adapters carry their own `# Cancellation` section —
 `crates/happenstance-sqlite/src/event_store.rs:125`, `crates/happenstance-cloudflare/src/event_store.rs:122`,
 `crates/happenstance-postgres/src/event_store.rs:29` and `crates/happenstance-neon/src/event_store.rs:3`.
-`FROZEN_DOC_MUSTS` still has only the port row (`xtask/src/lint_narrative.rs:1426-1431`).
+`FROZEN_DOC_MUSTS` still has only the port row (`xtask/src/lint_narrative.rs:1468-1474`).
 
 What is left is whether the array's completeness claim owes a third disposition, which is not
 a 1.0 surface question. **Owner now: phase 20**, where the adapter-author pointer this atom's
 cost argument asks for would be written. Phase 21's clause audit reads ES-23 as frozen and met
 either way. Status unchanged: the question asked is about the array, and the array has not moved.
+
+## Closed — 2026-10-11
+
+**The array gains the third disposition**, by the two-way decision recorded on issue #149, and
+no decision atom is written: it changes no clause, and ES-23's text is untouched.
+
+`Disposition::AdapterOwned { targets }` is an obligation that falls on each adapter's
+documentation, discharged per adapter by a test in its own crate. The narrative step points at
+those tests and never runs them. ES-23 is its first row and the array's first two-row clause. The
+port row stays `Pinned` at `xtask/src/lint_narrative.rs:1468-1474`, and the adapter row at
+`:1475-1485` names `crates/happenstance-{sqlite,cloudflare,postgres,neon}/tests/cancellation_statement.rs`.
+The derivation rule above the array says so where the next reader meets it, and the module's
+limits section states what the row cannot do.
+
+The objection on file — a row in `xtask` that rots the moment an adapter is renamed — is answered
+with two checks rather than accepted:
+
+- `check_pin`, inside `cargo xtask narrative`, reports a named target that is no longer a file,
+  naming the path and the clause (`an_adapter_row_whose_target_is_gone_is_a_problem`).
+- `es_23s_adapter_half_points_at_every_cancellation_statement` fails when ES-23 has no adapter
+  row, and when the row and the `crates/*/tests/cancellation_statement.rs` files on disk disagree
+  in either direction. A fifth adapter that copies the target therefore cannot go unnamed.
+
+`guard_pin` keys a row by clause and side. One contract row and one adapter row per clause are
+admitted, a second on either side is a hard error, and an adapter row naming no target is refused.
+
+What the decorative-check objection still gets right is stated, not argued away: the row proves
+the targets exist, not that they pass (that is `cargo test --workspace`'s answer), and an adapter
+that ships with no target at all is invisible to it, because nothing discovers which crates
+implement `EventStore`. ADR-0012's discovery pass stays unbuilt.
+
+The pointer the cost argument asked for is written where an adapter author reads:
+`docs/adapter-reading-order.md` (entry 3), `standards/rust/91-adapter-authoring-recipe.md` (its
+opening) and `CONTRIBUTING.md`, "Writing an adapter". Each names the targets to copy and the row
+to join. Closed by hand. No accepted decision was edited.

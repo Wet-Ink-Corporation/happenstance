@@ -18,10 +18,10 @@
 //!
 //! # Why this is a test and not a paragraph
 //!
-//! `xtask`'s `FROZEN_DOC_MUSTS` cannot reach this clause, by its own stated
-//! derivation rule: a candidate is pinned only when the obligation falls on *the
-//! contract's own documentation*. ES-23's adapter half falls on an adapter's, so
-//! it is invisible to the gate and to the reader of that array alike. ADR-0012
+//! `xtask`'s `FROZEN_DOC_MUSTS` cannot run this check. It pins only obligations
+//! on *the contract's own documentation*, and ES-23's adapter half falls on an
+//! adapter's, so the array carries it as an adapter-owned row that points at
+//! this file and checks only that it exists; what it asserts is here. ADR-0012
 //! §5 proposed the gate step that would have caught it, recorded that *"The step
 //! does not exist and has not been written"*, and named the fallback — the
 //! per-adapter review at phases 8–11. The step was never built and the review did
