@@ -22,6 +22,7 @@ that shapes a page whose job is orientation.
 | Fences the compiler never sees | [`text-fences.md`](text-fences.md) |
 | The canonical DCB program, worked end to end | [`read-the-worked-example.md`](read-the-worked-example.md) |
 | Carrying the worked example's invariant into your own domain | [`carry-your-invariant.md`](carry-your-invariant.md) |
+| Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
 
 | Looking for | It is at |
 | --- | --- |
