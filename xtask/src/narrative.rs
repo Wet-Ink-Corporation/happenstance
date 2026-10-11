@@ -210,3 +210,19 @@ mod retry_a_command {
 mod rebuild_a_read_model {
     #![doc = include_str!("../../docs/rebuild-a-read-model.md")]
 }
+
+// The Durable Object how-to. Three fences, and none names the Cloudflare crate,
+// because it is not a dependency of this target. The first is a stand-in with
+// that store's shape, an `Rc` over the memory store implementing only the bare
+// flavour, run through one decision function bound on `EventStore` beside the
+// memory store, with a clone of it filling the course the original opened. The
+// second spawns a task holding an `Rc` handle and is refused. rustc prints that
+// refusal with no error code, so the fence names none; the third is its
+// compiling control with an `Arc`, because a `compile_fail` fence passes on any
+// failure (RS-62-1). A clone that stopped aliasing the log, a seat limit off by
+// one, a bound on `SendEventStore`, or an `Rc` handle the spawn accepted, turns
+// this module red.
+#[cfg(doctest)]
+mod run_on_a_durable_object {
+    #![doc = include_str!("../../docs/run-on-a-durable-object.md")]
+}

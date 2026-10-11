@@ -25,6 +25,7 @@ that shapes a page whose job is orientation.
 | Carrying the worked example's invariant into your own domain | [`carry-your-invariant.md`](carry-your-invariant.md) |
 | Retrying a command without applying it twice | [`retry-a-command.md`](retry-a-command.md) |
 | Rebuilding a read model from the log | [`rebuild-a-read-model.md`](rebuild-a-read-model.md) |
+| Running the event store inside a Durable Object | [`run-on-a-durable-object.md`](run-on-a-durable-object.md) |
 | Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
 
 | Looking for | It is at |
