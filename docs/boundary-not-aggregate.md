@@ -109,15 +109,18 @@ the function matches on, and s1's subscription is not in the store after it
 Neither refusal says a limit was exceeded. It says the events the decision
 counted have moved, so the decision is taken again against what is there now,
 and that retaking is where thirty and five are compared. What the condition
-guarantees is that no write which could change either count lands between the
-read and the append unseen.
+buys is that no write which could change either count lands between the read
+and the append unseen
+([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics)).
 
 The first is the one the single large aggregate gets wrong in the other
 direction. Nothing s2 did on c2 is in the decision's query, so it gives the
-condition nothing to refuse on
-([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics), checked for
-every adapter by the conformance rule
-`condition_after_ignores_non_matching_events`). Where two decisions do overlap
+condition nothing to refuse on: its events are the same type, and a condition
+matches on tags as well as types
+([ES-27](../spec/SPECIFICATION.md#es-27--a-condition-matches-on-tags-not-only-on-types),
+checked for every adapter by the conformance rules
+`condition_with_an_unheld_tag_does_not_reject` and
+`condition_matches_on_every_tag_in_an_item`). Where two decisions do overlap
 and race, exactly one of them lands (the same clause, checked by
 `racing_conditional_appends_elect_one_winner` and, under real contention, by
 `exactly_one_of_n_contenders_commits`).
@@ -138,7 +141,7 @@ the three outcomes above are checked rather than described.
 ## What the aggregate did that you now do
 
 The aggregate gave the invariant a home: one class, one place to look, and a
-boundary nobody could narrow by accident. Here the invariant lives in the
+boundary nobody could narrow without noticing. Here the invariant lives in the
 query, and a query can be too narrow without anything failing. Tag the seats
 item to the student instead of the course, and the seats other students take
 never enter the read, the condition does not guard them, and the course can go
@@ -151,7 +154,7 @@ the aggregate never charged you.
 The home comes back one layer up. In the typed layer a decision model is a
 value with a scope, and a tuple of decision models is one boundary: the
 worked example's `subscribe` handler composes the course's seats with one
-student's own history, and one append condition checks both, retaking the
+student's history with that course, and one append condition checks both, retaking the
 decision when that condition refuses.
 [The example's source](../examples/course-subscriptions/src/main.rs) is that
 handler, and its `tests/runs.rs` runs the program and asserts that it refuses
