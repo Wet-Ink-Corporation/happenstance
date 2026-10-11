@@ -1,0 +1,93 @@
+name: Release
+
+# Publishes the seven crates when a `v*` tag is pushed. Nothing else triggers
+# it: a tag is the release decision, and it is cut from the release PR's merge
+# commit on `main`, never from a branch.
+#
+# Credentials come from crates.io trusted publishing. The job exchanges its
+# GitHub OIDC token for a crates.io token that lives about thirty minutes. No
+# long-lived `CARGO_REGISTRY_TOKEN` secret exists for this repository, so there
+# is nothing to leak or rotate. Each crate's trusted publisher on crates.io
+# names this repository, this file (`release.yml`) and the `crates-io`
+# environment below.
+on:
+  push:
+    tags: ["v*"]
+
+# The default for every job is read-only, as in `ci.yml`. The publish job
+# raises `id-token: write` for itself only, because the OIDC exchange is the
+# one thing that needs it.
+permissions:
+  contents: read
+
+concurrency:
+  # Two tags pushed together must not publish over each other.
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish to crates.io
+    runs-on: ubuntu-latest
+    # The environment that the crates.io trusted publishers name. Adding
+    # required reviewers to it in the repository settings turns every publish
+    # into a manual approval, without editing this file.
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Full history, so the step below can prove the tag is on `main`.
+          fetch-depth: 0
+
+      - name: The tag is on main
+        # A tag on a commit that never merged would publish code that no
+        # review and no gate run ever saw.
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # the `master` branch, 2026-09-03
+        with:
+          # The pin in `rust-toolchain.toml`, spelled out as the `msrv` job
+          # spells it.
+          toolchain: "1.97.1"
+
+      - name: The tag names the version every published crate carries
+        # The list is `xtask/src/package.rs`'s `PUBLISHABLE`. `cargo xtask
+        # package-check` holds that list to the manifests, but not to this
+        # file, so the step fails loudly if a crate is missing from the
+        # workspace or carries another version.
+        env:
+          CRATES: >-
+            happenstance-core happenstance happenstance-testkit
+            happenstance-sqlite happenstance-cloudflare
+            happenstance-postgres happenstance-neon
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          meta="$(cargo metadata --format-version 1 --no-deps --locked)"
+          for c in $CRATES; do
+            got="$(jq -r --arg c "$c" '.packages[] | select(.name == $c) | .version' <<<"$meta")"
+            if [ "$got" != "$want" ]; then
+              echo "::error::$c is at '${got:-missing}', the tag says $want"
+              exit 1
+            fi
+          done
+
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: auth
+
+      - name: Publish
+        # One `cargo publish` with every package, so that cargo orders them by
+        # their dependencies and waits for each to reach the index before
+        # publishing what depends on it. `--locked` publishes against the
+        # `Cargo.lock` the gate ran.
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: >-
+          cargo publish --locked
+          -p happenstance-core -p happenstance -p happenstance-testkit
+          -p happenstance-sqlite -p happenstance-cloudflare
+          -p happenstance-postgres -p happenstance-neon

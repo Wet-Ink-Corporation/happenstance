@@ -19,9 +19,15 @@ that shapes a page whose job is orientation.
 | Appending under a condition | [`append-conditions.md`](append-conditions.md) |
 | Watching a boundary refuse, in three runnable steps | [`first-encounter.md`](first-encounter.md) |
 | What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
+| Passing the conformance suite with your adapter | [`pass-conformance-suite.md`](pass-conformance-suite.md) |
 | Fences the compiler never sees | [`text-fences.md`](text-fences.md) |
 | The canonical DCB program, worked end to end | [`read-the-worked-example.md`](read-the-worked-example.md) |
+| Where the aggregate's consistency boundary went | [`boundary-not-aggregate.md`](boundary-not-aggregate.md) |
 | Carrying the worked example's invariant into your own domain | [`carry-your-invariant.md`](carry-your-invariant.md) |
+| Retrying a command without applying it twice | [`retry-a-command.md`](retry-a-command.md) |
+| Rebuilding a read model from the log | [`rebuild-a-read-model.md`](rebuild-a-read-model.md) |
+| Choosing a store for your deployment | [`choose-a-store.md`](choose-a-store.md) |
+| Running the event store inside a Durable Object | [`run-on-a-durable-object.md`](run-on-a-durable-object.md) |
 | Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
 
 | Looking for | It is at |
