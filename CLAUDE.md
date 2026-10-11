@@ -8,9 +8,9 @@ changing anything.
 A storage-agnostic, [DCB-compliant](https://dcb.events/specification/) event
 sourcing library. `happenstance-core` defines the contract; adapter crates
 implement it; `happenstance-testkit` decides whether they did. `happenstance`
-itself is the typed layer an application reaches for — today a five-line facade
-over the contract, holding the bare name because that is the crate most people
-will `cargo add` ([ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md)).
+itself is the typed layer an application reaches for — codecs, typed events and
+decision models over the contract — holding the bare name because that is the
+crate most people will `cargo add` ([ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md)).
 
 ## Who you are working with
 
@@ -130,7 +130,8 @@ saying "not in this release" and one saying "not finished" look identical in a
 manifest, so a crate that carries the key says which in its own crate root.
 
 `happenstance-postgres` was the **half case** and is no longer one. Its event
-store ran 101 of 101 against a live PostgreSQL 17.10 including the concurrency
+store ran the whole event-store suite (101 of 101 at phase 10b; the suite has
+grown since) against a live PostgreSQL 17.10 including the concurrency
 family at 64 contenders, and ADR-0024 records the arm it buys ES-10 with; its
 projection store now clears the projection suite, and it is the first projection
 adapter over storage this workspace does not control to do so. Both crates'
@@ -402,7 +403,8 @@ diverge again; ADR-0029 explains why it is kept rather than deleted.
 Do not settle these silently in passing; they need their own pass and probably
 their own ADR. Two files carry the answers, and they answer different questions.
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) says
-what is **true now** — 202 numbered clauses, each carrying a maturity marker
+what is **true now** — numbered clauses (205 at the last count; §7.1's
+generated summary is the live total), each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
 naming the conformance rule that checks it and the wrong implementation it
 forbids. `cargo xtask spec-trace` is a gate step precisely so those markers and
