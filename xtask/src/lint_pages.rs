@@ -1899,8 +1899,8 @@ fn guard_rules_not_vacuous(atoms: &[Atom]) -> Result<()> {
 /// records, with the second copy drifting silently the day the tree moves.
 ///
 /// The tree's index is not a page. That is not this module's judgement: the
-/// pinned tree's own checker states it — `xtask/src/lint_narrative.rs:232-241`
-/// ("the only file under `TREE` that is not a page") and `:486-491` ("a tree
+/// pinned tree's own checker states it — `xtask/src/lint_narrative.rs:255-264`
+/// ("the only file under `TREE` that is not a page") and `:501-504` ("a tree
 /// holding only its own routing table holds nothing to check").
 ///
 /// # Errors
@@ -4398,7 +4398,7 @@ mod tests {
         assert!(
             pages.is_empty(),
             "the pinned tree's own checker says the index is not a page \
-             (`xtask/src/lint_narrative.rs:232-241`, `:486-491`); it found {pages:?}"
+             (`xtask/src/lint_narrative.rs:255-264`, `:501-504`); it found {pages:?}"
         );
         fs::remove_dir_all(&root).ok();
     }

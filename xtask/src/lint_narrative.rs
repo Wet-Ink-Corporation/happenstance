@@ -114,6 +114,13 @@
 //!   there. Whether the paragraph around it still teaches an adapter author
 //!   what the clause needs them to know is a review question, and this step
 //!   asks none.
+//! * **An adapter-owned row is pointed at, never run.** Its targets are
+//!   checked to exist and nothing more; whether they pass is `cargo test
+//!   --workspace`'s answer. And a new adapter that ships with no such target
+//!   at all is invisible here, because the row lists the targets the tree has
+//!   rather than discovering the adapters that owe one — ADR-0012's discovery
+//!   pass, still unbuilt. What the row buys is the array's completeness claim
+//!   made honest, and a place a new adapter's author is sent to copy from.
 //! * **The harness is matched as text, so reformatting it can break this check
 //!   without breaking the compile.** Splitting an `include_str!` across lines, or
 //!   writing a `mod` line that does not start with `mod ` after trimming, makes a
@@ -1313,6 +1320,32 @@ enum Disposition {
         /// One line. Why the derivation rule does not reach this candidate.
         reason: &'static str,
     },
+    /// Falls on **each adapter's** documentation, and is discharged per
+    /// adapter by a test in that adapter's crate, which this step points at
+    /// and never runs.
+    ///
+    /// Pointed at, not run, and the difference is the whole of what the row
+    /// claims. [`check_pin`] proves each target is still on disk, so renaming
+    /// an adapter without editing the row is a problem rather than a dangling
+    /// pointer. Whether the targets *pass* is `cargo test --workspace`'s
+    /// answer, given under another banner. The row exists so that a reader of
+    /// this array learns the obligation exists, and where a new adapter's
+    /// author goes to copy its check.
+    AdapterOwned {
+        /// Repo-relative, `/`-separated test targets, one per adapter.
+        targets: &'static [&'static str],
+    },
+}
+
+impl Disposition {
+    /// Whether the row speaks for the adapters rather than for the contract.
+    ///
+    /// The second half of a row's identity: one clause may carry one row on
+    /// each side and no more, which is what lets ES-23 split without letting
+    /// a duplicate be absorbed.
+    const fn owned_by_adapters(self) -> bool {
+        matches!(self, Self::AdapterOwned { .. })
+    }
 }
 
 /// One candidate documentation obligation, disposed of.
@@ -1320,7 +1353,8 @@ enum Disposition {
 struct DocumentationMust {
     /// The clause id, resolved through [`crate::spec_trace::clause_ids`].
     clause: &'static str,
-    /// Pinned with a site and an anchor, or excluded with a reason.
+    /// Pinned with a site and an anchor, excluded with a reason, or pointed
+    /// at the adapters' test targets.
     disposition: Disposition,
 }
 
@@ -1333,6 +1367,15 @@ struct DocumentationMust {
 /// discharge exists today. Everything the scan finds and the rule does not
 /// reach is **excluded**, with its reason on the entry rather than in a
 /// paragraph somewhere else.
+///
+/// **A third disposition, for an obligation that falls on adapters.** When a
+/// `[FROZEN]` clause puts its obligation on each adapter's documentation, and
+/// each adapter discharges it with a test in its own crate, the candidate is
+/// **adapter-owned**: the entry names those test targets, this step checks they
+/// exist, and runs none of them. Without it, a clause whose MUSTs fall on two
+/// owners reads as one `Pinned` row, and the second obligation is not even a
+/// stated silence. Such a clause carries one row per owner, and
+/// [`guard_pin`] refuses a second row on either side.
 ///
 /// **(c) is a condition and not a footnote**, because pinning an undischarged
 /// obligation lands the gate red on a tree nobody broke, and the only repair is
@@ -1427,6 +1470,17 @@ const FROZEN_DOC_MUSTS: &[DocumentationMust] = &[
         disposition: Disposition::Pinned {
             site: "crates/happenstance-core/src/store.rs",
             anchor: "# Cancellation",
+        },
+    },
+    DocumentationMust {
+        clause: "ES-23",
+        disposition: Disposition::AdapterOwned {
+            targets: &[
+                "crates/happenstance-sqlite/tests/cancellation_statement.rs",
+                "crates/happenstance-cloudflare/tests/cancellation_statement.rs",
+                "crates/happenstance-postgres/tests/cancellation_statement.rs",
+                "crates/happenstance-neon/tests/cancellation_statement.rs",
+            ],
         },
     },
     DocumentationMust {
@@ -1814,11 +1868,15 @@ fn words_an_obligation(body: &str) -> bool {
 ///
 /// # Errors
 ///
-/// When [`FROZEN_DOC_MUSTS`] is empty; when it names one clause twice, which
-/// would let a dedup absorb an entry and make the derived-versus-hand-written
-/// comparison lie about which side moved; or when an anchor names its own
-/// clause id — as `main` stands, no discharge site names its clause id, so an
-/// id-as-anchor entry fails the day it lands and the repair a contributor
+/// When [`FROZEN_DOC_MUSTS`] is empty; when it names one clause twice on one
+/// side — two contract rows, or two adapter rows — which would let a dedup
+/// absorb an entry and make the derived-versus-hand-written comparison lie
+/// about which side moved; when an adapter row names no test target, which is
+/// a pointer at nothing that holds on every tree; when an adapter row's clause
+/// has no contract-side row, which the census would then not count at all; or
+/// when an anchor names its
+/// own clause id — as `main` stands, no discharge site names its clause id, so
+/// an id-as-anchor entry fails the day it lands and the repair a contributor
 /// reaches for is widening the match until it passes.
 fn guard_pin(pin: &[DocumentationMust]) -> Result<()> {
     if pin.is_empty() {
@@ -1827,12 +1885,21 @@ fn guard_pin(pin: &[DocumentationMust]) -> Result<()> {
         );
     }
 
-    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    let mut seen: BTreeSet<(&str, bool)> = BTreeSet::new();
     for entry in pin {
-        if !seen.insert(entry.clause) {
+        if !seen.insert((entry.clause, entry.disposition.owned_by_adapters())) {
             bail!(
-                "the pin names `{}` twice; a duplicate lets one entry be absorbed and makes \
-                 the derived-versus-hand-written comparison lie about which side moved",
+                "the pin names `{}` twice on one side; a duplicate lets one entry be absorbed \
+                 and makes the derived-versus-hand-written comparison lie about which side moved",
+                entry.clause
+            );
+        }
+        if let Disposition::AdapterOwned { targets } = entry.disposition
+            && targets.is_empty()
+        {
+            bail!(
+                "the pin's adapter row for `{}` names no test target; a pointer at nothing \
+                 holds on every tree",
                 entry.clause
             );
         }
@@ -1842,6 +1909,15 @@ fn guard_pin(pin: &[DocumentationMust]) -> Result<()> {
             bail!(
                 "the pin's anchor for `{}` names the clause id; no discharge site names its \
                  id, so an id-as-anchor entry fails on every site there is",
+                entry.clause
+            );
+        }
+    }
+    for entry in pin {
+        if entry.disposition.owned_by_adapters() && !seen.contains(&(entry.clause, false)) {
+            bail!(
+                "the pin's adapter row for `{}` has no contract-side row; an adapter row is \
+                 the second half of a split clause, and the census counts only the first",
                 entry.clause
             );
         }
@@ -1893,7 +1969,16 @@ fn check_pin_census(
     derived: &BTreeSet<String>,
     problems: &mut Vec<String>,
 ) {
-    let classified: BTreeSet<&str> = pin.iter().map(|entry| entry.clause).collect();
+    // Contract-side rows only. An adapter row discharges the adapters' half of
+    // a clause and says nothing about the contract's; counting it here would
+    // let ES-23's adapter row classify the clause after its `Pinned` row was
+    // deleted. The guard refuses an adapter row with no contract sibling, so
+    // every clause an adapter row names is counted through that sibling.
+    let contract_rows = || {
+        pin.iter()
+            .filter(|entry| !entry.disposition.owned_by_adapters())
+    };
+    let classified: BTreeSet<&str> = contract_rows().map(|entry| entry.clause).collect();
 
     for id in derived {
         if !classified.contains(id.as_str()) {
@@ -1903,7 +1988,7 @@ fn check_pin_census(
             ));
         }
     }
-    for entry in pin {
+    for entry in contract_rows() {
         // An id the document no longer declares cannot be a candidate either,
         // and assertion 1 has already said so in the sentence that fits. Saying
         // it twice would give one defect two messages, the second of which
@@ -1921,10 +2006,28 @@ fn check_pin_census(
     }
 }
 
+/// Assertion 2, the adapter half — every test target a row points at is
+/// still a file.
+///
+/// Existence only. The target is not read and not run: it is compiled and
+/// executed by `cargo test --workspace`, and a second runner here would be a
+/// second answer to a question that already has one.
+fn check_targets(root: &Path, clause: &str, targets: &[&str], problems: &mut Vec<String>) {
+    for target in targets {
+        if !root.join(target).is_file() {
+            problems.push(format!(
+                "{target} — the test target `{clause}`'s adapter row points at is not on disk; \
+                 the adapter moved, or its target was renamed"
+            ));
+        }
+    }
+}
+
 /// The pin, checked three ways, against one workspace root.
 ///
-/// The I/O half: one read per pinned discharge site, and one scan of the
-/// specification text the caller already read.
+/// The I/O half: one read per pinned discharge site, one existence check per
+/// adapter-owned test target, and one scan of the specification text the
+/// caller already read.
 fn check_pin(
     root: &Path,
     pin: &[DocumentationMust],
@@ -1935,15 +2038,18 @@ fn check_pin(
     check_pin_resolution(pin, clauses, problems);
 
     for entry in pin {
-        let Disposition::Pinned { site, anchor } = entry.disposition else {
-            continue;
-        };
-        match fs::read_to_string(root.join(site)) {
-            Ok(text) => check_anchor(entry.clause, site, anchor, &text, problems),
-            Err(err) => problems.push(format!(
-                "{site} — reading the discharge site for `{}` failed ({err}); the path moved",
-                entry.clause
-            )),
+        match entry.disposition {
+            Disposition::Pinned { site, anchor } => match fs::read_to_string(root.join(site)) {
+                Ok(text) => check_anchor(entry.clause, site, anchor, &text, problems),
+                Err(err) => problems.push(format!(
+                    "{site} — reading the discharge site for `{}` failed ({err}); the path moved",
+                    entry.clause
+                )),
+            },
+            Disposition::AdapterOwned { targets } => {
+                check_targets(root, entry.clause, targets, problems);
+            }
+            Disposition::Excluded { .. } => {}
         }
     }
 
@@ -3952,12 +4058,12 @@ One writer at a time.
     fn every_pin_entry_is_disposed_with_a_site_and_an_anchor() {
         assert!(!FROZEN_DOC_MUSTS.is_empty());
 
-        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        let mut seen: BTreeSet<(&str, bool)> = BTreeSet::new();
         for entry in FROZEN_DOC_MUSTS {
             assert!(!entry.clause.is_empty());
             assert!(
-                seen.insert(entry.clause),
-                "`{}` is enumerated twice",
+                seen.insert((entry.clause, entry.disposition.owned_by_adapters())),
+                "`{}` is enumerated twice on one side",
                 entry.clause
             );
             match entry.disposition {
@@ -3976,6 +4082,16 @@ One writer at a time.
                         "`{}` is excluded with no reason a reviewer can read",
                         entry.clause
                     );
+                }
+                Disposition::AdapterOwned { targets } => {
+                    assert!(!targets.is_empty(), "`{}` points at nothing", entry.clause);
+                    for target in targets {
+                        assert!(
+                            target.starts_with("crates/") && target.contains("/tests/"),
+                            "`{}`: {target} is not an adapter's test target",
+                            entry.clause
+                        );
+                    }
                 }
             }
         }
@@ -4374,6 +4490,212 @@ One writer at a time.
         let err = guard_pin(&pin).expect_err("a duplicate lets one entry be absorbed");
 
         assert!(err.to_string().contains("ES-23"), "got: {err}");
+    }
+
+    // ---- #149: an obligation on adapters, pointed at and never run ----------
+
+    fn adapter_owned(clause: &'static str, targets: &'static [&'static str]) -> DocumentationMust {
+        DocumentationMust {
+            clause,
+            disposition: Disposition::AdapterOwned { targets },
+        }
+    }
+
+    /// ES-23 is the shape this admits: one contract-side row and one adapter
+    /// row for one clause. What it still refuses is two rows on the **same**
+    /// side, which is the absorbed-duplicate defect the guard exists for.
+    ///
+    /// **Rejects** a guard keyed on the clause alone, which refuses ES-23's
+    /// two rows outright; and one that exempts adapter rows from the key, which
+    /// lets a second adapter row for one clause shadow the first.
+    #[test]
+    fn a_clause_carries_one_contract_row_and_one_adapter_row_at_most() {
+        const TARGETS: &[&str] = &["crates/happenstance-sqlite/tests/cancellation_statement.rs"];
+
+        let split = [
+            pinned(
+                "ES-23",
+                "crates/happenstance-core/src/store.rs",
+                "# Cancellation",
+            ),
+            adapter_owned("ES-23", TARGETS),
+        ];
+        guard_pin(&split)
+            .expect("a contract row and an adapter row are two owners, not a duplicate");
+
+        // The contract sibling is what makes this case reach the duplicate
+        // check: without it the no-contract-row check fails the same input,
+        // and a guard that exempts adapter rows from the key stays green.
+        let twice = [
+            pinned(
+                "ES-23",
+                "crates/happenstance-core/src/store.rs",
+                "# Cancellation",
+            ),
+            adapter_owned("ES-23", TARGETS),
+            adapter_owned("ES-23", TARGETS),
+        ];
+        let err = guard_pin(&twice).expect_err("two adapter rows for one clause absorb one");
+        assert!(
+            err.to_string().contains("`ES-23` twice on one side"),
+            "got: {err}"
+        );
+
+        let mixed = [
+            pinned(
+                "ES-23",
+                "crates/happenstance-core/src/store.rs",
+                "# Cancellation",
+            ),
+            excluded("ES-23"),
+        ];
+        let err = guard_pin(&mixed).expect_err("pinned and excluded both speak for the contract");
+        assert!(
+            err.to_string().contains("`ES-23` twice on one side"),
+            "got: {err}"
+        );
+    }
+
+    /// **Rejects** `AdapterOwned { targets: &[] }`: a row that points at
+    /// nothing, holds against every tree, and reads in the array exactly like
+    /// one that points at something.
+    #[test]
+    fn an_adapter_row_naming_no_target_is_a_hard_error() {
+        let pin = [excluded("ES-19"), adapter_owned("ES-23", &[])];
+
+        let err = guard_pin(&pin).expect_err("a pointer at nothing cannot fail");
+
+        assert!(
+            err.to_string().contains("ES-23") && err.to_string().contains("no test target"),
+            "got: {err}"
+        );
+    }
+
+    /// An adapter row speaks for the adapters' documentation and never for the
+    /// contract's, so a clause whose contract-side row is gone is a clause the
+    /// pin classifies neither way — whatever adapter row it still carries.
+    ///
+    /// **Rejects** a census that builds its classified set from every row:
+    /// under it, deleting ES-23's `Pinned` row leaves the adapter row
+    /// classifying the clause, and the port's half of ES-23 drops out of the
+    /// pin with every check green.
+    #[test]
+    fn an_adapter_row_does_not_classify_the_contract_half() {
+        const TARGETS: &[&str] = &["crates/happenstance-sqlite/tests/cancellation_statement.rs"];
+        let pin = [excluded("ES-19"), adapter_owned("ES-23", TARGETS)];
+        let spec = format!(
+            "{}#### ES-23 — a clause whose contract half nobody classified\n\n\
+             The port's documentation MUST state the thing.\n",
+            slice_for(&pin[..1])
+        );
+
+        let found = pin_problems_over(&pin, &["ES-19", "ES-23"], &spec);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].contains("ES-23") && found[0].contains("the document grew"),
+            "the contract half is unclassified, and the document is what moved, got: {}",
+            found[0]
+        );
+    }
+
+    /// An adapter row is the second half of a split clause, never the whole of
+    /// one: the clause's contract-side row is what the census counts, so an
+    /// adapter row standing alone is a pin that has lost its other half.
+    ///
+    /// **Rejects** a guard that admits a lone adapter row. Under it, the array
+    /// [`an_adapter_row_does_not_classify_the_contract_half`] drives is
+    /// structurally legal, and the only thing between a deleted `Pinned` row
+    /// and a green gate is the census reading a clause the specification may
+    /// later stop wording as an obligation.
+    #[test]
+    fn an_adapter_row_without_a_contract_row_is_a_hard_error() {
+        const TARGETS: &[&str] = &["crates/happenstance-sqlite/tests/cancellation_statement.rs"];
+        let pin = [excluded("ES-19"), adapter_owned("ES-23", TARGETS)];
+
+        let err = guard_pin(&pin).expect_err("an adapter row with no contract row is half a split");
+
+        assert!(
+            err.to_string().contains("ES-23") && err.to_string().contains("no contract-side row"),
+            "got: {err}"
+        );
+    }
+
+    /// The row cannot rot silently: renaming an adapter crate, or its test
+    /// target, without editing the row is a problem the gate reports, naming
+    /// the path and the clause.
+    ///
+    /// **Rejects** a [`check_pin`] that skips adapter rows the way it skips
+    /// exclusions — the `let Disposition::Pinned { .. } else { continue }` it
+    /// carried before this disposition existed — under which the row below is
+    /// green on every tree.
+    #[test]
+    fn an_adapter_row_whose_target_is_gone_is_a_problem() {
+        // The contract-side sibling the guard requires, so the census counts
+        // ES-23 and the one problem left is the moved target.
+        let pin = [
+            excluded("ES-23"),
+            adapter_owned(
+                "ES-23",
+                &[
+                    "crates/happenstance-sqlite/tests/cancellation_statement.rs",
+                    "crates/happenstance-renamed/tests/cancellation_statement.rs",
+                ],
+            ),
+        ];
+
+        let found = pin_problems_over(&pin, &["ES-23"], &slice_for(&pin[..1]));
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].starts_with("crates/happenstance-renamed/tests/cancellation_statement.rs")
+                && found[0].contains("ES-23")
+                && found[0].contains("the adapter moved"),
+            "the problem names the path, the clause and which side moved, got: {}",
+            found[0]
+        );
+    }
+
+    /// ES-23's adapter half is in the array, as an adapter row, and names
+    /// every per-adapter test target the tree carries — no more, no fewer.
+    ///
+    /// **Rejects** three wrong arrays, each of which the rest of the pin
+    /// passes: the adapter row deleted, which is the state the open question
+    /// was raised against (`.kb/open-questions/es-23-frozen-doc-musts-adapter-half.md`);
+    /// the row turned into an `Excluded`, a stated silence where a pointer
+    /// was; and a fifth adapter shipping a `cancellation_statement.rs` the row
+    /// does not name, which leaves the next author copying from a list that
+    /// stopped at four.
+    #[test]
+    fn es_23s_adapter_half_points_at_every_cancellation_statement() {
+        let root = workspace_root().unwrap();
+        let named: BTreeSet<&str> = FROZEN_DOC_MUSTS
+            .iter()
+            .filter(|entry| entry.clause == "ES-23")
+            .find_map(|entry| match entry.disposition {
+                Disposition::AdapterOwned { targets } => Some(targets.iter().copied().collect()),
+                Disposition::Pinned { .. } | Disposition::Excluded { .. } => None,
+            })
+            .expect("ES-23's adapter half has no adapter row in FROZEN_DOC_MUSTS");
+
+        let mut on_disk: BTreeSet<String> = BTreeSet::new();
+        for crate_dir in fs::read_dir(root.join("crates")).unwrap() {
+            let crate_dir = crate_dir.unwrap().path();
+            if crate_dir.join("tests/cancellation_statement.rs").is_file() {
+                let name = crate_dir.file_name().unwrap().to_str().unwrap();
+                on_disk.insert(format!("crates/{name}/tests/cancellation_statement.rs"));
+            }
+        }
+
+        assert!(
+            !on_disk.is_empty(),
+            "no adapter carries a cancellation_statement.rs; the scan below proves nothing"
+        );
+        let on_disk: BTreeSet<&str> = on_disk.iter().map(String::as_str).collect();
+        assert_eq!(
+            named, on_disk,
+            "ES-23's adapter row and the per-adapter test targets on disk disagree"
+        );
     }
 
     /// Verified on `main`: not one discharge site names its clause id, so an

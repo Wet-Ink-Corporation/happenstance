@@ -623,7 +623,8 @@ double-reject three already-registered mutants for reasons three other rules own
 adjacent to CF-34's merge-red prohibition; no governing principle reconciles both with the frozen
 text as written),
 `kb-open-question-es-23-adapter-half-001` (added 2026-09-07 — `FROZEN_DOC_MUSTS` has no recorded
-disposition for ES-23's adapter-side `MUST`, a gap two named instruments both failed to catch),
+disposition for ES-23's adapter-side `MUST`, a gap two named instruments both failed to catch;
+superseded 2026-10-11 by an adapter-owned row, #149),
 `kb-open-question-es-18-byte-identical-conformance-001` (added 2026-09-07 — whether ES-18's
 "byte-identical" second sentence is amended to the weaker conformance reading its own rules ask, or
 narrowed to exclude the position counter; specific to `happenstance-cloudflare`'s
