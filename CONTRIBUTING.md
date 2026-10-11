@@ -128,6 +128,14 @@ Step 4 is not a formality. An adapter that compiles but has not run the suite is
 not an adapter, and will not be merged as one. If a rule looks wrong, say so and
 fix the rule — a bad rule costs every future adapter author a day.
 
+One obligation the suite cannot check, because no rule can read a doc comment:
+ES-23 requires each adapter to state what a dropped `append` future does. Answer
+it under a `# Cancellation` heading in your store module, and keep it there with
+a test target copied from one of the four that exist:
+`crates/happenstance-{sqlite,cloudflare,postgres,neon}/tests/cancellation_statement.rs`.
+Then add yours to ES-23's adapter-owned row in `FROZEN_DOC_MUSTS`
+(`xtask/src/lint_narrative.rs`); `cargo test -p xtask` fails until you do.
+
 ## Adding a method to a port
 
 The two-flavour derivation ([ADR-0001](.kb/decisions/0001-async-port-flavours.md),

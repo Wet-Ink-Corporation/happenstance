@@ -47,6 +47,16 @@ where the fixture contract (CF-15) arrives.
 names the bar an adapter must clear. Read it after the recipe atom rather than before: the atom
 carries the compiled example, and this carries the obligation.
 
+One obligation there is not a conformance rule, because no rule can read a doc comment: ES-23's
+adapter half. Your store module answers it under its own `# Cancellation` heading, and a test in
+your crate keeps the answer there. Each published adapter carries one to copy, at
+`crates/happenstance-<name>/tests/cancellation_statement.rs` for `sqlite`, `cloudflare`,
+`postgres` and `neon`.
+
+`FROZEN_DOC_MUSTS`, in `xtask/src/lint_narrative.rs`, lists those four targets as ES-23's
+adapter-owned row. Add yours to the row: `cargo test -p xtask` fails until the row and the
+targets on disk agree.
+
 ## 4 of 6 — why there are two flavours
 
 `standards/rust/20-two-flavour-ports.md` is where the rule lives — RS-20-1 — and it carries the
