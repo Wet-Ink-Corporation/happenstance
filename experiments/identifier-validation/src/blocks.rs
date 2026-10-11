@@ -19,9 +19,15 @@ const fn block(name: &'static str, range: RangeInclusive<char>) -> Block {
     Block { name, range }
 }
 
-/// Every block of the Hebrew, Arabic, Syriac, Thaana, N'Ko, Samaritan and
-/// Mandaic scripts, and the RTL presentation forms.
-pub const RTL_BLOCKS: [Block; 17] = [
+/// The blocks of the Hebrew and Arabic scripts — the Arabic-script numeral
+/// blocks included — of their neighbours Syriac, Thaana, N'Ko, Samaritan and
+/// Mandaic, and the RTL presentation forms.
+///
+/// Not every right-to-left block in Unicode: historic and minority RTL scripts
+/// (Adlam, Hanifi Rohingya, Yezidi, Old South Arabian and others) are out of
+/// the ledger's scope and are not listed. The full sweep still tests their
+/// codepoints; only the "inside an RTL block" label does not name them.
+pub const RTL_BLOCKS: [Block; 19] = [
     block("Hebrew", '\u{0590}'..='\u{05FF}'),
     block("Arabic", '\u{0600}'..='\u{06FF}'),
     block("Syriac", '\u{0700}'..='\u{074F}'),
@@ -41,6 +47,8 @@ pub const RTL_BLOCKS: [Block; 17] = [
     block("Arabic Presentation Forms-B", '\u{FE70}'..='\u{FEFF}'),
     block("Rumi Numeral Symbols", '\u{10E60}'..='\u{10E7F}'),
     block("Arabic Extended-C", '\u{10EC0}'..='\u{10EFF}'),
+    block("Indic Siyaq Numbers", '\u{1EC70}'..='\u{1ECBF}'),
+    block("Ottoman Siyaq Numbers", '\u{1ED00}'..='\u{1ED4F}'),
     block(
         "Arabic Mathematical Alphabetic Symbols",
         '\u{1EE00}'..='\u{1EEFF}',

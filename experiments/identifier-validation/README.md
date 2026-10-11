@@ -48,10 +48,13 @@ So this experiment does two things, and they answer different questions.
 
 ## Pre-registered criterion
 
-This section was committed **before** any code in this directory was written or
-run, as its own commit, so that what "empty" means could not be adjusted to the
-outcome. The result is recorded below it, in a later commit; this section is not
-edited after the run.
+This section was committed **before any code in this directory was written**,
+as its own commit (`337d6a29`), so that what "empty" means could not be adjusted
+to the outcome. One erratum followed (`043ccb70`, below): it was made **after the
+harness was written but before it was run**, and it corrects a count, not a
+criterion. The result is recorded below, in later commits. Since the run, this
+section's substance is unchanged; this paragraph was reworded at review to say
+exactly when each of those two commits was made.
 
 ### What is measured
 

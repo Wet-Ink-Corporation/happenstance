@@ -118,24 +118,27 @@ fn write_corpus(out: &mut impl Write) -> io::Result<bool> {
     Ok(empty && pairs.is_empty() && shape.is_empty())
 }
 
-/// Writes the refused set as ranges with their verdicts and any RTL block a
-/// refused value falls in. Returns whether none does.
+/// Writes the recorded refusals as ranges with their verdicts, says when that
+/// list was capped, and names the RTL block of any recorded refusal. Returns
+/// whether no refusal at all, recorded or not, lies in an RTL block.
 fn write_refused(out: &mut impl Write, report: &SweepReport) -> io::Result<bool> {
     for (start, end, verdict) in ranges(&report.refused) {
         let (start, end) = (u32::from(start), u32::from(end));
         writeln!(out, "  refused U+{start:04X}..=U+{end:04X} {verdict:?}")?;
     }
-    let mut clean = true;
+    if report.refused_count > report.refused.len() {
+        let (shown, total) = (report.refused.len(), report.refused_count);
+        writeln!(out, "  (refused list truncated: {shown} of {total} shown)")?;
+    }
     for &(c, _) in &report.refused {
         for block in RTL_BLOCKS.iter().filter(|block| block.range.contains(&c)) {
-            clean = false;
             let (c, name) = (u32::from(c), block.name);
             writeln!(out, "  U+{c:04X} is inside RTL block {name}")?;
         }
     }
-    let inside = if clean { "none" } else { "some" };
+    let inside = report.refused_in_rtl_block;
     writeln!(out, "  refused values inside an RTL block: {inside}")?;
-    Ok(clean)
+    Ok(inside == 0)
 }
 
 /// Collapses consecutive codepoints with the same verdict into ranges.

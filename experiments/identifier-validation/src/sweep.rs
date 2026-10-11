@@ -1,5 +1,6 @@
 //! E11-R: every Unicode scalar value, in one position, against the oracle.
 
+use crate::blocks::RTL_BLOCKS;
 use crate::verdict::{Verdict, expected};
 
 /// How many Unicode scalar values there are: U+0000–U+10FFFF less the 2,048
@@ -79,6 +80,10 @@ pub struct SweepReport {
     /// The first [`MAX_RECORDED`] of them with the validator's verdict, in
     /// codepoint order.
     pub refused: Vec<(char, Verdict)>,
+    /// Refused scalar values lying in one of [`RTL_BLOCKS`], counted over every
+    /// refusal rather than over the capped [`refused`](Self::refused) list.
+    /// Criterion 2: zero.
+    pub refused_in_rtl_block: usize,
 }
 
 /// Tests every Unicode scalar value in `position` against `judge`, and compares
@@ -91,6 +96,7 @@ pub fn sweep(position: Position, mut judge: impl FnMut(&str) -> Verdict) -> Swee
         first_disagreements: Vec::new(),
         refused_count: 0,
         refused: Vec::new(),
+        refused_in_rtl_block: 0,
     };
     let mut buf = String::with_capacity(8);
 
@@ -112,6 +118,9 @@ pub fn sweep(position: Position, mut judge: impl FnMut(&str) -> Verdict) -> Swee
         }
         if actual != Verdict::Accepted {
             report.refused_count += 1;
+            if RTL_BLOCKS.iter().any(|block| block.range.contains(&value)) {
+                report.refused_in_rtl_block += 1;
+            }
             if report.refused.len() < MAX_RECORDED {
                 report.refused.push((value, actual));
             }

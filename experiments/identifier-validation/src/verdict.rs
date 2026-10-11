@@ -32,8 +32,10 @@ pub enum Verdict {
 /// VT-14's verdict for one scalar value, computed without the shipped code.
 ///
 /// `char::is_control` is Unicode general category `Cc` exactly, and the
-/// bidirectional half is the clause's closed list written out again. This is
-/// ADR-0015's E11 oracle, unchanged.
+/// bidirectional half is the clause's two ranges, U+202A–U+202E and
+/// U+2066–U+2069, written out again. Those ranges hold nine codepoints, and
+/// the oracle follows the ranges: ADR-0015's prose calls its E11 oracle a
+/// "seven-codepoint closed list", which is the same miscount VT-14's text makes.
 pub fn expected(c: char) -> Verdict {
     if c.is_control() {
         Verdict::ControlCharacter

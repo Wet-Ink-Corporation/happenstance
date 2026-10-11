@@ -64,17 +64,18 @@ fn corpus_catches_a_validator_that_bans_the_joiners() {
 
     let report = check_corpus(bans_joiners);
 
-    let refused_without_a_joiner = report
+    let with_a_joiner: Vec<(&str, Verdict)> = CORPUS
+        .iter()
+        .filter(|entry| entry.text.contains(['\u{200C}', '\u{200D}']))
+        .map(|entry| (entry.text, Verdict::OtherRefusal))
+        .collect();
+    let refused: Vec<(&str, Verdict)> = report
         .refused
         .iter()
-        .filter(|refusal| !refusal.text.contains(['\u{200C}', '\u{200D}']))
-        .count();
-    assert!(
-        report.refused.len() >= 3,
-        "only {} refused",
-        report.refused.len()
-    );
-    assert_eq!(refused_without_a_joiner, 0);
+        .map(|refusal| (refusal.text, refusal.verdict))
+        .collect();
+    assert_ne!(with_a_joiner.len(), 0, "the corpus carries no joiner");
+    assert_eq!(refused, with_a_joiner);
 }
 
 /// A validator that refuses nothing must let every negative control escape, or
@@ -83,5 +84,9 @@ fn corpus_catches_a_validator_that_bans_the_joiners() {
 fn negative_controls_catch_a_validator_that_refuses_nothing() {
     let report = check_corpus(|_| Verdict::Accepted);
 
-    assert_eq!(report.control_escape_count, report.controls_checked);
+    let every_control = CORPUS.len() * NEGATIVE_INSERTS.len() * 3;
+    assert_eq!(
+        (report.controls_checked, report.control_escape_count),
+        (every_control, every_control)
+    );
 }

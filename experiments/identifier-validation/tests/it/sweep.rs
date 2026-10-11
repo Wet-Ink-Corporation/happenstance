@@ -69,19 +69,22 @@ fn no_refused_codepoint_lies_in_an_rtl_block() {
     for constructor in Constructor::ALL {
         let report = refused_alone(constructor);
 
-        let inside: Vec<(char, &str)> = report
-            .refused
-            .iter()
-            .flat_map(|&(c, _)| {
-                RTL_BLOCKS
-                    .iter()
-                    .filter(move |block| block.range.contains(&c))
-                    .map(move |block| (c, block.name))
-            })
-            .collect();
-
-        assert_eq!(inside, Vec::new(), "{constructor:?}");
+        assert_eq!(report.refused_in_rtl_block, 0, "{constructor:?}");
     }
+}
+
+/// The RTL-block count is taken over every refusal, not over the capped list:
+/// a validator that refuses everything refuses every codepoint of every block,
+/// far more than [`MAX_RECORDED`](identifier_validation::MAX_RECORDED).
+#[test]
+fn rtl_block_count_covers_refusals_past_the_recorded_cap() {
+    let every_block_codepoint = ('\0'..=char::MAX)
+        .filter(|c| RTL_BLOCKS.iter().any(|block| block.range.contains(c)))
+        .count();
+
+    let report = sweep(Position::Alone, |_| Verdict::OtherRefusal);
+
+    assert_eq!(report.refused_in_rtl_block, every_block_codepoint);
 }
 
 /// The wrong validator VT-14's `Rejects:` line names second: one that bans only
