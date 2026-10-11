@@ -4,6 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue. A queued pull request is tested as the commit it would
+  # become: its head merged onto the tip of `main` and every entry ahead of it
+  # in the queue. That is what "require branches to be up to date" was buying,
+  # bought once per merge instead of once per merge *per open pull request*: at
+  # the pace this repository runs, the old rule sent every other open branch
+  # back through a full run on every merge. The queue run is also the backstop
+  # that lets a pull request's own run skip what its diff cannot affect
+  # (`changes`, below): whatever a pull request skipped, the queue runs before
+  # `main` moves.
+  merge_group:
   workflow_dispatch:
   # 07:17 on Tuesdays, driving the `advisories` job below. The offset is
   # deliberate: GitHub queues the whole fleet's scheduled workflows on the hour
@@ -45,11 +55,80 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # What a pull request's diff can affect, decided once for the jobs below.
+  #
+  # `code` is `false` only on a `pull_request` event whose every changed path is
+  # prose: documentation, the site, the runbook, the knowledge base, the
+  # specification, the constitution, the references and the frozen trees. On
+  # such a run the jobs that exercise built code against something outside the
+  # gate (the live endpoints, workerd, the MSRV, semver, the benchmarks) skip,
+  # and the gate runs in full on Linux only. Every other event says `true`, and
+  # so does every failure to decide.
+  #
+  # Two things keep a skip honest. First, the queue: a `merge_group` run always
+  # says `true`, so nothing reaches `main` that skipped anything. Second, fail
+  # OPEN. A required check that is *skipped* reads as passing, so a dependent
+  # gated on this job succeeding would turn a broken `changes` job into a row of
+  # green ticks over nothing. The dependents therefore run on `!cancelled()` and
+  # skip only on an explicit `false`; an empty output, from a job that failed,
+  # runs everything.
+  #
+  # The list is of paths that are prose, not of paths that are code, so a new
+  # top-level directory is code until someone says otherwise here. `standards/`
+  # and `spec/` are prose for this purpose though the gate reads both: the gate
+  # still runs on Linux, which is where `spec-trace`, `lint-constitution` and the
+  # constitution's doctests make the same claim on every runner.
+  changes:
+    name: what the diff can affect
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.decide.outputs.code }}
+    steps:
+      # Depth 2 is enough: a `pull_request` run checks out the merge of the head
+      # onto the base, whose first parent is the base tip, so `HEAD^1..HEAD` is
+      # exactly the pull request's change as it would land.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+      - name: Decide
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "${{ github.event_name }}: every job runs"
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! files=$(git diff --name-only HEAD^1 HEAD) || [ -z "$files" ]; then
+            echo "::warning::could not list the changed paths; every job runs"
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          prose='^(docs|site|runbook|references|\.kb|spec|standards|\.bklg|\.redkiln|assets)/|^[^/]+\.md$'
+          code_paths=$(grep -vE "$prose" <<<"$files" || true)
+          if [ -n "$code_paths" ]; then
+            echo "paths that are not prose:"
+            echo "$code_paths"
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::every changed path is prose; the jobs that exercise built code skip here and run in the merge queue"
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # The whole gate, defined once in xtask/src/main.rs rather than duplicated
   # here. `cargo xtask ci` is the same command contributors run locally.
   gate:
     name: gate (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    needs: changes
+    if: ${{ !cancelled() }}
+    timeout-minutes: 60
+    env:
+      # The full gate everywhere, except on a prose-only pull request, where
+      # macOS and Windows report green having run nothing but the line below
+      # that says so. They are the slowest two rows of every run, the gate's
+      # prose checks are not OS-dependent, and the merge queue runs all three.
+      FULL_GATE: ${{ matrix.os == 'ubuntu-latest' || needs.changes.outputs.code != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -57,12 +136,17 @@ jobs:
         # written for ships there.
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
+      - name: Whether this runner runs the gate
+        if: env.FULL_GATE != 'true'
+        run: echo "::notice::prose-only pull request; the gate runs on ubuntu-latest here, and on every runner in the merge queue"
+
       # Full history, for one gate step: `no accepted decision's body has changed`
       # (`xtask/src/lint_kb.rs`) reads `.kb/decisions/` at the base commit, and the
       # default `fetch-depth: 1` leaves that commit out of the clone — the `semver`
       # job below says the same for the same reason. The step refuses to run on a
       # shallow clone rather than skipping, so removing this makes the gate red.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.FULL_GATE == 'true'
         with:
           fetch-depth: 0
 
@@ -77,6 +161,7 @@ jobs:
       # can push to that branch. Raising it is `git ls-remote` on the branch,
       # and the date beside it says what the pin is behind.
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+        if: env.FULL_GATE == 'true'
 
       # Node 24, for the wasm32 steps that run `happenstance-cloudflare`'s shim.
       # The shim opens `node:sqlite` with `workerd`'s statement limits
@@ -85,6 +170,7 @@ jobs:
       # Node 24's `node:sqlite` and not in 22's, and every runner image's default
       # is 22 (Ubuntu 24.04: 22.23.3; macOS 15: 22.23.2). ADR-0079.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: env.FULL_GATE == 'true'
         with:
           node-version: "24"
 
@@ -128,11 +214,20 @@ jobs:
       # unseen because a lane-branch push runs no CI and every local machine
       # that had run the step already had the target installed for nightly.
       - name: Install nightly, for the docs.rs configuration step
+        if: env.FULL_GATE == 'true'
         run: rustup toolchain install nightly --profile minimal --target wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: env.FULL_GATE == 'true'
+        with:
+          # Saved from `main` only, restored everywhere. The cache store is
+          # 10 GB per repository and evicts least-recently-used; a cache saved
+          # per pull request branch, three runners wide, pushes out the `main`
+          # entries every branch restores from. A branch still restores `main`'s.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install supplementary tools
+        if: env.FULL_GATE == 'true'
         uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
         with:
           tool: cargo-hack,cargo-deny
@@ -155,6 +250,7 @@ jobs:
       # the move is the point: that job ran on `ubuntu-latest` alone while this
       # one matrices over three. See the retirement note below.
       - name: Resolve the wasm-bindgen version from Cargo.lock
+        if: env.FULL_GATE == 'true'
         id: wasm-bindgen
         shell: bash
         run: |
@@ -171,17 +267,19 @@ jobs:
       # gate red — it turns that claim into a lie, silently, which is why the
       # step's own comment in `xtask/src/main.rs` points back here.
       - name: Install the wasm32 conformance runner
+        if: env.FULL_GATE == 'true'
         uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
         with:
           tool: wasm-bindgen-cli@${{ steps.wasm-bindgen.outputs.version }}
 
       - name: Run the gate
+        if: env.FULL_GATE == 'true'
         run: cargo xtask ci
         env:
           # The base `lint-kb` compares accepted decisions against: the pull
           # request's base commit, or the previous tip on a push. Empty on a
           # schedule or a manual run, where the step falls back to the merge base.
-          HS_KB_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HS_KB_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
 
   # The backlog and the knowledge base, checked by the tool that owns them.
   #
@@ -422,10 +520,17 @@ jobs:
   live-postgres:
     name: conformance against a live Postgres
     runs-on: ubuntu-latest
+    needs: changes
+    # Fail open: `changes` names why.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # `main` only; the gate job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # No `services:` block. The image, its tag and its `max_connections` are
       # the fixture's (`crates/happenstance-postgres/tests/support/mod.rs`), so
@@ -742,12 +847,40 @@ jobs:
   live-neon:
     name: conformance against a live Neon endpoint
     runs-on: ubuntu-latest
+    needs: changes
+    # Fail open: `changes` names why.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 30
+    # Issue #250. Reads carry `xact_id < pg_snapshot_xmin(...)`, and that frontier
+    # is held back by any transaction open anywhere on the compute, so two runs
+    # against one endpoint fail each other's read-after-append rules. Schemas
+    # isolate the data, not the frontier. Two modes, chosen by configuration:
+    #
+    # * **A branch per run**, when the `NEON_PROJECT_ID` variable and the
+    #   `NEON_API_KEY` secret are set: a fresh Neon branch with its own compute,
+    #   created below and deleted at the end, so no other run shares its
+    #   frontier. It also carries an expiry, so a run killed before its delete
+    #   step leaves nothing that outlives the day.
+    # * **The shared endpoint** in `NEON_CONNECTION` otherwise, serialised by the
+    #   group below. GitHub keeps one running and ONE pending job per group and
+    #   cancels an older pending one when a newer one queues, so under load this
+    #   mode can report a run cancelled; that is the reason the first mode
+    #   exists, and why this mode is the fallback rather than the design.
+    #
+    # Never cancel-in-progress: the delete step must get to run.
+    concurrency:
+      group: ${{ vars.NEON_PROJECT_ID != '' && format('live-neon-{0}-{1}', github.run_id, github.run_attempt) || 'live-neon-shared' }}
+      cancel-in-progress: false
     env:
-      NEON_CONNECTION: ${{ secrets.NEON_CONNECTION }}
+      NEON_SHARED_CONNECTION: ${{ secrets.NEON_CONNECTION }}
+      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # `main` only; the gate job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Said out loud, because "skipped every step" and "ran and passed" are the
       # same green tick otherwise.
@@ -759,19 +892,67 @@ jobs:
       # arriving on the branch the release is cut from. So on a same-repo event
       # an absent secret is an ERROR rather than a notice.
       - name: Whether there is an endpoint to run against
+        id: endpoint
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
         run: |
-          if [ -n "$NEON_CONNECTION" ]; then
-            echo "NEON_CONNECTION is set; the gated suites will run."
+          if [ -n "$NEON_PROJECT_ID" ] && [ -n "$NEON_API_KEY" ]; then
+            echo "NEON_PROJECT_ID and NEON_API_KEY are set; this run gets its own branch."
+            echo "mode=branch" >> "$GITHUB_OUTPUT"
+          elif [ -n "$NEON_SHARED_CONNECTION" ]; then
+            echo "NEON_CONNECTION is set; this run uses the shared endpoint, serialised."
+            echo "NEON_CONNECTION=$NEON_SHARED_CONNECTION" >> "$GITHUB_ENV"
+            echo "mode=shared" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
-            echo "::notice::NEON_CONNECTION is not visible to a fork PR. Every \
+            echo "::notice::No Neon credential is visible to a fork PR. Every \
           step below is skipped and this job proves NOTHING about the adapter."
           else
-            echo "::error::NEON_CONNECTION is not set on a same-repository run, \
-          so every step below would be skipped and this job would report green \
-          having observed nothing. Configure the secret, or retire this job and \
-          say so - do not leave it reporting success over an empty run."
+            echo "::error::Neither NEON_PROJECT_ID with NEON_API_KEY nor \
+          NEON_CONNECTION is set on a same-repository run, so every step below \
+          would be skipped and this job would report green having observed \
+          nothing. Configure one, or retire this job and say so - do not leave \
+          it reporting success over an empty run."
             exit 1
           fi
+
+      # The branch: a child of the project's default branch, so it inherits the
+      # roles, the database and the password `NEON_CONNECTION` carries, with a
+      # read-write compute of its own. The connection string is the one Neon
+      # returns for it, masked before anything can print it. The step waits for
+      # the compute to report itself up, bounded, rather than letting the first
+      # rule pay its cold start.
+      - name: Create a Neon branch for this run
+        id: branch
+        if: steps.endpoint.outputs.mode == 'branch'
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          api="https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID"
+          name="ci-${{ github.run_id }}-${{ github.run_attempt }}"
+          expires=$(date -u -d '+6 hours' +%Y-%m-%dT%H:%M:%SZ)
+          body=$(jq -n --arg name "$name" --arg expires "$expires" \
+            '{branch: {name: $name, expires_at: $expires}, endpoints: [{type: "read_write"}]}')
+          curl -sS --fail-with-body -X POST "$api/branches" \
+            -H "authorization: Bearer $NEON_API_KEY" \
+            -H "content-type: application/json" -d "$body" > branch.json \
+            || { echo "::error::Neon refused the branch: $(head -c 400 branch.json)"; exit 1; }
+          branch_id=$(jq -r '.branch.id' branch.json)
+          endpoint_id=$(jq -r '.endpoints[0].id' branch.json)
+          connection=$(jq -r '.connection_uris[0].connection_uri // empty' branch.json)
+          test -n "$connection" || { echo "::error::Neon returned no connection URI for $name"; exit 1; }
+          echo "::add-mask::$connection"
+          echo "id=$branch_id" >> "$GITHUB_OUTPUT"
+          echo "NEON_CONNECTION=$connection" >> "$GITHUB_ENV"
+          echo "branch $name ($branch_id), endpoint $endpoint_id, expires $expires"
+          for attempt in $(seq 1 30); do
+            state=$(curl -sS -H "authorization: Bearer $NEON_API_KEY" \
+              "$api/endpoints/$endpoint_id" | jq -r '.endpoint.current_state')
+            echo "attempt $attempt: $state"
+            if [ "$state" = "active" ] || [ "$state" = "idle" ]; then exit 0; fi
+            sleep 2
+          done
+          echo "::error::the branch's compute never came up; last state: $state"
+          exit 1
 
       # Every rule is present in the binary before any of them runs.
       #
@@ -902,6 +1083,18 @@ jobs:
           fi
           echo "no conformance failures"
 
+      # Nothing outlives the run. Its own step, on `always()`, so a red suite
+      # still deletes; the expiry set at creation covers a run killed first.
+      - name: Delete the Neon branch for this run
+        if: always() && steps.branch.outputs.id != ''
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          curl -sS --fail-with-body -X DELETE \
+            -H "authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/${{ steps.branch.outputs.id }}" \
+            > /dev/null
+
   # Every event-store conformance rule inside `workerd`, through a real Durable
   # Object — `happenstance-cloudflare`'s 1.0 claim is *conformance on the real
   # runtime* (ADR-0066 §6), and the gate runs the rules against a `node:sqlite`
@@ -925,14 +1118,19 @@ jobs:
   workerd:
     name: conformance under workerd, local and deployed
     runs-on: ubuntu-latest
-    # One Worker name per repository, so two runs deploying at once would swap
-    # code and token under each other. A running job is never cancelled by this
-    # group, so the step that deletes the Worker always gets to run; GitHub does
-    # cancel a run still *pending* here when a newer one queues, which is safe
-    # because a pending run has deployed nothing.
-    concurrency:
-      group: workerd-deployed
-      cancel-in-progress: false
+    needs: changes
+    # Fail open: `changes` names why.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 30
+    # One Worker per run, named for the run (`WORKER_NAME`), so no group is
+    # needed. Until #250 every run deployed and deleted the same name, under a
+    # `workerd-deployed` group that serialised them; back to back was still too
+    # close, because a delete that is still reaching the edge can land on the
+    # next run's fresh deploy (`500 Worker not found.` after a 200 on the probe).
+    # A name nobody else deploys has no predecessor to race. Workers.dev
+    # hostnames are per name, so each run's URL is its own too.
+    env:
+      WORKER_NAME: happenstance-workerd-harness-${{ github.run_id }}-${{ github.run_attempt }}
     defaults:
       run:
         working-directory: harness/workerd
@@ -941,6 +1139,9 @@ jobs:
       # rust-toolchain.toml pins the channel and the wasm32 target.
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # `main` only; the gate job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
@@ -1061,7 +1262,7 @@ jobs:
           token=$(openssl rand -hex 32)
           echo "::add-mask::$token"
           echo "HARNESS_TOKEN=$token" >> "$GITHUB_ENV"
-          npx wrangler deploy --var "HARNESS_TOKEN:$token" | tee deploy.txt
+          npx wrangler deploy --name "$WORKER_NAME" --var "HARNESS_TOKEN:$token" | tee deploy.txt
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.txt | head -1)
           test -n "$url" || { echo "::error::wrangler printed no workers.dev URL"; exit 1; }
           echo "url=$url" >> "$GITHUB_OUTPUT"
@@ -1071,15 +1272,19 @@ jobs:
         run: |
           # A new deployment takes a moment to reach the edge. The wait is
           # bounded, and running out of it fails with what the Worker last
-          # answered rather than falling through to the run.
+          # answered rather than falling through to the run. Three 200s in a
+          # row rather than one: a single answer comes from a single edge node,
+          # and the run that follows is spread across several.
           ready=""
-          for attempt in 1 2 3 4 5 6; do
+          streak=0
+          for attempt in $(seq 1 12); do
             status=$(curl -s -o last.txt -w '%{http_code}' \
               -H "authorization: Bearer $HARNESS_TOKEN" \
               "${{ steps.deploy.outputs.url }}/do/ready-${{ github.run_id }}/rules")
             echo "attempt $attempt: $status"
-            if [ "$status" = "200" ]; then ready=yes; break; fi
-            sleep 10
+            if [ "$status" = "200" ]; then streak=$((streak + 1)); else streak=0; fi
+            if [ "$streak" -ge 3 ]; then ready=yes; break; fi
+            sleep 5
           done
           if [ -z "$ready" ]; then
             echo "::error::the deployed Worker never answered 200; last: $status $(head -c 200 last.txt)"
@@ -1089,16 +1294,23 @@ jobs:
             "run-${{ github.run_id }}-${{ github.run_attempt }}"
 
       # Nothing is left listening: the Worker and every object's storage go.
+      # Keyed on the deploy having *run* rather than on its URL: with a name per
+      # run, a deploy that uploaded and then failed to print a URL would
+      # otherwise leave a Worker no later run overwrites.
       - name: Delete the harness Worker
-        if: always() && steps.deploy.outputs.url != ''
+        if: always() && steps.deploy.outcome != 'skipped'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler delete --force
+        run: npx wrangler delete --name "$WORKER_NAME" --force
 
   msrv:
     name: minimum supported Rust version
     runs-on: ubuntu-latest
+    needs: changes
+    # Fail open: `changes` names why.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # `master` rather than `stable` because this job names its own toolchain
@@ -1115,6 +1327,9 @@ jobs:
           # facts that currently happen to be the same number.
           toolchain: "1.97.1"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # `main` only; the gate job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # `--no-dev-deps` because dev-dependencies are free to require a newer
       # compiler than the published crates do. This is what a *consumer* sees.
       - name: Install cargo-hack
@@ -1143,7 +1358,14 @@ jobs:
   semver:
     name: semver compatibility
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: changes
+    # A pull request and its queue entry; there is no base to compare a push
+    # against. Fails open on `changes` for the reason that job gives.
+    if: >-
+      ${{ !cancelled()
+      && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+      && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 30
     steps:
       # The baseline below names a commit, so that commit has to exist locally.
       # `actions/checkout` defaults to `fetch-depth: 1`, which fetches only the
@@ -1156,6 +1378,9 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # `main` only; the gate job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Whether the version the workspace declares is already on crates.io.
       # Inside a breaking window the base commit and this pull request both read
       # the next, unreleased version, so the step below compares two states no
@@ -1197,7 +1422,7 @@ jobs:
           # Until `0.2.0` this was the only baseline. Every name sat at `0.0.0`,
           # and Cargo treats each `0.0.x` as incompatible with every other, so
           # the registry had no compatible predecessor to diff against.
-          baseline-rev: ${{ github.event.pull_request.base.sha }}
+          baseline-rev: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           # All seven published crates, the facade included. `happenstance`
           # re-exports the contract wholesale today, so its surface duplicates
           # happenstance-core's. It is still the crate `cargo add happenstance`
@@ -1240,6 +1465,7 @@ jobs:
   advisories:
     name: security advisories
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # `schedule` is what normally fires this. `workflow_dispatch` is here so the
     # job can be proved to work without waiting for the next Tuesday — an
     # unproven scheduled job is indistinguishable from one that never runs.
@@ -1288,12 +1514,17 @@ jobs:
   benchmarks:
     name: the benchmark crate still compiles
     runs-on: ubuntu-latest
+    needs: changes
+    # Fail open: `changes` names why.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: benchmarks
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Its own lockfile, because it is its own workspace. `--locked` would fail
       # the first time a path dependency's manifest changed, which is the event
       # this job exists to notice rather than to refuse.
