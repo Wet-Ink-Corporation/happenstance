@@ -35,7 +35,8 @@ pub enum Verdict {
 /// bidirectional half is the clause's two ranges, U+202A–U+202E and
 /// U+2066–U+2069, written out again. Those ranges hold nine codepoints, and
 /// the oracle follows the ranges: ADR-0015's prose calls its E11 oracle a
-/// "seven-codepoint closed list", which is the same miscount VT-14's text makes.
+/// "seven-codepoint closed list", which is the same miscount VT-14's text made
+/// at `4d18e771`, before ADR-0089 corrected it.
 pub fn expected(c: char) -> Verdict {
     if c.is_control() {
         Verdict::ControlCharacter

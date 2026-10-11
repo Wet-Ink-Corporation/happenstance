@@ -7,7 +7,7 @@ ADR-0015 checked it against?
 
 This is VT-14's falsifier, run. It is issue #86, the item in
 [`runbook/phases/17b-after-the-window.md`](../../runbook/phases/17b-after-the-window.md),
-and the condition `runbook/ledgers.md:292` puts on VT-14's freeze: *"An RTL
+and the condition `runbook/ledgers.md:292` at `97f0f36` puts on VT-14's freeze: *"An RTL
 identifier corpus check (Arabic, Hebrew, Persian, with mixed LTR) comes back
 empty, with the E11 reproduction added to `experiments/`."*
 
@@ -20,10 +20,12 @@ its only dependency is a path dependency on `happenstance-core`. The root
 ## Why it exists
 
 VT-14 (`spec/SPECIFICATION.md`, §2.4) says `EventType::new` and `Tag::new` reject
-Unicode `Cc` and the seven explicit bidirectional formatting controls
-(U+202A–U+202E, U+2066–U+2069), and MUST NOT reject `Cf` generally. Its marker is
-`[PROVISIONAL — falsified by a legitimate event type or tag that requires an
-explicit bidirectional formatting control]`.
+Unicode `Cc` and the explicit bidirectional formatting controls
+(U+202A–U+202E, U+2066–U+2069), and MUST NOT reject `Cf` generally. When this
+directory was written, at `4d18e771`, the clause called those controls "seven" and
+its marker was `[PROVISIONAL — falsified by a legitimate event type or tag that
+requires an explicit bidirectional formatting control]`. It is now `[FROZEN]` by
+ADR-0089, on this run, which also corrected the count to nine.
 
 ADR-0066 refused to freeze it (`references/adr/0066-what-1-0-promises.md:216-218`)
 for a precise reason: **E11 tested how the check is built, not whether any
@@ -132,8 +134,8 @@ The first commit of this section said *"exactly 72"* and *"the seven
 bidirectional controls"*, taking the count from VT-14's own text. The clause's
 ranges, U+202A–U+202E and U+2066–U+2069, hold **nine** codepoints, not seven
 (five embeddings and overrides, four isolates), and `validate.rs` rejects all
-nine — its own test is named `rejects_all_seven_bidirectional_controls` and
-walks nine. The count was found wrong while writing the harness, before anything
+nine — its own test was named `rejects_all_seven_bidirectional_controls` until
+ADR-0089, and walks nine. The count was found wrong while writing the harness, before anything
 here was run, and corrected in its own commit with the old numbers struck
 through rather than deleted. The ranges were always the criterion; only the
 arithmetic moved. The miscount in the clause and in the prose that repeats it is
@@ -212,12 +214,13 @@ depend on that cap.
 
 ### What the run also showed
 
-- **VT-14 says "seven" and means nine.** The clause, ADR-0015, `validate.rs`'s
-  doc comments and the `BidirectionalControl` variant's docs all say *the seven
-  explicit bidirectional formatting controls*; the ranges they give hold nine,
-  and the shipped check refuses nine. Nothing is wrong with the behaviour; the
-  count in the prose is wrong (see the erratum above). Correcting a clause's
-  text is not this directory's to do.
+- **VT-14 said "seven" and meant nine.** At `4d18e771`, the clause, ADR-0015,
+  `validate.rs`'s doc comments and the `BidirectionalControl` variant's docs all
+  said *the seven explicit bidirectional formatting controls* (ADR-0089 corrected
+  all but ADR-0015, whose body is immutable); the ranges they give hold nine,
+  and the shipped check refuses nine. Nothing was wrong with the behaviour; the
+  count in the prose was wrong (see the erratum above). Correcting a clause's
+  text was not this directory's to do.
 - **RTL text uses `Cf`, and the narrow list lets it.** The corpus carries
   U+200C ZWNJ (six Persian entries and two pairs), U+200D ZWJ, U+200E LRM, U+200F RLM,
   U+061C ALM, U+0600 ARABIC NUMBER SIGN and U+06DD ARABIC END OF AYAH, all `Cf`,
@@ -234,7 +237,7 @@ depend on that cap.
 
 ### What this licenses
 
-VT-14's freeze condition in `runbook/ledgers.md:292` is met: the RTL corpus check
+VT-14's freeze condition in `runbook/ledgers.md:292` at `97f0f36` is met: the RTL corpus check
 came back empty and the E11 reproduction is in `experiments/`. Per *What "empty"
 does not mean* above, that is necessary and not sufficient, and marking the clause
 `[FROZEN]` is the owner's decision. This directory does not edit

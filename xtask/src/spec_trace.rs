@@ -1050,7 +1050,7 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 63] = [
     ),
     (
         "VT-14",
-        "rejects_all_seven_bidirectional_controls",
+        "rejects_all_nine_bidirectional_controls",
         Unresolvable::Elsewhere("crates/happenstance-core/src/validate.rs"),
     ),
     (

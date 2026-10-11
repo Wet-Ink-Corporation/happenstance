@@ -740,6 +740,19 @@ and that ADR is part of #109.
 | — | [`kb-decision-wi-17ec03`](../decisions/wi-17ec03-how-does-happenstance-neon-stop-exporting.md) | ProbeThenWriteStore becomes test-only: `cfg(test)`, crate-private, no re-export | accepted | 17 | — |
 | — | [`kb-decision-wi-33ab08`](../decisions/wi-33ab08-es-41-109-where-es-10-s-frontier-separates-a.md) | ES-41: `contains_event_id` means held, not visible | accepted | 13 | — |
 
+## 2026-10-11: VT-14 frozen, and the bidi count corrected (#86)
+
+ADR-0089 is the owner's call on #86's corpus run (`experiments/identifier-validation/`, PR #239),
+written straight here with no intake step. The run came back empty on its pre-registered
+criterion, so VT-14 is `[FROZEN]` and its `freeze-by-17b` row leaves the 1.0 dispositions. The
+same run found that "the seven explicit bidirectional formatting controls" names ranges holding
+nine. ADR-0089 corrects the live prose and the test name. `kb-decision-0015` keeps "seven",
+because its body is immutable, and it supersedes nothing: the ranges never changed.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0089 | [`kb-decision-0089`](../decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md) | VT-14 is frozen on the RTL corpus run, and the explicit bidirectional controls are nine, not seven | accepted | 17b | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
