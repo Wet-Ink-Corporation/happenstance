@@ -15,9 +15,10 @@ the questions below in order, then write your code so the answer can change.
 | `NeonEventStore<T>` | [`happenstance-neon`](../crates/happenstance-neon/README.md) | a host or `wasm32` | `EventStore` only |
 | `CloudflareEventStore` | [`happenstance-cloudflare`](../crates/happenstance-cloudflare/README.md) | a Durable Object, `wasm32` | `EventStore` only |
 
-The typed layer re-exports `MemoryEventStore`. Each adapter crate's README is
-the source for what this page says about that adapter, and the section names
-below are its headings.
+The typed layer re-exports `MemoryEventStore`. What this page says about an
+adapter comes from that crate's README or its crate-root documentation. A name
+in italics below is a heading in one of the two, and the sentence says which,
+unless it is the README of the store the paragraph is about.
 
 ## Start from where the code runs
 
@@ -28,9 +29,8 @@ own SQL storage. Build it with
 conformance family runs on `wasm32-unknown-unknown` inside the gate. It also
 runs under `workerd`, locally and on a deployed object, in a CI job beside the
 gate (*What the conformance suite ran against this adapter, and what it did
-not*). One object holds one log by
-default. `CloudflareEventStore::namespaced` keeps several logs in one object,
-each in its own tables.
+not*). One object holds one log by default. `CloudflareEventStore::namespaced`
+keeps several logs in one object, each in its own tables.
 
 **On `wasm32` without a Durable Object, or on any host that cannot hold a
 database connection, use `NeonEventStore`.** It reaches Neon's `/sql` endpoint
@@ -43,7 +43,8 @@ suite.
 
 **In a native process, choose among `MemoryEventStore`, `SqliteEventStore` and
 `PostgresEventStore`.** The next section decides between them. `SqliteEventStore`
-does not build for `wasm32-unknown-unknown` (its README's status note). Both SQL
+does not build for `wasm32-unknown-unknown` (its crate root, *The shape this
+crate represents*). Both SQL
 stores expect tokio. SQLite's reads run on a blocking task, and
 `PostgresEventStore` has to be called from a runtime with tokio's drivers
 enabled, as `#[tokio::main]` builds one (*Two roles, one pool*;
@@ -87,7 +88,8 @@ three costs, and you take all three:
   [ADR-0071](../.kb/decisions/0071-es-10-stays-global.md)).
 
 **Writers with no connection to hold: `NeonEventStore::new(transport, config)`.**
-The endpoint is PostgreSQL, so the same frontier applies with the same three
+Send `migration::request(migration::MIGRATION_1, &config)` through your
+transport once before it. The endpoint is PostgreSQL, so the same frontier applies with the same three
 costs (its crate root, *Status*). A read is ordered before a later append
 ([ES-11](../spec/SPECIFICATION.md#es-11--a-read-is-a-snapshot)) only when both
 go through clones of one transport value. Two transports with separate ledgers
@@ -98,7 +100,7 @@ difference (*ES-11, and the fence that meets it*;
 **A Durable Object has one writer by construction.** The object is a
 single-threaded actor that owns its storage, so its store has nobody to lose a
 race to. The concurrency family is not run against it, because that family's
-contenders run on OS threads and the store is `!Send` (its README, *The
+contenders run on OS threads and the store is `!Send` (its crate root, *The
 concurrency family is not invoked, and that is a reason rather than a
 silence*).
 
@@ -110,9 +112,10 @@ checkpoint, as one unit
 checked by `commit_is_atomic_with_the_read_model`). So choose the projection
 store by the database your read model lives in. One projection writes to one
 store ([PS-10](../spec/SPECIFICATION.md#43-the-write-seam)). The event log can be
-somewhere else: the typed layer's `run_projection`, behind its
-`unstable-projection` feature, takes the event store and the projection store
-as two arguments.
+in a different database, but not in a different process: the typed layer's
+`run_projection`, behind its `unstable-projection` feature, takes the event
+store and the projection store as two arguments to one call, so the process
+that runs it has to hold both.
 
 | Event store | Projection store in the same crate | Feature |
 | --- | --- | --- |
@@ -122,9 +125,37 @@ as two arguments.
 | `NeonEventStore<T>` | `NeonProjectionStore<T>` | `projection-store` |
 | `CloudflareEventStore` | none | none |
 
-`happenstance-cloudflare` ships an event store and no projection store (its
-crate root, *What this crate is for*). A read model of a Durable Object's log
-therefore lives in a store from another crate.
+Each SQL projection store needs its checkpoint table before the first commit.
+`SqliteProjectionStore::open` creates it on every connect. For Postgres, run
+`migration::apply_projection(&pool)`, which applies `migration::MIGRATION_2`
+separately from the event log's `migration::apply` (its README, *Two roles, one
+pool*). For Neon, send `migration::request(migration::MIGRATION_2, &config)`
+through your transport.
+
+**A Durable Object's log has no projection store beside it.**
+`happenstance-cloudflare` does not implement the projection port (its crate
+root, *Status: what publication this crate is ready for, and what it is not*).
+`CloudflareEventStore` exists only inside the object, on `wasm32`, so a runner
+reading it has to run in the object too, and only two projection stores can
+run there:
+
+- **`MemoryProjectionStore`.** It holds the read model and the checkpoint in the
+  object's memory, one lock over one struct (its own documentation), so both
+  are gone when that memory is. With no checkpoint, a runner replays the log
+  from its start
+  ([PS-20](../spec/SPECIFICATION.md#46-reset)), the same replay
+  [Rebuild a read model](rebuild-a-read-model.md) walks through.
+- **`NeonProjectionStore<T>`, over a `wasm32` transport you write.** The crate
+  compiles for `wasm32`, but its live conformance run uses a host client, so
+  no `wasm32` transport has run the projection suite.
+
+`SqliteProjectionStore` cannot run in the object, because its crate does not
+build for `wasm32`. Neither can `PostgresProjectionStore`: its crate claims
+only the host (`references/adapter-shapes.md`, *1. The portfolio at a
+glance*), and nothing in the gate builds it for `wasm32`. Reading the log from outside the object, for
+example through an HTTP API the object serves, is not something any crate here
+provides or documents. If you build it, the conformance suite has not checked
+it.
 
 Two more limits come with the SQL projection stores:
 
@@ -215,6 +246,21 @@ fn main() {
 }
 ```
 
+Stable rustdoc does not check the error code on a `compile_fail` fence, so the
+fence above would also pass if it failed for some other reason. This control is
+the same program with a store that implements `SendEventStore`, and it compiles:
+
+```rust
+use happenstance::{MemoryEventStore, SendEventStore};
+
+/// Bound on the `Send` flavour, because it hands the store to another thread.
+fn spawnable<S: SendEventStore>(_store: &S) {}
+
+fn main() {
+    spawnable(&MemoryEventStore::new());
+}
+```
+
 ## Check the limits before you need them
 
 **Capacity.** A batch over a store's limit is refused as
@@ -230,9 +276,11 @@ checked by `append_reports_exceeded_store_limits`):
 | `CloudflareEventStore` | 1,048,576 | 1,024 | 1,024 |
 | `MemoryEventStore` | none declared | none declared | none declared |
 
-The SQL stores publish these as `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT` and
-`MAX_EVENTS_PER_BATCH`. The Durable Object's row is a stated refusal policy, not
-a measured wall (its README, *The limits this store declares*). If your events
+`SqliteEventStore`, `PostgresEventStore` and `NeonEventStore` publish their
+limits as the associated constants `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT`
+and `MAX_EVENTS_PER_BATCH`. `CloudflareEventStore` has no public constants for
+them: its row comes from its README, *The limits this store declares*, which
+calls it a stated refusal policy and not a measured wall. If your events
 have to fit every store, stay within `MIN_SUPPORTED_EVENT_DATA_LEN`,
 `MIN_SUPPORTED_TAGS_PER_EVENT` and `MIN_SUPPORTED_EVENTS_PER_BATCH`, the floors
 every store accepts

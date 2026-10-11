@@ -200,13 +200,27 @@ mod retry_a_command {
     #![doc = include_str!("../../docs/retry-a-command.md")]
 }
 
-// The store how-to. Two fences, and neither names an adapter crate, because no
+// The rebuild how-to. Two fences over the port, because the runner is behind
+// `unstable-projection` and this target does not enable it. The first resets a
+// view and commits a second at the first position, and counts what each replay
+// reads; the second has a backwards commit refused and a reset take its place.
+// A reset that stopped clearing the checkpoint, or a store that accepted the
+// backwards commit or wrote the row it carried, turns this module red.
+#[cfg(doctest)]
+mod rebuild_a_read_model {
+    #![doc = include_str!("../../docs/rebuild-a-read-model.md")]
+}
+
+// The store how-to. Three fences, and none names an adapter crate, because no
 // adapter is a dependency of this target. The first runs one function bound on
 // the bare flavour against the reference store, a gappy store and a bare-only
 // store, and asserts that the count it reads agrees on all three while the
 // position distance does not. The second has a `SendEventStore` bound refuse
-// the bare-only store (E0277). Binding the first on `SendEventStore`, or
-// loosening the second to `EventStore`, turns this module red.
+// the bare-only store (E0277), and the third is its compiling control: the same
+// bound accepting the reference store, because stable rustdoc does not check a
+// `compile_fail` fence's error code (RS-62-1). Binding the first on
+// `SendEventStore`, or loosening the second to `EventStore`, turns this module
+// red.
 #[cfg(doctest)]
 mod choose_a_store {
     #![doc = include_str!("../../docs/choose-a-store.md")]
