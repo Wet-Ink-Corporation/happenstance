@@ -167,7 +167,7 @@ misread.** It is no longer a stub: the event store clears 101 of 101 conformance
 rules against a live PostgreSQL 17.10 including the concurrency family at 64
 contenders — the first adapter here to clear that family against a store whose
 writers are *not* serialised — and the projection store clears the projection
-suite, 14 rules run and 3 reported as skips. **It ships in `0.4.0`**, together
+suite, 15 rules run and 3 reported as skips. **It ships in `0.4.0`**, together
 with `happenstance-neon`: the release set was five, decided, and the owner
 re-opened it on that evidence at `e597c34`. It is the *first* adapter here to
 clear the concurrency family against a store whose writers are not serialised,
@@ -332,12 +332,12 @@ reason rather than disappearing.
 The macro expands to one `#[tokio::test]` per rule, so a failure names the rule
 that broke. **An adapter is not finished until it passes.**
 
-There are 116 rules in four families. The **event-store** family (93) covers
+There are 120 rules in four families. The **event-store** family (95) covers
 query semantics, read options, position uniqueness and monotonicity, append
 atomicity and the full append-condition matrix including the exact `after`
-boundary. The **concurrency** family (5) supplies the second caller a
+boundary. The **concurrency** family (6) supplies the second caller a
 one-at-a-time suite cannot, and is the case DCB exists to prevent. The
-**projection** family (17) holds a read-model write and its checkpoint to one
+**projection** family (18) holds a read-model write and its checkpoint to one
 unit of work. The **model** family (1) replays generated sequences of appends,
 conditional appends and reads against a model and compares every answer — which
 is the one that finds what the worked examples did not think to ask.

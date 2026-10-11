@@ -592,7 +592,7 @@ cannot see, found by reading every BREAKING entry above against the tool's outpu
 is not part of `0.4.0` until the owner accepts it.
 
 **Re-run for the release on 2026-10-11** against `main` at `97f0f36`, with the
-same command and tool version. It reported eight findings across three crates,
+same command and tool version. It reported eight lints across three crates,
 and each one is a T row below: T1–T3, T7 and T8 on `happenstance-neon`, T4 and T5
 on `happenstance-postgres`, and T6 on `happenstance-testkit`. `happenstance`,
 `happenstance-core`, `happenstance-sqlite` and `happenstance-cloudflare` again
@@ -4217,5 +4217,8 @@ time.
 
 [Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.3.2...v0.4.0
+[0.3.2]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Wet-Ink-Corporation/happenstance/releases/tag/v0.2.0
 [0.2.0-alpha.1]: https://github.com/Wet-Ink-Corporation/happenstance/commits/main

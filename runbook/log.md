@@ -16,7 +16,7 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 `[Unreleased]` becomes `[0.4.0] — 2026-10-11`. The trace table drops "draft".
 `cargo semver-checks check-release --workspace --baseline-version 0.3.2
---release-type minor` (0.51.0) was re-run on `97f0f36`. It reported eight findings
+--release-type minor` (0.51.0) was re-run on `97f0f36`. It reported eight lints
 on three crates, each one already a T row, and none on the other four. H13 adds
 `a_busy_append_left_nothing_behind` as a hand row, the ES-43 twin of H10, as raised
 in #222. Install and status lines move to `0.4.0`, and the status table gains the

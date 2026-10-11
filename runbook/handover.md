@@ -15,12 +15,13 @@ to read in one screen; link out for anything longer.
 `claude/project-thread-88m3wc`, on `97f0f36` (`main`, where PR #222 merged). 2026-10-11.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
-Per-item progress is in issues #61–#214. This file, the status table and the phase files
+Per-item progress is in the issues. This file, the status table and the phase files
 are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.4.0` is cut.** The release PR (#96) closes phase 17: it dates the changelog
+**`0.4.0` ships from the release PR (#96)**, which closes phase 17 and is written
+as of its own merge: it dates the changelog
 heading, re-runs the semver trace on `97f0f36` (eight tool findings, every one a
 T row, and one new hand row, H13), and moves every install and status line to
 `0.4.0`. `EventStore` has been frozen since `0.2.0`, and `ProjectionStore` since
@@ -30,9 +31,9 @@ the typed runner (18), sync (13) and retention (14), and `1.0.0` (21) last.
 
 **The tag is cut from #96's merge commit, not from a later `main`.** Publishing
 moves to crates.io trusted publishing: the owner chose this on 2026-10-11 over
-publishing by hand. A tag-triggered workflow publishes the seven crates in
-dependency order, so #97 is the tag push once that workflow is merged and each
-crate's trusted publisher is configured.
+publishing by hand. `.github/workflows/release.yml`, added in the same PR, publishes the seven
+crates in dependency order when a `v*` tag on `main` is pushed. #97 is that tag
+push, made once each crate's trusted publisher is configured on crates.io.
 
 ## In flight
 
@@ -45,7 +46,7 @@ crate's trusted publisher is configured.
 
 ## Next action
 
-1. Land the release workflow and configure trusted publishing, then merge #96 and
+1. Configure trusted publishing on crates.io, then merge #96 and
    push `v0.4.0` from its merge commit (#97). Check crates.io and docs.rs for all
    seven crates, then close #87.
 2. Phase 17b (#62): #86, #90, #77, #149 and #201 are `ready-for-agent`. Each is
@@ -59,8 +60,8 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- **Trusted publishing.** Approve the release workflow PR, and add its publisher
-  on crates.io for each of the seven crates.
+- **Trusted publishing.** Add a trusted publisher on crates.io for each of the
+  seven crates: this repository, workflow `release.yml`, environment `crates-io`.
 - **Merge #96**, which closes phase 17.
 - **#105 and #106** (ADR-0026 and ADR-0027) gate phase 13. **#102** claims the sync
   crate names. **#118** gates phase 18's checkpoint-id chain.
