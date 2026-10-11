@@ -75,7 +75,7 @@ and its correctness bar, unchanged.
 - [ ] #175 · The first how-to pages in `docs/`, under `standards/pages/`, each
       registered in `xtask/src/narrative.rs` and `site.rs`'s reading order:
       `choose-a-store`, `rebuild-a-read-model`, `retry-a-command`,
-      `pass-the-conformance-suite`, `run-on-a-durable-object`. On a follow-up
+      `pass-conformance-suite`, `run-on-a-durable-object`. On a follow-up
       branch, after the site merges (`wi-269e5a`).
 - [ ] #176 · `boundary-not-aggregate.md` (the issue's name is over `PATH_BUDGET`), the
       prior-model bridge. It argues against the DDD aggregate, matching the landing

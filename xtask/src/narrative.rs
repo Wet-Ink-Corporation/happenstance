@@ -210,3 +210,16 @@ mod retry_a_command {
 mod rebuild_a_read_model {
     #![doc = include_str!("../../docs/rebuild-a-read-model.md")]
 }
+
+// The conformance how-to. Two fences. The first is a whole fixture over
+// `GappyMemoryStore`, with the one-line suite invocation an adapter writes; its
+// `main` runs every rule `for_each_event_store_rule!` names under `block_on`, as
+// `emit_blocking` does, and asserts the skips are exactly the four the fixture
+// declined. The second is a fixture whose every `connect` opens a fresh store:
+// the isolation rule passes it and the second-handle rule fails it. A handle
+// that stopped sharing its store, or a capability claimed and not provided,
+// turns this module red.
+#[cfg(doctest)]
+mod pass_conformance_suite {
+    #![doc = include_str!("../../docs/pass-conformance-suite.md")]
+}
