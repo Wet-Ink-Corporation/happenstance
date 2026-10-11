@@ -142,8 +142,10 @@ The program below is a deposit, which has no natural key. Two deposits of the
 same amount into the same account are indistinguishable in the domain, so only
 the request can tell a redelivery from a second deposit. `attempt` is one pass
 of the command loop, spelled with the append condition directly so you can see
-each step. Two deliveries of one request race, the loser is retried, and then
-the client resends once more:
+each step. Its rule already reads `Deposited`, so the request's own event is
+in the boundary; when your rule does not read what it writes, add the request
+item from step 2. Two deliveries of one request race, the loser is retried,
+and then the client resends once more:
 
 ```rust
 use happenstance::{AppendCondition, AppendError, Event, EventStore, Query};
@@ -194,8 +196,8 @@ async fn attempt(
 }
 ```
 
-The check on the request is the step that does the work, and the condition
-does not cover for it. `commit` never sends a batch a second time as it was
+Both are needed: the condition refuses the loser of the race, and only the
+fold can tell its retry and the late resend that the request is done. `commit` never sends a batch a second time as it was
 (`retry_does_not_resubmit_the_previous_batch`). It reads again and decides
 again, every attempt. The loser of the race is refused,
 and its retry decides again; the late resend reads the original deposit, so its
