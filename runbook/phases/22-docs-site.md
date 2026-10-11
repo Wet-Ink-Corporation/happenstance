@@ -77,9 +77,9 @@ and its correctness bar, unchanged.
       `choose-a-store`, `rebuild-a-read-model`, `retry-a-command`,
       `pass-the-conformance-suite`, `run-on-a-durable-object`. On a follow-up
       branch, after the site merges (`wi-269e5a`).
-- [ ] #176 · `boundaries-not-aggregates.md`, the prior-model bridge. It argues against
-      the DDD aggregate, matching the landing page's second beat (`wi-3c4f18`,
-      the owner, 2026-09-29).
+- [ ] #176 · `boundary-not-aggregate.md` (the issue's name is over `PATH_BUDGET`), the
+      prior-model bridge. It argues against the DDD aggregate, matching the landing
+      page's second beat (`wi-3c4f18`, the owner, 2026-09-29).
 - [ ] #178 · Search. Zola builds the index; the client library has to be vendored.
 - [ ] #168 · The owner sets the repository's Pages source to *GitHub Actions*.
 

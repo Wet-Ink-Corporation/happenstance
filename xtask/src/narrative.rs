@@ -141,6 +141,16 @@ mod carry_your_invariant {
     #![doc = include_str!("../../docs/carry-your-invariant.md")]
 }
 
+// The prior-model bridge. One program takes the same decision three times
+// against three other writers, and its assertions are the argument: the write
+// that touches neither limit is admitted, and the two that touch one limit
+// each are refused by the same condition. Dropping either query item, or the
+// guard, turns this module red rather than turning the page stale.
+#[cfg(doctest)]
+mod boundary_not_aggregate {
+    #![doc = include_str!("../../docs/boundary-not-aggregate.md")]
+}
+
 // The handoff. It carries no fence either, and for a different reason from the
 // page below: its teaching is somebody else's file, reached in one hop. What
 // registration buys here is that the page cannot rot into an orphan under the
