@@ -166,7 +166,7 @@ directory does not make it.
 | criterion | held | the number |
 | --- | --- | --- |
 | 1. E11-R, zero disagreements | yes | `0` of `1,112,064`, in each of 3 positions × 2 constructors |
-| 2. refused set is the clause's ranges | yes | 74 refused alone, both constructors: U+0000–U+001F and U+007F–U+009F as `ControlCharacter`, U+202A–U+202E and U+2066–U+2069 as `BidirectionalControl`; none in an RTL block |
+| 2. refused set is the clause's ranges | yes | 74 refused alone, both constructors: U+0000–U+001F and U+007F–U+009F as `ControlCharacter`, U+202A–U+202E and U+2066–U+2069 as `BidirectionalControl`; 0 inside any of the 19 blocks in `src/blocks.rs`, counted over every refusal rather than over the recorded list |
 | 3. corpus, zero refusals | yes | 51 entries (Arabic 21, Hebrew 16, Persian 14) × 2 constructors, and 10 pairs through `Tag::key_value`: 0 refused, 0 altered |
 | void: negative controls | none escaped | 1,530 per constructor (51 entries × 10 inserts × 3 positions) |
 | void: corpus shape | no problem | ≥ 10 entries per script; every entry carries its script; mixed-LTR entries: Arabic 6, Hebrew 6, Persian 5 |
@@ -176,7 +176,7 @@ directory does not make it.
 
 | | |
 | --- | --- |
-| Tree | `163ba0aa` — the commit that added the harness, after the two README commits |
+| Tree | `7bc79b4e` — the harness after the first review's fixes. The first run, at `163ba0aa`, also came back empty, and its output is in this file's history |
 | Toolchain | `rustc 1.97.1 (8bab26f4f 2026-07-14)`, LLVM 22.1.6, `cargo 1.97.1` |
 | Host | `x86_64-unknown-linux-gnu` |
 | Build | `--release`, `--locked` |
@@ -199,11 +199,16 @@ names, and both are caught:
   32 C1 controls and the nine bidi controls.
 - `corpus_catches_a_validator_that_bans_the_joiners` — a check that refuses
   U+200C and U+200D (the two `Cf` characters the clause says a blanket `Cf` ban
-  would take) refuses Persian corpus entries, and refuses nothing else.
+  would take) refuses exactly the seven corpus entries that carry one, all
+  Persian, each as `OtherRefusal`, and nothing else.
 
 And `negative_controls_catch_a_validator_that_refuses_nothing` confirms all 1,530
 controls escape a validator that accepts everything, so the zero escapes above are
-the shipped validator's, not the harness's.
+the shipped validator's, not the harness's. Likewise
+`rtl_block_count_covers_refusals_past_the_recorded_cap` shows that a validator
+refusing everything is counted inside the RTL blocks for every one of their
+codepoints, far beyond the 256-entry recorded list, so criterion 2's zero does not
+depend on that cap.
 
 ### What the run also showed
 

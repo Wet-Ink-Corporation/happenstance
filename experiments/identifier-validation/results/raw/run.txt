@@ -4,13 +4,13 @@ Alone / EventType: checked 1112064, disagreements 0, refused 74
   refused U+007F..=U+009F ControlCharacter
   refused U+202A..=U+202E BidirectionalControl
   refused U+2066..=U+2069 BidirectionalControl
-  refused values inside an RTL block: none
+  refused values inside an RTL block: 0
 Alone / Tag: checked 1112064, disagreements 0, refused 74
   refused U+0000..=U+001F ControlCharacter
   refused U+007F..=U+009F ControlCharacter
   refused U+202A..=U+202E BidirectionalControl
   refused U+2066..=U+2069 BidirectionalControl
-  refused values inside an RTL block: none
+  refused values inside an RTL block: 0
 BetweenAscii / EventType: checked 1112064, disagreements 0, refused 74
 BetweenAscii / Tag: checked 1112064, disagreements 0, refused 74
 BetweenArabic / EventType: checked 1112064, disagreements 0, refused 74

@@ -1,4 +1,4 @@
-    Finished `release` profile [optimized] target(s) in 0.02s
+    Finished `release` profile [optimized] target(s) in 0.01s
      Running unittests src/lib.rs (target/release/deps/identifier_validation-bea3db9f8917485c)
 
 running 1 test
@@ -14,7 +14,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
      Running tests/it/main.rs (target/release/deps/it-ecc32ae1d6b06285)
 
-running 15 tests
+running 16 tests
 test corpus::corpus_catches_a_validator_that_bans_the_joiners ... ok
 test corpus::corpus_meets_its_preregistered_shape ... ok
 test corpus::every_corpus_entry_is_accepted_by_both_constructors ... ok
@@ -25,13 +25,14 @@ test sweep::every_scalar_value_alone_agrees_with_the_oracle ... ok
 test sweep::every_scalar_value_between_arabic_letters_agrees_with_the_oracle ... ok
 test sweep::every_scalar_value_between_ascii_letters_agrees_with_the_oracle ... ok
 test sweep::no_refused_codepoint_lies_in_an_rtl_block ... ok
+test sweep::rtl_block_count_covers_refusals_past_the_recorded_cap ... ok
 test sweep::sweep_catches_a_validator_that_bans_only_ascii_controls ... ok
 test sweep::the_refused_set_alone_is_exactly_the_clauses_ranges ... ok
 test verdict::both_constructors_agree_with_the_oracle_on_the_four_probes ... ok
 test verdict::constructors_report_empty_and_too_long_as_their_own_verdicts ... ok
 test verdict::oracle_classifies_the_four_probes ... ok
 
-test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
 
    Doc-tests identifier_validation
 
