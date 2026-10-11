@@ -247,6 +247,38 @@ pub const MAX_ROWS_EVER: usize = 20;
 /// named-unlinked form live at `store.rs:77`"), and both share one guard. So the
 /// row is filed under that variant and the rung it actually took is stated in its
 /// `guard`, where a reviewer reads it.
+///
+/// **P4 and P5 are the evaluator's two second questions, named here before either
+/// link was written** (DR-4; `evaluator-onward-links`). The page that answers the
+/// first question is `docs/first-encounter.md`, where a reader watches a boundary
+/// refuse a write, and both questions are provoked by having watched it. Both
+/// are drawn from the three stall points research 03 records as *"named by three
+/// independent people"*, in the stall-point synthesis of
+/// `.bklg/docs-that-teach/_discovery/research/03-teaching-the-aggregate-to-boundary-shift-how-dcb-events-disi.md`:
+///
+/// * **Q-A, row P4** — *is "dynamic" just a polite word for unstructured, and
+///   where is the structure?* That is the first stall point, dynamism mistaken
+///   for chaos. The structure is a fixed four-step cycle, and the passage that
+///   names it is `docs/carry-your-invariant.md`'s `## Tag, query, fold, guard`.
+/// * **Q-B, row P5** — *is DCB a modelling technique or a routing technique?*
+///   That is the second stall point. The design's DT-1 gives the reader-facing
+///   answer one home, `docs/carry-your-invariant.md`'s
+///   `## Where your streams went`.
+///
+/// **The third stall point is not walked, on purpose.** It is the missing noun
+/// for what an aggregate used to name, and research 03 calls whether this
+/// repository's own nouns land *"a direct probe"* for the friction log — an
+/// observed reader's instrument, not an author's. Answering it here would mean
+/// writing content on a page this register does not own.
+///
+/// **`#[doc(alias)]` was considered for both questions and declined.** A
+/// plain-language question is not a string that rustc, the specification or a
+/// recorded reader question emits, and an alias for a concept is the synonym
+/// farming that this module's rule 4 rejects.
+///
+/// The claim is bounded: two *plausible* second questions now have somewhere to
+/// go. Whether they are an evaluator's real ones is for an observed walk, by
+/// someone other than the author, to say.
 pub const POINTER_REGISTER: &[Pointer] = &[Pointer {
     id: "P3",
     surface: "crates/happenstance-core/src/store.rs",
