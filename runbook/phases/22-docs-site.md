@@ -114,7 +114,7 @@ reconciliation.
 |---|---|---|---|
 | **Application author** — has a rule spanning two entities | model the boundary right the first time, in the library's words | a model that compiles, runs and is quietly wrong | `first-encounter` → the worked example → `carry-your-invariant` |
 | **Evaluator** — twenty minutes before a `cargo add` | decide whether *storage-agnostic* and *DCB-compliant* are real | adopting, or rejecting, on a first impression that does not generalise | the landing page, then `reference`: each claim beside what checks it |
-| **Edge developer** — a `!Send` runtime, `wasm32`, a Durable Object | event-source on the edge without hand-building the layer | building on a niche that gets orphaned, as Thalo was | `reference#where-it-runs`; a Durable Object how-to is owed |
+| **Edge developer** — a `!Send` runtime, `wasm32`, a Durable Object | event-source on the edge without hand-building the layer | building on a niche that gets orphaned, as Thalo was | `reference#where-it-runs`, then `run-on-a-durable-object` |
 | **Adapter author** — their storage, this contract | know why the port is shaped so, to tell "the port is wrong for me" from "I have not understood it" | a wall that could be their misunderstanding or the port's limit | `adapter-reading-order`, then the conformance suite |
 
 **Not a reader of this site:** someone who knows neither event sourcing nor DCB.
