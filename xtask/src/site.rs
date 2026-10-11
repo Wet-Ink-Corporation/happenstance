@@ -39,17 +39,28 @@ use crate::spec_trace::workspace_root;
 /// Every page the site renders from `docs/`, in reading order.
 ///
 /// The order is the application author's path: run something, see the whole
-/// program, carry it into your own domain, then the reasoning behind the write,
-/// then the adapter author's entry point, and last the upgrade guide, which
-/// only a reader already on an older release needs. It is written here rather than
-/// derived because an order is a decision, and [`check_coverage`] is what keeps
-/// the list from falling behind the tree.
+/// program, set it against the aggregate you arrived with, carry it into your
+/// own domain, then the reasoning behind the write, then how to retry that
+/// write safely, then how to rebuild what was derived from it, then which store
+/// to deploy it on, which is where the edge developer joins, then how to run
+/// the store inside a Durable Object, then the adapter author's entry point and
+/// how that author passes the conformance suite, and
+/// last the upgrade guide, which only a reader already on an older release
+/// needs. It is written here rather than derived because an order is a
+/// decision, and [`check_coverage`] is what keeps the list from falling behind
+/// the tree.
 const READING_ORDER: &[&str] = &[
     "first-encounter.md",
     "read-the-worked-example.md",
+    "boundary-not-aggregate.md",
     "carry-your-invariant.md",
     "append-conditions.md",
+    "retry-a-command.md",
+    "rebuild-a-read-model.md",
+    "choose-a-store.md",
+    "run-on-a-durable-object.md",
     "adapter-reading-order.md",
+    "pass-conformance-suite.md",
     "upgrading-to-0-4.md",
 ];
 
