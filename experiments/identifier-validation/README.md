@@ -158,5 +158,84 @@ directory does not make it.
 
 ## Result
 
-Not yet run. The run, its conditions and its output are recorded in the commit
-after the one that introduces this file.
+**Empty.** Every criterion held, and no condition voided the run.
+
+| criterion | held | the number |
+| --- | --- | --- |
+| 1. E11-R, zero disagreements | yes | `0` of `1,112,064`, in each of 3 positions × 2 constructors |
+| 2. refused set is the clause's ranges | yes | 74 refused alone, both constructors: U+0000–U+001F and U+007F–U+009F as `ControlCharacter`, U+202A–U+202E and U+2066–U+2069 as `BidirectionalControl`; none in an RTL block |
+| 3. corpus, zero refusals | yes | 51 entries (Arabic 21, Hebrew 16, Persian 14) × 2 constructors, and 10 pairs through `Tag::key_value`: 0 refused, 0 altered |
+| void: negative controls | none escaped | 1,530 per constructor (51 entries × 10 inserts × 3 positions) |
+| void: corpus shape | no problem | ≥ 10 entries per script; every entry carries its script; mixed-LTR entries: Arabic 6, Hebrew 6, Persian 5 |
+| void: coverage | full | 1,112,064 values per position |
+
+### Conditions
+
+| | |
+| --- | --- |
+| Tree | `163ba0aa` — the commit that added the harness, after the two README commits |
+| Toolchain | `rustc 1.97.1 (8bab26f4f 2026-07-14)`, LLVM 22.1.6, `cargo 1.97.1` |
+| Host | `x86_64-unknown-linux-gnu` |
+| Build | `--release`, `--locked` |
+| Command | `./run.sh` |
+| Wall clock | a few seconds, almost all of it compilation |
+
+`results/raw/conditions.txt` is `rustc --version --verbose` read back by the run
+itself; `results/raw/tests.txt` is the test binary's output, one thread, and
+`results/raw/run.txt` is the binary's report, whose last line is
+`== Result: EMPTY`. The binary exits non-zero on anything else, so `run.sh` would
+have stopped there.
+
+### How the harness was shown not to be blind
+
+Two of the tests hand the same harness a validator VT-14's `Rejects:` line
+names, and both are caught:
+
+- `sweep_catches_a_validator_that_bans_only_ascii_controls` — a C0-and-DEL-only
+  check disagrees with the oracle on exactly 41 values between ASCII letters: the
+  32 C1 controls and the nine bidi controls.
+- `corpus_catches_a_validator_that_bans_the_joiners` — a check that refuses
+  U+200C and U+200D (the two `Cf` characters the clause says a blanket `Cf` ban
+  would take) refuses Persian corpus entries, and refuses nothing else.
+
+And `negative_controls_catch_a_validator_that_refuses_nothing` confirms all 1,530
+controls escape a validator that accepts everything, so the zero escapes above are
+the shipped validator's, not the harness's.
+
+### What the run also showed
+
+- **VT-14 says "seven" and means nine.** The clause, ADR-0015, `validate.rs`'s
+  doc comments and the `BidirectionalControl` variant's docs all say *the seven
+  explicit bidirectional formatting controls*; the ranges they give hold nine,
+  and the shipped check refuses nine. Nothing is wrong with the behaviour; the
+  count in the prose is wrong (see the erratum above). Correcting a clause's
+  text is not this directory's to do.
+- **RTL text uses `Cf`, and the narrow list lets it.** The corpus carries
+  U+200C ZWNJ (six Persian entries and two pairs), U+200D ZWJ, U+200E LRM, U+200F RLM,
+  U+061C ALM, U+0600 ARABIC NUMBER SIGN and U+06DD ARABIC END OF AYAH, all `Cf`,
+  all accepted. The implicit marks LRM, RLM and ALM are the plain-text tools a
+  writer reaches for to fix a mixed-direction rendering, and they are not on the
+  closed list; nothing in the corpus needed an *explicit* embedding, override or
+  isolate to be written. Isolates are what a display layer wraps around an
+  identifier when it prints one, which is outside the identifier's bytes.
+- **The byte bound bites RTL text at half the characters.** Arabic, Hebrew and
+  Persian letters are two bytes in UTF-8, so the 255-byte bound admits 127 of
+  them (`constructors_report_empty_and_too_long_as_their_own_verdicts` refuses
+  128 U+0628 as `TooLong`). That is VT-20's subject, not VT-14's, and no corpus
+  entry came near it.
+
+### What this licenses
+
+VT-14's freeze condition in `runbook/ledgers.md:292` is met: the RTL corpus check
+came back empty and the E11 reproduction is in `experiments/`. Per *What "empty"
+does not mean* above, that is necessary and not sufficient, and marking the clause
+`[FROZEN]` is the owner's decision. This directory does not edit
+`spec/SPECIFICATION.md`.
+
+## Running it
+
+```console
+./run.sh                     # conditions, the tests, then the report, into results/raw/
+cargo test --release         # the criteria alone
+cargo run --release          # the report alone; exits non-zero unless EMPTY
+```
