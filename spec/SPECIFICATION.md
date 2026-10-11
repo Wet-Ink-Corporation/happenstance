@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 205 clause IDs, of which 198 are normative:
-**156 `[FROZEN]`**, **30 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+**157 `[FROZEN]`**, **29 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -1207,12 +1207,12 @@ the applicable byte bound, any character in Unicode general category `Cc`, and
 the nine explicit bidirectional formatting controls (U+202A–U+202E,
 U+2066–U+2069). They MUST NOT reject Unicode category `Cf` generally.
 
-`[PROVISIONAL — falsified by a legitimate event type or tag that requires an
-explicit bidirectional formatting control; no such value is known and the
-scenarios contain none]`
+`[FROZEN]` — by [ADR-0089](../.kb/decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md),
+at phase 17b, on #239's `experiments/identifier-validation/` (#86): 0 disagreements in 1,112,064
+per position, no refusal in 19 RTL blocks, and all 51 Arabic, Hebrew and Persian entries accepted.
+Reopened by a legitimate event type or tag that requires an explicit bidirectional control.
 `Rule:` unit tests `rejects_invalid_event_types`, `rejects_invalid_tags`, and
-`validate`'s own `rejects_c0_del_and_c1_controls`,
-`rejects_all_nine_bidirectional_controls`,
+`validate`'s own `rejects_c0_del_and_c1_controls`, `rejects_all_nine_bidirectional_controls`,
 `accepts_the_format_characters_scripts_need` and
 `accepts_neighbours_of_the_closed_list`, which cover every arm this clause
 states — the C1 range, the nine controls, the `Cf` characters scripts need, and
@@ -1563,8 +1563,8 @@ VT-32 and VT-33 are not extended to cover this type. Both are `[FROZEN]` and the
 subject is `EventType` and `Tag`; widening a frozen clause's subject is a
 supersession, and a new clause costs nothing a supersession would not. VT-35
 restates for `ProjectionId` what those two require of its siblings, and adds the
-bound, the reservation and the watermark. VT-14 stays `[PROVISIONAL]`
-(freeze-by-17b) and keeps its own subject; VT-35 applies VT-14's character rules
+bound, the reservation and the watermark. VT-14, `[FROZEN]` at phase 17b by
+ADR-0089, keeps its own subject; VT-35 applies VT-14's character rules
 by reference, so a change to VT-14's set reaches `ProjectionId` through this
 clause.
 
@@ -9897,13 +9897,13 @@ between them because its *shape* does not wait on a transport but its
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 35 | 26 | 8 | 0 | 1 |
+| §2.1–§2.6 value types | `VT` | 35 | 27 | 7 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 38 | 4 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 26 | 5 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **205** | **156** | **30** | **12** | **7** |
+| **Total** | | **205** | **157** | **29** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9924,7 +9924,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic`, `positions_are_uni… | E2E-10, E2E-46 |
 | VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
 | VT-13 | FROZEN | unit test `position_next_signals_overflow`; `read_from_is_inclusive`, `conditi… | E2E-10, E2E-16 |
-| VT-14 | PROVISIONAL | unit tests `rejects_invalid_event_types`, `rejects_invalid_tags`, and `validat… | E2E-40 |
+| VT-14 | FROZEN | unit tests `rejects_invalid_event_types`, `rejects_invalid_tags`, and `validat… | E2E-40 |
 | VT-15 | FROZEN | `tags_differing_only_by_unicode_normalisation_are_distinct`, `append_preserves… | E2E-40, E2E-49 |
 | VT-16 | FROZEN | `query_item_tags_are_and`, `query_item_tags_match_supersets`, `query_item_reje… | E2E-32, E2E-40 |
 | VT-17 | FROZEN | `tags_may_repeat_a_key` | E2E-57 |

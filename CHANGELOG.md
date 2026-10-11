@@ -509,6 +509,19 @@ not the same as what a user needed to be told.
   on every attempt. ES-17 is `[FROZEN]`, so from `1.0.0` changing it is a major
   release ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md)).
 
+- **What `EventType::new` and `Tag::new` refuse is now a promise, and the
+  documentation counts it correctly.** No behaviour changed. VT-14 was
+  provisional until someone showed that real right-to-left identifiers pass the
+  check. `experiments/identifier-validation/` ran the shipped validator over every
+  Unicode scalar value in three positions, with 0 disagreements, and over 51
+  Arabic, Hebrew and Persian identifiers, many mixed with Latin text, with 0
+  refused. VT-14 is `[FROZEN]`, so from `1.0.0` changing the refused set is a
+  major release. The docs said the constructors refuse "the seven explicit
+  bidirectional formatting controls". The ranges they name, U+202A–U+202E and
+  U+2066–U+2069, hold nine, and the check has always refused all nine. The docs
+  now say nine
+  ([ADR-0089](.kb/decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md)).
+
 ### Removed
 
 - **BREAKING (`happenstance-core`): the empty `unstable-projection` feature is
