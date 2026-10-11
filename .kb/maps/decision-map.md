@@ -727,6 +727,19 @@ ADR-0084's check lands before `0.4.0`, and #78 lands with it.
 | — | [`kb-decision-wi-d09adc`](../decisions/wi-d09adc-should-the-deployed-green-run-record-transcript.md) | The deployed green-run record lands in #35 before merge | accepted | 17 | — |
 | — | [`kb-decision-wi-f267f3`](../decisions/wi-f267f3-does-adr-0084-s-postgres-parameter-count-check.md) | #89 and #78 both land before 0.4.0 | accepted | 17 | — |
 
+## 2026-10-11: how #78 lands, and ES-41's reading (#109)
+
+Two owner decisions from one Weigh-In brief, written straight here with no intake step.
+`kb-decision-wi-17ec03` settles the mechanism `kb-decision-wi-f267f3` left open for #78.
+`kb-decision-wi-33ab08` writes down the reading Postgres and Neon already answer, so it changes
+no published behaviour. The normative sentence it adds to `[FROZEN]` ES-41 still needs its own ADR,
+and that ADR is part of #109.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| — | [`kb-decision-wi-17ec03`](../decisions/wi-17ec03-how-does-happenstance-neon-stop-exporting.md) | ProbeThenWriteStore becomes test-only: `cfg(test)`, crate-private, no re-export | accepted | 17 | — |
+| — | [`kb-decision-wi-33ab08`](../decisions/wi-33ab08-es-41-109-where-es-10-s-frontier-separates-a.md) | ES-41: `contains_event_id` means held, not visible | accepted | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

@@ -10,6 +10,22 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-11 — how #78 lands, and ES-41's reading
+
+*Committed on `claude/project-thread-xhz9ob`, on `6a8cc2e`.* Phase 17.
+
+The owner took both recommendations from a Weigh-In brief. #78: `ProbeThenWriteStore` becomes
+test-only (`wi-17ec03`). Its only callers are two compile-shape unit tests in its own file, and
+moving it to the testkit is impossible because neon dev-depends on the testkit. #109: ES-41's
+`contains_event_id` means held, not visible (`wi-33ab08`). That is today's Postgres and Neon
+answer, and it agrees with the append condition and with VT-8's dedup on ingest. #109 is
+relabelled `semver:additive`. #84 was already answered by `wi-f267f3`. Both atoms are filed into
+`.kb/decisions/` with a decision-map section.
+
+**Verified.** `cargo xtask lints` and `cargo xtask lint-kb`. No Rust changed.
+
+---
+
 ## 2026-10-10 — the owner's list, worked through
 
 *Committed on `feature/friendly-wright-9lsxua`, on `1fe405a`.* Phase 17.
