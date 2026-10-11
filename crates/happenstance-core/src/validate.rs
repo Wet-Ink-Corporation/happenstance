@@ -43,7 +43,7 @@ pub(crate) enum Refusal {
 /// It deliberately does **not** reject Unicode category `Cf` generally, which
 /// VT-14 forbids in terms: a blanket `Cf` ban would take U+200C and U+200D with
 /// it, and Persian, Hindi and emoji sequences require both. The nine below are
-/// the only `Cf` codepoints no script needs, and each is a log-spoofing vector —
+/// the only `Cf` codepoints this check refuses, because each is a log-spoofing vector —
 /// an event type that renders as one thing in every console and matches another
 /// in every query.
 ///

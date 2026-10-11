@@ -1253,14 +1253,14 @@ disagreements (ADR-0015, experiment E11). That is what made one validator
 affordable, and one validator is what makes `from_static` exactly as strong as
 `new`.
 
-The bidirectional half is a new decision and it is narrow on purpose. U+202E in
-an event type is a log-spoofing vector — a type that renders as one thing in
-every console and matches another in every query — and the nine embedding, override
-and isolate characters are the only `Cf` codepoints no script needs. The check is a
-`matches!` over a closed list with no dependency, which is the reason it is
-affordable when a general-category predicate is not: `core` exposes no such
-predicate and pulling in a Unicode tables crate to get one would be the largest
-dependency in the contract crate by an order of magnitude.
+The bidirectional half is a new decision and it is narrow on purpose. U+202E in an
+event type is a log-spoofing vector — a type that renders as one thing in every
+console and matches another in every query — and the nine embedding, override and
+isolate characters are the only `Cf` codepoints this check refuses, because each is a
+log-spoofing vector. The check is a `matches!` over a closed list with no dependency,
+which is the reason it is affordable when a general-category predicate is not: `core`
+exposes no such predicate and pulling in a Unicode tables crate to get one would be
+the largest dependency in the contract crate by an order of magnitude.
 
 Zero-width space (U+200B) and the other invisible `Cf` characters remain legal
 and remain a hazard: two visually identical tags that are two different

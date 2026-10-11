@@ -89,9 +89,15 @@ the public constructors rather than a copy of the walk.
    - ADR-0015's long-form record, at
      `references/adr/0015-validated-identifiers-and-store-limits.md:160`, `:190`, `:199`, `:220`,
      `:876` and `:957`;
-   - the evaluations under `references/evaluation/`, the intake records under
-     `.kb/_governance/`, and the raw test logs under `experiments/`, which quote the old test
-     name.
+   - the frozen monolith, at `RUNBOOK.md:3123`;
+   - the evaluations, at `references/evaluation/phase-4-reconciliation.md:281` and `:834`, and
+     `references/evaluation/review-pre-publication-2026-09-03.md:3624`;
+   - the intake record at
+     `.kb/_governance/integration-waves/2026-08-10-intake-2/02-placement-and-adjudication.md:921`;
+   - the test logs under `experiments/`, which quote the old test name
+     (`experiments/provided-method-spike/results/core-tests.txt:98` and the raw logs under
+     `experiments/gate-vacuity/results/raw/`), and `experiments/identifier-validation/`'s own
+     account of the miscount, which pins each "seven" to the run's tree, `4d18e771`.
 
    Read "seven" in any of them as the nine codepoints of the two ranges it names.
 
