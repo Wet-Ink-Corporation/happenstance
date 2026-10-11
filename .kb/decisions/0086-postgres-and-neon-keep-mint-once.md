@@ -120,7 +120,7 @@ takes that choice (`runbook/phases/17-breaking-window.md:128-136`).
    cached, retired id onto rewound positions (the stale-cache race), so step 1 comes first. A
    process restarted before the `UPDATE` commits would read the retired row and cache it for its
    lifetime (the early-recache race), so step 3 follows step 2. Neon caches nothing: `local_origin`
-   reads the meta row inside every append statement (`crates/happenstance-neon/src/event_store.rs:570-575`),
+   reads the meta row inside every append statement (`crates/happenstance-neon/src/event_store.rs:592-597`),
    so for Neon steps 1, 2 and 4 suffice.
 3. **The additive remedies go to phase 13, or 17b if one is taken earlier.**
    - `remint_identity` on both stores, matching SQLite's name
@@ -138,7 +138,7 @@ takes that choice (`runbook/phases/17-breaking-window.md:128-136`).
 ## Why mint-per-open lost
 
 - **There is no natural open.** `NeonEventStore::new` is a `const fn`
-  (`crates/happenstance-neon/src/event_store.rs:311`), and a Workers deployment typically builds
+  (`crates/happenstance-neon/src/event_store.rs:332`), and a Workers deployment typically builds
   one per request (inferred; no deployment in the tree shows it). Minting per open would then mint
   per request: the unbounded-watermark harm VT-6's marker describes
   (`spec/SPECIFICATION.md:856-861`), though the marker's own candidate is a Durable Object and its
