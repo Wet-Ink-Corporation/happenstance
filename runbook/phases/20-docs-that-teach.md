@@ -22,7 +22,7 @@ reach-and-adapter-path (blocked, after a `changes-requested` slice),
 
 **Work carried in from phase 16**
 
-- [ ] #149 · **ES-23's adapter half, for the next adapter author**
+- [x] #149 · **ES-23's adapter half, for the next adapter author**
       (`.kb/open-questions/es-23-frozen-doc-musts-adapter-half.md`). All four
       published event-store adapters now carry their own `# Cancellation`
       section, so ES-23 is met; what nothing does is point a new adapter author
@@ -32,6 +32,10 @@ reach-and-adapter-path (blocked, after a `changes-requested` slice),
       gains a third disposition — an adapter-owned obligation it points at but
       cannot run — or keeps its documented scope with the gap stated. Additive
       either way; phase 21's clause audit reads ES-23 as frozen and met.
+      **Done 2026-10-11:** the third disposition, `AdapterOwned`, with ES-23's
+      adapter row naming the four `cancellation_statement.rs` targets; the
+      pointer is in `docs/adapter-reading-order.md`, the recipe atom and
+      `CONTRIBUTING.md`, and the atom is superseded.
 
 **Proof artefact.** The initiative's own Definition of Done
 (`.bklg/docs-that-teach/initiative.md`), re-observed from a clean checkout, which is
