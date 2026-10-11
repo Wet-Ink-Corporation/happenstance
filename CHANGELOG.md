@@ -568,7 +568,7 @@ keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md
   `commit` (behaviour; ADR-0084, accepted 2026-10-08; the check is owed).
 
 Every tool row and every hand row has a decision, and no break was found without
-one.
+one. The upgrade guide, [`docs/upgrading-to-0-4.md`](docs/upgrading-to-0-4.md), walks every row by crate.
 
 ## [0.3.2] — 2026-09-20
 

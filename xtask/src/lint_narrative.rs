@@ -218,7 +218,7 @@
 //!
 //! [`TREE`]'s *value* is a repository-wide contract: moving `docs/` without
 //! editing that line fails the gate, which is the point of pinning it rather than
-//! discovering by convention. `docs/README.md:25-29` is its prose mirror and has
+//! discovering by convention. `docs/README.md:57-60` is its prose mirror and has
 //! to stay true. [`HARNESS`] names a file this module reads as text and never
 //! links.
 
