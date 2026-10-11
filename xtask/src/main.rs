@@ -884,6 +884,30 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The step above, for the typed layer. `happenstance`'s crate page links
+        // into items behind `unstable-projection`, and only the workspace step's
+        // `--all-features` rendered it, where every gate is open. So a link from
+        // the page to `Projection::apply` was a hard error on the feature set
+        // `cargo add happenstance` gives, and green here, until #216 (#91).
+        //
+        // Its own step rather than a second `-p` on the one above: Cargo unifies
+        // features across the packages it builds, so `happenstance`'s edge into
+        // `happenstance-core` could widen core's feature set and blind that step
+        // to the one configuration it exists for.
+        name: "documentation (default features, happenstance)",
+        program: "cargo",
+        args: &[
+            "doc",
+            "--locked",
+            "-p",
+            "happenstance",
+            "--no-deps",
+            "--document-private-items",
+        ],
+        env: &[("RUSTDOCFLAGS", "-D warnings")],
+        probe: None,
+    },
+    Step {
         // D11. Manifest metadata promising two licences is not the same thing as
         // an artifact containing them, and only the second is what a consumer
         // unpacks. See `package`'s module docs.
