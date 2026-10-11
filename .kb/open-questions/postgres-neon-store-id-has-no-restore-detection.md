@@ -86,7 +86,7 @@ open across a re-mint would keep stamping the retired identity. That is the stal
 `happenstance-sqlite` closed in `f719b2a` by re-reading the identity inside the append
 (`crates/happenstance-sqlite/src/event_store.rs:699-746`). `NeonEventStore` has no cache. Its
 append reads `store_id` inside the same `INSERT … SELECT` statement
-(`crates/happenstance-neon/src/event_store.rs:527`), so a re-mint would be seen by the next append.
+(`crates/happenstance-neon/src/event_store.rs:549`), so a re-mint would be seen by the next append.
 
 ## Why a clone is not an edge case here
 

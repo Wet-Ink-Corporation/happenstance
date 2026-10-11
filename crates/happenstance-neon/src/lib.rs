@@ -81,11 +81,11 @@
 //! An `append` that probes for a condition violation and then writes, in two
 //! **round trips**, type-checks against
 //! [`EventStore`](happenstance_core::EventStore) perfectly.
-//! `ProbeThenWriteStore` is that implementation, written out in full so the
-//! compiling call site can be pointed at. It is also silently wrong here: two
-//! round trips are two implicit transactions, with a network-latency-wide window
-//! between them and no snapshot spanning it. A conflicting append committed
-//! inside that window is invisible to the probe and unopposed by the insert.
+//! `ProbeThenWriteStore` is that implementation, written out in full and compiled
+//! only for this crate's tests, so the compiling call site can be pointed at. It is
+//! also silently wrong here: two round trips are two implicit transactions, with a
+//! network-latency-wide window between them and no snapshot spanning it. A conflicting
+//! append committed inside that window is invisible to the probe and unopposed by the insert.
 //!
 //! A shape table that recorded only `error[E….]` would therefore rank this crate
 //! the most compatible adapter in the workspace. It is the least. The limits that
@@ -183,7 +183,7 @@ pub use transport::{
 
 #[cfg(feature = "event-store")]
 #[cfg_attr(docsrs, doc(cfg(feature = "event-store")))]
-pub use event_store::{NeonEventStore, NeonReadStream, ProbeThenWriteStore};
+pub use event_store::{NeonEventStore, NeonReadStream};
 
 #[cfg(feature = "projection-store")]
 #[cfg_attr(docsrs, doc(cfg(feature = "projection-store")))]

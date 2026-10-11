@@ -10,6 +10,22 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-11 — `ProbeThenWriteStore` is test-only (#78)
+
+*Committed on `local/78`, on `40b80ac`.* Phase 17.
+
+`happenstance-neon` stops exporting its lost-update store, as `wi-17ec03` decided: the
+type, `probe_request` and `decode_probe_response` are `#[cfg(test)]` and private, and
+the root re-export is gone. Two `compile_fail` doctests and a compiling control pin
+both paths shut. `cargo semver-checks` (0.51.0) reports `struct_missing` for both
+paths, and that is trace row T8. BREAKING on `happenstance-neon`, for `0.4.0`.
+
+**Verified.** The temper gate, `cargo test -p happenstance-neon --all-features`,
+`cargo xtask wasm`, `lints`, `lint-constitution`, `spec-trace`, `lint-kb`. The full
+`cargo xtask ci` was not run.
+
+---
+
 ## 2026-10-11 — how #78 lands, and ES-41's reading
 
 *Committed on `claude/project-thread-xhz9ob`, on `6a8cc2e`.* Phase 17.
