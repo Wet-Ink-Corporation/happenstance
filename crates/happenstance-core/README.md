@@ -8,10 +8,10 @@ event store. Storage-agnostic, and built on the
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
 > **Status: `0.4.0`.** The contract and its 95-rule event-store conformance suite
-> are real and tested, and **five adapters have cleared a suite against storage
+> are real and tested, and **four adapters have cleared a suite against storage
 > this workspace does not fully control** — a file on disk, a Durable Object on
-> `wasm32`, a pooled PostgreSQL server, a one-shot HTTP proxy with no connection
-> to hold, and an embedded graph database for the projection role.
+> `wasm32`, a pooled PostgreSQL server, and a one-shot HTTP proxy with no
+> connection to hold.
 >
 > **Two different maturity claims live here and they are not the same claim.** The
 > `EventStore` clauses marked `[FROZEN]` in the specification are **semver-binding

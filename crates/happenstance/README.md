@@ -8,7 +8,7 @@ An opinionated, storage-agnostic event sourcing library for Rust, built on the
 ## Which crate do I want?
 
 - **Writing an application?** This one — and a store to keep the events in.
-  Four ship at `0.2.0`, and the choice is about where the log lives rather than
+  Four are published, and the choice is about where the log lives rather than
   about features:
   [`happenstance-sqlite`](https://crates.io/crates/happenstance-sqlite) for one
   file on disk;
