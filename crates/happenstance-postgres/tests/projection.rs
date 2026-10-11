@@ -57,7 +57,14 @@
 
 mod support;
 
-use happenstance_core::{Authority, Checkpoint, ProjectionId, ProjectionStore, SequencePosition};
+use happenstance_core::{
+    Authority, Checkpoint, CommitError, ProjectionId, ProjectionProbe, ProjectionStore, ResetError,
+    SequencePosition,
+};
+use happenstance_postgres::error::PostgresProjectionStoreError;
+use happenstance_postgres::live_projection_store::LivePostgresProjectionStore;
+use happenstance_postgres::projection_store::{PgParam, PostgresProjectionStore};
+use happenstance_postgres::sqlx::postgres::PgPoolOptions;
 use happenstance_postgres::sqlx::{self, Row};
 use support::PostgresProjectionFixture;
 
@@ -227,4 +234,281 @@ async fn two_fixture_instances_own_different_schemas() {
         "two fixture instances share a schema, so one instance's rows are visible \
          to the other and every isolation premise in the suite is false here"
     );
+}
+
+// -------------------------------------------------------------------------
+// ADR-0084: a statement's values must match the highest `$n` its text uses
+// -------------------------------------------------------------------------
+
+/// The probe key the parameter-count tests write through.
+const KEY: &str = "arity-kept";
+
+/// The value written under [`KEY`]. Not `0` or `1`, so a default cannot pass.
+const VALUE: u64 = 4_211;
+
+/// The surplus leg's text. Issued by no other test, so on every connection it
+/// reaches it is a **first** preparation: an adapter without the count check
+/// commits the surplus deterministically rather than by the luck of the cache.
+const SURPLUS_TEXT: &str = "DELETE FROM projection_probe WHERE k = $1 /* arity-surplus */";
+
+/// A buffered store over a pool of **one** connection onto `fixture`'s schema.
+///
+/// One connection, so a correct call after a refused surplus reuses the very
+/// connection the surplus would have reached (ADR-0084 §6). The fixture's own
+/// pool is opened first, because that is what creates the schema, migration 2
+/// and the probe table.
+async fn one_connection_store(fixture: &PostgresProjectionFixture) -> PostgresProjectionStore {
+    let pool = fixture.pool_for_test().await;
+    let options = (*pool.connect_options())
+        .clone()
+        .options([("search_path", fixture.schema())]);
+    let one = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .expect("a broken test environment: a one-connection pool onto the fixture's schema");
+    PostgresProjectionStore::new(one)
+}
+
+/// Commits `KEY = VALUE` at the first position.
+async fn commit_kept(store: &PostgresProjectionStore, id: &ProjectionId) {
+    let mut batch = store.begin().await.unwrap();
+    store.probe_write(&mut batch, KEY, VALUE).await.unwrap();
+    store
+        .commit(batch, id, SequencePosition::FIRST, Authority::Live)
+        .await
+        .expect("the setup commit should succeed");
+}
+
+/// A mismatched statement fails the commit, in both directions, and moves
+/// nothing — and a refused surplus leaves no cached statement behind.
+///
+/// Each leg holds a valid probe write (statement 0) and then a `DELETE` aimed at
+/// the committed row (statement 1), so every wrong implementation changes
+/// something observable. The server refuses the too-few leg on its own; the
+/// too-many leg is refused only by the adapter's count. The follow-up commits
+/// the surplus text correctly on the same single connection, which rejects a
+/// check placed *after* the statement reached the server: by then the text is
+/// prepared with two parameters, and the correct call is refused by the cache.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn a_statement_with_the_wrong_parameter_count_fails_the_commit_and_moves_nothing() {
+    let fixture = PostgresProjectionFixture::new();
+    let store = one_connection_store(&fixture).await;
+    let id = ProjectionId::from_static("arity-commit");
+    commit_kept(&store, &id).await;
+    let second = SequencePosition::new(2).expect("2 is non-zero");
+
+    let legs: [(&str, &'static str, Vec<PgParam>, usize, usize); 2] = [
+        (
+            "too few",
+            "DELETE FROM projection_probe WHERE k = $1 OR k = $2",
+            vec![PgParam::text(KEY)],
+            2,
+            1,
+        ),
+        (
+            "too many",
+            SURPLUS_TEXT,
+            vec![PgParam::text(KEY), PgParam::text("unused")],
+            1,
+            2,
+        ),
+    ];
+    for (leg, sql, params, expected_declared, expected_supplied) in legs {
+        let mut batch = store.begin().await.unwrap();
+        store.probe_write(&mut batch, "fresh", 7).await.unwrap();
+        batch.push(sql, params);
+
+        let refused = store
+            .commit(batch, &id, second, Authority::Live)
+            .await
+            .expect_err("a parameter-count mismatch must fail the commit");
+
+        assert!(
+            matches!(
+                refused,
+                CommitError::Store(PostgresProjectionStoreError::ParameterCount {
+                    statement: 1,
+                    declared,
+                    supplied,
+                    ..
+                }) if declared == expected_declared && supplied == expected_supplied
+            ),
+            "{leg}: the refusal must name statement 1, {expected_declared} declared and \
+             {expected_supplied} supplied: {refused:?}"
+        );
+        assert_eq!(store.probe_read(KEY).await.unwrap(), Some(VALUE), "{leg}");
+        assert_eq!(store.probe_read("fresh").await.unwrap(), None, "{leg}");
+        assert_eq!(
+            store.checkpoint(&id).await.unwrap(),
+            Checkpoint::Live {
+                through: SequencePosition::FIRST
+            },
+            "{leg}"
+        );
+    }
+
+    let mut batch = store.begin().await.unwrap();
+    batch.push(SURPLUS_TEXT, [PgParam::text(KEY)]);
+    store
+        .commit(batch, &id, second, Authority::Live)
+        .await
+        .expect("the surplus text with the right count must commit on the same connection");
+    assert_eq!(store.probe_read(KEY).await.unwrap(), None);
+    assert_eq!(
+        store.checkpoint(&id).await.unwrap(),
+        Checkpoint::Live { through: second }
+    );
+}
+
+/// `reset` refuses a surplus value the same way, and moves nothing.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn a_statement_with_the_wrong_parameter_count_fails_the_reset_and_moves_nothing() {
+    let fixture = PostgresProjectionFixture::new();
+    let store = one_connection_store(&fixture).await;
+    let id = ProjectionId::from_static("arity-reset");
+    commit_kept(&store, &id).await;
+
+    let mut batch = store.begin().await.unwrap();
+    store.probe_delete_all(&mut batch).await.unwrap();
+    batch.push(SURPLUS_TEXT, [PgParam::text(KEY), PgParam::text("unused")]);
+
+    let refused = store
+        .reset(batch, &id)
+        .await
+        .expect_err("a parameter-count mismatch must fail the reset");
+
+    assert!(
+        matches!(
+            refused,
+            ResetError::Store(PostgresProjectionStoreError::ParameterCount {
+                statement: 1,
+                declared: 1,
+                supplied: 2,
+                ..
+            })
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(store.probe_read(KEY).await.unwrap(), Some(VALUE));
+    assert_eq!(
+        store.checkpoint(&id).await.unwrap(),
+        Checkpoint::Live {
+            through: SequencePosition::FIRST
+        }
+    );
+}
+
+/// How many parameters the **server** infers for `sql`.
+///
+/// `PREPARE` over the simple-query protocol, read back from
+/// `pg_prepared_statements` and deallocated, on one checked-out connection. A
+/// named server-side statement rather than `sqlx`'s `describe`, which is
+/// `#[doc(hidden)]` and answers from the per-connection cache.
+async fn server_parameter_count(pool: &sqlx::PgPool, sql: &str) -> usize {
+    let mut connection = pool.acquire().await.unwrap();
+    sqlx::raw_sql(&format!("PREPARE arity_probe AS {sql}"))
+        .execute(&mut *connection)
+        .await
+        .unwrap_or_else(|error| panic!("the server could not prepare {sql:?}: {error}"));
+    let count: i32 = sqlx::query_scalar(
+        "SELECT coalesce(cardinality(parameter_types), 0) \
+         FROM pg_prepared_statements WHERE name = 'arity_probe'",
+    )
+    .fetch_one(&mut *connection)
+    .await
+    .unwrap();
+    sqlx::raw_sql("DEALLOCATE arity_probe")
+        .execute(&mut *connection)
+        .await
+        .unwrap();
+    usize::try_from(count).expect("a parameter count is non-negative")
+}
+
+/// The scan agrees with the server on every construct it skips.
+///
+/// The differential behind ADR-0084 §10's last falsifier. For each statement
+/// the server's own count is taken, and the live store must then accept
+/// exactly that many values and refuse one more — through `execute_raw_sql`,
+/// so this also exercises the live batch's refusal on a target CI runs.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn the_placeholder_scan_agrees_with_the_server() {
+    // `$1$$ $2 $$` — a parameter directly followed by a dollar quote — is a
+    // syntax error the server will not prepare, so it is a unit test in
+    // `placeholder.rs`; `$1::text||$a1$ $2 $a1$` is its describable neighbour.
+    const CORPUS: [&str; 30] = [
+        "SELECT 1",
+        "SELECT $1::text, $2::text, $1::text",
+        "SELECT $1::text, '$2'",
+        "SELECT $1::text, 'it''s $2'",
+        r"SELECT $1::text, '\', $2::text",
+        r"SELECT $1::text, E'\'$2'",
+        r"SELECT $1::text, e'\\', $2::text",
+        "SELECT $1::text, N'$2'",
+        "SELECT $1::text, U&'$2'",
+        r#"SELECT $1::text AS "c$2""#,
+        r#"SELECT $1::text AS "a""$2""#,
+        r#"SELECT $1::text AS U&"c$2""#,
+        "SELECT $1::text, $t$ $2 $t$",
+        "SELECT $1::text, $$ $2 $$",
+        "SELECT $1::text /* /* */ $2 */",
+        "SELECT $1::text -- $2\n",
+        "SELECT $01::text",
+        "SELECT $1::text AS a$2",
+        // String continuations: the second segment keeps the first's quoting.
+        "SELECT $1::text, 'a'\n'$2'",
+        "SELECT 'a'\n'\\', $1::text",
+        "SELECT E'x'\n'\\' $2', $1::text",
+        "SELECT E''\n'\\'', $2::text, $1::text",
+        "SELECT E'x' -- c\n  -- d\n'\\' $2', $1::text",
+        "SELECT E'x', '\\', $2::text, $1::text",
+        "SELECT U&'a'\n'$2', $1::text",
+        // Operator-adjacent placeholders, and a tag right after an operator.
+        "SELECT 1 WHERE 'k'=$1::text",
+        "SELECT -$1::int",
+        "SELECT $1::text||$a1$ $2 $a1$",
+        // A multi-byte identifier byte, then `$`, is still one identifier.
+        "SELECT $1::text AS é$2",
+        "SELECT 1 AS café$1",
+    ];
+    let fixture = PostgresProjectionFixture::new();
+    let pool = fixture.pool_for_test().await;
+    let store = LivePostgresProjectionStore::new(pool.clone());
+
+    for sql in CORPUS {
+        let expected = server_parameter_count(&pool, sql).await;
+
+        // `"1"`, so a value the server casts to `int` is valid there too.
+        let mut batch = store.begin().await.unwrap();
+        batch
+            .execute_raw_sql(sql, vec![PgParam::text("1"); expected])
+            .await
+            .unwrap_or_else(|error| {
+                panic!("{sql:?}: the server counts {expected}, and the store refused that many: {error:?}")
+            });
+        store.rollback(batch).await.unwrap();
+
+        let mut batch = store.begin().await.unwrap();
+        let surplus = expected + 1;
+        let refused = batch
+            .execute_raw_sql(sql, vec![PgParam::text("1"); surplus])
+            .await
+            .expect_err("one value more than the server counts must be refused");
+        assert!(
+            matches!(
+                refused,
+                PostgresProjectionStoreError::ParameterCount {
+                    statement: 0,
+                    declared,
+                    supplied,
+                    ..
+                } if declared == expected && supplied == surplus
+            ),
+            "{sql:?}: the server counts {expected}: {refused:?}"
+        );
+        store.rollback(batch).await.unwrap();
+    }
 }
