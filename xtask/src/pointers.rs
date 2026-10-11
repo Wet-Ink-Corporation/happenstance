@@ -279,12 +279,13 @@ pub const MAX_ROWS_EVER: usize = 20;
 /// The claim is bounded: two *plausible* second questions now have somewhere to
 /// go. Whether they are an evaluator's real ones is for an observed walk, by
 /// someone other than the author, to say.
-pub const POINTER_REGISTER: &[Pointer] = &[Pointer {
-    id: "P3",
-    surface: "crates/happenstance-core/src/store.rs",
-    destination: "the adapter reading order, docs/adapter-reading-order.md",
-    form: PointerForm::PinnedTreeMarkdown,
-    guard: "two mechanisms, and between them they cover both ends. The narrative tree's \
+pub const POINTER_REGISTER: &[Pointer] = &[
+    Pointer {
+        id: "P3",
+        surface: "crates/happenstance-core/src/store.rs",
+        destination: "the adapter reading order, docs/adapter-reading-order.md",
+        form: PointerForm::PinnedTreeMarkdown,
+        guard: "two mechanisms, and between them they cover both ends. The narrative tree's \
             bidirectional registration check — `cargo xtask narrative`, a mandatory step — \
             fails the build when the destination stops being registered in \
             `xtask/src/narrative.rs`, whether it was deleted or renamed. And \
@@ -295,14 +296,61 @@ pub const POINTER_REGISTER: &[Pointer] = &[Pointer {
             Rung actually taken: the named-but-unlinked cross-reference, rung 3, because no \
             link form from a rustdoc page resolves into the narrative tree in all three of \
             the gate's rustdoc builds",
-    link_text: "the adapter reading order",
-    answer_on_first_screen: true,
-    targets_fragment: false,
-    gates: "(i) BR-15, a recorded reader failure at this item; (ii) the reader arrives from a \
+        link_text: "the adapter reading order",
+        answer_on_first_screen: true,
+        targets_fragment: false,
+        gates: "(i) BR-15, a recorded reader failure at this item; (ii) the reader arrives from a \
             diagnostic or a search box and `pub mod store` renders its own page; (iii) one \
             sentence, last in the section, no heading of its own; (iv) rung 3 of the ladder, \
             guarded by the registration check",
-}];
+    },
+    Pointer {
+        id: "P4",
+        surface: "docs/first-encounter.md",
+        destination: "where the structure is, Q-A's answer, \
+                      docs/carry-your-invariant.md#tag-query-fold-guard",
+        form: PointerForm::PinnedTreeMarkdown,
+        guard: "two mechanisms. The narrative tree's bidirectional registration check — \
+                `cargo xtask narrative`, a mandatory step — fails the build when either page \
+                stops being registered in `xtask/src/narrative.rs`. And \
+                `rows_p4_and_p5_land_on_a_heading_the_bridge_carries`, in this file, fails when \
+                the origin stops carrying exactly one link with this row's text, or the \
+                destination stops carrying the heading this row's fragment is derived from. \
+                Rung actually taken: rung 2, an in-tree markdown link with a heading fragment, \
+                because the destination is a page and not a Rust item",
+        link_text: "tag, query, fold, guard, on where the structure is",
+        answer_on_first_screen: false,
+        targets_fragment: true,
+        gates: "(i) DR-4's first stall point, dynamism mistaken for chaos, recorded by research \
+                03; (ii) the front door names the guide and cannot name a passage on a page the \
+                reader has not opened; (iii) one sentence after the drill that closes the \
+                page's own answer, no heading of its own; (iv) rung 2 of the ladder, guarded by \
+                the registration check and the fragment test",
+    },
+    Pointer {
+        id: "P5",
+        surface: "docs/first-encounter.md",
+        destination: "modelling or routing, Q-B's answer, \
+                      docs/carry-your-invariant.md#where-your-streams-went",
+        form: PointerForm::PinnedTreeMarkdown,
+        guard: "two mechanisms. The narrative tree's bidirectional registration check — \
+                `cargo xtask narrative`, a mandatory step — fails the build when either page \
+                stops being registered in `xtask/src/narrative.rs`. And \
+                `rows_p4_and_p5_land_on_a_heading_the_bridge_carries`, in this file, fails when \
+                the origin stops carrying exactly one link with this row's text, or the \
+                destination stops carrying the heading this row's fragment is derived from. \
+                Rung actually taken: rung 2, an in-tree markdown link with a heading fragment, \
+                because the destination is a page and not a Rust item",
+        link_text: "where your streams went, on modelling versus routing",
+        answer_on_first_screen: false,
+        targets_fragment: true,
+        gates: "(i) DR-4's second stall point, modelling technique or routing technique, \
+                recorded by research 03; (ii) the front door names the guide and cannot name a \
+                passage on a page the reader has not opened; (iii) one sentence after the \
+                drill that closes the page's own answer, no heading of its own; (iv) rung 2 of \
+                the ladder, guarded by the registration check and the fragment test",
+    },
+];
 
 /// The fewest words a self-describing link text can be built from.
 const LINK_TEXT_MINIMUM_WORDS: usize = 3;
@@ -648,7 +696,7 @@ mod tests {
         let filed: Vec<&str> = POINTER_REGISTER.iter().map(|row| row.id).collect();
         assert_eq!(
             filed,
-            ["P3"],
+            ["P3", "P4", "P5"],
             "the register grows one row per installed pointer: a row here that no \
              story installed is a claim nobody earned, and a missing row is a \
              pointer whose only guard is memory"
@@ -783,6 +831,238 @@ mod tests {
              `xtask/src/narrative.rs` registers, so `cargo xtask narrative` is \
              guarding a different page from the one the reader is sent to"
         );
+    }
+
+    /// The page both second questions are asked from.
+    const ORIGIN: &str = "docs/first-encounter.md";
+    /// The page both are answered on.
+    const BRIDGE: &str = "docs/carry-your-invariant.md";
+
+    /// Rows **P4** and **P5**, each with the heading of the passage that answers
+    /// its question. The heading is the fact; the fragment is derived from it, so
+    /// a row cannot name a fragment that no heading on the page would emit.
+    const ONWARD: [(&str, &str); 2] = [
+        ("P4", "## Tag, query, fold, guard"),
+        ("P5", "## Where your streams went"),
+    ];
+
+    /// The fewest and most words a linking sentence may carry.
+    const SENTENCE_WORDS: core::ops::RangeInclusive<usize> = 8..=30;
+
+    /// The anchor a heading renders under: lower-cased, spaces to hyphens, every
+    /// other non-alphanumeric dropped.
+    ///
+    /// That is GitHub's rule, which is the renderer a reader following a link in
+    /// the tree meets. The documentation site renders the same pages with Zola's
+    /// default anchor slugify, which `site/config.toml` does not override and
+    /// which collapses each run of non-alphanumerics into one hyphen; for these
+    /// two headings, whose one multi-character run is the `", "` in `Tag, query`,
+    /// both rules give the same anchor. This helper does not run Zola. The site
+    /// build does, and fails on an internal anchor it cannot find
+    /// (`internal_level = "error"`), but that build is the pages workflow's and
+    /// not the gate's.
+    fn heading_anchor(heading: &str) -> String {
+        heading
+            .trim_start_matches('#')
+            .trim()
+            .to_lowercase()
+            .chars()
+            .filter_map(|character| match character {
+                ' ' => Some('-'),
+                '-' | '_' => Some(character),
+                other if other.is_alphanumeric() => Some(other),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Everything wrong with one onward row against the three files it makes a
+    /// claim about. Pure, so the tests below can feed it files that are wrong.
+    fn landing_problems(
+        row: &Pointer,
+        heading: &str,
+        origin: &str,
+        bridge: &str,
+        registrations: &str,
+    ) -> Vec<String> {
+        let id = row.id;
+        let page = BRIDGE.trim_start_matches("docs/");
+        let href = format!("{page}#{}", heading_anchor(heading));
+        let link = format!("[{}]({href})", row.link_text);
+        let mut found = Vec::new();
+
+        if !row.destination.contains(&format!("docs/{href}")) {
+            found.push(format!("{id}: the row does not name docs/{href}"));
+        }
+        if !bridge.lines().any(|line| line.trim_end() == heading) {
+            found.push(format!("{id}: {BRIDGE} no longer carries `{heading}`"));
+        }
+        let installed = origin.matches(link.as_str()).count();
+        if installed != 1 {
+            found.push(format!("{id}: {ORIGIN} carries `{link}` {installed} times"));
+        }
+        for path in [ORIGIN, BRIDGE] {
+            if !registrations.contains(&format!("include_str!(\"../../{path}\")")) {
+                found.push(format!(
+                    "{id}: {path} is not registered in the narrative harness"
+                ));
+            }
+        }
+        found
+    }
+
+    /// Rows **P4** and **P5** record the two second questions as the policy
+    /// requires: a fragment, because neither answer is the bridge's first screen;
+    /// the pinned tree's form, with the rung it actually took; and a guard that
+    /// names a mechanism which exists.
+    #[test]
+    fn rows_p4_and_p5_target_the_answering_passage_and_name_their_guard() {
+        for (id, _) in ONWARD {
+            let row = POINTER_REGISTER
+                .iter()
+                .find(|row| row.id == id)
+                .unwrap_or_else(|| panic!("{id} is one of the evaluator's two onward links"));
+
+            assert_eq!(
+                row.surface, ORIGIN,
+                "{id} hangs off the page that answered first"
+            );
+            assert_eq!(row.form, PointerForm::PinnedTreeMarkdown, "{id}");
+            assert!(
+                row.targets_fragment && !row.answer_on_first_screen,
+                "{id} lands on a passage below the bridge's first screen, so it must carry \
+                 the passage's fragment rather than the top of the page"
+            );
+            for named in ["cargo xtask narrative", "rung 2", "fragment"] {
+                assert!(
+                    row.guard.contains(named),
+                    "{id}'s guard does not name {named:?}: {}",
+                    row.guard
+                );
+            }
+            assert!(
+                row.gates.contains("(i)") && row.gates.contains("(iv)"),
+                "rule 2 admits a pointer only through its four gates: {}",
+                row.gates
+            );
+        }
+    }
+
+    /// Rows **P4** and **P5** are installed where they claim, and land where they
+    /// claim: one link on the origin page with the row's own text, pointing at an
+    /// anchor that a heading on the bridge really emits, on two pages the
+    /// narrative tree really registers.
+    #[test]
+    fn rows_p4_and_p5_land_on_a_heading_the_bridge_carries() {
+        const ORIGIN_TEXT: &str = include_str!("../../docs/first-encounter.md");
+        const BRIDGE_TEXT: &str = include_str!("../../docs/carry-your-invariant.md");
+        const REGISTRATIONS: &str = include_str!("narrative.rs");
+
+        for (id, heading) in ONWARD {
+            let row = POINTER_REGISTER.iter().find(|row| row.id == id).unwrap();
+            let found = landing_problems(row, heading, ORIGIN_TEXT, BRIDGE_TEXT, REGISTRATIONS);
+            assert!(found.is_empty(), "{found:?}");
+        }
+    }
+
+    /// The wrong implementations [`landing_problems`] exists to reject: a heading
+    /// renamed out from under its fragment, a link never installed or installed
+    /// twice, and a page that left the harness.
+    #[test]
+    fn a_landing_whose_heading_link_or_registration_moved_is_rejected() {
+        let row = POINTER_REGISTER.iter().find(|row| row.id == "P5").unwrap();
+        let heading = "## Where your streams went";
+        let link = format!(
+            "[{}](carry-your-invariant.md#where-your-streams-went)",
+            row.link_text
+        );
+        let origin = format!("Prose that ends on {link}.");
+        let registrations = "include_str!(\"../../docs/first-encounter.md\")\n\
+                             include_str!(\"../../docs/carry-your-invariant.md\")";
+        let bridge = format!("# Bridge\n\n{heading}\n\nThe answer.");
+
+        assert_eq!(
+            landing_problems(row, heading, &origin, &bridge, registrations),
+            Vec::<String>::new(),
+            "the fixture must be good before each wrong one differs from it"
+        );
+
+        let renamed = bridge.replace(heading, "## Where the streams went");
+        let twice = format!("{origin} {origin}");
+        let unregistered = registrations.replace("carry-your-invariant", "elsewhere");
+        for (wrong, found) in [
+            (
+                "renamed heading",
+                landing_problems(row, heading, &origin, &renamed, registrations),
+            ),
+            (
+                "no link",
+                landing_problems(row, heading, "Prose.", &bridge, registrations),
+            ),
+            (
+                "two links",
+                landing_problems(row, heading, &twice, &bridge, registrations),
+            ),
+            (
+                "unregistered",
+                landing_problems(row, heading, &origin, &bridge, &unregistered),
+            ),
+        ] {
+            assert_eq!(found.len(), 1, "{wrong}: {found:?}");
+            assert!(found[0].starts_with("P5"), "{wrong}: {found:?}");
+        }
+    }
+
+    /// The fragment rule itself, against the headings it has to handle.
+    #[test]
+    fn a_heading_anchor_drops_punctuation_and_hyphenates_spaces() {
+        assert_eq!(
+            heading_anchor("## Tag, query, fold, guard"),
+            "tag-query-fold-guard"
+        );
+        assert_eq!(
+            heading_anchor("## Where your streams went"),
+            "where-your-streams-went"
+        );
+        assert_eq!(
+            heading_anchor("## A condition that refuses"),
+            "a-condition-that-refuses",
+            "the origin page's own step anchors, which `xtask/tests/first_encounter.rs` pins"
+        );
+    }
+
+    /// Each linking sentence holds the density budget: one sentence, eight to
+    /// thirty words, no parenthetical and no semicolon, ending on its link.
+    #[test]
+    fn each_onward_link_ends_one_sentence_inside_the_word_budget() {
+        const ORIGIN_TEXT: &str = include_str!("../../docs/first-encounter.md");
+        let prose = ORIGIN_TEXT.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        for (id, heading) in ONWARD {
+            let row = POINTER_REGISTER.iter().find(|row| row.id == id).unwrap();
+            let target = format!(
+                "({}#{})",
+                BRIDGE.trim_start_matches("docs/"),
+                heading_anchor(heading)
+            );
+            let link = format!("[{}]{target}", row.link_text);
+            let end = prose
+                .find(&format!("{link}."))
+                .unwrap_or_else(|| panic!("{id}'s link is not sentence-final on {ORIGIN}: {link}"))
+                + link.len();
+            let start = prose[..end].rfind(". ").map_or(0, |at| at + 2);
+            let sentence = prose[start..end].replace(&target, "");
+
+            let words = sentence.split_whitespace().count();
+            assert!(
+                SENTENCE_WORDS.contains(&words),
+                "{id}'s sentence is {words} words, outside {SENTENCE_WORDS:?}: {sentence}"
+            );
+            assert!(
+                !sentence.contains([';', '(', ')']),
+                "{id}'s sentence carries a semicolon or a parenthetical: {sentence}"
+            );
+        }
     }
 
     #[test]
