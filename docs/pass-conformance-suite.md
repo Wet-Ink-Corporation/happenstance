@@ -5,7 +5,7 @@
 An adapter counts once it has run the conformance suite against its own storage
 and passed. Compiling is not enough. The testkit's
 [crate documentation](../crates/happenstance-testkit/src/lib.rs) states that
-bar in its first paragraph. Read
+bar at the top. Read
 [what to read before you write an adapter](adapter-reading-order.md) first. This
 page starts where that one stops: your store implements the port, and you want
 the suite green.
@@ -17,15 +17,14 @@ to read what the suite says back, and which other families to add.
 
 ## Write the fixture
 
-The suite never takes your store directly. It takes a fixture: one fixture
-instance is one isolated backing store, and each `connect` on it opens a handle
-onto that store
+The suite never takes your store directly. It takes a fixture. Give each
+fixture instance a backing store of its own, such as a fresh temporary file or
+a throwaway schema, and make each `connect` open a handle onto that store
 ([CF-15](../spec/SPECIFICATION.md#63-the-fixture-contract), checked by
-`two_fixture_instances_observe_none_of_each_others_appends`). For a file-backed
-store an instance is a fresh temporary file. For a server it is a throwaway
-schema or database. Two instances that point at one file fail that rule.
+`two_fixture_instances_observe_none_of_each_others_appends`). Two instances that
+point at one file fail that rule.
 
-Then answer the constants. Two have no default, so you cannot forget them:
+Then answer the eight constants. Two have no default, so you cannot forget them:
 
 - **`SECOND_HANDLE`** is not a choice. The suite opens two handles onto one
   store to catch a store that is only correct within one session
@@ -51,6 +50,14 @@ capability and override the matching `arm_` method. Supporting
 `arming_a_mid_batch_fault_makes_the_append_fail`), so read the clause before
 you claim it.
 
+One more is defaulted the other way. `READ_YOUR_OWN_WRITES` defaults to
+supported: an append you were told succeeded shows up in your next read through
+the same handle. A store whose reads can lag an acknowledged append declines
+it, with its own reason. The PostgreSQL and Neon fixtures do, because a read
+there waits for a server-wide snapshot frontier. Only the model family needs it,
+and it reports a skip without it (`Fixture::READ_YOUR_OWN_WRITES`, read by
+`ops_agree_with_the_model`).
+
 Last come three ceilings: `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT` and
 `MAX_EVENTS_PER_BATCH`. They are facts about your store, not trades, so they
 take a number or `None` and no reason. The suite tests a number you state from
@@ -74,7 +81,8 @@ use futures_core::Stream;
 use happenstance_core::{AppendCondition, AppendError, Event, EventId, Query};
 use happenstance_core::{ReadOptions, SendEventStore, SequencePosition, SequencedEvent};
 use happenstance_testkit::{Capability, Fixture, GappyMemoryStore, NO_STORE_LIMITS};
-use happenstance_testkit::{RuleOutcome, block_on, rules};
+use happenstance_testkit::{RuleOutcome, UNSTATED_MID_BATCH_FAULT, UNSTATED_READ_FAULT};
+use happenstance_testkit::{block_on, rules};
 
 /// One handle onto a fixture's store.
 #[derive(Clone)]
@@ -153,6 +161,8 @@ fn main() {
     for (rule, outcome) in outcomes {
         if let RuleOutcome::Skipped { capability, reason } = outcome {
             skipped.insert(capability);
+            // Each reason is this fixture's own, never the testkit's default.
+            assert!(![UNSTATED_MID_BATCH_FAULT, UNSTATED_READ_FAULT].contains(&reason), "{rule}");
             if capability == "REOPEN" {
                 assert_eq!(Some(reason), StridedFixture::REOPEN.reason(), "{rule}");
             }
@@ -166,8 +176,9 @@ fn main() {
 In your crate, `cargo test` turns that macro line into one test per rule. A
 doctest is not built as a test binary, so the tests the line emits do not exist
 here. `main` runs the same rules instead, the way the `emit_blocking` harness
-does, and checks that every rule passed or was skipped for a capability the
-fixture declined. One emitted test has no rule behind it and so does not run
+does, and checks that every rule passed or was skipped, either for a
+capability the fixture declined or for the ceilings it states none of. It also
+checks that no skip carries the testkit's default wording. One emitted test has no rule behind it and so does not run
 here: `every_declined_capability_is_stated_by_this_fixture`. Your own
 `cargo test` runs it.
 
@@ -254,9 +265,10 @@ fn main() {
 }
 ```
 
-Do not decline a capability to turn a red rule green. `SECOND_HANDLE` refuses
-that outright, as above. The others record it in every skip line, where the
-people choosing your adapter can read it.
+Decline a capability only when your store genuinely lacks it, and say why.
+Declining one to turn a red rule green is a different act. `SECOND_HANDLE`
+refuses it outright, as above. The others record it in every skip line, where
+the people choosing your adapter can read it.
 
 If you believe a rule is wrong, the fix belongs in the testkit, in the same
 change as the wrong implementation the rule must still reject. Never skip it.
@@ -272,8 +284,9 @@ wrapper is a parameter you choose, not the testkit's
 names it:
 `event_store_conformance!(mod_name = …, emit = …, fixture = …)`.
 
-- `happenstance_testkit::emit_blocking` needs no runtime at all.
-- `happenstance_testkit::emit_wasm` runs under `wasm-bindgen-test`, for a
+- `emit_blocking` (`happenstance_testkit::emit_blocking`) needs no runtime at
+  all.
+- `emit_wasm` (`happenstance_testkit::emit_wasm`) runs under `wasm-bindgen-test`, for a
   `wasm32` store. The Cloudflare adapter uses it in
   [its conformance target](../crates/happenstance-cloudflare/tests/durable_object_conformance.rs).
 
@@ -304,7 +317,8 @@ own macro.
   there is no timeout to fail it.
 - **Model.** `event_store_model_conformance!` generates operation sequences and
   checks your store against a model of the log. It needs the testkit's
-  `proptest` feature on your dev-dependency. The SQLite adapter mounts it beside
+  `proptest` feature on your dev-dependency, and it skips on a fixture that
+  declines `READ_YOUR_OWN_WRITES`. The SQLite adapter mounts it beside
   the event-store family in
   [its conformance target](../crates/happenstance-sqlite/tests/conformance.rs).
 - **Projections.** If your crate also implements `ProjectionStore`,
@@ -331,9 +345,10 @@ behind it ([CF-31](../spec/SPECIFICATION.md#66-compatibility-policy-for-the-test
 
 ## What a green run does not tell you
 
-- **That `reopen` is honest.** A `reopen` that declares support and does nothing
-  passes every rule, over a store that loses everything on restart. No rule can
-  tell it from a real one, and the testkit records that in
+- **That `reopen` is honest.** Make your `reopen` really close what the
+  fixture holds and read the medium again, because nothing else will catch it.
+  An empty `reopen` over a store that loses everything on restart passes every
+  rule, and the testkit records that in
   `reopen_over_claiming_is_undetectable_and_this_is_the_record`.
 - **That your store is fast enough.** Performance is measured by a separate
   harness, which no adapter has to pass
