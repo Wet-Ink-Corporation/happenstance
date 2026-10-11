@@ -351,10 +351,11 @@ fn crate_root_renders_the_projection_surface() {
         "the four items are not re-exported from the crate's own module"
     );
 
-    // The density budget, in the units the design fixed.
+    // The density budget, in the units the design fixed; 132 since #193's
+    // guide pointer.
     assert!(
-        doc.len() <= 130,
-        "the crate-root module doc is {} lines; the budget is 130",
+        doc.len() <= 132,
+        "the crate-root module doc is {} lines; the budget is 132",
         doc.len()
     );
     let mut fenced = false;

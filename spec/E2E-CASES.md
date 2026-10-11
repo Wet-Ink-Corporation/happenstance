@@ -678,7 +678,7 @@ nowhere.
 
 - **From:** Norvant (the panic at 4,000,001); Kestrel Motor (the deliberate crypto-shred); Wattline (the trailing-space currency code); Turnstile
 - **Level:** contract
-- **Spans:** ⚠ `happenstance` (a doc comment and one `pub use`, `crates/happenstance/src/lib.rs:76`)
+- **Spans:** ⚠ `happenstance` (a doc comment and one `pub use`, `crates/happenstance/src/lib.rs:79`)
 
 **GIVEN** a pump and an `apply` that returns an application error at position *P*.
 **WHEN** the pump returns.
