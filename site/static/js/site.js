@@ -1,4 +1,4 @@
-// The site's only script: the theme toggle, copy buttons, the mobile drawer and
+// The script on every page: the theme toggle, copy buttons, the mobile drawer and
 // the on-this-page indicator. Everything degrades to a working page without it.
 (function () {
   "use strict";

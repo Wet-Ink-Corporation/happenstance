@@ -12,3 +12,8 @@
 *.sh    text eol=lf
 *.service text eol=lf
 *.env   text eol=lf
+
+# A vendored file is the upstream release byte for byte, and its sha256 is
+# recorded where it was added. A checkout that rewrote its line endings would
+# serve a file no checksum describes.
+site/static/js/elasticlunr/* -text
