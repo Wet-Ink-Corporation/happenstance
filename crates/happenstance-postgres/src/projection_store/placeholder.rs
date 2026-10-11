@@ -20,8 +20,10 @@
 //! on: a `$n` inside a standard, escape (`E'…'`), bit, hex, national or Unicode
 //! (`U&'…'`) string, a quoted identifier, a dollar-quoted body or a comment —
 //! line or nested block — is not a placeholder, and neither is a `$` that
-//! continues an identifier (`a$1`). An unterminated construct runs to the end of
-//! the text, which the server refuses on its own.
+//! continues an identifier (`a$1`). A string continued across a newline
+//! (`E'a'` newline `'b'`) keeps the quoting it began with, as `scan.l`'s
+//! `quotecontinue` does. An unterminated construct runs to the end of the text,
+//! which the server refuses on its own.
 //!
 //! With `standard_conforming_strings = off`, which has not been the default
 //! since PostgreSQL 9.1, a backslash inside a plain `'…'` string escapes the
@@ -146,6 +148,11 @@ fn skip_identifier(bytes: &[u8], start: usize) -> usize {
 /// The index just past the `quote` that closes a construct whose body starts at
 /// `from`. A doubled `quote` is part of the body. The end of the text when the
 /// construct is unterminated.
+///
+/// A string (`'`) continued across a newline is one string, in the quoting it
+/// began with: `scan.l`'s `quotecontinue` returns to the state the first
+/// segment was in, so after `E'…'` a continuation still honours backslashes.
+/// Quoted identifiers have no continuation.
 fn skip_quoted(bytes: &[u8], from: usize, quote: u8, backslash: Backslash) -> usize {
     let mut at = from;
     while let Some(&byte) = bytes.get(at) {
@@ -153,15 +160,60 @@ fn skip_quoted(bytes: &[u8], from: usize, quote: u8, backslash: Backslash) -> us
         if byte == b'\\' && backslash == Backslash::Escapes {
             at = next.saturating_add(1);
         } else if byte == quote {
-            if bytes.get(next) != Some(&quote) {
+            if bytes.get(next) == Some(&quote) {
+                at = next.saturating_add(1);
+            } else if let Some(reopened) = continuation(bytes, next).filter(|_| quote == b'\'') {
+                at = reopened.saturating_add(1);
+            } else {
                 return next;
             }
-            at = next.saturating_add(1);
         } else {
             at = next;
         }
     }
     bytes.len()
+}
+
+/// `[ \t\f\v]`: `scan.l`'s `horiz_space`.
+const fn is_horizontal_space(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | 0x0b | 0x0c)
+}
+
+/// `[\n\r]`: `scan.l`'s `newline`.
+const fn is_newline(byte: u8) -> bool {
+    matches!(byte, b'\n' | b'\r')
+}
+
+/// The index of the `'` that continues a string closed just before `from`, or
+/// `None` when what follows is not a continuation.
+///
+/// `scan.l`'s `quotecontinue`: horizontal space or `--` comments, then a
+/// newline, then any whitespace or `--` comments each ending in a newline, then
+/// the quote. Without the newline, `'a' 'b'` is two tokens.
+fn continuation(bytes: &[u8], from: usize) -> Option<usize> {
+    let mut at = from;
+    let mut crossed_newline = false;
+    while let Some(&byte) = bytes.get(at) {
+        let next = at.saturating_add(1);
+        at = match byte {
+            b'\'' if crossed_newline => return Some(at),
+            _ if is_horizontal_space(byte) => next,
+            _ if is_newline(byte) => {
+                crossed_newline = true;
+                next
+            }
+            b'-' if bytes.get(next) == Some(&b'-') => {
+                let end = skip_line_comment(bytes, next);
+                // A comment after the newline must itself end in one.
+                if crossed_newline && !bytes.get(end).copied().is_some_and(is_newline) {
+                    return None;
+                }
+                end
+            }
+            _ => return None,
+        };
+    }
+    None
 }
 
 /// The index of the line break that ends a `--` comment, or the end of the
@@ -299,6 +351,26 @@ mod tests {
         declares(r"SELECT somee'\', $2", 2);
     }
 
+    /// A string continued across a newline (`'a'` newline `'b'`) keeps the
+    /// quoting of the string it continues: PostgreSQL's `quotecontinue` returns
+    /// to the state the first segment was in. So after `E'…'` the next segment
+    /// still honours backslashes. Both statements below were counted by
+    /// PostgreSQL 17.10 (1 and 2), and a scan that restarts a continuation as a
+    /// standard string reads 2 and 0.
+    #[test]
+    fn a_continued_escape_string_keeps_honouring_backslashes() {
+        declares("SELECT E'x'\n'\\' $2', $1::text", 1);
+        declares("SELECT E''\n'\\'', $2::text, $1::text", 2);
+        declares("SELECT E'x' -- c\n  -- d\n'\\' $2', $1::text", 1);
+        declares("SELECT e'x' \t\r\n\n '\\' $2', $1", 1);
+        // Not a continuation: no newline before the next quote, so it is a
+        // fresh standard string, which a backslash does not escape.
+        declares("SELECT E'x', '\\', $2::text, $1::text", 2);
+        // A continuation of a standard string is standard either way.
+        declares("SELECT 'a'\n'\\', $1::text", 1);
+        declares("SELECT U&'a'\n'$2', $1::text", 1);
+    }
+
     #[test]
     fn placeholders_inside_quoted_identifiers_are_not_counted() {
         declares(r#"SELECT $1 AS "col$2""#, 1);
@@ -312,6 +384,9 @@ mod tests {
         declares("SELECT $tag$ $2 $other$ $tag$, $1", 1);
         declares("SELECT $_t9$ $2 $_t9$, $1", 1);
         declares("SELECT $1, $$ unterminated $2", 1);
+        // A parameter ends at its last digit, so a tag may follow it at once.
+        declares("SELECT $1$$ $2 $$", 1);
+        declares("SELECT $1::text||$a1$ $2 $a1$", 1);
     }
 
     /// Nesting is the case that rejects a scan which closes a block comment at
@@ -330,36 +405,48 @@ mod tests {
         declares("SELECT a$1", 0);
         declares("SELECT $1 AS a$2", 1);
         declares("SELECT _x$3, $1", 1);
+        // A multi-byte identifier byte continues an identifier too.
+        declares("SELECT $1::text AS é$2", 1);
+        declares("SELECT café$1", 0);
     }
 
-    /// Every string of up to four bytes over the bytes the scan dispatches on
-    /// returns rather than panicking — 14⁴ statements, exhaustively, which is
-    /// the totality property a property test would sample.
+    /// An operator byte ends the token before it, so a placeholder directly
+    /// after `=` or `-` is still one — and `--` is a comment, not two minuses.
+    #[test]
+    fn a_placeholder_directly_after_an_operator_is_counted() {
+        declares("SELECT 1 WHERE k=$1", 1);
+        declares("SELECT -$1::int", 1);
+        declares("SELECT 1--$1", 0);
+    }
+
+    /// Every string of one to four bytes over the bytes the scan dispatches on
+    /// returns rather than panicking — 18 + 18² + 18³ + 18⁴ statements,
+    /// exhaustively, which is the totality property a property test would
+    /// sample.
     #[test]
     fn the_scan_is_total() {
-        const ALPHABET: [char; 14] = [
-            '$', '1', '9', '\'', '"', '-', '/', '*', 'e', '\\', '\n', ' ', '&', 'U',
+        const ALPHABET: [char; 18] = [
+            '$', '1', '9', '\'', '"', '-', '/', '*', 'e', 'E', 'u', 'U', '_', '\\', '\n', '\r',
+            ' ', '&',
         ];
         let mut scanned = 0_usize;
-        for a in ALPHABET {
-            for b in ALPHABET {
-                for c in ALPHABET {
-                    for d in ALPHABET {
-                        for text in [
-                            String::from(a),
-                            [a, b].iter().collect(),
-                            [a, b, c].iter().collect(),
-                            [a, b, c, d].iter().collect::<String>(),
-                        ] {
-                            let highest = highest_placeholder(&text);
-                            assert!(highest <= 9_999, "{text:?} declared {highest}");
-                            scanned += 1;
-                        }
-                    }
-                }
+        let mut texts: Vec<String> = vec![String::new()];
+        for _ in 0..4 {
+            texts = texts
+                .iter()
+                .flat_map(|prefix| {
+                    ALPHABET
+                        .iter()
+                        .map(move |symbol| format!("{prefix}{symbol}"))
+                })
+                .collect();
+            for text in &texts {
+                let highest = highest_placeholder(text);
+                assert!(highest <= 999, "{text:?} declared {highest}");
+                scanned += 1;
             }
         }
-        assert_eq!(scanned, 4 * 14 * 14 * 14 * 14);
+        assert_eq!(scanned, 18 + 18 * 18 + 18 * 18 * 18 + 18 * 18 * 18 * 18);
 
         let absurd = format!("SELECT ${}", "9".repeat(25));
         assert_eq!(

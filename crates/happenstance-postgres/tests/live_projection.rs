@@ -289,3 +289,58 @@ async fn a_surplus_value_is_refused_at_execute_and_the_batch_cannot_commit() {
         .unwrap();
     assert_eq!(store.probe_read("after").await.unwrap(), Some(2));
 }
+
+/// `reset` refuses a batch poisoned by a local refusal, the same as `commit`,
+/// and moves nothing.
+///
+/// The batch's `probe_delete_all` has already reached the server, so a `reset`
+/// that ignored the latch would delete the committed row and the checkpoint.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn a_poisoned_live_batch_cannot_reset_and_moves_nothing() {
+    let fixture = LivePostgresProjectionFixture::new();
+    let store = fixture.connect().await;
+    let id = ProjectionId::from_static("arity-live-reset");
+
+    let mut setup = store.begin().await.unwrap();
+    store.probe_write(&mut setup, "kept", 4_211).await.unwrap();
+    store
+        .commit(setup, &id, SequencePosition::FIRST, Authority::Live)
+        .await
+        .unwrap();
+
+    let mut batch = store.begin().await.unwrap();
+    store.probe_delete_all(&mut batch).await.unwrap();
+    batch
+        .execute(
+            "DELETE FROM projection_probe WHERE k = $1 /* arity-surplus */",
+            [PgParam::text("kept"), PgParam::text("unused")],
+        )
+        .await
+        .expect_err("a surplus value must be refused at `execute`");
+
+    let refused = store
+        .reset(batch, &id)
+        .await
+        .expect_err("a batch with a refused statement cannot be reset");
+    assert!(
+        matches!(
+            refused,
+            happenstance_core::ResetError::Store(PostgresProjectionStoreError::Poisoned)
+        ),
+        "{refused:?}"
+    );
+
+    assert_eq!(
+        store.probe_read("kept").await.unwrap(),
+        Some(4_211),
+        "the delete issued before the refusal was rolled back with the batch"
+    );
+    assert_eq!(
+        store.checkpoint(&id).await.unwrap(),
+        Checkpoint::Live {
+            through: SequencePosition::FIRST
+        },
+        "and the checkpoint was not deleted"
+    );
+}

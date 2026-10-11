@@ -436,7 +436,10 @@ async fn server_parameter_count(pool: &sqlx::PgPool, sql: &str) -> usize {
 #[tokio::test]
 #[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
 async fn the_placeholder_scan_agrees_with_the_server() {
-    const CORPUS: [&str; 18] = [
+    // `$1$$ $2 $$` — a parameter directly followed by a dollar quote — is a
+    // syntax error the server will not prepare, so it is a unit test in
+    // `placeholder.rs`; `$1::text||$a1$ $2 $a1$` is its describable neighbour.
+    const CORPUS: [&str; 30] = [
         "SELECT 1",
         "SELECT $1::text, $2::text, $1::text",
         "SELECT $1::text, '$2'",
@@ -455,6 +458,21 @@ async fn the_placeholder_scan_agrees_with_the_server() {
         "SELECT $1::text -- $2\n",
         "SELECT $01::text",
         "SELECT $1::text AS a$2",
+        // String continuations: the second segment keeps the first's quoting.
+        "SELECT $1::text, 'a'\n'$2'",
+        "SELECT 'a'\n'\\', $1::text",
+        "SELECT E'x'\n'\\' $2', $1::text",
+        "SELECT E''\n'\\'', $2::text, $1::text",
+        "SELECT E'x' -- c\n  -- d\n'\\' $2', $1::text",
+        "SELECT E'x', '\\', $2::text, $1::text",
+        "SELECT U&'a'\n'$2', $1::text",
+        // Operator-adjacent placeholders, and a tag right after an operator.
+        "SELECT 1 WHERE 'k'=$1::text",
+        "SELECT -$1::int",
+        "SELECT $1::text||$a1$ $2 $a1$",
+        // A multi-byte identifier byte, then `$`, is still one identifier.
+        "SELECT $1::text AS é$2",
+        "SELECT 1 AS café$1",
     ];
     let fixture = PostgresProjectionFixture::new();
     let pool = fixture.pool_for_test().await;
@@ -463,9 +481,10 @@ async fn the_placeholder_scan_agrees_with_the_server() {
     for sql in CORPUS {
         let expected = server_parameter_count(&pool, sql).await;
 
+        // `"1"`, so a value the server casts to `int` is valid there too.
         let mut batch = store.begin().await.unwrap();
         batch
-            .execute_raw_sql(sql, vec![PgParam::text("x"); expected])
+            .execute_raw_sql(sql, vec![PgParam::text("1"); expected])
             .await
             .unwrap_or_else(|error| {
                 panic!("{sql:?}: the server counts {expected}, and the store refused that many: {error:?}")
@@ -475,7 +494,7 @@ async fn the_placeholder_scan_agrees_with_the_server() {
         let mut batch = store.begin().await.unwrap();
         let surplus = expected + 1;
         let refused = batch
-            .execute_raw_sql(sql, vec![PgParam::text("x"); surplus])
+            .execute_raw_sql(sql, vec![PgParam::text("1"); surplus])
             .await
             .expect_err("one value more than the server counts must be refused");
         assert!(
