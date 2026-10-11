@@ -17,6 +17,13 @@ one isolated backing store, which is
 [CF-15](../../spec/SPECIFICATION.md)'s sentence and not this atom's. Steps
 5–6 are RS-91-3 and RS-91-4 below.
 
+One obligation belongs to no step, because no conformance rule can read a doc
+comment: [ES-23](../../spec/SPECIFICATION.md)'s adapter half. The store module
+answers it under a `# Cancellation` heading, and a copied test target keeps the
+answer there — `crates/happenstance-sqlite/tests/cancellation_statement.rs` is
+one of four. `FROZEN_DOC_MUSTS` in `xtask/src/lint_narrative.rs` names all four
+as ES-23's adapter-owned row, and a new adapter's target joins it.
+
 ---
 
 ## RS-91-1. Implement the strongest flavour your own types allow.

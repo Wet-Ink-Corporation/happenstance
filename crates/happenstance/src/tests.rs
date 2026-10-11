@@ -574,8 +574,8 @@ const PROSE_COLUMNS: usize = 80;
 /// Code inside a doc fence, in columns. This is the budget that stops the
 /// fence acquiring a horizontal scrollbar at 1024px.
 const FENCE_COLUMNS: usize = 72;
-/// The crate-root module doc, in lines.
-const MODULE_DOC_LINES: usize = 130;
+/// The crate-root module doc, in lines. 132 since #193's guide pointer.
+const MODULE_DOC_LINES: usize = 132;
 /// The first sentence of any doc comment, in characters.
 const FIRST_SENTENCE: usize = 80;
 /// A public identifier this story adds, in characters.

@@ -128,6 +128,8 @@ summary: >-
   added postgres-neon-store-id-no-restore as the successor gap beside the last. It amended
   adr-0022-falsifiers-fired without closing it: kb-decision-0068 answers §8 and §16, and §9 stays
   open with phase 17.
+  Phase 20's 2026-10-11 pass flipped es-23-adapter-half to Superseded, closed on the record of
+  issue #149 without a decision: FROZEN_DOC_MUSTS gained an adapter-owned disposition.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -726,11 +728,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
   their live lines (`spec/SPECIFICATION.md:9495-9520`, `:9029-9042`), both stale as previously cited.
-- **Open** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
+- **Superseded** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the
   phase 8-11 per-adapter review) both failed to catch; `kb-decision-0058` discharges the port-adjacent
   half only. Added 2026-09-07.
+  **Resolved 2026-10-11** on issue #149, without a decision atom: a third disposition,
+  `AdapterOwned`, points at the four per-adapter `cancellation_statement.rs` targets as ES-23's
+  second row, checked to exist and never run, and the adapter-author pages point at it.
 - **Open** — [`es-18-byte-identical-versus-conformance-reading.md`](../open-questions/es-18-byte-identical-versus-conformance-reading.md)
   (`kb-open-question-es-18-byte-identical-conformance-001`) — whether ES-18's "byte-identical"
   second sentence is amended to the weaker conformance reading its own rules ask, left with

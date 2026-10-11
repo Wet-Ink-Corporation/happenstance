@@ -162,6 +162,26 @@ The same frontier is why the conformance fixture declines
 skip rather than run. That is a property of the *server*, and distinct from
 ES-11 above, which is a property of the *transport* and which the fence meets.
 
+## Minimum supported Rust version
+
+Rust **1.97.1**, the `rust-version` this crate declares
+([ADR-0029](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0029-msrv-raised-to-1-97-1.md)).
+After `1.0.0` the floor rises only in a minor release, never a patch; only to a
+Rust stable at least six months old on the day that minor ships; and always with
+a `CHANGELOG.md` entry naming the old floor, the new one and what forced it
+([ADR-0067](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)).
+
+Before `1.0.0`, a rise ships in a `0.x` minor, which a `"0.x"` requirement never
+resolves across
+([ADR-0037](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0037-msrv-becomes-a-promise-at-0-2-0.md)).
+From `1.0.0`, what keeps a rise from reaching you is your workspace's resolver,
+not this crate's: under `resolver = "3"`, the default for an edition-2024 root,
+or with `resolver.incompatible-rust-versions = "fallback"` set, Cargo prefers
+the newest version whose `rust-version` your lowest `package.rust-version` (or
+your `rustc`, if you declare none) satisfies, and `cargo update` says so by
+printing *to latest Rust 1.xx compatible versions* where resolver 2 prints *to
+latest compatible versions*. On resolver 2, only your lockfile holds you back.
+
 ## Licence
 
 MIT or Apache-2.0, at your option.
