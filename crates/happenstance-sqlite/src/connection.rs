@@ -165,15 +165,16 @@ pub fn configure(connection: &Connection) -> rusqlite::Result<()> {
 /// spend it here (see [`ensure_wal`]), so this loop spends it instead.
 const WAL_CONVERSION_BUDGET: Duration = Duration::from_millis(BUSY_TIMEOUT_MS);
 
-/// The pause after the first refused conversion. Each refusal doubles it, up
-/// to [`WAL_BACKOFF_CAP_MS`].
-const WAL_FIRST_BACKOFF: Duration = Duration::from_millis(1);
+/// The pause after the first refused conversion, in milliseconds. Each refusal
+/// doubles it, up to [`WAL_BACKOFF_CAP_MS`].
+const WAL_FIRST_BACKOFF_MS: u64 = 1;
 
 /// The longest single pause between conversion attempts, in milliseconds.
 ///
 /// Short, because the usual wait is a peer's journal write and header fsync —
 /// milliseconds — and a waiter should notice the peer finishing soon after it
-/// does. Not zero, because a pause that spends no time is what #238 was.
+/// does. Not zero, because the wait is for the peer's I/O, and a pause that
+/// spends no time gives that I/O none.
 const WAL_BACKOFF_CAP_MS: u64 = 25;
 
 /// How many times the WAL conversion is attempted at most, whatever the clock
@@ -183,18 +184,29 @@ const WAL_BACKOFF_CAP_MS: u64 = 25;
 /// finite if the clock does not advance: there is no watchdog anywhere in the
 /// conformance suite and there must not be one, so an unbounded retry would
 /// turn a livelock into a hung job that names no rule. It is set so that it
-/// cannot bind first on a clock that works: the pauses before it, at the cap
-/// alone, outlast the budget (the assertion below), so a refusal at the ceiling
-/// means the clock stopped, not that the peer was slow.
-///
-/// It is not 64 any more. That was the old bound, counted in `yield_now`s that
-/// take microseconds, against a peer's conversion that takes milliseconds on
-/// Windows: the bound ran out before the peer did (#238).
+/// cannot bind first on a clock that works: the pauses before it, less the
+/// ramp, already outlast the budget at the cap alone (the assertion below), so
+/// a refusal at the ceiling means the clock stopped, not that the peer was slow.
 const WAL_CONVERSION_ATTEMPTS: u64 = 1_024;
 
-// The ceiling's pauses, less the doubling ramp up to the cap, outlast the
-// budget, so a working clock always ends the loop before the ceiling does.
-const _: () = assert!((WAL_CONVERSION_ATTEMPTS - 64) * WAL_BACKOFF_CAP_MS > BUSY_TIMEOUT_MS);
+/// How many pauses fall below the cap while the backoff doubles up to it: five
+/// for 1 ms doubling to 25 ms (1, 2, 4, 8 and 16).
+const WAL_BACKOFF_RAMP: u64 = {
+    let mut pause = WAL_FIRST_BACKOFF_MS;
+    let mut below_cap = 0;
+    while pause < WAL_BACKOFF_CAP_MS {
+        pause *= 2;
+        below_cap += 1;
+    }
+    below_cap
+};
+
+// The ceiling allows `WAL_CONVERSION_ATTEMPTS - 1` pauses. Those past the ramp
+// are each a full cap, and they alone outlast the budget, so a working clock
+// always ends the loop before the ceiling does.
+const _: () = assert!(
+    (WAL_CONVERSION_ATTEMPTS - 1 - WAL_BACKOFF_RAMP) * WAL_BACKOFF_CAP_MS > BUSY_TIMEOUT_MS
+);
 
 /// Puts the database into WAL, tolerating the one `SQLITE_BUSY` a busy handler
 /// deliberately will not absorb.
@@ -216,20 +228,18 @@ const _: () = assert!((WAL_CONVERSION_ATTEMPTS - 64) * WAL_BACKOFF_CAP_MS > BUSY
 /// the busy timeout installed first, still saw seven of eight fail instantly.
 /// This loop is what makes all eight succeed.
 ///
-/// # Why the pause spends time
+/// # Why the bound is elapsed time
 ///
-/// This loop used to yield between at most 64 attempts, on the argument that
-/// no clock was then read and the converting connection got the core. The
-/// argument was about the wrong resource. What a refused connection waits for
-/// is a peer's **I/O** — creating and writing its rollback journal while it
-/// holds the reserved lock — and yielding does not make that finish sooner. On
-/// Linux the peer happened to finish inside 64 yields; on Windows's CI runner
-/// it did not, and three of four connections opening one fresh file reported
-/// `database is locked` (#238). A bound counted in instantaneous retries is a
-/// bound in CPU speed, not in the peer's progress.
+/// What a refused connection waits for is a peer's **I/O**: creating and
+/// writing its rollback journal while it holds the reserved lock, then the
+/// header write and fsync. That takes milliseconds, more on some platforms and
+/// file systems than others, and nothing this connection does makes it finish
+/// sooner. A bound counted in retries that take no time measures this
+/// thread's speed, not the peer's progress, so the bound here is measured on a
+/// clock, and every pause spends real time.
 ///
 /// So the loop is bounded by elapsed time, within [`WAL_CONVERSION_BUDGET`],
-/// with a doubling backoff from [`WAL_FIRST_BACKOFF`] capped at
+/// with a doubling backoff from [`WAL_FIRST_BACKOFF_MS`] capped at
 /// [`WAL_BACKOFF_CAP_MS`], and [`WAL_CONVERSION_ATTEMPTS`] as a ceiling that
 /// only a stopped clock reaches. A peer that is genuinely stuck is reported
 /// after about the budget, overshooting by at most one capped pause and one
@@ -280,7 +290,7 @@ impl RetryClock for WallClock {
 /// [`ensure_wal`]'s loop against `clock`.
 fn ensure_wal_within(connection: &Connection, clock: &mut impl RetryClock) -> rusqlite::Result<()> {
     let cap = Duration::from_millis(WAL_BACKOFF_CAP_MS);
-    let mut backoff = WAL_FIRST_BACKOFF;
+    let mut backoff = Duration::from_millis(WAL_FIRST_BACKOFF_MS);
     for _ in 1..WAL_CONVERSION_ATTEMPTS {
         match attempt_wal(connection) {
             Err(err) if is_busy(&err) && clock.elapsed() < WAL_CONVERSION_BUDGET => {
@@ -429,7 +439,8 @@ mod tests {
     /// passed — standing in for a peer whose conversion takes that long.
     struct Scripted {
         now: Duration,
-        pauses: u32,
+        /// Every pause asked for, in order.
+        pauses: Vec<Duration>,
         release_at: Option<Duration>,
         holder: Option<Connection>,
     }
@@ -438,7 +449,7 @@ mod tests {
         fn holding(holder: Connection, release_at: Option<Duration>) -> Self {
             Self {
                 now: Duration::ZERO,
-                pauses: 0,
+                pauses: Vec::new(),
                 release_at,
                 holder: Some(holder),
             }
@@ -451,7 +462,7 @@ mod tests {
         }
 
         fn pause(&mut self, pause: Duration) {
-            self.pauses += 1;
+            self.pauses.push(pause);
             self.now += pause;
             if self.release_at.is_some_and(|at| self.now >= at)
                 && let Some(holder) = self.holder.take()
@@ -501,7 +512,7 @@ mod tests {
         assert!(
             outcome.is_ok(),
             "refused after {} pauses totalling {:?}: {outcome:?}",
-            clock.pauses,
+            clock.pauses.len(),
             clock.now
         );
         assert!(clock.holder.is_none(), "the lock was held until released");
@@ -535,8 +546,31 @@ mod tests {
             clock.now
         );
         assert!(
-            u64::from(clock.pauses) < WAL_CONVERSION_ATTEMPTS - 1,
+            u64::try_from(clock.pauses.len()).expect("a pause count fits u64")
+                < WAL_CONVERSION_ATTEMPTS - 1,
             "the clock, not the ceiling, ended it"
+        );
+    }
+
+    /// The pauses double from one millisecond and then hold at the cap: short
+    /// first, so a peer that finishes in a millisecond or two is noticed at
+    /// once, and bounded, so a waiter checks again every 25 ms however long it
+    /// has waited. The wrong implementations this rejects are a constant pause
+    /// (slow to notice a fast peer) and an uncapped doubling (slow to notice a
+    /// slow one).
+    #[test]
+    fn the_backoff_doubles_from_one_millisecond_and_holds_at_the_cap() {
+        let file = FreshFile::new("backoff-shape");
+        let mut clock = Scripted::holding(reserved(&file), None);
+        let connection = opener(&file);
+
+        ensure_wal_within(&connection, &mut clock).expect_err("the lock is never released");
+
+        let millis: Vec<u128> = clock.pauses.iter().map(Duration::as_millis).collect();
+        assert_eq!(millis.get(..7), Some(&[1, 2, 4, 8, 16, 25, 25][..]));
+        assert!(
+            millis.iter().all(|&pause| pause <= 25),
+            "no pause exceeds the cap: {millis:?}"
         );
     }
 
