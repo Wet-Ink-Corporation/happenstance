@@ -22,8 +22,9 @@ store from it, and call `migrate()` before the first append:
   `SqlStorage::from_state` is shorthand for
   `SqlStorage::new(state.storage().sql())`, the spelling the README's *Use*
   section shows. Both of the store's constructors, this one and `namespaced`
-  below, take the object's storage, and nothing in the crate makes storage of
-  its own, because a real Durable Object's cannot be (the README, *Use*).
+  below, take the object's storage by injection, and nothing in the crate makes
+  storage of its own (`CloudflareEventStore::new`'s and `SqlStorage::new`'s own
+  documentation).
 - **Migrate.** `migrate()` creates the schema with `CREATE … IF NOT EXISTS`
   throughout, so it is safe to call every time the object starts. Its first run
   also mints this object's `StoreId` and keeps it in the object's own tables,
@@ -39,11 +40,16 @@ store from it, and call `migrate()` before the first append:
 A clone of the store is a second handle onto the same log, not a copy of it:
 cloning a `SqlStorage` aliases the object's storage (its own documentation).
 
-For a class that does all of this, read
-[the conformance harness's object](../harness/workerd/src/object.rs). It builds
-the adapter from `SqlStorage::from_state`, the way a production class does
-(`harness/workerd/README.md`, *How it fits together*). It is a test harness and is
-never published, so take the construction from it and leave the routing.
+The conformance harness has a working class, split across two files. It is a
+test harness and is never published, so read it for shape and leave the
+routing:
+
+- [Its object](../harness/workerd/src/object.rs) is the class: a struct holding
+  the `State` it was constructed with, and a `fetch` that handles each request.
+- [Its fixture](../harness/workerd/src/fixture.rs) is where a store is built:
+  `SqlStorage::from_state(state)`, then `CloudflareEventStore::namespaced`, then
+  `migrate()`. It uses `namespaced` rather than `new` because it keeps one log
+  per fixture instance in one object, which the next section explains.
 
 ## Keep several logs in one object
 
@@ -60,9 +66,9 @@ own documentation, which carries a compiled `no_run` example).
 becomes part of a SQL identifier. It accepts lowercase ASCII letters, digits and
 `_`, starting with a letter, not beginning `sqlite`, and at most
 `TableNamespace::MAX_LEN` bytes, which is 64. A refused name comes back as an
-`InvalidTableNamespace` naming the first rule it breaks (`TableNamespace`'s own
-documentation, *The alphabet*). That documentation suggests one log per tenant;
-the `workerd` harness uses it to give each fixture instance its own log in one
+`InvalidTableNamespace` naming the first rule it breaks (`TableNamespace::new`'s
+*Errors*). `TableNamespace`'s documentation suggests one log per tenant; the
+`workerd` harness uses it to give each fixture instance its own log in one
 object.
 
 ## Keep the store on the object's turn
@@ -73,11 +79,10 @@ value behind an `Rc`, and `Rc` is `!Send` whatever it holds (the crate root,
 `SendEventStore` (*What this crate is for*), and its error type is `!Send` too
 ([ES-6](../spec/SPECIFICATION.md#es-6--error-carries-no-send-or-sync-bound-and-the-strength-is-a-marker)).
 
-Write the code that decides generic over `EventStore`, and import only that name
-in the module
+Write the code that decides generic over `EventStore`
 ([ES-1](../spec/SPECIFICATION.md#es-1--one-definition-two-flavours-and-generic-code-binds-the-weaker-one)).
-Then the same function runs in the object and in a host test against the memory
-store. The program below shows that with a stand-in, because this page's examples
+What that buys here is one function that runs in the object and, unchanged,
+against the memory store in a host test. The program below shows that with a stand-in, because this page's examples
 cannot depend on the Cloudflare crate. `ObjectLocal` holds its storage behind an
 `Rc` and implements only the bare flavour, which is the shape of
 `CloudflareEventStore`:
@@ -255,12 +260,19 @@ reported as `CloudflareEventStoreError::StoredPosition` rather than narrowed (th
 README, *The limits this store declares*).
 
 **A failed batch.** The object's turn commits when the handler returns normally,
-and the store turns every throw into an `Err` and returns normally. So the turn
-does not undo a failed batch; the store's own write path does
-([ES-18](../spec/SPECIFICATION.md#es-18--atomicity); the `event_store` module,
-*Why the whole object is one consistency boundary*). If clearing the failed rows
-also fails, `append` reports `CloudflareEventStoreError::PartialBatch`. That
-variant's own documentation says the batch did not land and a retry is safe.
+and the store turns every throw into an `Err` and returns normally, so the turn
+does not undo a failed batch. All-or-none rests on the write path instead
+([ES-18](../spec/SPECIFICATION.md#es-18--atomicity)). A batch's rows become
+events only at its last statement, which stamps every row with its event
+identity at once. A batch that fails before that stamp leaves rows no read
+treats as events, so nothing of it is visible. The store then sweeps those rows
+away, but the sweep is cleanup and not what makes the batch all-or-none (the
+`event_store` module, *Why the whole object is one consistency boundary*). If
+the sweep itself fails, `append` reports
+`CloudflareEventStoreError::PartialBatch`, and that variant's own documentation
+says the batch did not land and a retry is safe. The crate root's older wording,
+which says the opposite, is tracked in
+[issue #257](https://github.com/Wet-Ink-Corporation/happenstance/issues/257).
 
 **A dropped append.** `append` contains no `.await`, so its future has run to
 completion by the time its first poll returns, and dropping it cannot cancel

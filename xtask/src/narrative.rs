@@ -211,6 +211,21 @@ mod rebuild_a_read_model {
     #![doc = include_str!("../../docs/rebuild-a-read-model.md")]
 }
 
+// The store how-to. Three fences, and none names an adapter crate, because no
+// adapter is a dependency of this target. The first runs one function bound on
+// the bare flavour against the reference store, a gappy store and a bare-only
+// store, and asserts that the count it reads agrees on all three while the
+// position distance does not. The second has a `SendEventStore` bound refuse
+// the bare-only store (E0277), and the third is its compiling control: the same
+// bound accepting the reference store, because stable rustdoc does not check a
+// `compile_fail` fence's error code (RS-62-1). Binding the first on
+// `SendEventStore`, or loosening the second to `EventStore`, turns this module
+// red.
+#[cfg(doctest)]
+mod choose_a_store {
+    #![doc = include_str!("../../docs/choose-a-store.md")]
+}
+
 // The Durable Object how-to. Three fences, and none names the Cloudflare crate,
 // because it is not a dependency of this target. The first is a stand-in with
 // that store's shape, an `Rc` over the memory store implementing only the bare
