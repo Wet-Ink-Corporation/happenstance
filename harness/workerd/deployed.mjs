@@ -10,7 +10,7 @@
 // Strict, like the local leg: it exits non-zero if any rule fails, if a rule's
 // name is unknown to the dispatcher, or if fewer rules ran than were listed.
 import { writeFileSync } from "node:fs";
-import { callPastPropagation, isPlatformMiss } from "./platform-miss.mjs";
+import { callPastPropagation, failureLine, isPlatformMiss } from "./platform-miss.mjs";
 
 const [base, runId] = process.argv.slice(2);
 const token = process.env.HARNESS_TOKEN;
@@ -32,7 +32,7 @@ const past = (object, route) =>
 
 const listing = await past(`${runId}-rules`, "rules");
 if (listing.status !== 200) {
-  console.error(`listing the rules failed: ${listing.status} ${listing.body}`);
+  console.error(`listing the rules failed: ${failureLine(listing.status, listing.body)}\n${listing.body}`);
   process.exit(1);
 }
 const rules = listing.body.split("\n").filter((name) => name.length > 0);
@@ -54,7 +54,7 @@ for (const rule of rules) {
   if (status === 200) {
     console.log(`ok   ${rule}${body.startsWith("skipped\n") ? `  (${body.slice(8)})` : ""}`);
   } else {
-    console.log(`FAIL ${rule}  [${status}] ${body.split("\n")[0]}`);
+    console.log(`FAIL ${rule}  ${failureLine(status, body)}`);
     failures.push({ rule, status, body });
   }
 }
@@ -66,7 +66,7 @@ writeFileSync("deployed-failures.json", JSON.stringify(failures, null, 2));
 
 console.log(`executed ${executed} of ${rules.length}; ${failures.length} failed`);
 if (probe.status !== 200) {
-  console.error(`the probe failed: ${probe.status}`);
+  console.error(`the probe failed: ${failureLine(probe.status, probe.body)}`);
   process.exit(1);
 }
 if (executed !== rules.length || failures.length > 0) {

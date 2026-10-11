@@ -56,3 +56,23 @@ export async function callPastPropagation(call, object, route, { pause, log }) {
   }
   return result;
 }
+
+// How the deployed leg prints a failure it does not retry: the status, then the
+// first line of the body, which is how a rule's own failure reports itself. An
+// HTML page (a body that opens with markup) is the edge's answer rather than
+// the harness's, and its first line is a doctype that says nothing, so it is
+// named by its `<title>` instead, whitespace collapsed and entities left as
+// sent. PR #51's deployed run met one such 500 and printed only
+// `<!DOCTYPE html>`; this is what the next one prints. Naming a page does not
+// make it retryable: only `isPlatformMiss` decides that, so the strict failure
+// list stays strict.
+export function failureLine(status, body) {
+  if (body.trimStart().startsWith("<")) {
+    const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body);
+    const text = title === null ? "" : title[1].replace(/\s+/g, " ").trim();
+    if (text.length > 0) {
+      return `[${status}] ${text}  (HTML page)`;
+    }
+  }
+  return `[${status}] ${body.split("\n")[0]}`;
+}
