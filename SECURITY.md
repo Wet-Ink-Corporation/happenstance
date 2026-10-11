@@ -79,7 +79,7 @@ backporting: a fix lands in the next release, and the release before it is not
 patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
 upgrade.
 
-`0.2.0` was the first stable release and `0.3.2` is current; what each promises
+`0.2.0` was the first stable release and `0.4.0` is current; what each promises
 is worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
 `0.2.0`. `ProjectionStore` was **not** at `0.2.0` — it shipped behind an
@@ -92,9 +92,8 @@ violation of this table.
 
 | Version | Supported |
 |---|---|
-| `0.3.2` | ✅ current |
-| `0.3.1` | ✅ supported; `0.3.2` moved a dev-dependency in `Cargo.lock` and no shipped code differs |
-| `0.3.0` | ✅ supported; `0.3.1` changed only three crate descriptions |
+| `0.4.0` | ✅ current |
+| `0.3.x` | ❌ superseded by `0.4.0`, a breaking release; [`docs/upgrading-to-0-4.md`](docs/upgrading-to-0-4.md) is the way across |
 | `0.2.0` | ❌ superseded by `0.3.0`; its `unstable-projection` surface was exempt and has moved |
 | `0.2.0-alpha.*` | ❌ yanked at the `0.2.0` release |
 | anything earlier | ❌ |

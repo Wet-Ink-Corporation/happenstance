@@ -260,6 +260,13 @@ script-free page using system fonts, written for the owner rather than for a con
 the report cites: nine reader maps, eight dimension assessments, the verifier votes
 and the effort model.
 
+[`phase-20-confirmation-2026-10-11.md`](phase-20-confirmation-2026-10-11.md)
+(2026-10-11, pinned to `c7b60e6`) has the same lifecycle. It is the confirmation
+record #150 asked for: every acceptance criterion of HS-P0020, HS-P0021 and
+HS-P0022, 214 in all, checked against the tree, and the narrative checks watched
+failing on deliberately broken pages. It decides nothing; the gaps it found are
+filed as #232 – #236.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`
