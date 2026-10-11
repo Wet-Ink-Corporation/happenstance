@@ -928,7 +928,7 @@ mod tests {
         let link = format!("[{}]({href})", row.link_text);
         let mut found = Vec::new();
 
-        if !row.destination.contains(&format!("docs/{href}")) {
+        if !row.destination.ends_with(&format!(" docs/{href}")) {
             found.push(format!("{id}: the row does not name docs/{href}"));
         }
         if !bridge.lines().any(|line| line.trim_end() == heading) {
@@ -1034,6 +1034,8 @@ mod tests {
         wrong_fragment.destination = "docs/carry-your-invariant.md#tag-query-fold-guard";
         let mut wrong_page = *row;
         wrong_page.destination = "docs/first-encounter.md#where-your-streams-went";
+        let mut suffixed = *row;
+        suffixed.destination = "docs/carry-your-invariant.md#where-your-streams-went-1";
         for (wrong, reason, found) in [
             (
                 "renamed heading",
@@ -1064,6 +1066,11 @@ mod tests {
                 "row names another page",
                 "does not name",
                 landing_problems(&wrong_page, heading, &origin, &bridge, registrations),
+            ),
+            (
+                "row names a duplicate heading's fragment",
+                "does not name",
+                landing_problems(&suffixed, heading, &origin, &bridge, registrations),
             ),
             (
                 "unregistered",
