@@ -41,6 +41,8 @@ mod support;
 use happenstance_core::{
     Authority, Checkpoint, ProjectionId, ProjectionProbe, ProjectionStore, SequencePosition,
 };
+use happenstance_postgres::error::PostgresProjectionStoreError;
+use happenstance_postgres::projection_store::PgParam;
 use happenstance_postgres::sqlx;
 use happenstance_testkit::{ProjectionFixture, RuleOutcome};
 use support::LivePostgresProjectionFixture;
@@ -200,6 +202,85 @@ async fn a_refused_statement_poisons_the_batch_and_commit_says_so() {
 
     // The store is still usable afterwards: the poisoned connection went back
     // to the pool rolled back, which is PS-7 for a batch that held a resource.
+    let mut fresh = store.begin().await.unwrap();
+    store.probe_write(&mut fresh, "after", 2).await.unwrap();
+    store
+        .commit(fresh, &id, SequencePosition::FIRST, Authority::Live)
+        .await
+        .unwrap();
+    assert_eq!(store.probe_read("after").await.unwrap(), Some(2));
+}
+
+/// A surplus value is refused at `execute`, before it reaches the server, and the
+/// batch can then no longer commit (ADR-0084).
+///
+/// The server never saw the refused statement, so it has not aborted the
+/// transaction; the adapter must. This rejects a check that refuses the statement
+/// locally but leaves the transaction committable — under which `commit` would
+/// record the probe write and advance the checkpoint past a statement that never
+/// ran.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn a_surplus_value_is_refused_at_execute_and_the_batch_cannot_commit() {
+    let fixture = LivePostgresProjectionFixture::new();
+    let store = fixture.connect().await;
+    let id = ProjectionId::from_static("arity-live");
+
+    let mut batch = store.begin().await.unwrap();
+    store.probe_write(&mut batch, "ok", 1).await.unwrap();
+
+    let refused = batch
+        .execute(
+            "DELETE FROM projection_probe WHERE k = $1 /* arity-surplus */",
+            [PgParam::text("ok"), PgParam::text("unused")],
+        )
+        .await
+        .expect_err("a surplus value must be refused at `execute`");
+    assert!(
+        matches!(
+            refused,
+            PostgresProjectionStoreError::ParameterCount {
+                statement: 1,
+                declared: 1,
+                supplied: 2,
+                ..
+            }
+        ),
+        "{refused:?}"
+    );
+
+    let after = batch
+        .execute(
+            "DELETE FROM projection_probe WHERE k = $1",
+            [PgParam::text("ok")],
+        )
+        .await
+        .expect_err("a batch with a refused statement accepts no more");
+    assert!(
+        matches!(after, PostgresProjectionStoreError::Poisoned),
+        "{after:?}"
+    );
+
+    let refused = store
+        .commit(batch, &id, SequencePosition::FIRST, Authority::Live)
+        .await
+        .expect_err("a batch with a refused statement cannot be committed");
+    assert!(
+        matches!(
+            refused,
+            happenstance_core::CommitError::Store(PostgresProjectionStoreError::Poisoned)
+        ),
+        "{refused:?}"
+    );
+
+    assert_eq!(
+        store.probe_read("ok").await.unwrap(),
+        None,
+        "the statement issued before the refusal was rolled back with the batch"
+    );
+    assert_eq!(store.checkpoint(&id).await.unwrap(), Checkpoint::NeverRun);
+
+    // The connection went back to the pool rolled back, so the store is usable.
     let mut fresh = store.begin().await.unwrap();
     store.probe_write(&mut fresh, "after", 2).await.unwrap();
     store

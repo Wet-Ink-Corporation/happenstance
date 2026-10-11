@@ -55,7 +55,8 @@ The `0.4.0` release (epic #61) is the owner's. **The owner decided on 2026-10-10
 (`wi-f267f3`) that both pending breaks land first**, so the release waits on two PRs:
 
 1. **#89** — ADR-0084's Postgres parameter-count check: refuse surplus parameters on
-   a projection batch. It fills the trace table's one pending row.
+   a projection batch. Built in its PR: the trace table's one pending row is now H12,
+   and the PR waits for the owner's review and merge.
 2. **#78** — `happenstance-neon` stops exporting `ProbeThenWriteStore`.
 3. Then #96 (the release PR: trace table, heading, install lines), #97 (tag and
    publish) and #87.

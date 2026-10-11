@@ -103,6 +103,8 @@ use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::error::PostgresProjectionStoreError;
 
+pub(crate) mod placeholder;
+
 /// [`Authority::Live`] as it is stored.
 ///
 /// Text rather than an integer or a `CREATE TYPE`. The value is read by a human
@@ -249,6 +251,42 @@ impl PostgresProjectionBatch {
     /// projection never replays those events and nothing re-derives the rows it
     /// corrupted. [`push_raw_sql`](Self::push_raw_sql) is the escape hatch, and
     /// it is separately named so that reaching for it is a decision.
+    ///
+    /// A statement written in source compiles:
+    ///
+    /// ```
+    /// use happenstance_postgres::projection_store::{PgParam, PostgresProjectionBatch};
+    ///
+    /// fn queue(batch: &mut PostgresProjectionBatch, account: &str) {
+    ///     batch.push(
+    ///         "DELETE FROM balance WHERE account = $1",
+    ///         [PgParam::text(account)],
+    ///     );
+    /// }
+    /// ```
+    ///
+    /// and the same statement with the value interpolated does not:
+    ///
+    /// ```compile_fail,E0308
+    /// use happenstance_postgres::projection_store::{PgParam, PostgresProjectionBatch};
+    ///
+    /// fn queue(batch: &mut PostgresProjectionBatch, account: &str) {
+    ///     batch.push(
+    ///         format!("DELETE FROM balance WHERE account = '{account}'"),
+    ///         core::iter::empty::<PgParam>(),
+    ///     );
+    /// }
+    /// ```
+    ///
+    /// # Parameter count
+    ///
+    /// The values must match the highest `$n` that `sql` uses, one for one.
+    /// Nothing counts them here. At `commit` (and `reset`) the batch counts them
+    /// before binding, and refuses a mismatch in either direction as
+    /// [`CommitError::Store`] (or [`ResetError::Store`]) carrying
+    /// [`ParameterCount`](PostgresProjectionStoreError::ParameterCount). Neither
+    /// the batch's statements nor the checkpoint move. The server alone would
+    /// refuse only too few values (ADR-0084).
     pub fn push(&mut self, sql: &'static str, params: impl IntoIterator<Item = PgParam>) {
         self.statements.push(PendingStatement {
             sql: sql.into(),
@@ -261,6 +299,12 @@ impl PostgresProjectionBatch {
     /// The honest case is an `IN (…)` list sized by the number of parameters.
     /// Everything [`push`](Self::push) says about binding still applies: values
     /// belong in `params`, never in `sql`.
+    ///
+    /// # Parameter count
+    ///
+    /// As for [`push`](Self::push). A computed `IN (…)` list is where a count
+    /// goes wrong: build the placeholders and the values from the same
+    /// collection.
     pub fn push_raw_sql(&mut self, sql: impl Into<Box<str>>, params: Vec<PgParam>) {
         self.statements.push(PendingStatement {
             sql: sql.into(),
@@ -280,6 +324,20 @@ impl PostgresProjectionBatch {
     /// read-model change would replay them forever.
     pub fn is_empty(&self) -> bool {
         self.statements.is_empty()
+    }
+
+    /// Every queued statement's value count against its text, in queue order.
+    ///
+    /// Run before the transaction opens, which is what makes "a refused batch
+    /// moves nothing" structural: no statement reaches the server, so no
+    /// wrong-arity statement is ever prepared and cached on a pooled connection.
+    fn check_parameter_counts(&self) -> Result<(), PostgresProjectionStoreError> {
+        self.statements
+            .iter()
+            .enumerate()
+            .try_for_each(|(index, statement)| {
+                placeholder::check_parameter_count(index, &statement.sql, statement.params.len())
+            })
     }
 }
 
@@ -477,6 +535,10 @@ impl SendProjectionStore for PostgresProjectionStore {
     /// * [`CommitError::CheckpointRegression`] if `position` is below the one
     ///   recorded — equal is accepted, because a batch that wrote nothing new
     ///   still records that its events were considered;
+    /// * [`CommitError::Store`] carrying
+    ///   [`ParameterCount`](PostgresProjectionStoreError::ParameterCount) if a
+    ///   statement's values do not match the highest `$n` its text uses,
+    ///   decided before the transaction opens;
     /// * [`CommitError::Store`] if the driver or the server failed.
     async fn commit(
         &self,
@@ -490,6 +552,8 @@ impl SendProjectionStore for PostgresProjectionStore {
             // structural rather than something to remember.
             return Err(CommitError::ForeignBatch);
         }
+
+        batch.check_parameter_counts().map_err(CommitError::Store)?;
 
         let stored_position = position_to_row(position).map_err(CommitError::Store)?;
 
@@ -556,6 +620,10 @@ impl SendProjectionStore for PostgresProjectionStore {
     ///
     /// * [`ResetError::ForeignBatch`] if `batch` was begun on a different store
     ///   instance;
+    /// * [`ResetError::Store`] carrying
+    ///   [`ParameterCount`](PostgresProjectionStoreError::ParameterCount) if a
+    ///   statement's values do not match the highest `$n` its text uses,
+    ///   decided before the transaction opens;
     /// * [`ResetError::Store`] if the driver or the server failed.
     ///
     /// [`ResetError::Refused`] is never returned: this store holds no protection
@@ -569,6 +637,8 @@ impl SendProjectionStore for PostgresProjectionStore {
         if batch.stamp != self.stamp {
             return Err(ResetError::ForeignBatch);
         }
+
+        batch.check_parameter_counts().map_err(ResetError::Store)?;
 
         let mut transaction = self
             .pool
@@ -703,6 +773,7 @@ impl happenstance_core::ProjectionProbe for PostgresProjectionStore {
 #[cfg(test)]
 mod tests {
     use super::{PgParam, PostgresProjectionBatch, PostgresProjectionStore, mint_stamp};
+    use crate::error::PostgresProjectionStoreError;
     use happenstance_core::ProjectionStore;
 
     /// The bare flavour must come free from the `Send` one, at this concrete
@@ -781,6 +852,30 @@ mod tests {
         batch.push("SELECT $1", [PgParam::text("x")]);
         assert!(!batch.is_empty());
         assert_eq!(batch.len(), 1);
+    }
+
+    /// The first statement whose value count is wrong is the one reported, by
+    /// its position in queue order — whichever direction it is wrong in.
+    #[test]
+    fn a_batch_reports_the_first_statement_whose_count_is_wrong() {
+        let mut batch = PostgresProjectionBatch::stamped(1);
+        assert!(matches!(batch.check_parameter_counts(), Ok(())));
+
+        batch.push("DELETE FROM t WHERE k = $1", [PgParam::text("kept")]);
+        batch.push(
+            "DELETE FROM t WHERE k = $1",
+            [PgParam::text("k"), PgParam::text("unused")],
+        );
+        batch.push("DELETE FROM t WHERE k = $1 OR k = $2", [PgParam::text("k")]);
+
+        assert!(matches!(
+            batch.check_parameter_counts(),
+            Err(PostgresProjectionStoreError::ParameterCount {
+                statement: 1,
+                declared: 1,
+                supplied: 2,
+            })
+        ));
     }
 
     /// A null carries a type, because Postgres parameters are typed.

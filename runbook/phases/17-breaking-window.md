@@ -891,9 +891,9 @@ the ES-11 fence spike on Neon, and whether ES-17's measurement changes `append`.
     - the breaking open questions;
     - the `workerd` sibling job (its exit criterion was already met);
     - the clause follow-ups (VT-10, ES-11 and ES-12 are all frozen).
-  - **One exit criterion is open:** `0.4.0` released. The trace table carries
-    one pending row, ADR-0084's Postgres parameter-count check, which is
-    accepted and not yet built.
+  - **One exit criterion is open:** `0.4.0` released. The trace table's one
+    pending row, ADR-0084's Postgres parameter-count check, is built as H12
+    (#89, `wi-7e9a97`) and waits for the owner's merge.
   - **The owner's, outstanding:**
     - re-add `conformance against a live Neon endpoint` to the `Protect main`
       ruleset now that the fence is on `main` (ADR-0087 D8, `wi-0f1291`);

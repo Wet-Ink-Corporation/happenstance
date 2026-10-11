@@ -50,6 +50,27 @@ not the same as what a user needed to be told.
   copy), and a write through it becomes `push_raw_sql`. `SqlStatement` is unchanged. The release is the
   owner's phase 17 default; ADR-0084, proposed in PR #44, records the seam.
 
+- **`happenstance-postgres` (`projection-store` feature): a projection statement
+  whose value count is not the highest `$n` its text uses is refused before it is
+  sent.** The buffered `PostgresProjectionBatch` counts every queued statement at
+  `commit` and `reset`, before the transaction opens, and refuses a mismatch in
+  either direction as `CommitError::Store` / `ResetError::Store` carrying
+  `PostgresProjectionStoreError::ParameterCount { statement, declared, supplied }`;
+  neither the read model nor the checkpoint moves. The live `LivePostgresBatch`
+  refuses at `execute` and `execute_raw_sql`, sends nothing, and then answers every
+  later `execute`, and `commit` and `reset`, with `Poisoned`, so it can only be
+  rolled back. Before this, the server alone refused only too few values: a
+  surplus value was accepted on a connection preparing the text for the first
+  time and committed, and the statement that connection cached then refused later
+  correct calls of the same text. The count skips quoted strings, quoted
+  identifiers, dollar-quoted bodies and nested comments, and a test checks it
+  against the server's own. To migrate: nothing, for a statement with the right
+  count; a statement that relied on a surplus value now fails, so drop the extra
+  value. Recorded by
+  [ADR-0084](.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md) and
+  landed before `0.4.0` by the owner's decision `wi-7e9a97`, which `wi-f267f3`
+  confirms.
+
 - **BREAKING (`happenstance-neon`): `SqlTransport` has a second required method,
   `reads_settled`, and `NeonEventStore::append` waits on it.** It resolves once
   every read-only request the transport dispatched before the call has been
@@ -348,6 +369,11 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-postgres`: `PostgresProjectionStoreError::ParameterCount` and
+  `PostgresProjectionStoreError::Poisoned`**, two variants on the
+  `#[non_exhaustive]` enum, for the parameter-count refusal under *Changed*.
+  `ParameterCount` is itself `#[non_exhaustive]`: match it with `..`.
+
 - **`happenstance-neon`: `ReadLedger`, `ReadTicket` and `ReadsSettled`**, in
   `happenstance_neon::transport` and re-exported from the crate root: the
   bookkeeping a transport needs for `SqlTransport::reads_settled`.
@@ -557,15 +583,14 @@ is not part of `0.4.0` until the owner accepts it.
 | H9 | `happenstance` | the same `ProjectionId::new`, through the facade's re-export | hand, as H8 | ADR-0082 | Changed |
 | H11 | `happenstance-sqlite`, `happenstance-postgres` | a store runs on the runtime it is called on, preferring `Handle::try_current()` over the handle it captured (behaviour) | hand | [ADR-0081](.kb/decisions/0081-a-store-hops-onto-the-runtime-it-is-called-on.md) | Changed |
 | H10 | `happenstance-testkit` | a new conformance rule, `projection_ids_round_trip_by_bytes` (PS-39), which an adapter that keys a checkpoint lossily now fails (behaviour; CF-32) | hand | ADR-0082 | Added |
+| H12 | `happenstance-postgres` | a projection statement whose value count is not the highest `$n` in its text is refused before it is sent: at `commit`/`reset` (buffered) and at `execute` (live, which then cannot commit); a surplus value could commit before (behaviour) | hand | [ADR-0084](.kb/decisions/0084-the-projection-batch-sql-seam-is-final.md), accepted 2026-10-08; landed before `0.4.0` by `wi-7e9a97` (confirmed by `wi-f267f3`) | Changed |
 
 **Not a break, recorded so the absence is a decision:** `EventStore::append`
 keeps `&[Event]` ([ADR-0080](.kb/decisions/0080-append-keeps-a-borrowed-batch.md));
-`AppendError::Busy` is an added variant on a `#[non_exhaustive]` enum (Added).
+`AppendError::Busy` is an added variant on a `#[non_exhaustive]` enum (Added);
+so are `PostgresProjectionStoreError::ParameterCount` and `::Poisoned` (Added).
 
-**Pending — each joins this table when its change lands:**
-
-- `happenstance-postgres`: a projection batch's parameter count is checked at
-  `commit` (behaviour; ADR-0084, accepted 2026-10-08; the check is owed).
+**Pending:** none. ADR-0084's Postgres count check joined as H12.
 
 Every tool row and every hand row has a decision, and no break was found without
 one.
