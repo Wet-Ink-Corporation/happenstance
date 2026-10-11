@@ -39,14 +39,16 @@ use crate::spec_trace::workspace_root;
 /// Every page the site renders from `docs/`, in reading order.
 ///
 /// The order is the application author's path: run something, see the whole
-/// program, carry it into your own domain, then the reasoning behind the write,
-/// then the adapter author's entry point, and last the upgrade guide, which
-/// only a reader already on an older release needs. It is written here rather than
-/// derived because an order is a decision, and [`check_coverage`] is what keeps
-/// the list from falling behind the tree.
+/// program, set it against the aggregate you arrived with, carry it into your
+/// own domain, then the reasoning behind the write, then the adapter author's
+/// entry point, and last the upgrade guide, which only a reader already on an
+/// older release needs. It is written here rather than derived because an order
+/// is a decision, and [`check_coverage`] is what keeps the list from falling
+/// behind the tree.
 const READING_ORDER: &[&str] = &[
     "first-encounter.md",
     "read-the-worked-example.md",
+    "boundary-not-aggregate.md",
     "carry-your-invariant.md",
     "append-conditions.md",
     "adapter-reading-order.md",
