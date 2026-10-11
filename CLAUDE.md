@@ -63,8 +63,8 @@ examples/rebuilding-read-models/ operating derived state. four views over one lo
                                  field the log does not carry, which stalls only itself.
 examples/handles-and-quotas/     the boundary with no aggregate. a unique name over an
                                  unbounded set, a per-owner quota, and an idempotent
-                                 delivery — three scopes, one append condition. the only
-                                 place command-retry idempotency is written down.
+                                 delivery — three scopes, one append condition. the running
+                                 program behind the how-to docs/retry-a-command.md.
 examples/telemetry-across-codecs/
                                  the log that outlived its encoding and its schema. JSON and
                                  postcard payloads read by one fold, and a v1 event shape

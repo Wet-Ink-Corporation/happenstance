@@ -17,9 +17,24 @@ admitted. The second keeps a redelivery from applying a command twice.
 
 ## Bound the loop's retry
 
-Pass `commit` a `Retry`. It has no default (`retry_has_no_default`), so the
-worst case is a number you wrote down. Spell it as a constant: `Retry::attempts` is a `const fn`, so a zero
-fails when the program is compiled, not when it runs.
+Pass `commit` (or the ungated `commit_with`) a `Retry`. It has no default
+(`retry_has_no_default`), so the worst case is a number you wrote down. Spell it
+as a constant, as
+[the canonical example](../examples/course-subscriptions/src/main.rs) spells
+`ATTEMPTS`: `Retry::attempts` is a
+`const fn` taking a `NonZeroU32`, so a zero is a compile error, `E0080`, and
+not a failure at run time:
+
+```rust,compile_fail,E0080
+use core::num::NonZeroU32;
+use happenstance::Retry;
+
+const RETRY: Retry = Retry::attempts(NonZeroU32::new(0).unwrap());
+
+fn main() {
+    let _ = RETRY;
+}
+```
 
 The loop retries two answers from the store, and both count against the same
 bound:
@@ -51,11 +66,7 @@ the last refusal (`exhaustion_is_bounded_and_named`,
 stayed busy call for different replies:
 
 ```rust
-use core::num::NonZeroU32;
-use happenstance::{AppendError, CommandError, ConditionViolated, Retry};
-
-// What you hand `commit` as its third argument. Zero does not compile.
-const RETRY: Retry = Retry::attempts(NonZeroU32::new(3).unwrap());
+use happenstance::{AppendError, CommandError, ConditionViolated};
 
 /// What the client that sent the command is told.
 #[derive(Debug, PartialEq, Eq)]
@@ -99,7 +110,8 @@ fn main() {
     };
     assert_eq!(reply(&hot), Reply::Contended);
 
-    let lost: Error = CommandError::Append(AppendError::Store(locked()));
+    let reset = std::io::Error::other("connection reset after COMMIT");
+    let lost: Error = CommandError::Append(AppendError::Store(reset));
     assert_eq!(reply(&lost), Reply::Unknown);
 }
 ```
@@ -116,62 +128,92 @@ Give every delivery of a command an id that the client chooses and sends again
 when it retries. Then do three things with it:
 
 1. **Tag** every event the command writes with the request id.
-2. **Query** for it: add one item for this request's events to the
-   boundary, beside the items your rule already needs.
+2. **Read** it: with `commit`, give the request a decision model of its own,
+   scoped to the request tag, in the boundary tuple beside your rule's models.
 3. **Fold** it first: if the read found this request's events, the command has
-   already been applied, and you decide nothing.
+   already been applied, and the decision appends nothing.
+
+Put the tag on the command's own events and nowhere else. It is unique per
+delivery, the highest-cardinality tag you will write, and that is the cost
+[ES-24](../spec/SPECIFICATION.md#es-24--resolving-an-unknown-outcome) weighs
+when it rejects an identity tag on every event.
 
 The program below is a deposit, which has no natural key. Two deposits of the
 same amount into the same account are indistinguishable in the domain, so only
-the request can tell a redelivery from a second deposit. Two deliveries of one
-request read before either appends, which is the race a client retry produces:
+the request can tell a redelivery from a second deposit. `attempt` is one pass
+of the command loop, spelled with the append condition directly so you can see
+each step. Two deliveries of one request race, the loser is retried, and then
+the client resends once more:
 
 ```rust
 use happenstance::{AppendCondition, AppendError, Event, EventStore, Query};
 use happenstance::{MemoryEventStore, QueryItem, Tags, read_decision_model};
 
+type Failure = Box<dyn core::error::Error>;
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn core::error::Error>> {
+async fn main() -> Result<(), Failure> {
     let store = MemoryEventStore::new();
     let account = Tags::from_pairs([("account", "a-1")])?;
     let request = Tags::from_pairs([("request", "r-9")])?;
-    // Your rule: no deposit into a closed account.
-    let closed = QueryItem::new(["AccountClosed"], account)?;
-    // The step this page adds: this delivery's own events.
-    let delivered = QueryItem::new(["Deposited"], request.clone())?;
-    let boundary = Query::from_items([closed, delivered])?;
+    // Your rule's boundary: the account, closed or not, and its deposits.
+    let types = ["AccountClosed", "Deposited"];
+    let boundary = Query::from_items([QueryItem::new(types, account)?])?;
     let tags = Tags::from_pairs([("account", "a-1"), ("request", "r-9")])?;
     let deposit = Event::new("Deposited", &b"{}"[..])?.with_tags(tags);
 
-    // Two deliveries of r-9, and both read before either appends.
-    let (_, first_read) = read_decision_model(&store, &boundary).await?;
-    let (_, second_read) = read_decision_model(&store, &boundary).await?;
-    let first = AppendCondition::new(boundary.clone()).after_opt(first_read);
-    store.append(&[deposit.clone()], Some(&first)).await?;
-    let second = AppendCondition::new(boundary.clone()).after_opt(second_read);
-    let refused = store.append(&[deposit], Some(&second)).await;
+    // Two deliveries of r-9 race: the second reads before the first lands.
+    let (_, stale) = read_decision_model(&store, &boundary).await?;
+    assert_eq!(attempt(&store, &boundary, &request, &deposit).await?, 1);
+    let guard = AppendCondition::new(boundary.clone()).after_opt(stale);
+    let refused = store.append(&[deposit.clone()], Some(&guard)).await;
     assert!(matches!(refused, Err(AppendError::ConditionViolated(_))));
 
-    // The retry reads again, and its fold finds r-9 already applied.
-    let (seen, _) = read_decision_model(&store, &boundary).await?;
-    let applied = seen.iter().any(|event| event.tags().contains_all(&request));
-    assert!(applied, "the second delivery decides nothing");
+    // The loser's retry, then a client's late resend. Both read r-9.
+    assert_eq!(attempt(&store, &boundary, &request, &deposit).await?, 0);
+    assert_eq!(attempt(&store, &boundary, &request, &deposit).await?, 0);
     assert_eq!(store.snapshot().len(), 1, "one deposit, not two");
     Ok(())
 }
+
+/// One attempt: read, fold, decide, and append under the read.
+async fn attempt(
+    store: &MemoryEventStore,
+    boundary: &Query,
+    request: &Tags,
+    deposit: &Event,
+) -> Result<usize, Failure> {
+    let (seen, upto) = read_decision_model(store, boundary).await?;
+    // The request first: if r-9 already landed, append nothing.
+    if seen.iter().any(|event| event.tags().contains_all(request)) {
+        return Ok(0);
+    }
+    let guard = AppendCondition::new(boundary.clone()).after_opt(upto);
+    store.append(&[deposit.clone()], Some(&guard)).await?;
+    Ok(1)
+}
 ```
 
-This program uses the append condition directly, so you can see what the
-request item does. With `commit`, the request is one more decision model in
-the boundary tuple, scoped to the request tag. The loop retries the refused
-append for you, and your decision checks that model before anything else.
+The check on the request is the step that does the work, and the condition
+does not cover for it. `commit` never sends a batch a second time as it was
+(`retry_does_not_resubmit_the_previous_batch`). It reads again and decides
+again, every attempt. The loser of the race is refused,
+and its retry decides again; the late resend reads the original deposit, so its
+condition is satisfied. In both cases only the fold can see that r-9 is done.
+Delete the request check from `attempt` and both append, and the account is
+credited three times.
 
-Without the `delivered` item, the boundary holds only `AccountClosed`. A
-deposit appended under it does not match its own condition, so the second
-delivery is admitted and the account is credited twice. A store does not
-protect you here: it must land that second copy
-([ES-24](../spec/SPECIFICATION.md#es-24--resolving-an-unknown-outcome), checked
-by `reissued_batch_conditioned_on_other_events_lands_twice`).
+The resend-it-unchanged guarantee in
+[ES-24](../spec/SPECIFICATION.md#es-24--resolving-an-unknown-outcome) (checked
+by `reissued_conditional_batch_lands_once`) is a different case: a raw
+`append` repeated byte for byte under the same condition. The command loop
+never does that.
+
+In the handle registry linked below, the request's model is scoped to the
+request tag alone.
+It reads this request's events whatever your rule's scope covers, which is what
+lets a decision whose rule does not read its own event type still settle a
+redelivery.
 
 When a decision finds its request already applied, it has two ways to say so.
 Returning no events gives you `CommandOutcome::Nothing`, which is a success and
