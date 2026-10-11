@@ -4,7 +4,7 @@
 
 Work through the sections for the crates in your manifest, in the order below.
 Each one names the break, says what to change, and links the
-[`CHANGELOG.md`](../CHANGELOG.md#unreleased) entry that carries the reasoning and
+[`CHANGELOG.md`](../CHANGELOG.md#040--2026-10-11) entry that carries the reasoning and
 the decision record. The row ids in brackets, such as **[H8]**, are the rows of
 the `0.4.0` trace table at the end of that section of the changelog, which lists
 every break this release carries with the decision that caused it.
@@ -166,7 +166,7 @@ Rename every `emit =` argument. There are no aliases:
 An invocation that names no emitter gets the tokio default, as before, and needs
 no change.
 
-### What the suite accepts **[T6, H10]**
+### What the suite accepts **[T6, H10, H13]**
 
 - `k_disjoint_boundaries_admit_exactly_k_commits` is renamed
   `k_disjoint_boundaries_never_conflict`. Update any filter or CI step that
