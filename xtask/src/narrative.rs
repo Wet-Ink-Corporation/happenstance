@@ -199,3 +199,15 @@ mod upgrading_to_0_4 {
 mod retry_a_command {
     #![doc = include_str!("../../docs/retry-a-command.md")]
 }
+
+// The store how-to. Two fences, and neither names an adapter crate, because no
+// adapter is a dependency of this target. The first runs one function bound on
+// the bare flavour against the reference store, a gappy store and a bare-only
+// store, and asserts that the count it reads agrees on all three while the
+// position distance does not. The second has a `SendEventStore` bound refuse
+// the bare-only store (E0277). Binding the first on `SendEventStore`, or
+// loosening the second to `EventStore`, turns this module red.
+#[cfg(doctest)]
+mod choose_a_store {
+    #![doc = include_str!("../../docs/choose-a-store.md")]
+}

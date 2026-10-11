@@ -24,6 +24,7 @@ that shapes a page whose job is orientation.
 | Where the aggregate's consistency boundary went | [`boundary-not-aggregate.md`](boundary-not-aggregate.md) |
 | Carrying the worked example's invariant into your own domain | [`carry-your-invariant.md`](carry-your-invariant.md) |
 | Retrying a command without applying it twice | [`retry-a-command.md`](retry-a-command.md) |
+| Choosing a store for your deployment | [`choose-a-store.md`](choose-a-store.md) |
 | Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
 
 | Looking for | It is at |
