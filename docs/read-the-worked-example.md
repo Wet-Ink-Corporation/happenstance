@@ -8,8 +8,8 @@ one place in this repository where the read-decide-append cycle works over
 domain code rather than inside a fence.
 
 Its own explanation names the model you arrived with, in another voice and
-correctly for its purpose; that model is answered in
-[boundaries, not aggregates](boundary-not-aggregate.md).
+correctly for its purpose; the single place that model is answered is
+[where your streams went](carry-your-invariant.md#where-your-streams-went).
 
 You have just written a `Query` and an `AppendCondition` by hand, and the
 example holds neither: `happenstance::commit` derives both from a
