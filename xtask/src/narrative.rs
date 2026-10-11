@@ -170,3 +170,12 @@ mod adapter_reading_order {
 mod text_fences {
     #![doc = include_str!("../../docs/text-fences.md")]
 }
+
+// The upgrade guide. Its `rust` fences are the 0.4 spellings of the breaks the
+// facade and the core crate carry, each asserting what the break changed; the
+// 0.3 spellings and the adapter-only code sit in `text` fences and say so,
+// because neither builds against this target.
+#[cfg(doctest)]
+mod upgrading_to_0_4 {
+    #![doc = include_str!("../../docs/upgrading-to-0-4.md")]
+}

@@ -40,7 +40,8 @@ use crate::spec_trace::workspace_root;
 ///
 /// The order is the application author's path: run something, see the whole
 /// program, carry it into your own domain, then the reasoning behind the write,
-/// then the adapter author's entry point. It is written here rather than
+/// then the adapter author's entry point, and last the upgrade guide, which
+/// only a reader already on an older release needs. It is written here rather than
 /// derived because an order is a decision, and [`check_coverage`] is what keeps
 /// the list from falling behind the tree.
 const READING_ORDER: &[&str] = &[
@@ -49,6 +50,7 @@ const READING_ORDER: &[&str] = &[
     "carry-your-invariant.md",
     "append-conditions.md",
     "adapter-reading-order.md",
+    "upgrading-to-0-4.md",
 ];
 
 /// Pages under `docs/` the site deliberately does not render, each with why.
