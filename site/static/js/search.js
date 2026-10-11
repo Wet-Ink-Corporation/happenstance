@@ -1,5 +1,5 @@
 // The search page's script, loaded on that page only. The index is Zola's
-// `search_index.en.js`, which sets `window.searchIndex`; the engine is the
+// `search_index.en.json`, fetched from the list's `data-index`; the engine is the
 // vendored elasticlunr. Results are built with DOM calls and `textContent`, never
 // `innerHTML`: a page's text carries `<` and `&` from its code, and here it is
 // data, not markup.
@@ -9,13 +9,14 @@
   var status = document.getElementById("search-status");
   var list = document.getElementById("search-results");
   if (!input || !status || !list) return;
-  if (!window.elasticlunr || !window.searchIndex) {
-    status.textContent = "The search index did not load. The guide's overview lists every page.";
+  var FAILED = "The search index did not load. The guide's overview lists every page.";
+  if (!window.elasticlunr || !window.fetch || !list.dataset.index) {
+    status.textContent = FAILED;
     return;
   }
 
-  var index = window.elasticlunr.Index.load(window.searchIndex);
-  var fields = { title: { boost: 3 }, body: { boost: 1 } };
+  var index = null;
+  var fields = { title: { boost: 3 }, description: { boost: 2 }, body: { boost: 1 } };
   var SNIPPET = 180;
   var LEAD = 60;
 
@@ -25,13 +26,19 @@
     return found.length ? found : index.search(query, { bool: "OR", expand: true, fields: fields });
   }
 
-  // What to highlight: each query word cut to its stem, matched at a word start,
-  // so "conditions" marks "condition" and "conditional" as the index matched them.
+  // What to highlight: each query word and its stem, matched at a word start, so
+  // "conditions" marks "condition" and "conditional", and "query", whose stem
+  // "queri" is no prefix of it, still marks itself. Stop words, which the index
+  // never held, mark nothing.
   function pattern(query) {
-    var stems = query.toLowerCase().split(/[\s\-]+/).map(function (word) {
+    var stems = [];
+    query.toLowerCase().split(/[\s\-]+/).forEach(function (word) {
       word = word.replace(/^\W+|\W+$/g, "");
-      return word.length > 1 ? window.elasticlunr.stemmer(word) : "";
-    }).filter(function (stem) { return stem.length > 1; });
+      if (word.length < 2 || window.elasticlunr.stopWordFilter(word) === undefined) return;
+      [word, window.elasticlunr.stemmer(word)].forEach(function (form) {
+        if (form.length > 1 && stems.indexOf(form) === -1) stems.push(form);
+      });
+    });
     if (!stems.length) return null;
     var escaped = stems.map(function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); });
     return new RegExp("\\b(?:" + escaped.join("|") + ")\\w*", "gi");
@@ -57,8 +64,9 @@
     return (at > 0 ? "… " : "") + body.slice(at, end).trim() + (end < body.length ? " …" : "");
   }
 
-  function marked(text, re) {
+  function marked(text, re, className) {
     var span = document.createElement("span");
+    if (className) span.className = className;
     var from = 0;
     if (re) {
       re.lastIndex = 0;
@@ -76,8 +84,9 @@
   }
 
   function render(query) {
-    list.textContent = "";
     query = query.trim();
+    if (!index) return;
+    list.textContent = "";
     if (!query) {
       status.textContent = "";
       return;
@@ -92,7 +101,8 @@
       link.href = hit.ref;
       link.textContent = doc.title || "happenstance";
       item.appendChild(link);
-      if (doc.body) item.appendChild(marked(excerpt(doc.body.replace(/\s+/g, " "), re), re));
+      if (doc.description) item.appendChild(marked(doc.description, re));
+      if (doc.body) item.appendChild(marked(excerpt(doc.body.replace(/\s+/g, " "), re), re, "search__snippet"));
       list.appendChild(item);
       shown += 1;
     });
@@ -140,8 +150,16 @@
   });
 
   var initial = new URLSearchParams(window.location.search).get("q");
-  if (initial) {
-    input.value = initial;
-    render(initial);
-  }
+  if (initial) input.value = initial;
+  status.textContent = "Loading the index\u2026";
+  window.fetch(list.dataset.index).then(function (response) {
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    return response.json();
+  }).then(function (data) {
+    index = window.elasticlunr.Index.load(data);
+    status.textContent = "";
+    render(input.value);
+  }).catch(function () {
+    status.textContent = FAILED;
+  });
 })();

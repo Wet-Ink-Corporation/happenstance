@@ -125,11 +125,13 @@ pre[data-lang="text"], pre:has(> code[data-lang="text"]) { background: var(--mut
 .search__results:empty { display: none; }
 .search__results span { overflow-wrap: anywhere; }
 .search__results mark { background: var(--sun-soft); color: var(--foreground); border-radius: 2px; }
+.search__results .search__snippet { margin-top: var(--space-1); }
 /* The results arrive after first paint, so nothing may sit below them on
-   screen to be pushed down: the page holds a screen's height, and in one column
-   the guide's links, which the drawer also carries, are not drawn under it. */
+   screen to be pushed down: the page holds a screen's height, which puts the
+   one-column sidebar below the fold. Below 721px the sidebar is not drawn at
+   all; the drawer's Guide link reaches the overview, which lists every page. */
 .docs--search .search { min-height: calc(100vh - 60px); }
-@media (max-width: 820px) { .docs--search .docs__nav { display: none; } }
+@media (max-width: 720px) { .docs--search .docs__nav { display: none; } }
 @media (max-width: 720px) { .site-search .hs-input { font-size: 16px; } }
 @media (scripting: none) { .site-search { display: none !important; } }
 

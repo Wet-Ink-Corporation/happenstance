@@ -40,17 +40,22 @@ internal_level = "error"
 # fails on an aeroplane and goes green when a registry is down.
 external_level = "warn"
 
-# The search index. Zola writes `search_index.en.js` from every page's title and
-# rendered text; `static/js/search.js` reads it with the vendored elasticlunr
-# 0.9.5, the release whose format Zola's index declares. In this format Zola also
-# writes its own minified `elasticlunr.min.js` (0.9.6) beside the index; the site
-# does not load it, because the vendored file, with its licence beside it, is the
-# one this repository can audit.
+# The search index. Zola writes `search_index.en.json` from every page's title,
+# description and rendered text; `static/js/search.js` fetches it on the search
+# page alone and reads it with the vendored elasticlunr 0.9.5, the release whose
+# format the index declares. The description is indexed because `cargo xtask
+# site` moves each page's `> **Answers:**` line there, out of the body.
+#
+# Zola 0.23.6 also writes its own minified `elasticlunr.min.js` (0.9.6) to the
+# output root for both elasticlunr formats, JSON as well as JavaScript
+# (`components/site/src/lib.rs`, `build_search_index`), and offers no switch to
+# stop it. No page loads it: the vendored file, with its licence beside it, is
+# the one this repository audits.
 [search]
-index_format = "elasticlunr_javascript"
+index_format = "elasticlunr_json"
 include_title = true
 include_content = true
-include_description = false
+include_description = true
 include_path = false
 
 [extra]

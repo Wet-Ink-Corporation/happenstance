@@ -5,7 +5,7 @@
 
 {#- The search page. The form is an ordinary GET to this page, so the header's
     box and a shared `?q=` link both land here; `js/search.js` reads the query,
-    runs it against the index Zola built, and fills the list. Without scripts the
+    runs it against the index Zola built (fetched as JSON), and fills the list. Without scripts the
     form is hidden and the `noscript` paragraph says where every page is listed. -#}
 {% block content %}
 <div class="docs docs--search">
@@ -27,16 +27,15 @@
     </form>
     <noscript><p class="search__status">Search runs in your browser and needs JavaScript. The <a href="{{ get_url(path='@/guide/_index.md') }}">guide's overview</a> lists every page by the question it answers.</p></noscript>
     <p class="search__status site-search" id="search-status" role="status" aria-live="polite"></p>
-    <ol class="page-list search__results" id="search-results"></ol>
+    <ol class="page-list search__results" id="search-results" data-index="{{ get_url(path='search_index.en.json') }}"></ol>
   </article>
 </div>
 {% endblock content %}
 
 {% block scripts %}
 {#- elasticlunr 0.9.5, MIT, vendored verbatim from the npm release tarball with
-    its LICENSE beside it. The index is loaded on this page only: no other page
-    pays for it. -#}
+    its LICENSE beside it. `search.js` fetches the index, from the list's
+    `data-index`, on this page only: no other page pays for it. -#}
 <script src="{{ get_url(path='js/elasticlunr/elasticlunr-0.9.5.js') }}" defer></script>
-<script src="{{ get_url(path='search_index.en.js') }}" defer></script>
 <script src="{{ get_url(path='js/search.js') }}" defer></script>
 {% endblock scripts %}
