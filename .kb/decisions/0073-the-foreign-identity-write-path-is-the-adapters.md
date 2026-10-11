@@ -160,7 +160,7 @@ The verdict above comes from one adapter of the serialise-the-writers shape, whi
 CLAUDE.md's spread rule warns about. `happenstance-neon` sits at the far end of the transport axis:
 no connection, no interactive transaction, one round trip per operation.
 
-Neon's ingest statement, `ingest_statement` (`crates/happenstance-neon/src/event_store.rs:664`,
+Neon's ingest statement, `ingest_statement` (`crates/happenstance-neon/src/event_store.rs:686`,
 `#[cfg(test)]`), is built from the same private builders `insert_statement` uses:
 - `insert_rows` (`:537`);
 - `local_origin` (`:556`);

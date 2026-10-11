@@ -100,12 +100,33 @@
 //!
 //! A single CTE therefore runs at `READ COMMITTED`, where two racers both find
 //! no conflict and both insert. That is the lost update this crate's
-//! [`ProbeThenWriteStore`] exists to name, arriving through the door left open
+//! `ProbeThenWriteStore` exists to name, arriving through the door left open
 //! while the other one was being closed. So the conditional append is a
 //! two-statement non-interactive batch: a probe that reports the conflicting
 //! position, and a guarded `INSERT … WHERE NOT EXISTS`, both on one
 //! `SERIALIZABLE` snapshot in one round trip. `conflicting_position` survives,
 //! which is what the CTE was for.
+//!
+//! `ProbeThenWriteStore` is a deliberately lost-update store, so it is compiled
+//! for this crate's unit tests and nowhere else (`wi-17ec03`). Neither path to
+//! it resolves from outside:
+//!
+//! ```compile_fail,E0432
+//! use happenstance_neon::ProbeThenWriteStore;
+//! ```
+//!
+//! ```compile_fail,E0432
+//! use happenstance_neon::event_store::ProbeThenWriteStore;
+//! ```
+//!
+//! Stable rustdoc does not check a `compile_fail` error code, so either block
+//! above would pass on any error. The same two paths to the real store
+//! compile, so the missing name is what fails above:
+//!
+//! ```
+//! use happenstance_neon::NeonEventStore;
+//! use happenstance_neon::event_store::NeonReadStream;
+//! ```
 //!
 //! Measured at 64 simultaneous contenders on one boundary against the live
 //! endpoint, six runs: exactly one commit and sixty-three
@@ -472,9 +493,10 @@ impl<T: SqlTransport> NeonEventStore<T> {
 
     /// The `EXISTS` probe the two-statement append sends first.
     ///
-    /// Used only by [`ProbeThenWriteStore`], which exists to be wrong: on its own
+    /// Used only by `ProbeThenWriteStore`, which exists to be wrong: on its own
     /// this statement is one round trip in its own implicit transaction, with
     /// nothing connecting it to the insert that follows.
+    #[cfg(test)]
     fn probe_request(&self, condition: &AppendCondition) -> SqlRequest {
         let mut next = 1;
         SqlRequest::single(self.probe_statement(condition, &mut next)).read_only()
@@ -1438,6 +1460,10 @@ impl<T: SqlTransport> Stream for NeonReadStream<'_, T> {
 
 /// The named attempt: an `append` that **probes and writes in two round trips**.
 ///
+/// Compiled for this module's tests only, and not API (`wi-17ec03`): a
+/// lost-update store has no caller outside the crate that should be able to
+/// build one.
+///
 /// # It compiles, and that is the finding
 ///
 /// Nothing in [`EventStore::append`]'s signature forbids two round trips, so this
@@ -1471,18 +1497,21 @@ impl<T: SqlTransport> Stream for NeonReadStream<'_, T> {
 /// travel in two requests, and nothing joins them. "Two statements" is safe and
 /// "two round trips" is not, and the whole of this crate's append design is that
 /// sentence.
+#[cfg(test)]
 #[derive(Debug, Clone)]
-pub struct ProbeThenWriteStore<T> {
+struct ProbeThenWriteStore<T> {
     inner: NeonEventStore<T>,
 }
 
+#[cfg(test)]
 impl<T> ProbeThenWriteStore<T> {
     /// Wraps a store, replacing its append with the two-round-trip one.
-    pub const fn new(inner: NeonEventStore<T>) -> Self {
+    const fn new(inner: NeonEventStore<T>) -> Self {
         Self { inner }
     }
 }
 
+#[cfg(test)]
 impl<T: SqlTransport> EventStore for ProbeThenWriteStore<T> {
     type Error = NeonError<T::Error>;
 
@@ -1564,6 +1593,7 @@ impl<T: SqlTransport> EventStore for ProbeThenWriteStore<T> {
 }
 
 /// The conflicting position the probe found, if any.
+#[cfg(test)]
 fn decode_probe_response<E>(
     response: &HttpResponse,
     max_response_bytes: usize,

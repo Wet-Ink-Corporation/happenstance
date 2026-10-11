@@ -63,7 +63,7 @@ outcome returning a stream at all exists to prevent.
 
 **Evidence.** `crates/happenstance-sqlite/src/event_store.rs:1892 (needs no pin)` ·
 `crates/happenstance-postgres/src/read_stream.rs:350 (the design above, and it is what makes every field)` ·
-`crates/happenstance-neon/src/event_store.rs:1400 (Every field is)` ·
+`crates/happenstance-neon/src/event_store.rs:1422 (Every field is)` ·
 `crates/happenstance-testkit/src/registry.rs:327 (the alternative — hand-writing a)` ·
 [ES-42](../../spec/SPECIFICATION.md)
 

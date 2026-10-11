@@ -4938,7 +4938,7 @@ had two halves.
   anything else — `happenstance-cloudflare` at phase 9 and `happenstance-neon` at
   phase 10, whichever lands first.* **`happenstance-neon` meets that wording's
   letter.** Its probe is one read-only round trip of its own
-  (`crates/happenstance-neon/src/event_store.rs:920`), over the
+  (`crates/happenstance-neon/src/event_store.rs:942`), over the
   `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint. The
   freeze does not reword that away. It accepts the round trip, because no required
