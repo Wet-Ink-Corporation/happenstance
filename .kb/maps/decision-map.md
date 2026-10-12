@@ -766,6 +766,17 @@ leave every merge with the owner.
 | — | [`kb-decision-wi-f97418`](../decisions/wi-f97418-should-92-carve-cf-40-s-cloudflare-metadata.md) | CF-40's Cloudflare metadata ceiling is carved from the documented 2 MB row limit | accepted | 17b | — |
 | — | [`kb-decision-wi-fa5c7b`](../decisions/wi-fa5c7b-may-the-afk-session-build-one-way-17b-prs-83-93.md) | An unattended session builds the one-way 17b PRs; the owner merges them | accepted | 17b | — |
 
+## 2026-10-12: the two typed-layer open questions, closed by record (#93)
+
+ADR-0090 and ADR-0091 write down the answers `kb-decision-wi-378078` took for #93, option A on
+both. They are written straight here with no intake step, and they change no signature. Each
+supersedes the open question it answers, and that atom's frontmatter now reads `superseded`.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0090 | [`kb-decision-0090`](../decisions/0090-one-boundary-folds-one-domain-enum.md) | One boundary folds one domain enum, and a tuple over two is fenced out at compile time | accepted | 17b | supersedes `kb-open-question-tuple-boundary-event-type-001` |
+| ADR-0091 | [`kb-decision-0091`](../decisions/0091-then-empty-asserts-nothing-was-emitted.md) | then(&[]) asserts the decision emitted nothing, decide gets no third channel, and no then_nothing() is added | accepted | 17b | supersedes `kb-open-question-then-empty-emission-idiom-001` |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

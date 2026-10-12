@@ -34,6 +34,23 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Changed
+
+- **`happenstance` now documents two typed-layer rules it always had** (#93). No
+  behaviour or signature changed.
+  - A tuple boundary folds one domain enum. Every member must share the first
+    member's `Boundary::Event`, so a tuple over two different enums is not a
+    `Boundary`. The two-model tuple's documentation now says so, with a
+    `compile_fail` example. To check two enums under one append condition, merge
+    them into one enum or use `happenstance-core` directly
+    ([ADR-0090](.kb/decisions/0090-one-boundary-folds-one-domain-enum.md)).
+    `Boundary::Event`'s doc no longer claims that adding an item to a sealed trait
+    would break you. The seal is what makes such an addition free.
+  - `Decision::then(&[])` asserts that the decision emitted nothing. A decision that
+    emitted an event fails it. There is no `then_nothing()`, and `commit`'s
+    `decide` closure gets no separate "nothing to do" signal
+    ([ADR-0091](.kb/decisions/0091-then-empty-asserts-nothing-was-emitted.md)).
+
 ## [0.4.1] — 2026-10-12
 
 ### Added

@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0090; 0085 is an unused gap (`wi-dea8db`).** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0092; 0085 is an unused gap (`wi-dea8db`).** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
@@ -42,7 +42,7 @@ parameter count is stated once, with an adapter-side count check proposed for Po
 is the owner's default; the record proposes its shape, and its code lands in its own lane PR.
 The VT-6 lane wrote 0086, **accepted** by the owner on 2026-10-08 (Postgres and Neon keep mint-once with a documented
 re-mint; mint-per-open declined; default-refusing detection ruled out after 1.0).
-Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change. #86 wrote 0089, accepted by the owner on 2026-10-11: VT-14 is frozen on the RTL corpus run (`experiments/identifier-validation/`), and its explicit bidirectional controls are nine, not seven.
+Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change. #86 wrote 0089, accepted by the owner on 2026-10-11: VT-14 is frozen on the RTL corpus run (`experiments/identifier-validation/`), and its explicit bidirectional controls are nine, not seven. #93 wrote 0090 and 0091, closing the two typed-layer open questions as the owner decided on 2026-10-12 (`wi-378078`): one boundary folds one domain enum, and `then(&[])` asserts the decision emitted nothing, with no third channel on `decide`.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.
