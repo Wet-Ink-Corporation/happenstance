@@ -640,9 +640,12 @@ jobs:
             --test projection -- --ignored --list | tee gated-projection.txt
 
       # `--test-threads=1` for the reason the event-store run gives: the pool
-      # arithmetic, not the frontier.
+      # arithmetic, not the frontier. `pipefail` because a step's shell is
+      # `bash -e` without it, so `cargo test | tee` exits with `tee`'s status:
+      # #77's red probe had three rules FAIL here under a green step.
       - name: The projection suite against a live Postgres
         run: |
+          set -o pipefail
           cargo test -p happenstance-postgres --all-features \
             --test projection -- --ignored --show-output --test-threads=1 \
             | tee projection-run.txt
@@ -668,6 +671,10 @@ jobs:
           fi
           if [ "$((passed + failed))" -ne "$expected" ]; then
             echo "::error::executed $((passed + failed)) of $expected gated projection tests"
+            exit 1
+          fi
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::$failed projection tests failed"
             exit 1
           fi
 
@@ -710,6 +717,7 @@ jobs:
 
       - name: The live projection store against a live Postgres
         run: |
+          set -o pipefail
           cargo test -p happenstance-postgres --all-features \
             --test live_projection -- --ignored --show-output --test-threads=1 \
             | tee live-projection-run.txt
@@ -739,6 +747,10 @@ jobs:
           fi
           if [ "$((passed + failed))" -ne "$expected" ]; then
             echo "::error::executed $((passed + failed)) of $expected gated live-projection tests"
+            exit 1
+          fi
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::$failed live-projection tests failed"
             exit 1
           fi
 
