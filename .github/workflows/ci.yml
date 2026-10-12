@@ -604,6 +604,7 @@ jobs:
       # under it, and a trade nobody can read is a trade nobody recorded (CF-18).
       - name: The conformance suite against a live Postgres
         run: |
+          set -o pipefail
           cargo test -p happenstance-postgres --all-features             --test postgres_conformance -- --ignored --show-output --test-threads=1             | tee run.txt
 
       # The vacuity guard, and the reason this job cannot be green having done
@@ -635,14 +636,21 @@ jobs:
       # transcript, one count. A combined run would put two `test result:` lines
       # in one file and the assertion reads the last.
       - name: Every gated projection test is present in the binary
+        if: ${{ !cancelled() }}
         run: |
           cargo test -p happenstance-postgres --all-features \
             --test projection -- --ignored --list | tee gated-projection.txt
 
       # `--test-threads=1` for the reason the event-store run gives: the pool
-      # arithmetic, not the frontier.
+      # arithmetic, not the frontier. `pipefail` because a step's shell is
+      # `bash -e` without it, so `cargo test | tee` exits with `tee`'s status:
+      # #77's red probe had three rules FAIL here under a green step. Every run
+      # step in this job sets it, so every later list and run step carries
+      # `!cancelled()`: one red suite must not skip the suites after it.
       - name: The projection suite against a live Postgres
+        if: ${{ !cancelled() }}
         run: |
+          set -o pipefail
           cargo test -p happenstance-postgres --all-features \
             --test projection -- --ignored --show-output --test-threads=1 \
             | tee projection-run.txt
@@ -670,6 +678,10 @@ jobs:
             echo "::error::executed $((passed + failed)) of $expected gated projection tests"
             exit 1
           fi
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::$failed projection tests failed"
+            exit 1
+          fi
 
           expected=$(grep -c ': test$' gated.txt)
           result=$(grep -E '^test result:' run.txt | tail -1)
@@ -693,6 +705,62 @@ jobs:
             exit 1
           fi
 
+      # THE LIVE PROJECTION STORE, `tests/live_projection.rs` (#77). The far end of
+      # PS-2's batch-shape axis -- a live `sqlx` transaction as the batch -- is
+      # what ADR-0063 froze the projection port against, and until this trio no
+      # second machine had run it: the claim that it clears the suite had no CI
+      # record. Its own list/run/assert trio for the projection trio's reason --
+      # one target, one transcript, one count -- and asserted the same way:
+      # nothing left ignored, and the executed count equals the listed count.
+      #
+      # `--test-threads=1` because each fixture opens a pool sized for the
+      # concurrency family, and the file's own header says why that matters.
+      - name: Every gated live-projection test is present in the binary
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test live_projection -- --ignored --list | tee gated-live-projection.txt
+
+      - name: The live projection store against a live Postgres
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-postgres --all-features \
+            --test live_projection -- --ignored --show-output --test-threads=1 \
+            | tee live-projection-run.txt
+
+      - name: The live-projection run executed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' live-projection-run.txt; then
+            echo "::error::no test result line; the live projection suite did not run at all"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-live-projection.txt)
+          result=$(grep -E '^test result:' live-projection-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; executed $((passed + failed)) (passed $passed, failed $failed), ignored $ignored"
+
+          if [ "$expected" -eq 0 ]; then
+            echo "::error::the listing found no gated live-projection tests"
+            exit 1
+          fi
+          if [ "$ignored" -ne 0 ]; then
+            echo "::error::$ignored gated live-projection tests did not execute"
+            exit 1
+          fi
+          if [ "$((passed + failed))" -ne "$expected" ]; then
+            echo "::error::executed $((passed + failed)) of $expected gated live-projection tests"
+            exit 1
+          fi
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::$failed live-projection tests failed"
+            exit 1
+          fi
+
       # ADR-0022 §9's reproduction, `tests/runtime_seam.rs`: a store built on one
       # runtime and driven from another after the first is gone or idle. Its own
       # list/run/assert trio for the projection trio's reason -- one target, one
@@ -701,12 +769,15 @@ jobs:
       #
       # `--test-threads=1` for the pool arithmetic the event-store run gives.
       - name: Every gated runtime-seam test is present in the binary
+        if: ${{ !cancelled() }}
         run: |
           cargo test -p happenstance-postgres --all-features \
             --test runtime_seam -- --ignored --list | tee gated-runtime-seam.txt
 
       - name: The runtime-seam reproduction against a live Postgres
+        if: ${{ !cancelled() }}
         run: |
+          set -o pipefail
           cargo test -p happenstance-postgres --all-features \
             --test runtime_seam -- --ignored --show-output --test-threads=1 \
             | tee runtime-seam-run.txt
@@ -778,6 +849,7 @@ jobs:
       # Clippy first, because the gate's `--all-features` clippy used to reach
       # these items and no longer does. It needs no server.
       - name: Clippy over the naive arm, under its cfg
+        if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: -D warnings --cfg happenstance_naive_arm
           CARGO_TARGET_DIR: target/naive-arm
@@ -793,6 +865,7 @@ jobs:
       # projection trio: the list first, then nothing ignored, and executed
       # equal to listed, and it also requires the named tests.
       - name: The rule controls and the naive-arm probe, under their cfg
+        if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: -D warnings --cfg happenstance_naive_arm
           CARGO_TARGET_DIR: target/naive-arm
