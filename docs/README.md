@@ -16,6 +16,10 @@ that shapes a page whose job is orientation.
 
 | Page | Read it at |
 | --- | --- |
+| Events, and the systems built on them | [`event-driven-systems.md`](event-driven-systems.md) |
+| Event sourcing, and CQRS | [`event-sourcing-and-cqrs.md`](event-sourcing-and-cqrs.md) |
+| Aggregates, and the boundary drawn in advance | [`aggregates.md`](aggregates.md) |
+| Dynamic consistency boundaries | [`what-is-dcb.md`](what-is-dcb.md) |
 | Appending under a condition | [`append-conditions.md`](append-conditions.md) |
 | Watching a boundary refuse, in three runnable steps | [`first-encounter.md`](first-encounter.md) |
 | What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |

@@ -39,8 +39,8 @@ const STEPS: [(&str, &str); 3] = [
     ("## A condition that refuses", "#a-condition-that-refuses"),
 ];
 
-/// The words the prior model is named in. It is named on exactly one page in
-/// the whole set — the bridge's — and that page is not this one.
+/// The words the prior model is named in. It is named on the bridge's page and
+/// on the background pages a newcomer reads first, and never on this one.
 const PRIOR_MODEL: [&str; 4] = [
     "aggregate",
     "your aggregates",

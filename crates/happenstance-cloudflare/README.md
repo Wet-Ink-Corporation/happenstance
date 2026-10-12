@@ -7,6 +7,10 @@ Durable Object into a DCB-compliant event store, writing to that object's own
 `#[durable_object]` class already holds, on `wasm32-unknown-unknown`, inside
 Workers.
 
+New to happenstance? [The happenstance guide](https://wet-ink-corporation.github.io/happenstance/)
+explains event sourcing and dynamic consistency boundaries from the beginning,
+with programs you can run.
+
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
 A Durable Object is a single-threaded actor with exclusive ownership of its

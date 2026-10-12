@@ -51,6 +51,7 @@ code, pre, kbd { font-family: var(--font-mono); }
 .hs-feature code.hs-inline-code { align-self: flex-start; }
 .hs-feature--link .hs-feature__title { color: var(--card-foreground); font-size: 15px; }
 .hs-feature--link:hover .hs-feature__title { color: var(--link); }
+.outcomes > p, .measured > p, .roadmap > p { margin: var(--space-5) 0 0; max-width: 72ch; }
 .name p { max-width: 72ch; color: var(--muted-foreground); margin: 0; }
 .name .heading { margin: 0 0 var(--space-3); }
 @media (max-width: 1000px) {

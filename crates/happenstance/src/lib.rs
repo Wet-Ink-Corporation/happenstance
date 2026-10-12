@@ -20,8 +20,8 @@
 //!
 //! > **Answers:** `tutorial` — How do I decide, write, and hold an invariant?
 //!
-//! Guide-level documentation — what a dynamic consistency boundary is, and how
-//! to model an application with one — is at the happenstance guide, in `docs/`.
+//! Guide-level documentation is [the happenstance guide](https://wet-ink-corporation.github.io/happenstance/), which starts from events
+//! and works up to dynamic consistency boundaries. Its source is `docs/`.
 //!
 //! One enum of events, one struct that folds them, and one call that reads,
 //! decides, appends and retries:
@@ -66,7 +66,7 @@
 //! # Ok::<(), Box<dyn Error>>(()) }
 //! ```
 //!
-//! To watch that boundary *refuse* a write instead, in three runnable steps: [the opening encounter](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/first-encounter.md).
+//! To watch that boundary *refuse* a write instead, in three runnable steps: [the opening encounter](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/).
 //!
 //! # What arrives here, and what stays below
 //!

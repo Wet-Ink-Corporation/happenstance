@@ -427,7 +427,10 @@ pub const POINTER_REGISTER: &[Pointer] = &[
 ///
 /// One constant rather than two copies, so the two rows cannot drift apart in
 /// what they claim catches them.
-const FRONT_DOOR_GUARD: &str = "three mechanisms. \
+const FRONT_DOOR_GUARD: &str = "four mechanisms. \
+    `every_link_into_the_site_names_a_page_it_renders`, in `xtask/src/site.rs`, fails \
+    the build when the sentence's absolute link, or any other front door's, leaves the \
+    site's `base_url` or names a guide page the site does not render. \
     `rows_p1_and_p2_mirror_one_sentence_onto_both_front_doors`, in this file, is the \
     mirror assertion: it fails the build when either surface stops carrying the \
     sentence, carries it twice, lets it fall below a heading or a fence, or lets its \
@@ -438,10 +441,11 @@ const FRONT_DOOR_GUARD: &str = "three mechanisms. \
     `cargo xtask narrative`'s pinned tree constant, so `docs/` is the tree the gate \
     guards. The README doctest mount compiles that file's Rust fences and not this \
     prose, so it is not counted. Rung actually taken: the named-but-unlinked \
-    cross-reference, rung 3. No link form from a rustdoc page resolves into the \
-    narrative tree in all three of the gate's rustdoc builds, the documentation site \
-    is not yet deployed, and the README mirrors the crate root byte for byte, so it \
-    takes the same rung";
+    cross-reference, rung 3, for `docs/` itself, beside an absolute link to the \
+    deployed documentation site that renders that tree. No link form from a rustdoc \
+    page resolves into the narrative tree's files in all three of the gate's rustdoc \
+    builds, so the sentence names the files and links the site, and the README \
+    mirrors the crate root byte for byte, so it takes the same rung";
 
 /// The fewest words a self-describing link text can be built from.
 const LINK_TEXT_MINIMUM_WORDS: usize = 3;

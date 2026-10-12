@@ -9,7 +9,7 @@
   <div class="hs-sidebar__section">
     <a class="hs-sidebar__link" href="{{ guide.permalink }}"{% if current_path == guide.path %} aria-current="page"{% endif %}>Overview</a>
   </div>
-  {%- for need in ["tutorial", "orientation", "explanation", "how-to"] %}
+  {%- for need in ["explanation", "tutorial", "how-to", "orientation"] %}
   {%- set members = [p for p in guide.pages if p.extra.need == need] %}
   {%- if members | length > 0 %}
   <div class="hs-sidebar__section">

@@ -6,6 +6,10 @@ event store adapters. Ninety-five rules, each tracing to a MUST in the
 and each shown to reject a named wrong implementation before it was trusted to
 pass.
 
+New to happenstance? [The happenstance guide](https://wet-ink-corporation.github.io/happenstance/)
+explains event sourcing and dynamic consistency boundaries from the beginning,
+with programs you can run.
+
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
 > **Status: early, and the reason has moved.** It used to be that
