@@ -26,7 +26,7 @@ cluster.
 > adapter twice: inside the repository's own gate, on `wasm32-unknown-unknown`
 > against a `node:sqlite`-backed Durable Object host; and in the `workerd` CI job,
 > a sibling of the gate, in a real Durable Object under local `workerd` and again
-> on an object deployed to Cloudflare.
+> on an object deployed to Cloudflare, where the account secret is present.
 >
 > **What the version number does and does not cover.** It inherits the
 > workspace's version, so the frozen `EventStore` clauses it implements are
@@ -121,7 +121,7 @@ take `workerd`'s four statement limits, which the shim sets when it opens.
 
 **`workerd` runs them too, outside the gate.** The `workerd` CI job, a sibling of
 the gate, runs every rule in a real Durable Object through `harness/workerd`.
-It runs under local `workerd` and again on an object deployed to Cloudflare. That
+It runs under local `workerd` and again on an object deployed to Cloudflare where the account secret is present. That
 covers the isolate, the I/O gate and the platform's row and length limits, which
 the shim does not take. Its statement limits are far tighter than SQLite's
 defaults: 5 compound-`SELECT` terms, 100 bound parameters, and 100,000 bytes of

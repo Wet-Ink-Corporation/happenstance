@@ -439,7 +439,7 @@
 //!
 //! # Running this crate's tests
 //!
-//! **One command reaches everything, and it is not `cargo test`:**
+//! **Two commands, and neither alone reaches everything.** The wasm32 one:
 //!
 //! ```console
 //! $ CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner \
@@ -452,9 +452,9 @@
 //! `durable_object_conformance` target under `tests/`. The list is the one
 //! `xtask`'s `WASM_TARGETS` and `WASM_UNIT_TARGETS` rows carry for this package.
 //!
-//! A plain `cargo test -p happenstance-cloudflare` runs four tests — the `!Send`
-//! probes — and nothing about whether the adapter works. **That is a property of
-//! the store, not a choice about where to put the tests.** Every `worker`
+//! The host one is a plain `cargo test -p happenstance-cloudflare`: the query
+//! planner, namespaces, `!Send` probes and host-only targets, never a store that
+//! appends or reads. **That is a property of the store, not a choice.** Every `worker`
 //! binding links on the host and resolves to a `wasm-bindgen` stub that panics
 //! when called, so a `SqlStorage` cannot be *driven* off-target at all: the
 //! tests that append and read have to be where a JavaScript heap is. What moved
