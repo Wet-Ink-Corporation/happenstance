@@ -156,7 +156,7 @@ consequences instead, and says the measurement declined to settle the knob.
 (`runbook/phases/17-breaking-window.md`; `kb-decision-0066`). Every fork that remains is
 additive at the type level:
 
-- `ReadOptions` is `#[non_exhaustive]` with `Default` (`crates/happenstance-core/src/query.rs:267-269`),
+- `ReadOptions` is `#[non_exhaustive]` with `Default` (`crates/happenstance-core/src/query.rs:311-313`),
   so a budget field breaks no caller.
 - An adapter-local builder, making `PAGE_SIZE` public (`crates/happenstance-sqlite/src/event_store.rs:223`),
   and deprecating `MAX_PAGE_BYTES_PER_STATEMENT` (`:380`) are all minors.

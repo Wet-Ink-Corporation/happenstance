@@ -34,6 +34,20 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **`QueryItem::of`, a query item you can build without a `Result`** (#83).
+  `QueryItem::of(first, rest, tags)` takes the first `EventType` as its own
+  parameter, any further types, and a `Tags`, and returns `QueryItem`.
+  `QueryItem::new` fails in two ways, and a caller holding built `EventType`s
+  can reach neither: the types are already validated, and a separate first
+  parameter means the item always constrains a type. So `of` is total, and
+  `QueryItem::of(ty, [], tags)` needs no `?`. It sorts and deduplicates through
+  the same private helper as `new`, so equal inputs give `==` items through
+  either constructor. `new` stays fallible, for strings and for sequences that
+  might be empty, and so does `of_types`, its tagless form
+  ([ADR-0069](.kb/decisions/0069-queryitem-gains-a-total-constructor.md)).
+
 ### Changed
 
 - **`happenstance-core` now checks, in your build, the shape `trait-variant`

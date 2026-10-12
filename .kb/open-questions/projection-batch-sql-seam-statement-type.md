@@ -151,7 +151,7 @@ is a contract-level question this atom does not reach.
 **Classification: breaking-if-answered → phase 17** (`runbook/phases/17-breaking-window.md`;
 `kb-decision-0066`). This atom assumed the surface was semver-exempt, and that premise is stale.
 `kb-decision-0063` froze the port, and both batches' `push(&mut self, sql: &'static str, …)` are
-published: `crates/happenstance-sqlite/src/projection_store.rs:487` and
+published: `crates/happenstance-sqlite/src/projection_store.rs:511` and
 `crates/happenstance-postgres/src/projection_store.rs:252`. Option B changes that parameter's type,
 so only `0.4.0` can absorb it. Recording *Option A is final* closes the atom without a break.
 Either record also says whether Neon's `push` (then `push(SqlStatement)`, now `push_raw_sql`,
@@ -179,10 +179,15 @@ connection's statement cache. The record proposes an adapter-side count check in
 That Neon narrows in `0.4.0` is the owner's default already in force (`runbook/handover.md:57-61`);
 the record proposes its shape. 
 
-One correction to "What is true today": `push` is at `projection_store.rs:487`, not `:473`.
+One correction to "What is true today": `push` is at `projection_store.rs:511`, not `:473`.
 
 ## Closed — 2026-10-08
 
 **Superseded by `kb-decision-0084`**, accepted by the owner on 2026-10-08. Option A is the
 1.0 seam. What it leaves owed is code, not a question: the adapter-side parameter-count check in
 `happenstance-postgres` that closes the too-many half, which lands as its own change.
+
+A citation note, 2026-10-12 (#225): ADR-0084's `SqliteBatch::push_raw_sql` row cites `:513-522`
+in the bare form, which `lint-kb` cannot repair in an accepted atom. Since #225 added the
+`# Parameter count` sections, `push_raw_sql` is at
+`crates/happenstance-sqlite/src/projection_store.rs:543-552`.
