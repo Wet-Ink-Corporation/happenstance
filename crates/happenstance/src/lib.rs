@@ -178,7 +178,7 @@
     not(feature = "unstable-projection"),
     doc = "[projection-runner]: https://docs.rs/happenstance/latest/happenstance/fn.run_projection.html"
 )]
-#![doc(html_no_source)]
+#![doc(html_no_source, /* one line: rustfmt keeps a commented list whole, and the lines below are cited by number */ html_logo_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg", html_favicon_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[macro_use]

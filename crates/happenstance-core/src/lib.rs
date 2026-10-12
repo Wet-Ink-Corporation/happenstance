@@ -99,7 +99,7 @@
 //!   The name is deliberately not a link here: a link into a `cfg`-gated item is
 //!   a hard error when the feature is off, and `cargo doc --no-default-features`
 //!   is a gate step.
-
+#![doc(/* one line: rustfmt keeps a commented list whole, and the lines below are cited by number */ html_logo_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg", html_favicon_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg")]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
