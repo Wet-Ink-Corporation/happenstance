@@ -210,35 +210,43 @@ fn a_handle_captured_on_a_dropped_runtime_strands_nothing() {
     let seeded = seed_on(&fixture, &second);
     drop(first);
 
-    let appended = second.block_on(async {
+    // This test is about whether each call succeeds from B. Its values are
+    // asserted only as far as the store promises them. The fixture declines
+    // `READ_YOUR_OWN_WRITES` because the ES-10 frontier is cluster-wide
+    // (ADR-0024, ADR-0071): a write transaction open anywhere on the cluster
+    // holds it back. One opened between the two appends leaves head on the
+    // seed, which is what the merge queue saw (#272). One opened before the
+    // seed leaves head at `None` and the read empty. Neither is a failure here.
+    let (appended, head) = second.block_on(async {
         let appended = match store.append(&[event("FromB")], None).await {
             Ok(appended) => appended,
             Err(error) => panic!("ADR-0022 §9: an append from B failed as {error:?}"),
         };
         assert!(appended > seeded, "B's append lands after the seed");
-        // This test is about whether the call succeeds from B. It asserts only
-        // the value the store promises. The fixture declines
-        // `READ_YOUR_OWN_WRITES` because the ES-10 frontier is cluster-wide
-        // (ADR-0024, ADR-0071): a transaction open anywhere can hold it back,
-        // so head may still name the seed (#272).
-        match store.head().await {
-            Ok(head) => assert!(
-                head.is_some_and(|head| seeded <= head && head <= appended),
-                "head lies between the seed and B's append, got {head:?}",
-            ),
+        let head = match store.head().await {
+            Ok(head) => head,
             Err(error) => panic!("ADR-0022 §9: head from B failed as {error:?}"),
-        }
-        appended
+        };
+        assert!(
+            head.is_none_or(|position| position == seeded || position == appended),
+            "head names a position that was written, if any, got {head:?}",
+        );
+        (appended, head)
     });
 
     let read = BoundedRead::start(second.handle().clone(), store);
     match read.finish() {
         Ok(events) => {
             let read = positions(&events);
-            let written = [seeded, appended];
             assert!(
-                read.first() == Some(&seeded) && written.starts_with(&read),
-                "the read is a prefix of what was written that holds the seed, got {read:?}",
+                [seeded, appended].starts_with(&read),
+                "the read is a prefix of what was written, got {read:?}",
+            );
+            // The frontier only advances, so a read issued after head holds
+            // everything up to it.
+            assert!(
+                head.is_none_or(|position| read.contains(&position)),
+                "the read reaches the head reported before it ({head:?}), got {read:?}",
             );
         }
         Err(error) => panic!("ADR-0022 §9: the read from B failed as {error:?}"),
