@@ -84,7 +84,7 @@
 //! [`SendEventStore`](happenstance_core::SendEventStore) — not a feature of this
 //! one.
 
-#![doc(html_no_source)]
+#![doc(html_no_source, /* one line: rustfmt keeps a commented list whole, and the lines below are cited by number */ html_logo_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg", html_favicon_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg")]
 // `docs.rs` builds this crate with `--all-features` and `--cfg docsrs`
 // (`Cargo.toml`'s `[package.metadata.docs.rs]`), which means the rendered page
 // shows `projection_store` beside `event_store` with nothing to distinguish
