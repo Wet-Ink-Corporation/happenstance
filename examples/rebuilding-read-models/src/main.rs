@@ -296,9 +296,10 @@ async fn a_third_view_added_late(
     // scheduled under blue's id would replay the whole log into whichever
     // table has the name it writes to once its checkpoint is reset.
     //
-    // Output from here to the end of the function goes through a locked handle,
-    // which returns an error on a closed pipe where `println!` panics. It is
-    // locked per line, so no guard is held across an `.await`.
+    // The `writeln!` lines below take a locked handle, which returns an error on
+    // a closed pipe where `println!` panics. Each locks for one line, so no
+    // guard is held across an `.await`. The helpers they sit between, and the
+    // rest of this file, print through the crate-level `print_stdout` allow.
     writeln!(
         io::stdout().lock(),
         "\n   -- a promotion whose rename fails --"
