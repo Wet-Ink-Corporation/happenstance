@@ -14,8 +14,8 @@ it.
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
 **Start with [the guide](https://wet-ink-corporation.github.io/happenstance/).** It
-explains event sourcing and dynamic consistency boundaries from the beginning,
-starting with [your first encounter](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/):
+starts from what an event is and works up to dynamic consistency boundaries,
+then [your first encounter](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/):
 three short programs that end with the store refusing a write that would have
 broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
 

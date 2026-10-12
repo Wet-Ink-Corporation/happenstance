@@ -20,8 +20,8 @@
 //!
 //! > **Answers:** `tutorial` — How do I decide, write, and hold an invariant?
 //!
-//! Guide-level documentation is [the happenstance guide](https://wet-ink-corporation.github.io/happenstance/), which starts
-//! from what a dynamic consistency boundary is. It is built from `docs/`.
+//! Guide-level documentation is [the happenstance guide](https://wet-ink-corporation.github.io/happenstance/), which starts from events
+//! and works up to dynamic consistency boundaries. Its source is `docs/`.
 //!
 //! One enum of events, one struct that folds them, and one call that reads,
 //! decides, appends and retries:

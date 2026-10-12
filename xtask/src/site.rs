@@ -503,8 +503,12 @@ mod tests {
     fn site_link_problems(surface: &str, text: &str, base: &str, pages: &[&str]) -> Vec<String> {
         let mut found = Vec::new();
         for (at, _) in text.match_indices(SITE_HOST) {
-            let start = text[..at].rfind("https://").unwrap_or(at);
-            let url: String = text[start..]
+            // The scheme sits immediately before the host, or the link is
+            // reported as it stands rather than joined to an earlier URL.
+            let start = at
+                .checked_sub("https://".len())
+                .filter(|start| text.get(*start..at) == Some("https://"));
+            let url: String = text[start.unwrap_or(at)..]
                 .chars()
                 .take_while(|c| !c.is_whitespace() && !matches!(c, ')' | '"' | '>' | '<'))
                 .collect();
@@ -512,7 +516,9 @@ mod tests {
                 found.push(format!("{surface}: {url} is not under base_url {base}"));
                 continue;
             };
-            let served = match path.trim_matches('/') {
+            // A fragment or query names a place on a page, not a page.
+            let page = path.split(['#', '?']).next().unwrap_or(path);
+            let served = match page.trim_matches('/') {
                 "" | "guide" => true,
                 rest => rest
                     .strip_prefix("guide/")
@@ -552,11 +558,26 @@ mod tests {
         let base = "https://wet-ink-corporation.github.io/happenstance";
         let pages = ["first-encounter.md"];
         let good = "[a](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/)";
-        assert!(site_link_problems("good", good, base, &pages).is_empty());
+        let anchored =
+            "[a](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/#try)";
+        for link in [good, anchored] {
+            assert!(
+                site_link_problems("good", link, base, &pages).is_empty(),
+                "{link}"
+            );
+        }
 
         let off_base = "[a](https://wet-ink-corporation.github.io/redkiln/)";
         let gone = "[a](https://wet-ink-corporation.github.io/happenstance/guide/retired/)";
-        for (wrong, reason) in [(off_base, "is not under base_url"), (gone, "names no page")] {
+        let insecure = "[a](https://x.dev) [b](http://wet-ink-corporation.github.io/happenstance/)";
+        for (wrong, reason) in [
+            (off_base, "is not under base_url"),
+            (gone, "names no page"),
+            (
+                insecure,
+                "wet-ink-corporation.github.io/happenstance/ is not under",
+            ),
+        ] {
             let found = site_link_problems("wrong", wrong, base, &pages);
             assert_eq!(found.len(), 1, "{wrong}: {found:?}");
             assert!(found[0].contains(reason), "{wrong}: {found:?}");

@@ -1,6 +1,6 @@
 +++
 title = "The guide"
-description = "From events to dynamic consistency boundaries to running code. Every Rust example in it is compiled and run by the repository's tests."
+description = "From events to dynamic consistency boundaries to running code. Every Rust example in it is checked by the repository's tests."
 sort_by = "weight"
 template = "section.html"
 page_template = "page.html"
