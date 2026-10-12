@@ -240,8 +240,22 @@ event types
 The wrong guard compiles, runs, and passes its own assertion. Nothing catches
 it for you, which is why it was worth seeing. The fix is one expression: tag
 the seats item with `held`, the course whose seats the rule is about, not with
-`whose`. [The guard you would write](#the-guard-you-would-write) is the version
-to copy.
+`whose`. With that tag, the seat that fills the course is inside the boundary:
+
+```rust
+use happenstance::{EventType, QueryItem, Tags};
+
+fn main() -> Result<(), Box<dyn core::error::Error>> {
+    let held = Tags::from_pairs([("course", "c1")])?;
+    let seats = QueryItem::new(["SeatHeld"], held.clone())?;
+    let filling = EventType::from_static("SeatHeld");
+    assert!(seats.matches(&filling, &held), "the seat is guarded");
+    Ok(())
+}
+```
+
+[The guard you would write](#the-guard-you-would-write) is the whole program to
+copy.
 
 To see the same steps inside a complete program rather than a single example,
 [read the worked example](read-the-worked-example.md).
