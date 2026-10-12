@@ -155,7 +155,7 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 28 `[PROVISIONAL]` clauses
+### The 27 `[PROVISIONAL]` clauses
 
 Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, VT-10 at phase 17
 by ADR-0073, ES-41 and PS-22 at phase 17 by ADR-0028, PS-9 and PS-11 at phase 17
