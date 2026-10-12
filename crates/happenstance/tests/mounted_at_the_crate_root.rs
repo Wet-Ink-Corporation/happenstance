@@ -121,7 +121,7 @@ fn the_crate_root_page_points_at_the_testing_module() {
     let root = include_str!("../src/lib.rs");
 
     assert!(
-        root.contains("//! # Testing without a database"),
+        root.contains("//! # Testing in memory"),
         "the landing page has no region pointing at `happenstance::testing`"
     );
     assert!(
@@ -129,9 +129,7 @@ fn the_crate_root_page_points_at_the_testing_module() {
         "the region does not link anywhere"
     );
 
-    let region = root
-        .find("//! # Testing without a database")
-        .expect("the region");
+    let region = root.find("//! # Testing in memory").expect("the region");
     let features = root.find("//! # Features").expect("the features region");
     let adapters = root
         .find("//! Adapter authors should depend on")

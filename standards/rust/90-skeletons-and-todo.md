@@ -90,7 +90,7 @@ sufficient — RS-90-2 is what catches the rest, and this is the case that prove
 the two rules are not one rule stated twice.
 
 **Evidence.** `crates/happenstance-postgres/src/projection_store.rs:18 (type Batch = sqlx::Transaction)` ·
-`crates/happenstance-sqlite/src/projection_store.rs:638 (type Batch = SqliteBatch)` ·
+`crates/happenstance-sqlite/src/projection_store.rs:668 (type Batch = SqliteBatch)` ·
 `references/adapter-shapes.md:10 (stubbed the only part)` ·
 `references/adapter-shapes.md:98 (code: None)` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md)
