@@ -83,8 +83,8 @@ bytes = { version = "1.10", default-features = false }
 # `std` is named rather than inherited, for the reason `base64/alloc` is: it is
 # a default today, and a crate that drops a default in a patch release breaks a
 # dependant that changed nothing.
-ciborium = { version = "0.2", default-features = false, features = ["std"] }
-futures-core = { version = "0.3", default-features = false }
+ciborium = { version = "0.2.1", default-features = false, features = ["std"] }
+futures-core = { version = "0.3.31", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 # `bundled` compiles the SQLite C amalgamation with the host toolchain, so no
 # system SQLite is needed on any developer machine or CI runner.
@@ -104,11 +104,11 @@ rusqlite = { version = "0.40", default-features = false, features = ["bundled"] 
 # here wants a fixed-capacity `Vec`; `use-std` is the flavour that serialises
 # into `std`'s, and it is what both the wire tests and the codec use.
 postcard = { version = "1", default-features = false, features = ["use-std"] }
-serde = { version = "1", default-features = false, features = ["derive"] }
+serde = { version = "1.0.194", default-features = false, features = ["derive"] }
 # The `/sql` endpoint speaks JSON, so `happenstance-neon` decodes JSON. `std`
 # rather than `alloc` because the endpoint's `bigint`-as-string rendering needs
 # arbitrary-precision parsing off the `std` float path.
-serde_json = { version = "1", default-features = false, features = ["std"] }
+serde_json = { version = "1.0.140", default-features = false, features = ["std"] }
 # No TLS backend selected here, and members must not add one casually: `sqlx`'s
 # `tls-rustls` fails `cargo deny check licenses` against this workspace's
 # allowlist. Measured, not assumed — the offender is not the one everybody
@@ -125,7 +125,7 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 # checked here. A skeleton whose bodies are `todo!()` connects to nothing, so the
 # feature buys nothing today and the question is owed a real answer at the point
 # something actually dials out.
-sqlx = { version = "0.8", default-features = false }
+sqlx = { version = "0.8.5", default-features = false }
 thiserror = { version = "2", default-features = false }
 # The Cloudflare Workers SDK, and the reason `happenstance-cloudflare` stopped
 # being a stand-in. Taken at **minimum width**: `worker` declares no `default`
@@ -147,7 +147,7 @@ worker = { version = "0.8.5", default-features = false }
 # under the header below, the manifest would say "dev / tooling only" about a
 # crate two adapters link against — and `ci.yml`'s msrv job reasons out loud
 # about `--no-dev-deps` hiding tokio, which stopped being true here.
-tokio = { version = "1", default-features = false }
+tokio = { version = "1.38", default-features = false }
 trait-variant = "0.1.3"
 
 # --- dev / tooling only ---
