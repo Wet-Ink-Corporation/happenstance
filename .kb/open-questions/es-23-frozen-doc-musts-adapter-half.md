@@ -119,7 +119,7 @@ no decision atom is written: it changes no clause, and ES-23's text is untouched
 documentation, discharged per adapter by a test in its own crate. The narrative step points at
 those tests and never runs them. ES-23 is its first row and the array's first two-row clause. The
 port row stays `Pinned` at `xtask/src/lint_narrative.rs:1476-1482`, and the adapter row at
-`:1475-1485` names `crates/happenstance-{sqlite,cloudflare,postgres,neon}/tests/cancellation_statement.rs`.
+`:1483-1493` names `crates/happenstance-{sqlite,cloudflare,postgres,neon}/tests/cancellation_statement.rs`.
 The derivation rule above the array says so where the next reader meets it, and the module's
 limits section states what the row cannot do.
 
