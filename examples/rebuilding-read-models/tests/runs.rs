@@ -4,7 +4,7 @@
 //! without this target the four operations this example exists to demonstrate
 //! would be checked by a compile. That is the decorative-gate shape the
 //! repository names elsewhere, and it is why `xtask/src/proof.rs` carries a row
-//! naming the two tests below.
+//! naming the three tests below.
 //!
 //! # Why the tests live in `mod runs`
 //!
@@ -88,6 +88,33 @@ mod runs {
         assert!(
             transcript.contains("the promoted view applied 1"),
             "the promoted view replayed instead of resuming\n{transcript}"
+        );
+    }
+
+    #[test]
+    fn a_failed_promotion_leaves_the_old_view_whole() {
+        let transcript = transcript();
+
+        // The program attempts the swap once with the new table's name
+        // mistyped, so the rename fails after the drop has run. Everything
+        // printed between that attempt and the real promotion is the old view
+        // as a reader would find it.
+        let (_, attempted) = transcript
+            .split_once("-- a promotion whose rename fails --")
+            .unwrap_or_else(|| panic!("the failed promotion was never attempted\n{transcript}"));
+        let (aftermath, _) = attempted
+            .split_once("-- promoted, and the checkpoint comes with it --")
+            .unwrap_or_else(|| panic!("the real promotion never followed it\n{transcript}"));
+
+        // Both halves, because a split promotion loses both. Retiring in one
+        // transaction and swapping in a second commits the retirement before
+        // the rename fails: the table is empty and the id is back at
+        // `NeverRun`, and a later run replays the whole log into it.
+        assert!(
+            aftermath.contains("daily_dispatches is live through")
+                && aftermath.contains("2026-09-01  2"),
+            "the failed swap committed part of the promotion: \
+             retirement and swap are not one transaction\n{transcript}"
         );
     }
 

@@ -183,7 +183,7 @@ async fn replay_reads(
 `MemoryProjectionStore` keeps all its rows in one map, so `delete_all` is the
 only delete it offers. On a real database, the batch carries a `DELETE` for the
 view's own table and nothing else. The example's `retire` function does exactly
-that on SQLite.
+that on SQLite when it prepares a rebuild.
 
 ## Do not wind the checkpoint back
 
@@ -332,16 +332,13 @@ swap.** Once the rename commits, the old name belongs to the new view, and a
 `DELETE` against it clears the rows you just promoted.
 
 [The rebuilding example's](../examples/rebuilding-read-models/src/main.rs)
-`a_third_view_added_late` promotes a view and keeps its id. After the promotion
-the view applies one new event rather than the whole log, and
-`the_binary_operates_every_view`, in
-[its tests](../examples/rebuilding-read-models/tests/runs.rs), checks that from
-the program's output.
-
-The example is simpler than a real deployment in one way you should not copy.
-It is one process with no scheduled runners, and it retires and renames in two
-separate transactions rather than one. Follow the order above, not the
-example's.
+`a_third_view_added_late` takes route B and keeps the new view's id. It first
+tries the swap with the new table's name mistyped, and the old view keeps its
+rows and its checkpoint. Then it promotes for real. After the promotion the view
+applies one new event rather than the whole log.
+[Its tests](../examples/rebuilding-read-models/tests/runs.rs) check both from
+the program's output: `a_failed_promotion_leaves_the_old_view_whole` and
+`the_binary_operates_every_view`.
 
 ## When the replay fails
 

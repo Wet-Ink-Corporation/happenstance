@@ -20,7 +20,9 @@
 //! 2. **A view added late is backfilled beside the one it replaces.** The
 //!    typed runner always claims `Authority::Live`, so a rebuild is bought
 //!    with a *second* `ProjectionId` writing a *second* table — blue and
-//!    green — and the swap is the application's, at the moment it chooses.
+//!    green — and the swap is the application's, at the moment it chooses. It
+//!    rides in the old id's reset batch, so retirement and swap are one
+//!    transaction, and a swap that fails leaves the old view whole.
 //! 3. **Reset is a real operation, and rebuilding is chunk-size invariant.**
 //!    `ProjectionStore::reset` clears the read model and the checkpoint as one
 //!    unit and leaves `Checkpoint::NeverRun` behind — not a checkpoint at the
@@ -38,7 +40,9 @@
 //! durability claim and `tickets-over-http` owns the two-process one; the
 //! subject here is what an operator does to a view that is already working.
 //! Nor is the poisoned view a claim about fault *injection*: nothing here
-//! interrupts a commit halfway. That belongs to the conformance suite.
+//! interrupts a commit halfway. That belongs to the conformance suite. The one
+//! promotion that fails on purpose fails on a statement, inside a transaction
+//! that is then rolled back — an operator's typo, not a crash.
 //!
 //! # The domain, and why it is not another ledger
 //!
@@ -50,6 +54,7 @@
 
 #![allow(clippy::print_stdout, reason = "the transcript is the point")]
 
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
@@ -256,6 +261,11 @@ async fn two_views_two_checkpoints(
 /// it.** `daily_dispatches_v2` keeps its name after the swap, because the
 /// checkpoint is keyed by that id — renaming it to look tidy would throw the
 /// resume point away and replay the whole log.
+///
+/// The swap is pushed into the *old* id's reset batch rather than run beside
+/// it, and that is what makes it one transaction. It is attempted once with
+/// the new table's name mistyped first, to show what that buys: the drop runs,
+/// the rename fails, and the old view keeps its rows and its checkpoint.
 async fn a_third_view_added_late(
     events: &SqliteEventStore,
     models: &SqliteProjectionStore,
@@ -281,15 +291,40 @@ async fn a_third_view_added_late(
     )?;
     println!("   both views are live at once, and neither has stopped answering");
 
-    println!("\n   -- promoted, and the checkpoint comes with it --");
-    // Blue is retired *before* the rename, and the order is load-bearing: the
-    // delete names `daily_dispatches`, which is about to become green's table.
-    // Retiring after the swap would clear the rows that were just promoted.
-    retire(models, blue.id(), "DELETE FROM daily_dispatches").await?;
-    app.execute_batch(
-        "DROP TABLE daily_dispatches;
-         ALTER TABLE daily_dispatches_v2 RENAME TO daily_dispatches;",
+    // From here blue's runner is stopped and green's is paused: neither is
+    // driven again until green comes back as `promoted`. A runner still
+    // scheduled under blue's id would replay the whole log into whichever
+    // table has the name it writes to once its checkpoint is reset.
+    //
+    // The lines this section adds go through a locked handle, which returns an
+    // error on a closed pipe where `println!` panics. Locked per line, so no
+    // guard is held across an `.await`.
+    writeln!(
+        io::stdout().lock(),
+        "\n   -- a promotion whose rename fails --"
     )?;
+    match retire(models, blue.id(), &MISTYPED_PROMOTION).await {
+        Ok(()) => bail!("a promotion from a table that does not exist was committed"),
+        Err(err) => writeln!(io::stdout().lock(), "   refused: {err}")?,
+    }
+    print_checkpoints(models, &[blue.id()]).await?;
+    print_table(
+        app,
+        "SELECT day, dispatched FROM daily_dispatches ORDER BY day",
+    )?;
+    writeln!(
+        io::stdout().lock(),
+        "   the drop ran and was rolled back with the rename: blue is untouched"
+    )?;
+
+    println!("\n   -- promoted, and the checkpoint comes with it --");
+    // The swap is blue's reset batch, so retiring blue and renaming green into
+    // its place are one transaction. A reader sees the old table until the
+    // reset commits and the new one after it, never an empty one between. Done
+    // as a retirement and then a separate swap, the gap between the two is a
+    // view with no rows and an id at `NeverRun` — which the attempt above
+    // would have left behind for good.
+    retire(models, blue.id(), &PROMOTION).await?;
     let mut promoted = DailyDispatches::promoted();
     print_checkpoints(models, &[promoted.id()]).await?;
 
@@ -330,7 +365,7 @@ async fn reset_and_rebuild(
 
     for chunk in REBUILD_CHUNKS {
         let mut stock = StockOnHand::new();
-        retire(models, stock.id(), "DELETE FROM stock_on_hand").await?;
+        retire(models, stock.id(), &["DELETE FROM stock_on_hand"]).await?;
         let cleared = models.checkpoint(stock.id()).await?;
         let applied = drive(events, models, &mut stock, chunk).await?;
         println!(
@@ -1129,6 +1164,24 @@ const UPSERT_DAILY_DISPATCHES_V2: &str = "INSERT INTO daily_dispatches_v2 (day, 
      ON CONFLICT(day) \
      DO UPDATE SET dispatched = daily_dispatches_v2.dispatched + excluded.dispatched";
 
+/// The blue/green swap, run as the retiring view's reset batch.
+///
+/// No `DELETE` first: the drop takes blue's rows with it. A delete naming
+/// `daily_dispatches` would be a hazard rather than a redundancy anywhere after
+/// the rename, because the name by then belongs to green.
+const PROMOTION: [&str; 2] = [
+    "DROP TABLE daily_dispatches",
+    "ALTER TABLE daily_dispatches_v2 RENAME TO daily_dispatches",
+];
+
+/// The same swap with the new table's name mistyped, so it fails *after* the
+/// drop has run — the one point at which a promotion split across two
+/// transactions would already have committed blue's retirement.
+const MISTYPED_PROMOTION: [&str; 2] = [
+    "DROP TABLE daily_dispatches",
+    "ALTER TABLE daily_dispatch_v2 RENAME TO daily_dispatches",
+];
+
 /// How much went out each day, counted one of two ways.
 ///
 /// One type with two configurations rather than two types, because the blue
@@ -1360,17 +1413,25 @@ fn error_chain(error: &dyn core::error::Error) -> String {
 
 /// Clears a view's rows and its checkpoint as one unit of work.
 ///
-/// The deletes are the *application's*, because the read model is: the port
+/// The statements are the *application's*, because the read model is: the port
 /// takes a batch and commits it alongside the checkpoint reset, and it has no
-/// idea which tables this program invented. Used twice below, for the two
-/// things reset is actually for — retiring a view, and preparing a rebuild.
+/// idea which tables this program invented. Used for the two things reset is
+/// actually for — retiring a view, and preparing a rebuild — and a retirement
+/// may carry a blue/green swap, which is what puts the swap in the same
+/// transaction as the checkpoint it retires.
+///
+/// A slice of statements rather than one string of several: the batch runs one
+/// statement per `push`, and rusqlite refuses a push that holds two with
+/// `MultipleStatement` — at commit, after the batch has left this function.
 async fn retire(
     models: &SqliteProjectionStore,
     id: &ProjectionId,
-    delete: &'static str,
+    statements: &[&'static str],
 ) -> Result<()> {
     let mut batch = models.begin().await?;
-    batch.push(delete, []);
+    for statement in statements {
+        batch.push(statement, []);
+    }
     models.reset(batch, id).await?;
     Ok(())
 }
