@@ -450,8 +450,8 @@ impl CloudflareEventStore {
     ///
     /// Injection, never construction: in production the handle comes off
     /// `State::storage().sql()` inside a `#[durable_object]` class, and in a
-    /// test it comes off whatever the harness has. One constructor means one
-    /// path for both.
+    /// test it comes off whatever the harness has. Production and tests call
+    /// the same constructor, so there is one path for both.
     #[must_use]
     pub fn new(sql: SqlStorage) -> Self {
         Self::over(sql, Tables::UNPREFIXED)

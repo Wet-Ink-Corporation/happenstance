@@ -6,8 +6,10 @@ status: accepted
 authority_tier: note
 summary: >-
   kb-decision-0006 is accepted and holds that happenstance re-exports the contract and
-  feature-gates the adapters; today it does neither in that stated form. crates/happenstance/src/lib.rs:246
-  is pub use happenstance_core::*, a glob of items rather than a re-export of the crate - there is
+  feature-gates the adapters; today it does neither in that stated form. crates/happenstance/src/lib.rs
+  re-exported the contract as pub use happenstance_core::*, a glob of items rather than a re-export
+  of the crate (since replaced by the explicit pub use happenstance_core::{...} list under the
+  comment "The contract's surface, mounted here") - there is
   no happenstance::happenstance_core path, though the glob does carry core's own re-exports through,
   so happenstance::bytes::Bytes already resolves. And crates/happenstance/Cargo.toml carries no
   dependency on any adapter crate at all, so there is nothing to feature-gate. Neither gap is a
@@ -50,7 +52,11 @@ happenstance_core"` over the workspace returns exactly one non-test hit:
 ```rust
 pub use happenstance_core::*;
 ```
-— `crates/happenstance/src/lib.rs:246`
+— `crates/happenstance/src/lib.rs`, as it stood when this was written. The glob
+has since been replaced by an explicit list of items — the `pub use
+happenstance_core::{…}` lines under the comment *"The contract's surface,
+mounted here"* in the same file — whose own comment says why it stopped being a
+glob.
 
 `pub use happenstance_core;` — the form that would give a caller
 `happenstance::happenstance_core::SomeType` and let them write generic code

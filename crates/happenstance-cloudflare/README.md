@@ -19,29 +19,32 @@ one writer, the object's own turn is the transaction, and the consistency
 boundary a DCB query describes fits inside an object rather than across a
 cluster.
 
-> **Status: released since `0.2.0`, in the `0.4.1` release set, and the release with the thinnest evidence of
-> the seven.** Every [`EventStore`](https://docs.rs/happenstance-core) body is
-> real — `migrate`, `append`, `head`, `contains_event_id` and `read` all execute
-> SQL against the object's storage — and the event-store conformance suite runs
-> against this adapter inside the repository's own gate, on
-> `wasm32-unknown-unknown`.
+> **Status: released since `0.2.0`, in the `0.4.1` release set, and the release
+> with the thinnest evidence of the seven.** Every
+> [`EventStore`](https://docs.rs/happenstance-core) body is real — `migrate`,
+> `append`, `head`, `contains_event_id` and `read` all execute SQL against the
+> object's storage — and the event-store conformance suite runs against this
+> adapter twice: inside the repository's own gate, on `wasm32-unknown-unknown`
+> against a `node:sqlite`-backed Durable Object host; and in the `workerd` CI job,
+> a sibling of the gate, in a real Durable Object under local `workerd` and again
+> on an object deployed to Cloudflare, where the account secrets are present.
 >
 > **What the version number does and does not cover.** It inherits the
 > workspace's version, so the frozen `EventStore` clauses it implements are
-> semver-binding here as everywhere. What it is not is *mileage*: the conformance
-> run stands the adapter up against a Durable Object host backed by real SQLite
-> rather than against `workerd` (the `workerd` job runs the rules there, outside the
-> gate), and nothing in the host test matrix exercises a
-> `wasm32`-only crate. The section below says what that does and does not cover,
-> in the run's own terms, and it is the reason this paragraph is longer than the
-> other four crates' put together.
+> semver-binding here as everywhere. What it is not is *mileage*: the `workerd`
+> job is not a required check, neither run exercises eviction or hibernation,
+> and nothing in the host test matrix exercises a `wasm32`-only crate. The
+> section below says what each run does and does not cover, in the run's own
+> terms.
 
 ## Use
 
 The adapter is an ordinary library type, so a `#[durable_object]` class holds one
-and hands it the storage it already has. There is a single constructor and it
-takes the object's `SqlStorage` — nothing here conjures storage out of nothing,
-because a real Durable Object's cannot be.
+and hands it the storage it already has. Both constructors take the object's
+`SqlStorage` — nothing here conjures storage out of nothing, because a real
+Durable Object's cannot be. `CloudflareEventStore::new` keeps the log in the
+object's own tables; `CloudflareEventStore::namespaced` keeps it in tables under
+a `TableNamespace`, so one object can hold several logs that share nothing.
 
 ```rust,no_run
 use happenstance_cloudflare::{CloudflareEventStore, SqlStorage};
@@ -119,8 +122,8 @@ take `workerd`'s four statement limits, which the shim sets when it opens.
 
 **`workerd` runs them too, outside the gate.** The `workerd` CI job, a sibling of
 the gate, runs every rule in a real Durable Object through `harness/workerd`.
-It runs under local `workerd` and again on an object deployed to Cloudflare. That
-covers the isolate, the I/O gate and the platform's row and length limits, which
+It runs under local `workerd` and again on an object deployed to Cloudflare
+where the account secrets are present. That covers the isolate, the I/O gate and the platform's row and length limits, which
 the shim does not take. Its statement limits are far tighter than SQLite's
 defaults: 5 compound-`SELECT` terms, 100 bound parameters, and 100,000 bytes of
 statement (`experiments/durable-object-limits`). Eviction and hibernation are still not

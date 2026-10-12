@@ -2864,7 +2864,7 @@ payloads in scope, by crate:
   holds an `Rc<worker::Error>` and is built by a public
   `JsThrow::from_error(worker::Error)`
   (`crates/happenstance-cloudflare/src/js.rs:168-173`, `:188`), with
-  `pub use worker` (`crates/happenstance-cloudflare/src/lib.rs:589`).
+  `pub use worker` (`crates/happenstance-cloudflare/src/lib.rs:596`).
 - **`happenstance-neon`** — `NeonError::MalformedResponse(serde_json::Error)`
   (`crates/happenstance-neon/src/error.rs:104`), with `pub use serde_json`
   (`crates/happenstance-neon/src/lib.rs:175`).

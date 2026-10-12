@@ -207,14 +207,14 @@ fn a_fixture_that_says_nothing_is_rejected_by_the_emitted_check() {
     }
 }
 
-/// A fixture that names the constant it agrees with is accepted.
+/// A fixture that states its own reasons is accepted.
 ///
 /// The positive control, and it is not ceremony: without it the test above
 /// passes against a check that rejects *every* fixture, which is a bar nobody
-/// can clear rather than a bar. It also pins the escape hatch the refusal
-/// message offers — *"if the inherited wording is exactly right, name the
-/// `UNSTATED_*` constant"* — as a lie, deliberately, because naming the constant
-/// is exactly what the check rejects.
+/// can clear rather than a bar. It also takes the one route the refusal message
+/// offers a fixture that agrees with the inherited wording. Naming the
+/// `UNSTATED_*` constant is not that route: the check compares by value, so the
+/// constant named is exactly what it rejects.
 ///
 /// So the hatch is a paraphrase, and this fixture takes it: it says the same
 /// thing in its own words, about its own store. That is the whole distinction

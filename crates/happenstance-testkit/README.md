@@ -34,8 +34,10 @@ with programs you can run.
 >   the first time that family was cleared against a store whose writers are not
 >   serialised.
 > - **`happenstance-neon`** — event store, concurrency and projection against a
->   live Neon endpoint over one-shot HTTP, and it ships naming one rule it does
->   not pass, with the reason on its own front page.
+>   live Neon endpoint over one-shot HTTP. From `0.4.0` it meets ES-11 and
+>   ES-12, which it failed intermittently before, and the one capability its
+>   event-store fixture declines, `READ_YOUR_OWN_WRITES`, carries its reason on
+>   the crate's own front page.
 > - **`happenstance-ladybug`** — the projection family only, against the real
 >   LadybugDB driver, from phase 11 until it was **retired** at phase 17. It was
 >   never published — `lbug` does not render on docs.rs, this project's bar for a
