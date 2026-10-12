@@ -77,16 +77,15 @@ impl QueryItem {
     /// [`EventType`] has already been validated, and a separate `first`
     /// parameter means the item always constrains at least one type, so it can
     /// never be the unconstrained item `new` refuses. Equal inputs produce `==`
-    /// items through either door, because both canonicalise through the same
-    /// sort and dedup.
+    /// items through either constructor, because both share one sort and dedup.
     ///
-    /// Reach for [`of_types`](Self::of_types) instead when the types are
-    /// strings, or arrive as a sequence whose length you do not know. It
-    /// validates each string and refuses an empty sequence, which is why it
-    /// returns a `Result`. Splitting off the head is how "at least one" becomes
-    /// a fact of the signature here: a slice or iterator parameter says nothing
-    /// about its length, so a total constructor over one would have to panic or
-    /// accept the empty item (ADR-0069).
+    /// Reach for [`new`](Self::new) instead when the types are strings, or
+    /// arrive as a sequence whose length you do not know, and for
+    /// [`of_types`](Self::of_types) when there are also no tags. Both validate
+    /// and can refuse, which is why they return a `Result`. Splitting off the
+    /// head is how "at least one" becomes a fact of the signature here: a slice
+    /// or iterator parameter says nothing about its length, so a total
+    /// constructor over one would have to panic or accept the empty item (ADR-0069).
     ///
     /// # Examples
     ///
@@ -102,6 +101,7 @@ impl QueryItem {
     /// assert_eq!(item.types(), [COURSE_DEFINED]);
     /// # Ok::<(), happenstance_core::InvalidTag>(())
     /// ```
+    #[must_use]
     pub fn of(first: EventType, rest: impl IntoIterator<Item = EventType>, tags: Tags) -> Self {
         Self::canonical(core::iter::once(first).chain(rest).collect(), tags)
     }

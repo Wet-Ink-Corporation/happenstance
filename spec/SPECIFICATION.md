@@ -2092,8 +2092,8 @@ desynchronisation and WF-3's match-everything-by-accident in one commit.
 Two divergences from the reference are known and are not defects under this
 clause. Both halves of them were recorded backwards. **happenstance** emitted a
 bare sequence — `Query::Items` went through `serialize_some` until ADR-0016 §7,
-and now goes through `QueryWire::Items` (`query.rs:459-467`), the mirror whose
-own doc comment records the encoding it replaced (`query.rs:440-447`) — while
+and now goes through `QueryWire::Items` (`query.rs:468-473`), the mirror whose
+own doc comment records the encoding it replaced (`query.rs:456-463`) — while
 **the reference** is the `{items: […]}` side: its `Query` is `{ items:
 QueryItem[]; matchesEvent(…); merge(…) }` and `queryAll()` returns `{items: []}`.
 happenstance did not fail to *parse* `[]` before ADR-0016 §7 either: it parsed to
@@ -2169,7 +2169,7 @@ absent field, or as an empty sequence. `Option<Query>` MUST round-trip, with
 `Cases:` E2E-40
 `Rejects:` the implementation this clause replaced. `Serialize` mapped `All` to
 `serialize_none` and `Items` to `serialize_some` — the encoding the mirror that
-took its place now records as the one that lost (`query.rs:440-447`) — so
+took its place now records as the one that lost (`query.rs:456-463`) — so
 `Query::All` became JSON `null`, `Some(Query::All)` and `None` were
 indistinguishable, and serde's `missing_field` succeeds for `Option`-shaped
 types — which meant a *missing* field decoded to the broadest condition in the
@@ -2183,7 +2183,7 @@ This reverses a documented decision, not an oversight: the comment ADR-0016 §7
 deleted stated the intent — "`None` is the match-all query; `Some(items)` is a
 filtered one" — and the ADR that lands a reversal must say it is reversing a
 choice. That is why the mirror which replaced it spends ten lines on the
-encoding it beat (`query.rs:440-447`) rather than simply describing itself. The
+encoding it beat (`query.rs:456-463`) rather than simply describing itself. The
 `Option`-shaped encoding was chosen for compactness in JSON and it is exactly
 the compactness that makes the two values indistinguishable.
 
@@ -2432,8 +2432,8 @@ limit.
 obvious implementation and which would let a peer construct every value the
 constructors exist to prevent — an unsorted `Tags`, an unconstrained `QueryItem`,
 a zero-item `Query` — directly in the receiver's memory. The current impls
-already do this correctly (`tag.rs:538-545` re-canonicalises, `query.rs:431-436`
-re-validates through `QueryItem::new`, `query.rs:469-484` routes `Query` through
+already do this correctly (`tag.rs:538-545` re-canonicalises, `query.rs:447-452`
+re-validates through `QueryItem::new`, `query.rs:499-514` routes `Query` through
 `from_items`, and `append.rs:315-343` rejects an empty guard sequence) and E2E-40
 credits them: "the envelope defends its own invariants; only cost is unguarded".
 This clause is what stops that being an accident.
@@ -2526,7 +2526,7 @@ meaning is negotiated between the two peers.
 
 The impls this clause deleted were on no wire path that existed and were
 maintenance the crate does not owe. What stands in their place is a comment
-saying so where the next author will look for them (`query.rs:486-492`), because
+saying so where the next author will look for them (`query.rs:516-522`), because
 a deletion nothing explains is a deletion somebody undoes. **The claim that their
 whole-struct `#[serde(default)]` was a fifth hazard of WF-2's class is
 withdrawn**, measured:
@@ -7830,7 +7830,7 @@ in the crate's prose.
 What already defends itself, and should not be re-defended: `Query::All` cannot
 be smuggled as an empty items list — `Query::from_items` rejects it
 (`error.rs:94-98`) — and `QueryItem` and `Tags` re-validate on deserialisation
-(`query.rs:431-436`, `tag.rs:538-545`), so non-canonical tags and fully
+(`query.rs:447-452`, `tag.rs:538-545`), so non-canonical tags and fully
 unconstrained items cannot reach memory. The envelope defends its own invariants.
 Only cost is unguarded.
 

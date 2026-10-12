@@ -145,7 +145,7 @@ definitional events.
 
 **Falsifies:** that `ReadOptions` is sufficient to bound a decision model.
 `ReadOptions.from` is one `Option<SequencePosition>` for the entire read
-(`crates/happenstance-core/src/query.rs:270-278`) and `read` applies one `ReadOptions`
+(`crates/happenstance-core/src/query.rs:321`) and `read` applies one `ReadOptions`
 to the whole `Query` (`store.rs:177-181`).
 
 **Rejects:** every adapter, today, and — more usefully — it rejects the
@@ -836,7 +836,7 @@ projection's stream locally with `Query::matches`.
 
 **Falsifies:** that the fan-out runner is safe to write. It rests entirely on
 `Items(a) ∪ Items(b) == Items(a ++ b)`, and on anything unioned with `All` being
-`All`. `Query::matches` is `pub` (`query.rs:238-248`) so the local re-filter is
+`All`. `Query::matches` is `pub` (`query.rs:260-270`) so the local re-filter is
 available — but **nothing in the crate states the algebra and no conformance rule
 pins it.**
 
@@ -1057,7 +1057,7 @@ half needs no new seam.
 
 **Falsifies:** that a transport-only sync port is sufficient. `AppendCondition` bounds
 nothing about its own cost, `Query` deserialises `none` as `Query::All`
-(`query.rs:358-365`), and `ReadOptions` is not part of a condition — so a peer can push
+(the encoding since replaced, recorded at `query.rs:456-463`), and `ReadOptions` is not part of a condition — so a peer can push
 "fail if the log is non-empty" and the hub executes an arbitrary peer-authored query
 against millions of rows inside a single-threaded actor with a fixed CPU ceiling.
 
@@ -1068,7 +1068,7 @@ anything currently in that crate's prose.
 
 **What already defends itself:** `Query::All` cannot be smuggled as an *empty items
 list* — `Query::from_items` rejects it (`error.rs:62-67`) — and `QueryItem` and `Tags`
-re-validate on deserialisation (`query.rs:341-346`), so non-canonical tags and fully
+re-validate on deserialisation (`query.rs:447-452`), so non-canonical tags and fully
 unconstrained items cannot reach hub memory. The envelope defends its own invariants;
 only cost is unguarded.
 
@@ -1356,7 +1356,7 @@ domain logic.
 
 **Rejects:** every snippet in every one of these six scenarios, all of which used `?` on
 both and compile only inside a `Box<dyn core::error::Error>` doctest — which is exactly
-how the crate's own doctests escape it (`query.rs:185`, `append.rs:31`). One
+how the crate's own doctests escape it (`query.rs:191`, `append.rs:31`). One
 `impl From<InvalidTag> for InvalidQuery`, or a single `InvalidInput` the three collapse
 into, is two lines and lands on all thirty-odd queries in this catalogue.
 

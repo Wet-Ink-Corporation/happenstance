@@ -44,8 +44,8 @@ not the same as what a user needed to be told.
   parameter means the item always constrains a type. So `of` is total, and
   `QueryItem::of(ty, [], tags)` needs no `?`. It sorts and deduplicates through
   the same private helper as `new`, so equal inputs give `==` items through
-  either constructor. `of_types` stays fallible, for strings and for sequences
-  that might be empty
+  either constructor. `new` stays fallible, for strings and for sequences that
+  might be empty, and so does `of_types`, its tagless form
   ([ADR-0069](.kb/decisions/0069-queryitem-gains-a-total-constructor.md)).
 
 ## [0.4.1] — 2026-10-12
