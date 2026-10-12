@@ -216,8 +216,16 @@ fn a_handle_captured_on_a_dropped_runtime_strands_nothing() {
             Err(error) => panic!("ADR-0022 §9: an append from B failed as {error:?}"),
         };
         assert!(appended > seeded, "B's append lands after the seed");
+        // This test is about whether the call succeeds from B. It asserts only
+        // the value the store promises. The fixture declines
+        // `READ_YOUR_OWN_WRITES` because the ES-10 frontier is cluster-wide
+        // (ADR-0024, ADR-0071): a transaction open anywhere can hold it back,
+        // so head may still name the seed (#272).
         match store.head().await {
-            Ok(head) => assert_eq!(head, Some(appended), "head names B's append"),
+            Ok(head) => assert!(
+                head.is_some_and(|head| seeded <= head && head <= appended),
+                "head lies between the seed and B's append, got {head:?}",
+            ),
             Err(error) => panic!("ADR-0022 §9: head from B failed as {error:?}"),
         }
         appended
@@ -225,7 +233,14 @@ fn a_handle_captured_on_a_dropped_runtime_strands_nothing() {
 
     let read = BoundedRead::start(second.handle().clone(), store);
     match read.finish() {
-        Ok(events) => assert_eq!(positions(&events), vec![seeded, appended]),
+        Ok(events) => {
+            let read = positions(&events);
+            let written = [seeded, appended];
+            assert!(
+                read.first() == Some(&seeded) && written.starts_with(&read),
+                "the read is a prefix of what was written that holds the seed, got {read:?}",
+            );
+        }
         Err(error) => panic!("ADR-0022 §9: the read from B failed as {error:?}"),
     }
 }
