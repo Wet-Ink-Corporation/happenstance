@@ -139,7 +139,7 @@ neither `exec_raw` arm nor its allocation count was measured here.
 
 Replica arms, not a feature-gated copy of the adapter (weigh-in `wi-8b2786`), so
 nothing under `crates/` changed. `event_store_benchmarks!` could not have driven
-this: it is compiled out on `wasm32` (`crates/happenstance-testkit/src/lib.rs:438`).
+this: it is compiled out on `wasm32` (`crates/happenstance-testkit/src/lib.rs:442`).
 
 **Conformance before timing** (`tests/cloudflare.rs`, `tests/host.rs`). Each test
 names the wrong implementation it rejects, and each of the four calibration

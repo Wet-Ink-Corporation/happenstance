@@ -47,6 +47,10 @@ not the same as what a user needed to be told.
   either constructor. `new` stays fallible, for strings and for sequences that
   might be empty, and so does `of_types`, its tagless form
   ([ADR-0069](.kb/decisions/0069-queryitem-gains-a-total-constructor.md)).
+- **The API documentation carries the project's badge** (#173). Each published
+  crate's rustdoc pages show the happenstance badge as the sidebar logo and the
+  browser favicon, served from `assets/brand/favicon.svg` on `main`. This is
+  documentation only; no code or behaviour changed.
 - **`AppendCondition::after_every_guard` and `after_every_guard_opt`** (#85,
   [ADR-0096](.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md)).
   They do what `after` and `after_opt` always did, and the name now says so: the

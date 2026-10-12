@@ -425,7 +425,11 @@
 //! native one should — you get that bound checked for free, because
 //! `SendEventStore` implies `EventStore`.
 
-#![doc(html_no_source)]
+#![doc(
+    html_no_source,
+    html_logo_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg",
+    html_favicon_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg"
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 // The same two conditions `model` carries below, and the second one is not
