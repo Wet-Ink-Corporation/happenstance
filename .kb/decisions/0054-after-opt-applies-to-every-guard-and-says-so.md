@@ -54,7 +54,7 @@ A scope-carrying name (`after_every_guard` / `after_every_guard_opt`) is introdu
 alongside the existing `after`/`after_opt`, with `#[deprecated]` on the old spellings. This
 is additive (minor) and available before and after `0.2.0`, unlike a hard rename, which
 would break roughly fifteen in-tree call sites and two source-substring gate tests
-(`xtask/tests/first_encounter.rs:423, :696`) for no more safety than a warning buys. The
+(`xtask/tests/first_encounter.rs:427, :696`) for no more safety than a warning buys. The
 alias survives whatever VT-30 later does: if the guard sequence is ever withdrawn, the
 alias dies in the same edit that removes `and_guard`; if VT-30's marker eventually lifts on
 Postgres and benchmark-harness evidence, the alias is renamed or deleted in that same pass.

@@ -45,6 +45,14 @@ not the same as what a user needed to be told.
   this, and two unit tests pin the order. VT-30 is now `[FROZEN]`, so from `1.0.0`
   a setter that fills only unset boundaries would be a breaking change.
 
+### Changed
+
+- **`happenstance-testkit`: `fixtures::condition_after(query, 0)` checks the whole
+  log** instead of panicking (#85). No position is zero, so "after zero" means
+  "after nothing", and the result now equals `fixtures::condition(query)`. Every
+  other position behaves as before. Nothing in the suite passes `0`, and a test of
+  your own that relied on the panic now gets a whole-log guard instead.
+
 ### Deprecated
 
 - **`AppendCondition::after` and `after_opt`**, in favour of `after_every_guard`

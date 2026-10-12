@@ -775,8 +775,8 @@ fn no_sentence_states_a_rule_in_the_pages_own_words() {
 // ---------------------------------------------------------------------------
 //
 // Appended rather than placed beside the page's attribute test above, because
-// ADR-0054 cites this file by line (`:423`, `:696`) and an insert above those
-// lines would repoint an accepted decision nobody may edit.
+// ADR-0054 cites this file by line, `first_encounter.rs:427` and a bare `:696`
+// for the check now at `:739`; lint-kb repoints only the first, so insert below.
 
 /// The crate root's doc comments as markdown, one entry per source line.
 ///

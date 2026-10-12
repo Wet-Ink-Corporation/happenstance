@@ -161,9 +161,9 @@ impl AppendCondition {
     /// consistency boundary rejects appends that never conflicted and the
     /// deployment reads the rejection rate as contention.
     ///
-    /// A later [`after_every_guard_opt`](Self::after_every_guard_opt) **erases** the
-    /// `after` given here, because it rewrites every guard already present: call it
-    /// before `and_guard`, never after.
+    /// A later `after_every_guard` or `after_every_guard_opt` **erases** the
+    /// `after` given here, because each rewrites every guard already present:
+    /// call them before `and_guard`, never after.
     ///
     /// Allocation note, since this is the trade a reader coming from a language
     /// with a growable list will not expect: `guards` is a boxed slice, which
@@ -186,8 +186,8 @@ impl AppendCondition {
         &self.guards
     }
 
-    /// Restricts **every** guard to events after `position`, exclusive, erasing any
-    /// boundary [`and_guard`](Self::and_guard) set: `after_every_guard_opt(Some(position))`.
+    /// Restricts **every** guard to events after `position`, exclusive, erasing
+    /// any boundary `and_guard` set: `after_every_guard_opt(Some(position))`.
     #[must_use]
     pub fn after_every_guard(self, position: SequencePosition) -> Self {
         self.after_every_guard_opt(Some(position))
@@ -201,9 +201,9 @@ impl AppendCondition {
     ///
     /// Applying to every guard is what keeps a single-guard condition — the
     /// shape every existing caller builds — behaving exactly as it always has.
-    /// For per-guard boundaries, use [`and_guard`](Self::and_guard). Called **after**
-    /// `and_guard`, this **erases** the boundary `and_guard` attached, moving a quiet
-    /// guard's boundary to `position` and widening what the condition tolerates.
+    /// For per-guard boundaries, use [`and_guard`](Self::and_guard). Called
+    /// **after** `and_guard`, this **erases** the boundary it attached, so a
+    /// quiet guard takes `position` and the condition tolerates more.
     #[must_use]
     pub fn after_every_guard_opt(self, position: Option<SequencePosition>) -> Self {
         let mut guards = self.guards;
@@ -381,9 +381,10 @@ mod serde_impls {
 impl AppendCondition {
     /// Restricts **every** guard to events after `position`, exclusive.
     ///
-    /// Renamed [`after_every_guard`](Self::after_every_guard), because the old name
-    /// did not say that it overwrites the boundary of every guard already present.
-    /// The behaviour is identical, and this spelling is kept through 1.x.
+    /// Renamed [`after_every_guard`](Self::after_every_guard), because the old
+    /// name did not say that it overwrites the boundary of every guard already
+    /// present. The behaviour is identical, and this spelling is kept through
+    /// 1.x.
     #[deprecated(
         since = "0.4.2",
         note = "use `after_every_guard`, which names its scope; `after` is kept through 1.x"
@@ -396,8 +397,8 @@ impl AppendCondition {
     /// Restricts **every** guard to events after `position`, exclusive, or
     /// checks the whole log when `position` is `None`.
     ///
-    /// Renamed [`after_every_guard_opt`](Self::after_every_guard_opt), because the
-    /// old name did not say its scope. Called **after**
+    /// Renamed [`after_every_guard_opt`](Self::after_every_guard_opt), because
+    /// the old name did not say its scope. Called **after**
     /// [`and_guard`](Self::and_guard), it **erases** the boundary `and_guard`
     /// attached, moving a quiet guard's boundary to `position` and widening what
     /// the condition tolerates. The behaviour is identical, and this spelling is

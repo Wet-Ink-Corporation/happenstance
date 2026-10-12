@@ -700,3 +700,29 @@ pub mod strategies {
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// "After zero" is "after nothing": the whole log, as [`condition`] builds.
+    /// The body this replaced panicked here on `expect("non-zero position")`.
+    #[test]
+    fn condition_after_zero_checks_the_whole_log() {
+        let query = query_of_types(&["A"]);
+
+        assert_eq!(condition_after(query.clone(), 0), condition(query));
+    }
+
+    /// Any other position is the boundary of the condition's one guard.
+    #[test]
+    fn condition_after_a_position_bounds_the_guard_there() {
+        let query = query_of_types(&["A"]);
+        let five = SequencePosition::new(5).expect("5 is non-zero");
+
+        assert_eq!(
+            condition_after(query.clone(), 5),
+            AppendCondition::new(query).after_every_guard(five)
+        );
+    }
+}
