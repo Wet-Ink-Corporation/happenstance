@@ -98,6 +98,7 @@ lag. `head()` reports the frontier, not the newest row.
 ```rust,ignore
 let pool = PgPool::connect(url).await?;
 happenstance_postgres::migration::apply(&pool).await?;
+happenstance_postgres::migration::apply_projection(&pool).await?;
 
 let events = PostgresEventStore::new(pool.clone());
 let views  = PostgresProjectionStore::new(pool);
@@ -106,7 +107,8 @@ let views  = PostgresProjectionStore::new(pool);
 Sharing one pool is the expected deployment, which is why neither type builds
 its own. The schema lives in `migrations/` as SQL and is compiled in, so a
 consumer needs nothing from the repository to apply it — `migration::MIGRATION_1`
-for the event log and `migration::MIGRATION_2` for the projection checkpoint.
+for the event log, applied by `migration::apply`, and `migration::MIGRATION_2` for
+the projection checkpoint, applied by `migration::apply_projection`.
 They are applied separately on purpose: an application using only the event store
 gets no `projection_checkpoint` table.
 

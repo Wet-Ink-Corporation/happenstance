@@ -232,6 +232,6 @@ months; the choice then is between the bound and the dependency, and it belongs 
 - Per-package floors, above.
 - Phase 21 checks each crate's documented MSRV statement against this policy
   (`runbook/phases/21-one-point-oh.md:40-44`). The two README bullets that state it today
-  (`crates/happenstance-core/README.md:65`, `crates/happenstance/README.md:138`) say *"checked in
+  (`crates/happenstance-core/README.md:65`, `crates/happenstance/README.md:139`) say *"checked in
   CI"*, and ADR-0037's point that the `msrv` job is vacuous while the pin equals the floor still
   stands.

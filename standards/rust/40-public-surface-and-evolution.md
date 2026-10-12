@@ -257,7 +257,7 @@ that is never compiled is decoration (F1-04, and
 `crates/happenstance-core/src/lib.rs:176 (pub use futures_core)` ·
 `crates/happenstance-sqlite/src/lib.rs:148 (pub use rusqlite)` ·
 `crates/happenstance-sqlite/src/lib.rs:190 (compile_fail,E0433)` ·
-`crates/happenstance-cloudflare/src/lib.rs:589 (pub use {happenstance_core, worker})` ·
+`crates/happenstance-cloudflare/src/lib.rs:596 (pub use {happenstance_core, worker})` ·
 `crates/happenstance-core/src/store.rs:188 (impl Stream<Item = Result<SequencedEvent, Self::Error>>)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)
 

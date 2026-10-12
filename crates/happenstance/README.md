@@ -33,8 +33,9 @@ and works up to dynamic consistency boundaries. Its source is `docs/`.
   `EventStore` clauses marked `[FROZEN]` in
   [the specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
   are semver-binding from here.
-- **`ProjectionStore` joined that promise after `0.2.0`** (ADR-0063). Five
-  adapters clear its suite, at both ends of the batch-shape axis its freeze
+- **`ProjectionStore` joined that promise after `0.2.0`** (ADR-0063). Four
+  adapter stores clear its suite — SQLite's, Postgres's buffered and live
+  ones, and Neon's — at both ends of the batch-shape axis its freeze
   condition names; the contract crate's `projection` module carries the
   account. What this crate still holds behind its off-by-default
   `unstable-projection` feature is the typed **runner** — `Projection`,

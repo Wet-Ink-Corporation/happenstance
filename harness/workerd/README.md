@@ -42,9 +42,9 @@ $ HARNESS_TOKEN=local node deployed.mjs http://127.0.0.1:8799 local-1
 
 | File | What it is |
 | --- | --- |
-| `src/object.rs` | The `#[durable_object]` class. It builds the adapter the way a production class does, from `SqlStorage::from_state`, and routes `/rules`, `/rule/<name>` and `/probe`. |
+| `src/object.rs` | The `#[durable_object]` class. It routes `/rules`, `/rule/<name>` and `/probe`, and clears the object's storage after each answer. It builds no adapter; `src/fixture.rs` does. |
 | `src/dispatch.rs` | The emitter. `for_each_event_store_rule!` expands into a `match` from rule name to rule. The name list comes from the same enumeration through the testkit's `__rule_names` callback, so a rule missing from the `match` fails as `no such rule` instead of disappearing. |
-| `src/fixture.rs` | One fixture instance is one log under its own `TableNamespace` in the object's single database. That is how two rules that open two isolated stores at once run inside one object. |
+| `src/fixture.rs` | Where the adapter is built, the way a production class builds it: `SqlStorage::from_state`, then `CloudflareEventStore::namespaced`, migrated before the first handle. One fixture instance is one log under its own `TableNamespace` in the object's single database. That is how two rules that open two isolated stores at once run inside one object. |
 | `src/probe.rs` | Phase A of `experiments/durable-object-limits`, run on this runtime. |
 | `worker.mjs` | The entry point, in JavaScript on purpose. See below. |
 | `test/*.test.ts` | One `it()` per rule, each against its own object, and the probe. |

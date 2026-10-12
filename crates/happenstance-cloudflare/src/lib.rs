@@ -408,8 +408,9 @@
 //!   positions a failed batch was assigned — exact rather than best-effort,
 //!   because nothing is awaited mid-batch. When the discard itself fails, the
 //!   caller is told through
-//!   [`event_store::CloudflareEventStoreError::PartialBatch`], which is the one
-//!   failure of `append` after which a retry is not safe.
+//!   [`event_store::CloudflareEventStoreError::PartialBatch`] — and a retry is
+//!   still safe after it: the rows left behind never reached the `UPDATE` that
+//!   stamps a batch into events, so no read, `head` or append guard sees them.
 //! * **Positions are bounded by 2^53, not 2^64.** Workers SQL widens integers
 //!   through a JS number on the way out, so a `SequencePosition` above
 //!   `Number.MAX_SAFE_INTEGER` is not round-trippable even though
@@ -442,8 +443,14 @@
 //!
 //! ```console
 //! $ CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner \
-//!     cargo test -p happenstance-cloudflare --lib --target wasm32-unknown-unknown
+//!     cargo test -p happenstance-cloudflare --target wasm32-unknown-unknown \
+//!       --lib --test durable_object_conformance --test fixture_contract \
+//!       --test wf11_memory_ceiling --test wide_query_ceiling
 //! ```
+//!
+//! `--lib` alone reaches only the cases in `src/`: the conformance suite is the
+//! `durable_object_conformance` target under `tests/`. The list is the one
+//! `xtask`'s `WASM_TARGETS` and `WASM_UNIT_TARGETS` rows carry for this package.
 //!
 //! A plain `cargo test -p happenstance-cloudflare` runs four tests — the `!Send`
 //! probes — and nothing about whether the adapter works. **That is a property of
@@ -467,9 +474,9 @@
 //!
 //! Neither is a precondition for touching the crate: `cargo test`,
 //! `cargo clippy` and `cargo check` all run on a stock stable toolchain with no
-//! wasm target installed. The gate runs the command above for you —
-//! `xtask`'s `WASM_UNIT_TARGETS` carries the row and the `wasm32 run of the
-//! conformance rules` step executes it — so a regression here fails the gate
+//! wasm target installed. The gate runs the command above for you, a target
+//! at a time — those rows are what the `wasm32 run of the conformance rules`
+//! step executes — so a regression here fails the gate
 //! rather than waiting for someone to think of running it.
 
 #![doc(html_no_source)]

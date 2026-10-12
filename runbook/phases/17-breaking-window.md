@@ -179,7 +179,7 @@ gave to this phase.
       (`.kb/open-questions/no-workerd-class-runner-in-the-gate.md`). ADR-0066 makes
       `happenstance-cloudflare`'s 1.0 claim *conformance on the real runtime*, and
       today the rules run against a `node:sqlite` shim
-      (`crates/happenstance-cloudflare/README.md:106-113`). Two measurements ride
+      (`crates/happenstance-cloudflare/README.md:108-115`). Two measurements ride
       on the job and are taken before either is promised: **the SQL-text wall** —
       the statement length at which a Durable Object refuses — and **ADR-0052's
       partition widths**, the public `MAX_QUERY_ARMS_PER_STATEMENT` and

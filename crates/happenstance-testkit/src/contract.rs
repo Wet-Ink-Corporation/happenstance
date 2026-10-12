@@ -1154,9 +1154,9 @@ pub const NO_CEILING_REASON: &str = "this fixture states no ceiling for any stor
 // and what CF-18's `Rejects:` paragraph has always asked for.
 //
 // These are `pub` on purpose: an adapter author who wants to know exactly what
-// their silence says can read it, and a fixture that deliberately agrees with
-// one can name it rather than paraphrase it into something that only looks
-// different.
+// their silence says can read it. A fixture cannot *agree* with one by naming
+// it: the check compares by value, so the constant named is the constant
+// inherited, and a fixture that agrees says so in its own words.
 
 /// What [`Fixture::MID_BATCH_FAULT`] says when a fixture does not.
 pub const UNSTATED_MID_BATCH_FAULT: &str = "this fixture cannot make its store fail between two rows of one batch;      nothing in the port can reach inside an `append`, so the injection has to      come from the adapter and this one has none to offer";
@@ -1389,9 +1389,10 @@ fn inherited(declared: &[(&str, Capability, &'static str)]) {
          default written by the suite cannot be that record: it says the same \
          thing about every store, including the ones for which it is false.\n\n\
          Write the constant on your `impl`, with the reason this store cannot \
-         co-operate. If the inherited wording is exactly right, name the \
-         `UNSTATED_*` constant rather than paraphrasing it — that is a \
-         deliberate agreement rather than a silence, and it says so.",
+         co-operate. If the inherited wording is right for this store, say the \
+         same thing in your own words, about this store: the check compares the \
+         text, so naming the `UNSTATED_*` constant, or copying its text, is \
+         still the inherited reason and still fails here.",
         unstated.join(", ")
     );
 }
