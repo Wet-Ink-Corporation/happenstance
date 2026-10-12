@@ -552,6 +552,71 @@ pub trait Fixture {
             );
         }
     }
+
+    /// Whether this fixture can **hold a committed row above ES-10's visibility
+    /// frontier**: a row the store has committed and `read` does not yet show.
+    ///
+    /// Only a store whose visibility is a predicate rather than an identity has
+    /// such a row at all. `happenstance-postgres` and `happenstance-neon` are
+    /// the built cases: a row is visible once its writer's `xact_id` falls below
+    /// `pg_snapshot_xmin(pg_current_snapshot())`, so between commit and that
+    /// moment it is committed and invisible. A store that publishes a row at
+    /// commit has no such row, and the default below is that answer.
+    ///
+    /// # What the capability is for
+    ///
+    /// ES-41 reads `contains_event_id` as **held**, not visible (ADR-0095).
+    /// [`contains_event_id_reports_a_held_row_above_the_frontier`](crate::rules::contains_event_id_reports_a_held_row_above_the_frontier)
+    /// arms this, appends, checks that `read` does not show the row, and
+    /// requires the probe to answer `true` for it. The wrong implementation
+    /// is the probe that carries the read path's frontier predicate. Every
+    /// other rule passes it, because no other rule stages a row the predicate
+    /// could hide.
+    ///
+    /// # Why this is a capability and not a rule every store runs
+    ///
+    /// The row cannot be staged through the port. Every store publishes what it
+    /// commits sooner or later, and `[FROZEN]` CF-33 forbids a rule that waits
+    /// or races for the gap between the two. So the staging is the adapter's,
+    /// just like a mid-batch fault.
+    ///
+    /// # How a fixture that does not answer is checked
+    ///
+    /// The default is declined, in this crate's words. For a store with no
+    /// frontier those words are a fact, and its fixture may leave them. For a
+    /// store whose fixture declines
+    /// [`READ_YOUR_OWN_WRITES`](Self::READ_YOUR_OWN_WRITES), they are false,
+    /// because declining that constant says reads trail commits.
+    /// [`assert_declensions_are_stated`] therefore rejects such a fixture
+    /// unless it states this constant itself.
+    const HELD_ABOVE_FRONTIER: Capability = Capability::declined(UNSTATED_HELD_ABOVE_FRONTIER);
+
+    /// Arms the store so that **every** append committed after this returns,
+    /// through any handle, is held above the visibility frontier for the rest
+    /// of this fixture's life. It is committed, `read` and `head` do not show
+    /// it, and the store still holds it.
+    ///
+    /// Arming MUST reach a handle the caller already holds, as
+    /// [`arm_read_fault`](Self::arm_read_fault)'s does. The rule connects
+    /// before it arms.
+    ///
+    /// "For the rest of this fixture's life" rather than "until released" is
+    /// deliberate. A rule gets a fresh fixture, so the two are the same run.
+    /// A release would be a second method whose only caller is the rule's
+    /// last line.
+    ///
+    /// # The provided body arms nothing, and that is not a silent pass
+    ///
+    /// Unlike [`reopen`](Self::reopen)'s, this default does not panic. It does
+    /// not need to. The rule checks the staging before it checks the probe: a
+    /// read taken after arming must not show the appended row. A fixture that
+    /// declares [`HELD_ABOVE_FRONTIER`](Self::HELD_ABOVE_FRONTIER) supported
+    /// and forgets this override fails there, with a message naming this
+    /// method. So does an override that arms nothing. That failure lands in
+    /// the adapter's own CI, where a panic here would have landed too.
+    fn arm_held_above_frontier(&self) -> impl Future<Output = ()> {
+        core::future::ready(())
+    }
 }
 
 /// One isolated **projection** store, plus the ways a projection rule is
@@ -1142,7 +1207,7 @@ pub const NO_CEILING_REASON: &str = "this fixture states no ceiling for any stor
 // The declensions a fixture inherits by saying nothing
 // ---------------------------------------------------------------------------
 //
-// Five capabilities default to a declension, and the reason each carries is
+// Six capabilities default to a declension, and the reason each carries is
 // THIS CRATE'S prose. That is what makes them different in kind from every
 // other declined capability, and the difference is the one `NO_CEILING_REASON`
 // above already names: a declined capability's reason is the adapter's account
@@ -1329,16 +1394,33 @@ impl RuleOutcome {
 /// # Panics
 ///
 /// If any capability `F` declines carries the reason it would have inherited by
-/// saying nothing.
+/// saying nothing. [`HELD_ABOVE_FRONTIER`](Fixture::HELD_ABOVE_FRONTIER) is
+/// checked only where `F` declines
+/// [`READ_YOUR_OWN_WRITES`](Fixture::READ_YOUR_OWN_WRITES): see the comment in
+/// the body for why the condition is that one.
 pub fn assert_declensions_are_stated<F: Fixture>(_opener: impl AsyncFn() -> F) {
-    inherited(&[
+    let mut declared = vec![
         (
             "MID_BATCH_FAULT",
             F::MID_BATCH_FAULT,
             UNSTATED_MID_BATCH_FAULT,
         ),
         ("READ_FAULT", F::READ_FAULT, UNSTATED_READ_FAULT),
-    ]);
+    ];
+    // The sixth default is a fact about a store with no frontier, and false
+    // about one with a frontier. A fixture that declines READ_YOUR_OWN_WRITES
+    // has said its reads trail its commits, so it has a frontier, and its
+    // silence on HELD_ABOVE_FRONTIER would print a false sentence as its own.
+    // Checking every fixture instead would turn every store without a frontier
+    // red for repeating a sentence that is true of it.
+    if !F::READ_YOUR_OWN_WRITES.is_supported() {
+        declared.push((
+            "HELD_ABOVE_FRONTIER",
+            F::HELD_ABOVE_FRONTIER,
+            UNSTATED_HELD_ABOVE_FRONTIER,
+        ));
+    }
+    inherited(&declared);
 }
 
 /// [`assert_declensions_are_stated`]'s sibling for the projection port.
@@ -1396,3 +1478,16 @@ fn inherited(declared: &[(&str, Capability, &'static str)]) {
         unstated.join(", ")
     );
 }
+
+/// What [`Fixture::HELD_ABOVE_FRONTIER`] says when a fixture does not.
+///
+/// The sixth inherited declension, and the one whose words are true of most
+/// stores: a store that publishes a row when it commits it has no row above a
+/// frontier. That is why [`assert_declensions_are_stated`] holds a fixture to
+/// it only where the fixture declines
+/// [`READ_YOUR_OWN_WRITES`](Fixture::READ_YOUR_OWN_WRITES), which is the one
+/// place the sentence is known to be false.
+pub const UNSTATED_HELD_ABOVE_FRONTIER: &str = "this fixture has not said whether it can hold a committed row above ES-10's \
+     visibility frontier; a store that shows a row from the moment it commits it \
+     has no such row to stage, and this is that answer given by default rather \
+     than by its author";

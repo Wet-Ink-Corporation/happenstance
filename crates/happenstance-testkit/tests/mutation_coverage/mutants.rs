@@ -87,7 +87,7 @@ use happenstance_testkit::{Capability, Fixture};
 
 use crate::correct::{self, Allocate, Log, LogError, LogStore, Snapshot, dense};
 use crate::harness::Subject;
-use crate::variants::Fault;
+use crate::variants::{Fault, FrontierLog, Membership};
 
 // =====================================================================
 // The shape a one-step defect takes
@@ -3511,6 +3511,36 @@ impl Defect for PositionOnlyMembershipStore {
     }
 }
 
+/// `SELECT 1 FROM event WHERE origin_store = $1 AND origin_position = $2 AND
+/// xact_id < pg_snapshot_xmin(pg_current_snapshot())`: the probe that carries
+/// the read path's frontier predicate.
+///
+/// ES-41's second named wrong implementation, and ADR-0095's. On a store whose
+/// reads and `head` already filter by visibility, copying the `WHERE` clause
+/// into the third query looks like consistency, and it is a different
+/// question. A row above the frontier is committed and held: the append
+/// condition sees it (ES-25), and VT-8's uniqueness refuses a second copy.
+/// This probe says it is absent. An ingest that trusted it would try to
+/// write the event again, and the store would refuse it for a reason the
+/// probe had just denied.
+///
+/// It is [`FrontierStore`](crate::variants::FrontierStore) with exactly one
+/// difference: this answer reads the visible prefix where
+/// [`Held`](crate::variants::Held) reads every held row. Before ADR-0095 there
+/// was no rule it could fail. Nothing staged a committed row above a frontier,
+/// so on every rule the two sets were the same.
+#[derive(Debug)]
+pub(crate) struct FrontierFilteredMembership;
+
+impl Membership for FrontierFilteredMembership {
+    const NAME: &'static str = "FrontierFilteredMembershipStore";
+
+    fn contains(log: &FrontierLog, id: EventId) -> bool {
+        // THE DEFECT: the frontier predicate is in the probe.
+        correct::contains(log.visible(), id)
+    }
+}
+
 // =====================================================================
 // ES-24 — the store that deduplicates for you
 // =====================================================================
@@ -3653,6 +3683,48 @@ impl Fixture for NoopFaultFixture {
 
 impl Subject for NoopFaultFixture {
     const NAME: &'static str = "NoopFaultFixture";
+
+    fn open() -> Self {
+        Self(LogStore::new(dense))
+    }
+}
+
+/// A fixture that declares `HELD_ABOVE_FRONTIER` supported and **does not
+/// override** `arm_held_above_frontier`.
+///
+/// [`NoopFaultFixture`]'s sibling, with one difference worth stating. There
+/// the forgotten override reaches a provided body that panics, so the vacuous
+/// pass needs an override that is present and empty. Here the provided body
+/// arms nothing on purpose (`contract.rs` says why), so the forgotten override
+/// *is* the empty one, and this fixture is it, written the way an author
+/// would write it: the claim, and nothing else.
+///
+/// The store under it is `LogStore`, which is completely correct and has no
+/// frontier. Without the rule's staging check, the probe would be asked about
+/// an ordinary visible row, answer `true`, and the rule would report ES-41's
+/// reading as certified on a store that cannot even express the question.
+#[derive(Debug)]
+pub(crate) struct UnarmedFrontierFixture(LogStore);
+
+impl Fixture for UnarmedFrontierFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over — this \
+         instrument's axis is what a declared frontier capability actually does",
+    );
+    // THE DEFECT: the claim, with `arm_held_above_frontier` left to the
+    // trait's provided body, which arms nothing.
+    const HELD_ABOVE_FRONTIER: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        self.0.clone()
+    }
+}
+
+impl Subject for UnarmedFrontierFixture {
+    const NAME: &'static str = "UnarmedFrontierFixture";
 
     fn open() -> Self {
         Self(LogStore::new(dense))

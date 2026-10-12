@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0090; 0085 is an unused gap (`wi-dea8db`).** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0096; 0090 – 0094 are held by unmerged PRs, ADR-0095 is #109's, and 0085 is an unused gap (`wi-dea8db`).** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),

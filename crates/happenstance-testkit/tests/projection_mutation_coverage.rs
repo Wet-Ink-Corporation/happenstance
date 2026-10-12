@@ -1466,7 +1466,7 @@ mod projection_mutation_coverage {
     /// family whose only variant skips half the suite — a control over half the
     /// suite, which reads exactly like a control over all of it. The second says
     /// **every projection rule executed against at least one variant**, which is
-    /// the event-store family's shape (`tests/mutation_coverage.rs:3175-3184`)
+    /// the event-store family's shape (`tests/mutation_coverage.rs:4347-4356`)
     /// and could not be met here until a variant declaring
     /// `READS_THROUGH_BATCH = true` was registered: with `NoBatchReadStore`
     /// alone, `batch_reads_reflect_pending_writes` and

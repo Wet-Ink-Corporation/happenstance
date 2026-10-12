@@ -6575,4 +6575,99 @@ pub mod rules {
             seen.push(position);
         }
     }
+
+    // ---------------------------------------------------------------------
+    // Membership above the frontier (ES-41, ADR-0095)
+    //
+    // At the end of the module rather than beside
+    // `contains_event_id_reports_membership`, so that the specification's
+    // `suite.rs:N` citations into the rules above stay where they point.
+    // ---------------------------------------------------------------------
+
+    /// ES-41 (ADR-0095): `contains_event_id` answers whether the store
+    /// **holds** an event, not whether a read would show it now.
+    ///
+    /// The two differ only on a store where ES-10's frontier can separate a
+    /// committed row from a visible one: committed, held, and not yet shown by
+    /// `read`. The owner settled the reading on 2026-10-11: such a row is held,
+    /// so the probe answers `true`. That agrees with the append condition,
+    /// which ES-25 evaluates over what the store holds, and with VT-8's
+    /// uniqueness, which ingest relies on to deduplicate.
+    ///
+    /// The wrong implementation is the probe that carries the read path's
+    /// frontier predicate. It is the natural one on such a store: the read and
+    /// `head` already filter by visibility, and copying the `WHERE` clause into a
+    /// third query looks like consistency. It passes every other rule in the
+    /// suite, because no other rule stages a row the predicate could hide.
+    /// `FrontierFilteredMembershipStore` in
+    /// `tests/mutation_coverage/mutants.rs` is it.
+    ///
+    /// # Order of the checks
+    ///
+    /// 1. One event appended before arming, and read back. That is the anchor,
+    ///    and it is the only way to learn this store's incarnation, because
+    ///    `EventStore` has no `store_id()` (ES-19).
+    /// 2. [`arm_held_above_frontier`](crate::Fixture::arm_held_above_frontier),
+    ///    then one more append. Its position is the one `append` returned, never
+    ///    a literal.
+    /// 3. **The staging check.** A read must not show the second event. If it
+    ///    does, the fixture staged nothing, and the probe below would be asked
+    ///    about an ordinary visible row. Asserting that is what keeps a fixture
+    ///    that forgot the override from passing.
+    /// 4. The probe must answer `Ok(true)` for the second event's identity.
+    pub async fn contains_event_id_reports_a_held_row_above_the_frontier<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: HELD_ABOVE_FRONTIER);
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        append_ok(&store, &[event("Anchor")]).await;
+        let anchored = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            anchored.len(),
+            1,
+            "the anchor: one event was appended before anything was armed, so a \
+             read must show exactly that one. It is how this rule learns the \
+             store's incarnation. Got {:?}",
+            types_of(&anchored)
+        );
+        let incarnation = anchored.first().map(|anchor| anchor.id.store());
+
+        fixture.arm_held_above_frontier().await;
+        let position = append_ok(&store, &[event("HeldAboveFrontier")]).await;
+
+        let shown = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert!(
+            shown.iter().all(|event| event.position != position),
+            "the staging: a fixture declaring `HELD_ABOVE_FRONTIER` supported MUST \
+             keep an append committed after `arm_held_above_frontier` out of \
+             `read`, but the read showed position {position}. Either the fixture \
+             does not override `arm_held_above_frontier`, or its override arms \
+             nothing. Without a row the read cannot see, this rule would be asking \
+             the probe about an ordinary visible event. Shown: {:?}",
+            positions_of(&shown)
+        );
+
+        // `Some` by the anchor assertion above. Carried as an `Option` rather
+        // than unwrapped, so that the one answer that passes is `Some(Ok(true))`.
+        let held = incarnation.map(|store_id| EventId::new(store_id, position));
+        let answer = match held {
+            Some(id) => Some(store.contains_event_id(id).await),
+            None => None,
+        };
+        assert!(
+            matches!(answer, Some(Ok(true))),
+            "ES-41 reads `contains_event_id` as HELD (ADR-0095): the store \
+             committed {held:?} and still holds it, so the probe MUST answer \
+             `true`, even though ES-10's frontier keeps `read` from showing it \
+             yet. A probe that carries the read path's frontier predicate \
+             answers `false` here. An ingest trusting that answer would then \
+             disagree with the append condition, which ES-25 evaluates over \
+             what the store holds. Got {answer:?}"
+        );
+
+        RuleOutcome::Ran
+    }
 }

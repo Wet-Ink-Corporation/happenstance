@@ -21,11 +21,19 @@
 //! `happenstance_testkit::block_on`'s parking path, which nothing else in the
 //! workspace reaches.
 //!
+//! [`FrontierStore`] over [`Held`] is the third, and it stands where
+//! `happenstance-postgres` stands: a committed row can sit above a visibility
+//! frontier, so `read` does not show it while the store still holds it. Its
+//! probe answers *held*, which is ES-41's reading (ADR-0095). `mutants.rs`
+//! builds the same store over a probe that answers *visible*, so the pair
+//! differs in one function.
+//!
 //! This file also holds [`DecliningFixture`], which is not a variant at all: it
 //! is the instrument `capability_skips_are_reported` needs, and it is
 //! deliberately absent from `for_each_mutant!`. See its documentation.
 
 use core::cell::{Cell, RefCell};
+use core::marker::PhantomData;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use std::rc::Rc;
@@ -535,6 +543,178 @@ impl Subject for PagedStreamFixture {
 }
 
 // =====================================================================
+// ES-41 — a store with a frontier, and what its probe answers (ADR-0095)
+// =====================================================================
+
+/// A log whose rows can be **committed and not yet visible**.
+///
+/// The in-memory shape of `happenstance-postgres`'s frontier, reduced to the
+/// one thing a rule can observe. Every row is held and the append condition
+/// sees every row, as ES-25 requires. A read and `head` see only the rows below
+/// the frontier.
+///
+/// The frontier is a row count rather than a predicate per row, because the
+/// only way it moves is [`Fixture::arm_held_above_frontier`], and that holds
+/// every later row for the rest of the fixture's life. So the visible rows are
+/// always a prefix of the held ones.
+#[derive(Debug)]
+pub(crate) struct FrontierLog {
+    events: Vec<SequencedEvent>,
+    /// How many rows, from the front, a read can see, or `None` before
+    /// anything is armed, when every committed row is visible.
+    frontier: Option<usize>,
+}
+
+impl FrontierLog {
+    /// Every row the store holds, visible or not.
+    pub(crate) fn held(&self) -> &[SequencedEvent] {
+        &self.events
+    }
+
+    /// The rows below the frontier: what a read and `head` may show.
+    pub(crate) fn visible(&self) -> &[SequencedEvent] {
+        self.frontier
+            .and_then(|below| self.events.get(..below))
+            .unwrap_or(&self.events)
+    }
+}
+
+/// How a [`FrontierStore`] answers `contains_event_id`: the one step that
+/// differs between this file's conformant variant and `mutants.rs`'s mutant.
+pub(crate) trait Membership {
+    /// The registry key for the store this answer is built into.
+    const NAME: &'static str;
+
+    /// Whether the store reports holding `id`.
+    fn contains(log: &FrontierLog, id: EventId) -> bool;
+}
+
+/// The reading ADR-0095 settles: a committed row is held, whatever the
+/// frontier says.
+#[derive(Debug)]
+pub(crate) struct Held;
+
+impl Membership for Held {
+    const NAME: &'static str = "HeldAboveFrontierStore";
+
+    fn contains(log: &FrontierLog, id: EventId) -> bool {
+        crate::correct::contains(log.held(), id)
+    }
+}
+
+/// A conformant store with a visibility frontier, generic over its probe.
+#[derive(Debug)]
+pub(crate) struct FrontierStore<M> {
+    log: Rc<RefCell<FrontierLog>>,
+    membership: PhantomData<M>,
+}
+
+impl<M: Membership> EventStore for FrontierStore<M> {
+    type Error = LogError;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        Snapshot::new(
+            self.log
+                .try_borrow()
+                .map_err(|_| LogError::AlreadyBorrowed)
+                .map(|log| crate::correct::select(log.visible(), query, options)),
+        )
+    }
+
+    // Over every held row, not the visible prefix. Filtering a committed row
+    // out of the condition would admit an append the consistency boundary
+    // forbids, which is why a frontier store keeps the two sets apart.
+    async fn append(
+        &self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        let mut log = self
+            .log
+            .try_borrow_mut()
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        crate::correct::commit(&mut log.events, events, condition, dense)
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        let log = self
+            .log
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(crate::correct::head_of(log.visible()))
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        let log = self
+            .log
+            .try_borrow()
+            .map_err(|_| LogError::AlreadyBorrowed)?;
+        Ok(M::contains(&log, id))
+    }
+}
+
+/// One frontier log, and any number of handles onto it.
+#[derive(Debug)]
+pub(crate) struct FrontierFixture<M> {
+    log: Rc<RefCell<FrontierLog>>,
+    membership: PhantomData<M>,
+}
+
+impl<M: Membership> Fixture for FrontierFixture<M> {
+    type Store = FrontierStore<M>;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "this variant exists for the held-versus-visible axis; its log is a Vec \
+         behind an Rc with no durable medium",
+    );
+
+    // Supported, and this pair is where the rule is shown to be passable and
+    // to reject something. The two stores differ in `Membership::contains`
+    // alone.
+    const HELD_ABOVE_FRONTIER: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        FrontierStore {
+            log: Rc::clone(&self.log),
+            membership: PhantomData,
+        }
+    }
+
+    // Through the `Rc` every handle shares, so it reaches the handle the rule
+    // connected before arming. Rows already committed stay visible, and every
+    // later one is held above the frontier.
+    //
+    // A borrow that fails arms nothing, and that is not a silent pass: the
+    // rule's staging check then sees the next row and fails, naming this
+    // method. Nothing holds a borrow across this call in any case, because no
+    // method here awaits while holding one.
+    async fn arm_held_above_frontier(&self) {
+        if let Ok(mut log) = self.log.try_borrow_mut() {
+            log.frontier = Some(log.events.len());
+        }
+    }
+}
+
+impl<M: Membership> Subject for FrontierFixture<M> {
+    const NAME: &'static str = M::NAME;
+
+    fn open() -> Self {
+        Self {
+            log: Rc::new(RefCell::new(FrontierLog {
+                events: Vec::new(),
+                frontier: None,
+            })),
+            membership: PhantomData,
+        }
+    }
+}
+
+// =====================================================================
 // ES-18 — the fault-injection axis
 // =====================================================================
 
@@ -621,6 +801,13 @@ impl DecliningFixture {
     pub(crate) const READ_FAULT_REASON: &'static str = "this instrument declines everything, and its read is an iterator over a \
          Vec with no fetch to fail in any case";
 
+    /// The reason this fixture gives for declining `HELD_ABOVE_FRONTIER`.
+    ///
+    /// Stated rather than inherited, for
+    /// [`MID_BATCH_FAULT_REASON`](Self::MID_BATCH_FAULT_REASON)'s reason.
+    pub(crate) const HELD_ABOVE_FRONTIER_REASON: &'static str = "this instrument declines everything, and its store shows a row from the \
+         moment it commits it, so it has no frontier to hold a row above in any case";
+
     /// A fresh instrument over a completely correct, densely-allocating store.
     pub(crate) fn new() -> Self {
         Self {
@@ -637,6 +824,7 @@ impl Fixture for DecliningFixture {
     const REOPEN: Capability = Capability::declined(Self::REOPEN_REASON);
     const MID_BATCH_FAULT: Capability = Capability::declined(Self::MID_BATCH_FAULT_REASON);
     const READ_FAULT: Capability = Capability::declined(Self::READ_FAULT_REASON);
+    const HELD_ABOVE_FRONTIER: Capability = Capability::declined(Self::HELD_ABOVE_FRONTIER_REASON);
 
     async fn connect(&self) -> Self::Store {
         let taken = self.connects.get() + 1;

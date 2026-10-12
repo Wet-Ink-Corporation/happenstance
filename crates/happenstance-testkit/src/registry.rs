@@ -159,6 +159,7 @@ macro_rules! for_each_event_store_rule {
             append_stamps_a_recorded_time,
             recorded_time_survives_a_reopen,
             contains_event_id_reports_membership,
+            contains_event_id_reports_a_held_row_above_the_frontier,
 
             // --- Append ----------------------------------------------------
             append_returns_last_written_position,

@@ -766,6 +766,16 @@ leave every merge with the owner.
 | — | [`kb-decision-wi-f97418`](../decisions/wi-f97418-should-92-carve-cf-40-s-cloudflare-metadata.md) | CF-40's Cloudflare metadata ceiling is carved from the documented 2 MB row limit | accepted | 17b | — |
 | — | [`kb-decision-wi-fa5c7b`](../decisions/wi-fa5c7b-may-the-afk-session-build-one-way-17b-prs-83-93.md) | An unattended session builds the one-way 17b PRs; the owner merges them | accepted | 17b | — |
 
+## 2026-10-12: ES-41's reading written into the clause (#109)
+
+ADR-0095 is the ADR `kb-decision-wi-33ab08` said #109 owed. It adds the "held" reading to
+`[FROZEN]` ES-41 as a clarification, and it records the rule, the fixture capability and the two
+mutants that pin it. Numbers 0090 – 0094 are held by unmerged PRs, which is why this one is 0095.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0095 | [`kb-decision-0095`](../decisions/0095-es-41-membership-means-held.md) | ES-41's contains_event_id means held, not visible, and a rule stages the row that tells them apart | accepted | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
