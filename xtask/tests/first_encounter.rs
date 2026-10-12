@@ -913,6 +913,10 @@ fn a_tilde_or_indented_opt_out_in_the_crate_root_is_caught() {
 /// `docs/first-encounter.md`'s 24-character `## A condition that refuses`
 /// stands. That is the owner's decision "Split by surface", 2026-10-12, on
 /// issue #234.
+///
+/// Only `happenstance`'s crate root is held to it, because that is the page
+/// `_design.md` measured and the one a newcomer lands on. The other published
+/// crate roots carry longer headings and are not checked here.
 const CRATE_ROOT_HEADING: usize = 22;
 
 /// Every ATX heading in `docs` outside a fence, as `(line, text)`, 1-based.
@@ -998,6 +1002,8 @@ fn an_over_long_crate_root_heading_is_caught() {
             "   ###### Testing without a database\n",
             "Testing without a database",
         ),
+        // One character over the budget: the boundary is `>`, at 22.
+        ("## Twenty-three characters\n", "Twenty-three characters"),
     ] {
         assert_eq!(
             headings_over_budget(docs),
@@ -1007,6 +1013,8 @@ fn an_over_long_crate_root_heading_is_caught() {
     }
     for docs in [
         "# Testing in memory\n",
+        // Exactly the budget, and 23 bytes: characters are counted, not bytes.
+        "## Twenty-two caractères!\n",
         "```\n# let a_hidden_doctest_line_over_the_budget = 1;\n```\n",
         "~~~\n# a hidden line in a tilde fence, over the budget\n~~~\n",
         "#hashtag-is-a-paragraph-and-over-the-budget\n",
