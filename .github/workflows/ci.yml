@@ -693,6 +693,55 @@ jobs:
             exit 1
           fi
 
+      # THE LIVE PROJECTION STORE, `tests/live_projection.rs` (#77). The far end of
+      # PS-2's batch-shape axis -- a live `sqlx` transaction as the batch -- is
+      # what ADR-0063 froze the projection port against, and until this trio no
+      # second machine had run it: the claim that it clears the suite had no CI
+      # record. Its own list/run/assert trio for the projection trio's reason --
+      # one target, one transcript, one count -- and asserted the same way:
+      # nothing left ignored, and the executed count equals the listed count.
+      #
+      # `--test-threads=1` because each fixture opens a pool sized for the
+      # concurrency family, and the file's own header says why that matters.
+      - name: Every gated live-projection test is present in the binary
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test live_projection -- --ignored --list | tee gated-live-projection.txt
+
+      - name: The live projection store against a live Postgres
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test live_projection -- --ignored --show-output --test-threads=1 \
+            | tee live-projection-run.txt
+
+      - name: The live-projection run executed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' live-projection-run.txt; then
+            echo "::error::no test result line; the live projection suite did not run at all"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-live-projection.txt)
+          result=$(grep -E '^test result:' live-projection-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; executed $((passed + failed)) (passed $passed, failed $failed), ignored $ignored"
+
+          if [ "$expected" -eq 0 ]; then
+            echo "::error::the listing found no gated live-projection tests"
+            exit 1
+          fi
+          if [ "$ignored" -ne 0 ]; then
+            echo "::error::$ignored gated live-projection tests did not execute"
+            exit 1
+          fi
+          if [ "$((passed + failed))" -ne "$expected" ]; then
+            echo "::error::executed $((passed + failed)) of $expected gated live-projection tests"
+            exit 1
+          fi
+
       # ADR-0022 §9's reproduction, `tests/runtime_seam.rs`: a store built on one
       # runtime and driven from another after the first is gone or idle. Its own
       # list/run/assert trio for the projection trio's reason -- one target, one
