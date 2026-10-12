@@ -71,7 +71,7 @@ left one condition: freeze once live Neon has run it green. The 1.0 dispositions
    - the job was in branch-per-run mode, on its own Neon branch `ci-38271947822-1`, so no other
      run shared its frontier (#250);
    - `projection_conformance::projection_ids_round_trip_by_bytes ... ok`, with no `SKIP` line,
-     so the fixture declined nothing the rule needs. The run's three `SKIP` lines, for
+     so the fixture declined nothing the rule needs. The projection run's three `SKIP` lines, for
      `READS_THROUGH_BATCH` and `RESET_REFUSAL`, belong to three other rules;
    - the vacuity guard read `run-projection.txt: expected 20; executed 20 (passed 20, failed 0),
      ignored 0` and `run-events.txt: expected 108; executed 108 (passed 108, failed 0), ignored 0`,

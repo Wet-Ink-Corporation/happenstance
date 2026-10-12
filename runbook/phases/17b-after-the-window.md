@@ -6,7 +6,7 @@ surface. None of it breaks a published crate.
 **Why here.** [ADR-0072](../../.kb/decisions/0072-phase-17-is-split-at-the-release.md)
 split phase 17 at its release. The breaking window ends at `0.4.0` and does not
 wait on these items, because an additive change does not need the window. They
-still come before 1.0, because four `freeze-by-17b` rows in
+still come before 1.0, because the remaining `freeze-by-17b` rows in
 [`ledgers.md`](../ledgers.md) and phase 21's clause audit depend on them. **The rule
 that sends an item back:** if the answer an item is about to take would break a
 published crate, it belongs to phase 17, and is not landed here.
@@ -90,7 +90,7 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       by [ADR-0094](../../.kb/decisions/0094-ps-39-is-frozen-on-a-live-neon-run.md). That
       run is the proof rather than the pull request's own, because a prose-only diff
       skips `live-neon` on a pull request (`changes` says `code=false`). The merge queue
-      runs it again before `main` moves, and that run's id is recorded here at merge.
+      runs it again before `main` moves, as a required check.
 
 **Proof artefact.** The freezes of VT-14, VT-30, ES-7 and PS-39 in
 `spec/SPECIFICATION.md`, PS-39's with the id of the live Neon run it rests on, and
@@ -129,5 +129,5 @@ a red then green run URL for each new sibling job, in this file's session log.
 - 2026-10-12 — #81: PS-39 was `freeze-by-17b` in the ledger and missing from this
   file. It is scheduled here and frozen by ADR-0094 on the owner's `wi-378078`. The
   proof is the `live-neon` run on `main` at `8b52528`, run 38271947822, where
-  `projection_ids_round_trip_by_bytes` passed on its own Neon branch. Merge-queue run:
-  recorded at merge.
+  `projection_ids_round_trip_by_bytes` passed on its own Neon branch. The merge queue re-runs
+  it as a required check.
