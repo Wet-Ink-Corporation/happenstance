@@ -29,6 +29,10 @@ const CRATE_ROOT: &str = "crates/happenstance/src/lib.rs";
 const FENCE_COLUMNS: usize = 68;
 /// A step fence, in rendered lines.
 const FENCE_LINES: usize = 24;
+/// The crate root's landing fence, in rendered lines. The design exempts the
+/// crate-root encounter from [`FENCE_LINES`] at this ceiling, because the
+/// whole program has to fit on one page.
+const LANDING_FENCE_LINES: usize = 32;
 /// A paragraph, in characters — five rendered lines at 764px.
 const PARAGRAPH: usize = 435;
 
@@ -532,6 +536,45 @@ fn every_fence_holds_the_density_budget() {
                 fence.line + offset + 1
             );
         }
+    }
+}
+
+/// The crate root's landing fence holds the same width budget as a step
+/// fence and its own height ceiling, counted as rendered: a `# ` line is
+/// hidden by rustdoc, so it costs nothing (#234).
+#[test]
+fn the_crate_roots_landing_fence_holds_its_budget() {
+    let root = read(CRATE_ROOT);
+    let doc: Vec<&str> = root
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix("//!"))
+        .map(|line| line.strip_prefix(' ').unwrap_or(line))
+        .collect();
+    let rendered: Vec<&str> = doc
+        .iter()
+        .skip_while(|line| !line.starts_with("```"))
+        .skip(1)
+        .take_while(|line| !line.starts_with("```"))
+        .filter(|line| !line.starts_with("# ") && **line != "#")
+        .copied()
+        .collect();
+
+    assert!(
+        !rendered.is_empty(),
+        "{CRATE_ROOT} carries no landing fence, so this test proves nothing"
+    );
+    assert!(
+        rendered.len() <= LANDING_FENCE_LINES,
+        "{CRATE_ROOT}: the landing fence renders {} lines, over {LANDING_FENCE_LINES}",
+        rendered.len()
+    );
+    for line in rendered {
+        let columns = line.chars().count();
+        assert!(
+            columns <= FENCE_COLUMNS,
+            "{CRATE_ROOT}: a landing fence line is {columns} columns, over \
+             {FENCE_COLUMNS}, so it scrolls at 1024x768: {line}"
+        );
     }
 }
 

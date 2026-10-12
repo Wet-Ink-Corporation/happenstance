@@ -30,12 +30,10 @@
 //! use happenstance::{bytes::Bytes, Codec, CodecError, DecisionModel};
 //! use happenstance::{DomainEvent, EventType, MemoryEventStore, Retry};
 //! use happenstance::{Tags, commit};
-//! use std::error::Error;
+//! use std::{convert::Infallible, error::Error};
 //! # #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {
-//!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! enum Seat { Taken }
-//!
 //! const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
 //! impl DomainEvent for Seat {
 //!     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN];
@@ -59,8 +57,7 @@
 //! let store = MemoryEventStore::new();
 //! let seats = Seats { scope: Tags::empty(), taken: 0 };
 //! let retry = Retry::attempts(core::num::NonZeroU32::new(3).unwrap());
-//! let take =
-//!     |_: &Seats| Ok::<_, core::convert::Infallible>(vec![Seat::Taken]);
+//! let take = |_: &Seats| Ok::<_, Infallible>(vec![Seat::Taken]);
 //! let done = commit(&store, seats, retry, take).await?;
 //! assert_eq!(done.committed().expect("a seat was taken").attempts, 1);
 //! # Ok::<(), Box<dyn Error>>(()) }
