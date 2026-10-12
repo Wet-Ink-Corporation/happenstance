@@ -67,6 +67,12 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       schedule. The falsifier is restated to cover a consumer's unlocked resolve.
       An exact `=0.1.3` pin is the alternative, and the owner may prefer to take
       it inside phase 17 (ADR-0072's borderline rule).
+      **Built:** the owner kept the caret (`wi-727ec8`), and ES-7 is `[FROZEN]` by
+      [ADR-0092](../../.kb/decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md).
+      The contract is `crates/happenstance-core/src/derivation.rs`; three wrong
+      derivations compiled green before it and fail it after. The box stays open
+      until the `floating-deps` job has been watched failing once, through its
+      `floating_deps_prove_red` dispatch input, which needs a push.
 - [ ] #90 · **A minimal-versions CI job.** After a lockstep `1.0.0` the crates version
       independently (ADR-0066), and each adapter declares the core it needs as
       `happenstance-core = "1.N"`. A lower bound nothing ever resolves against is
@@ -156,6 +162,15 @@ a red then green run URL for each new sibling job, in this file's session log.
   deprecated and kept through 1.x, and every in-tree call site is migrated. Typestate is
   rejected, and limb 2 is retired by the record rather than by a bench scenario. ES-7
   remains, so the exit criterion stays open.
+
+
+
+- 2026-10-12 — #88: the owner kept the caret (`wi-727ec8`). ADR-0092 freezes ES-7 and
+  adds the derivation contract and the `floating-deps` job. Owed after the push: one
+  `CI` dispatch with `floating_deps_prove_red` ticked, expected red at the contract
+  step with `E0277` in `derivation.rs`, then one plain dispatch, expected green. Both
+  run URLs go here.
+
 
 
 - 2026-10-12 — #92: `StoreLimit::MetadataLen` (floor 0) and `Fixture::MAX_METADATA_LEN`

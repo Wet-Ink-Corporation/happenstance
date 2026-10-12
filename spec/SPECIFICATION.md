@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 205 clause IDs, of which 198 are normative:
-**159 `[FROZEN]`**, **27 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+**160 `[FROZEN]`**, **26 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -2911,34 +2911,34 @@ so a `tokio` release that changed either would force an adapter major too.
 Implementing `EventStore` for a local type in a downstream crate MUST NOT collide
 with the blanket impl the derivation emits.
 
-**[PROVISIONAL — falsified by `error[E0119]: conflicting implementations` on a
-downstream `impl EventStore for LocalType`. The named test is the `!Send`
-reference store, which lives in `happenstance-testkit` — a genuinely downstream
-crate — and which is also ADR-0001's own lift condition.]**
+`[FROZEN]` — by [ADR-0092](../.kb/decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md), at 17b.
+The falsifier was `error[E0119]: conflicting implementations` on a downstream `impl
+EventStore for LocalType`. `trait-variant` is a caret and `Cargo.lock` does not travel,
+so it is restated for a consumer's unlocked resolve: a `0.1.z` under which that impl
+collides, or a `SendEventStore` stops being an `EventStore`. The derivation contract
+fails the second in the consumer's own build; the `floating-deps` job sees both first.
 
-`mk_blanket_impl` (`variant.rs:171-192`) emits `impl<T: SendEventStore>
-EventStore for T`. ADR-0001:70-76 recorded a spike confirming a downstream
-direct impl is accepted, and for as long as nothing in the tree corroborated it
-the ADR stayed provisional. Four impls now do, and one of them is the proof
-rather than the breadth: `LocalMemoryEventStore`
-(`crates/happenstance-testkit/tests/local_conformance.rs:198`) is a direct
-`impl EventStore for` in a genuinely downstream crate, sitting beside the
-blanket impl without `error[E0119]` and passing every rule natively and on
-`wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:1118`) and
-`happenstance-neon`'s two (`crates/happenstance-neon/src/event_store.rs:168`,
-`:405`) are skeletons and
-widen the evidence without adding to it. ADR-0001's provisional marker was
-lifted on that basis at phase 1 (`references/adr/0001-async-port-flavours.md:5-6`);
-what remains open, and is phase 9's, is whether a real platform SDK fits.
+`mk_blanket_impl` (`variant.rs:171-192`) emits `impl<T: SendEventStore> EventStore for
+T`. ADR-0001:70-76 recorded a spike confirming a downstream direct impl is accepted, and
+for as long as nothing in the tree corroborated it the ADR stayed provisional. Four
+impls now do, and one of them is the proof rather than the breadth: `LocalMemoryEventStore`
+(`crates/happenstance-testkit/tests/local_conformance.rs:198`) is a direct `impl
+EventStore for` in a genuinely downstream crate, beside the blanket impl without
+`error[E0119]`, passing every rule natively and on `wasm32`. `CloudflareEventStore`
+(`crates/happenstance-cloudflare/src/event_store.rs:1118`) and `happenstance-neon`'s two
+(`crates/happenstance-neon/src/event_store.rs:168`, `:405`) widen the evidence without
+adding to it. ADR-0001's marker was lifted on that basis at phase 1 (`references/adr/0001-async-port-flavours.md:5-6`).
 
 - **Rule:** not a new rule but a new *invocation* of the existing suite — the
-  `Rc`-backed `!Send` reference store CF-28 requires in
-  `happenstance-testkit`'s own `tests/`, running the whole suite. CF-28 owns the
-  instrument; this clause is what it is evidence for.
+  `Rc`-backed `!Send` reference store CF-28 requires in `happenstance-testkit`'s own
+  `tests/`, running the whole suite; CF-28 owns the instrument. Since ADR-0092, also the
+  derivation contract, a const-evaluation assertion in library code at
+  `crates/happenstance-core/src/derivation.rs` (both bridges, the `Send` supertrait, and
+  `Send` on the append and begin futures and the read stream), and the `floating-deps` job in
+  `.github/workflows/ci.yml`, which runs `cargo update`, then the contract and the suite.
 - **Cases:** E2E-52, E2E-09, E2E-54.
-- **Rejects:** shipping 0.1 on a coherence property that has never been compiled
-  outside the crate that declares it.
+- **Rejects:** a coherence property never compiled outside the crate that declares it;
+  and a `trait-variant` that emits no blanket impl, which compiled green before the contract.
 
 ---
 
@@ -9899,11 +9899,11 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|---|---|---|
 | §2.1–§2.6 value types | `VT` | 35 | 28 | 6 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 43 | 38 | 4 | 1 | 0 |
+| §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **205** | **159** | **27** | **12** | **7** |
+| **Total** | | **205** | **160** | **26** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9974,7 +9974,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-4 | FROZEN | `provided_method_future_is_send_in_generic_code` † | E2E-13 |
 | ES-5 | FROZEN | `error_bound_is_identical_on_both_flavours` † | E2E-53 |
 | ES-6 | FROZEN | `store_error_crosses_a_join_handle` † | E2E-53, E2E-52 |
-| ES-7 | PROVISIONAL | not a new rule but a new *invocation* of the existing suite — the `Rc`-backed … | E2E-52, E2E-09, E2E-54 |
+| ES-7 | FROZEN | not a new rule but a new *invocation* of the existing suite — the `Rc`-backed … | E2E-52, E2E-09, E2E-54 |
 | ES-8 | FROZEN | `read_defaults_to_ascending_order`, `read_from_is_inclusive`, `read_backwards_… | E2E-10, E2E-12 |
 | ES-9 | FROZEN | `query_matching_nothing_yields_empty`, `read_from_a_gap_position`, `read_from_… | E2E-10 |
 | ES-10 | FROZEN | `nothing_below_an_observed_position_appears_later`, `positions_are_unique`, `p… | E2E-01, E2E-02 |

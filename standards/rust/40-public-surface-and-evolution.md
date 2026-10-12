@@ -63,7 +63,7 @@ request against its own base SHA and the break is inside the diff only if
 somebody bothered to look at the job's output.
 
 **Evidence.** `crates/happenstance-core/src/store.rs:318 (async fn head)` ·
-`.github/workflows/ci.yml:1556 (baseline-rev: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }})` ·
+`.github/workflows/ci.yml:1564 (baseline-rev: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }})` ·
 [ADR-0008](../../.kb/decisions/0008-one-derivation-for-both-ports.md) ·
 [research §12](../../references/evaluation/research-rust-api-guidelines.md) *(dated evidence)* ·
 [cargo-semver-checks 0.50](https://github.com/obi1kenobi/cargo-semver-checks) —
@@ -253,8 +253,8 @@ integration-test target — cargo never hands those to a compiler, and a fence
 that is never compiled is decoration (F1-04, and
 [`80-the-gate.md`](80-the-gate.md)).
 
-**Evidence.** `crates/happenstance-core/src/lib.rs:169 (pub use bytes)` ·
-`crates/happenstance-core/src/lib.rs:176 (pub use futures_core)` ·
+**Evidence.** `crates/happenstance-core/src/lib.rs:170 (pub use bytes)` ·
+`crates/happenstance-core/src/lib.rs:177 (pub use futures_core)` ·
 `crates/happenstance-sqlite/src/lib.rs:148 (pub use rusqlite)` ·
 `crates/happenstance-sqlite/src/lib.rs:190 (compile_fail,E0433)` ·
 `crates/happenstance-cloudflare/src/lib.rs:596 (pub use {happenstance_core, worker})` ·

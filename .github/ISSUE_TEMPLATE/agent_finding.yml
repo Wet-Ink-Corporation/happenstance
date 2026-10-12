@@ -31,7 +31,7 @@ body:
         `path:line` at a named commit, and what is there. Name the wrong behaviour
         you saw, not only the right one.
       placeholder: |
-        At 07215eb, `runbook/ledgers.md:312` marks PS-39 freeze-by-17b, and
+        At 07215eb, `runbook/ledgers.md:311` marks PS-39 freeze-by-17b, and
         `runbook/phases/17b-after-the-window.md` never mentions PS-39.
     validations:
       required: true

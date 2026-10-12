@@ -2,7 +2,8 @@
 id: kb-open-question-trait-variant-caret-001
 title: The two-flavour port derivation is emitted by a caret-pinned proc macro that only --locked can see
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0092
 authority_tier: note
 summary: >-
   Binding constraint 4 (bind EventStore, not SendEventStore, in generic code) rests on a blanket
@@ -20,8 +21,15 @@ summary: >-
   consumer's resolve can see. Neither the version-pinning question nor a floating-resolve CI check
   was decided or built here — both were judged outside this lane's writable surface and are routed
   to whoever owns ADR-0001 and ADR-0035, the two decisions the two-flavour derivation belongs to.
+  Resolved 2026-10-12 by kb-decision-0092: the caret stays; a derivation contract in
+  happenstance-core's library code (derivation.rs) asserts both bridges and Send on the Send
+  flavours' append and begin futures and read stream, in every build of the crate; a non-gating
+  weekly floating-deps job resolves without the lock and builds and tests; the store.rs sentence
+  is scoped; and ES-7 is frozen with its falsifier restated for a consumer's unlocked resolve.
 depends_on: []
 related:
+  - kb-decision-0092
+  - kb-decision-wi-727ec8
   - kb-decision-0001
   - kb-decision-0035
 source_paths:
@@ -30,7 +38,7 @@ source_paths:
   - Cargo.toml
   - xtask/src/main.rs
   - .github/workflows/ci.yml
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-12
 ---
 
 # The two-flavour port derivation is emitted by a caret-pinned proc macro that only --locked can see
@@ -104,3 +112,15 @@ unscoped *"the gate builds `--locked`"* sentence is still at `crates/happenstanc
 The minimal-versions job `kb-decision-0066` sends to phase 17 tests declared **lower** bounds. It
 does not observe a floating upper resolve, so this atom's second question is still open.
 **Owner now: phase 17.**
+
+## Closed — 2026-10-12
+
+**Superseded by `kb-decision-0092`**, accepted by the owner on 2026-10-12 (`wi-727ec8`). Both
+questions are answered. The caret stays, and the exposure is covered by a derivation contract
+compiled into `happenstance-core`'s library code, `crates/happenstance-core/src/derivation.rs`,
+which fails a consumer's own build when a `trait-variant` release changes the derivation's shape.
+The `floating-deps` job is built too: a non-gating sibling in `.github/workflows/ci.yml` on the
+weekly schedule, which runs `cargo update` and then the contract, the build and the tests. The
+`store.rs` sentence now says it holds for this workspace's builds only
+(`crates/happenstance-core/src/store.rs:1195`). ES-7 is `[FROZEN]`. What stays owed is one run:
+the job has to be watched failing once, and that can only happen after a push.

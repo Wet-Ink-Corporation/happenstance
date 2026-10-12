@@ -823,6 +823,19 @@ supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0096 | [`kb-decision-0096`](../decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md) | VT-30 is frozen, after_every_guard names the blanket setter's scope, and typestate is rejected | accepted | 17b | — |
 
+## 2026-10-12: ES-7 frozen, and the trait-variant caret kept (#88)
+
+ADR-0092 records `wi-727ec8` and answers `kb-open-question-trait-variant-caret-001`, written
+straight here with no intake step. The caret stays. A derivation contract compiled into
+`happenstance-core`'s library code holds the shape `trait_variant` emits in every build of the
+crate, a consumer's included, and a non-gating weekly `floating-deps` job resolves without the
+lock. ES-7 is `[FROZEN]`. 0090 and 0091 are held by an unmerged pull request, which is why the
+number skips them.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0092 | [`kb-decision-0092`](../decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md) | The trait-variant caret stays, a derivation contract compiled into happenstance-core holds the shape, and ES-7 is frozen | accepted | 17b | supersedes `kb-open-question-trait-variant-caret-001` |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
