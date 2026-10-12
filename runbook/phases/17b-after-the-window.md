@@ -107,3 +107,9 @@ in this file's session log.
   empty (PR #239). On the owner's call, VT-14 is `[FROZEN]` by ADR-0089, and "seven"
   explicit bidirectional controls is corrected to nine wherever it was live prose. VT-30
   and ES-7 remain, so the exit criterion stays open.
+- 2026-10-12 — #90: the minimal-versions job landed (PR #268), and its leg 1 was red
+  locally before six floors moved. Ryan kept all six. #77's live-projection trio
+  landed (PR #267); it went red in CI on a deliberately broken `reset`, then green on
+  the revert. `cargo semver-checks` against `0.4.0` reports nothing for all seven
+  crates, and `0.4.1` is cut. #83, #85, #88, #92 and #93 are one-way and wait on the
+  owner.
