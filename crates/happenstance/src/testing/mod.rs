@@ -276,6 +276,13 @@ pub struct Decision<E> {
 impl<E: DomainEvent + PartialEq + core::fmt::Debug> Decision<E> {
     /// Asserts the decision emitted exactly `expected`.
     ///
+    /// So `then(&[])` asserts the decision emitted **nothing**, the decision
+    /// `commit` reports as [`CommandOutcome::Nothing`](crate::CommandOutcome::Nothing),
+    /// and it is the one spelling of that assertion. A `then_nothing()` lost:
+    /// it would be a second name for the same comparison ([ADR-0091]).
+    ///
+    /// [ADR-0091]: https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0091-then-empty-asserts-nothing-was-emitted.md
+    ///
     /// # Panics
     ///
     /// Panics when the emitted events differ, rendering four labelled regions —

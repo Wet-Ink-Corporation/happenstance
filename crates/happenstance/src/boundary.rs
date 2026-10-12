@@ -69,9 +69,9 @@ use crate::domain::{DecisionModel, DomainEvent};
 pub trait Boundary: crate::sealed::Sealed {
     /// The one domain enum every member of this boundary folds.
     ///
-    /// Present from birth rather than added later: the trait is sealed and the
-    /// crate publishes from it, and growing a sealed trait a required item is
-    /// a breaking change no downstream crate could have prepared for.
+    /// The seal would have made adding it later free, since no downstream
+    /// `impl` exists to lack it. The name is what cannot retract: `commit`
+    /// spells `B::Event`, and a tuple's members must share it (ADR-0090).
     type Event: DomainEvent;
 
     /// The query this boundary reads with, derived from its event set.

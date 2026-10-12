@@ -566,6 +566,38 @@ fn then_on_a_refused_decision_panics_naming_the_refusal() {
     );
 }
 
+/// ADR-0091: `then(&[])` asserts the decision emitted nothing. A `then` that
+/// read an empty slice as "assert nothing at all" passes the first half and is
+/// caught by the second.
+#[test]
+fn then_empty_asserts_that_nothing_was_emitted() {
+    block_on(async {
+        given(model())
+            .when(|_: &Deposits| Ok::<_, core::convert::Infallible>(Vec::new()))
+            .await
+            .unwrap()
+    })
+    .then(&[]);
+
+    let message = caught(|| {
+        let decision = block_on(async {
+            given(model())
+                .when(|_: &Deposits| {
+                    Ok::<_, core::convert::Infallible>(vec![DepositOnly::Deposited])
+                })
+                .await
+                .unwrap()
+        });
+        decision.then(&[]);
+    })
+    .message;
+
+    assert!(
+        message.contains("actual:") && message.contains("Deposited"),
+        "an emission compared against `&[]` must fail naming what was emitted:\n{message}"
+    );
+}
+
 #[test]
 fn assert_domain_event_rejects_variants_permuted_against_event_types() {
     // Index 0 carries `Withdrawn` while EVENT_TYPES declares `Deposited`
