@@ -1457,7 +1457,7 @@ correct under DCB's superset semantics — any event that could violate conditio
 carries every tag of some item of *C* — provided writers also lock the tags of the events
 they write. But **a tag-less condition has no key and collapses to a global lock over the
 whole log**, and a tag-less condition is legal, idiomatic and *encouraged*:
-`QueryItem::of_types` is a first-class constructor (`query.rs:129-135`), the append
+`QueryItem::of_types` is a first-class constructor (`query.rs:128-134`), the append
 documentation's own worked example uses it (`append.rs:23-31`), and only a fully
 unconstrained item is rejected (`error.rs:66-71`).
 
