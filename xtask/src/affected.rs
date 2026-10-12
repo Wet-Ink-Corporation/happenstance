@@ -1384,7 +1384,7 @@ mod tests {
     /// Read from disk rather than reasoned about, because what is being
     /// asserted is *which calls are written there*. It is the instrument
     /// `lint_narrative` already points at this exact block
-    /// (`xtask/src/lint_narrative.rs:2576`, `the_checker_joins_the_
+    /// (`xtask/src/lint_narrative.rs:2584`, `the_checker_joins_the_
     /// unconditional_file_reading_list`), and the two checks below are that
     /// one generalised.
     ///
