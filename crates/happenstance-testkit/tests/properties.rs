@@ -277,7 +277,7 @@ proptest! {
         event_type in any_event_type(),
         event_tags in any_tags(),
     ) {
-        let condition = AppendCondition::new(query).after_opt(after);
+        let condition = AppendCondition::new(query).after_every_guard_opt(after);
 
         prop_assert_eq!(
             condition.is_violated_by(position, &event_type, &event_tags),

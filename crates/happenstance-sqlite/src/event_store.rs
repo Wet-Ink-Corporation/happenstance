@@ -3116,7 +3116,7 @@ mod plan_tests {
         vec![
             (
                 "(a) two tags, after",
-                AppendCondition::new(Query::from_item(two())).after(after),
+                AppendCondition::new(Query::from_item(two())).after_every_guard(after),
             ),
             (
                 "(b) two tags, no boundary",
@@ -3128,7 +3128,7 @@ mod plan_tests {
                     &[("subject", "s1"), ("region", "r1"), ("shard", "cold")],
                     &[],
                 )))
-                .after(after),
+                .after_every_guard(after),
             ),
             (
                 "(d) two two-tag items, after",
@@ -3139,7 +3139,7 @@ mod plan_tests {
                     ])
                     .expect("a non-empty item list"),
                 )
-                .after(after),
+                .after_every_guard(after),
             ),
             (
                 "(e) two tags and two types, after",
@@ -3147,7 +3147,7 @@ mod plan_tests {
                     &[("subject", "s1"), ("shard", "cold")],
                     &["Seeded", "Other"],
                 )))
-                .after(after),
+                .after_every_guard(after),
             ),
         ]
     }

@@ -88,7 +88,7 @@ where
     // ... fold `events` into a decision ...
 
     // Append only if nothing matching has landed since we looked.
-    let condition = AppendCondition::new(query).after_opt(last_seen);
+    let condition = AppendCondition::new(query).after_every_guard_opt(last_seen);
     store.append(&[subscribed], Some(&condition)).await?;
     Ok(())
 }

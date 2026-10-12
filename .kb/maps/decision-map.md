@@ -766,6 +766,19 @@ leave every merge with the owner.
 | — | [`kb-decision-wi-f97418`](../decisions/wi-f97418-should-92-carve-cf-40-s-cloudflare-metadata.md) | CF-40's Cloudflare metadata ceiling is carved from the documented 2 MB row limit | accepted | 17b | — |
 | — | [`kb-decision-wi-fa5c7b`](../decisions/wi-fa5c7b-may-the-afk-session-build-one-way-17b-prs-83-93.md) | An unattended session builds the one-way 17b PRs; the owner merges them | accepted | 17b | — |
 
+## 2026-10-12: VT-30 frozen, and `after_every_guard` names its scope (#85)
+
+ADR-0096 builds the #85 part of `wi-378078` and is written straight here with no intake step.
+It carries out ADR-0054: `after_every_guard` and `after_every_guard_opt` are added, and `after`
+and `after_opt` are deprecated and kept through 1.x. It rejects typestate and freezes VT-30.
+Limb 1 is answered by `happenstance-neon`, and limb 2 is retired by the record. It amends one
+sentence of `kb-decision-0054`, which said the alias would be deleted when the marker lifted, and
+supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0096 | [`kb-decision-0096`](../decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md) | VT-30 is frozen, after_every_guard names the blanket setter's scope, and typestate is rejected | accepted | 17b | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

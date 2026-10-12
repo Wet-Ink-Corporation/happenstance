@@ -404,7 +404,7 @@ fn step_three_guards_on_a_position_its_own_read_observed() {
         .expect("step three never reads");
     assert!(
         seeded < read_back,
-        "step three reads an empty store, so `upto` is None and `after_opt(upto)` \
+        "step three reads an empty store, so `upto` is None and `after_every_guard_opt(upto)` \
          is inert — the guard it builds is indistinguishable from the whole-log \
          guard `AppendCondition::new` already carries"
     );
@@ -424,7 +424,7 @@ fn step_three_guards_on_a_position_its_own_read_observed() {
          so nothing is above the position the guard was built from"
     );
     assert!(
-        program.contains("after_opt(upto)"),
+        program.contains("after_every_guard_opt(upto)"),
         "the condition is not built from the position the read observed"
     );
 
@@ -697,7 +697,7 @@ fn every_step_closes_on_a_clause_citation() {
 /// over a program that only demonstrates syntax — and this page is the one
 /// written to close it. ES-26 is the **exclusivity** of `after`: an event at
 /// exactly `after` does not reject. A program that guards an *empty* store
-/// never reaches it, because `after_opt(None)` means "no matching event at
+/// never reaches it, because `after_every_guard_opt(None)` means "no matching event at
 /// all" (ES-25's other half) and no position is ever compared. That is the
 /// wrong implementation this rule rejects, and it is the one the page shipped
 /// with until this check existed.
@@ -736,7 +736,7 @@ fn step_two_reaches_the_boundary_its_citation_claims() {
     // The guard is built from that observed position, and the guarded append
     // is admitted rather than refused — both halves of what the prose claims.
     assert!(
-        program.contains("after_opt(upto)") && program.contains("Some(&condition)"),
+        program.contains("after_every_guard_opt(upto)") && program.contains("Some(&condition)"),
         "step two does not guard on the position its own read observed"
     );
 

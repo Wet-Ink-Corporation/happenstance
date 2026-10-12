@@ -2,7 +2,8 @@
 id: kb-open-question-vt-30-marker-stale-unscheduled-001
 title: VT-30's provisional marker names two falsifiers, one built, and no phase schedules lifting it
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0096
 authority_tier: note
 summary: >-
   VT-30 is PROVISIONAL, falsified if no adapter can push a multi-guard AppendCondition into a
@@ -18,13 +19,15 @@ summary: >-
   ledger rather than against the clause text, so VT-30 clears the audit unexamined on a row naming
   a phase that already shipped. Moving a provisional marker is an ADR's act; this atom records
   that no ADR has been asked to.
+  Resolved 2026-10-12 by kb-decision-0096: VT-30 is FROZEN at phase 17b. Limb 1 does not fire, because happenstance-neon pushes a multi-guard condition into one statement with no self-join per guard; limb 2 is retired by the record, because it could fire only as a major. after_every_guard and after_every_guard_opt are added and after and after_opt are deprecated and kept through 1.x.
 depends_on:
   - kb-decision-0054
 related:
   - kb-decision-0012
+  - kb-decision-0096
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/after-opt-scope.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-12
 ---
 
 # VT-30's provisional marker names two falsifiers, one built, and no phase schedules lifting it
@@ -113,8 +116,25 @@ was proposed and refuted in the 2026-09-29 verification.
 The marker is staler than this atom recorded: it still calls the Postgres adapter unbuilt
 (`spec/SPECIFICATION.md:1988-1992`), and that event store has been real since phase 10b.
 ADR-0054's `after_every_guard` has not landed — `after` and `after_opt` carry no `#[deprecated]`
-(`crates/happenstance-core/src/append.rs:187`, `:201`) — so adding the alias is additive and
+(`crates/happenstance-core/src/append.rs:187`, `:201` at `d1100f8`) — so adding the alias is additive and
 retiring the old names is a break only phase 17 can take. The ledger row naming phase 4
 (`runbook/ledgers.md:172`) is outranked by the disposition row (`runbook/ledgers.md:289`), which
 names phase 17. Sub-questions 1 and 2 go with the freeze; 3 is answered by the Postgres adapter
 existing. **Owner now: phase 17.**
+
+## Phase 17b — 2026-10-12: resolved by ADR-0096
+
+[`kb-decision-0096`](../decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md),
+on the owner's call `wi-378078`, freezes VT-30 and answers the sub-questions.
+
+1. **The marker text.** It is replaced by a `[FROZEN]` basis, so it is not corrected as a
+   provisional marker.
+2. **The multi-guard benchmark scenario.** It is not built. Limb 2 is retired by the record,
+   because firing it would withdraw a published guard sequence, and that is a major.
+3. **The Postgres append path.** It issues one statement per guard, as `happenstance-sqlite`
+   does. Limb 1 is answered by `happenstance-neon` instead, which pushes every guard into one
+   conditional insert with no self-join per guard
+   (`crates/happenstance-neon/src/event_store.rs:525-544`).
+
+`after_every_guard` and `after_every_guard_opt` have landed, and `after` and `after_opt` carry
+`#[deprecated]` and are kept through 1.x.

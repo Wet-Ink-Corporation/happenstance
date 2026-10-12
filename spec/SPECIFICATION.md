@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 205 clause IDs, of which 198 are normative:
-**157 `[FROZEN]`**, **29 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+**158 `[FROZEN]`**, **28 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -1982,14 +1982,14 @@ clause took that number in the same slice, so it moved rather than colliding.
 
 An `AppendCondition` MUST hold a non-empty sequence of guards, each a pair of a
 `Query` and an `Option<SequencePosition>` boundary. The append MUST be rejected
-if any guard is violated. `AppendCondition::new(query)` MUST continue to produce
-a single unbounded guard, and `after`/`after_opt` MUST continue to apply the
-given boundary to every guard.
+if any guard is violated. `AppendCondition::new(query)` MUST produce a single unbounded
+guard, and `after_every_guard`/`after_every_guard_opt`, with their deprecated spellings
+`after`/`after_opt`, MUST apply the given boundary to every guard already present.
 
-`[PROVISIONAL — falsified if no adapter can push a multi-guard condition into a
-single statement without one self-join per guard, or if the `min()` collapse
-measures as immaterial on a Wattline-shaped workload; the Postgres adapter and
-the benchmark harness are the two instruments and both are unbuilt]`
+`[FROZEN]` — by [ADR-0096](../.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md),
+at phase 17b (#85): `happenstance-neon` pushes a multi-guard condition into one statement with
+no self-join per guard, and the `min()`-collapse limb is retired by that record, because it could
+fire only as a major. Reopened after 1.0 only as a major, with its own record.
 `Rule:` `condition_guards_carry_independent_boundaries`,
 `condition_with_one_guard_behaves_as_today`; the existing
 `condition_after_*` family becomes the single-guard case
@@ -2004,8 +2004,8 @@ rate as physics.
 Query, after: Option<SequencePosition> }` with public fields on a
 `#[non_exhaustive]` struct. It is now `{ guards: Box<[Guard]> }`
 (`append.rs:102-119`) with `pub struct Guard { pub query: Query, pub after:
-Option<SequencePosition> }` (`:130-141`); the clause landed at phase 4 and it
-stays `[PROVISIONAL]` until its two instruments are built. The
+Option<SequencePosition> }` (`:130-141`); the clause landed at phase 4 and
+was frozen at phase 17b by ADR-0096. The
 `Guard` type MUST itself be `#[non_exhaustive]` with public fields, for the same
 reason `AppendCondition` is: E2E-37's ingest rule must *read* `after` on a
 peer-supplied condition without being able to construct one literally, and
@@ -2205,9 +2205,9 @@ than a live obligation — **and so MUST `{"guards":[{}]}` and
 The field is named `query` because VT-30 moved the boundary into `Guard { query,
 after }` (ADR-0012 §9), and this clause's earlier `fail_if_events_match` named a
 field that move deleted; the MUST is about presence (E2E-37) and not about
-spelling. **VT-30 is itself `[PROVISIONAL]` (`:1781-1784`) with both instruments
-unbuilt, so this noun tracks a provisional clause's landed implementation:
-falsifying VT-30 withdraws the guard sequence and returns this clause to a
+spelling. **VT-30 was `[PROVISIONAL]` when this was written, and is `[FROZEN]`
+at phase 17b by ADR-0096, so this noun now tracks a frozen clause: only a major
+that withdraws the guard sequence would return this clause to a
 single-guard spelling. It does not reopen the `after`-presence obligation, which
 is E2E-37's and independent of the guard count.**
 
@@ -4038,13 +4038,13 @@ phase 4.
 
 VT-30 replaced the single `fail_if_events_match` / `after` pair with that
 non-empty sequence of guards, each a `(Query, Option<SequencePosition>)` pair,
-and that clause is still `[PROVISIONAL]`. Every clause
+and that clause is `[FROZEN]` since phase 17b. Every clause
 in this subsection is written for one guard and generalises to N by conjunction:
 the append is rejected if **any** guard is violated, and each guard is evaluated
 by exactly the rules stated here. Nothing below depends on there being only one,
 and the existing `condition_after_*` rules become the single-guard case rather
-than being rewritten — which is why VT-30 can stay provisional under clauses that
-are frozen.
+than being rewritten — which is why VT-30 could stay provisional under clauses
+that were frozen, until ADR-0096 froze it too.
 
 #### ES-25 — Condition semantics
 
@@ -4250,7 +4250,7 @@ rather than a contradiction — underspecified upstream, settled here.
 
 The pairing that falls out is exact and requires no arithmetic:
 `read_decision_model` returns the maximum position observed and
-`AppendCondition::after_opt` consumes it (`store.rs:535-545`, `append.rs:191-212`).
+`AppendCondition::after_every_guard_opt` consumes it (`store.rs:535-545`, `append.rs:196-212`).
 The pairing that does *not* fall out is the checkpoint resume path, where
 `ProjectionStore::checkpoint` returns an inclusive-consumed position and
 `ReadOptions::from` is inclusive, so the caller must advance by hand through
@@ -4424,12 +4424,12 @@ the private format nothing.
   `AppendCondition`'s, and VT-30 is why: `Guard` is `#[non_exhaustive]` with
   **public** fields (`append.rs:121-141`), while `AppendCondition`'s own `guards`
   field is **private** and reachable only through `guards()`
-  (`append.rs:102-119`, `:179-183`). Either way the refusal is checkable today:
+  (`append.rs:102-119`, `:183-187`). Either way the refusal is checkable today:
   readable but not literal-constructible is exactly what makes an ingest-side
   policy possible.
 
 The position-free form is already the default — `AppendCondition::new` leaves
-`after: None` and `after`/`after_opt` are opt-in builders (`append.rs:185-212`) — so
+`after: None` and `after_every_guard`/`_opt` are opt-in builders (`append.rs:189-212`) — so
 the API already makes the replicable shape the easy one. The crate's only read
 helper, `read_decision_model`, exists to produce the *position-relative* form and
 has no counterpart for the replicable one; if the sync design lands on
@@ -7147,7 +7147,7 @@ property rather than `AppendCondition`'s: `Guard` is `#[non_exhaustive]` with
 **public** fields (`append.rs:121-141`), so a peer can read `after` and reject on
 it while being unable to construct the struct literally, while
 `AppendCondition`'s own `guards` field is private and readable only through
-`guards()` (`append.rs:102-119`, `:179-183`).
+`guards()` (`append.rs:102-119`, `:183-187`).
 Readable-but-not-literal-constructible is precisely what makes this
 checkable. WF-4 is the other half: `after` is **always
 present** on the wire, never elided, because a policy can only refuse what it can
@@ -9897,13 +9897,13 @@ between them because its *shape* does not wait on a transport but its
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 35 | 27 | 7 | 0 | 1 |
+| §2.1–§2.6 value types | `VT` | 35 | 28 | 6 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 38 | 4 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 26 | 5 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **205** | **157** | **29** | **12** | **7** |
+| **Total** | | **205** | **158** | **28** | **12** | **7** |
 
 ### 7.2 The table
 
@@ -9940,7 +9940,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-27 | FROZEN | compile-level; enforced by the wire tests, which would otherwise have a positi… | E2E-04, E2E-05, E2E-37, E2E-38 |
 | VT-28 | FROZEN | `read_limit_zero_yields_nothing`, `read_limit_truncates` | E2E-11, E2E-13 |
 | VT-29 | FROZEN | `read_to_is_inclusive`, `read_from_and_to_bound_a_closed_window`, `read_to_und… | E2E-11 |
-| VT-30 | PROVISIONAL | `condition_guards_carry_independent_boundaries`, `condition_with_one_guard_beh… | E2E-04, E2E-05, E2E-06 |
+| VT-30 | FROZEN | `condition_guards_carry_independent_boundaries`, `condition_with_one_guard_beh… | E2E-04, E2E-05, E2E-06 |
 | VT-31 | FROZEN | `query_items_are_or`, `query_item_order_does_not_change_the_result_set`, `quer… | E2E-32 |
 | VT-32 | FROZEN | unit tests `from_static_and_new_agree`, `from_static_rejects_a_bidirectional_c… | E2E-40, E2E-51 |
 | VT-33 | FROZEN | unit tests `a_borrowed_and_an_owned_tag_are_one_value`, `a_map_keyed_by_event_… | E2E-40, E2E-51 |

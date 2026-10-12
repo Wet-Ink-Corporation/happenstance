@@ -200,7 +200,7 @@ pub trait EventStore {
     /// exists to catch. The sound `after` comes from a read:
     /// [`read_decision_model`] returns the last position actually observed,
     /// which is what
-    /// [`AppendCondition::after_opt`](crate::AppendCondition::after_opt)
+    /// [`AppendCondition::after_every_guard_opt`](crate::AppendCondition::after_every_guard_opt)
     /// expects.
     ///
     /// # Atomicity
@@ -534,7 +534,7 @@ where
 /// what you can see, then append conditioned on nothing new having appeared.
 /// The returned position is the last one observed, or `None` when nothing
 /// matched — which is exactly what
-/// [`AppendCondition::after_opt`](crate::AppendCondition::after_opt) expects.
+/// [`AppendCondition::after_every_guard_opt`](crate::AppendCondition::after_every_guard_opt) expects.
 ///
 /// # Errors
 ///

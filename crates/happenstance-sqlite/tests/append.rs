@@ -417,7 +417,10 @@ async fn guard_after_is_exclusive_at_the_boundary() {
     let admitted = store
         .append(
             &[tagged("Enrolled", &[("course", "c1")])],
-            Some(&AppendCondition::new(query_tagged(&[("course", "c1")])).after(boundary)),
+            Some(
+                &AppendCondition::new(query_tagged(&[("course", "c1")]))
+                    .after_every_guard(boundary),
+            ),
         )
         .await;
     assert!(
@@ -430,7 +433,10 @@ async fn guard_after_is_exclusive_at_the_boundary() {
     let refused = store
         .append(
             &[tagged("Enrolled", &[("course", "c1")])],
-            Some(&AppendCondition::new(query_tagged(&[("course", "c1")])).after(boundary)),
+            Some(
+                &AppendCondition::new(query_tagged(&[("course", "c1")]))
+                    .after_every_guard(boundary),
+            ),
         )
         .await;
     assert!(matches!(refused, Err(AppendError::ConditionViolated(_))));

@@ -103,7 +103,8 @@ fn query(owned: bool) -> Query {
 }
 
 fn condition(owned: bool) -> AppendCondition {
-    AppendCondition::new(query(owned)).after(SequencePosition::new(7).expect("7 is non-zero"))
+    AppendCondition::new(query(owned))
+        .after_every_guard(SequencePosition::new(7).expect("7 is non-zero"))
 }
 
 /// One value in both formats.
@@ -351,7 +352,7 @@ fn the_encoding_is_the_one_that_shipped() {
             "AppendCondition",
             encodings(
                 &AppendCondition::new(query.clone())
-                    .after(SequencePosition::new(7).expect("7 is non-zero")),
+                    .after_every_guard(SequencePosition::new(7).expect("7 is non-zero")),
             ),
             r#"{"guards":[{"query":{"Items":[{"types":["A"],"tags":["k00:v00"]}]},"after":7}]}"#,
             // One guard: the Query above, then `after` as `Some(7)`.

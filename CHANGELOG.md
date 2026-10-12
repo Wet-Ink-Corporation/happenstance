@@ -34,6 +34,24 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **`AppendCondition::after_every_guard` and `after_every_guard_opt`** (#85,
+  [ADR-0096](.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md)).
+  They do what `after` and `after_opt` always did, and the name now says so: the
+  boundary goes on **every** guard already in the condition. If you call one after
+  `and_guard`, it overwrites the boundary `and_guard` set and widens what the
+  condition tolerates, so call it first. Both doc blocks and `and_guard`'s now say
+  this, and two unit tests pin the order. VT-30 is now `[FROZEN]`, so from `1.0.0`
+  a setter that fills only unset boundaries would be a breaking change.
+
+### Deprecated
+
+- **`AppendCondition::after` and `after_opt`**, in favour of `after_every_guard`
+  and `after_every_guard_opt`. They behave exactly as before and are **kept through
+  1.x**; only a 2.0 can remove them. The fix is a rename. A crate built with
+  `-D warnings` sees the deprecation as an error until it renames.
+
 ## [0.4.1] — 2026-10-12
 
 ### Added

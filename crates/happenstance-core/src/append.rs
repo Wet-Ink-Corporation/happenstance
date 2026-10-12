@@ -58,7 +58,7 @@ use crate::query::Query;
 /// // ... read with `query`, ending at `last_seen` ...
 /// let last_seen = None; // nothing matched
 ///
-/// let condition = AppendCondition::new(query).after_opt(last_seen);
+/// let condition = AppendCondition::new(query).after_every_guard_opt(last_seen);
 /// # Ok::<(), Box<dyn core::error::Error>>(())
 /// ```
 ///
@@ -90,7 +90,7 @@ use crate::query::Query;
 /// let quiet = Query::from_item(QueryItem::of_types(["TariffPublished"])?);
 ///
 /// let condition = AppendCondition::new(busy)
-///     .after_opt(SequencePosition::new(9_000))
+///     .after_every_guard_opt(SequencePosition::new(9_000))
 ///     .and_guard(quiet, SequencePosition::new(12));
 ///
 /// assert_eq!(condition.guards().len(), 2);
@@ -161,6 +161,10 @@ impl AppendCondition {
     /// consistency boundary rejects appends that never conflicted and the
     /// deployment reads the rejection rate as contention.
     ///
+    /// A later [`after_every_guard_opt`](Self::after_every_guard_opt) **erases** the
+    /// `after` given here, because it rewrites every guard already present: call it
+    /// before `and_guard`, never after.
+    ///
     /// Allocation note, since this is the trade a reader coming from a language
     /// with a growable list will not expect: `guards` is a boxed slice, which
     /// carries no spare capacity, so this unboxes, pushes and re-boxes. A chain
@@ -182,10 +186,11 @@ impl AppendCondition {
         &self.guards
     }
 
-    /// Restricts **every** guard to events after `position`, exclusive.
+    /// Restricts **every** guard to events after `position`, exclusive, erasing any
+    /// boundary [`and_guard`](Self::and_guard) set: `after_every_guard_opt(Some(position))`.
     #[must_use]
-    pub fn after(self, position: SequencePosition) -> Self {
-        self.after_opt(Some(position))
+    pub fn after_every_guard(self, position: SequencePosition) -> Self {
+        self.after_every_guard_opt(Some(position))
     }
 
     /// Restricts **every** guard to events after `position`, exclusive, or
@@ -196,19 +201,14 @@ impl AppendCondition {
     ///
     /// Applying to every guard is what keeps a single-guard condition — the
     /// shape every existing caller builds — behaving exactly as it always has.
-    /// For per-guard boundaries, use [`and_guard`](Self::and_guard).
+    /// For per-guard boundaries, use [`and_guard`](Self::and_guard). Called **after**
+    /// `and_guard`, this **erases** the boundary `and_guard` attached, moving a quiet
+    /// guard's boundary to `position` and widening what the condition tolerates.
     #[must_use]
-    pub fn after_opt(self, position: Option<SequencePosition>) -> Self {
-        let guards = Vec::from(self.guards)
-            .into_iter()
-            .map(|guard| Guard {
-                query: guard.query,
-                after: position,
-            })
-            .collect::<Vec<_>>();
-        Self {
-            guards: guards.into_boxed_slice(),
-        }
+    pub fn after_every_guard_opt(self, position: Option<SequencePosition>) -> Self {
+        let mut guards = self.guards;
+        guards.iter_mut().for_each(|guard| guard.after = position);
+        Self { guards }
     }
 
     /// Whether an event at `position` with this type and these tags would
@@ -374,6 +374,44 @@ mod serde_impls {
     }
 }
 
+/// The two spellings ADR-0054 renamed, kept through 1.x.
+///
+/// A separate `impl` block, after everything else, so that adding them moved no
+/// line a citation names. Each forwards to the name that says its scope.
+impl AppendCondition {
+    /// Restricts **every** guard to events after `position`, exclusive.
+    ///
+    /// Renamed [`after_every_guard`](Self::after_every_guard), because the old name
+    /// did not say that it overwrites the boundary of every guard already present.
+    /// The behaviour is identical, and this spelling is kept through 1.x.
+    #[deprecated(
+        since = "0.4.2",
+        note = "use `after_every_guard`, which names its scope; `after` is kept through 1.x"
+    )]
+    #[must_use]
+    pub fn after(self, position: SequencePosition) -> Self {
+        self.after_every_guard(position)
+    }
+
+    /// Restricts **every** guard to events after `position`, exclusive, or
+    /// checks the whole log when `position` is `None`.
+    ///
+    /// Renamed [`after_every_guard_opt`](Self::after_every_guard_opt), because the
+    /// old name did not say its scope. Called **after**
+    /// [`and_guard`](Self::and_guard), it **erases** the boundary `and_guard`
+    /// attached, moving a quiet guard's boundary to `position` and widening what
+    /// the condition tolerates. The behaviour is identical, and this spelling is
+    /// kept through 1.x.
+    #[deprecated(
+        since = "0.4.2",
+        note = "use `after_every_guard_opt`, which names its scope; `after_opt` is kept through 1.x"
+    )]
+    #[must_use]
+    pub fn after_opt(self, position: Option<SequencePosition>) -> Self {
+        self.after_every_guard_opt(position)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
@@ -400,7 +438,7 @@ mod tests {
     #[test]
     fn after_is_exclusive() {
         let condition = AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()))
-            .after(pos(5));
+            .after_every_guard(pos(5));
 
         // Strictly before the boundary: already accounted for.
         assert!(!condition.is_violated_by(pos(4), &ty("A"), &Tags::empty()));
@@ -413,8 +451,72 @@ mod tests {
     #[test]
     fn non_matching_events_after_the_boundary_are_ignored() {
         let condition = AppendCondition::new(Query::from_item(QueryItem::of_types(["A"]).unwrap()))
-            .after(pos(5));
+            .after_every_guard(pos(5));
 
         assert!(!condition.is_violated_by(pos(99), &ty("B"), &Tags::empty()));
+    }
+
+    fn of_type(value: &str) -> Query {
+        Query::from_item(QueryItem::of_types([value]).unwrap())
+    }
+
+    fn boundaries(condition: &AppendCondition) -> Vec<Option<SequencePosition>> {
+        condition.guards().iter().map(|guard| guard.after).collect()
+    }
+
+    /// ADR-0054's first pin: the hazardous order. A blanket setter called after
+    /// `and_guard` overwrites the boundary `and_guard` attached, so the quiet
+    /// guard's `p2` becomes `p1`. The wrong implementation it rejects fills only
+    /// guards whose `after` is `None`, which would leave `[p1, p2]`.
+    #[test]
+    fn after_every_guard_after_and_guard_overwrites_every_boundary() {
+        let condition = AppendCondition::new(of_type("A"))
+            .and_guard(of_type("B"), Some(pos(2)))
+            .after_every_guard(pos(1));
+
+        assert_eq!(boundaries(&condition), [Some(pos(1)), Some(pos(1))]);
+
+        let cleared = AppendCondition::new(of_type("A"))
+            .and_guard(of_type("B"), Some(pos(2)))
+            .after_every_guard_opt(None);
+
+        assert_eq!(boundaries(&cleared), [None, None]);
+    }
+
+    /// ADR-0054's second pin: the safe order. The blanket setter before any
+    /// `and_guard` leaves each later guard with the boundary it was given.
+    #[test]
+    fn after_every_guard_opt_before_and_guard_keeps_boundaries_independent() {
+        let condition = AppendCondition::new(of_type("A"))
+            .after_every_guard_opt(Some(pos(9_000)))
+            .and_guard(of_type("B"), Some(pos(12)))
+            .and_guard(of_type("C"), None);
+
+        assert_eq!(
+            boundaries(&condition),
+            [Some(pos(9_000)), Some(pos(12)), None]
+        );
+    }
+
+    /// The deprecated spellings are kept through 1.x with the same behaviour,
+    /// so they are pinned on the same hazardous order as their replacements.
+    #[test]
+    #[expect(
+        deprecated,
+        reason = "pins `after` and `after_opt`, which ADR-0054 deprecates and keeps through 1.x"
+    )]
+    fn deprecated_after_and_after_opt_still_overwrite_every_guard() {
+        let hazardous = || AppendCondition::new(of_type("A")).and_guard(of_type("B"), Some(pos(2)));
+
+        assert_eq!(
+            hazardous().after(pos(1)),
+            hazardous().after_every_guard(pos(1))
+        );
+        assert_eq!(boundaries(&hazardous().after(pos(1))), [Some(pos(1)); 2]);
+        assert_eq!(
+            hazardous().after_opt(Some(pos(1))),
+            hazardous().after_every_guard_opt(Some(pos(1)))
+        );
+        assert_eq!(boundaries(&hazardous().after_opt(None)), [None, None]);
     }
 }

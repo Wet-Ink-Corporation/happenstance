@@ -5596,7 +5596,7 @@ pub mod rules {
     /// A one-guard condition is evaluated by the same rules as any other guard.
     ///
     /// VT-30's compatibility half: `AppendCondition::new(query)` produces a single
-    /// unbounded guard, `after`/`after_opt` apply to every guard, and every
+    /// unbounded guard, `after_every_guard`/`_opt` apply to every guard, and every
     /// existing call site keeps its meaning as the single-guard case. What that
     /// obliges of a *store* is one sentence — **the one-guard path is not exempt
     /// from the boundary semantics** — and it is the sentence a store can get
@@ -6186,7 +6186,7 @@ pub mod rules {
     /// # Why the failure is quieter than a tear looks
     ///
     /// The missed event's position sits *below* the maximum the read observed.
-    /// `read_decision_model` hands that maximum to `AppendCondition::after_opt`,
+    /// `read_decision_model` hands that maximum to `after_every_guard_opt`,
     /// and the condition then says "reject if anything matched after *P*" —
     /// which is precisely the instruction to ignore the event that was missed. A
     /// torn read does not become a rejected append; it becomes an **accepted**

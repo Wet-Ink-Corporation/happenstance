@@ -1372,7 +1372,7 @@ into, is two lines and lands on all thirty-odd queries in this catalogue.
 
 **GIVEN** a `!Send` `EventStore` behind an `Rc`, on a single-threaded executor.
 **WHEN** a generic handler bound on `EventStore` reads with a five-item query, drains it
-with `collect`, builds `AppendCondition::new(query).after_opt(last_seen)` and appends.
+with `collect`, builds `AppendCondition::new(query).after_every_guard_opt(last_seen)` and appends.
 **THEN** the whole future is usable in a `!Send` context.
 
 **Falsifies:** nothing — it **confirms** ADR-0001, which is still marked provisional

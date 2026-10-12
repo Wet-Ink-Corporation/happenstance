@@ -1655,7 +1655,7 @@ mod tests {
         let tags = Tags::from_pairs([("k", "v")]).unwrap();
         let condition =
             AppendCondition::new(Query::from_item(QueryItem::tagged(tags.clone()).unwrap()))
-                .after_opt(SequencePosition::new(3));
+                .after_every_guard_opt(SequencePosition::new(3));
         let event = Event::new("T", b"x".to_vec()).unwrap().with_tags(tags);
         let foreign = foreign_rows(1);
 

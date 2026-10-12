@@ -158,12 +158,12 @@ pub fn condition(query: Query) -> AppendCondition {
 
 /// Builds an append condition restricted to events after `position`.
 ///
-/// # Panics
-///
-/// Panics if `position` is zero. Test-only helper.
+/// No position is zero, so "after zero" means "after nothing": a `position`
+/// of `0` checks the whole log, exactly as [`condition`] does. Test-only
+/// helper.
 #[must_use]
 pub fn condition_after(query: Query, position: u64) -> AppendCondition {
-    AppendCondition::new(query).after(SequencePosition::new(position).expect("non-zero position"))
+    AppendCondition::new(query).after_every_guard_opt(SequencePosition::new(position))
 }
 
 // -------------------------------------------------------------------------

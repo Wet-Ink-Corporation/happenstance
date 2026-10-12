@@ -30,7 +30,7 @@ spelling, settled by compiling it.
       its doc contrasts it with the fallible `of_types`. Check
       `crates/happenstance-core/tests/frozen_signatures.rs` for an enumeration it
       must join.
-- [ ] #85 · **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
+- [x] #85 · **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
       research recommends: `after_every_guard` and `after_every_guard_opt`, with
       `after` / `after_opt` deprecated since the release that carries them and
       kept through 1.x; the two pin tests and doc sentences ADR-0054 names;
@@ -39,6 +39,11 @@ spelling, settled by compiling it.
       deprecation into an error — so this lands **last** among 17b's code items.
       Limb 2 retired by the record or by a multi-guard `fragmented_boundary`
       bench scenario.
+      **Done:** VT-30 is `[FROZEN]` by
+      [ADR-0096](../../.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md),
+      on the owner's call (`wi-378078`): `after_every_guard` and `after_every_guard_opt`
+      added, `after` and `after_opt` deprecated since `0.4.2` and kept through 1.x, every
+      in-tree call site migrated, typestate rejected and limb 2 retired by the record.
 - [x] #86 · **VT-14 — the RTL identifier corpus check.** A standalone
       `experiments/identifier-validation/` with a path dependency on
       `happenstance-core`: the E11 reproduction run against the shipped validator
@@ -113,3 +118,8 @@ in this file's session log.
   the revert. `cargo semver-checks` against `0.4.0` reports nothing for all seven
   crates, and `0.4.1` is cut. #83, #85, #88, #92 and #93 are one-way and wait on the
   owner.
+- 2026-10-12 — #85: on the owner's call (`wi-378078`), VT-30 is `[FROZEN]` by ADR-0096.
+  `after_every_guard` and `after_every_guard_opt` are added, `after` and `after_opt` are
+  deprecated and kept through 1.x, and every in-tree call site is migrated. Typestate is
+  rejected, and limb 2 is retired by the record rather than by a bench scenario. ES-7
+  remains, so the exit criterion stays open.
