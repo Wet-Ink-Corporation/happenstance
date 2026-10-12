@@ -63,7 +63,7 @@ use happenstance_postgres::projection_store::PostgresProjectionStore;
 use happenstance_postgres::sqlx::postgres::PgPoolOptions;
 use happenstance_postgres::sqlx::{Executor, PgPool};
 use happenstance_testkit::concurrency::CONTENDERS;
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::{Armed, Capability, Fixture};
 use testcontainers::ReuseDirective;
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
@@ -487,6 +487,17 @@ impl Fixture for PostgresFixture {
     /// two obvious injections are not.
     const READ_FAULT: Capability = Capability::SUPPORTED;
 
+    /// **Supported, and staged for real.** This adapter is one of the two the
+    /// capability exists for: a row is visible once its `xact_id` is below
+    /// `pg_snapshot_xmin(pg_current_snapshot())`, so a committed row can be
+    /// held and not yet read. ES-41 reads the probe as *held* (ADR-0095), and
+    /// `contains_event_id_reports_a_held_row_above_the_frontier` is the rule
+    /// that checks this store answers that way.
+    ///
+    /// See [`PostgresFixture::arm_held_above_frontier`] for how the row is
+    /// staged, and why the frontier is not held back instead.
+    const HELD_ABOVE_FRONTIER: Capability = Capability::SUPPORTED;
+
     /// Mirrored from the adapter's own constants, never restated as literals.
     ///
     /// A number restated here is a number that drifts from the one `append`
@@ -591,6 +602,47 @@ impl Fixture for PostgresFixture {
             });
     }
 
+    /// Arms every later append to land above the visibility frontier.
+    ///
+    /// # What is injected
+    ///
+    /// A `BEFORE INSERT` trigger on `event` that sets the new row's `xact_id`
+    /// to the largest `xid8` this fixture writes, `i64::MAX`. The append itself
+    /// runs unchanged: same statement, same transaction, same commit. The row
+    /// is committed and held, and the read path's own predicate keeps it out
+    /// of `read` and `head`, because no snapshot's `xmin` will ever pass it.
+    /// The probe is then asked about a row its read path cannot see, which is
+    /// the question ES-41's reading settles.
+    ///
+    /// # Why the row is lifted rather than the frontier held back
+    ///
+    /// The natural staging is to hold the frontier: open a transaction, take
+    /// an `xid` with `pg_current_xact_id()`, and keep it open while the rule
+    /// appends. It loses on two counts. The frontier is **server-wide**, so
+    /// for as long as the hold lasts, every sibling rule running in this
+    /// binary against the same container would read without its own writes.
+    /// That is the lag `READ_YOUR_OWN_WRITES` declines, induced on purpose,
+    /// and `[FROZEN]` CF-33 names a rule that passes on a quiet machine and
+    /// fails on a loaded one as worse than none. The trigger is scoped to this
+    /// instance's schema and moves nothing anyone else reads.
+    ///
+    /// It fires for the life of this fixture instance, which is what the trait
+    /// asks for. `DROP TRIGGER IF EXISTS` first, so arming twice is a no-op
+    /// rather than an error.
+    ///
+    /// # Panics
+    ///
+    /// On any failure to reach or prepare the server. See the module docs.
+    async fn arm_held_above_frontier(&self) -> Armed {
+        let pool = self.pool().await;
+        pool.execute(HELD_ABOVE_FRONTIER_INJECTION)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("a broken test environment, not a non-conformant adapter: {error}")
+            });
+        Armed::Staged
+    }
+
     async fn reopen(&self) {
         // Every handle this fixture handed out owns its own `PgPool`, and this
         // fixture keeps none of them — so there is nothing here to close, and
@@ -631,6 +683,22 @@ const READ_FAULT_INJECTION: &str = concat!(
     "WHERE read_fault_guard(position); ",
     "END IF; ",
     "END $arm$;",
+);
+
+/// The held-above-the-frontier staging, as SQL.
+///
+/// [`READ_FAULT_INJECTION`]'s reason for being a constant. `i64::MAX` rather
+/// than the type's own ceiling because it is far above any `xid8` a server
+/// will assign, and it is a literal every reader recognises.
+const HELD_ABOVE_FRONTIER_INJECTION: &str = concat!(
+    "CREATE OR REPLACE FUNCTION held_above_frontier() RETURNS trigger AS ",
+    "$held$ BEGIN ",
+    "NEW.xact_id := '9223372036854775807'::xid8; ",
+    "RETURN NEW; ",
+    "END; $held$ LANGUAGE plpgsql;\n",
+    "DROP TRIGGER IF EXISTS held_above_frontier_trigger ON event;\n",
+    "CREATE TRIGGER held_above_frontier_trigger BEFORE INSERT ON event ",
+    "FOR EACH ROW EXECUTE FUNCTION held_above_frontier();",
 );
 
 // -------------------------------------------------------------------------

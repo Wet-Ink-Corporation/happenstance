@@ -639,25 +639,25 @@ impl SendEventStore for PostgresEventStore {
     }
 
     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
-        // # The frontier disagreement, answered rather than settled
+        // # Held, not visible: ES-41's reading, settled by ADR-0095
         //
         // This asks whether the store *holds* an event, and under the frontier
         // mechanism that is a different question from whether `read` would yield
-        // it: a committed row above the frontier is held but invisible. Both
-        // answers are defensible and both are wrong somewhere.
+        // it: a committed row above the frontier is held but invisible. ES-41
+        // reads it as held, and this answer is what the clause now requires.
         //
         // **This method answers `true` for a held-but-invisible row** — it does
-        // **not** carry the frontier predicate. The reason is what each mistake
-        // costs. Answering `false` would let a replication ingest re-accept an
-        // event the store already holds, and duplicate history is not
-        // recoverable by retrying; answering `true` makes this method briefly
-        // disagree with `read`, and that disagreement resolves itself as the
-        // frontier advances. A transient disagreement is cheaper than a
-        // permanent duplicate.
+        // **not** carry the frontier predicate. It agrees with the append
+        // condition, which ES-25 evaluates over what the store holds, and with
+        // VT-8's uniqueness on the origin pair. Answering `false` would let an
+        // ingest try to write again an event the store already holds; answering
+        // `true` makes this method briefly disagree with `read`, and that
+        // disagreement resolves itself as the frontier advances.
         //
-        // This is recorded, not settled. ES-41 was frozen at phase 17 (ADR-0028),
-        // but its marker does not fix this reading, and the replication
-        // semantics that would settle it belong to phase 13, which owns ingest.
+        // `contains_event_id_reports_a_held_row_above_the_frontier` checks it:
+        // the fixture lifts a row's `xact_id` above any frontier and the rule
+        // requires `true`. `FrontierFilteredMembershipStore`, the probe with
+        // the predicate copied in, is the testkit's mutant that fails it.
         let store = id.store().to_bytes().to_vec();
         let position = as_i64(id.position());
         let pool = self.pool.clone();

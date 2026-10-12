@@ -411,6 +411,8 @@ impl Fixture for Defaulted {
 fn capability_constants_are_answered_not_defaulted() {
     assert!(PostgresFixture::SECOND_HANDLE.is_supported());
     assert!(PostgresFixture::REOPEN.is_supported());
+    // A frontier store, so the default sentence (no frontier here) is false.
+    assert!(PostgresFixture::HELD_ABOVE_FRONTIER.is_supported());
 
     // `MID_BATCH_FAULT` was declined while `append` was `todo!()` and is
     // supported now that it is not. Both are answers; the failure mode this test
