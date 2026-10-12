@@ -2,7 +2,8 @@
 id: kb-open-question-then-empty-emission-idiom-001
 title: What does then(&[]) mean once an empty decision has its own outcome arm, and can decide say "nothing to do" separately from "refused"?
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0091
 authority_tier: note
 summary: >-
   ADR-0046 (the ratified successor to the empty-decision-outcome brief) settled that commit grows a
@@ -19,15 +20,17 @@ summary: >-
   events it should have seen. Both are named explicitly as unsettled by the accepted decision itself
   and are one design area because an answer to the DSL question likely shapes what a distinct
   "nothing to do" channel would need to look like on the decide side.
+  Resolved 2026-10-12 by kb-decision-0091: then(&[]) asserts the decision emitted nothing, as it always has; no then_nothing() is added; decide gets no third channel and CommandOutcome stays two-armed.
 depends_on: []
 related:
+  - kb-decision-0091
   - kb-decision-0012
   - kb-decision-0020
   - kb-decision-0031
   - kb-decision-0030
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/empty-decision-outcome.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-12
 ---
 
 # What does then(&[]) mean once an empty decision has its own outcome arm, and can decide say "nothing to do" separately from "refused"?
@@ -125,3 +128,12 @@ The likeliest answer adds `then_nothing()`, documents `then(&[])`'s meaning as i
 declines a separate channel. That closes the atom without a break, but the decline has to be
 recorded before 1.0. **Owner now: phase 17.** Sub-question 3, the scope-coverage helper, waits
 on it.
+
+## Closed — 2026-10-12
+
+**Superseded by `kb-decision-0091`**, accepted by the owner on 2026-10-12 (`kb-decision-wi-378078`).
+Sub-question 1: `then(&[])` is the designed idiom as it stands, and asserts the decision emitted
+nothing; no `then_nothing()` is added. Sub-question 2: `decide` gains no distinct signal, so its
+closure's return type and `CommandOutcome` are unchanged. Sub-question 3: the scope-coverage
+helper inherits no DSL shape and is free to add its own function. Nothing broke, so the deadline
+this atom inherited from ADR-0046 is spent without a break.
