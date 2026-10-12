@@ -45,6 +45,14 @@
 //!   by this module on every gate run and reported by nothing, and a test pins
 //!   that silence so the day it closes is the day this bullet fails a build.
 //!   The only other instrument is the reviewer who reads the tag in the diff.
+//! * **A Rust example tagged `no_run` is compiled and never executed.** The
+//!   fence walk accepts `no_run` beside `rust` and asks for no allowance, so a
+//!   page fence retagged `rust,no_run` still type-checks while its assertions
+//!   stop running, and a false `assert!` on a page passes the gate. A test pins
+//!   that silence with exactly such a fence. The instrument is the reviewer
+//!   who reads the tag in the diff; making `no_run` need an
+//!   [`IGNORE_ALLOWANCES`]-style entry would close the hole, and is a change to
+//!   what this tree accepts rather than a repair.
 //! * **A block indented by four spaces or more is invisible to this walk.**
 //!   `CommonMark` makes it an indented code block rather than a fence, and
 //!   rustdoc compiles it — measured, not assumed. What escapes is therefore the
@@ -5466,6 +5474,42 @@ One writer at a time.
         assert!(
             existing < added,
             "the new row must be appended, not inserted above the rows already there"
+        );
+    }
+
+    // ---- #235: a `no_run` fence compiles and is never executed ------------
+
+    /// The claim the `no_run` bullet must carry, matched inside one bullet.
+    const NO_RUN_CLAIM: &str = "tagged `no_run` is compiled and never executed";
+
+    /// The `no_run` limit, executed: a fence whose assertion is false on its
+    /// face walks clean, and the checker's limits section says so.
+    ///
+    /// `no_run` sits in the accepting arm of [`check_fences`] beside `rust`, so
+    /// a page fence retagged `rust,no_run` keeps compiling and stops running.
+    /// The issue offered two remedies, an allowance like `ignore`'s or a stated
+    /// limit; this pins the second. If the walk ever starts reporting the
+    /// fence, the limit is closed and the bullet is wrong.
+    #[test]
+    fn a_no_run_fence_with_a_false_assertion_walks_clean_and_the_limit_says_so() {
+        let text = "```rust,no_run\nfn main() {\n    assert_eq!(1, 2);\n}\n```\n";
+        let found = walk(
+            &[page_with("append-conditions.md", text)],
+            IGNORE_ALLOWANCES,
+        );
+        assert!(
+            found.is_empty(),
+            "the `no_run` limit is closed: the walk now reports the fence. Delete the \
+             bullet stating `{NO_RUN_CLAIM}` from {CHECKER} and this test with it. \
+             got: {found:#?}"
+        );
+
+        let bullets = limits_bullets(&module_docs(&shipping_source(CHECKER)));
+        let stating = bullets.iter().find(|bullet| bullet.contains(NO_RUN_CLAIM));
+        assert!(
+            stating.is_some_and(|bullet| bullet.contains("reviewer")),
+            "{CHECKER}'s `# {LIMITS_HEADING}` must carry a bullet stating \
+             `{NO_RUN_CLAIM}` and naming the reviewer as the instrument"
         );
     }
 
