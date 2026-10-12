@@ -2405,6 +2405,80 @@ const REGISTRY: &[Declared] = &[
             "MUST accept in one append",
         )],
     },
+    // --- CF-40's metadata ceiling (ADR-0043) ---------------------------
+    //
+    // One column, five ways to get its refusal wrong, one per assertion of the
+    // rule's metadata branch, and each fails only that branch. Each states ONLY
+    // `MAX_METADATA_LEN`, so a gate that forgot the fourth constant would skip
+    // all five and every row below
+    // would fail as "a declared failure that never ran". Each `expect` pins the
+    // `Got` the store produced, so a row cannot pass on another row's defect.
+    Declared {
+        name: "MetadataCeilingStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "a `metadata` column with a size check, or a KV value with a cap, and an \
+             adapter written before ADR-0043: its only channel for the refusal was \
+             `AppendError::Store`, which VT-25 forbids, so a sync runner reads \"this event \
+             will never fit\" as \"retry\".",
+        mode: FailureMode::Assertion,
+        expect: &[("append_reports_exceeded_store_limits", "MetadataTooLarge")],
+    },
+    Declared {
+        name: "MisnamedMetadataCeilingStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "the same ceiling refused as `StoreLimit::EventDataLen`, the one capacity \
+             variant there was before `MetadataLen`: a second check pasted from the payload \
+             check with the limit name left alone. ADR-0043 calls it a lie about which field \
+             failed, and a caller trimming `data` to fit trims the field that was not too long.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "limit: EventDataLen, len",
+        )],
+    },
+    Declared {
+        name: "TruncatingMetadataStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "`MetadataCeilingStore`'s column under `MySQL`'s non-strict `sql_mode`, the \
+             pairing `TruncatingPayloadStore` makes one column over: over-length metadata is \
+             stored clipped, the warning goes to a log nobody reads, and the caller is told \
+             the whole write landed. Metadata is where a causation header lives, so the \
+             clipped value is a trace that no longer joins.",
+        mode: FailureMode::Assertion,
+        expect: &[("append_reports_exceeded_store_limits", "Got Ok(")],
+    },
+    Declared {
+        name: "OffByOneMetadataCeilingStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "a size check written `>=` where `>` was meant: the ceiling is documented as \
+             the most the column holds and checked as the first size it refuses. Every value \
+             above the ceiling is refused correctly, so only an append of exactly the stated \
+             ceiling, the rule's at-ceiling anchor, tells the two apart.",
+        mode: FailureMode::Assertion,
+        // The anchor's own `append_ok`, refused at exactly the ceiling.
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "limit: MetadataLen, len: 4096",
+        )],
+    },
+    Declared {
+        name: "RefuseAfterInsertMetadataStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "the size check moved below the `INSERT`, where the encoded value's length is \
+             easy to read, with no transaction around the two. The caller is told the event \
+             was refused, with the right variant, and the event is in the log anyway; only \
+             reading the log back after the refusal sees it.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "must not be in the log in any form",
+        )],
+    },
 ];
 
 /// A deterministic disagreement between a store's own read path and
@@ -2568,6 +2642,17 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::ChunkedQueryStore>,
             crate::mutants::MutantFixture<crate::mutants::BatchParameterCeilingStore>,
             crate::mutants::MutantFixture<crate::mutants::ChunkLosingBatchStore>,
+            crate::mutants::MutantFixture<crate::mutants::metadata_ceilings::MetadataCeilingStore>,
+            crate::mutants::MutantFixture<
+                crate::mutants::metadata_ceilings::MisnamedMetadataCeilingStore,
+            >,
+            crate::mutants::MutantFixture<crate::mutants::metadata_ceilings::TruncatingMetadataStore>,
+            crate::mutants::MutantFixture<
+                crate::mutants::metadata_ceilings::OffByOneMetadataCeilingStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::metadata_ceilings::RefuseAfterInsertMetadataStore,
+            >,
             crate::mutants::MutantFixture<crate::mutants::NormalisingTagStore>,
             crate::mutants::MutantFixture<crate::mutants::KeyedTagMapStore>,
             crate::mutants::MutantFixture<crate::mutants::TrimmingIdentifierStore>,
@@ -2736,9 +2821,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Forty-five rows below are marked [`ModelOutcome::Agreed`] at this commit; three
+/// Fifty rows below are marked [`ModelOutcome::Agreed`] at this commit; three
 /// of them are the conformant controls and *must* be, which leaves
-/// **forty-two misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **forty-seven misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -2809,6 +2894,11 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///   — the empty payload and `Some(<empty>)` metadata were kept out because the
 ///   clause that owned the question had not been written. It has now, and the
 ///   rules that own it are named rather than generated.
+/// * `MetadataCeilingStore`, `MisnamedMetadataCeilingStore`,
+///   `TruncatingMetadataStore`, `OffByOneMetadataCeilingStore`,
+///   `RefuseAfterInsertMetadataStore` — CF-40's metadata ceiling, the same shape one
+///   column over: the generator's metadata is at most nine bytes, and the
+///   boundary is at 4,096.
 ///
 /// That is the shape of the argument for the concurrency family, arriving from
 /// the other direction: three of the window-shaped six are exactly what a
@@ -2919,6 +3009,13 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("ChunkedQueryStore", ModelOutcome::Agreed),
     ("BatchParameterCeilingStore", ModelOutcome::Agreed),
     ("ChunkLosingBatchStore", ModelOutcome::Agreed),
+    // CF-40's metadata ceiling: `any_event`'s metadata is at most nine bytes,
+    // so a 4,096-byte boundary is one the generator never reaches.
+    ("MetadataCeilingStore", ModelOutcome::Agreed),
+    ("MisnamedMetadataCeilingStore", ModelOutcome::Agreed),
+    ("TruncatingMetadataStore", ModelOutcome::Agreed),
+    ("OffByOneMetadataCeilingStore", ModelOutcome::Agreed),
+    ("RefuseAfterInsertMetadataStore", ModelOutcome::Agreed),
     ("NormalisingTagStore", ModelOutcome::Agreed),
     ("KeyedTagMapStore", ModelOutcome::Agreed),
     ("TrimmingIdentifierStore", ModelOutcome::Agreed),
@@ -3487,15 +3584,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 45,
-            "`MODEL_COVERAGE`'s heading says forty-five rows are `Agreed` and the \
+            agreed, 50,
+            "`MODEL_COVERAGE`'s heading says fifty rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            42,
-            "`MODEL_COVERAGE`'s heading says forty-two misses and the table \
+            47,
+            "`MODEL_COVERAGE`'s heading says forty-seven misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls

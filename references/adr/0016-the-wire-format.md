@@ -682,7 +682,7 @@ which the `proof.rs` step already does in order to list its neighbours.
 
 **D12 was closed at phase 0**, by commit `927d291` (2026-08-06), whose message says
 *"**D12** — `serde/alloc` arrived by accident … Now stated."* The fix is at
-`crates/happenstance-core/Cargo.toml:36` and `CHANGELOG.md:1091` records it.
+`crates/happenstance-core/Cargo.toml:36` and `CHANGELOG.md:1147` records it.
 
 **Its failure is not reproducible at HEAD**, which is the whole argument for the
 instrument. `bytes` 1.12.1 — the version `Cargo.lock:92-93` pins — declares its own

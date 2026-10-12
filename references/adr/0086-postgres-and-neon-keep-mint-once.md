@@ -43,7 +43,7 @@ VT-6 (`spec/SPECIFICATION.md:848-906`) is `[PROVISIONAL]`. ADR-0066 marks it fre
 | `happenstance-sqlite` | once, in `migrate` | re-read inside the append's `BEGIN IMMEDIATE`, refusing a stale handle with `IdentityMoved` (`crates/happenstance-sqlite/src/event_store.rs:746`, `:1253-1264`, rationale `:699-732`) | `SqliteEventStore::remint_identity(path)` (`:597-646`) | none, and none is possible | present (`references/adapter-shapes.md:382`) |
 | `happenstance-postgres` | once, migration 1 (`migrations/0001_event_log.sql:102-118`) | `Arc<OnceLock<StoreId>>` filled on first use (`src/event_store.rs:183`, `:396-420`), read once per append (`:537`), bound on every row by `insert_batch` (`:1001-1043`) | none | none | "undecided" (`references/adapter-shapes.md:385`) |
 | `happenstance-neon` | once, migration 1 (`migrations/0001_neon_log.sql:126-141`) | a scalar subquery inside the `INSERT … SELECT`, `local_origin()` (`src/event_store.rs:564-575`), shared by append (`:527`) and ingest compensation (`:701`) | none | none | "undecided" (`:385`) |
-| `happenstance-cloudflare` | once, at the first `migrate` | `RefCell<Option<StoreId>>` (`src/event_store.rs:364`, `:575-591`), pinned by `store_id_is_not_reminted_per_handle` (`:2254`) | none | none | "undecided" (`:385`) |
+| `happenstance-cloudflare` | once, at the first `migrate` | `RefCell<Option<StoreId>>` (`src/event_store.rs:376`, `:587-603`), pinned by `store_id_is_not_reminted_per_handle` (`:2274`) | none | none | "undecided" (`:397`) |
 
 `happenstance-ladybug` is listed beside them in that "undecided" row, but it never had an event
 store. It was a projection store, and it is retired (ADR-0078). It never owed a VT-6 row.
@@ -443,7 +443,7 @@ it is retired (ADR-0078). The file grows by two lines, so the two citations of
 ~~~
 | `happenstance-postgres` | **mint once, in migration 1** | The documented re-mint (ADR-0086). After `pg_restore`, PITR, a failover that lost acknowledged writes, or any copy: stop every writer, run the re-mint statement on the copy, restart every process holding a `PostgresEventStore` (a handle and its clones cache the identity they read first), then resume appends. Detection is not taken: no candidate fingerprint has been measured, and none is expected to change under a restore into the same database | `crates/happenstance-postgres/migrations/0001_event_log.sql:102-118`; the procedure is in the crate root and README. `remint_identity` and stamping inside the append transaction are phase 13's |
 | `happenstance-neon` | **mint once, in migration 1** | The documented re-mint (ADR-0086). On every branch that is created, reset or restored, and after any restore: stop every writer, run the statement against `NeonConfig::qualified_meta`, then resume appends. No restart is needed, because every append reads the row | `crates/happenstance-neon/migrations/0001_neon_log.sql:126-141`; the procedure is in the crate root and README |
-| `happenstance-cloudflare` | **mint once, at the first `migrate`**, cached per handle | **Undecided.** Durable Object storage outlives the isolate, so eviction is not a restore (`store_id_is_not_reminted_per_handle`). Whether the platform's point-in-time recovery is a restore this adapter must answer for is open (Appendix C) | `crates/happenstance-cloudflare/src/event_store.rs:364`, `:575-591`, `:2254` |
+| `happenstance-cloudflare` | **mint once, at the first `migrate`**, cached per handle | **Undecided.** Durable Object storage outlives the isolate, so eviction is not a restore (`store_id_is_not_reminted_per_handle`). Whether the platform's point-in-time recovery is a restore this adapter must answer for is open (Appendix C) | `crates/happenstance-cloudflare/src/event_store.rs:376`, `:587-603`, `:2274` |
 ~~~
 
 ### A.2 `crates/happenstance-postgres/src/lib.rs`, before `//! # Still open`
@@ -574,8 +574,8 @@ To be written at acceptance as
 `kb-open-question-cloudflare-store-id-and-object-recovery-001`, owned by phase 13.
 
 > `happenstance-cloudflare` mints its `StoreId` once, at the first `migrate`, and caches it per
-> handle in a `RefCell<Option<StoreId>>` (`crates/happenstance-cloudflare/src/event_store.rs:364`,
-> `:575-591`); `store_id_is_not_reminted_per_handle` (`:2254`) pins it. Eviction is answered:
+> handle in a `RefCell<Option<StoreId>>` (`crates/happenstance-cloudflare/src/event_store.rs:376`,
+> `:587-603`); `store_id_is_not_reminted_per_handle` (`:2274`) pins it. Eviction is answered:
 > Durable Object storage outlives the isolate. Not answered: (1) whether the platform can rewind an
 > object's SQLite storage, by point-in-time recovery or otherwise, and whether a rewind includes
 > `store_meta`, which needs the platform's documentation and a deployed-object probe under

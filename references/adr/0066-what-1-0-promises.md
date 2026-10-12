@@ -325,7 +325,7 @@ third and a fourth adapter arm real in-store faults as well.**
 The rule is `arming_a_mid_batch_fault_makes_the_append_fail`
 (`crates/happenstance-testkit/src/suite.rs:3109`, registered at
 `registry.rs:168`). It can fail: `NoopFaultFixture`
-(`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:3655`)
+(`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:3658`)
 declares the capability, overrides the arming with an empty body, and is
 rejected. The clause needs no `†`.
 

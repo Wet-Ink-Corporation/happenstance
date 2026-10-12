@@ -778,6 +778,17 @@ record says it was met.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0094 | [`kb-decision-0094`](../decisions/0094-ps-39-is-frozen-on-a-live-neon-run.md) | PS-39 is frozen on a live Neon run of `projection_ids_round_trip_by_bytes` | accepted | 17b | — |
 
+## 2026-10-12: CF-40's metadata ceiling (#92)
+
+ADR-0093 implements `wi-f97418`. #92 builds ADR-0043's `StoreLimit::MetadataLen`, and the
+owner chose to carve `happenstance-cloudflare`'s metadata ceiling from the documented row
+limit. The record chooses the share, 512 KiB, and records the arithmetic. It is proposed and
+waits on the owner.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0093 | [`kb-decision-0093`](../decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md) | `happenstance-cloudflare`'s metadata ceiling is 512 KiB, carved from the documented row limit | accepted | 17b | — |
+
 ## 2026-10-12: ES-41's reading written into the clause (#109)
 
 ADR-0095 is the ADR `kb-decision-wi-33ab08` said #109 owed. It adds the "held" reading to

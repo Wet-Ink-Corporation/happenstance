@@ -451,6 +451,91 @@ fn no_declared_ceiling_is_below_its_floor() {
     }
 }
 
+/// CF-40's fourth ceiling (ADR-0043) is written out in this impl, for
+/// [`the_three_store_limits_are_stated_here`]'s reason: an inherited `None`
+/// and a deliberate one are indistinguishable in a CI log.
+#[test]
+fn the_metadata_limit_is_stated_here() {
+    const SOURCE: &str = include_str!("support/mod.rs");
+
+    assert!(
+        SOURCE.contains("const MAX_METADATA_LEN"),
+        "`MAX_METADATA_LEN` is not written in `tests/support/mod.rs`, so this \
+         fixture inherited `None` from the trait"
+    );
+}
+
+/// The metadata ceiling is declared, so the rule's metadata branch runs here.
+///
+/// `None` would be false of this store, which refuses oversized metadata
+/// before issuing any SQL, and it would leave the workspace's one
+/// capacity-capped runtime silent on the branch it was given.
+#[test]
+fn the_metadata_limit_is_declared_not_defaulted() {
+    assert!(
+        <CloudflareFixture as Fixture>::MAX_METADATA_LEN.is_some(),
+        "MAX_METADATA_LEN is `None`, which says this store has no metadata \
+         ceiling; it has one, and `append_reports_exceeded_store_limits` would \
+         skip its metadata branch"
+    );
+}
+
+/// One row at all four ceilings at once fits the documented row limit.
+///
+/// The carve wi-f97418 chose, held to its arithmetic. Cloudflare documents a
+/// maximum row size of 2 MB; this reads it as the smaller 2,000,000 bytes, so
+/// the sum holds under the 2 MiB reading too. The deployed object's measured
+/// wall (8,388,637 B) is deliberately not the bound: a documented limit is the
+/// one the platform has promised to keep.
+///
+/// What one `event` row can carry at the ceilings: `data`, the canonical
+/// `tags` blob (`UNIT tag UNIT … tag UNIT`, so one leading byte plus a tag and
+/// a separator per tag), the `event_type`, and `metadata`. The fixed-width
+/// columns (`position`, `origin_store`, `origin_position`, `recorded_at`) and
+/// SQLite's record header are what the headroom is for, and 256 bytes is
+/// several times what they take.
+///
+/// The named wrong implementation it rejects is a metadata ceiling carved from
+/// the measured wall instead, or raised later without moving another: either
+/// puts the sum past the limit and fails here, on the host, with no Durable
+/// Object needed.
+#[test]
+fn the_four_ceilings_fit_the_documented_row_limit() {
+    use happenstance_core::{MAX_EVENT_TYPE_LEN, MAX_TAG_LEN};
+
+    const DOCUMENTED_ROW_LIMIT: usize = 2_000_000;
+    const FIXED_COLUMNS_AND_HEADER: usize = 256;
+
+    let ceiling = |name: &str, declared: Option<usize>| {
+        declared.unwrap_or_else(|| panic!("{name} is `None` on a store that declares it"))
+    };
+    let data = ceiling(
+        "MAX_EVENT_DATA_LEN",
+        <CloudflareFixture as Fixture>::MAX_EVENT_DATA_LEN,
+    );
+    let tags = ceiling(
+        "MAX_TAGS_PER_EVENT",
+        <CloudflareFixture as Fixture>::MAX_TAGS_PER_EVENT,
+    );
+    let metadata = ceiling(
+        "MAX_METADATA_LEN",
+        <CloudflareFixture as Fixture>::MAX_METADATA_LEN,
+    );
+    let tags_blob = 1 + tags * (MAX_TAG_LEN + 1);
+
+    let row = data + tags_blob + MAX_EVENT_TYPE_LEN + metadata;
+    assert_eq!(
+        row, 1_835_264,
+        "the carve the fixture, `Ceilings::DECLARED` and ADR-0093 all state"
+    );
+    assert!(
+        row + FIXED_COLUMNS_AND_HEADER <= DOCUMENTED_ROW_LIMIT,
+        "one row at every ceiling is {row} bytes plus {FIXED_COLUMNS_AND_HEADER} \
+         of fixed columns, past the documented {DOCUMENTED_ROW_LIMIT}-byte row \
+         limit: a ceiling moved and none was carved down to pay for it"
+    );
+}
+
 /// AC-007 — the expression the slice-mate hands the shipped macro type-checks.
 ///
 /// The macro's general arm hoists the fixture expression behind

@@ -280,6 +280,8 @@ pub(crate) struct Ceilings {
     pub(crate) tags_per_event: usize,
     /// The most events one `append` may carry.
     pub(crate) events_per_batch: usize,
+    /// The largest `metadata` one event may carry.
+    pub(crate) metadata_len: usize,
 }
 
 impl Ceilings {
@@ -318,10 +320,19 @@ impl Ceilings {
     ///   count the object has to get through before it yields. Measured: a
     ///   1,024-event batch with one tag each issues 2,055 statements and
     ///   completes. Eight times the `MIN_SUPPORTED_EVENTS_PER_BATCH` floor.
+    /// * **`metadata_len` — 512 KiB.** Carved from the same documented row
+    ///   limit, read as the smaller 2,000,000 bytes (wi-f97418, ADR-0093), so
+    ///   that one row at every ceiling at once still fits: 1,048,576 of `data`,
+    ///   262,145 of `tags` (`1 + 1,024 × 256`), 255 of `event_type` and
+    ///   524,288 of `metadata` is 1,835,264 bytes, leaving 164,736 for the
+    ///   fixed-width columns and SQLite's record header. ADR-0043 sets no
+    ///   metadata floor, so any number is legal; this one is the largest
+    ///   power of two that fits beside the three above.
     pub(crate) const DECLARED: Self = Self {
         event_data_len: 1024 * 1024,
         tags_per_event: 1024,
         events_per_batch: 1024,
+        metadata_len: 512 * 1024,
     };
 
     /// A store that refuses nothing, for the tests that supply their own.
@@ -336,6 +347,7 @@ impl Ceilings {
         event_data_len: usize::MAX,
         tags_per_event: usize::MAX,
         events_per_batch: usize::MAX,
+        metadata_len: usize::MAX,
     };
 }
 
@@ -387,12 +399,12 @@ impl CloudflareEventStore {
     /// to evaluate at least 128 items and puts no ceiling above that — so a wide
     /// query is **chunked and merged, never refused**: 128 items are 26
     /// statements. There is no query-item refusal anywhere in this crate and no
-    /// fourth [`StoreLimit`] variant to report one through, because a query-item
-    /// refusal is not an append outcome.
+    /// `QueryItems` [`StoreLimit`] variant to report one through, because a
+    /// query-item refusal is not an append outcome.
     ///
-    /// This is not one of the three ceilings under *The capacity limits this
+    /// This is not one of the four ceilings under *The capacity limits this
     /// store declares* on the crate's front page, and it is deliberately not a
-    /// fourth row of that table: every row there is a value the store **refuses**
+    /// fifth row of that table: every row there is a value the store **refuses**
     /// and names a `StoreLimit` to refuse it with, and this is a value the store
     /// accepts and plans differently. It is published for the reason the sibling
     /// publishes its own — a test that has to guess the boundary is a test that
@@ -645,6 +657,14 @@ impl CloudflareEventStore {
                 return Err(AppendError::ExceedsStoreLimit {
                     limit: StoreLimit::TagsPerEvent,
                     len: event.tags().len(),
+                });
+            }
+            if let Some(metadata) = event.metadata()
+                && metadata.len() > self.ceilings.metadata_len
+            {
+                return Err(AppendError::ExceedsStoreLimit {
+                    limit: StoreLimit::MetadataLen,
+                    len: metadata.len(),
                 });
             }
         }
@@ -2401,6 +2421,7 @@ mod write_path_tests {
             event_data_len: 8,
             tags_per_event: 2,
             events_per_batch: 3,
+            ..Ceilings::UNBOUNDED
         });
         store.migrate().expect("the schema applies");
 
@@ -2455,6 +2476,7 @@ mod write_path_tests {
             event_data_len: 8,
             tags_per_event: 2,
             events_per_batch: 3,
+            ..Ceilings::UNBOUNDED
         });
         store.migrate().expect("the schema applies");
 
@@ -2471,6 +2493,43 @@ mod write_path_tests {
             .expect("a batch at every ceiling is accepted");
 
         assert_eq!(stored_positions(&sql).len(), 3);
+    }
+
+    /// CF-40's metadata ceiling (ADR-0043), at both ends: exactly the ceiling
+    /// is accepted, one more is refused as `MetadataLen` and not as
+    /// `EventDataLen`, and the refused event leaves no row.
+    #[wasm_bindgen_test]
+    async fn a_metadata_refusal_names_metadata_len() {
+        let sql = durable_object();
+        let store = CloudflareEventStore::new(sql.clone()).with_ceilings(Ceilings {
+            metadata_len: 8,
+            ..Ceilings::UNBOUNDED
+        });
+        store.migrate().expect("the schema applies");
+
+        store
+            .append(&[event("Exact").with_metadata(vec![1_u8; 8])], None)
+            .await
+            .expect("metadata at the ceiling is accepted");
+
+        let refused = store
+            .append(&[event("TooMuch").with_metadata(vec![1_u8; 9])], None)
+            .await;
+        assert!(
+            matches!(
+                refused,
+                Err(AppendError::ExceedsStoreLimit {
+                    limit: StoreLimit::MetadataLen,
+                    len: 9
+                })
+            ),
+            "oversized metadata names MetadataLen and its byte count: {refused:?}"
+        );
+        assert_eq!(
+            stored_types(&sql),
+            ["Exact"],
+            "and the refused event left no row"
+        );
     }
 
     /// AC-007. `append` returns the position of the **last** event in slice

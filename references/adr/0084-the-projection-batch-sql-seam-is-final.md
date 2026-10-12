@@ -319,10 +319,10 @@ Under ADR-0066 a published macro's accepted input is a semver surface as much as
 signature is.
 
 **4.5 It would be the second narrowing of the same parameter.** `push` narrowed once, from
-`impl Into<String>` to `&'static str`, in `0.2.0` (`CHANGELOG.md:1896-1925`, under `## [0.2.0]`). A second
+`impl Into<String>` to `&'static str`, in `0.2.0` (`CHANGELOG.md:1952-1981`, under `## [0.2.0]`). A second
 narrowing in `0.4.0` would break every caller in `examples/` (§8) for a guarantee that §4.3 shows
 only a run-time check can give, and a run-time check needs no new type. The CHANGELOG entry that landed Option A said why that matters: "a signature narrowed twice is
-worse than one narrowed once" (`CHANGELOG.md:1921-1925`).
+worse than one narrowed once" (`CHANGELOG.md:1977-1981`).
 
 ## 5. The arity obligation: what each driver does
 

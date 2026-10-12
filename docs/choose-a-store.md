@@ -374,13 +374,13 @@ An append over a store's limit is refused as `AppendError::ExceedsStoreLimit`.
 It is never quietly cut short
 ([VT-25](../spec/SPECIFICATION.md#vt-25--a-capacity-refusal-is-distinguishable-from-a-store-failure)):
 
-| Store | Bytes of data per event | Tags per event | Events per append |
-| --- | --- | --- | --- |
-| `SqliteEventStore` | 1,048,576 | 128 | 256 |
-| `PostgresEventStore` | 1,048,576 | 128 | 256 |
-| `NeonEventStore<T>` | 131,072 | 128 | 128 |
-| `CloudflareEventStore` | 1,048,576 | 1,024 | 1,024 |
-| `MemoryEventStore` | none declared | none declared | none declared |
+| Store | Bytes of data per event | Tags per event | Events per append | Bytes of metadata per event |
+| --- | --- | --- | --- | --- |
+| `SqliteEventStore` | 1,048,576 | 128 | 256 | none declared |
+| `PostgresEventStore` | 1,048,576 | 128 | 256 | none declared |
+| `NeonEventStore<T>` | 131,072 | 128 | 128 | none declared |
+| `CloudflareEventStore` | 1,048,576 | 1,024 | 1,024 | 524,288 |
+| `MemoryEventStore` | none declared | none declared | none declared | none declared |
 
 `SqliteEventStore`, `PostgresEventStore` and `NeonEventStore` publish these
 limits as the constants `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT` and
@@ -394,6 +394,9 @@ If your events have to fit every store, stay within
 ([VT-21](../spec/SPECIFICATION.md#vt-21--min_supported_event_data_len-is-a-floor-of-65536-bytes),
 [VT-22](../spec/SPECIFICATION.md#vt-22--min_supported_tags_per_event-is-a-floor-of-64),
 [VT-24](../spec/SPECIFICATION.md#vt-24--min_supported_events_per_batch-is-a-floor-of-128)).
+Metadata has no such floor. A store may refuse any amount of it, as
+`StoreLimit::MetadataLen`, so keep metadata small if an event has to fit
+everywhere.
 
 A Neon read has one more ceiling. Its whole response has to fit in
 `MAX_RESPONSE_BYTES`, 64 MiB, because a one-shot HTTP request cannot stream

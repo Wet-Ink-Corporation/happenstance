@@ -927,8 +927,8 @@ is now free; it should be re-read on the day someone adds the secret, not before
 *"104 of 105" has a soft edge.* `query_items_share_one_snapshot` passes, and ES-12's
 own predicted defect — one statement per `QueryItem` — is unreachable on an adapter
 that issues one statement per `read`. But that rule **appends after the first poll
-and asserts the drained set is unchanged** (`crates/happenstance-testkit/src/suite.rs:6150`,
-`:6164-6167`), which is structurally identical to ES-11's rule at `:6062-6065`. Sixty
+and asserts the drained set is unchanged** (`crates/happenstance-testkit/src/suite.rs:6207`,
+`:6221-6224`), which is structurally identical to ES-11's rule at `:6119-6122`. Sixty
 measured runs at the sibling rule's observed rate separate luck from immunity poorly.
 The honest figure is **104 of 105 observed**, and the ADR says so rather than
 rounding it to a clean claim.

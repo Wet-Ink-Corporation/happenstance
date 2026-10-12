@@ -82,13 +82,13 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       `happenstance-neon`, run red once before any floor is raised; leg 2 resolves
       against the published `0.4.0`. A sibling rather than a gate step: it needs a
       nightly resolver.
-- [ ] #92 · **CF-40's `MetadataLen`, built under ADR-0043.** `StoreLimit::MetadataLen`
+- [x] #92 · **CF-40's `MetadataLen`, built under ADR-0043.** `StoreLimit::MetadataLen`
       in `happenstance-core`; a defaulted `MAX_METADATA_LEN` on the testkit's
       `Fixture`; a metadata branch in `append_reports_exceeded_store_limits`; its
-      wrong implementations in the testkit's `tests/`. `happenstance-cloudflare`'s
-      ceiling is carved from the row budget measured by phase 17's deployed
-      Durable Object leg, because local `workerd` does not enforce the production
-      row limit. Phase 13 then decides the budget unit.
+      wrong implementations in the testkit's `tests/`. **Done:** five wrong stores
+      (`Store`, `EventDataLen`, clipped, off by one, refused after the write), and `happenstance-cloudflare`'s ceiling is
+      512 KiB, carved from the documented 2 MB row limit rather than the measured
+      wall (`wi-f97418`; ADR-0093, accepted with the narrowing on 2026-10-12). Phase 13 decides the budget unit.
 - [x] #93 · **The two typed-layer closures**, each in its own record:
       - `tuple-boundary-heterogeneous-event-type` — option A taken deliberately:
         one DCB boundary folds one domain enum; a `compile_fail` doctest fences it,
@@ -122,7 +122,7 @@ a red then green run URL for each new sibling job, in this file's session log.
       `projection_ids_round_trip_by_bytes`, with the run's id recorded.
 - [ ] The minimal-versions and floating-dependency jobs exist, and each has been
       watched failing once.
-- [ ] CF-40's `MetadataLen` is built, with a named wrong implementation per branch.
+- [x] CF-40's `MetadataLen` is built, with a named wrong implementation per branch.
 - [x] Both typed-layer open questions are closed: ADR-0090 and ADR-0091.
 - [ ] #95 · `cargo-semver-checks` against `0.4.0` reports no major finding.
 - [ ] The specification is reconciled against this phase's changes (session
@@ -170,3 +170,13 @@ a red then green run URL for each new sibling job, in this file's session log.
   `CI` dispatch with `floating_deps_prove_red` ticked, expected red at the contract
   step with `E0277` in `derivation.rs`, then one plain dispatch, expected green. Both
   run URLs go here.
+
+
+
+- 2026-10-12 — #92: `StoreLimit::MetadataLen` (floor 0) and `Fixture::MAX_METADATA_LEN`
+  are in the tree, and `append_reports_exceeded_store_limits` gained a metadata branch.
+  Five wrong stores, one per assertion of the branch (ADR-0093 lists them), each fail
+  it, and `GappedPositionStore` passes it. `happenstance-cloudflare` states
+  512 KiB, carved from the documented row limit: one row at all four ceilings is
+  1,835,264 B against 2,000,000. ADR-0093 records the share, accepted 2026-10-12: refusing more
+  metadata than that narrows published behaviour, and the owner accepted it in 17b.

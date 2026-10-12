@@ -669,6 +669,7 @@ fn declines<S: Subject>() -> Vec<(&'static str, &'static str)> {
     if S::MAX_EVENT_DATA_LEN.is_none()
         && S::MAX_TAGS_PER_EVENT.is_none()
         && S::MAX_EVENTS_PER_BATCH.is_none()
+        && S::MAX_METADATA_LEN.is_none()
     {
         declined_items.push((
             happenstance_testkit::NO_STORE_LIMITS,

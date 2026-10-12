@@ -123,6 +123,7 @@ confirmed accepted on the executing runtime:
 | --- | --- | --- |
 | `MAX_EVENT_DATA_LEN` | 1,048,576 (1 MiB) | Half the documented 2 MiB row cap. The other half is the rest of the row: `event_type` ≤ 255 B, the canonical `tags` blob ≤ 256 KiB at the tag ceiling below, ADR-0014's `origin_store` + `origin_position` + `recorded_at`, and a `metadata` blob the contract does not bound at all. 16× the `MIN_SUPPORTED_EVENT_DATA_LEN` floor |
 | `MAX_TAGS_PER_EVENT` | 1,024 | At `MAX_TAG_LEN` (255) the canonical blob is then 256 KiB — an eighth of the row cap, which is what keeps the payload figure above safe. Measured cost: exactly one `event_tag` row per tag. 16× the `MIN_SUPPORTED_TAGS_PER_EVENT` floor |
+| `MAX_METADATA_LEN` | 524,288 (512 KiB) | Added at #92 (ADR-0043's `MetadataLen`; ADR-0093). Carved from the documented row cap read as the smaller 2,000,000 B, not from the deployed wall below (wi-f97418): `data` 1,048,576 + `tags` blob 262,145 (`1 + 1,024 × 256`) + `event_type` 255 + `metadata` 524,288 = 1,835,264 B, leaving 164,736 B for the fixed-width columns and the record header. ADR-0043 sets no floor |
 | `MAX_EVENTS_PER_BATCH` | 1,024 | Not a parameter cap: one `INSERT` per event and one per tag, each its own statement. The bound is that the batch runs inside **one turn with nothing awaited between rows**, which is what makes the compensating discard exact — so it is a statement count, measured at 2,055 for 1,024 events. 8× the `MIN_SUPPORTED_EVENTS_PER_BATCH` floor |
 
 CF-40 requires only that a declared value is accepted and one more refused; it
@@ -176,9 +177,10 @@ chain exceeded the expression depth. The conformance rule
 **The row wall moved between two `workerd` releases**, from about 2.2 MB to
 8 MiB + 29 B. The deployed object settles it at **8,388,637 B (8 MiB + 29)**: the
 platform enforces the newer limit, not the 2 MB its documentation states, so the
-older local runner under-reports it. That is the number CF-40's metadata ceiling
-(17b) is carved from, and it leaves `MAX_EVENT_DATA_LEN`'s 1 MiB with more room
-than its derivation assumed.
+older local runner under-reports it. CF-40's metadata ceiling (17b) was to be
+carved from it; the owner chose the documented 2 MB instead (wi-f97418), so the
+ceiling is the table's 512 KiB row above (ADR-0093). The wall still leaves
+`MAX_EVENT_DATA_LEN`'s 1 MiB with more room than its derivation assumed.
 ([`results/run-workerd-deployed-2026-10-02.txt`](results/run-workerd-deployed-2026-10-02.txt),
 CI run 36966608470.)
 

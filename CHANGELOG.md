@@ -51,6 +51,22 @@ not the same as what a user needed to be told.
   crate's rustdoc pages show the happenstance badge as the sidebar logo and the
   browser favicon, served from `assets/brand/favicon.svg` on `main`. This is
   documentation only; no code or behaviour changed.
+- **A store can now refuse an event for its metadata, and say so** (#92,
+  [ADR-0043](.kb/decisions/0043-event-metadata-gets-a-refusal-channel-with-no-floor.md)).
+  `happenstance-core`'s `StoreLimit` gains `MetadataLen`. Before this, a store
+  that could not hold an event's `metadata` had no conformant way to refuse it:
+  `AppendError::Store` is forbidden for capacity refusals, and `EventDataLen`
+  names `data`. `StoreLimit::MetadataLen.guaranteed_minimum()` is `0`, because
+  the contract guarantees no metadata capacity. `StoreLimit` was already
+  `#[non_exhaustive]`, so a `match` on it already has a wildcard arm and keeps
+  compiling.
+- **`happenstance-testkit`: `Fixture::MAX_METADATA_LEN`, defaulting to `None`.**
+  A fixture that states one makes `append_reports_exceeded_store_limits` check
+  metadata at exactly that size is accepted, and one byte more is refused as
+  `MetadataLen`. A fixture that leaves it `None` runs exactly as before. The
+  skip the rule reports when a fixture states no ceiling now names all four
+  constants, so the `NO_STORE_LIMITS` string has a fourth name in it. Compare
+  against the constant, not the text.
 - **`happenstance-testkit`: `contains_event_id_reports_a_held_row_above_the_frontier`,
   and the capability it runs behind** (#109,
   [ADR-0095](.kb/decisions/0095-es-41-membership-means-held.md)). ES-41 now says
@@ -104,6 +120,15 @@ not the same as what a user needed to be told.
   `-D warnings` sees the deprecation as an error until it renames.
 
 ### Changed
+
+- **Behaviour change: `happenstance-cloudflare` refuses metadata over 524,288
+  bytes (512 KiB)**, as `StoreLimit::MetadataLen`, before it sends any SQL. An
+  event with more metadata was accepted before and is now refused; metadata up
+  to that size is accepted as before. The number is carved from Cloudflare's
+  documented 2 MB row limit, read as 2,000,000 bytes, so one event at all four
+  ceilings is 1,835,264 bytes and still fits
+  ([ADR-0093](.kb/decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md),
+  accepted by the owner with the narrowing on 2026-10-12).
 
 - **A projection store that keys a checkpoint on anything but the id's exact
   bytes is now ruled out for good** (#81). No behaviour changed. PS-39 says a

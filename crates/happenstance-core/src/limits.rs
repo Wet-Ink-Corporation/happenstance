@@ -75,11 +75,11 @@ pub const MIN_SUPPORTED_EVENTS_PER_BATCH: usize = 128;
 
 /// Which capacity limit an append exceeded.
 ///
-/// Three variants and not four: a query-item refusal is not an append outcome,
-/// so a `QueryItems` variant would name a refusal no `append` could ever
-/// produce. `MIN_SUPPORTED_QUERY_ITEMS` is a floor on evaluation, and a store
-/// that will not evaluate a large query fails it through its own error rather
-/// than through this enum.
+/// Four variants, and no `QueryItems`: a query-item refusal is not an append
+/// outcome, so that variant would name a refusal no `append` could produce, and
+/// a store that will not evaluate a large query fails it through its own error.
+/// [`MetadataLen`](Self::MetadataLen) is the one variant with no floor behind
+/// it (ADR-0043): a refusal channel, with no capacity guaranteed.
 ///
 /// # The variant this enum does not have
 ///
@@ -107,6 +107,15 @@ pub enum StoreLimit {
     TagsPerEvent,
     /// The batch held more events than the store accepts in one append.
     EventsPerBatch,
+    /// One event's `metadata` was larger than the store accepts.
+    ///
+    /// Distinct from [`EventDataLen`](Self::EventDataLen), which is about
+    /// `data` alone: a store refusing an event for its metadata and naming
+    /// `EventDataLen` would be naming the wrong field. Its
+    /// [`guaranteed_minimum`](Self::guaranteed_minimum) is `0`, because the
+    /// contract guarantees no metadata capacity (ADR-0043). Whether `data` and
+    /// `metadata` should share one budget instead is open, and is phase 13's.
+    MetadataLen,
 }
 
 impl StoreLimit {
@@ -115,12 +124,16 @@ impl StoreLimit {
     /// A caller that has hit a store's actual limit can compare against this to
     /// tell "this store is stricter than the contract allows" — a conformance
     /// bug — from "this payload was always going to be too big to replicate".
+    ///
+    /// For [`MetadataLen`](Self::MetadataLen) it is `0`, so that comparison
+    /// can never report a conformance bug: no metadata capacity is guaranteed.
     #[must_use]
     pub const fn guaranteed_minimum(self) -> usize {
         match self {
             Self::EventDataLen => MIN_SUPPORTED_EVENT_DATA_LEN,
             Self::TagsPerEvent => MIN_SUPPORTED_TAGS_PER_EVENT,
             Self::EventsPerBatch => MIN_SUPPORTED_EVENTS_PER_BATCH,
+            Self::MetadataLen => 0,
         }
     }
 }
@@ -131,6 +144,7 @@ impl core::fmt::Display for StoreLimit {
             Self::EventDataLen => "event data length",
             Self::TagsPerEvent => "tags per event",
             Self::EventsPerBatch => "events per batch",
+            Self::MetadataLen => "metadata length",
         };
         f.write_str(name)
     }
@@ -157,6 +171,14 @@ mod tests {
             StoreLimit::EventsPerBatch.guaranteed_minimum(),
             MIN_SUPPORTED_EVENTS_PER_BATCH
         );
+    }
+
+    /// ADR-0043: the metadata channel is a refusal path with no floor, so a
+    /// store may refuse one byte of metadata and still be conformant.
+    #[test]
+    fn metadata_len_guarantees_no_capacity() {
+        assert_eq!(StoreLimit::MetadataLen.guaranteed_minimum(), 0);
+        assert_eq!(StoreLimit::MetadataLen.to_string(), "metadata length");
     }
 
     /// The composed floor is the number the module documentation states.

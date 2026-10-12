@@ -165,18 +165,18 @@
 //! | payload (`data`) | 1,048,576 bytes (1 MiB) | `AppendError::ExceedsStoreLimit { limit: StoreLimit::EventDataLen, .. }` |
 //! | tags per event | 1,024 | `… limit: StoreLimit::TagsPerEvent` |
 //! | events per append | 1,024 | `… limit: StoreLimit::EventsPerBatch` |
+//! | `metadata` per event | 524,288 bytes (512 KiB) | `… limit: StoreLimit::MetadataLen` |
 //!
-//! Each clears its guaranteed minimum by a wide margin — sixteen, sixteen and
-//! eight times respectively — and each is a **stated** ceiling rather than the
-//! physical maximum. Read that literally, because the difference is the whole of
-//! what is honest here: **no physical wall was observable on the executing
-//! host** at 8 MiB of payload, 16,384 tags or 8,192 consecutive inserts, and the
-//! host is a Node process rather than `workerd`, so it does not enforce the
-//! Durable Object platform's documented caps at all. The three numbers are
-//! therefore this adapter's **own refusal policy**, seeded from Cloudflare's
-//! documented 2 MiB row cap and reduced by this adapter's measured per-row
-//! overhead. They are not search results, and the experiment's own README
-//! records the failure to locate the wall as its central finding.
+//! The first three clear their guaranteed minimum by a wide margin — sixteen,
+//! sixteen and eight times — and the metadata ceiling has none to clear
+//! (ADR-0043). Each is a **stated** ceiling, not the physical maximum: **no
+//! physical wall was observable on the executing host** at 8 MiB of payload,
+//! 16,384 tags or 8,192 consecutive inserts, and that host is a Node process
+//! rather than `workerd`, so it does not enforce the platform's documented caps.
+//! They are this adapter's **own refusal policy**, carved from Cloudflare's
+//! documented row limit of 2 MB, read as 2,000,000 bytes; one row at all four
+//! ceilings is 1,835,264 bytes and fits (ADR-0093). The experiment's
+//! README records the failure to locate the wall as its central finding.
 //!
 //! What *was* measured, on this host and reproducibly: the declared value is
 //! accepted and read back byte-for-byte, and one more is refused as

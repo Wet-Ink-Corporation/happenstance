@@ -388,7 +388,7 @@ impl SqliteEventStore {
     /// nothing by design — the specification requires every store to evaluate at
     /// least 128 items and puts no ceiling above that — so a wide query is
     /// **chunked and merged, never refused**: there is no `MAX_QUERY_ITEMS`
-    /// anywhere in this crate and no fourth `StoreLimit` variant to report one
+    /// anywhere in this crate and no `QueryItems` `StoreLimit` variant to report one
     /// through, because a query-item refusal is not an append outcome.
     ///
     /// The number is public so that a test can compute the boundary rather than

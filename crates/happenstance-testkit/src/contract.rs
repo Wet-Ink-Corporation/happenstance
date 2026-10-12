@@ -383,7 +383,7 @@ pub trait Fixture {
     ///
     /// # Why this is an `Option<usize>` and not a [`Capability`]
     ///
-    /// The three constants here look like capabilities and are deliberately not
+    /// The four constants here look like capabilities and are deliberately not
     /// spelled as ones. A declined [`Capability`] is a **trade**: the fixture
     /// could have co-operated and chose not to, and the reason string is the
     /// record of that choice, printed on every run so a reviewer and a user of
@@ -423,7 +423,7 @@ pub trait Fixture {
     /// The largest number of tags on one event this fixture's store accepts, or
     /// `None` if it has no ceiling.
     ///
-    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) for why these three
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) for why these four
     /// are `Option<usize>` rather than [`Capability`], and for what stating a
     /// number commits the store to. The floor is `MIN_SUPPORTED_TAGS_PER_EVENT`
     /// (VT-22).
@@ -445,6 +445,20 @@ pub trait Fixture {
     /// query-item refusal is not an append outcome, so it has no `StoreLimit`
     /// variant to be reported through and no rule to gate.
     const MAX_EVENTS_PER_BATCH: Option<usize> = None;
+
+    /// The largest `metadata` on one event this fixture's store accepts, in
+    /// bytes, or `None` if it has no ceiling.
+    ///
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN). Stating a number
+    /// commits the store to accepting metadata of exactly that many bytes and
+    /// refusing one more as `ExceedsStoreLimit { limit: StoreLimit::MetadataLen,
+    /// .. }`, never as `EventDataLen`, which names `data`.
+    ///
+    /// Unlike the other three there is **no floor** (ADR-0043):
+    /// `StoreLimit::MetadataLen.guaranteed_minimum()` is `0`, so any number
+    /// here is a legal declaration, and no rule fails a store for stating a
+    /// small one.
+    const MAX_METADATA_LEN: Option<usize> = None;
 
     /// Arms the store so that the **next** append of more than `after` events
     /// fails while writing event `after + 1`.
@@ -1159,11 +1173,12 @@ impl Capability {
 /// The `capability` name a rule reports when a fixture states **no ceiling at
 /// all** on any store limit.
 ///
-/// Not a [`Fixture`] associated const, and it names all three because the rule
-/// gated on it needs all three to be absent before it has nothing to do. A skip
-/// naming only one of them would send an adapter author to look for the constant
-/// they did set.
-pub const NO_STORE_LIMITS: &str = "MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH";
+/// Not a [`Fixture`] associated const, and it names all four because the rule
+/// gated on it needs all four to be absent before it has nothing to do. A skip
+/// naming only some of them would send an adapter author to look for the
+/// constant they did set.
+pub const NO_STORE_LIMITS: &str =
+    "MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH, MAX_METADATA_LEN";
 
 /// The `capability` name a rule reports when an adapter's **batch offers no read
 /// path** at all.
