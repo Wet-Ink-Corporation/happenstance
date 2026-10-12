@@ -34,6 +34,13 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **The API documentation carries the project's badge** (#173). Each published
+  crate's rustdoc pages show the happenstance badge as the sidebar logo and the
+  browser favicon, served from `assets/brand/favicon.svg` on `main`. This is
+  documentation only; no code or behaviour changed.
+
 ## [0.4.1] — 2026-10-12
 
 ### Added
