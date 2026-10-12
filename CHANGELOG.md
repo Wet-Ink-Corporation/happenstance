@@ -62,7 +62,7 @@ not the same as what a user needed to be told.
   documented 2 MB row limit, read as 2,000,000 bytes, so one event at all four
   ceilings is 1,835,264 bytes and still fits
   ([ADR-0093](.kb/decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md),
-  proposed, awaiting the owner's sign-off on the narrowing).
+  accepted by the owner with the narrowing on 2026-10-12).
 
 ## [0.4.1] — 2026-10-12
 

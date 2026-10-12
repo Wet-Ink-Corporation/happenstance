@@ -775,7 +775,7 @@ waits on the owner.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0093 | [`kb-decision-0093`](../decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md) | `happenstance-cloudflare`'s metadata ceiling is 512 KiB, carved from the documented row limit | proposed | 17b | — |
+| ADR-0093 | [`kb-decision-0093`](../decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md) | `happenstance-cloudflare`'s metadata ceiling is 512 KiB, carved from the documented row limit | accepted | 17b | — |
 
 ## Adding a row
 

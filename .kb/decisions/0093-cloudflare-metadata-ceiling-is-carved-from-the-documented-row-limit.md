@@ -2,7 +2,7 @@
 id: kb-decision-0093
 title: happenstance-cloudflare's metadata ceiling is 512 KiB, carved from the documented row limit
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0093
 reversibility: medium
@@ -10,7 +10,7 @@ phase: 17b
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed, not yet accepted by the owner, and it awaits the owner's sign-off on a narrowing. #92 builds ADR-0043's StoreLimit::MetadataLen and
+  Accepted by the owner on 2026-10-12, narrowing included ("Accept in 17b"). #92 builds ADR-0043's StoreLimit::MetadataLen and
   Fixture::MAX_METADATA_LEN, and happenstance-cloudflare is the adapter that states a metadata
   ceiling. The owner decided where it is carved from (wi-f97418): the documented 2 MB Durable
   Object row limit, not the 8,388,637 B wall the deployed object measured. This record decides the
@@ -24,7 +24,7 @@ summary: >-
   had no metadata check, and a deployed object holds rows up to about 8 MB. A metadata ceiling
   refuses only events carrying more than 512 KiB of metadata, where shrinking data would refuse
   ordinary payloads that the published README promises. Under ADR-0072's borderline rule this is
-  a narrowing of published behaviour, so the owner decides whether it lands in 17b. A host test, the_four_ceilings_fit_the_documented_row_limit, holds the sum to the
+  a narrowing of published behaviour, and the owner accepted it in 17b. A host test, the_four_ceilings_fit_the_documented_row_limit, holds the sum to the
   limit. It implements wi-f97418. It is reopened by a change to the documented row limit, by a
   schema change that widens the event row, or by phase 13 choosing data plus metadata as one
   budget unit.
@@ -45,10 +45,10 @@ last_reviewed: 2026-10-12
 
 # happenstance-cloudflare's metadata ceiling is 512 KiB, carved from the documented row limit
 
-**Proposed.** Written by the #92 session and not yet accepted by the owner. It implements the
+**Accepted by the owner on 2026-10-12** ("Accept in 17b"). Written by the #92 session. It implements the
 owner's decision `wi-f97418`, which chose the source of the carve. This record chooses the share.
-It waits on one further sign-off, set out under *Consequences*: whether the narrowing it makes may
-land in 17b.
+The owner also signed off, separately, on the narrowing set out under *Consequences*: it
+lands in 17b.
 
 ## Context
 
@@ -118,8 +118,8 @@ means.
   the variant and the testkit constant alone. The record recommends the first. An event with more
   than 512 KiB of metadata fits the documented 2 MB only while its other columns stay small, and
   above about 2 MB of metadata it relies on the measured wall rather than the documented one,
-  which the platform may enforce at any time. It stays `proposed`
-  until the owner answers.
+  which the platform may enforce at any time. The owner chose the first
+  on 2026-10-12.
 - The question of whether data and metadata share one budget stays open for phase 13. If it shares
   one, this ceiling is re-derived from that budget.
 

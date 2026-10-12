@@ -72,7 +72,7 @@ spelling, settled by compiling it.
       wrong implementations in the testkit's `tests/`. **Done:** five wrong stores
       (`Store`, `EventDataLen`, clipped, off by one, refused after the write), and `happenstance-cloudflare`'s ceiling is
       512 KiB, carved from the documented 2 MB row limit rather than the measured
-      wall (`wi-f97418`; ADR-0093, proposed, the narrowing awaiting the owner). Phase 13 decides the budget unit.
+      wall (`wi-f97418`; ADR-0093, accepted with the narrowing on 2026-10-12). Phase 13 decides the budget unit.
 - [ ] #93 · **The two typed-layer closures**, each in its own record:
       - `tuple-boundary-heterogeneous-event-type` — option A taken deliberately:
         one DCB boundary folds one domain enum; a `compile_fail` doctest fences it,
@@ -118,5 +118,5 @@ in this file's session log.
   Five wrong stores, one per assertion of the branch (ADR-0093 lists them), each fail
   it, and `GappedPositionStore` passes it. `happenstance-cloudflare` states
   512 KiB, carved from the documented row limit: one row at all four ceilings is
-  1,835,264 B against 2,000,000. ADR-0093 records the share and is proposed: refusing more
-  metadata than that narrows published behaviour, and the owner decides whether it lands in 17b.
+  1,835,264 B against 2,000,000. ADR-0093 records the share, accepted 2026-10-12: refusing more
+  metadata than that narrows published behaviour, and the owner accepted it in 17b.
