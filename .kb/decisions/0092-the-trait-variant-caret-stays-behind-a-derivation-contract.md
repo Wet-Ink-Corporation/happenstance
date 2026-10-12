@@ -21,7 +21,8 @@ summary: >-
   is what a consumer builds. Decision: the caret stays. A derivation contract, a const _ block of
   generic functions bounded by the Send flavours in crates/happenstance-core/src/derivation.rs,
   is library code and is type-checked in every build of the crate, a consumer's included. It
-  asserts both bridges, the Send supertrait on each flavour, Send on SendEventStore::append's future and SendProjectionStore::begin's,
+  asserts both bridges, the Send supertrait on each flavour, Send on SendEventStore::append's
+  future and SendProjectionStore::begin's,
   and Send on SendEventStore::read's stream. Against the same three wrong derivations it fails
   each with E0277 at the assertion aimed at it, on the host and on wasm32. A non-gating weekly
   floating-deps job in ci.yml runs cargo update and then the contract, the build and the tests,
