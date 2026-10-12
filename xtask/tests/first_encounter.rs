@@ -893,3 +893,130 @@ fn a_tilde_or_indented_opt_out_in_the_crate_root_is_caught() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// #234 — the crate root's headings, against rustdoc's sidebar
+// ---------------------------------------------------------------------------
+//
+// Appended for the same reason as #236's section above: ADR-0054 cites this
+// file by line.
+
+/// A crate-root heading, in characters. rustdoc lists the crate root's
+/// headings in its 200px sidebar with `white-space: nowrap` and an ellipsis,
+/// so a longer heading is cut mid-phrase in the page's only navigation
+/// (`_design.md`, `## Density budget`).
+///
+/// **The budget applies to rustdoc crate roots only.** A markdown page under
+/// `docs/` has no rustdoc sidebar: the guide site lists page titles in its
+/// sidebar, and its "On this page" list wraps a long heading rather than
+/// cutting it. So `docs/` headings are not held to this number, and
+/// `docs/first-encounter.md`'s 24-character `## A condition that refuses`
+/// stands. That is the owner's decision "Split by surface", 2026-10-12, on
+/// issue #234.
+const CRATE_ROOT_HEADING: usize = 22;
+
+/// Every ATX heading in `docs` outside a fence, as `(line, text)`, 1-based.
+///
+/// A fence is walked by [`doc_fence_delimiter`]'s `CommonMark` reading,
+/// because a `# ` line inside a doctest is a hidden line rather than a
+/// heading. A heading is up to three spaces of indentation, one to six `#`,
+/// then a space or the end of the line; `#hashtag` is a paragraph.
+fn doc_headings(docs: &str) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut open: Option<(char, usize)> = None;
+    for (index, line) in docs.lines().enumerate() {
+        if let Some((mark, run, info)) = doc_fence_delimiter(line) {
+            open = match open {
+                Some((opened, length)) if mark == opened && run >= length && info.is_empty() => {
+                    None
+                }
+                Some(still) => Some(still),
+                None => Some((mark, run)),
+            };
+            continue;
+        }
+        if open.is_some() {
+            continue;
+        }
+        let unindented = line.trim_start_matches(' ');
+        if line.len() - unindented.len() > 3 {
+            continue;
+        }
+        let text = unindented.trim_start_matches('#');
+        let level = unindented.len() - text.len();
+        if (1..=6).contains(&level) && (text.is_empty() || text.starts_with(' ')) {
+            out.push((index + 1, text.trim().to_owned()));
+        }
+    }
+    out
+}
+
+/// Every heading in `docs` over [`CRATE_ROOT_HEADING`], as
+/// `(line, text, characters)`.
+fn headings_over_budget(docs: &str) -> Vec<(usize, String, usize)> {
+    doc_headings(docs)
+        .into_iter()
+        .map(|(line, text)| {
+            let characters = text.chars().count();
+            (line, text, characters)
+        })
+        .filter(|(_, _, characters)| *characters > CRATE_ROOT_HEADING)
+        .collect()
+}
+
+/// Every heading on the crate root fits rustdoc's sidebar (#234).
+#[test]
+fn every_crate_root_heading_fits_the_sidebar() {
+    let docs = crate_root_docs();
+    assert!(
+        !doc_headings(&docs).is_empty(),
+        "{CRATE_ROOT} carries no heading, so this test proves nothing"
+    );
+    let over = headings_over_budget(&docs);
+    assert!(
+        over.is_empty(),
+        "{CRATE_ROOT}: headings over {CRATE_ROOT_HEADING} characters, as \
+         (line, text, characters), which rustdoc's sidebar truncates: {over:?}"
+    );
+}
+
+/// The two headings #234 retitled are rejected, at every level and indent
+/// `CommonMark` allows; a walk that read a doctest's hidden `# ` line as a
+/// heading, or `#hashtag` as one, would flag the inputs that must pass.
+#[test]
+fn an_over_long_crate_root_heading_is_caught() {
+    for (docs, text) in [
+        (
+            "# What arrives here, and what stays below\n",
+            "What arrives here, and what stays below",
+        ),
+        (
+            "## Testing without a database\n",
+            "Testing without a database",
+        ),
+        (
+            "   ###### Testing without a database\n",
+            "Testing without a database",
+        ),
+    ] {
+        assert_eq!(
+            headings_over_budget(docs),
+            [(1, text.to_owned(), text.chars().count())],
+            "an over-long heading was not seen in {docs:?}"
+        );
+    }
+    for docs in [
+        "# Testing in memory\n",
+        "```\n# let a_hidden_doctest_line_over_the_budget = 1;\n```\n",
+        "~~~\n# a hidden line in a tilde fence, over the budget\n~~~\n",
+        "#hashtag-is-a-paragraph-and-over-the-budget\n",
+        "    # an indented code block line, over the budget\n",
+        "####### seven hashes is a paragraph, over the budget\n",
+    ] {
+        let over = headings_over_budget(docs);
+        assert!(
+            over.is_empty(),
+            "a line that is not a heading was flagged in {docs:?}: {over:?}"
+        );
+    }
+}

@@ -65,7 +65,7 @@
 //!
 //! To watch that boundary *refuse* a write instead, in three runnable steps: [the opening encounter](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/).
 //!
-//! # What arrives here, and what stays below
+//! # Encoding lives here
 //!
 //! The discriminator is **encoding**. [`happenstance_core`] deals in opaque
 //! bytes on purpose — that is what keeps adapters free of domain knowledge and
@@ -128,7 +128,7 @@
 //! | `serde` | the contract's wire-format derives, for replication |
 //! | `unstable-projection` | the projection runner; `apply` is unproved |
 //!
-//! # Testing without a database
+//! # Testing in memory
 //!
 //! *Does the domain model work* and *pick a database* are two decisions, and
 //! only the first is due now. [`happenstance::testing`][testing-module] answers
