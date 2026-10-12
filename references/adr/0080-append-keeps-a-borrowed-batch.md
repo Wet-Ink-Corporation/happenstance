@@ -219,7 +219,7 @@ record is where that is written.
 **(a) The harness ADR-0055 named cannot drive this adapter.** ADR-0055 scheduled the two builds
 "both driven through `happenstance_testkit::event_store_benchmarks!`". That macro's module is
 compiled only under `#[cfg(all(feature = "bench", not(target_arch = "wasm32")))]`
-(`crates/happenstance-testkit/src/lib.rs:438`), and `happenstance-cloudflare` runs on wasm32. The
+(`crates/happenstance-testkit/src/lib.rs:442`), and `happenstance-cloudflare` runs on wasm32. The
 measurement therefore used **calibrated replica arms** (Weigh-In `wi-8b2786`) rather than a
 feature-gated copy of the adapter, so nothing under `crates/` changed. B0 is the shipped write
 path, and the claim that it is was checked rather than assumed: adapter and B0 allocate

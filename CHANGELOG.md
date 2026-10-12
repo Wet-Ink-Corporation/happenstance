@@ -47,6 +47,10 @@ not the same as what a user needed to be told.
   either constructor. `new` stays fallible, for strings and for sequences that
   might be empty, and so does `of_types`, its tagless form
   ([ADR-0069](.kb/decisions/0069-queryitem-gains-a-total-constructor.md)).
+- **The API documentation carries the project's badge** (#173). Each published
+  crate's rustdoc pages show the happenstance badge as the sidebar logo and the
+  browser favicon, served from `assets/brand/favicon.svg` on `main`. This is
+  documentation only; no code or behaviour changed.
 - **A store can now refuse an event for its metadata, and say so** (#92,
   [ADR-0043](.kb/decisions/0043-event-metadata-gets-a-refusal-channel-with-no-floor.md)).
   `happenstance-core`'s `StoreLimit` gains `MetadataLen`. Before this, a store

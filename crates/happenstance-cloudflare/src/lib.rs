@@ -479,7 +479,7 @@
 //! step executes — so a regression here fails the gate
 //! rather than waiting for someone to think of running it.
 
-#![doc(html_no_source)]
+#![doc(html_no_source, /* one line: rustfmt keeps a commented list whole, and the lines below are cited by number */ html_logo_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg", html_favicon_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg")]
 
 pub mod event_store;
 // The Durable Object host. `pub`, and the visibility is the decision rather

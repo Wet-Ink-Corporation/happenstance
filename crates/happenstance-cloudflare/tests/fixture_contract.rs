@@ -540,7 +540,7 @@ fn the_four_ceilings_fit_the_documented_row_limit() {
 ///
 /// The macro's general arm hoists the fixture expression behind
 /// `async fn __conformance_fixture() -> impl Fixture` and hands the opaque type
-/// to every rule (`crates/happenstance-testkit/src/lib.rs:608-629`). This is
+/// to every rule (`crates/happenstance-testkit/src/lib.rs:612-633`). This is
 /// that obligation, written out: if `CloudflareFixture::new()` does not satisfy
 /// it, the slice-mate's three-line target does not compile.
 #[test]
