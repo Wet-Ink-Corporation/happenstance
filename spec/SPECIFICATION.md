@@ -2933,8 +2933,8 @@ adding to it. ADR-0001's marker was lifted on that basis at phase 1 (`references
   `Rc`-backed `!Send` reference store CF-28 requires in `happenstance-testkit`'s own
   `tests/`, running the whole suite; CF-28 owns the instrument. Since ADR-0092, also the
   derivation contract, a const-evaluation assertion in library code at
-  `crates/happenstance-core/src/derivation.rs` (both bridges, and `Send` on the `Send`
-  flavour's append future and read stream), and the `floating-deps` job in
+  `crates/happenstance-core/src/derivation.rs` (both bridges, the `Send` supertrait, and
+  `Send` on the append and begin futures and the read stream), and the `floating-deps` job in
   `.github/workflows/ci.yml`, which runs `cargo update`, then the contract and the suite.
 - **Cases:** E2E-52, E2E-09, E2E-54.
 - **Rejects:** a coherence property never compiled outside the crate that declares it;

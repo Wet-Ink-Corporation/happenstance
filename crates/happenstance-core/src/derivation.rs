@@ -30,9 +30,9 @@
 //!
 //! # What this does not cover
 //!
-//! It checks the properties generic code depends on: the bridge (CLAUDE.md binding
-//! constraint 4) and `Send` on what the `Send` flavour returns. It does not check that the
-//! derived trait still copies the base trait's attributes. That is documentation, not a
+//! It checks what generic code depends on: the bridge (CLAUDE.md binding constraint 4), the
+//! `Send` supertrait, and `Send` on what the `Send` flavour returns. It does not check that
+//! the derived trait still copies the base trait's attributes. That is documentation, not a
 //! type: `missing_docs` guards the doc comment, and `tests/trait_variant_pin.rs` ties the
 //! two `#[doc(alias)]` keys to the locked version.
 //!
@@ -78,9 +78,9 @@ const _: () = {
         is_send(&SendEventStore::read(store, query, ReadOptions::new()));
     }
 
-    /// The bridge, projection side. Implementing [`SendProjectionStore`] must make a type a
-    /// [`ProjectionStore`](crate::ProjectionStore). The same derivation emits it, so a release that changes one
-    /// bridge has changed both.
+    /// The bridge, projection side. Implementing [`SendProjectionStore`] must make a type
+    /// a [`ProjectionStore`](crate::ProjectionStore). The same derivation emits it, so a
+    /// release that changes one bridge has changed both.
     fn _every_send_projection_store_is_a_projection_store<S: SendProjectionStore>() {
         fn bare<S: crate::ProjectionStore>() {}
         bare::<S>();
@@ -91,5 +91,16 @@ const _: () = {
     fn _send_projection_flavour_begin_future_is_send<S: SendProjectionStore>(store: &S) {
         fn is_send<T: Send>(_: &T) {}
         is_send(&SendProjectionStore::begin(store));
+    }
+
+    /// Each `Send` flavour is itself `Send`: `trait_variant` emits the variant's bound as a
+    /// supertrait, `pub trait SendEventStore: Send`. Generic code that moves a store into a
+    /// spawned task may lean on that rather than spell `+ Send`, and `spawns_from_generic`
+    /// spells it, so without this a release that dropped the supertrait would pass the
+    /// workspace's own tests.
+    fn _every_send_flavour_is_send<E: SendEventStore, P: SendProjectionStore>() {
+        fn is_send<T: Send>() {}
+        is_send::<E>();
+        is_send::<P>();
     }
 };

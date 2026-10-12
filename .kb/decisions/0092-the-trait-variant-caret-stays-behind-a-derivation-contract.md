@@ -21,7 +21,7 @@ summary: >-
   is what a consumer builds. Decision: the caret stays. A derivation contract, a const _ block of
   generic functions bounded by the Send flavours in crates/happenstance-core/src/derivation.rs,
   is library code and is type-checked in every build of the crate, a consumer's included. It
-  asserts both bridges, Send on SendEventStore::append's future and SendProjectionStore::begin's,
+  asserts both bridges, the Send supertrait on each flavour, Send on SendEventStore::append's future and SendProjectionStore::begin's,
   and Send on SendEventStore::read's stream. Against the same three wrong derivations it fails
   each with E0277 at the assertion aimed at it, on the host and on wasm32. A non-gating weekly
   floating-deps job in ci.yml runs cargo update and then the contract, the build and the tests,
@@ -108,7 +108,8 @@ generic code, as an error about their own bounds.
    - `S: SendEventStore` implies `S: EventStore`, and `S: SendProjectionStore` implies
      `S: ProjectionStore` (the two bridges);
    - `SendEventStore::append`'s future is `Send`, and `SendProjectionStore::begin`'s;
-   - `SendEventStore::read`'s stream is `Send` at the top level.
+   - `SendEventStore::read`'s stream is `Send` at the top level;
+   - each `Send` flavour is itself `Send`, the supertrait `trait_variant` emits.
 
    The functions are never called, and their names start with `_`, so `dead_code` does not report
    them. That is the language's spelling for a deliberately unused item, not a lint attribute.

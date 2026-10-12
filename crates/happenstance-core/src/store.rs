@@ -1200,10 +1200,10 @@ help: disambiguate the method for candidate #2
     /// crate, and the copying is held only by the guard in the parenthesis below,
     /// which a consumer's build does not run. The weekly `floating-deps` CI job
     /// runs `tests/trait_variant_pin.rs` against an unlocked resolve, so a new
-    /// release turns that test red there first. (The other half of the mechanism has a standing guard already:
+    /// release turns that test red there first. (The other half has a guard:
     /// `SendEventStore` has no doc comment of its own, so if attributes stopped
-    /// being copied, `missing_docs` — `warn` in the workspace lints and `-D
-    /// warnings` in the gate — would fail the build.)
+    /// being copied, `missing_docs`, `warn` in the workspace lints and `-D
+    /// warnings` in the gate, would fail the build.)
     #[test]
     fn the_search_keys_sit_where_trait_variant_copies_them_to_both_flavours() {
         let lines: Vec<&str> = production_source().lines().collect();
