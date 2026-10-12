@@ -2925,7 +2925,7 @@ rather than the breadth: `LocalMemoryEventStore`
 `impl EventStore for` in a genuinely downstream crate, sitting beside the
 blanket impl without `error[E0119]` and passing every rule natively and on
 `wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:1098`) and
+(`crates/happenstance-cloudflare/src/event_store.rs:1118`) and
 `happenstance-neon`'s two (`crates/happenstance-neon/src/event_store.rs:168`,
 `:405`) are skeletons and
 widen the evidence without adding to it. ADR-0001's provisional marker was
@@ -4465,7 +4465,7 @@ today, four of them skeletons — `happenstance-sqlite` was the fifth until phas
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
 `crates/happenstance-sqlite/src/event_store.rs:1133`,
 `crates/happenstance-postgres/src/event_store.rs:121`,
-`crates/happenstance-cloudflare/src/event_store.rs:1098` and
+`crates/happenstance-cloudflare/src/event_store.rs:1118` and
 `crates/happenstance-neon/src/event_store.rs:168`, `:405`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
@@ -8934,13 +8934,13 @@ ES-18: the `Ok` branch of `append_is_atomic_under_a_mid_batch_fault` becomes
 unreachable for a conformant fixture, and is retained deliberately.
 
 **CF-40.** A fixture MUST state its store's capacity ceilings as
-`Option<usize>` associated constants — `MAX_EVENT_DATA_LEN`,
-`MAX_TAGS_PER_EVENT`, `MAX_EVENTS_PER_BATCH` — each defaulting to `None`. A
-stated ceiling is a promise about the store: a value at exactly that limit MUST
-be accepted and a value one larger MUST be refused as
-`AppendError::ExceedsStoreLimit` naming the corresponding `StoreLimit`. `None`
-means the store has no ceiling for that limit, and a rule that needs one MUST
-report a skip rather than being omitted.
+`Option<usize>` associated constants — `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT`,
+`MAX_EVENTS_PER_BATCH`, `MAX_METADATA_LEN` — each defaulting to `None`. A stated
+ceiling is a promise about the store: a value at exactly that limit MUST be
+accepted and one larger MUST be refused as `AppendError::ExceedsStoreLimit` naming
+the corresponding `StoreLimit` — `MetadataLen` for metadata, which has no floor
+(ADR-0043). `None` means the store has no ceiling for that limit, and a rule
+that needs one MUST report a skip rather than being omitted.
 
 They MUST NOT be spelled as `Capability`. A declined capability is a **trade** —
 the fixture could have co-operated and its stated reason is the record of what
@@ -8974,14 +8974,14 @@ hard-coded one would be a `MAX_EVENT_DATA_LEN` constant by another route, which
 VT-21 forbids in terms.
 Cases: E2E-35, E2E-42.
 Rejects: a fixture that states a ceiling its store does not have, or does not
-enforce distinguishably. Four are compiled and registered, in two pairs — one
-pair refuses through `AppendError::Store` (`PayloadCeilingStore`,
-`BatchParameterCeilingStore`) and one does not refuse at all
-(`TruncatingPayloadStore`, `ChunkLosingBatchStore`). It also rejects the shape
-this clause exists to prevent: a suite in which **no** fixture states a ceiling,
-where `append_reports_exceeded_store_limits` skips everywhere and VT-25 is a
-variant nothing exercises. `GappedPositionFixture` states all three at
-VT-21 – VT-24's floors and is what makes the rule run.
+enforce distinguishably. Seven are compiled and registered. `PayloadCeilingStore`,
+`BatchParameterCeilingStore` and `MetadataCeilingStore` refuse through
+`AppendError::Store`; `MisnamedMetadataCeilingStore` names `EventDataLen` for
+metadata; `TruncatingPayloadStore`, `ChunkLosingBatchStore` and
+`TruncatingMetadataStore` do not refuse at all. It also rejects a suite in which
+**no** fixture states a ceiling, where the rule skips everywhere and VT-25 is a
+variant nothing exercises. `GappedPositionFixture` states the first three at
+VT-21 – VT-24's floors and a metadata ceiling, and is what makes the rule run.
 
 **CF-19.** A rule MUST assert that an append made through one handle is visible
 to an append condition evaluated through a second handle onto the same backing

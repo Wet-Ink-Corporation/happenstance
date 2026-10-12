@@ -150,6 +150,13 @@ pub(crate) enum LogError {
     /// only channel an adapter has for it is `AppendError::Store`, which is
     /// exactly the clause's complaint and exactly what this variant models.
     ValueTooLarge,
+    /// The `metadata` column's width was exceeded.
+    ///
+    /// `MetadataCeilingStore`'s answer, and [`ValueTooLarge`](Self::ValueTooLarge)
+    /// one column over: a capacity refusal on the field ADR-0043 gave its own
+    /// `StoreLimit`, sent instead through `AppendError::Store`, which VT-25
+    /// forbids.
+    MetadataTooLarge,
     /// The statement carried more bound parameters than the driver accepts.
     ///
     /// `BatchParameterCeilingStore`'s answer: one parameter set per event in a
@@ -191,6 +198,7 @@ impl core::fmt::Display for LogError {
             Self::ReadFailed => f.write_str("a fetch part way through the read failed"),
             Self::NotNullViolation => f.write_str("NOT NULL constraint failed: event.data"),
             Self::ValueTooLarge => f.write_str("value too large for column: event.data"),
+            Self::MetadataTooLarge => f.write_str("value too large for column: event.metadata"),
             Self::TooManyParameters => f.write_str("too many SQL variables"),
             Self::NullHead => {
                 f.write_str("max(position) returned NULL: the paging window has no upper bound")

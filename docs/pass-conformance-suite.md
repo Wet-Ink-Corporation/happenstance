@@ -103,11 +103,12 @@ only shows rows below a server-wide snapshot point. Only the model family needs
 this capability, and it reports a skip without it
 (`Fixture::READ_YOUR_OWN_WRITES`, read by `ops_agree_with_the_model`).
 
-### The three size limits
+### The four size limits
 
-Last come three ceilings: `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT` and
-`MAX_EVENTS_PER_BATCH`. These are facts about your store rather than trade-offs,
-so each takes a number, or `None` for no limit, and no reason.
+Last come four ceilings: `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT`,
+`MAX_EVENTS_PER_BATCH` and `MAX_METADATA_LEN`. These are facts about your store
+rather than trade-offs, so each takes a number, or `None` for no limit, and no
+reason. The metadata ceiling is the one with no floor: any number is legal.
 
 When you state a number, the suite tests both sides of it: an append within the
 ceiling must be accepted, and one beyond it must be refused

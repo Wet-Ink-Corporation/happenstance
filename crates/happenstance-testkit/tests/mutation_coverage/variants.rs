@@ -60,6 +60,15 @@ const FIRST_GAPPED: u64 = 4096;
 /// another.
 const GAP: u64 = 7;
 
+/// The metadata ceiling [`GappedPositionFixture`] states and its store keeps.
+///
+/// The three-mutant set in `metadata_ceilings.rs` states the same number, so
+/// the conformant control and the wrong stores meet the rule at one boundary.
+/// ADR-0043 sets no floor, so the variant cannot sit "at the floor" here as it
+/// does for the other three; the number only has to clear every metadata the
+/// rest of the suite writes, the largest of which is nine bytes.
+const METADATA_CEILING: usize = crate::mutants::metadata_ceilings::CEILING;
+
 /// Allocates positions in steps of [`GAP`] starting at [`FIRST_GAPPED`].
 ///
 /// This is a legal policy, not a defect. A real adapter reaches it by allocating
@@ -194,6 +203,16 @@ impl EventStore for GappedPositionStore {
                 len: events.len(),
             });
         }
+        if let Some(metadata) = events
+            .iter()
+            .filter_map(Event::metadata)
+            .find(|metadata| metadata.len() > METADATA_CEILING)
+        {
+            return Err(AppendError::ExceedsStoreLimit {
+                limit: StoreLimit::MetadataLen,
+                len: metadata.len(),
+            });
+        }
 
         let position = {
             let mut log = self
@@ -272,6 +291,10 @@ impl Fixture for GappedPositionFixture {
     const MAX_EVENT_DATA_LEN: Option<usize> = Some(MIN_SUPPORTED_EVENT_DATA_LEN);
     const MAX_TAGS_PER_EVENT: Option<usize> = Some(MIN_SUPPORTED_TAGS_PER_EVENT);
     const MAX_EVENTS_PER_BATCH: Option<usize> = Some(MIN_SUPPORTED_EVENTS_PER_BATCH);
+    // ADR-0043's metadata ceiling has no floor to state, so this one cannot be
+    // "at the floor" like the three above: a ceiling of 0 would refuse the
+    // eight bytes the round-trip rule writes. See [`METADATA_CEILING`].
+    const MAX_METADATA_LEN: Option<usize> = Some(METADATA_CEILING);
 
     async fn connect(&self) -> Self::Store {
         GappedPositionStore {

@@ -78,7 +78,7 @@ experiment that would ever remove it — so it accumulates, and the corpus's sig
 per token falls for everyone.
 
 **Evidence.** `CONTRIBUTING.md:205 (Write the wrong implementation)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:433 (impl Defect for InnerJoinTagStore)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:436 (impl Defect for InnerJoinTagStore)` ·
 [SPECIFICATION CF-1](../../spec/SPECIFICATION.md#61-the-suites-own-proof-obligation) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 

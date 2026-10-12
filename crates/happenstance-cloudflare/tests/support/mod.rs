@@ -316,6 +316,16 @@ impl Fixture for CloudflareFixture {
     /// statements and completing, and found 4,096 accepted with no refusal.
     const MAX_EVENTS_PER_BATCH: Option<usize> = Some(1024);
 
+    /// 524,288 bytes (512 KiB) of `metadata`. ADR-0043 sets no floor.
+    ///
+    /// Carved, not measured, from the same documented row limit as the
+    /// payload ceiling, read as the smaller 2,000,000 bytes (wi-f97418,
+    /// ADR-0093). One row at all four ceilings at once is 1,048,576 of `data`,
+    /// 262,145 of `tags`, 255 of `event_type` and this, 1,835,264 bytes in all,
+    /// which leaves 164,736 for the fixed-width columns and the record header.
+    /// `tests/fixture_contract.rs` holds that sum to the limit.
+    const MAX_METADATA_LEN: Option<usize> = Some(512 * 1024);
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // `ready` rather than `async move`: acquiring this handle is a refcount
         // bump and one JS property read, and pretending otherwise would hide

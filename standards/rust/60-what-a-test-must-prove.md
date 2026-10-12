@@ -267,7 +267,7 @@ which store is lying.
 
 **Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:111 (pub(crate) trait Defect)` ·
 `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:108 (Box<dyn Defect>)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:267 (defect: PhantomData<D>)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:269 (defect: PhantomData<D>)` ·
 [SPECIFICATION CF-3](../../spec/SPECIFICATION.md) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 

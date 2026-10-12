@@ -34,6 +34,32 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **A store can now refuse an event for its metadata, and say so** (#92,
+  [ADR-0043](.kb/decisions/0043-event-metadata-gets-a-refusal-channel-with-no-floor.md)).
+  `happenstance-core`'s `StoreLimit` gains `MetadataLen`. Before this, a store
+  that could not hold an event's `metadata` had no conformant way to refuse it:
+  `AppendError::Store` is forbidden for capacity refusals, and `EventDataLen`
+  names `data`. `StoreLimit::MetadataLen.guaranteed_minimum()` is `0`, because
+  the contract guarantees no metadata capacity. `StoreLimit` was already
+  `#[non_exhaustive]`, so a `match` on it already has a wildcard arm and keeps
+  compiling.
+- **`happenstance-testkit`: `Fixture::MAX_METADATA_LEN`, defaulting to `None`.**
+  A fixture that states one makes `append_reports_exceeded_store_limits` check
+  metadata at exactly that size is accepted, and one byte more is refused as
+  `MetadataLen`. A fixture that leaves it `None` runs exactly as before. The
+  skip the rule reports when a fixture states no ceiling now names all four
+  constants, so the `NO_STORE_LIMITS` string has a fourth name in it. Compare
+  against the constant, not the text.
+- **`happenstance-cloudflare` refuses metadata over 524,288 bytes (512 KiB)**, as
+  `StoreLimit::MetadataLen`, before it sends any SQL. The number is carved from
+  Cloudflare's documented 2 MB row limit, read as 2,000,000 bytes. One event at
+  all four ceilings is 1,835,264 bytes, so it still fits
+  ([ADR-0093](.kb/decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md),
+  proposed). Metadata up to that size was accepted before and still is. An event
+  with more was accepted before and is now refused.
+
 ## [0.4.1] — 2026-10-12
 
 ### Added

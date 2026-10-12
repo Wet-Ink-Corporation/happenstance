@@ -619,6 +619,28 @@ fn the_conformance_claim_carries_every_qualifier_the_run_produces() {
     }
 }
 
+/// CF-40's metadata ceiling (ADR-0043) is stated in the README, beside the
+/// other three, under the variant it is refused as.
+///
+/// The README is what a consumer reads, and a ceiling the fixture declares
+/// that the README omits is one a caller meets as a refusal it was never told
+/// about.
+#[test]
+fn the_readme_states_the_metadata_ceiling() {
+    let readme = packaged("README.md");
+    let declared = <CloudflareFixture as Fixture>::MAX_METADATA_LEN
+        .expect("this adapter declares a metadata ceiling");
+
+    assert!(
+        readme.contains(&grouped(declared)),
+        "the README does not state the metadata ceiling the fixture declares: {declared}"
+    );
+    assert!(
+        readme.contains("StoreLimit::MetadataLen"),
+        "the README does not name the variant a metadata refusal arrives as"
+    );
+}
+
 /// AC-011. No unimplemented body and no scoped allow survives.
 ///
 /// This story **verifies** rather than causes it: the scoped

@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0090; 0085 is an unused gap (`wi-dea8db`).** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0094; 0085 is an unused gap (`wi-dea8db`), and 0090 – 0092 are held by branches not yet on main.** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
@@ -42,7 +42,7 @@ parameter count is stated once, with an adapter-side count check proposed for Po
 is the owner's default; the record proposes its shape, and its code lands in its own lane PR.
 The VT-6 lane wrote 0086, **accepted** by the owner on 2026-10-08 (Postgres and Neon keep mint-once with a documented
 re-mint; mint-per-open declined; default-refusing detection ruled out after 1.0).
-Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change. #86 wrote 0089, accepted by the owner on 2026-10-11: VT-14 is frozen on the RTL corpus run (`experiments/identifier-validation/`), and its explicit bidirectional controls are nine, not seven.
+Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change. #86 wrote 0089, accepted by the owner on 2026-10-11: VT-14 is frozen on the RTL corpus run (`experiments/identifier-validation/`), and its explicit bidirectional controls are nine, not seven. #92 wrote 0093, **proposed** and awaiting the owner: `happenstance-cloudflare`'s metadata ceiling is 512 KiB, carved from the documented row limit as `wi-f97418` directs.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.
@@ -327,7 +327,7 @@ says why.
 | CF-17 | renew-past-1.0: a durable adapter cannot express even a reopen through this contract — the candidates are phase 19a's browser storage and the first workerd-class run observing a real eviction | Cloudflare's `REOPEN` now runs under workerd as well as the shim (phase 17's job), still as a fresh handle rather than an observed eviction. So the instrument that could fire it is not yet built |
 | CF-27 | freeze-by-14 | The report shape was decided at 17 by ADR-0028: instrument-local, over an arbitrary retained set, with a defaulted-declined removal capability. Built and frozen at 14. Phase 13's SY-27 needs the same instrument, so it may have to be built at 13 |
 | CF-34 | renew-past-1.0: a complexity property becomes expressible as a deterministic assertion rather than a timing — an instrumented fixture counting rows examined — and the clause splits | Needs an instrumented rows-examined fixture and a record on the scope of CF-33's operation-count ban (`.kb/open-questions/cf-33-cf-34-scope-outside-the-testkit.md`) |
-| CF-40 | freeze-by-13 | Phase 17 builds ADR-0043's `MetadataLen`; phase 13 decides whether `payload_len` — data plus metadata — is the budget unit |
+| CF-40 | freeze-by-13 | ADR-0043's `MetadataLen` is built (#92, phase 17b), and `happenstance-cloudflare` states a metadata ceiling (ADR-0093). Phase 13 decides whether `payload_len` — data plus metadata — is the budget unit |
 
 ### The blocked cases
 

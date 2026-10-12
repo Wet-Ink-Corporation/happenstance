@@ -766,6 +766,17 @@ leave every merge with the owner.
 | — | [`kb-decision-wi-f97418`](../decisions/wi-f97418-should-92-carve-cf-40-s-cloudflare-metadata.md) | CF-40's Cloudflare metadata ceiling is carved from the documented 2 MB row limit | accepted | 17b | — |
 | — | [`kb-decision-wi-fa5c7b`](../decisions/wi-fa5c7b-may-the-afk-session-build-one-way-17b-prs-83-93.md) | An unattended session builds the one-way 17b PRs; the owner merges them | accepted | 17b | — |
 
+## 2026-10-12: CF-40's metadata ceiling (#92)
+
+ADR-0093 implements `wi-f97418`. #92 builds ADR-0043's `StoreLimit::MetadataLen`, and the
+owner chose to carve `happenstance-cloudflare`'s metadata ceiling from the documented row
+limit. The record chooses the share, 512 KiB, and records the arithmetic. It is proposed and
+waits on the owner.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0093 | [`kb-decision-0093`](../decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md) | `happenstance-cloudflare`'s metadata ceiling is 512 KiB, carved from the documented row limit | proposed | 17b | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

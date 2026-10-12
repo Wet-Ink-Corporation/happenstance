@@ -4660,8 +4660,9 @@ pub mod rules {
     /// single number is a straitjacket on Postgres and a lie on a KV-backed peer.
     /// So the ceiling is a **fact about this store**, and the fixture states it:
     /// [`MAX_EVENT_DATA_LEN`](crate::Fixture::MAX_EVENT_DATA_LEN),
-    /// [`MAX_TAGS_PER_EVENT`](crate::Fixture::MAX_TAGS_PER_EVENT) and
-    /// [`MAX_EVENTS_PER_BATCH`](crate::Fixture::MAX_EVENTS_PER_BATCH), each
+    /// [`MAX_TAGS_PER_EVENT`](crate::Fixture::MAX_TAGS_PER_EVENT),
+    /// [`MAX_EVENTS_PER_BATCH`](crate::Fixture::MAX_EVENTS_PER_BATCH) and
+    /// [`MAX_METADATA_LEN`](crate::Fixture::MAX_METADATA_LEN), each
     /// defaulting to `None`.
     ///
     /// They are `Option<usize>` and **not** [`Capability`](crate::Capability),
@@ -4685,6 +4686,11 @@ pub mod rules {
     /// The second pair is why each limit is checked twice — once for the answer,
     /// once for what is in the store afterwards.
     ///
+    /// The metadata branch (ADR-0043) has three of its own, one column with its
+    /// refusal got wrong three ways: `MetadataCeilingStore` refuses through
+    /// `AppendError::Store`, `MisnamedMetadataCeilingStore` names
+    /// `EventDataLen`, and `TruncatingMetadataStore` clips and answers `Ok`.
+    ///
     /// # The at-the-ceiling append is the anchor
     ///
     /// Without it a store that refused *everything* would satisfy every assertion
@@ -4699,11 +4705,12 @@ pub mod rules {
         open: impl AsyncFn() -> F,
     ) -> RuleOutcome {
         // CF-40's gate. Written out rather than behind `require!` because the
-        // three constants are `Option<usize>` rather than `Capability`: a store
+        // four constants are `Option<usize>` rather than `Capability`: a store
         // with no ceiling has nothing to refuse and no trade to record.
         if F::MAX_EVENT_DATA_LEN.is_none()
             && F::MAX_TAGS_PER_EVENT.is_none()
             && F::MAX_EVENTS_PER_BATCH.is_none()
+            && F::MAX_METADATA_LEN.is_none()
         {
             return RuleOutcome::Skipped {
                 capability: NO_STORE_LIMITS,
@@ -4722,6 +4729,9 @@ pub mod rules {
         }
         if let Some(ceiling) = F::MAX_EVENTS_PER_BATCH {
             batch_ceiling_is_honoured(&store, ceiling).await;
+        }
+        if let Some(ceiling) = F::MAX_METADATA_LEN {
+            metadata_ceiling_is_honoured(&store, ceiling).await;
         }
 
         RuleOutcome::Ran
@@ -4744,20 +4754,11 @@ pub mod rules {
     /// clause `Rule:` lines for three failures that can only arrive together in
     /// an adapter that got its capacity reporting wrong once.
     async fn payload_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
-        // A repeating non-zero pattern rather than zeroes: a column that
-        // stores the length and nothing else, or a driver that treats a run
-        // of NULs as a terminator, both survive an all-zero payload.
-        let filler = |len: usize| -> Vec<u8> {
-            (0..len)
-                .map(|byte| u8::try_from(byte % 251).unwrap_or(0))
-                .collect()
-        };
-
-        let at = event_with_owned_payload("AtTheCeiling", filler(ceiling))
+        let at = event_with_owned_payload("AtTheCeiling", patterned(ceiling))
             .with_tags(tags(&[("edge", "data-at")]));
         append_ok(store, core::slice::from_ref(&at)).await;
 
-        let over = event_with_owned_payload("OverTheCeiling", filler(ceiling + 1))
+        let over = event_with_owned_payload("OverTheCeiling", patterned(ceiling + 1))
             .with_tags(tags(&[("edge", "data-over")]));
         let refused = store.append(core::slice::from_ref(&over), None).await;
         assert!(
@@ -4890,6 +4891,60 @@ pub mod rules {
              tail. Got {} event(s) of a refused batch in the store",
             leftovers.len()
         );
+    }
+
+    /// The metadata ceiling (ADR-0043). See [`payload_ceiling_is_honoured`].
+    ///
+    /// The refusal must name `MetadataLen`, never `EventDataLen`: the payload
+    /// here is a few bytes, so a store naming `data` names the field that was
+    /// not too long. No floor is asserted, because ADR-0043 sets none.
+    async fn metadata_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
+        let at = tagged_event("MetadataAtTheCeiling", &[("edge", "metadata-at")])
+            .with_metadata(patterned(ceiling));
+        append_ok(store, core::slice::from_ref(&at)).await;
+
+        let over = tagged_event("MetadataOverTheCeiling", &[("edge", "metadata-over")])
+            .with_metadata(patterned(ceiling + 1));
+        let refused = store.append(core::slice::from_ref(&over), None).await;
+        assert!(
+            matches!(
+                refused,
+                Err(AppendError::ExceedsStoreLimit {
+                    limit: StoreLimit::MetadataLen,
+                    ..
+                })
+            ),
+            "VT-25 and ADR-0043: this fixture states a metadata ceiling of \
+             {ceiling} bytes, so metadata of {} must be refused as \
+             `AppendError::ExceedsStoreLimit {{ limit: MetadataLen, .. }}` — \
+             not as `AppendError::Store`, not under the payload's limit, which \
+             names a different field, and not by succeeding. Got {refused:?}",
+            ceiling + 1
+        );
+
+        let leftovers = read_ok(
+            store,
+            &query_tagged(&[("edge", "metadata-over")]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert!(
+            leftovers.is_empty(),
+            "and a store MUST NOT clip the metadata instead: the refused event \
+             must not be in the log in any form. Got {:?}",
+            positions_of(&leftovers)
+        );
+    }
+
+    /// `len` bytes of a repeating non-zero pattern, for the two byte ceilings.
+    ///
+    /// Not zeroes: a column that stores the length and nothing else, or a
+    /// driver that treats a run of NULs as a terminator, both survive an
+    /// all-zero value.
+    fn patterned(len: usize) -> Vec<u8> {
+        (0..len)
+            .map(|byte| u8::try_from(byte % 251).unwrap_or(0))
+            .collect()
     }
 
     // ---------------------------------------------------------------------

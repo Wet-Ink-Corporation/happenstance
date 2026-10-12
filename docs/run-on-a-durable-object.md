@@ -281,7 +281,7 @@ discovering them in production.
 
 ### Capacity
 
-The store checks each batch against three ceilings before it sends any SQL. A
+The store checks each batch against four ceilings before it sends any SQL. A
 batch over one is refused as `AppendError::ExceedsStoreLimit`, naming the
 `StoreLimit` it crossed, so you can tell a capacity refusal apart from a storage
 failure
@@ -293,11 +293,15 @@ The README states the ceilings under *The limits this store declares*:
 | payload (`data`) | 1,048,576 bytes (1 MiB) |
 | tags per event | 1,024 |
 | events per append | 1,024 |
+| `metadata` per event | 524,288 bytes (512 KiB) |
 
 These numbers are the store's chosen policy, not a measured physical limit. They
 were set comfortably under Cloudflare's documented 2 MiB row cap, and the real
-wall was never located. The crate publishes no constants for them, so copy the
-numbers from the README rather than naming them in code.
+wall was never located. An event at all four ceilings at once still fits that
+cap. Metadata over its ceiling is refused as `StoreLimit::MetadataLen`. That
+limit has no guaranteed minimum, so another store may accept less metadata. The
+crate publishes no constants for them, so copy the numbers from the README rather
+than naming them in code.
 
 ### Query width
 

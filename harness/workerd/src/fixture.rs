@@ -127,6 +127,7 @@ impl Fixture for WorkerdFixture<'_> {
     const MAX_EVENT_DATA_LEN: Option<usize> = Some(1024 * 1024);
     const MAX_TAGS_PER_EVENT: Option<usize> = Some(1024);
     const MAX_EVENTS_PER_BATCH: Option<usize> = Some(1024);
+    const MAX_METADATA_LEN: Option<usize> = Some(512 * 1024);
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         let sql = self

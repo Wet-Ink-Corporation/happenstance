@@ -66,13 +66,13 @@ spelling, settled by compiling it.
       `happenstance-neon`, run red once before any floor is raised; leg 2 resolves
       against the published `0.4.0`. A sibling rather than a gate step: it needs a
       nightly resolver.
-- [ ] #92 · **CF-40's `MetadataLen`, built under ADR-0043.** `StoreLimit::MetadataLen`
+- [x] #92 · **CF-40's `MetadataLen`, built under ADR-0043.** `StoreLimit::MetadataLen`
       in `happenstance-core`; a defaulted `MAX_METADATA_LEN` on the testkit's
       `Fixture`; a metadata branch in `append_reports_exceeded_store_limits`; its
-      wrong implementations in the testkit's `tests/`. `happenstance-cloudflare`'s
-      ceiling is carved from the row budget measured by phase 17's deployed
-      Durable Object leg, because local `workerd` does not enforce the production
-      row limit. Phase 13 then decides the budget unit.
+      wrong implementations in the testkit's `tests/`. **Done:** three wrong stores
+      (`Store`, `EventDataLen`, clipped), and `happenstance-cloudflare`'s ceiling is
+      512 KiB, carved from the documented 2 MB row limit rather than the measured
+      wall (`wi-f97418`, ADR-0093, proposed). Phase 13 then decides the budget unit.
 - [ ] #93 · **The two typed-layer closures**, each in its own record:
       - `tuple-boundary-heterogeneous-event-type` — option A taken deliberately:
         one DCB boundary folds one domain enum; a `compile_fail` doctest fences it,
@@ -92,7 +92,7 @@ in this file's session log.
       says why.
 - [ ] The minimal-versions and floating-dependency jobs exist, and each has been
       watched failing once.
-- [ ] CF-40's `MetadataLen` is built, with a named wrong implementation per branch.
+- [x] CF-40's `MetadataLen` is built, with a named wrong implementation per branch.
 - [ ] Both typed-layer open questions are closed.
 - [ ] #95 · `cargo-semver-checks` against `0.4.0` reports no major finding.
 - [ ] The specification is reconciled against this phase's changes (session
@@ -113,3 +113,9 @@ in this file's session log.
   the revert. `cargo semver-checks` against `0.4.0` reports nothing for all seven
   crates, and `0.4.1` is cut. #83, #85, #88, #92 and #93 are one-way and wait on the
   owner.
+- 2026-10-12 — #92: `StoreLimit::MetadataLen` (floor 0) and `Fixture::MAX_METADATA_LEN`
+  are in the tree, and `append_reports_exceeded_store_limits` gained a metadata branch.
+  `MetadataCeilingStore`, `MisnamedMetadataCeilingStore` and `TruncatingMetadataStore`
+  each fail it, and `GappedPositionStore` passes it. `happenstance-cloudflare` states
+  512 KiB, carved from the documented row limit: one row at all four ceilings is
+  1,835,264 B against 2,000,000. ADR-0093 records the share and is proposed.

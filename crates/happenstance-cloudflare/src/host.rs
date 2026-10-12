@@ -60,7 +60,7 @@
 //!
 //! * **What this store's per-value limits physically are.** No per-value wall
 //!   is observable on this host at 8 MiB of payload, 16,384 tags or 8,192
-//!   consecutive inserts, so the three ceilings the conformance fixture declares
+//!   consecutive inserts, so the four ceilings the conformance fixture declares
 //!   are this adapter's own **refusal policy**, seeded from Cloudflare's
 //!   documented 2 MiB row cap — not a search result. `crate`'s own
 //!   documentation says so where a consumer lands, and
