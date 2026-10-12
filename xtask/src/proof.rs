@@ -351,8 +351,17 @@ const COMPILE_FAIL_PAIR: &[&str] = &[
 /// commit nothing — and the other three must then keep running against the same
 /// store. A build that quietly started tolerating the decode failure, or that
 /// stalled every view behind it, would still pass the first test.
+///
+/// `a_failed_promotion_leaves_the_old_view_whole` holds the promotion's route,
+/// `retire` with the swap in the old id's reset batch, to one transaction
+/// (#253). The program sends a deliberately mistyped swap down the same route
+/// as the real one, and this test reads the failure path off the run: a route
+/// that retired the old view and then swapped in a second transaction leaves
+/// an empty table at `NeverRun` there. A promotion that succeeds looks the same
+/// either way, so the first test cannot see a split.
 const REBUILDING_VIEWS_TESTS: &[&str] = &[
     "runs::the_binary_operates_every_view",
+    "runs::a_failed_promotion_leaves_the_old_view_whole",
     "runs::the_poisoned_view_stops_and_the_others_advance",
 ];
 
