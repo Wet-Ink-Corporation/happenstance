@@ -7,7 +7,7 @@ authority_tier: note
 summary: >-
   The deterministic reproduction taken 2026-09-03 in experiments/busy-timeout-margin/tests/lost_wakeup.rs
   of a second way a conformance run can stop and name no rule. The testkit's own executor,
-  crates/happenstance-testkit/src/registry.rs:357-361, drives a rule by polling and calling
+  crates/happenstance-testkit/src/registry.rs:358-362, drives a rule by polling and calling
   std::thread::park on Poll::Pending, with no notified flag of its own. std's park and unpark
   carry a single token per thread, so an unpark delivered while the thread is not parked is
   coalesced rather than queued: a second block_on nested inside a rule already driven by one —
@@ -55,7 +55,7 @@ uses, not by observing a failure in CI.
 
 ## The mechanism
 
-`registry.rs:357-361` implements `block_on` as a hand-rolled poll loop: on `Poll::Pending` it calls
+`registry.rs:358-362` implements `block_on` as a hand-rolled poll loop: on `Poll::Pending` it calls
 `std::thread::park()` directly, with no flag of its own recording whether a wakeup already arrived.
 This is a deliberate, documented choice — the comment at the call site says parking rather than
 spinning lets a rule that awaits real I/O make progress without burning a core — and it is exactly

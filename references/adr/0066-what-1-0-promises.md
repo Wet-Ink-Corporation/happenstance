@@ -305,9 +305,9 @@ third and a fourth adapter arm real in-store faults as well.**
 - **Postgres, phase 10.** The fixture declares the capability supported and arms
   an `AFTER INSERT` trigger that raises on the `after + 1`-th row
   (`crates/happenstance-postgres/tests/support/mod.rs:459-473`, the raise at
-  `:525`). The `sqlx` pool did not absorb it. The conformance test asserts that
+  `:536`). The `sqlx` pool did not absorb it. The conformance test asserts that
   the capability is supported **and** is not the trait's silent default
-  (`crates/happenstance-postgres/tests/postgres_conformance.rs:415-429`). The rule
+  (`crates/happenstance-postgres/tests/postgres_conformance.rs:417-431`). The rule
   runs in CI's `live-postgres` job (`.github/workflows/ci.yml:412`), which makes
   it a claim CI makes rather than one machine's.
 - **Cloudflare, phase 9.** A `BEFORE INSERT … RAISE(ABORT, …)` trigger behind a
@@ -324,8 +324,8 @@ third and a fourth adapter arm real in-store faults as well.**
 
 The rule is `arming_a_mid_batch_fault_makes_the_append_fail`
 (`crates/happenstance-testkit/src/suite.rs:3109`, registered at
-`registry.rs:167`). It can fail: `NoopFaultFixture`
-(`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:3628`)
+`registry.rs:168`). It can fail: `NoopFaultFixture`
+(`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:3658`)
 declares the capability, overrides the arming with an empty body, and is
 rejected. The clause needs no `†`.
 

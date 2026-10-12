@@ -2308,7 +2308,7 @@ fn no_orphan_projection_rules() {
 ///
 /// **The set itself is pinned elsewhere, and that is deliberate.**
 /// `assert_reference_projection_declensions`
-/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:4815`) asserts the
+/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:4914`) asserts the
 /// reference fixture's skip set by *equality*, in enumeration order, with each
 /// skip's capability and stated reason. Read that assertion as the authority for
 /// which rules skip and how many: a count restated in prose is a number nothing
@@ -2319,7 +2319,7 @@ fn no_orphan_projection_rules() {
 /// [`RuleOutcome::report`](crate::RuleOutcome::report) writes to stdout, which
 /// libtest suppresses for a *passing* test unless `--show-output` is passed, and
 /// which does not exist at all on `wasm32-unknown-unknown`
-/// (`crates/happenstance-testkit/src/contract.rs:1272-1283`). A test that scraped
+/// (`crates/happenstance-testkit/src/contract.rs:1345-1356`). A test that scraped
 /// the printed line would therefore assert nothing on the one target the
 /// two-flavour design exists for. The machine-checked half is this equality; the
 /// human-facing half is the line `skip_line` renders from the same two fields.

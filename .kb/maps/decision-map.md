@@ -789,6 +789,16 @@ waits on the owner.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0093 | [`kb-decision-0093`](../decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md) | `happenstance-cloudflare`'s metadata ceiling is 512 KiB, carved from the documented row limit | accepted | 17b | — |
 
+## 2026-10-12: ES-41's reading written into the clause (#109)
+
+ADR-0095 is the ADR `kb-decision-wi-33ab08` said #109 owed. It adds the "held" reading to
+`[FROZEN]` ES-41 as a clarification, and it records the rule, the fixture capability and the two
+mutants that pin it. Numbers 0090 – 0094 are held by unmerged PRs, which is why this one is 0095.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0095 | [`kb-decision-0095`](../decisions/0095-es-41-membership-means-held.md) | ES-41's contains_event_id means held, not visible, and a rule stages the row that tells them apart | accepted | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

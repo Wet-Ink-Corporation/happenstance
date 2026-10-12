@@ -205,7 +205,7 @@ and neither driver absorbed the fault:
   declines by scope and names that test.
 - **Postgres.** An `AFTER INSERT` trigger fires behind the `sqlx` pool
   (`tests/support/mod.rs:459-473`). It is asserted as supported and not left at
-  the default (`postgres_conformance.rs:415-429`), and it runs in CI's
+  the default (`postgres_conformance.rs:417-431`), and it runs in CI's
   `live-postgres` job.
 
 Two more adapters arm faults of their own:

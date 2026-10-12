@@ -58,7 +58,7 @@ seeing each other's events. Two instances that point at one file fail that rule.
 
 ### The two capabilities you must declare
 
-A fixture declares eight constants. Two have no default, so the compiler makes
+A fixture declares nine constants. Two have no default, so the compiler makes
 you answer them:
 
 - **`SECOND_HANDLE`** is not really a choice. The suite opens two handles onto
@@ -103,6 +103,29 @@ only shows rows below a server-wide snapshot point. Only the model family needs
 this capability, and it reports a skip without it
 (`Fixture::READ_YOUR_OWN_WRITES`, read by `ops_agree_with_the_model`).
 
+### Rows held above a visibility frontier
+
+`HELD_ABOVE_FRONTIER` asks whether your fixture can leave a committed row where
+`read` does not yet show it. That is possible only on a store whose reads trail its
+commits, such as the PostgreSQL and Neon stores, where a row stays invisible until
+a server-wide snapshot point passes it. On such a store, `contains_event_id` must
+still answer `true` for that row, because ES-41 means *held*, not *visible*
+([ADR-0095](../.kb/decisions/0095-es-41-membership-means-held.md);
+`contains_event_id_reports_a_held_row_above_the_frontier`).
+
+It defaults to declined, and the default's reason says your store has no frontier.
+If your fixture supports `READ_YOUR_OWN_WRITES`, that is usually true, and you may
+leave it. If your fixture declines `READ_YOUR_OWN_WRITES`, the default is false
+about your store, and `every_declined_capability_is_stated_by_this_fixture` fails
+until you either state your own reason or support the capability. To support it,
+override `arm_held_above_frontier` so that the *next* append commits a row the
+frontier has not passed, and return `Armed::Staged`. The provided body returns
+`Armed::Nothing`, and the rule fails on that answer, so a forgotten override fails
+on every run. The rule also checks that `read` does not show the row before it
+asks the probe, so an override that answers `Staged` and arms nothing fails too. The PostgreSQL fixture in
+[its support module](../crates/happenstance-postgres/tests/support/mod.rs) does it
+with a trigger that lifts the new row above any frontier.
+
 ### The four size limits
 
 Last come four ceilings: `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT`,
@@ -137,7 +160,8 @@ use futures_core::Stream;
 use happenstance_core::{AppendCondition, AppendError, Event, EventId, Query};
 use happenstance_core::{ReadOptions, SendEventStore, SequencePosition, SequencedEvent};
 use happenstance_testkit::{Capability, Fixture, GappyMemoryStore, NO_STORE_LIMITS};
-use happenstance_testkit::{RuleOutcome, UNSTATED_MID_BATCH_FAULT, UNSTATED_READ_FAULT};
+use happenstance_testkit::{RuleOutcome, UNSTATED_HELD_ABOVE_FRONTIER};
+use happenstance_testkit::{UNSTATED_MID_BATCH_FAULT, UNSTATED_READ_FAULT};
 use happenstance_testkit::{block_on, rules};
 
 /// One handle onto a fixture's store.
@@ -195,6 +219,9 @@ impl Fixture for StridedFixture {
     const READ_FAULT: Capability = Capability::declined(
         "a read iterates memory the store already holds, so there is no fetch to fail",
     );
+    const HELD_ABOVE_FRONTIER: Capability = Capability::declined(
+        "a read shows every row from the moment its append returns, so there is no frontier",
+    );
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         core::future::ready(Handle(Arc::clone(&self.0)))
@@ -218,13 +245,24 @@ fn main() {
         if let RuleOutcome::Skipped { capability, reason } = outcome {
             skipped.insert(capability);
             // Each reason is this fixture's own, never the testkit's default.
-            assert!(![UNSTATED_MID_BATCH_FAULT, UNSTATED_READ_FAULT].contains(&reason), "{rule}");
+            let defaults = [
+                UNSTATED_HELD_ABOVE_FRONTIER,
+                UNSTATED_MID_BATCH_FAULT,
+                UNSTATED_READ_FAULT,
+            ];
+            assert!(!defaults.contains(&reason), "{rule}");
             if capability == "REOPEN" {
                 assert_eq!(Some(reason), StridedFixture::REOPEN.reason(), "{rule}");
             }
         }
     }
-    let declined = ["MID_BATCH_FAULT", NO_STORE_LIMITS, "READ_FAULT", "REOPEN"];
+    let declined = [
+        "HELD_ABOVE_FRONTIER",
+        "MID_BATCH_FAULT",
+        NO_STORE_LIMITS,
+        "READ_FAULT",
+        "REOPEN",
+    ];
     assert_eq!(skipped, BTreeSet::from(declined));
 }
 ```

@@ -304,7 +304,8 @@ struct Declared {
 /// synthesised from a row's ordinal, one derived from the payload, one
 /// minted per event, one bound once per statement, one materialised as a
 /// queryable tag, a time read from the connection's clock, and a membership
-/// test that drops the incarnation from its `WHERE` clause. On the fixture side: a stale per-handle head, a write acknowledged
+/// test that drops the incarnation from its `WHERE` clause, and one that copies
+/// the read path's frontier predicate into it. On the fixture side: a stale per-handle head, a write acknowledged
 /// before it is durable, and two fixture instances that are one store. On the
 /// isolation axis, a read that takes a fresh sample per page. On an
 /// axis of its own, a position allocated *before* the transaction that publishes
@@ -428,6 +429,19 @@ const REGISTRY: &[Declared] = &[
              asynchronously, so a read stream that is ready on first poll is a \
              property of in-memory adapters rather than of the contract. It is \
              also the workspace's only exercise of `block_on`'s parking path.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
+        name: "HeldAboveFrontierStore",
+        kind: Kind::ConformantVariant,
+        fails: &[],
+        provenance: "happenstance-postgres and happenstance-neon: a row is visible once its \
+             writer's `xact_id` is below `pg_snapshot_xmin(pg_current_snapshot())`, so a \
+             committed row can sit above the frontier, held and not yet read. Its probe \
+             answers held, which is ES-41's reading (ADR-0095), and it is the control \
+             that shows `contains_event_id_reports_a_held_row_above_the_frontier` can be \
+             passed at all.",
         mode: FailureMode::Assertion,
         expect: &[],
     },
@@ -1769,6 +1783,24 @@ const REGISTRY: &[Declared] = &[
             "which names another incarnation at a position this store happens to have",
         )],
     },
+    Declared {
+        name: "FrontierFilteredMembershipStore",
+        kind: Kind::Mutant,
+        fails: &["contains_event_id_reports_a_held_row_above_the_frontier"],
+        provenance: "`SELECT 1 FROM event WHERE origin_store = $1 AND origin_position = $2 \
+             AND xact_id < pg_snapshot_xmin(pg_current_snapshot())` — the probe written by \
+             copying the read path's frontier predicate into it, which on a store whose \
+             reads and `head` already filter by visibility looks like consistency. Every \
+             other rule passes it, because no other rule stages a committed row above the \
+             frontier.",
+        mode: FailureMode::Assertion,
+        // The probe assertion, not the staging check: this store stages the row
+        // exactly as its conformant twin does, and differs only in the answer.
+        expect: &[(
+            "contains_event_id_reports_a_held_row_above_the_frontier",
+            "ES-41 reads `contains_event_id` as HELD",
+        )],
+    },
     // --- Position visibility --------------------------------------------
     Declared {
         name: "PollPaddedPositionStore",
@@ -2107,6 +2139,39 @@ const REGISTRY: &[Declared] = &[
         expect: &[(
             "arming_a_mid_batch_fault_makes_the_append_fail",
             "cause the write of the k-th event to fail",
+        )],
+    },
+    Declared {
+        name: "UnarmedFrontierFixture",
+        kind: Kind::Mutant,
+        fails: &["contains_event_id_reports_a_held_row_above_the_frontier"],
+        provenance: "a fixture that declares `HELD_ABOVE_FRONTIER` supported and leaves \
+             `arm_held_above_frontier` to the trait's provided body, which answers \
+             `Armed::Nothing`. It is the author who claims the capability first and means to \
+             write the injection later. The staging check cannot be what fails it: on a \
+             frontier store an unarmed row is sometimes above the frontier anyway, because \
+             an unrelated transaction held it back, so that check would pass on some runs. \
+             The arming check fails it on every run, before anything is appended.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "contains_event_id_reports_a_held_row_above_the_frontier",
+            "the arming: a fixture declaring `HELD_ABOVE_FRONTIER` supported",
+        )],
+    },
+    Declared {
+        name: "EmptyArmFrontierFixture",
+        kind: Kind::Mutant,
+        fails: &["contains_event_id_reports_a_held_row_above_the_frontier"],
+        provenance: "a fixture that declares `HELD_ABOVE_FRONTIER` supported and overrides \
+             `arm_held_above_frontier` with a body that answers `Armed::Staged` and arms \
+             nothing, over a completely correct store with no frontier. The arming check \
+             passes, because the override answered as an armed one does. Without the rule's \
+             staging check the probe would be asked about an ordinary visible row, answer \
+             `true`, and ES-41's reading would be certified on a store that cannot stage it.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "contains_event_id_reports_a_held_row_above_the_frontier",
+            "the staging: a fixture declaring `HELD_ABOVE_FRONTIER` supported",
         )],
     },
     // --- Value edges ---------------------------------------------------
@@ -2504,6 +2569,7 @@ macro_rules! for_each_mutant {
         $($callback)+! {
             crate::variants::GappedPositionFixture,
             crate::variants::PagedStreamFixture,
+            crate::variants::FrontierFixture<crate::variants::Held>,
 
             crate::mutants::MutantFixture<crate::mutants::InnerJoinTagStore>,
             crate::mutants::MutantFixture<crate::mutants::TypesAreAndStore>,
@@ -2563,6 +2629,8 @@ macro_rules! for_each_mutant {
             crate::mutants::NoTransactionFixture,
             crate::mutants::YieldingRowAtATimeFixture,
             crate::mutants::NoopFaultFixture,
+            crate::mutants::UnarmedFrontierFixture,
+            crate::mutants::EmptyArmFrontierFixture,
 
             crate::mutants::MutantFixture<crate::mutants::EmptyPayloadIsNullStore>,
             crate::mutants::MutantFixture<crate::mutants::MetadataConflatingStore>,
@@ -2596,6 +2664,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<crate::mutants::SharedBatchIdentityStore>,
             crate::mutants::MutantFixture<crate::mutants::IdentityMatchableAsTagStore>,
             crate::mutants::MutantFixture<crate::mutants::PositionOnlyMembershipStore>,
+            crate::variants::FrontierFixture<crate::mutants::FrontierFilteredMembership>,
 
             crate::mutants::CachedHeadFixture,
             crate::mutants::LastWrittenHeadFixture,
@@ -2752,9 +2821,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Forty-six rows below are marked [`ModelOutcome::Agreed`] at this commit; two
+/// Fifty rows below are marked [`ModelOutcome::Agreed`] at this commit; three
 /// of them are the conformant controls and *must* be, which leaves
-/// **forty-four misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **forty-seven misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -2850,6 +2919,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     // the model.
     ("GappedPositionStore", ModelOutcome::Agreed),
     ("PagedStreamStore", ModelOutcome::Agreed),
+    ("HeldAboveFrontierStore", ModelOutcome::Agreed),
     // Query semantics.
     ("InnerJoinTagStore", ModelOutcome::Rejected),
     ("TypesAreAndStore", ModelOutcome::Rejected),
@@ -2927,6 +2997,8 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("NoTransactionStore", ModelOutcome::Agreed),
     ("YieldingRowAtATimeStore", ModelOutcome::Agreed),
     ("NoopFaultFixture", ModelOutcome::Agreed),
+    ("UnarmedFrontierFixture", ModelOutcome::Agreed),
+    ("EmptyArmFrontierFixture", ModelOutcome::Agreed),
     ("EmptyPayloadIsNullStore", ModelOutcome::Agreed),
     ("MetadataConflatingStore", ModelOutcome::Agreed),
     ("NarrowIdentifierColumnStore", ModelOutcome::Agreed),
@@ -2964,6 +3036,10 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("SharedBatchIdentityStore", ModelOutcome::Agreed),
     ("IdentityMatchableAsTagStore", ModelOutcome::Agreed),
     ("PositionOnlyMembershipStore", ModelOutcome::Agreed),
+    // Agreed: nothing the model generates arms the frontier, and no `Op` calls
+    // `contains_event_id`, so this store and its conformant twin answer every
+    // generated sequence identically.
+    ("FrontierFilteredMembershipStore", ModelOutcome::Agreed),
     // The fixture-level and window-shaped defects.
     ("CachedHeadFixture", ModelOutcome::Agreed),
     ("LastWrittenHeadStore", ModelOutcome::Agreed),
@@ -3344,7 +3420,9 @@ mod mutation_coverage {
     use happenstance_testkit::fixtures::MemoryProjectionFixture;
 
     use crate::harness::{run_projection_subject, run_subject};
-    use crate::variants::{DecliningFixture, DecliningProjectionFixture, GappedPositionFixture};
+    use crate::variants::{
+        DecliningFixture, DecliningProjectionFixture, FrontierFixture, GappedPositionFixture, Held,
+    };
 
     /// Every rule the registry claims a mutant for.
     fn covered() -> Vec<&'static str> {
@@ -3506,15 +3584,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 46,
-            "`MODEL_COVERAGE`'s heading says forty-six rows are `Agreed` and the \
+            agreed, 50,
+            "`MODEL_COVERAGE`'s heading says fifty rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            44,
-            "`MODEL_COVERAGE`'s heading says forty-four misses and the table \
+            47,
+            "`MODEL_COVERAGE`'s heading says forty-seven misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls
@@ -4515,6 +4593,7 @@ mod mutation_coverage {
                         || *reason == DecliningFixture::REOPEN_REASON
                         || *reason == DecliningFixture::MID_BATCH_FAULT_REASON
                         || *reason == DecliningFixture::READ_FAULT_REASON
+                        || *reason == DecliningFixture::HELD_ABOVE_FRONTIER_REASON
                         // CF-40: a fixture with no ceiling reports the testkit's
                         // reason rather than its own, because the sentence is the
                         // same for every store that has none. See
@@ -4578,16 +4657,36 @@ mod mutation_coverage {
                  to `require!` and the MUST is unenforced again"
             );
         }
+    }
 
-        // ---- And a fully capable fixture skips nothing ---------------------
+    /// [`capability_skips_are_reported`]'s other end: a fixture that supports a
+    /// capability runs every rule gated on it.
+    #[test]
+    fn capable_fixtures_skip_only_what_they_decline() {
+        // `GappedPositionFixture` supports every capability but one. It has no
+        // frontier, so it declines `HELD_ABOVE_FRONTIER` by inheritance, and
+        // the one rule gated on that is the one skip allowed against it. The
+        // frontier variant supports exactly that capability, so between them
+        // every gate is held to the const it should read.
         let capable = run_subject::<GappedPositionFixture>();
-        assert!(
-            capable.skipped().is_empty(),
-            "`{}` supports every capability, so nothing may be skipped against \
-             it — a skip here means a rule's `require!` gate reads the wrong \
-             const: {:?}",
+        assert_eq!(
+            capable.skipped(),
+            ["contains_event_id_reports_a_held_row_above_the_frontier"],
+            "`{}` supports every capability except `HELD_ABOVE_FRONTIER`, so \
+             only the rule gated on that may be skipped against it — any other \
+             skip means a rule's `require!` gate reads the wrong const",
             capable.name,
-            capable.skipped()
+        );
+        let frontier = run_subject::<FrontierFixture<Held>>();
+        assert!(
+            !frontier
+                .skipped()
+                .contains(&"contains_event_id_reports_a_held_row_above_the_frontier"),
+            "`{}` supports `HELD_ABOVE_FRONTIER`, so the rule gated on it must run \
+             against it — a skip means its `require!` gate reads the wrong const: \
+             {:?}",
+            frontier.name,
+            frontier.skipped()
         );
     }
 

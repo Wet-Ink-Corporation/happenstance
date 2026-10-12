@@ -406,7 +406,7 @@ unrelated crate wanted replication.
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`ingest.rs:140`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point, and it has narrowed to one port. `EventStore` is
-frozen because it has evidence: ninety-five rules — each one shown to reject a
+frozen because it has evidence: ninety-six rules — each one shown to reject a
 named wrong implementation — a reference implementation, six deployment
 scenarios walked line by line, and one pressure test whose contested claims were
 settled by compiling them. `ProjectionStore` was not, for a long time, and the
@@ -4960,15 +4960,15 @@ had two halves.
   changing the return type is a major. A "not retained" answer, if ever wanted,
   is ES-39's provided method, not a change here.
 
-*Non-normative, and not frozen by this marker.* Where ES-10's frontier separates
-a committed row from a visible one, whether "holds" means held in the committed
-log or visible to `read` is **not settled here**. No rule stages a committed row
-above the frontier, so `contains_event_id_reports_membership` passes under either
-reading. `happenstance-postgres` and `happenstance-neon` answer `true` for such a
-row and record that as unsettled. Neither reading can produce a duplicate
-through ingest, because ingest does not probe first
-(`crates/happenstance-sync/src/ingest.rs:97-101`). The reading is phase 13's,
-which owns ingest, together with a rule that stages the row.
+*Clarification, by [ADR-0095](../.kb/decisions/0095-es-41-membership-means-held.md);
+the marker is unchanged.* Where ES-10's frontier separates a committed row from
+a visible one, "holds" means **held** in the committed log, not visible to `read`:
+the probe MUST answer `true` for a row the store has committed and the frontier
+has not yet passed. That agrees with ES-25, which evaluates a condition over what
+the store holds, and with VT-8's uniqueness on the origin pair. Neither reading can
+produce a duplicate through ingest, which does not probe first
+(`crates/happenstance-sync/src/ingest.rs:97-101`), so agreement is the reason, and
+`contains_event_id_reports_a_held_row_above_the_frontier` stages the row.
 
 The `async fn` spelling is load-bearing and matches ES-30's: a clause written
 without it describes a different method under `trait_variant`.
@@ -5011,15 +5011,15 @@ lookup table can prove membership without locating the row. Widening a `bool` to
 an `Option` later is breaking; adding a second, locating method later is
 additive. Of the two ways to be wrong, this is the cheaper one.
 
-- **Rule:** `contains_event_id_reports_membership`.
+- **Rule:** `contains_event_id_reports_membership`; `contains_event_id_reports_a_held_row_above_the_frontier`.
 - **Cases:** E2E-32, E2E-34, E2E-36 — VT-7's own, since this is the operation
   VT-7 requires.
-- **Rejects:** a store that answers by position alone and ignores the `StoreId` —
-  the natural `SELECT 1 FROM events WHERE position = ?`, which passes every
-  single-store rule in the suite and reports a peer's event as present whenever
-  the local log is long enough. `PositionOnlyMembershipStore` in
-  `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs` is that store,
-  compiled and registered.
+- **Rejects:** a store that answers by position alone and ignores the `StoreId` — the
+  natural `SELECT 1 FROM events WHERE position = ?`, which passes every single-store rule
+  and reports a peer's event as present whenever the local log is long enough; and a probe
+  that copies the read path's frontier predicate in, which answers `false` for a row it holds.
+  `PositionOnlyMembershipStore` and `FrontierFilteredMembershipStore` in
+  `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs` are those stores, registered.
 
 ---
 
@@ -6021,7 +6021,7 @@ rather than zero — a distinction this marker exists to preserve.** No projecti
 adapter has shipped at all, and the single fixture in the workspace *declines*
 the capability with the store's own reason: `MemoryProjectionStore` holds no
 protection policy, so `reset` returns `Refused` on no path
-(`crates/happenstance-testkit/src/fixtures.rs:446`). A fixture that claimed
+(`crates/happenstance-testkit/src/fixtures.rs:455`). A fixture that claimed
 `RESET_REFUSAL` to make this count come out would fail the very rule the count
 is over. So the owner is named rather than the answer guessed, and a reader can
 tell this from a question nobody has looked at — which is what moving the marker
@@ -9879,8 +9879,8 @@ claiming only what it verified.
   build failure under CF-38.
 
 **What §7.1's shape says** is what §1.6 says in words. `ES` is 88 % frozen because
-it has the most behind it: ninety-five rules, a reference implementation and six
-scenarios. Ninety-five is every rule in the event-store family, however its
+it has the most behind it: ninety-six rules, a reference implementation and six
+scenarios. Ninety-six is every rule in the event-store family, however its
 clauses claim them; the distinct names the `Rule:` fields cite are a different
 count, because a field also names instruments outside `suite.rs`, and §7.3 and
 §7.4 carry the rules and clauses that do not pair up.
@@ -10008,7 +10008,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-38 | FROZEN | `positions_are_not_reused_after_removal` † | E2E-46, E2E-10 |
 | ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
 | ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` † | E2E-47, E2E-56, E2E-44 |
-| ES-41 | FROZEN | `contains_event_id_reports_membership` | E2E-32, E2E-34, E2E-36 |
+| ES-41 | FROZEN | `contains_event_id_reports_membership`, `contains_event_id_reports_a_held_row_… | E2E-32, E2E-34, E2E-36 |
 | ES-42 | FROZEN | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |
 | ES-43 | FROZEN | `a_busy_append_left_nothing_behind`, `positions_are_unique_under_concurrent_ap… | E2E-08, E2E-07 |
 
