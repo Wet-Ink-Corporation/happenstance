@@ -439,7 +439,7 @@ impl SendProjectionStore for LivePostgresProjectionStore {
         let mut transaction = batch.transaction;
 
         sqlx::query("DELETE FROM projection_checkpoint WHERE projection_id = $1")
-            .bind(format!("{}-deliberately-wrong", id.as_str()))
+            .bind(id.as_str())
             .execute(&mut *transaction)
             .await
             .map_err(|error| ResetError::Store(PostgresProjectionStoreError::Driver(error)))?;
