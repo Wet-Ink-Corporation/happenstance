@@ -390,6 +390,8 @@ fn capability_constants_are_answered_not_defaulted() {
     assert!(NeonFixture::REOPEN.is_supported());
     assert!(NeonFixture::MID_BATCH_FAULT.is_supported());
     assert!(NeonFixture::READ_FAULT.is_supported());
+    // A frontier store, so the default sentence (no frontier here) is false.
+    assert!(NeonFixture::HELD_ABOVE_FRONTIER.is_supported());
 
     // Not left at the trait's provided default. Comparing against the default
     // explicitly is the only way to tell an answer from an omission, because the

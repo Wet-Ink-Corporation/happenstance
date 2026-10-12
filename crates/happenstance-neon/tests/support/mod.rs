@@ -40,7 +40,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use happenstance_neon::event_store::NeonEventStore;
 use happenstance_neon::{NeonConfig, SqlRequest, SqlStatement, SqlTransport, migration};
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::{Armed, Capability, Fixture};
 use tokio::sync::OnceCell;
 
 pub(crate) mod transport;
@@ -197,6 +197,18 @@ impl Fixture for NeonFixture {
     /// and it is unobservable, and those are different facts.
     const READ_FAULT: Capability = Capability::SUPPORTED;
 
+    /// **Supported, and staged for real**, by the same injection
+    /// `happenstance-postgres`'s fixture uses: a `BEFORE INSERT` trigger that
+    /// lifts the new row's `xact_id` to `i64::MAX`, so the row is committed and
+    /// held, and the read path's frontier predicate never passes it.
+    ///
+    /// It is the only staging this transport allows, which is the second
+    /// reason to prefer it. Holding the frontier back would need a transaction
+    /// left open across requests, and one-shot HTTP has none. The first reason
+    /// is `happenstance-postgres`'s: the frontier is server-wide, so holding it
+    /// would stall every sibling rule's reads for as long as it lasted.
+    const HELD_ABOVE_FRONTIER: Capability = Capability::SUPPORTED;
+
     /// Mirrored from the adapter's own constants, never restated as literals. A
     /// number restated here is a number that drifts from the one `append`
     /// enforces, and the rule checks the fixture's copy — so the drift would show
@@ -275,6 +287,37 @@ impl Fixture for NeonFixture {
             self.schema(),
         )
         .await;
+    }
+
+    // `happenstance-postgres`'s staging, schema-qualified because this
+    // transport has no `search_path` to lean on. `DROP TRIGGER IF EXISTS`
+    // first, so arming twice on one instance is a no-op rather than an error.
+    async fn arm_held_above_frontier(&self) -> Armed {
+        self.migrate().await;
+        let schema = happenstance_neon::config::quote_ident(self.schema());
+        let statements = vec![
+            SqlStatement::new(format!(
+                "CREATE OR REPLACE FUNCTION {schema}.held_above_frontier() RETURNS trigger AS \
+                 $held$ BEGIN NEW.xact_id := '9223372036854775807'::xid8; RETURN NEW; END \
+                 $held$ LANGUAGE plpgsql"
+            )),
+            SqlStatement::new(format!(
+                "DROP TRIGGER IF EXISTS held_above_frontier_trigger ON {}",
+                self.config.qualified_event()
+            )),
+            SqlStatement::new(format!(
+                "CREATE TRIGGER held_above_frontier_trigger BEFORE INSERT ON {} \
+                 FOR EACH ROW EXECUTE FUNCTION {schema}.held_above_frontier()",
+                self.config.qualified_event()
+            )),
+        ];
+        execute(
+            SqlRequest::batch(statements, happenstance_neon::IsolationLevel::ReadCommitted),
+            "the held-above-the-frontier staging",
+            self.schema(),
+        )
+        .await;
+        Armed::Staged
     }
 
     async fn reopen(&self) {

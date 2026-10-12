@@ -104,7 +104,7 @@ provides the atomicity and the identity that makes it idempotent.
       type, the watermark's plan assertion, and the policy for an event claiming
       this store's own `StoreId` that it does not hold — pinned, not endorsed, by
       `pinned_vt6_breach_an_unheld_own_id_is_ingested_and_wedges_the_append_that_reaches_it`.
-- [ ] #109 · **ES-41's held-versus-visible reading.** ADR-0028 froze ES-41 at phase 17
+- [x] #109 · **ES-41's held-versus-visible reading.** ADR-0028 froze ES-41 at phase 17
       and left one reading open: where ES-10's frontier separates a committed row
       from a visible one, does `contains_event_id` mean held or visible?
       `happenstance-postgres` and `happenstance-neon` answer held, and record it

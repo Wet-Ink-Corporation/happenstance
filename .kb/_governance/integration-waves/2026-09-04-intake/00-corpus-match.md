@@ -85,7 +85,7 @@ experiments/busy-timeout-margin/results/raw/                    ✓ cores-debug-
 experiments/busy-timeout-margin/tests/lost_wakeup.rs            ✓ exists — R-4's deterministic reproduction
 xtask/src/proof.rs                                              ✓ exists — the --list anti-vacuity check
 crates/happenstance-core/src/tag.rs                             ✓ exists — Tags is Box<[Tag]>, Tag is Cow<'static, str>
-crates/happenstance-testkit/src/registry.rs:338-342              ✓ block_on parks on Poll::Pending with no notified flag
+crates/happenstance-testkit/src/registry.rs:339-343              ✓ block_on parks on Poll::Pending with no notified flag
 crates/happenstance-sqlite/tests/concurrency.rs:45-47            ✓ "If a rule hangs, that is evidence about ADR-0022's busy-timeout paragraph"
 crates/happenstance-core/src/limits.rs                          ✓ four MIN_SUPPORTED_* constants, three StoreLimit variants — Q1 confirmed
 crates/happenstance-sqlite/src/event_store.rs:577,760            ✓ PARAMETER_BUDGET declared once, called once — Q5 confirmed
