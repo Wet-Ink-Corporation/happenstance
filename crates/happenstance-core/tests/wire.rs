@@ -1243,7 +1243,7 @@ mod wire {
     ///
     /// # This is a regression pin, and is stated as one
     ///
-    /// `query.rs:368-373` already routes the decode through `QueryItem::new`.
+    /// `query.rs:447-452` already routes the decode through `QueryItem::new`.
     /// The pin is against the same derive: `QueryItemWire` is `#[derive(
     /// Serialize, Deserialize)]` two lines above, and deleting the hand-written
     /// impl in favour of putting the derive on `QueryItem` itself looks like
@@ -1298,7 +1298,7 @@ mod wire {
     ///
     /// # This is a regression pin, and is stated as one
     ///
-    /// `query.rs:385-392` routes `Items` through `Query::from_items`. The pin is
+    /// `query.rs:499-514` routes `Items` through `Query::from_items`. The pin is
     /// against a derive onto `Query` itself — which is *more* tempting here than
     /// anywhere else in this section, because `QueryWire` is already a derived
     /// enum with the right variants and the hand-written impl looks like a
