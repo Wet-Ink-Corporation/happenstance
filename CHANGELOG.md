@@ -61,6 +61,29 @@ not the same as what a user needed to be told.
   U+2066–U+2069, hold nine, and the check has always refused all nine. The docs
   now say nine
   ([ADR-0089](.kb/decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md)).
+- **Six dependency lower bounds are raised to versions that actually build**
+  (#90). No upper bound moved and no major changed, and every version in the
+  committed `Cargo.lock` already met the new floors, so a build from the lockfile
+  is unchanged. What changes is what `cargo update -Z direct-minimal-versions`
+  may hand you. A new CI job, `minimal dependency versions`, now resolves every
+  published crate's direct dependencies at their lowest versions. Its first run
+  was red at once: `happenstance` asked for `serde_json`'s `std` feature, which
+  `1.0.0`, the old floor, does not have. The floors that turned it green:
+  - `serde_json` `1` → `1.0.140` (`happenstance`, `happenstance-neon`). `std`
+    first appears in `1.0.45`, and `worker 0.8.5` requires `^1.0.140`, so
+    nothing lower resolves beside `happenstance-cloudflare`.
+  - `serde` `1` → `1.0.194` (`happenstance`, `happenstance-core`,
+    `happenstance-neon`). `serde_json 1.0.140` requires it.
+  - `futures-core` `0.3` → `0.3.31` (all seven). `worker`'s `futures-channel
+    0.3.31` requires it.
+  - `ciborium` `0.2` → `0.2.1` (`happenstance`, `cbor` feature). `0.2.0` has no
+    crate-root `into_writer` or `from_reader`, which the codec calls.
+  - `tokio` `1` → `1.38` (`happenstance-sqlite`, `happenstance-postgres`).
+    `sqlx` reaches `tokio-stream 0.1.18`, which declares `tokio 1.15` but calls
+    `Receiver::max_capacity`, which arrived in `1.38`. `1.28` and `1.37` were
+    tried and fail.
+  - `sqlx` `0.8` → `0.8.5` (`happenstance-postgres`). The adapter calls
+    `Pool::begin_with`, which first shipped in `0.8.4`, and `0.8.4` is yanked.
 
 ### Fixed
 

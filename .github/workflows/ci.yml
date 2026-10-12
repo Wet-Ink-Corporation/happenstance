@@ -1589,3 +1589,108 @@ jobs:
       - name: Compile the benchmark harness and its tests
         working-directory: benchmarks
         run: cargo check --benches --tests
+
+  # THE DECLARED FLOORS, RESOLVED (#90). `tokio = "1.38"` claims that every 1.x
+  # from 1.38 builds this workspace, and a lockfile only ever proves the newest.
+  # After the lockstep `1.0.0` each crate versions on its own and an adapter's
+  # `happenstance-core = "1.N"` is the whole of its compatibility promise
+  # (ADR-0066 §4), so a lower bound nothing resolves against is a guess.
+  #
+  # Each leg is one `cargo minimal-versions` run with `--direct`, which is
+  # cargo's `-Z direct-minimal-versions`: every direct requirement of a published
+  # crate at its lowest version and the rest of the graph at its newest, which is
+  # what a consumer's `cargo update` can actually hand them. `--ignore-private`
+  # drops the examples, the harness, `xtask` and `happenstance-sync`; the tool
+  # drops dev-dependencies, because `check` builds no test.
+  #
+  # * **Floors.** The third-party lower bounds, on the host with
+  #   `--all-features` and on `wasm32` for the two crates that claim that target.
+  #   The workspace's own crates resolve by path here. Its first run was red
+  #   (`serde_json 1.0.0` has no `std` feature); the floors raised to green are
+  #   listed in CHANGELOG.md under #90.
+  # * **Against the published release.** The same host check with the `path`
+  #   keys of `happenstance-core` and `happenstance` cut from
+  #   `[workspace.dependencies]`, so every published crate's `"0.4.0"` resolves
+  #   from crates.io. An adapter that reaches for an item added to the core since
+  #   that release, without raising its requirement, fails here and nowhere else.
+  #   The tool's own `--detach-path-deps` cannot do this: it rewrites member
+  #   manifests and leaves a virtual root's `[workspace.dependencies]` alone,
+  #   which is where these two keys live. Inside a breaking window the declared
+  #   version is not on crates.io yet, so the leg skips and says so: the
+  #   `semver` job's probe, for the same reason.
+  #
+  # NOT A GATE STEP AND NOT A REQUIRED CHECK. The resolve needs an unstable cargo
+  # flag (the tool reaches it with `RUSTC_BOOTSTRAP=1` on the pinned toolchain,
+  # so the compile itself is 1.97.1's), and its answer moves without a commit: a
+  # new release of any transitive crate can raise what a floor has to be. Hence
+  # the weekly schedule as well, and a red run is a floor to raise in a pull
+  # request of its own rather than a merge to block. Skipped in the merge queue,
+  # where nothing reads a check that is not required and runners are scarcest.
+  minimal-versions:
+    name: minimal dependency versions
+    runs-on: ubuntu-latest
+    needs: changes
+    # Fail open: `changes` names why.
+    if: >-
+      ${{ !cancelled()
+      && github.event_name != 'merge_group'
+      && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # rust-toolchain.toml pins the channel and the wasm32 target.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # `main` only; the gate job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Pinned, because what this job proves depends on how the tool rewrites the
+      # manifests: the `--detach-path-deps` limit above is 0.1.37's. It drives
+      # `cargo hack` for the per-crate pass.
+      - name: Install cargo-minimal-versions and cargo-hack
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: cargo-hack,cargo-minimal-versions@0.1.37
+
+      - name: Floors, host
+        run: cargo minimal-versions check --workspace --direct --ignore-private --all-features
+      # Runs whatever the host leg said, so one red run names every failing leg.
+      - name: Floors, wasm32
+        if: ${{ !cancelled() }}
+        run: >-
+          cargo minimal-versions check --direct --ignore-private --all-features
+          --target wasm32-unknown-unknown
+          -p happenstance-cloudflare -p happenstance-neon
+
+      - name: is the declared version published
+        if: ${{ !cancelled() }}
+        id: published
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          if [ -z "$version" ]; then
+            echo "::error::no version under [workspace.package] in Cargo.toml"
+            exit 1
+          fi
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --user-agent "happenstance-ci (https://github.com/Wet-Ink-Corporation/happenstance)" \
+            "https://crates.io/api/v1/crates/happenstance-core/$version" || echo 000)
+          echo "happenstance-core $version: crates.io answered $status"
+          if [ "$status" = "200" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::happenstance-core $version is not on crates.io (HTTP $status); the published-release leg skips"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      # The runner's checkout is thrown away, so the edit is never restored. The
+      # `grep` afterwards is the assertion: a key that survived the `sed` would
+      # resolve by path and pass for the wrong reason.
+      - name: Against the published release
+        if: ${{ !cancelled() && steps.published.outputs.published == 'true' }}
+        run: |
+          sed -i -E '/^happenstance(-core)? = \{/s/, path = "[^"]*"//' Cargo.toml
+          if grep -nE '^happenstance(-core)? = \{.*path =' Cargo.toml; then
+            echo "::error::a path key survived; this leg would resolve the workspace's own crates by path"
+            exit 1
+          fi
+          grep -nE '^happenstance(-core)? = ' Cargo.toml
+          cargo minimal-versions check --workspace --direct --ignore-private --all-features
