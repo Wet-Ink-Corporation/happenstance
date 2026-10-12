@@ -154,6 +154,81 @@ impl_boundary_for_tuple! {
     /// assert_eq!(both.query()?.items().map_or(0, <[_]>::len), 2);
     /// # Ok::<(), Box<dyn core::error::Error>>(())
     /// ```
+    ///
+    /// # One boundary folds one domain enum
+    ///
+    /// Every member after the first must share the first member's
+    /// [`Event`](crate::Boundary::Event), so a tuple over two bounded
+    /// contexts' enums is not a `Boundary` at all ([ADR-0090]). Relaxing the
+    /// bound lost: the composite's `Event` would silently be whichever member
+    /// came first. Compose models over one enum, as above, or use
+    /// `happenstance-core` directly, whose query names no domain enum.
+    ///
+    /// The block below composes a model over `Seat` with one over `Door`. Each
+    /// model is a boundary alone, and the tuple is the one diagnostic:
+    /// `E0277`, `(Seats, Doors)` does not implement `Boundary`. The fence is
+    /// spelled bare `compile_fail`, because rustdoc passes a fence whose
+    /// claimed code does not match; the compiling example above is its twin.
+    ///
+    /// [ADR-0090]: https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0090-one-boundary-folds-one-domain-enum.md
+    ///
+    /// ```compile_fail
+    /// // compile_fail: a_tuple_over_two_domain_enums_is_not_a_boundary
+    /// use happenstance::{Boundary, Codec, CodecError, DecisionModel};
+    /// use happenstance::{DomainEvent, EventType, Tags, bytes::Bytes};
+    ///
+    /// #[derive(serde::Serialize, serde::Deserialize)]
+    /// enum Seat { Taken }
+    /// #[derive(serde::Serialize, serde::Deserialize)]
+    /// enum Door { Opened }
+    ///
+    /// const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
+    /// const DOOR_OPENED: EventType = EventType::from_static("DoorOpened");
+    /// impl DomainEvent for Seat {
+    ///     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN];
+    ///     fn event_type(&self) -> EventType { SEAT_TAKEN }
+    ///     fn tags(&self) -> Tags { Tags::empty() }
+    ///     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
+    ///         c.encode(self)
+    ///     }
+    ///     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
+    ///         -> Result<Self, CodecError> { c.decode(d) }
+    /// }
+    /// impl DomainEvent for Door {
+    ///     const EVENT_TYPES: &'static [EventType] = &[DOOR_OPENED];
+    ///     fn event_type(&self) -> EventType { DOOR_OPENED }
+    ///     fn tags(&self) -> Tags { Tags::empty() }
+    ///     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
+    ///         c.encode(self)
+    ///     }
+    ///     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
+    ///         -> Result<Self, CodecError> { c.decode(d) }
+    /// }
+    ///
+    /// #[derive(Clone)]
+    /// struct Seats(Tags);
+    /// impl DecisionModel for Seats {
+    ///     type Event = Seat;
+    ///     fn scope(&self) -> &Tags { &self.0 }
+    ///     fn apply(&mut self, _event: Seat) {}
+    /// }
+    ///
+    /// #[derive(Clone)]
+    /// struct Doors(Tags);
+    /// impl DecisionModel for Doors {
+    ///     type Event = Door;
+    ///     fn scope(&self) -> &Tags { &self.0 }
+    ///     fn apply(&mut self, _event: Door) {}
+    /// }
+    ///
+    /// fn boundary<B: Boundary>(_: &B) {}
+    ///
+    /// let seats = Seats(Tags::empty());
+    /// let doors = Doors(Tags::empty());
+    /// boundary(&seats);
+    /// boundary(&doors);
+    /// boundary(&(seats, doors));
+    /// ```
     B1 b1, B2 b2
 }
 

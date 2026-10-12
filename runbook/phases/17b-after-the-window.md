@@ -83,13 +83,14 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       ceiling is carved from the row budget measured by phase 17's deployed
       Durable Object leg, because local `workerd` does not enforce the production
       row limit. Phase 13 then decides the budget unit.
-- [ ] #93 · **The two typed-layer closures**, each in its own record:
+- [x] #93 · **The two typed-layer closures**, each in its own record:
       - `tuple-boundary-heterogeneous-event-type` — option A taken deliberately:
         one DCB boundary folds one domain enum; a `compile_fail` doctest fences it,
         and `boundary.rs:72-74` is corrected.
       - `then-empty-emission-idiom-and-the-nothing-to-do-channel` — `then(&[])`
         asserts the decision emitted exactly nothing, and `decide` gets no third
         channel. `then_nothing()` is additive at any date and is not added.
+      Written as ADR-0090 and ADR-0091; the fence is on the two-arity tuple impl.
 - [x] #81 · **PS-39 — frozen once live Neon runs `projection_ids_round_trip_by_bytes`
       green.** ADR-0082 minted it provisional at phase 17, green on memory, SQLite and
       both Postgres stores, and left one condition: a live Neon run. That run is CI's
@@ -116,7 +117,7 @@ a red then green run URL for each new sibling job, in this file's session log.
 - [ ] The minimal-versions and floating-dependency jobs exist, and each has been
       watched failing once.
 - [ ] CF-40's `MetadataLen` is built, with a named wrong implementation per branch.
-- [ ] Both typed-layer open questions are closed.
+- [x] Both typed-layer open questions are closed: ADR-0090 and ADR-0091.
 - [ ] #95 · `cargo-semver-checks` against `0.4.0` reports no major finding.
 - [ ] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
@@ -141,6 +142,14 @@ a red then green run URL for each new sibling job, in this file's session log.
   proof is the `live-neon` run on `main` at `8b52528`, run 38271947822, where
   `projection_ids_round_trip_by_bytes` passed on its own Neon branch. The merge queue re-runs
   it as a required check.
+
+- 2026-10-12 — #93: option A on both typed-layer questions, as the owner cleared it
+  (`wi-378078`). ADR-0090 records that one boundary folds one domain enum, with a
+  `compile_fail` doctest on the two-arity tuple impl and `Boundary::Event`'s sealed-trait
+  rationale corrected. ADR-0091 records that `then(&[])` asserts nothing was emitted, that
+  `decide` gets no third channel and that no `then_nothing()` is added. Both open questions
+  are superseded. The PR is one-way and waits on the owner.
+
 
 - 2026-10-12 — #85: on the owner's call (`wi-378078`), VT-30 is `[FROZEN]` by ADR-0096.
   `after_every_guard` and `after_every_guard_opt` are added, `after` and `after_opt` are

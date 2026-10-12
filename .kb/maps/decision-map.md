@@ -788,6 +788,17 @@ mutants that pin it. Numbers 0090 – 0094 are held by unmerged PRs, which is wh
 | --- | --- | --- | --- | --- | --- |
 | ADR-0095 | [`kb-decision-0095`](../decisions/0095-es-41-membership-means-held.md) | ES-41's contains_event_id means held, not visible, and a rule stages the row that tells them apart | accepted | 13 | — |
 
+## 2026-10-12: the two typed-layer open questions, closed by record (#93)
+
+ADR-0090 and ADR-0091 write down the answers `kb-decision-wi-378078` took for #93, option A on
+both. They are written straight here with no intake step, and they change no signature. Each
+supersedes the open question it answers, and that atom's frontmatter now reads `superseded`.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0090 | [`kb-decision-0090`](../decisions/0090-one-boundary-folds-one-domain-enum.md) | One boundary folds one domain enum, and a tuple over two is fenced out at compile time | accepted | 17b | supersedes `kb-open-question-tuple-boundary-event-type-001` |
+| ADR-0091 | [`kb-decision-0091`](../decisions/0091-then-empty-asserts-nothing-was-emitted.md) | then(&[]) asserts the decision emitted nothing, decide gets no third channel, and no then_nothing() is added | accepted | 17b | supersedes `kb-open-question-then-empty-emission-idiom-001` |
+
 ## 2026-10-12: VT-30 frozen, and `after_every_guard` names its scope (#85)
 
 ADR-0096 builds the #85 part of `wi-378078` and is written straight here with no intake step.
