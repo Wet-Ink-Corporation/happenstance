@@ -10,6 +10,24 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-12 — `0.4.1`, a patch release in phase 17b
+
+*Committed on `claude/project-thread-88m3wc-041`, on `0f87192`.* `[Unreleased]` becomes
+`[0.4.1] — 2026-10-12`, and all seven crates move to `0.4.1`. It carries the SQLite
+WAL-conversion fix (#238, PR #265), six dependency floors that a minimal resolve
+builds (#90, PR #268), VT-14's freeze (#86), and README MSRV sections (#201). The
+live Postgres job now also runs `tests/live_projection.rs` (#77, PR #267), which
+changes CI only. Phase 17b moves to `in progress`. Its one-way items (#83, #85,
+#88, #92, #93) wait on the owner, so the phase stays open.
+
+**Verified.** `cargo semver-checks check-release --workspace --baseline-version
+0.4.0 --release-type patch` (0.51.0) on `0f87192` reports "no semver update
+required" for all seven crates (#95's first criterion). `cargo xtask lints`,
+`spec-trace` and `lint-kb` pass. The full `cargo xtask ci` was not run locally;
+CI runs it.
+
+---
+
 ## 2026-10-11 — `0.4.0`, the release PR (#96)
 
 *Committed on `claude/project-thread-88m3wc`, on `97f0f36`.* Phase 17 closes.
