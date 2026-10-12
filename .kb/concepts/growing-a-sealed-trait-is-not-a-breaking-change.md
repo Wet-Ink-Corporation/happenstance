@@ -17,21 +17,26 @@ depends_on:
 related:
   - kb-open-question-tuple-boundary-event-type-001
   - kb-decision-0044
+  - kb-decision-0090
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/tuple-boundary-event-type.md
   - standards/rust/40-public-surface-and-evolution.md
-last_reviewed: 2026-09-07
+last_reviewed: 2026-10-12
 ---
 
 # Growing a sealed trait cannot produce E0046 downstream
 
 ## The claim
 
-`crates/happenstance/src/boundary.rs:70-75` states, as the reason `Boundary`
+**Corrected 2026-10-12 by `kb-decision-0090` (#93):** the sentence quoted below is gone;
+`crates/happenstance/src/boundary.rs:70-75` now says the seal is what made adding
+`type Event` free, and that what cannot be taken back is the name. The claim as it stood:
+
+`crates/happenstance/src/boundary.rs:70-75` stated, as the reason `Boundary`
 carries `type Event: DomainEvent` from birth rather than adding it later: "the
 trait is sealed and the crate publishes from it, and growing a sealed trait a
 required item is a breaking change no downstream crate could have prepared for."
-That sentence has the direction backwards. Sealing is precisely what makes
+That sentence had the direction backwards. Sealing is precisely what makes
 growing the trait *free*, not what makes it costly — the comment spends the
 seal's dividend as though it were the seal's price.
 
