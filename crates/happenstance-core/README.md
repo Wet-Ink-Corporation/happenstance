@@ -5,6 +5,10 @@ value types, the storage ports, the error taxonomy, and an in-memory reference
 event store. Storage-agnostic, and built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
+New to happenstance? [The happenstance guide](https://wet-ink-corporation.github.io/happenstance/)
+explains event sourcing and dynamic consistency boundaries from the beginning,
+with programs you can run.
+
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
 > **Status: `0.4.0`.** The contract and its 95-rule event-store conformance suite

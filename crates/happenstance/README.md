@@ -3,8 +3,8 @@
 An opinionated, storage-agnostic event sourcing library for Rust, built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
-Guide-level documentation — what a dynamic consistency boundary is, and how
-to model an application with one — is at the happenstance guide, in `docs/`.
+Guide-level documentation is [the happenstance guide](https://wet-ink-corporation.github.io/happenstance/), which starts
+from what a dynamic consistency boundary is. It is built from `docs/`.
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 

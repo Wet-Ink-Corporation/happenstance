@@ -6,6 +6,10 @@ store adapters for
 storage-agnostic event sourcing library built on the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
+New to happenstance? [The happenstance guide](https://wet-ink-corporation.github.io/happenstance/)
+explains event sourcing and dynamic consistency boundaries from the beginning,
+with programs you can run.
+
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
 > **Status: conformant, and on crates.io since `0.2.0`.** Up to `0.3.2` two rules

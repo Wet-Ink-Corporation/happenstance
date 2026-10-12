@@ -38,7 +38,11 @@ use crate::spec_trace::workspace_root;
 
 /// Every page the site renders from `docs/`, in reading order.
 ///
-/// The order is the application author's path: run something, see the whole
+/// It opens on the four background pages, for a reader new to event sourcing:
+/// events, event sourcing and CQRS, aggregates, then DCB, each ending on a link
+/// to the next and the last on the opening encounter.
+///
+/// From there the order is the application author's path: run something, see the whole
 /// program, set it against the aggregate you arrived with, carry it into your
 /// own domain, then the reasoning behind the write, then how to retry that
 /// write safely, then how to rebuild what was derived from it, then which store
@@ -50,6 +54,10 @@ use crate::spec_trace::workspace_root;
 /// decision, and [`check_coverage`] is what keeps the list from falling behind
 /// the tree.
 const READING_ORDER: &[&str] = &[
+    "event-driven-systems.md",
+    "event-sourcing-and-cqrs.md",
+    "aggregates.md",
+    "what-is-dcb.md",
     "first-encounter.md",
     "read-the-worked-example.md",
     "boundary-not-aggregate.md",
@@ -437,5 +445,121 @@ mod tests {
     fn the_real_tree_is_covered() -> Result<()> {
         let files = markdown_files(&workspace_root()?.join(TREE))?;
         check_coverage(&files)
+    }
+
+    /// The host every absolute link into the documentation site is spelled with.
+    const SITE_HOST: &str = "wet-ink-corporation.github.io";
+
+    /// The surfaces outside the site that link into it: the front doors a reader
+    /// arrives through from crates.io, docs.rs and GitHub.
+    const SITE_LINKERS: &[(&str, &str)] = &[
+        ("Cargo.toml", include_str!("../../Cargo.toml")),
+        ("README.md", include_str!("../../README.md")),
+        (
+            "crates/happenstance/src/lib.rs",
+            include_str!("../../crates/happenstance/src/lib.rs"),
+        ),
+        (
+            "crates/happenstance/README.md",
+            include_str!("../../crates/happenstance/README.md"),
+        ),
+        (
+            "crates/happenstance-core/README.md",
+            include_str!("../../crates/happenstance-core/README.md"),
+        ),
+        (
+            "crates/happenstance-testkit/README.md",
+            include_str!("../../crates/happenstance-testkit/README.md"),
+        ),
+        (
+            "crates/happenstance-sqlite/README.md",
+            include_str!("../../crates/happenstance-sqlite/README.md"),
+        ),
+        (
+            "crates/happenstance-postgres/README.md",
+            include_str!("../../crates/happenstance-postgres/README.md"),
+        ),
+        (
+            "crates/happenstance-neon/README.md",
+            include_str!("../../crates/happenstance-neon/README.md"),
+        ),
+        (
+            "crates/happenstance-cloudflare/README.md",
+            include_str!("../../crates/happenstance-cloudflare/README.md"),
+        ),
+    ];
+
+    /// `base_url` as `site/config.toml` declares it.
+    fn base_url() -> &'static str {
+        include_str!("../../site/config.toml")
+            .lines()
+            .find_map(|line| line.strip_prefix("base_url = \""))
+            .and_then(|rest| rest.strip_suffix('"'))
+            .expect("site/config.toml declares base_url on one line")
+    }
+
+    /// Every link into the site on `text` that the site would not serve: one off
+    /// `base`, or one naming a guide page `pages` does not render.
+    fn site_link_problems(surface: &str, text: &str, base: &str, pages: &[&str]) -> Vec<String> {
+        let mut found = Vec::new();
+        for (at, _) in text.match_indices(SITE_HOST) {
+            let start = text[..at].rfind("https://").unwrap_or(at);
+            let url: String = text[start..]
+                .chars()
+                .take_while(|c| !c.is_whitespace() && !matches!(c, ')' | '"' | '>' | '<'))
+                .collect();
+            let Some(path) = url.strip_prefix(base) else {
+                found.push(format!("{surface}: {url} is not under base_url {base}"));
+                continue;
+            };
+            let served = match path.trim_matches('/') {
+                "" | "guide" => true,
+                rest => rest
+                    .strip_prefix("guide/")
+                    .is_some_and(|slug| pages.contains(&format!("{slug}.md").as_str())),
+            };
+            if !served {
+                found.push(format!("{surface}: {url} names no page the site renders"));
+            }
+        }
+        found
+    }
+
+    /// The guard the front door's absolute links rest on: each one is under the
+    /// site's `base_url`, and each guide link names a page in `READING_ORDER`.
+    #[test]
+    fn every_link_into_the_site_names_a_page_it_renders() {
+        let found: Vec<String> = SITE_LINKERS
+            .iter()
+            .flat_map(|(surface, text)| {
+                site_link_problems(surface, text, base_url(), READING_ORDER)
+            })
+            .collect();
+        assert!(found.is_empty(), "{found:?}");
+        let linked = SITE_LINKERS
+            .iter()
+            .filter(|(_, text)| text.contains(SITE_HOST))
+            .count();
+        assert_eq!(
+            linked,
+            SITE_LINKERS.len(),
+            "a front door stopped linking the site"
+        );
+    }
+
+    #[test]
+    fn a_site_link_off_the_base_or_to_an_unrendered_page_is_rejected() {
+        let base = "https://wet-ink-corporation.github.io/happenstance";
+        let pages = ["first-encounter.md"];
+        let good = "[a](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/)";
+        assert!(site_link_problems("good", good, base, &pages).is_empty());
+
+        let off_base = "[a](https://wet-ink-corporation.github.io/redkiln/)";
+        let gone = "[a](https://wet-ink-corporation.github.io/happenstance/guide/retired/)";
+        for (wrong, reason) in [(off_base, "is not under base_url"), (gone, "names no page")] {
+            let found = site_link_problems("wrong", wrong, base, &pages);
+            assert_eq!(found.len(), 1, "{wrong}: {found:?}");
+            assert!(found[0].contains(reason), "{wrong}: {found:?}");
+        }
     }
 }

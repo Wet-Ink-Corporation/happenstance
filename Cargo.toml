@@ -36,7 +36,7 @@ repository = "https://github.com/Wet-Ink-Corporation/happenstance"
 # per crate, so one inherited URL would point four of the five at the wrong page
 # — worse than leaving it unset, because crates.io falls back to the right
 # `docs.rs/<name>` on its own. Each publishable crate names its own below.
-homepage = "https://github.com/Wet-Ink-Corporation/happenstance"
+homepage = "https://wet-ink-corporation.github.io/happenstance/"
 authors = ["Ryan Britton"]
 keywords = ["event-sourcing", "dcb", "cqrs", "event-store"]
 categories = ["database", "data-structures"]

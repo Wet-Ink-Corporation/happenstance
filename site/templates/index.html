@@ -11,8 +11,8 @@
   <div class="hs-hero__inner">
     <div class="hs-hero__copy">
       <p class="hs-kicker hs-kicker--inverse">Event sourcing for Rust</p>
-      <h1 class="hs-hero__title" id="hero-title">The boundary is not declared in advance.</h1>
-      <p class="hs-hero__lede">A storage-agnostic, DCB-compliant event store. Each decision reads the events it depends on, and its write is refused if anything matching that read has landed since — so the consistency boundary is whatever the decision actually read.</p>
+      <h1 class="hs-hero__title" id="hero-title">Keep your rules true when requests collide.</h1>
+      <p class="hs-hero__lede">happenstance records what your application does as a log of events. When a request makes a decision, such as taking the last seat on a course, it reads just the events that decision depends on. If a new event matching what it read has been added by the time it writes, the write is refused and the decision is made again, so two requests can never both take the last seat. The same code runs on SQLite, PostgreSQL, Neon and Cloudflare Durable Objects.</p>
       <div class="hs-hero__actions">
         <a class="hs-btn hs-btn--sun hs-btn--size-lg" href="{{ get_url(path='@/guide/first-encounter.md') }}">Watch a write get refused {{ <icon name="arrow-right" /> }}</a>
         {{ <install command={config.extra.install} /> }}
@@ -25,6 +25,30 @@
 </section>
 
 <div class="page-shell">
+
+  <section class="outcomes" aria-labelledby="outcomes-title">
+    <p class="hs-kicker">What you get</p>
+    <h2 class="display" id="outcomes-title">Rules that hold, on the storage you already run</h2>
+    <div class="grid grid--4">
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">Rules that span several things just hold</div>
+        <p class="hs-feature__body">A seat limit on a course and a course limit on a student are checked by one read and guarded by one write. No locks, no background clean-up, no overbooking.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">Only real conflicts collide</div>
+        <p class="hs-feature__body">Each decision guards exactly the events it read, so two requests about different things never refuse each other.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">The whole history, kept</div>
+        <p class="hs-feature__body">Every change is an event you can read back. Build a new view over years of data, or rebuild a broken one, without touching the log.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">One codebase, four places to run it</div>
+        <p class="hs-feature__body">SQLite, PostgreSQL, Neon over HTTP, and Cloudflare Durable Objects at the edge. Your code binds one trait, and every store passes the same conformance suite.</p>
+      </div>
+    </div>
+    <p>New to event sourcing? <a href="{{ get_url(path='@/guide/event-driven-systems.md') }}">Start with the background</a>: four short pages, from what an event is to why the boundary can be drawn per decision.</p>
+  </section>
 
   <section class="story" aria-labelledby="story-title">
     <p class="hs-kicker">One rule, three answers</p>
@@ -43,14 +67,14 @@
           <h3 class="hs-section-heading__title"><span class="hs-num">02</span>The answer you know</h3>
           <div class="hs-rulebar"></div>
         </div>
-        <p>Classical event sourcing asks you to choose the boundary when the schema is written: a <code class="hs-inline-code">Course</code> aggregate or a <code class="hs-inline-code">Student</code> aggregate. Choose either, and the other limit needs a read model and a saga. The boundary was fixed before anyone knew which decisions it would have to hold.</p>
+        <p>Most event-sourced systems split events into fixed groups chosen up front, such as one per course or one per student, and only keep a rule consistent inside one group. A rule about a course <em>and</em> a student fits neither, so it ends up enforced by extra machinery: a separate copy of the data to check against, and a background process to undo the mistakes that slip through.</p>
       </article>
       <article class="beat">
         <div class="hs-section-heading">
           <h3 class="hs-section-heading__title"><span class="hs-num">03</span>The answer here</h3>
           <div class="hs-rulebar"></div>
         </div>
-        <p>A dynamic consistency boundary is drawn per decision. The handler reads exactly the events this decision rests on — the seats taken on this course, the courses this student holds — and appends on condition that nothing matching that read has appeared since. <strong>The boundary is deliberate, but not pre-declared.</strong></p>
+        <p>With a <em>dynamic consistency boundary</em> (DCB) there are no fixed groups. Each decision reads the events it needs, here the seats taken on this course and the courses this student holds, and its write is accepted only if no new event matching that read has been added since. <strong>Both limits hold, with one read and one write.</strong></p>
       </article>
     </div>
 
@@ -72,6 +96,58 @@
     </figure>
   </section>
 
+  <section class="measured" aria-labelledby="measured-title">
+    <p class="hs-kicker">Measured, not claimed</p>
+    <h2 class="display" id="measured-title">Fast where it matters</h2>
+    <div class="grid grid--4">
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">~34 µs to check a two-thing rule</div>
+        <p class="hs-feature__body">The SQLite store checks a condition spanning a course and a student in about 34 µs, and the cost stays flat as the log grows from a thousand events to a million.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">~57,000 events a second</div>
+        <p class="hs-feature__body">Appended to SQLite in batches of 128, about 6,900 a second one at a time. The in-memory store reaches about 4.8 million.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">~189,000 events a second, rebuilt</div>
+        <p class="hs-feature__body">A read model catches up from an empty start over SQLite at that rate, so rebuilding a view over a large log is minutes, not hours.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">64 writers, one winner, no errors</div>
+        <p class="hs-feature__body">Sixty-four requests race for the same decision. Exactly one is accepted, the other sixty-three are told to decide again, and nothing fails.</p>
+      </div>
+    </div>
+    <p>One run on one Linux machine, in September 2026; read them as orders of magnitude. The <a href="{{ config.extra.blob }}/benchmarks/results/GRADES.md">full results</a> carry the method, the raw output and what the numbers do not show.</p>
+  </section>
+
+  <section class="roadmap" aria-labelledby="roadmap-title">
+    <p class="hs-kicker">Where it is going</p>
+    <h2 class="display" id="roadmap-title">On the road to 1.0</h2>
+    <div class="grid grid--4">
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Planned</span>
+        <div class="hs-feature__title">Sync between stores</div>
+        <p class="hs-feature__body">Replicate a log between happenstance stores, hub-and-spoke or peer-to-peer: an edge or offline store that syncs with a central one, with conflicts settled by ordinary events rather than lost.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Planned</span>
+        <div class="hs-feature__title">A stable projection runner</div>
+        <p class="hs-feature__body">The typed runner that keeps read models up to date leaves its <code class="hs-inline-code">unstable</code> feature, with projections that can write straight into their database.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Planned</span>
+        <div class="hs-feature__title">Forgetting, on purpose</div>
+        <p class="hs-feature__body">A supported way to remove events a log must not keep, such as personal data under a deletion request.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Exploring</span>
+        <div class="hs-feature__title">SQLite in the browser</div>
+        <p class="hs-feature__body">The SQLite store on <code class="hs-inline-code">wasm32</code>, a candidate for the offline end of sync.</p>
+      </div>
+    </div>
+    <p>The plan, phase by phase, is <a href="{{ config.extra.blob }}/runbook/README.md">in the runbook</a>.</p>
+  </section>
+
   <section class="paths" aria-labelledby="paths-title">
     <p class="hs-kicker">Choose your path</p>
     <h2 class="display" id="paths-title">Start from the question you arrived with</h2>
@@ -79,7 +155,7 @@
       <a class="hs-card hs-feature hs-feature--link" href="{{ get_url(path='@/guide/first-encounter.md') }}">
         <span class="hs-label">Application author</span>
         <span class="hs-feature__title">I have a rule that spans two things</span>
-        <span class="hs-feature__body">Three runnable programs that end with a write the library refuses, then the worked example, then your own invariant in this library's terms.</span>
+        <span class="hs-feature__body">New to event sourcing or DCB? Start here: three short programs that end with the store refusing a write that would have broken a rule.</span>
       </a>
       <a class="hs-card hs-feature hs-feature--link" href="{{ get_url(path='@/reference.md') }}">
         <span class="hs-label">Evaluator</span>

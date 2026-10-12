@@ -256,3 +256,27 @@ mod run_on_a_durable_object {
 mod pass_conformance_suite {
     #![doc = include_str!("../../docs/pass-conformance-suite.md")]
 }
+
+// The four background pages a newcomer reads before the opening encounter:
+// events, event sourcing and CQRS, aggregates, and DCB. Prose and `text` fences
+// only, so nothing here compiles; they are mounted so the registration check
+// and the fence walk read them like every other page in the tree.
+#[cfg(doctest)]
+mod event_driven_systems {
+    #![doc = include_str!("../../docs/event-driven-systems.md")]
+}
+
+#[cfg(doctest)]
+mod event_sourcing_and_cqrs {
+    #![doc = include_str!("../../docs/event-sourcing-and-cqrs.md")]
+}
+
+#[cfg(doctest)]
+mod aggregates {
+    #![doc = include_str!("../../docs/aggregates.md")]
+}
+
+#[cfg(doctest)]
+mod what_is_dcb {
+    #![doc = include_str!("../../docs/what-is-dcb.md")]
+}

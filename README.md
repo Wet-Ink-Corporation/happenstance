@@ -7,10 +7,17 @@ it.
 
 [![CI](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml/badge.svg)](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/happenstance.svg)](https://crates.io/crates/happenstance)
+[![Guide](https://img.shields.io/badge/guide-read-informational)](https://wet-ink-corporation.github.io/happenstance/)
 [![docs.rs](https://img.shields.io/docsrs/happenstance)](https://docs.rs/happenstance)
 [![MSRV](https://img.shields.io/badge/MSRV-1.97.1-blue)](#minimum-supported-rust-version)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](#licence)
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
+
+**Start with [the guide](https://wet-ink-corporation.github.io/happenstance/).** It
+explains event sourcing and dynamic consistency boundaries from the beginning,
+starting with [your first encounter](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/):
+three short programs that end with the store refusing a write that would have
+broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
 
 > **Status: `0.4.0`, and worth being precise about what that number claims.** The
 > contract, the typed layer and a 120-rule conformance suite across four families
