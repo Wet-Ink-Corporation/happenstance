@@ -30,12 +30,10 @@
 //! use happenstance::{bytes::Bytes, Codec, CodecError, DecisionModel};
 //! use happenstance::{DomainEvent, EventType, MemoryEventStore, Retry};
 //! use happenstance::{Tags, commit};
-//! use std::error::Error;
+//! use std::{convert::Infallible, error::Error};
 //! # #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {
-//!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! enum Seat { Taken }
-//!
 //! const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
 //! impl DomainEvent for Seat {
 //!     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN];
@@ -59,8 +57,7 @@
 //! let store = MemoryEventStore::new();
 //! let seats = Seats { scope: Tags::empty(), taken: 0 };
 //! let retry = Retry::attempts(core::num::NonZeroU32::new(3).unwrap());
-//! let take =
-//!     |_: &Seats| Ok::<_, core::convert::Infallible>(vec![Seat::Taken]);
+//! let take = |_: &Seats| Ok::<_, Infallible>(vec![Seat::Taken]);
 //! let done = commit(&store, seats, retry, take).await?;
 //! assert_eq!(done.committed().expect("a seat was taken").attempts, 1);
 //! # Ok::<(), Box<dyn Error>>(()) }
@@ -68,7 +65,7 @@
 //!
 //! To watch that boundary *refuse* a write instead, in three runnable steps: [the opening encounter](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/).
 //!
-//! # What arrives here, and what stays below
+//! # Encoding lives here
 //!
 //! The discriminator is **encoding**. [`happenstance_core`] deals in opaque
 //! bytes on purpose — that is what keeps adapters free of domain knowledge and
@@ -131,7 +128,7 @@
 //! | `serde` | the contract's wire-format derives, for replication |
 //! | `unstable-projection` | the projection runner; `apply` is unproved |
 //!
-//! # Testing without a database
+//! # Testing in memory
 //!
 //! *Does the domain model work* and *pick a database* are two decisions, and
 //! only the first is due now. [`happenstance::testing`][testing-module] answers
