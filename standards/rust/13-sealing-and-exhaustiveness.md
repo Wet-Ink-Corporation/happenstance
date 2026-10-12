@@ -111,7 +111,7 @@ the pattern, and no attribute at all would cost the seal.
 use happenstance_core::{AppendCondition, Guard, Query, QueryItem, SequencePosition};
 
 let condition = AppendCondition::new(Query::from_item(QueryItem::of_types(["A"])?))
-    .after(SequencePosition::FIRST);
+    .after_every_guard(SequencePosition::FIRST);
 
 // What a replication hub does to a peer-supplied condition before refusing it.
 let Guard { query, .. } = &condition.guards()[0];

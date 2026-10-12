@@ -130,6 +130,8 @@ summary: >-
   open with phase 17.
   Phase 20's 2026-10-11 pass flipped es-23-adapter-half to Superseded, closed on the record of
   issue #149 without a decision: FROZEN_DOC_MUSTS gained an adapter-owned disposition.
+  Phase 17b's 2026-10-12 pass flipped two typed-layer questions to Superseded under issue #93:
+  tuple-boundary-event-type by kb-decision-0090 and then-empty-emission-idiom by kb-decision-0091.
 depends_on: []
 related:
   - kb-map-domain-001
@@ -148,7 +150,7 @@ source_paths:
   - .kb/_governance/integration-waves/2026-09-09-intake
   - .kb/_governance/integration-waves/2026-09-11-intake
   - .kb/_governance/integration-waves/2026-09-21-intake
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-12
 ---
 
 # Open-questions index
@@ -684,11 +686,13 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-cf-25-cf-26-portfolio-check-001`) — no check in `xtask/src/spec_trace.rs`
   performs the portfolio/axis comparison CF-25 and CF-26 both name (verified: zero occurrences of
   "portfolio", "far end" or "axis"). Added 2026-09-07.
-- **Open** — [`vt-30-provisional-marker-is-stale-and-unscheduled.md`](../open-questions/vt-30-provisional-marker-is-stale-and-unscheduled.md)
+- **Superseded** — [`vt-30-provisional-marker-is-stale-and-unscheduled.md`](../open-questions/vt-30-provisional-marker-is-stale-and-unscheduled.md)
   (`kb-open-question-vt-30-marker-stale-unscheduled-001`) — split off from ADR-0054, which discharges
   only `after_opt`'s naming/pinning half; VT-30's `[PROVISIONAL]` marker is stale as written now that
   `happenstance-testkit/src/bench.rs` exists, and the real gap narrows to no multi-guard workload in
   the harness. Added 2026-09-07.
+  **Resolved 2026-10-12** by ADR-0096 (`kb-decision-0096`): VT-30 is `[FROZEN]`, limb 1 answered by
+  `happenstance-neon`'s one-statement guard pushdown and limb 2 retired by the record.
 - **Superseded** — [`adapter-version-lockstep-and-cf-32.md`](../open-questions/adapter-version-lockstep-and-cf-32.md)
   (`kb-open-question-adapter-version-lockstep-001`) — whether an adapter's version implies a
   `happenstance-core` version; the brief's original lockstep claim collides with CF-32 `[FROZEN]`,
@@ -807,10 +811,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   exactly the reason the stall exists (the pre-spawn sample takes the process mutex the writer
   takes). Sub-questions 1 and 2 are untouched — neither candidate remedy is measured and the 635ms
   figure stands — so this atom stays open.
-- **Open** — [`then-empty-emission-idiom-and-the-nothing-to-do-channel.md`](../open-questions/then-empty-emission-idiom-and-the-nothing-to-do-channel.md)
+- **Superseded** — [`then-empty-emission-idiom-and-the-nothing-to-do-channel.md`](../open-questions/then-empty-emission-idiom-and-the-nothing-to-do-channel.md)
   (`kb-open-question-then-empty-emission-idiom-001`) — how `then(&[])` reads once `commit`'s outcome
   is two-armed (three of five in-tree call sites would break), and whether `decide` can express
   "nothing to do" distinctly from "refused". Added 2026-09-07.
+  Superseded 2026-10-12 by `kb-decision-0091`: `then(&[])` asserts the decision emitted nothing,
+  no `then_nothing()` is added, and `decide` gets no third channel.
 - **Open** — [`scope-coverage-helper-and-the-projection-port-gap.md`](../open-questions/scope-coverage-helper-and-the-projection-port-gap.md)
   (`kb-open-question-scope-coverage-helper-projection-gap-001`) — the additive, enum-total
   `assert_scope_covered` test helper ADR-0047 endorses but sequences after this, and the identical
@@ -853,10 +859,12 @@ the decision and reference atoms this domain also owns.
   mapping from a fold position to a decoder is unchecked by the compiler, in both
   `course-subscriptions` and `transfers-on-sqlite`; filed rather than amending ADR-0033, which the
   new second-example ceremony measurement strengthens instead. Added 2026-09-07.
-- **Open** — [`tuple-boundary-heterogeneous-event-type.md`](../open-questions/tuple-boundary-heterogeneous-event-type.md)
+- **Superseded** — [`tuple-boundary-heterogeneous-event-type.md`](../open-questions/tuple-boundary-heterogeneous-event-type.md)
   (`kb-open-question-tuple-boundary-event-type-001`) — `composition.rs`'s macro-generated tuple
   impls bind every member to the first member's `Event` type, unwritten in ADR-0020's decision text,
   the signed-off design (which contradicts itself about it), or `standards/rust/`. Added 2026-09-07.
+  Superseded 2026-10-12 by `kb-decision-0090`: one boundary folds one domain enum, fenced by a
+  `compile_fail` doctest.
 - **Superseded** — [`should-codec-be-sealed.md`](../open-questions/should-codec-be-sealed.md)
   (`kb-open-question-seal-the-codec-001`) — whether `Codec` is later sealed, now that `0.2.0` is
   live and the window to do so for free has closed; bundles the `UnknownTag`-split and

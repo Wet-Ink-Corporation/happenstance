@@ -2,7 +2,8 @@
 id: kb-open-question-tuple-boundary-event-type-001
 title: Every tuple Boundary is bound to its first member's event type, and no signed-off record says so
 kind: open_question
-status: accepted
+status: superseded
+superseded_by: kb-decision-0090
 authority_tier: note
 summary: >-
   crates/happenstance/src/composition.rs's macro-generated tuple impls bind every member after the
@@ -20,8 +21,10 @@ summary: >-
   ratified: the underlying product question — whether one DCB boundary may honestly span two bounded
   contexts — has never been tested by anything in this workspace, and taking the recommended option
   requires deciding that deliberately rather than by default.
+  Resolved 2026-10-12 by kb-decision-0090: option A, taken deliberately; one boundary folds one domain enum, a compile_fail doctest on the two-arity tuple impl fences the heterogeneous tuple, and the sealed-trait rationale on Boundary::Event is corrected.
 depends_on: []
 related:
+  - kb-decision-0090
   - kb-decision-0020
   - kb-concept-sealed-trait-growth-001
 source_paths:
@@ -29,7 +32,7 @@ source_paths:
   - crates/happenstance/src/composition.rs
   - crates/happenstance/src/boundary.rs
   - references/adr/0020-fold-query-agreement.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-12
 ---
 
 # Every tuple Boundary is bound to its first member's event type, and no signed-off record says so
@@ -106,3 +109,12 @@ governance price, a superseding atom against `kb-decision-0020`. The bound is un
 
 Free at any phase, and still owed: the backwards sealed-trait rationale at
 `crates/happenstance/src/boundary.rs:72-74`. **Owner now: phase 17.**
+
+## Closed — 2026-10-12
+
+**Superseded by `kb-decision-0090`**, accepted by the owner on 2026-10-12 (`kb-decision-wi-378078`).
+Option A is taken deliberately: one DCB boundary folds one domain enum. The bound is unchanged at
+`crates/happenstance/src/composition.rs:30`; the `compile_fail` doctest fencing a tuple over two
+enums is at `crates/happenstance/src/composition.rs:175`; and the backwards rationale at
+`crates/happenstance/src/boundary.rs:72-74` is corrected in place. Option D stays additive at the
+price this atom named.

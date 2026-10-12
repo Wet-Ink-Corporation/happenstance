@@ -28,7 +28,7 @@ tree_hash: "055d8a80760d15224e496a5237224523e3239338"
 
 Does #88 keep trait-variant's caret, protected by a compiled derivation contract and a weekly floating-deps job, rather than an exact =0.1.3 pin?
 
-Raised by an agent (marker) as a question and captured by Weigh-In as `wi-727ec8`. Anchor: `runbook/phases/17b-after-the-window.md:48`.
+Raised by an agent (marker) as a question and captured by Weigh-In as `wi-727ec8`. Anchor: `runbook/phases/17b-after-the-window.md:56`.
 
 ## Decision outcome
 

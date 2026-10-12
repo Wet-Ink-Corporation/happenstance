@@ -183,7 +183,7 @@ async fn enrol<S: EventStore>(store: &S, student: &str) -> Result<bool, Failure>
         return Ok(false);
     }
     let seat = Event::new("StudentEnrolled", student.as_bytes().to_vec())?.with_tags(course);
-    let guard = AppendCondition::new(seats.clone()).after_opt(last_seen);
+    let guard = AppendCondition::new(seats.clone()).after_every_guard_opt(last_seen);
     store.append(&[seat], Some(&guard)).await?;
     Ok(true)
 }

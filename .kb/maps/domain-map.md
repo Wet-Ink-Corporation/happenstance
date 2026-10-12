@@ -651,7 +651,7 @@ three already-published crates),
 `kb-open-question-es-11-sqlite-ceiling-sample-cost-001` (added 2026-09-07 — ES-11's ceiling sample
 stalls 39.3x the idle floor under contention on `happenstance-sqlite`'s read path, a second native
 adapter data point against ES-11's `[PROVISIONAL]` marker),
-`kb-open-question-then-empty-emission-idiom-001` (added 2026-09-07 — how `then(&[])` reads once
+`kb-open-question-then-empty-emission-idiom-001` (**superseded** 2026-10-12 by `kb-decision-0091`; added 2026-09-07 — how `then(&[])` reads once
 `commit`'s outcome is two-armed, and whether `decide` can express "nothing to do" distinctly from
 "refused"),
 `kb-open-question-scope-coverage-helper-projection-gap-001` (added 2026-09-07 — the additive,
@@ -771,7 +771,7 @@ working as intended outward, and ADR-0033's reopen condition does not fire),
 `EVENT_TYPES[n]` mapping from a fold position to a decoder is unchecked by the compiler in both
 `course-subscriptions` and `transfers-on-sqlite`; filed rather than amending ADR-0033, which the
 new ceremony measurement strengthens instead),
-`kb-open-question-tuple-boundary-event-type-001` (added 2026-09-07 — `composition.rs`'s
+`kb-open-question-tuple-boundary-event-type-001` (**superseded** 2026-10-12 by `kb-decision-0090`; added 2026-09-07 — `composition.rs`'s
 macro-generated tuple impls bind every member to the first member's `Event` type, unwritten in
 ADR-0020's decision text or the signed-off design),
 `kb-open-question-seal-the-codec-001` (**superseded** 2026-10-08 by `kb-decision-0083`; added 2026-09-07 — whether `Codec` is later sealed now that

@@ -60,7 +60,7 @@ use crate::store::SendEventStore;
 ///     .with_tags(Tags::from_pairs([("course", "c1")])?);
 ///
 /// // Append only if nothing matching has appeared since we looked.
-/// let condition = AppendCondition::new(query.clone()).after_opt(last_seen);
+/// let condition = AppendCondition::new(query.clone()).after_every_guard_opt(last_seen);
 /// store.append(&[defined.clone()], Some(&condition)).await?;
 ///
 /// // Replaying the same command now fails — the course exists.

@@ -35,7 +35,7 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       property test in `crates/happenstance-core/tests/query_item_of.rs`.
       `frozen_signatures.rs` lists no `QueryItem` constructors, so there was
       nothing for it to join.
-- [ ] #85 · **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
+- [x] #85 · **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
       research recommends: `after_every_guard` and `after_every_guard_opt`, with
       `after` / `after_opt` deprecated since the release that carries them and
       kept through 1.x; the two pin tests and doc sentences ADR-0054 names;
@@ -44,6 +44,11 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       deprecation into an error — so this lands **last** among 17b's code items.
       Limb 2 retired by the record or by a multi-guard `fragmented_boundary`
       bench scenario.
+      **Done:** VT-30 is `[FROZEN]` by
+      [ADR-0096](../../.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md),
+      on the owner's call (`wi-378078`): `after_every_guard` and `after_every_guard_opt`
+      added, `after` and `after_opt` deprecated since `0.4.2` and kept through 1.x, every
+      in-tree call site migrated, typestate rejected and limb 2 retired by the record.
 - [x] #86 · **VT-14 — the RTL identifier corpus check.** A standalone
       `experiments/identifier-validation/` with a path dependency on
       `happenstance-core`: the E11 reproduction run against the shipped validator
@@ -78,13 +83,14 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       (`Store`, `EventDataLen`, clipped, off by one, refused after the write), and `happenstance-cloudflare`'s ceiling is
       512 KiB, carved from the documented 2 MB row limit rather than the measured
       wall (`wi-f97418`; ADR-0093, accepted with the narrowing on 2026-10-12). Phase 13 decides the budget unit.
-- [ ] #93 · **The two typed-layer closures**, each in its own record:
+- [x] #93 · **The two typed-layer closures**, each in its own record:
       - `tuple-boundary-heterogeneous-event-type` — option A taken deliberately:
         one DCB boundary folds one domain enum; a `compile_fail` doctest fences it,
         and `boundary.rs:72-74` is corrected.
       - `then-empty-emission-idiom-and-the-nothing-to-do-channel` — `then(&[])`
         asserts the decision emitted exactly nothing, and `decide` gets no third
         channel. `then_nothing()` is additive at any date and is not added.
+      Written as ADR-0090 and ADR-0091; the fence is on the two-arity tuple impl.
 - [x] #81 · **PS-39 — frozen once live Neon runs `projection_ids_round_trip_by_bytes`
       green.** ADR-0082 minted it provisional at phase 17, green on memory, SQLite and
       both Postgres stores, and left one condition: a live Neon run. That run is CI's
@@ -111,7 +117,7 @@ a red then green run URL for each new sibling job, in this file's session log.
 - [ ] The minimal-versions and floating-dependency jobs exist, and each has been
       watched failing once.
 - [x] CF-40's `MetadataLen` is built, with a named wrong implementation per branch.
-- [ ] Both typed-layer open questions are closed.
+- [x] Both typed-layer open questions are closed: ADR-0090 and ADR-0091.
 - [ ] #95 · `cargo-semver-checks` against `0.4.0` reports no major finding.
 - [ ] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
@@ -136,6 +142,21 @@ a red then green run URL for each new sibling job, in this file's session log.
   proof is the `live-neon` run on `main` at `8b52528`, run 38271947822, where
   `projection_ids_round_trip_by_bytes` passed on its own Neon branch. The merge queue re-runs
   it as a required check.
+
+- 2026-10-12 — #93: option A on both typed-layer questions, as the owner cleared it
+  (`wi-378078`). ADR-0090 records that one boundary folds one domain enum, with a
+  `compile_fail` doctest on the two-arity tuple impl and `Boundary::Event`'s sealed-trait
+  rationale corrected. ADR-0091 records that `then(&[])` asserts nothing was emitted, that
+  `decide` gets no third channel and that no `then_nothing()` is added. Both open questions
+  are superseded. The PR is one-way and waits on the owner.
+
+
+- 2026-10-12 — #85: on the owner's call (`wi-378078`), VT-30 is `[FROZEN]` by ADR-0096.
+  `after_every_guard` and `after_every_guard_opt` are added, `after` and `after_opt` are
+  deprecated and kept through 1.x, and every in-tree call site is migrated. Typestate is
+  rejected, and limb 2 is retired by the record rather than by a bench scenario. ES-7
+  remains, so the exit criterion stays open.
+
 
 - 2026-10-12 — #92: `StoreLimit::MetadataLen` (floor 0) and `Fixture::MAX_METADATA_LEN`
   are in the tree, and `append_reports_exceeded_store_limits` gained a metadata branch.

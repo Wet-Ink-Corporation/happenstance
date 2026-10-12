@@ -259,7 +259,7 @@ async fn a_wide_guard_answers_from_every_chunk_not_the_first() {
     let refused = store
         .append(
             &[tagged("Subject", "subject", "new")],
-            Some(&AppendCondition::new(query.clone()).after(assigned[0])),
+            Some(&AppendCondition::new(query.clone()).after_every_guard(assigned[0])),
         )
         .await;
     assert!(
@@ -278,7 +278,7 @@ async fn a_wide_guard_answers_from_every_chunk_not_the_first() {
     store
         .append(
             &[tagged("Subject", "subject", "new")],
-            Some(&AppendCondition::new(query).after(assigned[2])),
+            Some(&AppendCondition::new(query).after_every_guard(assigned[2])),
         )
         .await
         .expect("nothing matches above the highest match, so the guard holds");

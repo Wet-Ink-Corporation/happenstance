@@ -46,7 +46,7 @@ use happenstance::{MemoryEventStore, Query, QueryItem, Tags, read_decision_model
 /// One seat is landed *before* the read, so `upto` is `Some(SequencePosition(1))`
 /// rather than `None` and the guard carries a boundary this program actually
 /// observed. That is not decoration: with an empty store the read yields `None`,
-/// `AppendCondition::new` already carries `after: None`, and `.after_opt(upto)`
+/// `AppendCondition::new` already carries `after: None`, and `.after_every_guard_opt(upto)`
 /// is inert — the scenario would refuse for the whole-log reason rather than for
 /// the reason the page claims. See `boundary-refusal-encounter/_conditions.md`
 /// § BC-004.
@@ -73,7 +73,7 @@ async fn raced() -> Result<(MemoryEventStore, Event, AppendCondition), Box<dyn c
     let (_taken, upto) = read_decision_model(&store, &seats).await?;
     store.append(&[seat.clone()], None).await?; // another writer
 
-    let condition = AppendCondition::new(seats).after_opt(upto);
+    let condition = AppendCondition::new(seats).after_every_guard_opt(upto);
     Ok((store, seat, condition))
 }
 
@@ -91,7 +91,7 @@ async fn the_guarded_append_is_refused() -> Result<(), Box<dyn core::error::Erro
 /// What "the `after` is load-bearing" can mean, and what it cannot, executed.
 ///
 /// The page's criterion asks for a second falsification alongside the tag join:
-/// remove `after_opt(upto)` and the scenario stops refusing. That one cannot be
+/// remove `after_every_guard_opt(upto)` and the scenario stops refusing. That one cannot be
 /// had, and this is where it is *checked* rather than asserted in prose.
 /// `AppendCondition::new` carries `after: None`, and `None` checks the **whole
 /// log** — strictly stronger than any position — so deleting the call tightens
@@ -122,7 +122,7 @@ async fn the_after_is_load_bearing_in_its_value_not_in_its_presence()
     let (_taken, _upto) = read_decision_model(&store, &seats).await?;
     store.append(&[seat.clone()], None).await?; // another writer
 
-    // Presence: the guard a reader is left with if they delete `after_opt`.
+    // Presence: the guard a reader is left with if they delete `after_every_guard_opt`.
     let whole_log = AppendCondition::new(seats.clone());
     let refused = store.append(&[seat.clone()], Some(&whole_log)).await;
     assert!(
@@ -134,7 +134,7 @@ async fn the_after_is_load_bearing_in_its_value_not_in_its_presence()
     // Value: a guard built from a read taken *after* the race, which is the
     // mistake the page's `upto` exists to prevent.
     let (_again, fresh) = read_decision_model(&store, &seats).await?;
-    let stale = AppendCondition::new(seats).after_opt(fresh);
+    let stale = AppendCondition::new(seats).after_every_guard_opt(fresh);
     let accepted = store.append(&[seat], Some(&stale)).await;
     assert!(
         accepted.is_ok(),

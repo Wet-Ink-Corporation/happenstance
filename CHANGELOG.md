@@ -95,6 +95,29 @@ not the same as what a user needed to be told.
   declension, or support the capability and override `arm_held_above_frontier`.
   The Postgres and Neon fixtures support it with a `BEFORE INSERT` trigger that
   lifts the new row's `xact_id` above any frontier.
+- **`AppendCondition::after_every_guard` and `after_every_guard_opt`** (#85,
+  [ADR-0096](.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md)).
+  They do what `after` and `after_opt` always did, and the name now says so: the
+  boundary goes on **every** guard already in the condition. If you call one after
+  `and_guard`, it overwrites the boundary `and_guard` set and widens what the
+  condition tolerates, so call it first. Both doc blocks and `and_guard`'s now say
+  this, and two unit tests pin the order. VT-30 is now `[FROZEN]`, so from `1.0.0`
+  a setter that fills only unset boundaries would be a breaking change.
+
+### Changed
+
+- **`happenstance-testkit`: `fixtures::condition_after(query, 0)` checks the whole
+  log** instead of panicking (#85). No position is zero, so "after zero" means
+  "after nothing", and the result now equals `fixtures::condition(query)`. Every
+  other position behaves as before. Nothing in the suite passes `0`, and a test of
+  your own that relied on the panic now gets a whole-log guard instead.
+
+### Deprecated
+
+- **`AppendCondition::after` and `after_opt`**, in favour of `after_every_guard`
+  and `after_every_guard_opt`. They behave exactly as before and are **kept through
+  1.x**; only a 2.0 can remove them. The fix is a rename. A crate built with
+  `-D warnings` sees the deprecation as an error until it renames.
 
 ### Changed
 
@@ -118,6 +141,20 @@ not the same as what a user needed to be told.
   it, or narrowing which ids `ProjectionId::new` accepts to suit a store, is a
   major release
   ([ADR-0094](.kb/decisions/0094-ps-39-is-frozen-on-a-live-neon-run.md)).
+- **`happenstance` now documents two typed-layer rules it always had** (#93). No
+  behaviour or signature changed.
+  - A tuple boundary folds one domain enum. Every member must share the first
+    member's `Boundary::Event`, so a tuple over two different enums is not a
+    `Boundary`. The two-model tuple's documentation now says so, with a
+    `compile_fail` example. To check two enums under one append condition, merge
+    them into one enum or use `happenstance-core` directly
+    ([ADR-0090](.kb/decisions/0090-one-boundary-folds-one-domain-enum.md)).
+    `Boundary::Event`'s doc no longer claims that adding an item to a sealed trait
+    would break you. The seal is what makes such an addition free.
+  - `Decision::then(&[])` asserts that the decision emitted nothing. A decision that
+    emitted an event fails it. There is no `then_nothing()`, and `commit`'s
+    `decide` closure gets no separate "nothing to do" signal
+    ([ADR-0091](.kb/decisions/0091-then-empty-asserts-nothing-was-emitted.md)).
 
 ## [0.4.1] — 2026-10-12
 

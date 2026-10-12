@@ -799,6 +799,30 @@ mutants that pin it. Numbers 0090 – 0094 are held by unmerged PRs, which is wh
 | --- | --- | --- | --- | --- | --- |
 | ADR-0095 | [`kb-decision-0095`](../decisions/0095-es-41-membership-means-held.md) | ES-41's contains_event_id means held, not visible, and a rule stages the row that tells them apart | accepted | 13 | — |
 
+## 2026-10-12: the two typed-layer open questions, closed by record (#93)
+
+ADR-0090 and ADR-0091 write down the answers `kb-decision-wi-378078` took for #93, option A on
+both. They are written straight here with no intake step, and they change no signature. Each
+supersedes the open question it answers, and that atom's frontmatter now reads `superseded`.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0090 | [`kb-decision-0090`](../decisions/0090-one-boundary-folds-one-domain-enum.md) | One boundary folds one domain enum, and a tuple over two is fenced out at compile time | accepted | 17b | supersedes `kb-open-question-tuple-boundary-event-type-001` |
+| ADR-0091 | [`kb-decision-0091`](../decisions/0091-then-empty-asserts-nothing-was-emitted.md) | then(&[]) asserts the decision emitted nothing, decide gets no third channel, and no then_nothing() is added | accepted | 17b | supersedes `kb-open-question-then-empty-emission-idiom-001` |
+
+## 2026-10-12: VT-30 frozen, and `after_every_guard` names its scope (#85)
+
+ADR-0096 builds the #85 part of `wi-378078` and is written straight here with no intake step.
+It carries out ADR-0054: `after_every_guard` and `after_every_guard_opt` are added, and `after`
+and `after_opt` are deprecated and kept through 1.x. It rejects typestate and freezes VT-30.
+Limb 1 is answered by `happenstance-neon`, and limb 2 is retired by the record. It amends one
+sentence of `kb-decision-0054`, which said the alias would be deleted when the marker lifted, and
+supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0096 | [`kb-decision-0096`](../decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md) | VT-30 is frozen, after_every_guard names the blanket setter's scope, and typestate is rejected | accepted | 17b | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
