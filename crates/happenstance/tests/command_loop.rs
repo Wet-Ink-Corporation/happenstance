@@ -313,8 +313,8 @@ fn threads_append_return_is_rejected() {
     let returned = SequencePosition::new(9);
     let query = Seats::for_course().query().expect("a constrained boundary");
 
-    let sound = AppendCondition::new(query.clone()).after_opt(observed);
-    let unsound = AppendCondition::new(query).after_opt(returned);
+    let sound = AppendCondition::new(query.clone()).after_every_guard_opt(observed);
+    let unsound = AppendCondition::new(query).after_every_guard_opt(returned);
 
     let unseen = SequencePosition::new(7).expect("7 is not zero");
     assert!(

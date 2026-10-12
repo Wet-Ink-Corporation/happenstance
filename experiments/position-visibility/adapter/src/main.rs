@@ -317,7 +317,7 @@ async fn one_pass(
                     continue;
                 };
                 let batch = [event.with_tags(tags)];
-                let condition = AppendCondition::new(query).after_opt(after);
+                let condition = AppendCondition::new(query).after_every_guard_opt(after);
 
                 // A lost race is a legitimate outcome of a DCB command, not an
                 // error: it is counted as work done, because the probe and the

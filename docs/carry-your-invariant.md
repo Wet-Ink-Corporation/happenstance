@@ -95,7 +95,8 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     let (seen, upto) = read_decision_model(&store, &rule).await?;
     let free = seen.iter().fold(2, |left, _| left - 1);
     store.append(&[seat.clone()], None).await?; // another writer
-    let condition = AppendCondition::new(rule).after_opt(upto);
+    let condition =
+        AppendCondition::new(rule).after_every_guard_opt(upto);
     let refused = store.append(&[seat], Some(&condition)).await;
     assert!(matches!(refused,
         Err(AppendError::ConditionViolated(_))), "{free} free");
@@ -210,7 +211,8 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     let (seen, upto) = read_decision_model(&store, &rule).await?;
     let free = seen.iter().fold(2, |left, _| left - 1);
     store.append(&[seat.clone()], None).await?; // another writer
-    let condition = AppendCondition::new(rule).after_opt(upto);
+    let condition =
+        AppendCondition::new(rule).after_every_guard_opt(upto);
     let accepted = store.append(&[seat], Some(&condition)).await;
     assert!(accepted.is_ok(), "{free} free, and it still went in");
     // END WRONG. The correct guard is the one above.

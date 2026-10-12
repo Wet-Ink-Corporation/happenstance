@@ -514,8 +514,8 @@ impl Model {
                 query,
                 anchor,
             } => {
-                let condition =
-                    AppendCondition::new(query.clone()).after_opt(self.resolve(*anchor));
+                let condition = AppendCondition::new(query.clone())
+                    .after_every_guard_opt(self.resolve(*anchor));
                 let predicted = self.violation(&condition);
 
                 let result = store.append(events, Some(&condition)).await;

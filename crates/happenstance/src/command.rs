@@ -468,7 +468,7 @@ where
         let batch = encode::<B::Event, C, S::Error, D>(&decided, codec, &query)?;
 
         // From the read, and only from the read.
-        let condition = AppendCondition::new(query).after_opt(anchor);
+        let condition = AppendCondition::new(query).after_every_guard_opt(anchor);
 
         match store.append(&batch, Some(&condition)).await {
             Ok(position) => {

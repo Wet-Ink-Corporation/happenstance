@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     store.append(&[seat.clone()], None).await?; // already held
 
     let (_seen, upto) = read_decision_model(&store, &seats).await?;
-    let condition = AppendCondition::new(seats).after_opt(upto);
+    let condition = AppendCondition::new(seats).after_every_guard_opt(upto);
 
     // The seat at the boundary was read, so it does not refuse you.
     store.append(&[seat.clone()], Some(&condition)).await?;

@@ -686,11 +686,13 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   (`kb-open-question-cf-25-cf-26-portfolio-check-001`) — no check in `xtask/src/spec_trace.rs`
   performs the portfolio/axis comparison CF-25 and CF-26 both name (verified: zero occurrences of
   "portfolio", "far end" or "axis"). Added 2026-09-07.
-- **Open** — [`vt-30-provisional-marker-is-stale-and-unscheduled.md`](../open-questions/vt-30-provisional-marker-is-stale-and-unscheduled.md)
+- **Superseded** — [`vt-30-provisional-marker-is-stale-and-unscheduled.md`](../open-questions/vt-30-provisional-marker-is-stale-and-unscheduled.md)
   (`kb-open-question-vt-30-marker-stale-unscheduled-001`) — split off from ADR-0054, which discharges
   only `after_opt`'s naming/pinning half; VT-30's `[PROVISIONAL]` marker is stale as written now that
   `happenstance-testkit/src/bench.rs` exists, and the real gap narrows to no multi-guard workload in
   the harness. Added 2026-09-07.
+  **Resolved 2026-10-12** by ADR-0096 (`kb-decision-0096`): VT-30 is `[FROZEN]`, limb 1 answered by
+  `happenstance-neon`'s one-statement guard pushdown and limb 2 retired by the record.
 - **Superseded** — [`adapter-version-lockstep-and-cf-32.md`](../open-questions/adapter-version-lockstep-and-cf-32.md)
   (`kb-open-question-adapter-version-lockstep-001`) — whether an adapter's version implies a
   `happenstance-core` version; the brief's original lockstep claim collides with CF-32 `[FROZEN]`,

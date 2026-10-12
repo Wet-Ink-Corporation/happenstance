@@ -304,7 +304,7 @@ mod wire {
 
         /// One to three guards, each with its own optional boundary.
         ///
-        /// `after_opt` is applied to the first guard before the others are added
+        /// `after_every_guard_opt` is applied to the first guard before the others are added
         /// because it rewrites *every* guard it can see; adding the rest
         /// afterwards is what keeps their boundaries independent.
         pub(super) fn any_append_condition() -> impl Strategy<Value = AppendCondition> {
@@ -315,7 +315,7 @@ mod wire {
             .prop_map(|guards| {
                 let mut guards = guards.into_iter();
                 let (query, after) = guards.next().expect("at least one guard");
-                let mut condition = AppendCondition::new(query).after_opt(after);
+                let mut condition = AppendCondition::new(query).after_every_guard_opt(after);
                 for (query, after) in guards {
                     condition = condition.and_guard(query, after);
                 }
@@ -892,7 +892,7 @@ mod wire {
     fn condition_after_is_visible_to_an_ingest_policy() {
         let boundary = SequencePosition::new(4_001).unwrap();
         let condition = AppendCondition::new(Query::all())
-            .after_opt(None)
+            .after_every_guard_opt(None)
             .and_guard(Query::all(), Some(boundary));
 
         let value: serde_json::Value =
