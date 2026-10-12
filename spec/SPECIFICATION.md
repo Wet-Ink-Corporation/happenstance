@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 205 clause IDs, of which 198 are normative:
-**159 `[FROZEN]`**, **27 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+**160 `[FROZEN]`**, **26 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -9903,7 +9903,7 @@ between them because its *shape* does not wait on a transport but its
 | §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **205** | **159** | **27** | **12** | **7** |
+| **Total** | | **205** | **160** | **26** | **12** | **7** |
 
 ### 7.2 The table
 
