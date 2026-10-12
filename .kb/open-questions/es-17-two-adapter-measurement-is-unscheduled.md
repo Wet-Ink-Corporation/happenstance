@@ -149,7 +149,7 @@ found owned by nobody and freezes ES-17 on it.
 
 - **Who took it, and how.** `experiments/append-batch-ownership/`, against
   `happenstance-cloudflare`, the subject ADR-0055 named. Not through `event_store_benchmarks!`,
-  which is compiled out on wasm32 (`crates/happenstance-testkit/src/lib.rs:438`): four arms — the
+  which is compiled out on wasm32 (`crates/happenstance-testkit/src/lib.rs:442`): four arms — the
   adapter, a replica of its write path verified to allocate identically at all 72 sweep points, the
   same statements without the binding clone, and an owned `Vec<Event>` arm. The harness's one-tag
   limit and shared-batch contention scenario, both named above, were sidestepped rather than fixed:

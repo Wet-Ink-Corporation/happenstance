@@ -54,7 +54,7 @@ and its correctness bar, unchanged.
       Verified with `html_no_source` left in place: the scraped snippets link
       into the example crates' own source pages, which exist, so the attribute
       the earlier specs asked not to flip in passing is not flipped.
-- [ ] #173 · rustdoc logo and favicon on the seven published crates — the badge, from
+- [x] #173 · rustdoc logo and favicon on the seven published crates — the badge, from
       `assets/brand/favicon.svg` on `main`, which the public repository serves.
       Built and seen rendering, then **withdrawn**: an attribute block above a
       crate root's items moves every line under it, and `standards/rust/` alone
@@ -62,6 +62,20 @@ and its correctness bar, unchanged.
       It lands either as a same-line addition to an existing crate attribute —
       if `rustfmt` keeps it on one line — or together with a citation repoint,
       in a change that touches nothing else.
+      **Landed, line-neutral in six of the seven.** `rustfmt` splits a long
+      `#![doc(...)]` over several lines, but leaves a meta list that holds a
+      comment as written, so five crate roots carry the two keys on their
+      `#![doc(html_no_source)]` line behind a block comment saying why.
+      `happenstance-core` has no unconditional crate attribute to extend; its
+      commented attribute takes the blank line between the module docs and
+      `#![cfg_attr(...)]`. `happenstance-testkit` is the exception: `cargo xtask
+      lints` scans its sources with a scanner that refuses a block comment, and
+      `#![rustfmt::skip::attributes(doc)]` is unstable as an inner attribute, so
+      its attribute takes `rustfmt`'s five lines and every live citation below it
+      moved by four — eight in `standards/rust/`, one in the specification, and
+      six more in `.kb/`, `references/adr/`, `experiments/` and a Cloudflare test.
+      Historical citations (the dated evaluations, `xtask`'s "as it stood"
+      quote, `.bklg/`) were left as records.
 - [x] `.github/workflows/pages.yml` — build on a pull request, deploy from
       `main`; SHA-pinned and read-only at the top level, as `cargo xtask
       lint-workflows` requires. `site/` is inert to `cargo xtask affected`.
@@ -155,3 +169,7 @@ Voice follows the design system's brand book and `SD-0001`:
   - Zola 0.23 runs Tera 2, which has no macros; the templates use components.
   - The design system's `bundle.css` references `var(--space-3.5)`, which is
     invalid CSS; the vendored copy escapes it and says so.
+- **2026-10-12** — *#173, `claude/project-thread-wx9968`.* The badge landed as the
+  rustdoc logo and favicon on the seven published crates. Six crate roots kept
+  every line where it was; `happenstance-testkit`'s moved by four, with its
+  citations repointed. The generated `index.html` of each was checked for both links.
