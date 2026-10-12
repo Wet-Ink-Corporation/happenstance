@@ -35,7 +35,7 @@ be (`:244-266`):
 If it fired, the successor was `Vec<Event>` and nothing else (`:266`). ADR-0055 restated the
 subject: not SQLite, which binds from the borrow and is null by construction, but
 `happenstance-cloudflare`, whose `write_rows` copies type, payload and metadata into owned
-`SqlValue`s per event (`crates/happenstance-cloudflare/src/event_store.rs:831-836`).
+`SqlValue`s per event (`crates/happenstance-cloudflare/src/event_store.rs:851-856`).
 
 Phase 16 made ES-17 `freeze-by-17`, because the other answer changes `append` on
 `happenstance-core`, the four published adapters, the testkit's own stores and the typed layer,

@@ -2342,9 +2342,10 @@ const REGISTRY: &[Declared] = &[
     },
     // --- CF-40's metadata ceiling (ADR-0043) ---------------------------
     //
-    // One column, three ways to get its refusal wrong, and each fails only the
-    // rule's metadata branch. Each states ONLY `MAX_METADATA_LEN`, so a gate
-    // that forgot the fourth constant would skip all three and every row below
+    // One column, five ways to get its refusal wrong, one per assertion of the
+    // rule's metadata branch, and each fails only that branch. Each states ONLY
+    // `MAX_METADATA_LEN`, so a gate that forgot the fourth constant would skip
+    // all five and every row below
     // would fail as "a declared failure that never ran". Each `expect` pins the
     // `Got` the store produced, so a row cannot pass on another row's defect.
     Declared {
@@ -2383,6 +2384,35 @@ const REGISTRY: &[Declared] = &[
              clipped value is a trace that no longer joins.",
         mode: FailureMode::Assertion,
         expect: &[("append_reports_exceeded_store_limits", "Got Ok(")],
+    },
+    Declared {
+        name: "OffByOneMetadataCeilingStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "a size check written `>=` where `>` was meant: the ceiling is documented as \
+             the most the column holds and checked as the first size it refuses. Every value \
+             above the ceiling is refused correctly, so only an append of exactly the stated \
+             ceiling, the rule's at-ceiling anchor, tells the two apart.",
+        mode: FailureMode::Assertion,
+        // The anchor's own `append_ok`, refused at exactly the ceiling.
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "limit: MetadataLen, len: 4096",
+        )],
+    },
+    Declared {
+        name: "RefuseAfterInsertMetadataStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "the size check moved below the `INSERT`, where the encoded value's length is \
+             easy to read, with no transaction around the two. The caller is told the event \
+             was refused, with the right variant, and the event is in the log anyway; only \
+             reading the log back after the refusal sees it.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "must not be in the log in any form",
+        )],
     },
 ];
 
@@ -2549,6 +2579,12 @@ macro_rules! for_each_mutant {
                 crate::mutants::metadata_ceilings::MisnamedMetadataCeilingStore,
             >,
             crate::mutants::MutantFixture<crate::mutants::metadata_ceilings::TruncatingMetadataStore>,
+            crate::mutants::MutantFixture<
+                crate::mutants::metadata_ceilings::OffByOneMetadataCeilingStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::metadata_ceilings::RefuseAfterInsertMetadataStore,
+            >,
             crate::mutants::MutantFixture<crate::mutants::NormalisingTagStore>,
             crate::mutants::MutantFixture<crate::mutants::KeyedTagMapStore>,
             crate::mutants::MutantFixture<crate::mutants::TrimmingIdentifierStore>,
@@ -2716,9 +2752,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Forty-four rows below are marked [`ModelOutcome::Agreed`] at this commit; two
+/// Forty-six rows below are marked [`ModelOutcome::Agreed`] at this commit; two
 /// of them are the conformant controls and *must* be, which leaves
-/// **forty-two misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **forty-four misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -2790,7 +2826,8 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///   clause that owned the question had not been written. It has now, and the
 ///   rules that own it are named rather than generated.
 /// * `MetadataCeilingStore`, `MisnamedMetadataCeilingStore`,
-///   `TruncatingMetadataStore` — CF-40's metadata ceiling, the same shape one
+///   `TruncatingMetadataStore`, `OffByOneMetadataCeilingStore`,
+///   `RefuseAfterInsertMetadataStore` — CF-40's metadata ceiling, the same shape one
 ///   column over: the generator's metadata is at most nine bytes, and the
 ///   boundary is at 4,096.
 ///
@@ -2905,6 +2942,8 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("MetadataCeilingStore", ModelOutcome::Agreed),
     ("MisnamedMetadataCeilingStore", ModelOutcome::Agreed),
     ("TruncatingMetadataStore", ModelOutcome::Agreed),
+    ("OffByOneMetadataCeilingStore", ModelOutcome::Agreed),
+    ("RefuseAfterInsertMetadataStore", ModelOutcome::Agreed),
     ("NormalisingTagStore", ModelOutcome::Agreed),
     ("KeyedTagMapStore", ModelOutcome::Agreed),
     ("TrimmingIdentifierStore", ModelOutcome::Agreed),
@@ -3467,15 +3506,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 44,
-            "`MODEL_COVERAGE`'s heading says forty-four rows are `Agreed` and the \
+            agreed, 46,
+            "`MODEL_COVERAGE`'s heading says forty-six rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            42,
-            "`MODEL_COVERAGE`'s heading says forty-two misses and the table \
+            44,
+            "`MODEL_COVERAGE`'s heading says forty-four misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls

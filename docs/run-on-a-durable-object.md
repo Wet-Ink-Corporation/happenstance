@@ -296,9 +296,9 @@ The README states the ceilings under *The limits this store declares*:
 | `metadata` per event | 524,288 bytes (512 KiB) |
 
 These numbers are the store's chosen policy, not a measured physical limit. They
-were set comfortably under Cloudflare's documented 2 MiB row cap, and the real
-wall was never located. An event at all four ceilings at once still fits that
-cap. Metadata over its ceiling is refused as `StoreLimit::MetadataLen`. That
+were set under Cloudflare's documented row limit of 2 MB, read as 2,000,000
+bytes, and the real wall was never located. An event at all four ceilings at once
+still fits that limit. Metadata over its ceiling is refused as `StoreLimit::MetadataLen`. That
 limit has no guaranteed minimum, so another store may accept less metadata. The
 crate publishes no constants for them, so copy the numbers from the README rather
 than naming them in code.

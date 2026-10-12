@@ -1,16 +1,18 @@
-//! CF-40's metadata branch (ADR-0043), and the three wrong implementations it
+//! CF-40's metadata branch (ADR-0043), and the five wrong implementations it
 //! rejects.
 //!
-//! A module of its own rather than three more entries in `mutants.rs`, which is
-//! already the longest file in this binary. The three are one column with the
-//! engine configured three ways, and each is a move ADR-0043 names: before
-//! `StoreLimit::MetadataLen` existed, a store that could not hold an event's
-//! metadata could refuse through `AppendError::Store`, which VT-25 forbids, or
-//! name `EventDataLen`, which is about a different field. The third does not
-//! refuse at all.
+//! A module of its own rather than five more entries in `mutants.rs`, which is
+//! already the longest file in this binary. The five are one column with its
+//! refusal got wrong five ways, one per assertion the branch makes. Two are
+//! moves ADR-0043 names: before `StoreLimit::MetadataLen` existed, a store that
+//! could not hold an event's metadata could refuse through `AppendError::Store`,
+//! which VT-25 forbids, or name `EventDataLen`, which is about a different
+//! field. The third does not refuse at all. The fourth refuses at the ceiling
+//! itself, which only the at-ceiling anchor sees, and the fifth refuses after
+//! writing, which only the leftovers check sees.
 //!
-//! All three state the same ceiling, so that every half of the rule's metadata
-//! branch is checked at the same boundary, and all three state **only** this
+//! All five state the same ceiling, so that every half of the rule's metadata
+//! branch is checked at the same boundary, and all five state **only** this
 //! ceiling. That second choice is what makes them reject a gate that forgot the
 //! fourth constant too: with the other three at `None`, a rule gated on three
 //! constants would skip each of these stores rather than run, and
@@ -25,7 +27,7 @@ use happenstance_core::{
 use crate::correct::{self, Allocate, LogError};
 use crate::mutants::Defect;
 
-/// The metadata ceiling all three stores state.
+/// The metadata ceiling all five stores state.
 ///
 /// Small on purpose, and not a measurement: no metadata the rest of the suite
 /// writes comes near it (the largest is `causation`, nine bytes), so each store
@@ -129,8 +131,9 @@ impl Defect for TruncatingMetadataStore {
         head: Option<SequencePosition>,
         allocate: Allocate,
     ) -> Vec<SequencedEvent> {
-        // Cloned because `correct::sequence` stores owned events; an `Event`'s
-        // payloads are `Bytes`, so each clone is a refcount bump, not a copy.
+        // Cloned because `correct::sequence` stores owned events. The payloads
+        // are refcounted `Bytes`, but cloning the `Tags` allocates; that is an
+        // acceptable cost in a test mutant.
         let clipped: Vec<Event> = events
             .iter()
             .map(|event| match event.metadata() {
@@ -142,5 +145,80 @@ impl Defect for TruncatingMetadataStore {
             })
             .collect();
         correct::sequence(&clipped, head, allocate)
+    }
+}
+
+/// The ceiling check is `>=` where `>` was meant.
+///
+/// The commonest edit to a size check: the limit is written down as "the most
+/// metadata we hold" and checked as "the first size we refuse". Every value
+/// above the ceiling is refused correctly, so only an append of exactly the
+/// stated ceiling tells the two apart. That is the rule's at-ceiling anchor,
+/// and without this store nothing showed the anchor can fail.
+pub(crate) struct OffByOneMetadataCeilingStore;
+
+impl Defect for OffByOneMetadataCeilingStore {
+    const NAME: &'static str = "OffByOneMetadataCeilingStore";
+
+    const MAX_METADATA_LEN: Option<usize> = Some(CEILING);
+
+    fn commit(
+        stored: &mut Vec<SequencedEvent>,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        // THE DEFECT: `>=`, so the stated ceiling itself is refused.
+        if let Some(event) = events.iter().find(|event| metadata_len(event) >= CEILING) {
+            return Err(AppendError::ExceedsStoreLimit {
+                limit: StoreLimit::MetadataLen,
+                len: metadata_len(event),
+            });
+        }
+        correct::commit_with(
+            stored,
+            events,
+            condition,
+            Self::ALLOCATE,
+            Self::violation,
+            Self::sequence,
+        )
+    }
+}
+
+/// The ceiling is checked after the row is written, and the row is kept.
+///
+/// The check moved below the `INSERT`, where the encoded value's size is easy
+/// to read, with no transaction around the two. The answer is the right
+/// variant, so a caller is told the event was refused, and the event is in the
+/// log anyway. Only the rule's leftovers check, which reads the log back after
+/// the refusal, can see it.
+pub(crate) struct RefuseAfterInsertMetadataStore;
+
+impl Defect for RefuseAfterInsertMetadataStore {
+    const NAME: &'static str = "RefuseAfterInsertMetadataStore";
+
+    const MAX_METADATA_LEN: Option<usize> = Some(CEILING);
+
+    fn commit(
+        stored: &mut Vec<SequencedEvent>,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        let position = correct::commit_with(
+            stored,
+            events,
+            condition,
+            Self::ALLOCATE,
+            Self::violation,
+            Self::sequence,
+        )?;
+        // THE DEFECT: the refusal is right, and it arrives after the write.
+        if let Some(event) = events.iter().find(|event| metadata_len(event) > CEILING) {
+            return Err(AppendError::ExceedsStoreLimit {
+                limit: StoreLimit::MetadataLen,
+                len: metadata_len(event),
+            });
+        }
+        Ok(position)
     }
 }

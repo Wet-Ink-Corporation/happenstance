@@ -174,8 +174,8 @@
 //! 16,384 tags or 8,192 consecutive inserts, and that host is a Node process
 //! rather than `workerd`, so it does not enforce the platform's documented caps.
 //! They are this adapter's **own refusal policy**, carved from Cloudflare's
-//! documented row cap less the rest of the row; one row at all four is 1,835,264
-//! bytes, inside even a 2,000,000-byte reading of it (ADR-0093). The experiment's
+//! documented row limit of 2 MB, read as 2,000,000 bytes; one row at all four
+//! ceilings is 1,835,264 bytes and fits (ADR-0093). The experiment's
 //! README records the failure to locate the wall as its central finding.
 //!
 //! What *was* measured, on this host and reproducibly: the declared value is

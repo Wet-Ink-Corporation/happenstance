@@ -4686,10 +4686,12 @@ pub mod rules {
     /// The second pair is why each limit is checked twice — once for the answer,
     /// once for what is in the store afterwards.
     ///
-    /// The metadata branch (ADR-0043) has three of its own, one column with its
-    /// refusal got wrong three ways: `MetadataCeilingStore` refuses through
-    /// `AppendError::Store`, `MisnamedMetadataCeilingStore` names
-    /// `EventDataLen`, and `TruncatingMetadataStore` clips and answers `Ok`.
+    /// The metadata branch (ADR-0043) has five of its own, one per assertion:
+    /// `MetadataCeilingStore` refuses through `AppendError::Store`,
+    /// `MisnamedMetadataCeilingStore` names `EventDataLen`,
+    /// `TruncatingMetadataStore` clips and answers `Ok`,
+    /// `OffByOneMetadataCeilingStore` refuses the ceiling itself, and
+    /// `RefuseAfterInsertMetadataStore` refuses after writing the event.
     ///
     /// # The at-the-ceiling append is the anchor
     ///
@@ -4930,8 +4932,8 @@ pub mod rules {
         .await;
         assert!(
             leftovers.is_empty(),
-            "and a store MUST NOT clip the metadata instead: the refused event \
-             must not be in the log in any form. Got {:?}",
+            "and a store MUST NOT write the refused event, whole or with its \
+             metadata clipped: it must not be in the log in any form. Got {:?}",
             positions_of(&leftovers)
         );
     }

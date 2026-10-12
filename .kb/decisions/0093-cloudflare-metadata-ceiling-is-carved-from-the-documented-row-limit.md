@@ -10,7 +10,7 @@ phase: 17b
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed, not yet accepted by the owner. #92 builds ADR-0043's StoreLimit::MetadataLen and
+  Proposed, not yet accepted by the owner, and it awaits the owner's sign-off on a narrowing. #92 builds ADR-0043's StoreLimit::MetadataLen and
   Fixture::MAX_METADATA_LEN, and happenstance-cloudflare is the adapter that states a metadata
   ceiling. The owner decided where it is carved from (wi-f97418): the documented 2 MB Durable
   Object row limit, not the 8,388,637 B wall the deployed object measured. This record decides the
@@ -20,8 +20,11 @@ summary: >-
   event type and the metadata share. A 524,288 B (512 KiB) share makes that 1,835,264 B, which
   leaves 164,736 B for the fixed-width columns and SQLite's record header. 512 KiB is the largest
   power of two that fits. ADR-0043 sets no metadata floor, so no number is too small to be legal.
-  The data ceiling is not re-derived: shrinking a published ceiling would refuse appends that
-  succeed today. A host test, the_four_ceilings_fit_the_documented_row_limit, holds the sum to the
+  The data ceiling is not re-derived. Both options narrow what the adapter accepts: before #92 it
+  had no metadata check, and a deployed object holds rows up to about 8 MB. A metadata ceiling
+  refuses only events carrying more than 512 KiB of metadata, where shrinking data would refuse
+  ordinary payloads that the published README promises. Under ADR-0072's borderline rule this is
+  a narrowing of published behaviour, so the owner decides whether it lands in 17b. A host test, the_four_ceilings_fit_the_documented_row_limit, holds the sum to the
   limit. It implements wi-f97418. It is reopened by a change to the documented row limit, by a
   schema change that widens the event row, or by phase 13 choosing data plus metadata as one
   budget unit.
@@ -44,6 +47,8 @@ last_reviewed: 2026-10-12
 
 **Proposed.** Written by the #92 session and not yet accepted by the owner. It implements the
 owner's decision `wi-f97418`, which chose the source of the carve. This record chooses the share.
+It waits on one further sign-off, set out under *Consequences*: whether the narrowing it makes may
+land in 17b.
 
 ## Context
 
@@ -84,9 +89,14 @@ means.
 - **The measured 8,388,637 B wall.** The owner rejected it (`wi-f97418`).
 - **256 KiB.** It also fits. It was rejected because no evidence asks for the extra 256 KiB of
   headroom, and the larger share is the less surprising one for a caller who writes trace context.
-- **Shrinking `data` to make room.** `MAX_EVENT_DATA_LEN` is published in the crate's README. Lowering
-  it would refuse appends that succeed today, which ADR-0072 does not allow in 17b. The sum fits
-  without it.
+- **Shrinking `data` to make room.** Both this and the chosen ceiling narrow what the adapter
+  accepts today, so neither is free. Before #92 there was no metadata check at all, and a deployed
+  object accepts rows up to about 8 MB, so an event with more than 512 KiB of metadata that lands
+  today is refused after this change. The difference is who each one hits. Lowering
+  `MAX_EVENT_DATA_LEN`, which the crate's README publishes, would refuse ordinary payloads between
+  the new and the old figure, which is the common case for any caller near the documented limit.
+  The metadata ceiling refuses only events whose metadata exceeds 512 KiB, which the framing the
+  typed layer writes (tens of bytes) never approaches. The sum fits without touching `data`.
 - **No metadata ceiling.** It is false of a store whose row is bounded. It would also leave the
   rule's metadata branch skipped on the one adapter that can run it.
 
@@ -97,6 +107,19 @@ means.
   needed.
 - `append_reports_exceeded_store_limits` now runs a metadata branch against this adapter, on the
   shim and under `workerd`.
+- **This narrows published behaviour.** `happenstance-cloudflare` `0.4.1` accepts an event with
+  any amount of metadata up to the platform's row wall. After this change, an event with more than
+  524,288 bytes of metadata is refused as `ExceedsStoreLimit { limit: MetadataLen, .. }`. No
+  signature changes, so `cargo-semver-checks` reports nothing, but an append that succeeds today
+  fails tomorrow. ADR-0072's borderline rule says an item whose answer would break a published
+  crate returns to phase 17, and phase 17 has shipped as `0.4.0`. Applied here, the rule makes this
+  a question for the owner rather than for this record: accept the narrowing in 17b, as a
+  behaviour change the CHANGELOG flags; or hold the ceiling for the next breaking window and ship
+  the variant and the testkit constant alone. The record recommends the first. An event with more
+  than 512 KiB of metadata fits the documented 2 MB only while its other columns stay small, and
+  above about 2 MB of metadata it relies on the measured wall rather than the documented one,
+  which the platform may enforce at any time. It stays `proposed`
+  until the owner answers.
 - The question of whether data and metadata share one budget stays open for phase 13. If it shares
   one, this ceiling is re-derived from that budget.
 

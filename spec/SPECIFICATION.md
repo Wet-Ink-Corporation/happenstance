@@ -8974,13 +8974,13 @@ hard-coded one would be a `MAX_EVENT_DATA_LEN` constant by another route, which
 VT-21 forbids in terms.
 Cases: E2E-35, E2E-42.
 Rejects: a fixture that states a ceiling its store does not have, or does not
-enforce distinguishably. Seven are compiled and registered. `PayloadCeilingStore`,
-`BatchParameterCeilingStore` and `MetadataCeilingStore` refuse through
-`AppendError::Store`; `MisnamedMetadataCeilingStore` names `EventDataLen` for
-metadata; `TruncatingPayloadStore`, `ChunkLosingBatchStore` and
-`TruncatingMetadataStore` do not refuse at all. It also rejects a suite in which
-**no** fixture states a ceiling, where the rule skips everywhere and VT-25 is a
-variant nothing exercises. `GappedPositionFixture` states the first three at
+enforce distinguishably. Nine are compiled and registered: `PayloadCeilingStore`,
+`BatchParameterCeilingStore` and `MetadataCeilingStore` refuse through `Store`;
+`MisnamedMetadataCeilingStore` names `EventDataLen`; `TruncatingPayloadStore`,
+`ChunkLosingBatchStore` and `TruncatingMetadataStore` do not refuse at all;
+`OffByOneMetadataCeilingStore` refuses the ceiling itself; and
+`RefuseAfterInsertMetadataStore` refuses after writing. It also rejects a suite
+where **no** fixture states a ceiling and VT-25 is a variant nothing exercises. `GappedPositionFixture` states the first three at
 VT-21 – VT-24's floors and a metadata ceiling, and is what makes the rule run.
 
 **CF-19.** A rule MUST assert that an append made through one handle is visible

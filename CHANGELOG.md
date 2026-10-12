@@ -52,13 +52,17 @@ not the same as what a user needed to be told.
   skip the rule reports when a fixture states no ceiling now names all four
   constants, so the `NO_STORE_LIMITS` string has a fourth name in it. Compare
   against the constant, not the text.
-- **`happenstance-cloudflare` refuses metadata over 524,288 bytes (512 KiB)**, as
-  `StoreLimit::MetadataLen`, before it sends any SQL. The number is carved from
-  Cloudflare's documented 2 MB row limit, read as 2,000,000 bytes. One event at
-  all four ceilings is 1,835,264 bytes, so it still fits
+
+### Changed
+
+- **Behaviour change: `happenstance-cloudflare` refuses metadata over 524,288
+  bytes (512 KiB)**, as `StoreLimit::MetadataLen`, before it sends any SQL. An
+  event with more metadata was accepted before and is now refused; metadata up
+  to that size is accepted as before. The number is carved from Cloudflare's
+  documented 2 MB row limit, read as 2,000,000 bytes, so one event at all four
+  ceilings is 1,835,264 bytes and still fits
   ([ADR-0093](.kb/decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md),
-  proposed). Metadata up to that size was accepted before and still is. An event
-  with more was accepted before and is now refused.
+  proposed, awaiting the owner's sign-off on the narrowing).
 
 ## [0.4.1] — 2026-10-12
 

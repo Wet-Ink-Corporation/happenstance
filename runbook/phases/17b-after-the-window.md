@@ -69,10 +69,10 @@ spelling, settled by compiling it.
 - [x] #92 · **CF-40's `MetadataLen`, built under ADR-0043.** `StoreLimit::MetadataLen`
       in `happenstance-core`; a defaulted `MAX_METADATA_LEN` on the testkit's
       `Fixture`; a metadata branch in `append_reports_exceeded_store_limits`; its
-      wrong implementations in the testkit's `tests/`. **Done:** three wrong stores
-      (`Store`, `EventDataLen`, clipped), and `happenstance-cloudflare`'s ceiling is
+      wrong implementations in the testkit's `tests/`. **Done:** five wrong stores
+      (`Store`, `EventDataLen`, clipped, off by one, refused after the write), and `happenstance-cloudflare`'s ceiling is
       512 KiB, carved from the documented 2 MB row limit rather than the measured
-      wall (`wi-f97418`, ADR-0093, proposed). Phase 13 then decides the budget unit.
+      wall (`wi-f97418`; ADR-0093, proposed, the narrowing awaiting the owner). Phase 13 decides the budget unit.
 - [ ] #93 · **The two typed-layer closures**, each in its own record:
       - `tuple-boundary-heterogeneous-event-type` — option A taken deliberately:
         one DCB boundary folds one domain enum; a `compile_fail` doctest fences it,
@@ -115,7 +115,8 @@ in this file's session log.
   owner.
 - 2026-10-12 — #92: `StoreLimit::MetadataLen` (floor 0) and `Fixture::MAX_METADATA_LEN`
   are in the tree, and `append_reports_exceeded_store_limits` gained a metadata branch.
-  `MetadataCeilingStore`, `MisnamedMetadataCeilingStore` and `TruncatingMetadataStore`
-  each fail it, and `GappedPositionStore` passes it. `happenstance-cloudflare` states
+  Five wrong stores, one per assertion of the branch (ADR-0093 lists them), each fail
+  it, and `GappedPositionStore` passes it. `happenstance-cloudflare` states
   512 KiB, carved from the documented row limit: one row at all four ceilings is
-  1,835,264 B against 2,000,000. ADR-0093 records the share and is proposed.
+  1,835,264 B against 2,000,000. ADR-0093 records the share and is proposed: refusing more
+  metadata than that narrows published behaviour, and the owner decides whether it lands in 17b.

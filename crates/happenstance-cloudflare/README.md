@@ -177,12 +177,11 @@ wall** — the difference is the whole of what is honest here. No physical wall 
 observable on the executing host at eight times the payload figure, sixteen times
 the tag figure or eight times the batch figure, and that host is a Node process
 rather than `workerd`, so it does not enforce the platform's documented caps at
-all. The first three are seeded from Cloudflare's documented 2 MiB row cap and
-reduced by this adapter's measured per-row overhead. Each clears the
-specification's guaranteed minimum by a wide margin. The metadata ceiling has no
-minimum to clear (ADR-0043). It is carved from the same documented limit, read as
-2,000,000 bytes, so that one row at all four ceilings is 1,835,264 bytes and still
-fits ([ADR-0093](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md)). What *was* measured, twice
+all. All four are carved from Cloudflare's documented row limit of 2 MB, read as
+2,000,000 bytes, less this adapter's measured per-row overhead. The first three
+clear the specification's guaranteed minimum by a wide margin. The metadata
+ceiling has no minimum to clear (ADR-0043), and it is sized so that one row at
+all four ceilings is 1,835,264 bytes and still fits ([ADR-0093](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md)). What *was* measured, twice
 and reproducibly: the declared value is accepted and read back byte-for-byte, and
 one more is refused, naming the ceiling it crossed.
 

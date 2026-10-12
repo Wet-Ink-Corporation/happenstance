@@ -35,7 +35,7 @@ Should ADR-0084's adapter-side Postgres parameter-count check land before 0.4.0 
 
 ADR-0084 is accepted; its Postgres parameter-count check is the trace table's one Pending row.
 
-Raised by an agent (marker) as a question and captured by Weigh-In as `wi-7e9a97`. Anchor: `CHANGELOG.md:591`.
+Raised by an agent (marker) as a question and captured by Weigh-In as `wi-7e9a97`. Anchor: `CHANGELOG.md:565`.
 
 ## Decision drivers
 
@@ -59,7 +59,7 @@ Ship 0.4.0, check in 0.4.x
 
 ## Evidence
 
-- `CHANGELOG.md:591`: 0.4.0 trace table: ADR-0084 Postgres check Pending
+- `CHANGELOG.md:565`: 0.4.0 trace table: ADR-0084 Postgres check Pending
 
 ## Decision outcome
 

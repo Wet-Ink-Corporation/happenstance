@@ -88,7 +88,7 @@ until `2.0`, and in `1.x` `Codec` can grow only defaulted items: methods with bo
 associated consts with defaults. A new associated *type* is ruled out too, because associated type
 defaults are not stable Rust. A new required item would be `E0046` in every foreign impl. This
 is the same constraint `EventStore` already lives under, and the reason `reads_tag` was added with
-a default (`CHANGELOG.md:1419-1424`).
+a default (`CHANGELOG.md:1449-1454`).
 
 **Coherence, which is a separate fence.** The orphan rule says an `impl` must be in the crate
 that owns the trait or the type. It is why nobody outside `happenstance` can override `reads_tag`
@@ -116,7 +116,7 @@ They are two different walls, and this record leaves both standing.
    - `commit_with`'s page is the door for a codec of your own, and a test holds its pointer to the
      limit section (`tests/codec_extension_point.rs:169-185`).
    - `reads_tag` serves only a foreign codec. The three built-ins never override it, and its
-     CHANGELOG entry says so (`CHANGELOG.md:1419-1432`).
+     CHANGELOG entry says so (`CHANGELOG.md:1449-1462`).
 2. **Sealing leaves a valid build that compiles but cannot be used.** `default = ["std", "memory",
    "json"]`, and each codec is its own optional feature (`crates/happenstance/Cargo.toml:105`,
    `:120-127`). `default-features = false` with none of `json`, `postcard` or `cbor` turned on is
