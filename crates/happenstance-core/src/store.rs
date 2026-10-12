@@ -1191,10 +1191,16 @@ help: disambiguate the method for candidate #2
     /// not sufficient: the copying itself is upstream behaviour, and a
     /// `trait-variant` release that stopped doing it would leave this test green
     /// and `SendEventStore` carrying no search key at all. Nothing in this
-    /// repository can observe the expansion, so the version is asserted instead —
-    /// the gate builds `--locked`, so the resolved version cannot move without
-    /// someone changing it deliberately, and changing it is the moment to re-read
-    /// `variant.rs`. (The other half of the mechanism has a standing guard already:
+    /// repository can observe the expansion, so the version is asserted instead.
+    /// That holds for this workspace's own builds only. Its gate builds `--locked`,
+    /// so the resolved version cannot move without someone changing it deliberately,
+    /// and changing it is the moment to re-read `variant.rs`. A consumer's resolve
+    /// is not locked and can float past it (ADR-0092). There the derivation's
+    /// *types* are held by `derivation.rs`, compiled into every build of this
+    /// crate, and the copying is held only by the guard in the parenthesis below,
+    /// which a consumer's build does not run. The weekly `floating-deps` CI job
+    /// runs `tests/trait_variant_pin.rs` against an unlocked resolve, so a new
+    /// release turns that test red there first. (The other half of the mechanism has a standing guard already:
     /// `SendEventStore` has no doc comment of its own, so if attributes stopped
     /// being copied, `missing_docs` — `warn` in the workspace lints and `-D
     /// warnings` in the gate — would fail the build.)

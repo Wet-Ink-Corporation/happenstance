@@ -766,6 +766,19 @@ leave every merge with the owner.
 | — | [`kb-decision-wi-f97418`](../decisions/wi-f97418-should-92-carve-cf-40-s-cloudflare-metadata.md) | CF-40's Cloudflare metadata ceiling is carved from the documented 2 MB row limit | accepted | 17b | — |
 | — | [`kb-decision-wi-fa5c7b`](../decisions/wi-fa5c7b-may-the-afk-session-build-one-way-17b-prs-83-93.md) | An unattended session builds the one-way 17b PRs; the owner merges them | accepted | 17b | — |
 
+## 2026-10-12: ES-7 frozen, and the trait-variant caret kept (#88)
+
+ADR-0092 records `wi-727ec8` and answers `kb-open-question-trait-variant-caret-001`, written
+straight here with no intake step. The caret stays. A derivation contract compiled into
+`happenstance-core`'s library code holds the shape `trait_variant` emits in every build of the
+crate, a consumer's included, and a non-gating weekly `floating-deps` job resolves without the
+lock. ES-7 is `[FROZEN]`. 0090 and 0091 are held by an unmerged pull request, which is why the
+number skips them.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0092 | [`kb-decision-0092`](../decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md) | The trait-variant caret stays, a derivation contract compiled into happenstance-core holds the shape, and ES-7 is frozen | accepted | 17b | supersedes `kb-open-question-trait-variant-caret-001` |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

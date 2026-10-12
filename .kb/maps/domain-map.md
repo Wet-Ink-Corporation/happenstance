@@ -645,7 +645,7 @@ CF-39-shaped clause after ADR-0042's retraction, so a fixture can declare it and
 `kb-open-question-projection-module-exemption-scope-001` (added 2026-09-07 — ADR-0036's
 unstable-projection exemption text names only `happenstance-core` and `happenstance`;
 `happenstance-testkit`'s projection module is unconditional and un-exempt as written),
-`kb-open-question-trait-variant-caret-001` (added 2026-09-07 — `trait_variant`'s blanket impl is
+`kb-open-question-trait-variant-caret-001` (**superseded** 2026-10-12 by `kb-decision-0092`; added 2026-09-07 — `trait_variant`'s blanket impl is
 pinned only by a caret, guarded only by `#[cfg(test)]`, which does not travel to a consumer of the
 three already-published crates),
 `kb-open-question-es-11-sqlite-ceiling-sample-cost-001` (added 2026-09-07 — ES-11's ceiling sample

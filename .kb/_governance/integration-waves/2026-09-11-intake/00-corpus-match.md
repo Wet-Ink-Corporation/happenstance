@@ -100,7 +100,7 @@ xtask/src/lints.rs:2003     (cited as CITATION_SCAN_EXCLUDE)              ✗ DR
 .kb/decisions/0058-…:33                                                   ✓ the line; its ranges now read :1396-1431, repointed at 4e13ee2
 a4616ca, 025f300, 6acdf24, a0a925b, 4e13ee2                               ✓ all five commits resolve; messages match the file's account
 REMEDIATION-HANDOVER.md:143                                               ✓ "~1,200" under .kb/_intake, beside ~2,700 and ~25,700
-.github/workflows/ci.yml:243                                              ✓ `if: false` on the backlog job
+.github/workflows/ci.yml:251                                              ✓ `if: false` on the backlog job
 CLAUDE.md:216                                                             ✓ the "edited in place" transcript the finding rests on
 
 ── adr-0004 ──

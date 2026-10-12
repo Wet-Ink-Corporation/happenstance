@@ -675,7 +675,7 @@ choice is `open-questions/README.md`'s *"a known gap the work uncovered and did 
 **What is true today** (at `86a410c`): the check is a dirty-tree guard; it refuses an
 uncommitted edit to an accepted body and passes the moment the edit is committed; it cannot tell
 a referent repair (`4e13ee2`, three line ranges) from a reversal; the `backlog` CI job that would
-run it is `if: false` (`.github/workflows/ci.yml:243`) and, enabled, would run it against a tree
+run it is `if: false` (`.github/workflows/ci.yml:251`) and, enabled, would run it against a tree
 equal to `HEAD`. Its honest reach is *pre-commit*, not *pre-merge*. **What is not decided:** which
 of the three remedies, and whether a referent-only carve-out can be stated mechanically or only
 as the governance atom's judgement test. **What forces it:** the next referent repair to an

@@ -57,6 +57,12 @@ spelling, settled by compiling it.
       schedule. The falsifier is restated to cover a consumer's unlocked resolve.
       An exact `=0.1.3` pin is the alternative, and the owner may prefer to take
       it inside phase 17 (ADR-0072's borderline rule).
+      **Built:** the owner kept the caret (`wi-727ec8`), and ES-7 is `[FROZEN]` by
+      [ADR-0092](../../.kb/decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md).
+      The contract is `crates/happenstance-core/src/derivation.rs`; three wrong
+      derivations compiled green before it and fail it after. The box stays open
+      until the `floating-deps` job has been watched failing once, through its
+      `floating_deps_prove_red` dispatch input, which needs a push.
 - [ ] #90 · **A minimal-versions CI job.** After a lockstep `1.0.0` the crates version
       independently (ADR-0066), and each adapter declares the core it needs as
       `happenstance-core = "1.N"`. A lower bound nothing ever resolves against is
@@ -113,3 +119,8 @@ in this file's session log.
   the revert. `cargo semver-checks` against `0.4.0` reports nothing for all seven
   crates, and `0.4.1` is cut. #83, #85, #88, #92 and #93 are one-way and wait on the
   owner.
+- 2026-10-12 — #88: the owner kept the caret (`wi-727ec8`). ADR-0092 freezes ES-7 and
+  adds the derivation contract and the `floating-deps` job. Owed after the push: one
+  `CI` dispatch with `floating_deps_prove_red` ticked, expected red at the contract
+  step with `E0277` in `derivation.rs`, then one plain dispatch, expected green. Both
+  run URLs go here.

@@ -250,7 +250,7 @@ routed CF-39 to phases 8 and 10 (`:199`) is corrected.
 - **CF-32 is unchanged.** ADR-0057 is executed at phase 17.
 - **ADR-0044 sets a named limit on the promise.** An adapter's major follows its
   re-exported driver's breaking version. `happenstance-core`'s
-  `pub use futures_core` (`lib.rs:176`) makes `futures-core 0.3` a named
+  `pub use futures_core` (`lib.rs:177`) makes `futures-core 0.3` a named
   accepted risk.
 
 This closes **`kb-open-question-adapter-version-lockstep-001`**.

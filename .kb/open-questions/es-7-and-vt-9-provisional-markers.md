@@ -327,3 +327,14 @@ VT-9 freezes at phase 13 on a sync-testkit rule that ingest preserves `RecordedA
 The PS-4 limb is `kb-open-question-apply-synchronous-live-store-001`'s, in phase 17's `apply`
 record. Citation drift: ES-7 is now `spec/SPECIFICATION.md:2909`, VT-9 `:958`. **Owners now:
 phase 17 (ES-7, PS-4's limb), phase 13 (VT-9).**
+
+## 2026-10-12 — ES-7's half is answered
+
+**ES-7 is `[FROZEN]`** by `kb-decision-0092`, the record answering
+`trait-variant-caret-resolves-past-the-locked-gate` (`wi-727ec8`), at phase 17b rather than 17
+because ADR-0072 moved it there. Its falsifier is restated to one that can still fire: a
+`trait-variant` release, resolved without a lock, under which a downstream direct impl collides
+or a `SendEventStore` stops being an `EventStore`. A derivation contract in `happenstance-core`'s
+library code fails the second in a consumer's own build, and the weekly `floating-deps` job sees
+both before a consumer does. Measured: three wrong derivations compiled green against the core
+before the contract and fail it after. **VT-9's half is unchanged, and so is its owner, phase 13.**
