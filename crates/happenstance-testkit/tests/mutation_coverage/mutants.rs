@@ -675,7 +675,7 @@ impl Defect for ItemOrderedUnionStore {
 ///
 /// The optimisation ES-15's `Rejects:` names and that no rule caught until
 /// `query_union_is_item_concatenation` landed. `QueryItem::new` already sorts
-/// and deduplicates *types* (`query.rs:62-67`), so extending the idea one level
+/// and deduplicates *types* (`query.rs:113-115`), so extending the idea one level
 /// up — group the items by their type set, emit one `type_id IN (…)` clause per
 /// distinct set — looks like the same move. It is not: the tag half of every
 /// swallowed item goes with it, so the query silently selects a **smaller** set

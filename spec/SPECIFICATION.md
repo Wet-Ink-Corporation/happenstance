@@ -706,7 +706,7 @@ adapter for a payload decode.
 `Rejects:` an ingest path
 that writes the origin's identity into `Event::metadata`. `Tags` and
 `EventType` are the only things `QueryItem::matches` looks at
-(`crates/happenstance-core/src/query.rs:113-116`), so an identity in `metadata`
+(`crates/happenstance-core/src/query.rs:157-160`), so an identity in `metadata`
 is structurally invisible to the port, and a peer that must deserialise opaque
 bytes to decide whether it has already seen an event has broken ADR-0003 at the
 exact point ADR-0003 claims to win.
@@ -1490,7 +1490,7 @@ handler in a library crate cannot use `anyhow`, calls `Tags::from_pairs`
 propagates with `?` — and needed a bespoke union enum before it wrote a line of
 domain logic. Every code snippet in all six scenarios has this shape, and every
 one of them compiled only inside a `Box<dyn core::error::Error>` doctest, which
-is how the crate's own doctests escape it (`query.rs:135-148`, `append.rs:54-63`).
+is how the crate's own doctests escape it (`query.rs:179-192`, `append.rs:54-63`).
 **Discharged at phase 4:** `InvalidQuery::Tag(#[from] InvalidTag)`
 (`error.rs:106-114`) is the variant and the `From` impl in one. Collapsing the
 three enums into one `InvalidInput` was the alternative and it loses: the three
@@ -1787,7 +1787,7 @@ MUST carry `#[non_exhaustive]`.
 `Cases:` E2E-40
 `Rejects:` `Query::Items(Vec::new().into_boxed_slice())` from any downstream
 crate — the exact state `Query::from_items` rejects with `InvalidQuery::NoItems`
-(`query.rs:185-191`). `Query::matches` then returns `false` for everything, so an
+(`query.rs:229-235`). `Query::matches` then returns `false` for everything, so an
 `AppendCondition` built from it can never be violated: a conditional append that
 is silently unconditional. The crate's headline design claim is false at the
 boundary that matters, and it is one line of downstream code away.
@@ -1805,7 +1805,7 @@ name the constructor, so `Query::Items { .. }` and `Query::Items { 0: held, .. }
 both compile, and the trailing `..` is the compiler telling the reader that the
 payload is the crate's business. The property is unchanged — readable, not
 constructible — and only the spelling was wrong; `query.rs`'s own doc was
-corrected first (`query.rs:156-168`). `Query::items()` (`query.rs:203-209`)
+corrected first (`query.rs:200-212`). `Query::items()` (`query.rs:247-253`)
 remains the ordinary read path and needs no change.
 
 #### VT-27 — A `Query` carries no positions, and a decision model composes by reading its fragments separately
@@ -1831,7 +1831,7 @@ one.
 This is the section's new finding and it deserves its cost stated plainly rather
 than resolved by a field.
 
-`ReadOptions` carries one `from` for the entire read (`query.rs:269-289`) and
+`ReadOptions` carries one `from` for the entire read (`query.rs:313-333`) and
 `read` applies one `ReadOptions` to the whole `Query` (`store.rs:177-181`). So
 Wattline's four-item `StartSession` boundary cannot bound its 828,000-event fleet
 item without blinding the three items whose definitional events sit far below any
@@ -1879,9 +1879,9 @@ expressible through the API. A rule recorded as unwritable, with an owner and a
 reason, is not a gap — that is the ownership distinction §7.4 turns on, and it is
 why the name was left here rather than dropped until it could be written.
 
-**Discharged at phase 4.** `limit` is `Option<usize>` (`query.rs:286-288`), the
-builder stores `Some(0)` verbatim (`query.rs:343-347`),
-`zero_limit_means_zero_events` (`query.rs:553-566`) asserts it, and
+**Discharged at phase 4.** `limit` is `Option<usize>` (`query.rs:330-332`), the
+builder stores `Some(0)` verbatim (`query.rs:387-391`),
+`zero_limit_means_zero_events` (`query.rs:597-610`) asserts it, and
 `read_limit_zero_yields_nothing` is in the suite
 (`crates/happenstance-testkit/src/suite.rs:1539`) and in
 `for_each_event_store_rule!`
@@ -1916,9 +1916,9 @@ owns (*H*, ∞) is the shape every backfill-beside-tail deployment wants, and
 position arithmetic as a count.
 
 **Discharged at phase 4.** The field is on the struct
-(`query.rs:269-289`), the builder is `const` and inclusive
-(`query.rs:318-330`), and `to_is_recorded_and_independent_of_from`
-(`query.rs:568-578`) asserts that direction reverses what the two fields bound
+(`query.rs:313-333`), the builder is `const` and inclusive
+(`query.rs:362-374`), and `to_is_recorded_and_independent_of_from`
+(`query.rs:612-622`) asserts that direction reverses what the two fields bound
 rather than reassigning them. The MUST stands over every adapter still to come.
 
 **This clause is not a fix for E2E-04.** An upper bound does not let one item of
@@ -2044,10 +2044,10 @@ side there
 `Rejects:` an adapter that deduplicates or reorders a query's items as an
 optimisation in a way that is not match-set preserving — natural to reach for,
 because `QueryItem::new` already sorts and deduplicates *types*
-(`query.rs:62-67`), so extending the idea to items looks like the same move. Such
+(`query.rs:113-115`), so extending the idea to items looks like the same move. Such
 an adapter passes every existing rule and breaks the fan-out projection runner,
 which reads one union query and re-filters each projection's stream locally with
-`Query::matches` (`query.rs:216-226`) and is correct only if the algebra holds.
+`Query::matches` (`query.rs:260-270`) and is correct only if the algebra holds.
 
 `Query::matches` is `pub` precisely so the local re-filter is available. Nothing
 in the crate states the algebra it depends on and no rule pins it, which is the
@@ -2092,8 +2092,8 @@ desynchronisation and WF-3's match-everything-by-accident in one commit.
 Two divergences from the reference are known and are not defects under this
 clause. Both halves of them were recorded backwards. **happenstance** emitted a
 bare sequence — `Query::Items` went through `serialize_some` until ADR-0016 §7,
-and now goes through `QueryWire::Items` (`query.rs:415-423`), the mirror whose
-own doc comment records the encoding it replaced (`query.rs:396-403`) — while
+and now goes through `QueryWire::Items` (`query.rs:468-473`), the mirror whose
+own doc comment records the encoding it replaced (`query.rs:456-463`) — while
 **the reference** is the `{items: […]}` side: its `Query` is `{ items:
 QueryItem[]; matchesEvent(…); merge(…) }` and `queryAll()` returns `{items: []}`.
 happenstance did not fail to *parse* `[]` before ADR-0016 §7 either: it parsed to
@@ -2132,7 +2132,7 @@ below maximum size: deleting it is deleting the rule.
 `Cases:` E2E-33, E2E-35, E2E-42
 `Rejects:` the five `skip_serializing_if` attributes ADR-0016 §3 deleted — two on
 `EventWire`'s `tags` and `metadata` (`event.rs:739-750`), two on `QueryItemWire`'s
-`types` and `tags` (`query.rs:370-375`) and one on `GuardWire`'s `after`
+`types` and `tags` (`query.rs:414-419`) and one on `GuardWire`'s `after`
 (`append.rs:286-291`), each anchored on the struct that carried it rather than on
 the line it sat on, because a line number for deleted code can only ever be
 wrong. The attribute shortens the field count passed to `serialize_struct`; a
@@ -2169,7 +2169,7 @@ absent field, or as an empty sequence. `Option<Query>` MUST round-trip, with
 `Cases:` E2E-40
 `Rejects:` the implementation this clause replaced. `Serialize` mapped `All` to
 `serialize_none` and `Items` to `serialize_some` — the encoding the mirror that
-took its place now records as the one that lost (`query.rs:396-403`) — so
+took its place now records as the one that lost (`query.rs:456-463`) — so
 `Query::All` became JSON `null`, `Some(Query::All)` and `None` were
 indistinguishable, and serde's `missing_field` succeeds for `Option`-shaped
 types — which meant a *missing* field decoded to the broadest condition in the
@@ -2183,7 +2183,7 @@ This reverses a documented decision, not an oversight: the comment ADR-0016 §7
 deleted stated the intent — "`None` is the match-all query; `Some(items)` is a
 filtered one" — and the ADR that lands a reversal must say it is reversing a
 choice. That is why the mirror which replaced it spends ten lines on the
-encoding it beat (`query.rs:396-403`) rather than simply describing itself. The
+encoding it beat (`query.rs:456-463`) rather than simply describing itself. The
 `Option`-shaped encoding was chosen for compactness in JSON and it is exactly
 the compactness that makes the two values indistinguishable.
 
@@ -2432,8 +2432,8 @@ limit.
 obvious implementation and which would let a peer construct every value the
 constructors exist to prevent — an unsorted `Tags`, an unconstrained `QueryItem`,
 a zero-item `Query` — directly in the receiver's memory. The current impls
-already do this correctly (`tag.rs:538-545` re-canonicalises, `query.rs:387-392`
-re-validates through `QueryItem::new`, `query.rs:425-440` routes `Query` through
+already do this correctly (`tag.rs:538-545` re-canonicalises, `query.rs:447-452`
+re-validates through `QueryItem::new`, `query.rs:499-514` routes `Query` through
 `from_items`, and `append.rs:315-343` rejects an empty guard sequence) and E2E-40
 credits them: "the envelope defends its own invariants; only cost is unguarded".
 This clause is what stops that being an accident.
@@ -2526,7 +2526,7 @@ meaning is negotiated between the two peers.
 
 The impls this clause deleted were on no wire path that existed and were
 maintenance the crate does not owe. What stands in their place is a comment
-saying so where the next author will look for them (`query.rs:442-448`), because
+saying so where the next author will look for them (`query.rs:516-522`), because
 a deletion nothing explains is a deletion somebody undoes. **The claim that their
 whole-struct `#[serde(default)]` was a fifth hazard of WF-2's class is
 withdrawn**, measured:
@@ -3338,7 +3338,7 @@ existing rules never hit it because they pass the temporary and drain the stream
 inside one expression, which is what the suite's `read_ok` helper does.
 
 The alternative was taking `Query` by value. It loses on cost and on retry
-ergonomics: `Query::Items` is a `Box<[QueryItem]>` (`query.rs:170`) whose items
+ergonomics: `Query::Items` is a `Box<[QueryItem]>` (`query.rs:214`) whose items
 each own a `Box<[EventType]>` and a `Tags`, so by-value would allocate on every
 read, and a command handler that reads with a query and then reuses it in the
 append condition — the documented shape (`append.rs:49-63`) — would clone it
@@ -3526,7 +3526,7 @@ re-derive the merge.
   `Query::all()` entirely, which is silent data loss on the query every
   projection runner starts from. And
   an adapter that sorts and dedups *items* as an optimisation —
-  `QueryItem::new` already sorts and dedups *types* (`query.rs:62-67`), so
+  `QueryItem::new` already sorts and dedups *types* (`query.rs:113-115`), so
   extending it one level up is the natural next step.
 
   **That third one has no rule, and saying so is the honest answer rather than a
@@ -3545,7 +3545,7 @@ re-derive the merge.
   registered adapter this clause's third `Rejects:` entry had been describing
   with nothing to point at. The fan-out projection
   runner (one read of the union query, twenty local re-filters through
-  `Query::matches`, `query.rs:216-226`) rests entirely on this algebra, and
+  `Query::matches`, `query.rs:260-270`) rests entirely on this algebra, and
   nothing in the crate states it.
 
 #### ES-16 — An upper bound on a read
@@ -3566,9 +3566,9 @@ adapter that ignores an unknown field silently returns too much. **If `to` lande
 at all it had to land before the first adapter shipped**, and none has.
 
 **Discharged at phase 4.** `ReadOptions` now carries `from`, `to`, `backwards`
-and `limit` (`query.rs:269-289`), with `to` inclusive in both directions
-(`query.rs:318-330`) and asserted by `to_is_recorded_and_independent_of_from`
-(`query.rs:568-578`). The state this clause was written against is the one it
+and `limit` (`query.rs:313-333`), with `to` inclusive in both directions
+(`query.rs:362-374`) and asserted by `to_is_recorded_and_independent_of_from`
+(`query.rs:612-622`). The state this clause was written against is the one it
 forbids: with `from`, `backwards` and `limit` and no upper bound, a backfill
 worker could not be given the closed window [1, *H*] while a tail worker owned
 (*H*, ∞), and `limit` could not stand in, because `event.rs:215-217` forbids
@@ -3991,7 +3991,7 @@ The unknown outcome of ES-23 is resolvable only if a caller can ask "did my even
 land?" without knowing a position. Today it cannot: `Event` is
 `(event_type, data, tags, metadata)` (`event.rs:321-326`) and carries no identity,
 `append` has no slot for a caller-supplied one (`store.rs:271-275`), and a query
-matches on type and tags only (`query.rs:113-116`), so an identity in `metadata`
+matches on type and tags only (`query.rs:157-160`), so an identity in `metadata`
 is structurally unqueryable and breaks ADR-0003 at the point ADR-0003 claims to
 win.
 
@@ -6061,7 +6061,7 @@ marker here or there, and §7.2 daggers neither of the two rows that name it
 **Cases:** E2E-15, E2E-16.
 **Rejects:** a runner that computes its resume point as
 `checkpoint.unwrap_or(FIRST)` and reads `ReadOptions::from` that value —
-`from` is inclusive (`query.rs:270`, `store.rs:176`) — which double-applies event
+`from` is inclusive (`query.rs:314`, `store.rs:176`) — which double-applies event
 1 for a genuine checkpoint of `Some(1)`. The mirror wrong implementation is the
 operator's workaround itself: `commit(empty, id, FIRST)` reads back as
 `Some(1)`, the runner advances past it, and event 1 is skipped permanently,
@@ -6292,7 +6292,7 @@ into a visible rebuild.
 This clause has a dependency on §2 and §2 does not supply it directly, so the
 resolution is stated here rather than left as a blocker. A digest needs a
 canonical encoding of `Query`. `QueryItem::new` already sorts and dedups types
-(`query.rs:62-67`) and VT-16 makes `Tags` canonical, but **nothing canonicalises
+(`query.rs:113-115`) and VT-16 makes `Tags` canonical, but **nothing canonicalises
 item order and VT-31 deliberately declines to** — item order is not observable in
 the match set, so making it part of the value would be pinning something the
 algebra says is free. The digest therefore MUST impose its own order: encode each
@@ -7287,7 +7287,7 @@ Cases: E2E-33, E2E-34, E2E-36.
 
 *Rejects:* a peer that carries the identity in `Event::metadata`. Metadata is
 opaque `Bytes` (`event.rs:325`, `:400-401`) and `QueryItem::matches` filters on
-type and tags only (`query.rs:113-116`), so the identity a peer is instructed
+type and tags only (`query.rs:157-160`), so the identity a peer is instructed
 to carry is structurally unreachable from anything the port exposes. A peer
 that must parse opaque bytes to dedupe has broken ADR-0003 at the exact point
 ADR-0003 claims to win — and ADR-0003's own lift condition is
@@ -7749,7 +7749,7 @@ contract that has spent this section arguing for exactly one.
 
 It rejects, more importantly, **silence**. A domain that needs a causal parent
 has a working answer today and it is one line: put the parent's `EventId` in a
-tag. That makes it queryable (`query.rs:113-116` matches on tags), replicable
+tag. That makes it queryable (`query.rs:157-160` matches on tags), replicable
 (tags travel), and reasonable-about without decoding — which is SY-35. The cost
 is the cost of any high-cardinality tag and the domain pays it knowingly. What
 must not happen is a domain discovering the absence at ingest time and inventing
@@ -7811,7 +7811,7 @@ first scoped adapter happens to do.
 before it is evaluated.**
 
 `[PROVISIONAL — falsified if a cost policy expressible over `Query`'s surface
-(types and tags only, `query.rs:111-115`) can be shown to admit an unbounded scan
+(types and tags only, `query.rs:155-159`) can be shown to admit an unbounded scan
 anyway, in which case the seam is in the wrong place and belongs in the adapter.
 Falsification test: construct a query that satisfies any tag-based policy and
 still scans the log.]`
@@ -7830,7 +7830,7 @@ in the crate's prose.
 What already defends itself, and should not be re-defended: `Query::All` cannot
 be smuggled as an empty items list — `Query::from_items` rejects it
 (`error.rs:94-98`) — and `QueryItem` and `Tags` re-validate on deserialisation
-(`query.rs:387-392`, `tag.rs:538-545`), so non-canonical tags and fully
+(`query.rs:447-452`, `tag.rs:538-545`), so non-canonical tags and fully
 unconstrained items cannot reach memory. The envelope defends its own invariants.
 Only cost is unguarded.
 

@@ -93,8 +93,8 @@ review, fails only once the adapter crate is compiled, and the diagnostic says
 "private tuple variant" — which sends the author hunting for a missing `pub` in
 the contract crate instead of for the attribute that is doing exactly its job.
 
-**Evidence.** `crates/happenstance-core/src/query.rs:156 (so that no downstream crate can build one directly)` ·
-`crates/happenstance-core/src/query.rs:204 (pub fn items)` ·
+**Evidence.** `crates/happenstance-core/src/query.rs:200 (so that no downstream crate can build one directly)` ·
+`crates/happenstance-core/src/query.rs:248 (pub fn items)` ·
 [SPECIFICATION VT-26](../../spec/SPECIFICATION.md)
 
 ## RS-13-3. Reach for `#[non_exhaustive]` with public fields when a value must be readable but not fabricable.

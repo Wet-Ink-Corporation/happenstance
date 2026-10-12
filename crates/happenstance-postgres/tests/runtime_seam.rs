@@ -210,22 +210,45 @@ fn a_handle_captured_on_a_dropped_runtime_strands_nothing() {
     let seeded = seed_on(&fixture, &second);
     drop(first);
 
-    let appended = second.block_on(async {
+    // This test is about whether each call succeeds from B. Its values are
+    // asserted only as far as the store promises them. The fixture declines
+    // `READ_YOUR_OWN_WRITES` because the ES-10 frontier is cluster-wide
+    // (ADR-0024, ADR-0071): a write transaction open anywhere on the cluster
+    // holds it back. One opened between the two appends leaves head on the
+    // seed, which is what the merge queue saw (#272). One opened before the
+    // seed leaves head at `None` and the read empty. Neither is a failure here.
+    let (appended, head) = second.block_on(async {
         let appended = match store.append(&[event("FromB")], None).await {
             Ok(appended) => appended,
             Err(error) => panic!("ADR-0022 §9: an append from B failed as {error:?}"),
         };
         assert!(appended > seeded, "B's append lands after the seed");
-        match store.head().await {
-            Ok(head) => assert_eq!(head, Some(appended), "head names B's append"),
+        let head = match store.head().await {
+            Ok(head) => head,
             Err(error) => panic!("ADR-0022 §9: head from B failed as {error:?}"),
-        }
-        appended
+        };
+        assert!(
+            head.is_none_or(|position| position == seeded || position == appended),
+            "head names a position that was written, if any, got {head:?}",
+        );
+        (appended, head)
     });
 
     let read = BoundedRead::start(second.handle().clone(), store);
     match read.finish() {
-        Ok(events) => assert_eq!(positions(&events), vec![seeded, appended]),
+        Ok(events) => {
+            let read = positions(&events);
+            assert!(
+                [seeded, appended].starts_with(&read),
+                "the read is a prefix of what was written, got {read:?}",
+            );
+            // The frontier only advances, so a read issued after head holds
+            // everything up to it.
+            assert!(
+                head.is_none_or(|position| read.contains(&position)),
+                "the read reaches the head reported before it ({head:?}), got {read:?}",
+            );
+        }
         Err(error) => panic!("ADR-0022 §9: the read from B failed as {error:?}"),
     }
 }
@@ -251,7 +274,11 @@ fn a_read_from_b_does_not_wait_on_an_undriven_capturing_runtime() {
             .expect("the worker reported, so it did not panic");
         drop(first);
         match outcome {
-            Ok(events) => assert_eq!(positions(&events), vec![seeded]),
+            // The frontier may lag the seed (#272), so the read may be empty.
+            Ok(events) => assert!(
+                [seeded].starts_with(&positions(&events)),
+                "the read holds the seed or nothing, got {events:?}"
+            ),
             Err(error) => panic!("the read from B failed as {error:?}"),
         }
     } else {
@@ -327,9 +354,9 @@ fn a_pool_connection_opened_on_a_dropped_runtime_does_not_serve_the_next() {
 /// the previous case pins. The store's work now runs on B, but the connection it
 /// is handed was opened on A, so whether `head` answers is the previous case's
 /// race: it answers, reports the pool's `PoolTimedOut`, or does not finish. All
-/// three are accepted here, an answer only if it is the right one. What this
-/// case rejects is the handle strand, and an empty answer that would look like
-/// an empty log. **The pool strand is what remedy B does not fix**: an
+/// three are accepted here, an answer only if it names nothing but the seed; it
+/// may be empty, because the ES-10 frontier can lag the seed (#272). What this
+/// case rejects is the handle strand. **The pool strand is what remedy B does not fix**: an
 /// application whose pool can outlive the runtime that opened it must open the
 /// pool on a runtime that lives as long as the pool does.
 #[test]
@@ -362,10 +389,10 @@ fn a_store_built_wholly_on_a_dropped_runtime_is_stranded_by_its_pool_not_its_han
                 "not cancelled"
             }
         ),
-        Ok(Ok(head)) => assert_eq!(
-            head,
-            Some(seeded),
-            "a head that raced through a connection opened on A must name A's append"
+        Ok(Ok(head)) => assert!(
+            head.is_none_or(|position| position == seeded),
+            "a head that raced through a connection opened on A names A's append, if \
+             anything, got {head:?}"
         ),
         Ok(Err(other)) => panic!("head from B failed in an unmeasured way: {other:?}"),
     }
@@ -455,9 +482,14 @@ fn a_call_from_a_runtime_without_drivers_fails_as_a_worker_panic() {
     }
 
     // The failure is the caller's runtime, not the store: from the full runtime
-    // the same store still answers, and the driverless append did not land.
+    // the same store still answers, and the driverless append did not land. The
+    // frontier may lag the seed (#272), so head may be empty; it never names
+    // anything past the seed.
     let head = full
         .block_on(store.head())
         .expect("the store answers from the runtime that has its drivers");
-    assert_eq!(head, Some(seeded), "only the seed is in the log");
+    assert!(
+        head.is_none_or(|position| position == seeded),
+        "only the seed is in the log, got {head:?}"
+    );
 }

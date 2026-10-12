@@ -21,15 +21,20 @@ spelling, settled by compiling it.
 
 **Work**
 
-- [ ] #83 · **ADR-0069's total `QueryItem` constructor.** An infallible constructor
+- [x] #83 · **ADR-0069's total `QueryItem` constructor.** An infallible constructor
       taking a first `EventType` as its own parameter, any further types and a
       `Tags`, canonicalising exactly as `QueryItem::new` does
-      (`crates/happenstance-core/src/query.rs:56-76`) through one shared private
+      (`crates/happenstance-core/src/query.rs:56-72`) through one shared private
       helper, so the two doors cannot diverge. The spelling (`QueryItem::of` is
       ADR-0069's candidate) is settled by compiling `QueryItem::of(ty, [], tags)`;
       its doc contrasts it with the fallible `of_types`. Check
       `crates/happenstance-core/tests/frozen_signatures.rs` for an enumeration it
       must join.
+      **Done:** spelled `QueryItem::of`, canonicalising through the private
+      `QueryItem::canonical` that `new` now shares, and pinned against `new` by a
+      property test in `crates/happenstance-core/tests/query_item_of.rs`.
+      `frozen_signatures.rs` lists no `QueryItem` constructors, so there was
+      nothing for it to join.
 - [ ] #85 · **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
       research recommends: `after_every_guard` and `after_every_guard_opt`, with
       `after` / `after_opt` deprecated since the release that carries them and

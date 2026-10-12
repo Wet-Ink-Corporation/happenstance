@@ -58,21 +58,65 @@ impl QueryItem {
         T: TryInto<EventType>,
         InvalidQuery: From<T::Error>,
     {
-        let mut types: Vec<EventType> = types
+        let types: Vec<EventType> = types
             .into_iter()
             .map(|ty| ty.try_into().map_err(InvalidQuery::from))
             .collect::<Result<_, _>>()?;
-        types.sort_unstable();
-        types.dedup();
 
         if types.is_empty() && tags.is_empty() {
             return Err(InvalidQuery::UnconstrainedItem);
         }
 
-        Ok(Self {
+        Ok(Self::canonical(types, tags))
+    }
+
+    /// Creates an item from at least one type the caller already holds.
+    ///
+    /// Total: it returns `QueryItem`, not a `Result`. [`new`](Self::new) has
+    /// two ways to fail, and neither can reach this signature. A built
+    /// [`EventType`] has already been validated, and a separate `first`
+    /// parameter means the item always constrains at least one type, so it can
+    /// never be the unconstrained item `new` refuses. Equal inputs produce `==`
+    /// items through either constructor, because both share one sort and dedup.
+    ///
+    /// Reach for [`new`](Self::new) instead when the types are strings, or
+    /// arrive as a sequence whose length you do not know, and for
+    /// [`of_types`](Self::of_types) when there are also no tags. Both validate
+    /// and can refuse, which is why they return a `Result`. Splitting off the
+    /// head is how "at least one" becomes a fact of the signature here: a slice
+    /// or iterator parameter says nothing about its length, so a total
+    /// constructor over one would have to panic or accept the empty item (ADR-0069).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use happenstance_core::{EventType, QueryItem, Tags};
+    ///
+    /// const COURSE_DEFINED: EventType = EventType::from_static("CourseDefined");
+    /// let tags = Tags::from_pairs([("course", "c1")])?;
+    ///
+    /// // No further types, and no `?` on the item.
+    /// let item = QueryItem::of(COURSE_DEFINED, [], tags);
+    ///
+    /// assert_eq!(item.types(), [COURSE_DEFINED]);
+    /// # Ok::<(), happenstance_core::InvalidTag>(())
+    /// ```
+    #[must_use]
+    pub fn of(first: EventType, rest: impl IntoIterator<Item = EventType>, tags: Tags) -> Self {
+        Self::canonical(core::iter::once(first).chain(rest).collect(), tags)
+    }
+
+    /// The one place both constructors canonicalise. Types are sorted and
+    /// deduplicated so that two items expressing the same constraint compare
+    /// equal. Whether the item constrains anything is the caller's to have
+    /// established: `new` checks it, and `of`'s signature guarantees it.
+    fn canonical(mut types: Vec<EventType>, tags: Tags) -> Self {
+        types.sort_unstable();
+        types.dedup();
+        Self {
             types: types.into_boxed_slice(),
             tags,
-        })
+        }
     }
 
     /// Creates an item constrained only by type.
