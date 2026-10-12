@@ -42,11 +42,13 @@ sessions cannot push tags; the owner pushes them.
 
 ## Next action
 
-1. After #271 merges, push `v0.4.1` at its merge commit. Check crates.io and docs.rs
-   for all seven crates.
-2. Phase 17b (#62): #83, #85, #88, #92 and #93 are `door:one-way` and wait on the
-   owner. #79 needs triage and #81 needs the owner. #95 re-runs semver-checks and
-   spec-trace once they land.
+1. `v0.4.1` is published (tag at `eb7f41e6`); all seven crates are on crates.io.
+2. Phase 17b (#62): the owner cleared #83, #85, #88, #92, #93 and #81 on 2026-10-12,
+   as recommended (`wi-fa5c7b`, `wi-378078`, `wi-727ec8`, `wi-f97418`), and #109
+   was cleared on 2026-10-11 (`wi-33ab08`). An unattended session builds each one
+   green and reviewed and **leaves the merge to the owner**; #85 lands last. #79
+   needs triage. #95 re-runs semver-checks and spec-trace once they land, then
+   `0.4.2`.
 3. Phase 18 (#63): its breaking chains open as `door:one-way` PRs for the owner.
 
 ```
@@ -55,8 +57,9 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- **Push `v0.4.1`** at #271's merge commit.
-- **Phase 17b's one-way items:** #83, #85, #88, #92 and #93, and #81.
+- **Merging phase 17b's one-way PRs** (#83, #85, #88, #92, #93, #81, #109) once
+  they are open, green and reviewed.
+- **Closing #97 and #87,** which `0.4.0` shipped.
 - **#105 and #106** (ADR-0026 and ADR-0027) gate phase 13. **#102** claims the sync
   crate names. **#118** gates phase 18's checkpoint-id chain.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`

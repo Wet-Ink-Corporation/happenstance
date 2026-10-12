@@ -114,6 +114,10 @@ Never write an ADR as a side effect of a leaf.
 - Take a `door:one-way` issue, or tag, publish or delete a remote branch.
 - Run `redkiln` or edit `.bklg/`. Both are frozen records.
 - Skip, ignore or weaken a check to get to green.
+- Remove a step or a required job from `.github/workflows/ci.yml` without the
+  owner. `.claude/temper.json` leaves `ci.yml` out of temper's protected list so
+  that CI work does not stall on a prompt, so a PR that edits it says in its body
+  which steps it adds, changes or removes.
 - Use `--no-verify`, or force-push to `main`.
 
 ## Final report
