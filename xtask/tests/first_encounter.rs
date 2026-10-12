@@ -504,6 +504,47 @@ fn no_fence_on_the_page_opts_out_of_the_compiler() {
     }
 }
 
+/// The crate root's doc comments as markdown, one entry per source line.
+///
+/// A line that is not a doc comment becomes empty rather than being dropped,
+/// so a fence's reported line is the line in the file.
+fn crate_root_docs() -> String {
+    read(CRATE_ROOT)
+        .lines()
+        .map(|line| {
+            let line = line.trim_start();
+            line.strip_prefix("//!")
+                .or_else(|| line.strip_prefix("///"))
+                .map_or("", |doc| doc.strip_prefix(' ').unwrap_or(doc))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The crate root is outside `cargo xtask narrative`'s tree, which is `docs/`
+/// and nothing else (#236). Its landing fence is the first program a docs.rs
+/// reader runs, so the attribute rule the page above is held to is held here
+/// too: every fence compiles **and runs**. An `ignore`, `no_run` or
+/// `compile_fail` tag on it would leave every other step green.
+#[test]
+fn no_fence_in_the_crate_roots_docs_opts_out_of_running() {
+    let docs = crate_root_docs();
+    let found = fences(&docs);
+    assert!(
+        !found.is_empty(),
+        "{CRATE_ROOT} carries no doc fence, so this test proves nothing"
+    );
+    for fence in found {
+        assert!(
+            fence.info.is_empty() || fence.info == "rust",
+            "{CRATE_ROOT}:{}: the fence info string is `{}`; a crate-root example \
+             is compiled and run, and nothing in it is exempt",
+            fence.line,
+            fence.info
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // AC-007 — the density budget, the vocabulary, and zero affordances
 // ---------------------------------------------------------------------------

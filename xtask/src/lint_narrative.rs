@@ -70,6 +70,13 @@
 //!   business.** The rule is scoped to [`TREE`], deliberately: a scanner is
 //!   scoped to the directory whose behaviour it constrains. Prose elsewhere in
 //!   the repository may use `<details>` and this step will never say so.
+//! * **The `happenstance` crate root is outside this walk.** Its `//!` landing
+//!   fence and any clause it cites live in `crates/happenstance/src/lib.rs`,
+//!   not under [`TREE`], and by that same scoping no rule here reads them. The
+//!   fence attribute is held by `xtask/tests/first_encounter.rs`, which already
+//!   owns the crate root's half of the opening encounter; a clause citation
+//!   there is resolved by nothing, and the reviewer is the only instrument for
+//!   it.
 //! * **The scan reads source, and cannot know what a renderer does with it.**
 //!   It reports the bytes a page carries. Whether a particular host collapses,
 //!   ignores or escapes them is outside anything this repository can observe,
@@ -5508,6 +5515,49 @@ One writer at a time.
             stating.is_some_and(|bullet| bullet.contains("reviewer")),
             "{CHECKER}'s `# {LIMITS_HEADING}` must carry a bullet stating \
              `{NO_RUN_CLAIM}` and naming the reviewer as the instrument"
+        );
+    }
+
+    // ---- #236: the crate root is outside the walk, and says where it is held
+
+    /// The claim the crate-root bullet must carry, matched inside one bullet.
+    const CRATE_ROOT_CLAIM: &str = "crate root is outside this walk";
+
+    /// Whether a module's limits section states the crate-root gap and names
+    /// the test that holds the fence attribute instead.
+    fn states_the_crate_root_gap(source: &str) -> bool {
+        limits_bullets(&module_docs(source)).iter().any(|bullet| {
+            bullet.contains(CRATE_ROOT_CLAIM)
+                && bullet.contains("xtask/tests/first_encounter.rs")
+                && bullet.contains("reviewer")
+        })
+    }
+
+    /// The blind spot, executed: the real walk discovers no page outside
+    /// [`TREE`], so `crates/happenstance/src/lib.rs` is never read here, and
+    /// the limits section says so and says what holds it instead. The second
+    /// half proves the bullet check can fail.
+    #[test]
+    fn the_crate_root_is_outside_the_walk_and_the_limit_says_where_it_is_held() {
+        let root = workspace_root().expect("xtask sits inside the workspace");
+        let walked = pages(&root).expect("the pinned tree is readable");
+        assert!(
+            walked
+                .iter()
+                .all(|page| page.path.starts_with(&format!("{TREE}/"))),
+            "the walk now reaches outside {TREE}; the crate-root bullet in {CHECKER} \
+             is wrong and must go in this same change"
+        );
+
+        let source = shipping_source(CHECKER);
+        assert!(
+            states_the_crate_root_gap(&source),
+            "{CHECKER}'s `# {LIMITS_HEADING}` must state `{CRATE_ROOT_CLAIM}` and name \
+             the test and the reviewer that hold it"
+        );
+        assert!(
+            !states_the_crate_root_gap(&without_bullet(&source, CRATE_ROOT_CLAIM)),
+            "deleting the bullet must be caught"
         );
     }
 
