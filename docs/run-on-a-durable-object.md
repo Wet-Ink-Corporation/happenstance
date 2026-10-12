@@ -9,8 +9,10 @@ tests, and a clear picture of what the store refuses and what has not yet been
 proven about it.
 
 Why a Durable Object? Each object is a single-threaded actor that owns its own
-SQL storage. Only one request runs inside it at a time, so the object is a
-natural home for a log whose writes must not race. The store from
+SQL storage. Its code never runs on two threads at once, so no two writes can
+race at the storage level, which makes it a natural home for a log. It is
+*re-entrant*, though: while one request is waiting at an `.await`, another can
+start, so a decision still guards its write with a condition. The store from
 [`happenstance-cloudflare`](../crates/happenstance-cloudflare/README.md),
 `CloudflareEventStore`, writes the log to that storage, compiled for
 `wasm32-unknown-unknown`.
@@ -72,8 +74,9 @@ you want several separate logs in the same object, for example one per tenant.
 To do that, build each store with
 `CloudflareEventStore::namespaced(sql, &namespace)`, where `namespace` is a
 `TableNamespace`. Each namespace keeps its log in its own tables. Two namespaces
-share no rows and no position sequence, so an `EventId` written in one is never
-found in another. Two handles built under the same namespace are two handles
+share no rows, no position sequence and no incarnation (the per-log identity
+every `EventId` carries), so an `EventId` written in one is never found in
+another. Two handles built under the same namespace are two handles
 onto one log.
 
 `migrate()` runs per namespace, so call it on each store before its first
@@ -259,10 +262,11 @@ async fn main() {
 
 ### What staying on one turn costs you
 
-Nothing. A Durable Object already runs one request at a time and owns its
-storage, so there is no second writer to race against. `append` does not await
-anything between checking the condition and writing the batch, so it never
-reports `AppendError::Busy`. `CloudflareEventStoreError`'s documentation
+Nothing. A Durable Object's code runs on one thread and owns its storage, so
+there is no second thread to race against. Requests can still interleave at
+`.await` points, which is why your decision keeps its condition. But `append`
+itself awaits nothing between checking the condition and writing the batch, so
+no other request can slip in there, and it never reports `AppendError::Busy`. `CloudflareEventStoreError`'s documentation
 explains this under *Why this store never reports `AppendError::Busy`*.
 
 For the same reason, the conformance suite's concurrency tests, which race

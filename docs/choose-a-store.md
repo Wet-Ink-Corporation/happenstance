@@ -9,7 +9,7 @@ and what they will refuse. This page walks through those questions in order.
 It also shows how to write your code so that changing your mind later is a
 one-line change.
 
-Every store below passes the same event-store conformance suite, so the rules
+Every store below passes the event-store family of the conformance suite, so the rules
 from [your first encounter](first-encounter.md), such as conditions being
 checked and positions only going up, hold on all of them.
 
@@ -49,7 +49,7 @@ log by default. `CloudflareEventStore::namespaced` keeps several logs in one
 object, each in its own tables. [Run on a Durable Object](run-on-a-durable-object.md)
 walks through it.
 
-Its conformance tests run on `wasm32-unknown-unknown` as part of every build.
+Its event-store conformance tests run on `wasm32-unknown-unknown` in the CI gate.
 They also run under `workerd`, Cloudflare's runtime, both locally and on a
 deployed object, in a separate CI job (*What the conformance suite ran against
 this adapter, and what it did not*).
@@ -126,11 +126,13 @@ position 10 does, and a reader that saw 11 could miss 10 for good.
 
 The store prevents that, and keeps the rule that readers see positions in order
 ([ES-10](../spec/SPECIFICATION.md#es-10--position-order-is-visibility-order)).
-Each read stops at a *visibility frontier*: the highest position below which
-every transaction has finished, worked out from Postgres's own transaction ids
-(`xid8`). That has three costs, and you take all three:
+Each read admits only events written by transactions older than every
+transaction still open, a *visibility frontier* worked out from Postgres's own
+transaction ids (`pg_snapshot_xmin`, over `xid8`). `head()` reports the highest
+position among those events. Why the store works this way is recorded in
+[ADR-0024](../.kb/decisions/0024-position-visibility-mechanism.md). That has three costs, and you take all three:
 
-- **`head()` can lag.** It reports the frontier, which can sit below the newest
+- **`head()` can lag.** It reports the highest position below the frontier, which can sit below the newest
   position the store has handed out (ES-10).
 - **You may not read your own write straight away.** A read made right after a
   successful append may not include that append's events yet (ES-10).
@@ -160,9 +162,11 @@ meets it*).
 
 ### Inside a Durable Object
 
-**A Durable Object has exactly one writer.** The object is a single-threaded
-actor that owns its storage, so its store never has two appends racing each
-other.
+**A Durable Object has exactly one writing thread.** The object is a
+single-threaded actor that owns its storage, so its store never has two appends
+running on different threads. Requests can interleave at `.await` points, so a
+decision still needs its condition, but `append` awaits nothing between checking
+the condition and writing.
 
 For the same reason, the conformance suite's concurrency tests are not run
 against it. Those tests run competing writers on separate OS threads, and this
