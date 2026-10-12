@@ -316,6 +316,15 @@ impl Fixture for MemoryFixture {
          the store, which is what FaultyStore is for",
     );
 
+    // Stated for the same reason, though CF-18's check would accept silence
+    // here: this fixture supports READ_YOUR_OWN_WRITES, and the inherited
+    // sentence is true of this store. It is written out because this is the
+    // fixture an author copies.
+    const HELD_ABOVE_FRONTIER: Capability = Capability::declined(
+        "MemoryEventStore shows a row to every read from the moment its append \
+         returns, so there is no frontier for a committed row to sit above",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // Ready rather than `async move`: acquiring this handle is a refcount
         // bump, and pretending otherwise would hide that a real fixture's
@@ -505,7 +514,7 @@ impl ProjectionFixture for MemoryProjectionFixture {
     // is not the only one; `RESET_REFUSAL` above is declined too, so a reference
     // run prints two. The set is pinned by equality, in enumeration order and
     // with each stated reason, at `assert_reference_projection_declensions`
-    // (`crates/happenstance-testkit/tests/mutation_coverage.rs:3593`) — read that
+    // (`crates/happenstance-testkit/tests/mutation_coverage.rs:4817`) — read that
     // assertion for how many and which, rather than a count written here that
     // nothing in the gate reads.
     const COMMIT_FAULT: Capability = Capability::declined(

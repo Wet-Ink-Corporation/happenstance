@@ -778,6 +778,16 @@ record says it was met.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0094 | [`kb-decision-0094`](../decisions/0094-ps-39-is-frozen-on-a-live-neon-run.md) | PS-39 is frozen on a live Neon run of `projection_ids_round_trip_by_bytes` | accepted | 17b | — |
 
+## 2026-10-12: ES-41's reading written into the clause (#109)
+
+ADR-0095 is the ADR `kb-decision-wi-33ab08` said #109 owed. It adds the "held" reading to
+`[FROZEN]` ES-41 as a clarification, and it records the rule, the fixture capability and the two
+mutants that pin it. Numbers 0090 – 0094 are held by unmerged PRs, which is why this one is 0095.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0095 | [`kb-decision-0095`](../decisions/0095-es-41-membership-means-held.md) | ES-41's contains_event_id means held, not visible, and a rule stages the row that tells them apart | accepted | 13 | — |
+
 ## 2026-10-12: the two typed-layer open questions, closed by record (#93)
 
 ADR-0090 and ADR-0091 write down the answers `kb-decision-wi-378078` took for #93, option A on
