@@ -1,18 +1,11 @@
 # Documentation
 
-**This directory is for user documentation** — what someone who has run `cargo add
-happenstance` needs in order to use it. It is the **narrative tree**: the Rust
-examples on the pages below are compiled by `cargo xtask ci` against the real
-workspace crates, so an example that stopped compiling fails the gate rather than
-a reader.
+This directory is the source of **[the happenstance guide](https://wet-ink-corporation.github.io/happenstance/guide/)**,
+which is easier to read on the site. Every Rust example on these pages is
+compiled against the real crates by the repository's tests, so an example that
+stopped working would fail the build before it reached a reader.
 
-Everything else that used to live under `docs/` was moved out, because a directory
-holding both "how to use this library" and "the 9,000-line normative specification"
-serves neither reader.
-
-It routes rather than teaches: the library is explained on the pages below and
-not here, because [`RP-10-2`](../standards/pages/10-the-need-set.md) is the rule
-that shapes a page whose job is orientation.
+## New to event sourcing? Read these in order
 
 | Page | Read it at |
 | --- | --- |
@@ -20,19 +13,29 @@ that shapes a page whose job is orientation.
 | Event sourcing, and CQRS | [`event-sourcing-and-cqrs.md`](event-sourcing-and-cqrs.md) |
 | Aggregates, and the boundary drawn in advance | [`aggregates.md`](aggregates.md) |
 | Dynamic consistency boundaries | [`what-is-dcb.md`](what-is-dcb.md) |
-| Appending under a condition | [`append-conditions.md`](append-conditions.md) |
-| Watching a boundary refuse, in three runnable steps | [`first-encounter.md`](first-encounter.md) |
-| What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
-| Passing the conformance suite with your adapter | [`pass-conformance-suite.md`](pass-conformance-suite.md) |
-| Fences the compiler never sees | [`text-fences.md`](text-fences.md) |
+| Your first encounter: watch a write get refused | [`first-encounter.md`](first-encounter.md) |
+
+## Everything else
+
+| Page | Read it at |
+| --- | --- |
 | The canonical DCB program, worked end to end | [`read-the-worked-example.md`](read-the-worked-example.md) |
 | Where the aggregate's consistency boundary went | [`boundary-not-aggregate.md`](boundary-not-aggregate.md) |
-| Carrying the worked example's invariant into your own domain | [`carry-your-invariant.md`](carry-your-invariant.md) |
+| Carrying the worked example's rule into your own domain | [`carry-your-invariant.md`](carry-your-invariant.md) |
+| Appending under a condition | [`append-conditions.md`](append-conditions.md) |
 | Retrying a command without applying it twice | [`retry-a-command.md`](retry-a-command.md) |
 | Rebuilding a read model from the log | [`rebuild-a-read-model.md`](rebuild-a-read-model.md) |
 | Choosing a store for your deployment | [`choose-a-store.md`](choose-a-store.md) |
 | Running the event store inside a Durable Object | [`run-on-a-durable-object.md`](run-on-a-durable-object.md) |
+| What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
+| Passing the conformance suite with your adapter | [`pass-conformance-suite.md`](pass-conformance-suite.md) |
 | Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
+| Fences the compiler never sees (a fixture for the build, not a guide page) | [`text-fences.md`](text-fences.md) |
+
+## For contributors
+
+This directory is the **narrative tree**: user documentation only. The rest of
+the project's records live elsewhere, and route from here.
 
 | Looking for | It is at |
 | --- | --- |

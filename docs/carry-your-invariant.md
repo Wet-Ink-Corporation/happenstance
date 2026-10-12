@@ -1,47 +1,65 @@
 # Carry your invariant across
 
-> **Answers:** `explanation` — How do I say my own rule in this library's terms?
+> **Answers:** `explanation` — How do I write my own rule in this library's terms?
+
+The first encounter guarded a rule about one course. Most real rules are about
+more than one thing at once. This page takes a rule like that and turns it into
+code in four steps, then shows the one mistake the compiler cannot catch for you.
 
 ## Your rule, in your words
 
-You already have the rule. Say it the way you would say it to a registrar:
+Start with a rule from your own domain, said the way you would say it out loud.
+Here is the one this page uses:
 
 > Course c1 has two seats, and a student the registrar has barred may not
 > take one of them.
 
-That rule is about two things at once — a course and a student — and the
-command that has to hold it is a single command: *hold a seat on c1 for s1*.
-Nothing about it is unusual. It is the ordinary shape of a rule that will not
-sit still inside one entity.
+That rule is about two things: a course and a student. Yet a single request has
+to respect all of it: *hold a seat on c1 for s1*. There is nothing unusual about
+this. Plenty of rules refuse to fit inside one entity.
 
 ## Where your streams went
 
-Your reflex question is probably *which stream does this go in?* — the model
-you arrived with puts one stream per entity, so a rule spanning two of them
-has to pick a side or be split across both. There is no side to pick here:
-nothing asks you to name an aggregate, and your aggregates are not the unit
-anything is checked against.
+If you have built event-sourced systems before, your first question is probably
+*which stream does this go in?* With [one stream per aggregate](aggregates.md),
+a rule about a course and a student has to live in one of the two streams, or
+be split across both of them.
 
-What you are asked for instead is the set of events your decision depends on,
-and that set is what gets guarded. The boundary is drawn per decision, by the
-query you are about to write, so the stream the rule "belongs to" never has
-to exist.
+Here there is no stream to choose. Nothing asks you to name an aggregate, and
+nothing is checked against one. Every event goes into one ordered log, tagged
+with what it is about, as [dynamic consistency boundaries](what-is-dcb.md)
+describes.
+
+What you give the library instead is the set of events your decision depends
+on, and that set is what the store guards. The query you write in the next
+section draws the boundary for this one decision, so the stream the rule
+"belongs to" never has to exist.
+
+So this is a change in how you model a rule, not just a new way of routing
+writes to storage. You stop asking where a rule lives, and start asking which
+events it reads.
 
 ## Tag, query, fold, guard
 
-Four steps, and these same four names every time they come up below.
+Each decision draws its own boundary, but that does not mean anything goes.
+Every decision follows the same four steps, in the same order, and this page
+uses these four names for them throughout.
 
-1. **Tag.** Name each thing the rule is about as a set of tags — one set per
-   entity. `course=c1` is one of them; `student=s1` is the other.
-2. **Query.** Build one `QueryItem` per tag set, saying which event types
-   count for that entity, and put both items in one `Query`. Items are OR'd
-   across a query, so it returns everything either half of the rule depends
-   on
+1. **Tag.** Describe each thing the rule is about as a set of tags, one set per
+   thing. Here, `course=c1` is one set and `student=s1` is the other.
+2. **Query.** Build one `QueryItem` per tag set, naming the event types that
+   matter for that thing, and put both items in one `Query`. An event matches
+   the query if it matches either item, so one read returns everything both
+   halves of the rule depend on
    ([ES-27](../spec/SPECIFICATION.md#es-27--a-condition-matches-on-tags-not-only-on-types)).
-3. **Fold.** Read that query and walk what comes back into whatever the
-   decision needs — a count, a total, a flag.
-4. **Guard.** Build an `AppendCondition` from that same `Query`, bounded at
-   the position the read reached, and append under it.
+3. **Fold.** Read with that query, and work the events you get back into
+   whatever the decision needs: a count, a total, or a yes-or-no flag.
+4. **Guard.** Build an `AppendCondition` from that same `Query` and the
+   position the read reached, and append under it. If anything matching the
+   query arrives in the meantime, the append is refused.
+
+Each step maps onto something you already said in plain words, and onto
+something you already ran in the first encounter:
 
 | Your words | This library's words | Where you saw it |
 | --- | --- | --- |
@@ -52,23 +70,27 @@ Four steps, and these same four names every time they come up below.
 
 ## Where your identifiers come from
 
-Step 1 is the one that changes when the rule stops being an example. `c1` and
-`s1` are literals here; yours arrive as a `String` — off a request, out of a
-queue, from a file — and a tag built out of one can be refused. `Tag::key_value`
-rejects an empty value, a value past the length ceiling, and a set of control
-and bidirectional formatting characters, so the `?` in the fences on this page
-is not ceremony.
+In this page's examples, `c1` and `s1` are written into the code. In your
+application they arrive as strings, from a request, a queue or a file, and a
+tag built from one of them can be refused. `Tag::key_value` rejects an empty
+value, a value that is too long, and certain control and text-direction
+characters. That is why the examples use `?` when they build tags.
 
-The trouble is that the `?` has nowhere to go later. When your events become a
-type — a `DomainEvent`, rather than a `Query` you assemble by hand — the method
-that hands the library their tags is `fn tags(&self) -> Tags`, and it is total.
-It returns no `Result`, and there is nothing for a `?` to sit on. Rebuilding the
-tag inside it leaves exactly one way out: an `expect` on a value that came from
-outside your program, on the write path, after the decision has been taken.
+That matters most once your events become Rust types. The typed layer asks each
+event for its tags through a `DomainEvent` method, `fn tags(&self) -> Tags`.
+It returns `Tags`, not a `Result`, so there is nowhere for an error to go.
+Building a tag from a raw string inside that method would leave only one way
+out: calling `expect` on data from outside your program, on the write path,
+after the decision has already been made.
 
-So the validation moves to the one place where a `Result` is still welcome:
-your identifier type. Validate once at the edge, keep the `Tag` you were given,
-and hand it out.
+The fix is to check the identifier once, at the edge of your program, where a
+`Result` is still welcome. Wrap it in its own type (a *newtype*), whose only
+constructor builds the `Tag` and keeps it. From then on, handing out that tag
+cannot fail.
+
+The struct keeps both the original string and the tag built from it. Because
+`new` is the only way to make a `CourseId`, every `CourseId` in your program
+holds a tag that was already checked:
 
 ```rust
 use happenstance::{InvalidTag, Tag, Tags};
@@ -104,20 +126,21 @@ fn main() -> Result<(), InvalidTag> {
 }
 ```
 
-Both worked examples do exactly this and say so inline — `CourseId` and
-`StudentId` in
-[the canonical example](../examples/course-subscriptions/src/main.rs), and the
-same two fields in
-[the SQLite one](../examples/transfers-on-sqlite/src/main.rs). It is the same
-resolution the library takes for a decision model's own scope, applied one
-level down to the event.
+Both worked examples do exactly this, and say so in comments: `CourseId` and
+`StudentId` in [the canonical example](../examples/course-subscriptions/src/main.rs),
+and `AccountId` in [the SQLite one](../examples/transfers-on-sqlite/src/main.rs).
+Each keeps the same two fields, the string and its tag.
+The typed layer makes the same choice for a decision model's scope: `scope`
+returns tags the model already holds, so it cannot fail either.
 
 ## The guard you would write
 
-The whole cycle is one program. Two tag sets, one item per tag set, one query
-holding both, a read, a fold over what the read returned, and an append under
-a condition built from that same query. Between the read and the append
-someone else takes the last seat, so the append is refused.
+Here are all four steps in one program. It builds two tag sets, one query item
+for each, and one query holding both. It reads, folds the result into a count
+of free seats, and appends under a condition built from the same query.
+
+To show the guard working, someone else takes the last seat between the read
+and the append. The store notices, and refuses the append.
 
 ```rust
 use happenstance::{AppendCondition, Event, EventStore, Query};
@@ -145,21 +168,26 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
 }
 ```
 
-The condition is the query you already wrote, bounded at the position your
-read reached, and a matching event above that boundary is what refuses it
+The condition is just the query you already wrote, plus the position your read
+reached. A matching event after that position is what makes the store refuse
 ([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics)).
 
-One `Query` goes into `AppendCondition::new` today; carrying several
-independently bounded guards in one condition is described but is not settled
+Today, `AppendCondition::new` takes one `Query`. The specification describes a
+condition holding several guards, each with its own position, but that is not
+settled yet
 ([VT-30](../spec/SPECIFICATION.md#vt-30--an-appendcondition-is-one-or-more-guards-each-with-its-own-boundary)),
-so nothing above leans on it.
+so nothing on this page depends on it.
 
 ## What a narrow guard misses
 
-Now change one expression. The guard below is tagged to the student the
-command is writing for, rather than to the course whose seats the rule is
-about. Everything else — the events appended, the condition, the guarded
-append — is the same text as above.
+The query is the boundary, so a query that is too narrow guards too little, and
+nothing fails to tell you. This section shows that happening, so you can
+recognise it in your own code.
+
+The program below changes one expression. The seats item is tagged with the
+student the command is for, instead of the course whose seats the rule is
+about. Everything else is the same as above: the events appended, the
+condition, and the guarded append.
 
 ```rust
 use happenstance::{AppendCondition, Event, EventStore, Query};
@@ -188,33 +216,32 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
 }
 ```
 
-The seat that fills the course carries `course=c1` and no student tag, so it
-never enters this guard's query. The read comes back empty, the boundary
-guards nothing, the append is accepted, and the course is over capacity with
-no error anywhere.
+The seat that fills the course is tagged `course=c1` and carries no student
+tag, so it never matches this query. The read comes back empty, the condition
+guards nothing, and the store accepts the append. The course is now over
+capacity, and no error was reported anywhere.
 
-That acceptance is not a defect being exposed. A condition carrying a tag no
-stored event carries does not reject the append, even when a stored event
-matches the condition's types
-([CF-8](../spec/SPECIFICATION.md#62-the-measured-gaps)).
+The store is behaving correctly here. A condition whose tags no stored event
+carries does not refuse the append, even when a stored event has a matching
+type ([CF-8](../spec/SPECIFICATION.md#62-the-measured-gaps)).
 
-The mirror mistake — dropping the tags and guarding on types alone — fails
-the other way, loudly, by refusing commands it should admit
-([CF-7](../spec/SPECIFICATION.md#62-the-measured-gaps)); this fence is
+The opposite mistake is to drop the tags and guard on event types alone. That
+fails the other way, and loudly: it refuses requests it should accept, because
+any seat on any course now counts
+([CF-7](../spec/SPECIFICATION.md#62-the-measured-gaps)). The program above is
 deliberately not that one.
 
-Both follow from the same rule, that a condition is matched on tags and not
-only on types
+Both behaviours follow from one rule: a condition matches on tags as well as on
+event types
 ([ES-27](../spec/SPECIFICATION.md#es-27--a-condition-matches-on-tags-not-only-on-types)).
 
 ## Back to the working version
 
-The wrong guard above compiles, runs, and passes its own assertion. Nothing
-catches it for you, which is why it is worth having read. The difference is
-one expression: the query item is tagged `held`, the course whose seats the
-rule is about, and not `whose`.
-[The guard you would write](#the-guard-you-would-write) is the version to
-copy.
+The wrong guard compiles, runs, and passes its own assertion. Nothing catches
+it for you, which is why it was worth seeing. The fix is one expression: tag
+the seats item with `held`, the course whose seats the rule is about, not with
+`whose`. [The guard you would write](#the-guard-you-would-write) is the version
+to copy.
 
-To see the same cycle inside a running program rather than a fence,
+To see the same steps inside a complete program rather than a single example,
 [read the worked example](read-the-worked-example.md).

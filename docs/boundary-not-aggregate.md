@@ -1,56 +1,61 @@
 # Boundaries, not aggregates
 
-> **Answers:** `explanation` — Where did my aggregate's consistency boundary go?
+> **Answers:** `explanation` — If I don't define aggregates, what keeps my decisions consistent?
 
-You model with aggregates, and this library asks you for none. This page says
-what the aggregate was doing for you, what takes its place here, and what you
-now do yourself that the aggregate used to do.
+If you design event-sourced systems with aggregates, happenstance will feel
+like something is missing: it never asks you for one. This page shows what the
+aggregate was doing for you, what does that job here, and the one thing you now
+have to take care of yourself.
 
 ## The rule, and the answer you know
 
-One rule, two limits, about two different things:
+Take one request that has to respect two limits about two different things:
 
 > A course holds thirty seats, and a student takes at most five courses.
 
-The command that has to respect both is a single command: *subscribe s1 to
-c1*. An aggregate is a consistency boundary and a transaction boundary at once,
-and you choose it when the schema is written. So you choose:
+The request is *subscribe s1 to c1*. An aggregate is both a consistency
+boundary and a transaction boundary, and you choose it when you design the
+streams. As [aggregates, and the boundary drawn in advance](aggregates.md)
+describes, that leaves three choices:
 
-- **`Course` is the aggregate.** Thirty seats is an invariant it holds. Five
-  courses per student spans many `Course` instances, and one transaction
-  changes one aggregate, so that limit moves out of the transaction: a read
-  model of each student's courses, checked before the command, and a saga
-  that compensates when two subscriptions for the same student cross.
-- **`Student` is the aggregate.** The mirror image. Five courses is held;
-  thirty seats becomes the read model and the saga.
-- **One aggregate holds both.** Both limits are transactional, and every
-  subscription anywhere now contends with every other on one instance.
+- **`Course` is the aggregate.** It holds the thirty-seat limit. The five-course
+  limit spans many courses, and one transaction changes one aggregate, so that
+  limit moves outside the transaction. It is checked against a read model of
+  each student's courses, and a saga undoes the extra subscription when two
+  requests for the same student cross.
+- **`Student` is the aggregate.** The mirror image. The five-course limit is
+  held, and the thirty-seat limit becomes the read model and the saga.
+- **One aggregate holds both.** Both limits are held in the transaction, but
+  every subscription anywhere now queues behind every other on one aggregate.
 
-None of these is a mistake. Each is the honest price of a boundary fixed
-before anyone knew which decisions it would have to hold: either one limit is
-enforced after the fact, by compensation, or both are enforced by putting every
-subscription through one instance.
+None of these is a mistake. Each is the price of fixing the boundary before
+knowing which decisions it would have to hold. Either one limit is enforced
+after the fact, by repairing it, or both are enforced by sending every
+subscription through one place.
 
 ## What is drawn instead
 
-The boundary here is drawn per decision, by a query. *Subscribe s1 to c1* rests
-on two sets of events — the subscriptions tagged `course=c1` and the
-subscriptions tagged `student=s1` — so the decision reads one query with one
-item for each, and appends on condition that nothing matching that query has
-appeared since the read. A condition's query is matched the way a read's is
+Here, each decision draws its own boundary with a query. *Subscribe s1 to c1*
+depends on two sets of events: subscriptions tagged `course=c1`, and
+subscriptions tagged `student=s1`. So the decision reads one query with one
+item for each set, and appends on condition that nothing matching that query
+has arrived since the read.
+
+A condition's query matches events the same way a read's query does
 ([ES-27](../spec/SPECIFICATION.md#es-27--a-condition-matches-on-tags-not-only-on-types)),
 so one condition covers both items, and with them both limits.
 
-Neither entity is the boundary, and neither has to be chosen. The tagging, the
-query and the guard are spelled out step by step in
-[tag, query, fold, guard](carry-your-invariant.md#tag-query-fold-guard); this
-page is about what that buys against the aggregate, not how to write it.
+Neither the course nor the student is the boundary, and you never have to pick
+one. How to write the tags, the query and the guard is covered step by step in
+[tag, query, fold, guard](carry-your-invariant.md#tag-query-fold-guard). This
+page is about what that buys you compared with an aggregate.
 
 ## One condition, both limits
 
-The program below takes the subscribe decision three times. Each time another
-writer lands one subscription between the read and the append, and the
-function reports whether s1's append still went in.
+The program below takes the subscribe decision three times, each time against
+a fresh store. Every time, another writer adds one subscription between the
+read and the append. The function returns `true` if s1's subscription was still
+accepted, and `false` if the store refused it.
 
 ```rust
 use happenstance::{AppendCondition, AppendError, Event, EventStore};
@@ -95,78 +100,85 @@ async fn main() -> Result<(), Failure> {
 }
 ```
 
-Read the three assertions against the three aggregate designs.
+Now compare the three outcomes with the three aggregate designs.
 
-The second one moved the count the course limit is checked against, and the
-`Student` aggregate could not have refused it in the transaction. The third
-moved the count the student limit is checked against, and the `Course`
-aggregate could not have. Here the same append refuses both, with no read model
-consulted and nothing to compensate: each refusal is the `ConditionViolated`
-the function matches on, and s1's subscription is not in the store after it
-([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics), checked by
-`condition_rejection_leaves_store_unchanged`).
+The second call adds a subscription to c1, which changes the seat count the
+course limit is checked against. A `Student` aggregate could not have refused
+that inside its transaction. The third call subscribes s1 to another course,
+which changes the count the student limit is checked against, and a `Course`
+aggregate could not have refused that.
 
-Neither refusal says a limit was exceeded. It says the events the decision
-counted have moved, so the decision is taken again against what is there now,
-and that retaking is where thirty and five are compared. What the condition
-buys is that no write which could change either count lands between the read
-and the append unseen
+Here the same append refuses both, with no read model and nothing to repair
+afterwards. Each refusal is the `ConditionViolated` error the function matches
+on, and s1's subscription is not in the store after it
+([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics), checked by the
+conformance test `condition_rejection_leaves_store_unchanged`).
+
+A refusal does not mean a limit was exceeded. It means the events the decision
+counted have changed, so the decision has to be made again against what is
+there now. That second attempt is where thirty and five are actually compared.
+What the condition guarantees is that no write which could change either count
+slips in unseen between the read and the append
 ([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics)).
 
-The first is the one the single large aggregate gets wrong in the other
-direction. Nothing s2 did on c2 is in the decision's query, so it gives the
-condition nothing to refuse on: its events are the same type, and a condition
-matches on tags as well as types
+The first call is the one the single large aggregate gets wrong, in the other
+direction. s2 subscribing to c2 matches neither item of s1's query, so it gives
+the condition nothing to refuse on, even though its event has the same type. A
+condition matches on tags as well as types
 ([ES-27](../spec/SPECIFICATION.md#es-27--a-condition-matches-on-tags-not-only-on-types),
-checked for every adapter by the conformance rules
-`condition_with_an_unheld_tag_does_not_reject` and
-`condition_matches_on_tags`). Where two decisions do overlap and race, exactly
-one of them lands
+checked against every store by the conformance tests
+`condition_with_an_unheld_tag_does_not_reject` and `condition_matches_on_tags`).
+
+When two decisions do overlap and race, exactly one of them is accepted
 ([ES-25](../spec/SPECIFICATION.md#es-25--condition-semantics), checked by
-`racing_conditional_appends_elect_one_winner` and, under real contention, by
-`exactly_one_of_n_contenders_commits`).
+`racing_conditional_appends_elect_one_winner` and, with many writers at once,
+by `exactly_one_of_n_contenders_commits`).
 
-This fence is compiled and its assertions run by this repository's gate, so
-the three outcomes above are checked rather than described.
+The program above is compiled and its assertions are run by this repository's
+tests, so these three outcomes are checked, not just described.
 
-> **Status.** Under real contention, the independence of decisions that share
-> nothing is a narrower promise than the program above shows. The conformance
-> rule `k_disjoint_boundaries_never_conflict` holds that they are never refused
-> as `ConditionViolated` on each other's account and that at least one of them
-> commits; a store may still refuse one as `Busy`
+> **A narrower promise under load.** With many writers at once, decisions that
+> share no events are still never refused with `ConditionViolated` because of
+> each other, and at least one of them is accepted. But a store may still
+> refuse one of them as `Busy`, meaning it wrote nothing and you can retry
 > ([ES-43](../spec/SPECIFICATION.md#es-43--a-busy-refusal-wrote-nothing-and-says-so)).
-> No clause states that independence yet, and
+>
+> The conformance test `k_disjoint_boundaries_never_conflict` checks this. The
+> specification has no clause stating that independence yet, and
 > [the open question](../.kb/open-questions/disjoint-boundaries-have-no-clause.md)
-> records the decision it is owed.
+> records the decision still to be made.
 
 ## What the aggregate did that you now do
 
-The aggregate gave the invariant a home: one class, one place to look, and a
-boundary nobody could narrow without noticing. Here the invariant lives in the
-query, and a query can be too narrow without anything failing. Tag the seats
-item to the student instead of the course, and the seats other students take
-never enter the read, the condition does not guard them, and the course can go
-over capacity with no error
+The aggregate gave each rule a home: one class, one place to look, and a
+boundary nobody could narrow without noticing. Here the rule lives in a query,
+and a query can be too narrow without anything failing.
+
+Tag the seats item with the student instead of the course, and seats taken by
+other students never enter the read. The condition does not guard them, and the
+course can go over capacity with no error
 ([CF-8](../spec/SPECIFICATION.md#62-the-measured-gaps)).
 [What a narrow guard misses](carry-your-invariant.md#what-a-narrow-guard-misses)
-is that failure as a compiled program, and it is the cost of this model that
-the aggregate never charged you.
+shows that failure as a runnable program. It is the one cost of this approach
+that aggregates never charged you.
 
-The home comes back one layer up. In the typed layer a decision model is a
-value with a scope, and a tuple of decision models is one boundary: the
-worked example's `subscribe` handler composes the course's seats with one
-student's history with that course, and one append condition checks both,
-retaking the decision when that condition refuses.
-[The example's source](../examples/course-subscriptions/src/main.rs) is that
-handler, and its `tests/runs.rs` runs the program and asserts that it refuses
-a course that is full and a student already subscribed to it.
+The typed layer gives the rule a home again. There, a *decision model* is a
+value that knows its own scope (the tags it reads), and several decision models
+combined in a tuple form one boundary. The worked example's `subscribe` handler
+combines the course's seats with one student's history on that course. One
+append condition checks both, and the decision is retried when the condition
+refuses.
+
+[The example's source](../examples/course-subscriptions/src/main.rs)
+contains that handler, and its `tests/runs.rs` runs the program and checks that
+it refuses a full course and a student who is already subscribed.
 
 ## Where this page stops
 
-The aggregate is a consistency boundary, and that is what this page answers.
-The other habit you may have brought — one stream per entity, and the question
-of which stream a two-entity rule is written to — is a storage reflex rather
-than a boundary, and it is answered under
-[where your streams went](carry-your-invariant.md#where-your-streams-went).
-Why the store re-runs your query rather than you is
-[appending under a condition](append-conditions.md).
+This page was about the aggregate as a consistency boundary. The other habit
+you may have brought with you, one stream per entity and the question of which
+stream a two-entity rule is written to, is about storage rather than
+consistency. It is answered under
+[where your streams went](carry-your-invariant.md#where-your-streams-went). Why
+the store, rather than your code, checks that nothing has changed is explained
+in [appending under a condition](append-conditions.md).
