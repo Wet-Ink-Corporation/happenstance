@@ -68,71 +68,6 @@ something you already ran in the first encounter:
 | "what I decide from them" | **fold** — over what the read returned | first encounter, step 2 |
 | "only if nothing has moved" | **guard** — an `AppendCondition` over that same query | first encounter, step 3 |
 
-## Where your identifiers come from
-
-In this page's examples, `c1` and `s1` are written into the code. In your
-application they arrive as strings, from a request, a queue or a file, and a
-tag built from one of them can be refused. `Tag::key_value` rejects an empty
-value, a value that is too long, and certain control and text-direction
-characters. That is why the examples use `?` when they build tags.
-
-That matters most once your events become Rust types. The typed layer asks each
-event for its tags through a `DomainEvent` method, `fn tags(&self) -> Tags`.
-It returns `Tags`, not a `Result`, so there is nowhere for an error to go.
-Building a tag from a raw string inside that method would leave only one way
-out: calling `expect` on data from outside your program, on the write path,
-after the decision has already been made.
-
-The fix is to check the identifier once, at the edge of your program, where a
-`Result` is still welcome. Wrap it in its own type (a *newtype*), whose only
-constructor builds the `Tag` and keeps it. From then on, handing out that tag
-cannot fail.
-
-The struct keeps both the original string and the tag built from it. Because
-`new` is the only way to make a `CourseId`, every `CourseId` in your program
-holds a tag that was already checked:
-
-```rust
-use happenstance::{InvalidTag, Tag, Tags};
-
-#[derive(Debug, Clone)]
-struct CourseId {
-    id: String,
-    tag: Tag,
-}
-
-impl CourseId {
-    // The only constructor, and the only place a bad identifier is refused.
-    fn new(id: &str) -> Result<Self, InvalidTag> {
-        Ok(Self {
-            id: id.to_owned(),
-            tag: Tag::key_value("course", id)?,
-        })
-    }
-}
-
-fn main() -> Result<(), InvalidTag> {
-    let course = CourseId::new("c1")?; // the edge, where a `?` is at home
-    let refused = CourseId::new("");
-    assert!(refused.is_err(), "an empty value is not a tag");
-
-    // And this is the call that cannot fail. `Tags` has no infallible
-    // constructor from strings, but it does have one from tags that already
-    // exist, so a `tags` method built this way needs no `Result` and no
-    // `expect`.
-    let tags: Tags = [course.tag.clone()].into_iter().collect();
-    assert_eq!(tags.len(), 1);
-    Ok(())
-}
-```
-
-Both worked examples do exactly this, and say so in comments: `CourseId` and
-`StudentId` in [the canonical example](../examples/course-subscriptions/src/main.rs),
-and `AccountId` in [the SQLite one](../examples/transfers-on-sqlite/src/main.rs).
-Each keeps the same two fields, the string and its tag.
-The typed layer makes the same choice for a decision model's scope: `scope`
-returns tags the model already holds, so it cannot fail either.
-
 ## The guard you would write
 
 Here are all four steps in one program. It builds two tag sets, one query item
@@ -178,6 +113,72 @@ settled yet
 ([VT-30](../spec/SPECIFICATION.md#vt-30--an-appendcondition-is-one-or-more-guards-each-with-its-own-boundary)),
 so nothing on this page depends on it.
 
+## Where your identifiers come from
+
+In the program above, `c1` and `s1` are written into the code. In your
+application they arrive as strings, from a request, a queue or a file, and a
+tag built from one of them can be refused. `Tag::key_value` rejects an empty
+value, a value that is too long, and certain control and text-direction
+characters. That is why the examples use `?` when they build tags.
+
+That matters most once your events become Rust types. The typed layer asks each
+event for its tags through a `DomainEvent` method, `fn tags(&self) -> Tags`.
+It returns `Tags`, not a `Result`, so there is nowhere for an error to go.
+Building a tag from a raw string inside that method would leave only one way
+out: calling `expect` on data from outside your program, on the write path,
+after the decision has already been made.
+
+The fix is to check the identifier once, at the edge of your program, where a
+`Result` is still welcome. Wrap it in its own type (a *newtype*), whose only
+constructor builds the `Tag` and keeps it. From then on, handing out that tag
+cannot fail.
+
+The struct keeps both the original string and the tag built from it. Because
+`new` is the only way to make a `CourseId`, every `CourseId` in your program
+holds a tag that was already checked:
+
+```rust
+use happenstance::{InvalidTag, Tag, Tags};
+
+#[derive(Debug, Clone)]
+struct CourseId {
+    id: String,
+    tag: Tag,
+}
+
+impl CourseId {
+    // The only constructor, and the one place an identifier is
+    // refused.
+    fn new(id: &str) -> Result<Self, InvalidTag> {
+        Ok(Self {
+            id: id.to_owned(),
+            tag: Tag::key_value("course", id)?,
+        })
+    }
+}
+
+fn main() -> Result<(), InvalidTag> {
+    let course = CourseId::new("c1")?; // the edge: `?` is at home
+    let refused = CourseId::new("");
+    assert!(refused.is_err(), "an empty value is not a tag");
+
+    // And this is the call that cannot fail. `Tags` has no
+    // infallible constructor from strings, but it has one from
+    // tags that already exist, so a `tags` method built this way
+    // needs no `Result` and no `expect`.
+    let tags: Tags = [course.tag.clone()].into_iter().collect();
+    assert_eq!(tags.len(), 1);
+    Ok(())
+}
+```
+
+Both worked examples do exactly this, and say so in comments: `CourseId` and
+`StudentId` in [the canonical example](../examples/course-subscriptions/src/main.rs),
+and `AccountId` in [the SQLite one](../examples/transfers-on-sqlite/src/main.rs).
+Each keeps the same two fields, the string and its tag.
+The typed layer makes the same choice for a decision model's scope: `scope`
+returns tags the model already holds, so it cannot fail either.
+
 ## What a narrow guard misses
 
 The query is the boundary, so a query that is too narrow guards too little, and
@@ -186,8 +187,9 @@ recognise it in your own code.
 
 The program below changes one expression. The seats item is tagged with the
 student the command is for, instead of the course whose seats the rule is
-about. Everything else is the same as above: the events appended, the
-condition, and the guarded append.
+about. Everything else is the same as in
+[the guard you would write](#the-guard-you-would-write): the events appended,
+the condition, and the guarded append.
 
 ```rust
 use happenstance::{AppendCondition, Event, EventStore, Query};
