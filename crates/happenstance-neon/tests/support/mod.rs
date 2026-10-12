@@ -40,7 +40,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use happenstance_neon::event_store::NeonEventStore;
 use happenstance_neon::{NeonConfig, SqlRequest, SqlStatement, SqlTransport, migration};
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::{Armed, Capability, Fixture};
 use tokio::sync::OnceCell;
 
 pub(crate) mod transport;
@@ -292,7 +292,7 @@ impl Fixture for NeonFixture {
     // `happenstance-postgres`'s staging, schema-qualified because this
     // transport has no `search_path` to lean on. `DROP TRIGGER IF EXISTS`
     // first, so arming twice on one instance is a no-op rather than an error.
-    async fn arm_held_above_frontier(&self) {
+    async fn arm_held_above_frontier(&self) -> Armed {
         self.migrate().await;
         let schema = happenstance_neon::config::quote_ident(self.schema());
         let statements = vec![
@@ -317,6 +317,7 @@ impl Fixture for NeonFixture {
             self.schema(),
         )
         .await;
+        Armed::Staged
     }
 
     async fn reopen(&self) {

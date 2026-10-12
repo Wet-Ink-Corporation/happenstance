@@ -19,11 +19,13 @@ summary: >-
   evaluates a condition over what the store holds, and VT-8's uniqueness on the origin pair is
   what ingest deduplicates against, while ingest never probes first, so neither reading could
   produce a duplicate. The proof is additive. happenstance-testkit gains
-  Fixture::HELD_ABOVE_FRONTIER, defaulted to declined, Fixture::arm_held_above_frontier, defaulted
-  to arming nothing, and the rule contains_event_id_reports_a_held_row_above_the_frontier, which
-  checks that read does not show the staged row before it asks the probe. Two mutants pin it:
-  FrontierFilteredMembershipStore, the probe with the frontier predicate copied in, and
-  UnarmedFrontierFixture, the fixture that claims the capability and arms nothing. CF-18's emitted
+  Fixture::HELD_ABOVE_FRONTIER, defaulted to declined, Fixture::arm_held_above_frontier, whose
+  provided body answers Armed::Nothing, and the rule
+  contains_event_id_reports_a_held_row_above_the_frontier. The rule requires Armed::Staged, then
+  checks that read does not show the staged row, then asks the probe. Three mutants pin it:
+  FrontierFilteredMembershipStore, the probe with the frontier predicate copied in;
+  UnarmedFrontierFixture, the forgotten override; and EmptyArmFrontierFixture, an override that
+  answers Staged and arms nothing. CF-18's emitted
   check rejects a fixture that declines READ_YOUR_OWN_WRITES and inherits the new default. The
   Postgres and Neon fixtures stage the row with a BEFORE INSERT trigger that lifts xact_id above
   any frontier, because holding the server-wide frontier back would stall every sibling rule.
@@ -101,23 +103,33 @@ passed the whole suite.
    `happenstance-testkit` gains:
    - `Fixture::HELD_ABOVE_FRONTIER`, defaulted to a declension whose reason is the public constant
      `UNSTATED_HELD_ABOVE_FRONTIER`;
-   - `Fixture::arm_held_above_frontier`, whose provided body arms nothing;
+   - `Fixture::arm_held_above_frontier`, returning the new public enum `Armed`. The provided body
+     arms nothing and answers `Armed::Nothing`; an override answers `Armed::Staged`;
    - `contains_event_id_reports_a_held_row_above_the_frontier`. It appends an anchor and reads it
-     back to learn the store's incarnation, arms the fixture, and appends again. It then requires
-     that `read` not show the second event (the staging check) and that the probe answer
-     `Ok(true)` for it. Positions are the ones `append` returned, never literals.
+     back to learn the store's incarnation, arms the fixture, and requires `Armed::Staged` (the
+     arming check). It then appends again, requires that `read` not show the second event (the
+     staging check), and requires the probe to answer `Ok(true)` for it. Positions are the ones
+     `append` returned, never literals.
 
    The row cannot be staged through the port. Every store publishes what it commits sooner or
    later, and `[FROZEN]` CF-33 forbids a rule that waits or races for the gap. So the staging is
    the adapter's, as a mid-batch fault is.
-5. **Two wrong implementations pin it**, registered in the testkit's mutant registry:
+5. **Three wrong implementations pin it**, registered in the testkit's mutant registry:
    - `FrontierFilteredMembershipStore`: the probe with the read path's frontier predicate copied
      in. It fails exactly the new rule, at the probe assertion. Its conformant twin,
      `HeldAboveFrontierStore`, differs from it in one function and passes everything.
    - `UnarmedFrontierFixture`: a fixture that declares the capability and leaves
-     `arm_held_above_frontier` to the provided body. It fails exactly the new rule, at the staging
-     check. That check is why the provided body may arm nothing rather than panic: a forgotten
-     override fails in the adapter's own CI either way.
+     `arm_held_above_frontier` to the provided body. It fails exactly the new rule, at the arming
+     check, on every run.
+   - `EmptyArmFrontierFixture`: an override that answers `Armed::Staged` and arms nothing. It
+     passes the arming check and fails exactly the new rule, at the staging check.
+
+   The staging check alone cannot catch the forgotten override deterministically. A frontier
+   store declines `READ_YOUR_OWN_WRITES` because an unrelated transaction can hold the
+   server-wide frontier back. While one does, an unarmed append also sits above the frontier, so
+   the staging check passes on that run. Detection that fires on some runs only is the flake
+   CF-33 calls worse than none. The provided body's answer is what makes the forgotten override
+   fail every time. The staging check stays for the override that exists and is empty.
 6. **CF-18 holds the default to the stores it is false about.** The default reason says the store
    has no frontier. That is a fact for most stores, so a fixture with no frontier may leave it.
    A fixture that declines `READ_YOUR_OWN_WRITES` has said its reads trail its commits, so for that
@@ -169,5 +181,10 @@ published adapters, and it needs its own record.
   frontier red for repeating a sentence that is true of it. The coupling to
   `READ_YOUR_OWN_WRITES` catches exactly the fixtures for which the sentence is false.
 - **A provided `arm_held_above_frontier` that panics**, the shape of `reopen` and
-  `arm_read_fault`. The staging check already fails a forgotten override in the adapter's own CI,
-  so a panic would add no protection, only one more panic in a provided body.
+  `arm_read_fault`. It would fail a forgotten override on every run, as the `Armed` answer does,
+  but `happenstance-testkit`'s new code is held to no `panic!` in production code, and the answer
+  keeps the failure inside the rule, with the rule's message.
+- **A provided body that arms nothing and returns `()`**, relying on the staging check. This
+  change first shipped it that way, and review rejected it: on a frontier store the forgotten
+  override passes the staging check whenever the frontier happens to be held back, so detection
+  is intermittent.

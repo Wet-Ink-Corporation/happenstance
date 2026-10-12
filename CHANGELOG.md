@@ -44,15 +44,18 @@ not the same as what a user needed to be told.
   has committed and the frontier has not yet passed. `happenstance-postgres` and
   `happenstance-neon` already answered that way, so no published behaviour changes;
   their notes at the method cite ADR-0095 in place of "recorded, not settled".
-  The rule appends an anchor, asks the fixture to arm, appends again, requires
-  that `read` not show the second event, and then requires `Ok(true)` from the
-  probe. The defect it rejects is `FrontierFilteredMembershipStore`: a probe with
-  the read path's frontier predicate copied in. `UnarmedFrontierFixture` pins the
-  staging check, which fails a fixture that claims the capability and arms nothing.
+  The rule appends an anchor, asks the fixture to arm and requires the answer
+  `Armed::Staged`, appends again, requires that `read` not show the second event,
+  and then requires `Ok(true)` from the probe. The defect it rejects is
+  `FrontierFilteredMembershipStore`: a probe with the read path's frontier
+  predicate copied in. `UnarmedFrontierFixture`, the forgotten override, pins the
+  arming check, and `EmptyArmFrontierFixture`, an override that answers `Staged`
+  and arms nothing, pins the staging check.
 
   `Fixture` gains `HELD_ABOVE_FRONTIER`, defaulted to a declension whose reason is
   the new public constant `UNSTATED_HELD_ABOVE_FRONTIER`, and
-  `arm_held_above_frontier`, whose provided body arms nothing. A store with no
+  `arm_held_above_frontier`, which returns the new public enum `Armed`. Its
+  provided body arms nothing and answers `Armed::Nothing`. A store with no
   frontier needs no change and reports one more skip. Adding a rule is a testkit
   minor that can turn an adapter's CI red, and here one fixture shape does: CF-18's
   `every_declined_capability_is_stated_by_this_fixture` now rejects a fixture that

@@ -46,7 +46,7 @@ use happenstance_core::{
     ReadOptions, SequencePosition, SequencedEvent, StoreLimit,
 };
 use happenstance_testkit::fixtures::{MemoryProjectionFixture, MemoryProjectionHandle};
-use happenstance_testkit::{Capability, Fixture, ProjectionFixture};
+use happenstance_testkit::{Armed, Capability, Fixture, ProjectionFixture};
 
 use crate::correct::{Log, LogError, LogStore, Snapshot, dense};
 use crate::harness::{ProjectionSubject, Subject};
@@ -688,15 +688,13 @@ impl<M: Membership> Fixture for FrontierFixture<M> {
     // Through the `Rc` every handle shares, so it reaches the handle the rule
     // connected before arming. Rows already committed stay visible, and every
     // later one is held above the frontier.
-    //
-    // A borrow that fails arms nothing, and that is not a silent pass: the
-    // rule's staging check then sees the next row and fails, naming this
-    // method. Nothing holds a borrow across this call in any case, because no
-    // method here awaits while holding one.
-    async fn arm_held_above_frontier(&self) {
-        if let Ok(mut log) = self.log.try_borrow_mut() {
-            log.frontier = Some(log.events.len());
-        }
+    async fn arm_held_above_frontier(&self) -> Armed {
+        let mut log = self
+            .log
+            .try_borrow_mut()
+            .expect("no borrow of the frontier log is live across arm_held_above_frontier");
+        log.frontier = Some(log.events.len());
+        Armed::Staged
     }
 }
 

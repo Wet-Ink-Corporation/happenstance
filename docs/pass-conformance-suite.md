@@ -119,9 +119,10 @@ leave it. If your fixture declines `READ_YOUR_OWN_WRITES`, the default is false
 about your store, and `every_declined_capability_is_stated_by_this_fixture` fails
 until you either state your own reason or support the capability. To support it,
 override `arm_held_above_frontier` so that the *next* append commits a row the
-frontier has not passed. The rule checks that `read` does not show that row before
-it asks the probe, so an override that arms nothing fails the rule instead of
-passing it. The PostgreSQL fixture in
+frontier has not passed, and return `Armed::Staged`. The provided body returns
+`Armed::Nothing`, and the rule fails on that answer, so a forgotten override fails
+on every run. The rule also checks that `read` does not show the row before it
+asks the probe, so an override that answers `Staged` and arms nothing fails too. The PostgreSQL fixture in
 [its support module](../crates/happenstance-postgres/tests/support/mod.rs) does it
 with a trigger that lifts the new row above any frontier.
 

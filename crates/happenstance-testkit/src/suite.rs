@@ -112,7 +112,7 @@ pub mod rules {
         item_of_types, item_tagged, query_of, query_of_items, query_of_types, query_tagged,
         tagged_event, tags,
     };
-    use crate::{Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, RuleOutcome};
+    use crate::{Armed, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, RuleOutcome};
 
     // ---------------------------------------------------------------------
     // The four guaranteed minima (VT-21 – VT-24)
@@ -6607,14 +6607,18 @@ pub mod rules {
     /// 1. One event appended before arming, and read back. That is the anchor,
     ///    and it is the only way to learn this store's incarnation, because
     ///    `EventStore` has no `store_id()` (ES-19).
-    /// 2. [`arm_held_above_frontier`](crate::Fixture::arm_held_above_frontier),
-    ///    then one more append. Its position is the one `append` returned, never
-    ///    a literal.
-    /// 3. **The staging check.** A read must not show the second event. If it
-    ///    does, the fixture staged nothing, and the probe below would be asked
-    ///    about an ordinary visible row. Asserting that is what keeps a fixture
-    ///    that forgot the override from passing.
-    /// 4. The probe must answer `Ok(true)` for the second event's identity.
+    /// 2. **The arming check.**
+    ///    [`arm_held_above_frontier`](crate::Fixture::arm_held_above_frontier)
+    ///    must answer [`Armed::Staged`]. The provided body
+    ///    answers `Nothing`, so a fixture that forgot the override fails here on
+    ///    every run. The staging check below cannot promise that on a frontier
+    ///    store, where an unarmed row is sometimes above the frontier anyway.
+    /// 3. One more append. Its position is the one `append` returned, never a
+    ///    literal.
+    /// 4. **The staging check.** A read must not show the second event. If it
+    ///    does, the override armed nothing, and the probe below would be asked
+    ///    about an ordinary visible row.
+    /// 5. The probe must answer `Ok(true)` for the second event's identity.
     pub async fn contains_event_id_reports_a_held_row_above_the_frontier<F: Fixture>(
         open: impl AsyncFn() -> F,
     ) -> RuleOutcome {
@@ -6635,7 +6639,17 @@ pub mod rules {
         );
         let incarnation = anchored.first().map(|anchor| anchor.id.store());
 
-        fixture.arm_held_above_frontier().await;
+        let armed = fixture.arm_held_above_frontier().await;
+        assert_eq!(
+            armed,
+            Armed::Staged,
+            "the arming: a fixture declaring `HELD_ABOVE_FRONTIER` supported MUST \
+             override `arm_held_above_frontier` and return `Armed::Staged` once it \
+             has armed the store. This fixture left the provided body, which arms \
+             nothing. A read after an unarmed append would hide the row only when \
+             something else happened to hold the frontier back, so this is checked \
+             here rather than left to the staging check below"
+        );
         let position = append_ok(&store, &[event("HeldAboveFrontier")]).await;
 
         let shown = read_ok(&store, &Query::all(), ReadOptions::new()).await;
@@ -6643,10 +6657,10 @@ pub mod rules {
             shown.iter().all(|event| event.position != position),
             "the staging: a fixture declaring `HELD_ABOVE_FRONTIER` supported MUST \
              keep an append committed after `arm_held_above_frontier` out of \
-             `read`, but the read showed position {position}. Either the fixture \
-             does not override `arm_held_above_frontier`, or its override arms \
-             nothing. Without a row the read cannot see, this rule would be asking \
-             the probe about an ordinary visible event. Shown: {:?}",
+             `read`, but the read showed position {position}. The override \
+             answered `Armed::Staged` and armed nothing. Without a row the read \
+             cannot see, this rule would be asking the probe about an ordinary \
+             visible event. Shown: {:?}",
             positions_of(&shown)
         );
 

@@ -83,7 +83,7 @@ use happenstance_core::{
     AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, EventType, Query,
     QueryItem, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId, Tag, Tags,
 };
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::{Armed, Capability, Fixture};
 
 use crate::correct::{self, Allocate, Log, LogError, LogStore, Snapshot, dense};
 use crate::harness::Subject;
@@ -3692,17 +3692,16 @@ impl Subject for NoopFaultFixture {
 /// A fixture that declares `HELD_ABOVE_FRONTIER` supported and **does not
 /// override** `arm_held_above_frontier`.
 ///
-/// [`NoopFaultFixture`]'s sibling, with one difference worth stating. There
-/// the forgotten override reaches a provided body that panics, so the vacuous
-/// pass needs an override that is present and empty. Here the provided body
-/// arms nothing on purpose (`contract.rs` says why), so the forgotten override
-/// *is* the empty one, and this fixture is it, written the way an author
-/// would write it: the claim, and nothing else.
+/// The forgotten override, written the way an author would write it: the
+/// claim, and nothing else. The provided body answers `Armed::Nothing`, and
+/// the rule's arming check fails on that answer before anything is appended.
 ///
-/// The store under it is `LogStore`, which is completely correct and has no
-/// frontier. Without the rule's staging check, the probe would be asked about
-/// an ordinary visible row, answer `true`, and the rule would report ES-41's
-/// reading as certified on a store that cannot even express the question.
+/// That check is what this mutant pins, and the staging check could not stand
+/// in for it. Under `LogStore` the unarmed row is visible, so the staging check
+/// would fail here too. On a frontier store it would not always: an unrelated
+/// transaction can hold the frontier back, so an unarmed row sometimes sits
+/// above it anyway and the staging check passes on that run. Only the answer
+/// from the provided body fails the forgotten override on every run.
 #[derive(Debug)]
 pub(crate) struct UnarmedFrontierFixture(LogStore);
 
@@ -3725,6 +3724,50 @@ impl Fixture for UnarmedFrontierFixture {
 
 impl Subject for UnarmedFrontierFixture {
     const NAME: &'static str = "UnarmedFrontierFixture";
+
+    fn open() -> Self {
+        Self(LogStore::new(dense))
+    }
+}
+
+/// A fixture that declares `HELD_ABOVE_FRONTIER` supported and overrides
+/// `arm_held_above_frontier` with a body that **answers `Armed::Staged` and arms
+/// nothing**.
+///
+/// [`NoopFaultFixture`]'s counterpart for this capability: the override is
+/// present, so the arming check passes, and it is empty. The rule's staging
+/// check is what fails it, because the store under it is `LogStore`. That store
+/// is correct and has no frontier, so the row the override claimed to hold is
+/// visible to the next read. Without the staging check, the probe would be
+/// asked about an ordinary visible row, answer `true`, and the rule would
+/// certify ES-41's reading on a store that cannot even express the question.
+#[derive(Debug)]
+pub(crate) struct EmptyArmFrontierFixture(LogStore);
+
+impl Fixture for EmptyArmFrontierFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over — this \
+         instrument's axis is what a declared frontier capability actually does",
+    );
+    // THE DEFECT, first half: the claim.
+    const HELD_ABOVE_FRONTIER: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        self.0.clone()
+    }
+
+    // THE DEFECT, second half: the answer an armed override gives, from a body
+    // that arms nothing.
+    async fn arm_held_above_frontier(&self) -> Armed {
+        Armed::Staged
+    }
+}
+
+impl Subject for EmptyArmFrontierFixture {
+    const NAME: &'static str = "EmptyArmFrontierFixture";
 
     fn open() -> Self {
         Self(LogStore::new(dense))

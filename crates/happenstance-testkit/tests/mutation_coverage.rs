@@ -2146,9 +2146,26 @@ const REGISTRY: &[Declared] = &[
         kind: Kind::Mutant,
         fails: &["contains_event_id_reports_a_held_row_above_the_frontier"],
         provenance: "a fixture that declares `HELD_ABOVE_FRONTIER` supported and leaves \
-             `arm_held_above_frontier` to the trait's provided body, which arms nothing, over a \
-             completely correct store with no frontier. It is the author who claims the \
-             capability first and means to write the injection later. Without the rule's \
+             `arm_held_above_frontier` to the trait's provided body, which answers \
+             `Armed::Nothing`. It is the author who claims the capability first and means to \
+             write the injection later. The staging check cannot be what fails it: on a \
+             frontier store an unarmed row is sometimes above the frontier anyway, because \
+             an unrelated transaction held it back, so that check would pass on some runs. \
+             The arming check fails it on every run, before anything is appended.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "contains_event_id_reports_a_held_row_above_the_frontier",
+            "the arming: a fixture declaring `HELD_ABOVE_FRONTIER` supported",
+        )],
+    },
+    Declared {
+        name: "EmptyArmFrontierFixture",
+        kind: Kind::Mutant,
+        fails: &["contains_event_id_reports_a_held_row_above_the_frontier"],
+        provenance: "a fixture that declares `HELD_ABOVE_FRONTIER` supported and overrides \
+             `arm_held_above_frontier` with a body that answers `Armed::Staged` and arms \
+             nothing, over a completely correct store with no frontier. The arming check \
+             passes, because the override answered as an armed one does. Without the rule's \
              staging check the probe would be asked about an ordinary visible row, answer \
              `true`, and ES-41's reading would be certified on a store that cannot stage it.",
         mode: FailureMode::Assertion,
@@ -2539,6 +2556,7 @@ macro_rules! for_each_mutant {
             crate::mutants::YieldingRowAtATimeFixture,
             crate::mutants::NoopFaultFixture,
             crate::mutants::UnarmedFrontierFixture,
+            crate::mutants::EmptyArmFrontierFixture,
 
             crate::mutants::MutantFixture<crate::mutants::EmptyPayloadIsNullStore>,
             crate::mutants::MutantFixture<crate::mutants::MetadataConflatingStore>,
@@ -2718,9 +2736,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Forty-four rows below are marked [`ModelOutcome::Agreed`] at this commit; three
+/// Forty-five rows below are marked [`ModelOutcome::Agreed`] at this commit; three
 /// of them are the conformant controls and *must* be, which leaves
-/// **forty-one misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **forty-two misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -2890,6 +2908,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("YieldingRowAtATimeStore", ModelOutcome::Agreed),
     ("NoopFaultFixture", ModelOutcome::Agreed),
     ("UnarmedFrontierFixture", ModelOutcome::Agreed),
+    ("EmptyArmFrontierFixture", ModelOutcome::Agreed),
     ("EmptyPayloadIsNullStore", ModelOutcome::Agreed),
     ("MetadataConflatingStore", ModelOutcome::Agreed),
     ("NarrowIdentifierColumnStore", ModelOutcome::Agreed),
@@ -3468,15 +3487,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 44,
-            "`MODEL_COVERAGE`'s heading says forty-four rows are `Agreed` and the \
+            agreed, 45,
+            "`MODEL_COVERAGE`'s heading says forty-five rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            41,
-            "`MODEL_COVERAGE`'s heading says forty-one misses and the table \
+            42,
+            "`MODEL_COVERAGE`'s heading says forty-two misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls

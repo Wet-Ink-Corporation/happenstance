@@ -63,7 +63,7 @@ use happenstance_postgres::projection_store::PostgresProjectionStore;
 use happenstance_postgres::sqlx::postgres::PgPoolOptions;
 use happenstance_postgres::sqlx::{Executor, PgPool};
 use happenstance_testkit::concurrency::CONTENDERS;
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::{Armed, Capability, Fixture};
 use testcontainers::ReuseDirective;
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
@@ -633,13 +633,14 @@ impl Fixture for PostgresFixture {
     /// # Panics
     ///
     /// On any failure to reach or prepare the server. See the module docs.
-    async fn arm_held_above_frontier(&self) {
+    async fn arm_held_above_frontier(&self) -> Armed {
         let pool = self.pool().await;
         pool.execute(HELD_ABOVE_FRONTIER_INJECTION)
             .await
             .unwrap_or_else(|error| {
                 panic!("a broken test environment, not a non-conformant adapter: {error}")
             });
+        Armed::Staged
     }
 
     async fn reopen(&self) {

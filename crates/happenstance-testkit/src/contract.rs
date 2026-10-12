@@ -605,17 +605,25 @@ pub trait Fixture {
     /// A release would be a second method whose only caller is the rule's
     /// last line.
     ///
-    /// # The provided body arms nothing, and that is not a silent pass
+    /// An override returns [`Armed::Staged`] once it has armed the store.
     ///
-    /// Unlike [`reopen`](Self::reopen)'s, this default does not panic. It does
-    /// not need to. The rule checks the staging before it checks the probe: a
-    /// read taken after arming must not show the appended row. A fixture that
-    /// declares [`HELD_ABOVE_FRONTIER`](Self::HELD_ABOVE_FRONTIER) supported
-    /// and forgets this override fails there, with a message naming this
-    /// method. So does an override that arms nothing. That failure lands in
-    /// the adapter's own CI, where a panic here would have landed too.
-    fn arm_held_above_frontier(&self) -> impl Future<Output = ()> {
-        core::future::ready(())
+    /// # The provided body says it armed nothing
+    ///
+    /// It returns [`Armed::Nothing`], and the rule asserts on that answer
+    /// before it appends. A fixture that declares
+    /// [`HELD_ABOVE_FRONTIER`](Self::HELD_ABOVE_FRONTIER) supported and
+    /// forgets this override therefore fails on every run, with a message
+    /// naming this method. The answer is needed because the rule's staging
+    /// check cannot catch the forgotten override reliably. On a frontier
+    /// store, an unrelated transaction can hold the frontier back, so an
+    /// unarmed append sometimes sits above it anyway, and the staging check
+    /// passes on that run. Detection that fires only on some runs is the
+    /// flake CF-33 exists to forbid.
+    ///
+    /// The staging check stays, for the other wrong implementation: an
+    /// override that answers [`Armed::Staged`] and arms nothing.
+    fn arm_held_above_frontier(&self) -> impl Future<Output = Armed> {
+        core::future::ready(Armed::Nothing)
     }
 }
 
@@ -1491,3 +1499,22 @@ pub const UNSTATED_HELD_ABOVE_FRONTIER: &str = "this fixture has not said whethe
      visibility frontier; a store that shows a row from the moment it commits it \
      has no such row to stage, and this is that answer given by default rather \
      than by its author";
+
+/// What [`Fixture::arm_held_above_frontier`] reports it did.
+///
+/// The rule asserts [`Armed::Staged`] before it appends. That is how a fixture
+/// that claims [`HELD_ABOVE_FRONTIER`](Fixture::HELD_ABOVE_FRONTIER) and forgets
+/// the override fails on every run, rather than only on runs where nothing
+/// else happens to hold the store's frontier back.
+///
+/// Deliberately exhaustive, like [`RuleOutcome`]. An arming either happened or
+/// it did not, and a third answer would be one the rule could not judge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use = "the rule asserts on this answer; dropping it hides a forgotten override"]
+pub enum Armed {
+    /// The override armed the store: the next append is held above the
+    /// frontier.
+    Staged,
+    /// Nothing was armed. Only the provided body returns this.
+    Nothing,
+}
