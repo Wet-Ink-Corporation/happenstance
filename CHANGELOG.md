@@ -47,6 +47,10 @@ not the same as what a user needed to be told.
   either constructor. `new` stays fallible, for strings and for sequences that
   might be empty, and so does `of_types`, its tagless form
   ([ADR-0069](.kb/decisions/0069-queryitem-gains-a-total-constructor.md)).
+- **The API documentation carries the project's badge** (#173). Each published
+  crate's rustdoc pages show the happenstance badge as the sidebar logo and the
+  browser favicon, served from `assets/brand/favicon.svg` on `main`. This is
+  documentation only; no code or behaviour changed.
 - **`happenstance-testkit`: `contains_event_id_reports_a_held_row_above_the_frontier`,
   and the capability it runs behind** (#109,
   [ADR-0095](.kb/decisions/0095-es-41-membership-means-held.md)). ES-41 now says

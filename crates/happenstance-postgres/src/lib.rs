@@ -183,7 +183,7 @@
 // nothing. The manifest asserted that was happening while neither the feature
 // nor a single attribute existed, so every gated item rendered as ordinary API.
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![doc(html_no_source)]
+#![doc(html_no_source, /* one line: rustfmt keeps a commented list whole, and the lines below are cited by number */ html_logo_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg", html_favicon_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg")]
 pub mod error;
 
 #[cfg(feature = "event-store")]

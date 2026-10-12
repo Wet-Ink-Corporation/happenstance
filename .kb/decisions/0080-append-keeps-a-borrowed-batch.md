@@ -113,7 +113,7 @@ ADR-0012 (`:93-160`) already foreclosed the other two shapes: an `EventBatch` ne
 ## What ADR-0012 and ADR-0055 cannot say
 
 - **(a)** ADR-0055 scheduled the builds through `event_store_benchmarks!`, which is compiled out
-  on wasm32 (`crates/happenstance-testkit/src/lib.rs:438`). The measurement used calibrated
+  on wasm32 (`crates/happenstance-testkit/src/lib.rs:442`). The measurement used calibrated
   replica arms instead (Weigh-In `wi-8b2786`): B0 equals the real adapter, heap operations and
   bytes, at all 72 points, and nothing under `crates/` changed.
 - **(b)** Postgres copies too: `insert_batch` takes `.to_owned()` and `.to_vec()` per event
