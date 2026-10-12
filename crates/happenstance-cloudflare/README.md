@@ -76,7 +76,7 @@ async fn enrol(state: &worker::State) -> Result<(), Box<dyn core::error::Error>>
         .with_tags(Tags::from_pairs([("course", "c1")])?);
 
     // Append only if nothing matching has appeared since that read.
-    let condition = AppendCondition::new(query.clone()).after_opt(last_seen);
+    let condition = AppendCondition::new(query.clone()).after_every_guard_opt(last_seen);
     let appended = store.append(&[event], Some(&condition)).await?;
 
     // The store assigns positions and the caller reads them back rather than

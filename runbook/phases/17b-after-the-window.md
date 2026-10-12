@@ -35,7 +35,7 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       property test in `crates/happenstance-core/tests/query_item_of.rs`.
       `frozen_signatures.rs` lists no `QueryItem` constructors, so there was
       nothing for it to join.
-- [ ] #85 · **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
+- [x] #85 · **VT-30 — ADR-0054's alias and builder-state, decided in one pass.** The
       research recommends: `after_every_guard` and `after_every_guard_opt`, with
       `after` / `after_opt` deprecated since the release that carries them and
       kept through 1.x; the two pin tests and doc sentences ADR-0054 names;
@@ -44,6 +44,11 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       deprecation into an error — so this lands **last** among 17b's code items.
       Limb 2 retired by the record or by a multi-guard `fragmented_boundary`
       bench scenario.
+      **Done:** VT-30 is `[FROZEN]` by
+      [ADR-0096](../../.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md),
+      on the owner's call (`wi-378078`): `after_every_guard` and `after_every_guard_opt`
+      added, `after` and `after_opt` deprecated since `0.4.2` and kept through 1.x, every
+      in-tree call site migrated, typestate rejected and limb 2 retired by the record.
 - [x] #86 · **VT-14 — the RTL identifier corpus check.** A standalone
       `experiments/identifier-validation/` with a path dependency on
       `happenstance-core`: the E11 reproduction run against the shipped validator
@@ -150,6 +155,14 @@ a red then green run URL for each new sibling job, in this file's session log.
   rationale corrected. ADR-0091 records that `then(&[])` asserts nothing was emitted, that
   `decide` gets no third channel and that no `then_nothing()` is added. Both open questions
   are superseded. The PR is one-way and waits on the owner.
+
+
+- 2026-10-12 — #85: on the owner's call (`wi-378078`), VT-30 is `[FROZEN]` by ADR-0096.
+  `after_every_guard` and `after_every_guard_opt` are added, `after` and `after_opt` are
+  deprecated and kept through 1.x, and every in-tree call site is migrated. Typestate is
+  rejected, and limb 2 is retired by the record rather than by a bench scenario. ES-7
+  remains, so the exit criterion stays open.
+
 
 
 - 2026-10-12 — #88: the owner kept the caret (`wi-727ec8`). ADR-0092 freezes ES-7 and

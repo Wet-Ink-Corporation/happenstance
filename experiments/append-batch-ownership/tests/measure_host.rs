@@ -202,7 +202,7 @@ const CALLERS: [Caller; 5] = [
 
 fn fence(boundary: &Tags, decided_at: Option<SequencePosition>) -> AppendCondition {
     let item = QueryItem::tagged(boundary.clone()).expect("one tag is a valid item");
-    AppendCondition::new(Query::from_item(item)).after_opt(decided_at)
+    AppendCondition::new(Query::from_item(item)).after_every_guard_opt(decided_at)
 }
 
 /// Why a contended run stopped before every contender committed, one label per

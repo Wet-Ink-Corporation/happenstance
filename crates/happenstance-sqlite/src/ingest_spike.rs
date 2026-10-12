@@ -520,7 +520,7 @@ mod tests {
         assert_eq!(ingested.appended, 1);
 
         let landed = carrying(&log(&store).await, rival[0].id).position;
-        let since_decision = AppendCondition::new(seat).after(decided_at);
+        let since_decision = AppendCondition::new(seat).after_every_guard(decided_at);
         match store
             .append(&[event("Reserved", "seat-9")], Some(&since_decision))
             .await

@@ -129,7 +129,8 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     store.append(&[seat.clone()], None).await?;
 
     let (seen, upto) = read_decision_model(&store, &seats).await?;
-    let condition = AppendCondition::new(seats).after_opt(upto);
+    let condition =
+        AppendCondition::new(seats).after_every_guard_opt(upto);
     let at = store.append(&[seat], Some(&condition)).await?;
 
     println!("{} seen, up to {upto:?}, at {at:?}", seen.len());
@@ -145,7 +146,7 @@ One seat is already held when the program reads, so the read sees it and stops
 at position 1. Nobody writes between the read and the append, so the condition
 holds and the store accepts the new event at position 2.
 
-`after_opt` takes the position as an `Option` because a read whose query
+`after_every_guard_opt` takes the position as an `Option` because a read whose query
 matched nothing returns `None`. With no position to be "after", every matching
 event counts,
 so the condition would refuse if anything matching the query existed at all.
@@ -181,10 +182,10 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     let seats = Query::from_items([item])?;
     let seat = Event::new("SeatHeld", &b"{}"[..])?.with_tags(held);
     store.append(&[seat.clone()], None).await?; // already held
-
     let (_taken, upto) = read_decision_model(&store, &seats).await?;
     store.append(&[seat.clone()], None).await?; // another writer
-    let condition = AppendCondition::new(seats).after_opt(upto);
+    let condition =
+        AppendCondition::new(seats).after_every_guard_opt(upto);
     match store.append(&[seat], Some(&condition)).await {
         Err(AppendError::ConditionViolated(_)) => {
             println!("guarded above {upto:?}: ConditionViolated");

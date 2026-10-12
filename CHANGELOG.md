@@ -79,6 +79,29 @@ not the same as what a user needed to be told.
   declension, or support the capability and override `arm_held_above_frontier`.
   The Postgres and Neon fixtures support it with a `BEFORE INSERT` trigger that
   lifts the new row's `xact_id` above any frontier.
+- **`AppendCondition::after_every_guard` and `after_every_guard_opt`** (#85,
+  [ADR-0096](.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md)).
+  They do what `after` and `after_opt` always did, and the name now says so: the
+  boundary goes on **every** guard already in the condition. If you call one after
+  `and_guard`, it overwrites the boundary `and_guard` set and widens what the
+  condition tolerates, so call it first. Both doc blocks and `and_guard`'s now say
+  this, and two unit tests pin the order. VT-30 is now `[FROZEN]`, so from `1.0.0`
+  a setter that fills only unset boundaries would be a breaking change.
+
+### Changed
+
+- **`happenstance-testkit`: `fixtures::condition_after(query, 0)` checks the whole
+  log** instead of panicking (#85). No position is zero, so "after zero" means
+  "after nothing", and the result now equals `fixtures::condition(query)`. Every
+  other position behaves as before. Nothing in the suite passes `0`, and a test of
+  your own that relied on the panic now gets a whole-log guard instead.
+
+### Deprecated
+
+- **`AppendCondition::after` and `after_opt`**, in favour of `after_every_guard`
+  and `after_every_guard_opt`. They behave exactly as before and are **kept through
+  1.x**; only a 2.0 can remove them. The fix is a rename. A crate built with
+  `-D warnings` sees the deprecation as an error until it renames.
 
 ### Changed
 

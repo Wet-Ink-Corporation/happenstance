@@ -198,7 +198,7 @@ async fn main() -> Result<(), Failure> {
     // Two deliveries of r-9 race: the second reads before the first lands.
     let (_, stale) = read_decision_model(&store, &boundary).await?;
     assert_eq!(attempt(&store, &boundary, &request, &deposit).await?, 1);
-    let guard = AppendCondition::new(boundary.clone()).after_opt(stale);
+    let guard = AppendCondition::new(boundary.clone()).after_every_guard_opt(stale);
     let refused = store.append(&[deposit.clone()], Some(&guard)).await;
     assert!(matches!(refused, Err(AppendError::ConditionViolated(_))));
 
@@ -221,7 +221,7 @@ async fn attempt(
     if seen.iter().any(|event| event.tags().contains_all(request)) {
         return Ok(0);
     }
-    let guard = AppendCondition::new(boundary.clone()).after_opt(upto);
+    let guard = AppendCondition::new(boundary.clone()).after_every_guard_opt(upto);
     store.append(&[deposit.clone()], Some(&guard)).await?;
     Ok(1)
 }

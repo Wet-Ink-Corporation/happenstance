@@ -80,7 +80,7 @@ async fn s1_takes_c1_after(other: [(&str, &str); 2]) -> Result<bool, Failure> {
 
     let mine = Event::new("Subscribed", &b"{}"[..])?
         .with_tags(Tags::from_pairs([("course", "c1"), ("student", "s1")])?);
-    let condition = AppendCondition::new(decision).after_opt(upto);
+    let condition = AppendCondition::new(decision).after_every_guard_opt(upto);
     match store.append(&[mine], Some(&condition)).await {
         Ok(_) => Ok(true),
         Err(AppendError::ConditionViolated(_)) => Ok(false),
