@@ -504,47 +504,6 @@ fn no_fence_on_the_page_opts_out_of_the_compiler() {
     }
 }
 
-/// The crate root's doc comments as markdown, one entry per source line.
-///
-/// A line that is not a doc comment becomes empty rather than being dropped,
-/// so a fence's reported line is the line in the file.
-fn crate_root_docs() -> String {
-    read(CRATE_ROOT)
-        .lines()
-        .map(|line| {
-            let line = line.trim_start();
-            line.strip_prefix("//!")
-                .or_else(|| line.strip_prefix("///"))
-                .map_or("", |doc| doc.strip_prefix(' ').unwrap_or(doc))
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// The crate root is outside `cargo xtask narrative`'s tree, which is `docs/`
-/// and nothing else (#236). Its landing fence is the first program a docs.rs
-/// reader runs, so the attribute rule the page above is held to is held here
-/// too: every fence compiles **and runs**. An `ignore`, `no_run` or
-/// `compile_fail` tag on it would leave every other step green.
-#[test]
-fn no_fence_in_the_crate_roots_docs_opts_out_of_running() {
-    let docs = crate_root_docs();
-    let found = fences(&docs);
-    assert!(
-        !found.is_empty(),
-        "{CRATE_ROOT} carries no doc fence, so this test proves nothing"
-    );
-    for fence in found {
-        assert!(
-            fence.info.is_empty() || fence.info == "rust",
-            "{CRATE_ROOT}:{}: the fence info string is `{}`; a crate-root example \
-             is compiled and run, and nothing in it is exempt",
-            fence.line,
-            fence.info
-        );
-    }
-}
-
 // ---------------------------------------------------------------------------
 // AC-007 — the density budget, the vocabulary, and zero affordances
 // ---------------------------------------------------------------------------
@@ -764,6 +723,130 @@ fn no_sentence_states_a_rule_in_the_pages_own_words() {
             line.contains("](../spec/SPECIFICATION.md#"),
             "{PAGE}:{}: a `MUST` sentence that is not a clause link: {line}",
             index + 1
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// #236 — the crate root's fences, which no narrative step reads
+// ---------------------------------------------------------------------------
+//
+// Appended rather than placed beside the page's attribute test above, because
+// ADR-0054 cites this file by line (`:423`, `:696`) and an insert above those
+// lines would repoint an accepted decision nobody may edit.
+
+/// The crate root's doc comments as markdown, one entry per source line.
+///
+/// A line that is not a doc comment becomes empty rather than being dropped,
+/// so a fence's reported line is the line in the file.
+fn crate_root_docs() -> String {
+    read(CRATE_ROOT)
+        .lines()
+        .map(|line| {
+            let line = line.trim_start();
+            line.strip_prefix("//!")
+                .or_else(|| line.strip_prefix("///"))
+                .map_or("", |doc| doc.strip_prefix(' ').unwrap_or(doc))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A fence delimiter line by `CommonMark`'s rule: up to three spaces of
+/// indentation, then a run of three or more of one of `` ` `` or `~`. Returns
+/// the character, the run's length and the trimmed rest of the line.
+///
+/// Kept apart from [`fences`], which the page's tests above use with a
+/// backtick-only, unindented reading that their expectations were written
+/// against.
+fn doc_fence_delimiter(line: &str) -> Option<(char, usize, &str)> {
+    let unindented = line.trim_start_matches(' ');
+    if line.len() - unindented.len() > 3 {
+        return None;
+    }
+    let mark = unindented
+        .chars()
+        .next()
+        .filter(|c| matches!(c, '`' | '~'))?;
+    let rest = unindented.trim_start_matches(mark);
+    let run = unindented.len() - rest.len();
+    (run >= 3).then_some((mark, run, rest.trim()))
+}
+
+/// Every fence opener in `docs`, as `(line, info)`, 1-based.
+///
+/// A fence closes only on a delimiter of its own character, at least as long
+/// as its opener, with nothing after it, so a `~~~` line inside a backtick
+/// fence is body rather than a new opener.
+fn doc_fence_openers(docs: &str) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut open: Option<(char, usize)> = None;
+    for (index, line) in docs.lines().enumerate() {
+        let Some((mark, run, info)) = doc_fence_delimiter(line) else {
+            continue;
+        };
+        match open {
+            Some((opened, length)) if mark == opened && run >= length && info.is_empty() => {
+                open = None;
+            }
+            Some(_) => {}
+            None => {
+                out.push((index + 1, info.to_owned()));
+                open = Some((mark, run));
+            }
+        }
+    }
+    assert!(open.is_none(), "a doc fence is opened and never closed");
+    out
+}
+
+/// Every fence in `docs` whose info string opts it out of running, as
+/// `(line, info)`, 1-based.
+fn opted_out(docs: &str) -> Vec<(usize, String)> {
+    doc_fence_openers(docs)
+        .into_iter()
+        .filter(|(_, info)| !(info.is_empty() || info == "rust"))
+        .collect()
+}
+
+/// The crate root is outside `cargo xtask narrative`'s tree, which is `docs/`
+/// and nothing else (#236). Its landing fence is the first program a docs.rs
+/// reader runs, so the attribute rule the page above is held to is held here
+/// too: every fence compiles **and runs**. An `ignore`, `no_run` or
+/// `compile_fail` tag on it would leave every other step green.
+#[test]
+fn no_fence_in_the_crate_roots_docs_opts_out_of_running() {
+    let docs = crate_root_docs();
+    assert!(
+        !doc_fence_openers(&docs).is_empty(),
+        "{CRATE_ROOT} carries no doc fence, so this test proves nothing"
+    );
+    let exempt = opted_out(&docs);
+    assert!(
+        exempt.is_empty(),
+        "{CRATE_ROOT}: fences opted out as (line, info string) {exempt:?}; a \
+         crate-root example is compiled and run, and nothing in it is exempt"
+    );
+}
+
+/// rustdoc reads doc comments as `CommonMark`, which opens a fence with three
+/// or more backticks **or tildes**, indented by up to three spaces, and
+/// compiles what is inside either. `lint_narrative`'s
+/// `a_fence_indented_up_to_three_spaces_is_still_a_fence` and
+/// `a_tilde_fence_is_a_fence` record the same two ways past a walk that only
+/// strips a leading `` ``` ``; this is the crate root's copy of both.
+#[test]
+fn a_tilde_or_indented_opt_out_in_the_crate_root_is_caught() {
+    for (docs, info) in [
+        ("~~~ignore\nfn f() {}\n~~~\n", "ignore"),
+        ("~~~~rust,no_run\nfn f() {}\n~~~~\n", "rust,no_run"),
+        ("   ```compile_fail\nfn f() {}\n   ```\n", "compile_fail"),
+        ("  ~~~ignore\nfn f() {}\n  ~~~\n", "ignore"),
+    ] {
+        assert_eq!(
+            opted_out(docs),
+            [(1, info.to_owned())],
+            "an opted-out fence was not seen in {docs:?}"
         );
     }
 }

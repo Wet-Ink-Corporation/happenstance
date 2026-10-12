@@ -71,12 +71,12 @@
 //!   scoped to the directory whose behaviour it constrains. Prose elsewhere in
 //!   the repository may use `<details>` and this step will never say so.
 //! * **The `happenstance` crate root is outside this walk.** Its `//!` landing
-//!   fence and any clause it cites live in `crates/happenstance/src/lib.rs`,
-//!   not under [`TREE`], and by that same scoping no rule here reads them. The
-//!   fence attribute is held by `xtask/tests/first_encounter.rs`, which already
-//!   owns the crate root's half of the opening encounter; a clause citation
-//!   there is resolved by nothing, and the reviewer is the only instrument for
-//!   it.
+//!   fence and any clause it cites live in `crates/happenstance/src/lib.rs`.
+//!   The page walk is scoped to [`TREE`], and no [`FROZEN_DOC_MUSTS`] or
+//!   [`DECIDED_DOCUMENTATION`] row names that file as a site. The fence
+//!   attribute is held by `xtask/tests/first_encounter.rs`, which owns the
+//!   crate root's half of the opening encounter; a clause citation there is
+//!   resolved by nothing, and the reviewer is the only instrument for it.
 //! * **The scan reads source, and cannot know what a renderer does with it.**
 //!   It reports the bytes a page carries. Whether a particular host collapses,
 //!   ignores or escapes them is outside anything this repository can observe,
@@ -5523,41 +5523,116 @@ One writer at a time.
     /// The claim the crate-root bullet must carry, matched inside one bullet.
     const CRATE_ROOT_CLAIM: &str = "crate root is outside this walk";
 
-    /// Whether a module's limits section states the crate-root gap and names
-    /// the test that holds the fence attribute instead.
+    /// The file the bullet is about, as a pinned site would spell it.
+    const CRATE_ROOT: &str = "crates/happenstance/src/lib.rs";
+
+    /// Whether a module's limits section states the crate-root gap, names the
+    /// two arrays whose rows it rests on, and names the test that holds the
+    /// fence attribute instead.
     fn states_the_crate_root_gap(source: &str) -> bool {
         limits_bullets(&module_docs(source)).iter().any(|bullet| {
             bullet.contains(CRATE_ROOT_CLAIM)
+                && bullet.contains("FROZEN_DOC_MUSTS")
+                && bullet.contains("DECIDED_DOCUMENTATION")
                 && bullet.contains("xtask/tests/first_encounter.rs")
                 && bullet.contains("reviewer")
         })
     }
 
-    /// The blind spot, executed: the real walk discovers no page outside
-    /// [`TREE`], so `crates/happenstance/src/lib.rs` is never read here, and
-    /// the limits section says so and says what holds it instead. The second
-    /// half proves the bullet check can fail.
+    /// Every site either array names that is the crate root.
+    ///
+    /// These two arrays are the only reads this module makes outside [`TREE`]
+    /// — they already name `crates/happenstance-core` sources — so a row here
+    /// is the realistic way the crate-root bullet stops being true.
+    fn crate_root_sites(
+        pins: &[DocumentationMust],
+        decided: &[DecidedDocumentation],
+    ) -> Vec<&'static str> {
+        let pinned = pins.iter().filter_map(|entry| match entry.disposition {
+            Disposition::Pinned { site, .. } => Some(site),
+            Disposition::Excluded { .. } | Disposition::AdapterOwned { .. } => None,
+        });
+        pinned
+            .chain(decided.iter().map(|entry| entry.site))
+            .filter(|site| site.trim_start_matches("./") == CRATE_ROOT)
+            .collect()
+    }
+
+    /// Every walked page whose tree-relative path climbs out of [`TREE`].
+    ///
+    /// [`Page::new`] prefixes [`TREE`] to whatever it is handed, so a `path`
+    /// prefix check holds by construction; a `..` component in `rel` is what
+    /// a walk that followed a link out of the tree would actually produce.
+    fn pages_escaping_the_tree(walked: &[Page]) -> Vec<&str> {
+        walked
+            .iter()
+            .filter(|page| page.rel.split('/').any(|part| part == ".."))
+            .map(|page| page.rel.as_str())
+            .collect()
+    }
+
+    /// The blind spot, executed: the real walk discovers no page that climbs
+    /// out of [`TREE`], so `crates/happenstance/src/lib.rs` is never read by
+    /// it, and the limits section says so and says what holds it instead.
+    /// Each check is run once over a constructed case that must fire.
     #[test]
     fn the_crate_root_is_outside_the_walk_and_the_limit_says_where_it_is_held() {
         let root = workspace_root().expect("xtask sits inside the workspace");
         let walked = pages(&root).expect("the pinned tree is readable");
+        let escaped = pages_escaping_the_tree(&walked);
         assert!(
-            walked
-                .iter()
-                .all(|page| page.path.starts_with(&format!("{TREE}/"))),
-            "the walk now reaches outside {TREE}; the crate-root bullet in {CHECKER} \
-             is wrong and must go in this same change"
+            escaped.is_empty(),
+            "the walk now reaches outside {TREE} ({escaped:?}); the crate-root bullet \
+             in {CHECKER} is wrong and must go in this same change"
+        );
+        let climbing = [page_with(&format!("../{CRATE_ROOT}"), "")];
+        assert_eq!(
+            pages_escaping_the_tree(&climbing),
+            [format!("../{CRATE_ROOT}")],
+            "a page that climbs out of {TREE} must be caught"
         );
 
         let source = shipping_source(CHECKER);
         assert!(
             states_the_crate_root_gap(&source),
-            "{CHECKER}'s `# {LIMITS_HEADING}` must state `{CRATE_ROOT_CLAIM}` and name \
-             the test and the reviewer that hold it"
+            "{CHECKER}'s `# {LIMITS_HEADING}` must state `{CRATE_ROOT_CLAIM}`, name \
+             FROZEN_DOC_MUSTS and DECIDED_DOCUMENTATION, and name the test and the \
+             reviewer that hold it"
         );
         assert!(
             !states_the_crate_root_gap(&without_bullet(&source, CRATE_ROOT_CLAIM)),
             "deleting the bullet must be caught"
+        );
+    }
+
+    /// The other half of the bullet's claim: neither array that reads source
+    /// outside [`TREE`] names the crate root as a site. The constructed rows
+    /// are the edit that would make the bullet false, and each must be caught.
+    #[test]
+    fn no_pinned_or_decided_site_names_the_crate_root() {
+        let named = crate_root_sites(FROZEN_DOC_MUSTS, DECIDED_DOCUMENTATION);
+        assert!(
+            named.is_empty(),
+            "a FROZEN_DOC_MUSTS or DECIDED_DOCUMENTATION row now reads {CRATE_ROOT}; \
+             the crate-root bullet in {CHECKER} is wrong and must go in this same change"
+        );
+
+        let pin = [pinned("ES-23", CRATE_ROOT, "a pinned phrase")];
+        assert_eq!(
+            crate_root_sites(&pin, &[]),
+            [CRATE_ROOT],
+            "a Pinned row naming the crate root must be caught"
+        );
+        let decided = [DecidedDocumentation {
+            decision: ".kb/decisions/0011-read-laziness-and-isolation.md",
+            site: CRATE_ROOT,
+            anchor: "a decided phrase",
+            replaced: None,
+        }];
+        assert_eq!(
+            crate_root_sites(&[], &decided),
+            [CRATE_ROOT],
+            "a DECIDED_DOCUMENTATION row naming the crate root must be caught"
         );
     }
 
