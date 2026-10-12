@@ -766,6 +766,18 @@ leave every merge with the owner.
 | — | [`kb-decision-wi-f97418`](../decisions/wi-f97418-should-92-carve-cf-40-s-cloudflare-metadata.md) | CF-40's Cloudflare metadata ceiling is carved from the documented 2 MB row limit | accepted | 17b | — |
 | — | [`kb-decision-wi-fa5c7b`](../decisions/wi-fa5c7b-may-the-afk-session-build-one-way-17b-prs-83-93.md) | An unattended session builds the one-way 17b PRs; the owner merges them | accepted | 17b | — |
 
+## 2026-10-12: PS-39 frozen on a live Neon run (#81)
+
+ADR-0094 enacts `wi-378078`'s #81 limb, written straight here with no intake step. ADR-0082 left
+PS-39 provisional until live Neon had run `projection_ids_round_trip_by_bytes` green. CI's
+`live-neon` job did, on `main` at `8b52528`, so PS-39 is `[FROZEN]` and its `freeze-by-17b` row
+leaves the 1.0 dispositions. It supersedes nothing: ADR-0082's D6 named this condition, and this
+record says it was met.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0094 | [`kb-decision-0094`](../decisions/0094-ps-39-is-frozen-on-a-live-neon-run.md) | PS-39 is frozen on a live Neon run of `projection_ids_round_trip_by_bytes` | accepted | 17b | — |
+
 ## 2026-10-12: CF-40's metadata ceiling (#92)
 
 ADR-0093 implements `wi-f97418`. #92 builds ADR-0043's `StoreLimit::MetadataLen`, and the
