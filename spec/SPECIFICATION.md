@@ -6305,11 +6305,11 @@ different iteration orders.
 **PS-39 — A store MUST key a checkpoint on the `ProjectionId`'s exact bytes. Any
 id `ProjectionId::new` accepts MUST round-trip through `commit`, `checkpoint` and
 `reset`, and two ids that differ in any byte MUST be two checkpoints.**
-`[PROVISIONAL — falsified by a backing store whose key column cannot hold a
-MAX_PROJECTION_ID_LEN-byte UTF-8 key byte-faithfully and cannot be configured to.
-If one is real, VT-35's bound or character set narrows to what every store can
-hold. Freeze-by-17b, once the rule has run green against live Neon as well as
-against memory, SQLite and Postgres, where it ran green at phase 17.]`
+`[FROZEN]` — by [ADR-0094](../.kb/decisions/0094-ps-39-is-frozen-on-a-live-neon-run.md), at
+phase 17b (#81), once live Neon ran the rule green (CI run 38271947822, at `8b52528`); memory,
+SQLite and both Postgres stores had at phase 17. Reopened by a backing store whose key column
+cannot hold a MAX_PROJECTION_ID_LEN-byte UTF-8 key byte-faithfully and cannot be configured to;
+narrowing VT-35's bound or character set to suit one is then a major release.
 Minted by [ADR-0082](../.kb/decisions/0082-projection-id-is-validated-and-sync-is-reserved.md),
 as the store's half of VT-35: the constructor promises it folds, trims and
 normalises nothing, and that promise is worth nothing if the store keying the
@@ -9884,7 +9884,7 @@ scenarios. Ninety-five is every rule in the event-store family, however its
 clauses claim them; the distinct names the `Rule:` fields cite are a different
 count, because a field also names instruments outside `suite.rs`, and §7.3 and
 §7.4 carry the rules and clauses that do not pair up.
-`PS` is 67 % frozen. The port itself froze at ADR-0063, once adapters stood at both
+`PS` is 69 % frozen. The port itself froze at ADR-0063, once adapters stood at both
 ends of PS-2's axis; what is not frozen are the clauses still provisional against a
 measurement, those deferred to a later phase, and five demoted to prose
 — none of them waits on a missing adapter any more. `SY` sits
@@ -9900,7 +9900,7 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 35 | 28 | 6 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 38 | 4 | 1 | 0 |
-| §4 `ProjectionStore` | `PS` | 39 | 26 | 5 | 3 | 5 |
+| §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
 | **Total** | | **205** | **158** | **28** | **12** | **7** |
@@ -10054,7 +10054,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-36 | FROZEN | *(none — see clause)* | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
 | PS-38 | PROVISIONAL | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-17, E2E-23 |
-| PS-39 | PROVISIONAL | `projection_ids_round_trip_by_bytes` | E2E-18 |
+| PS-39 | FROZEN | `projection_ids_round_trip_by_bytes` | E2E-18 |
 
 #### `SY` — the `SyncPeer` port (§5)
 
