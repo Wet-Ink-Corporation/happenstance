@@ -501,11 +501,11 @@ impl SqliteBatch {
     ///
     /// # Parameter count
     ///
-    /// The values must match the placeholders `sql` uses, one for one. Nothing
-    /// counts them here. At `commit` (and `reset`) the driver counts them as it
-    /// binds, and refuses a mismatch in either direction as
-    /// [`CommitError::Store`] (or [`ResetError::Store`]) carrying
-    /// [`Sqlite`](SqliteProjectionStoreError::Sqlite) with
+    /// One value per number up to the highest placeholder `sql` uses (`?N`; a
+    /// bare `?` takes the next number), so `?1 OR ?1` takes one. Nothing counts
+    /// them here; at `commit` (and `reset`) the driver does, and refuses a
+    /// mismatch either way as [`CommitError::Store`] (or [`ResetError::Store`])
+    /// carrying [`Sqlite`](SqliteProjectionStoreError::Sqlite) with
     /// [`InvalidParameterCount`](rusqlite::Error::InvalidParameterCount).
     /// Neither the batch's statements nor the checkpoint move (ADR-0084).
     pub fn push(&mut self, sql: &'static str, params: impl IntoIterator<Item = Value>) {

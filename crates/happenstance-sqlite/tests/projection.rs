@@ -316,6 +316,49 @@ async fn a_statement_with_the_wrong_parameter_count_fails_the_commit_and_moves_n
     }
 }
 
+/// The reset half of the same promise: a reset batch whose statement's values
+/// do not match its placeholders fails the reset and moves nothing (ADR-0084).
+///
+/// `reset` replays its batch through the same `apply` as `commit` today, which
+/// is the only reason the rustdoc's "(and `reset`)" is true. A reset given its
+/// own replay, onto an entry point that ignores parameters, would delete `KEY`
+/// and leave the id at `NeverRun`; this leg refuses that.
+#[tokio::test]
+async fn a_statement_with_the_wrong_parameter_count_fails_the_reset_and_moves_nothing() {
+    let fixture = SqliteProjectionFixture::new();
+    let store = fixture.connect().await;
+    let id = ProjectionId::from_static("a_reset_with_the_wrong_parameter_count");
+    commit_one(&store, &id, SequencePosition::FIRST).await;
+
+    let mut batch = store.begin().await.unwrap();
+    batch.push(
+        "DELETE FROM projection_probe WHERE k = ?1 OR k = ?2",
+        [Value::Text(KEY.to_owned())],
+    );
+
+    let refused = store
+        .reset(batch, &id)
+        .await
+        .expect_err("a parameter-count mismatch must fail the reset");
+
+    assert!(
+        matches!(
+            refused,
+            ResetError::Store(SqliteProjectionStoreError::Sqlite(
+                rusqlite::Error::InvalidParameterCount(..)
+            ))
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(store.probe_read(KEY).await.unwrap(), Some(VALUE));
+    assert_eq!(
+        store.checkpoint(&id).await.unwrap(),
+        Checkpoint::Live {
+            through: SequencePosition::FIRST
+        }
+    );
+}
+
 /// The suite runs against a **file**, and a second `connect` is a second
 /// connection onto it.
 ///
