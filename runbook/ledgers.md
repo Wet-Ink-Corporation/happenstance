@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0096; 0090 – 0094 are held by unmerged PRs, ADR-0095 is #109's, and 0085 is an unused gap (`wi-dea8db`).** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0097; 0085 is an unused gap (`wi-dea8db`), and 0090 – 0096 are each taken, on `main` or by a pull request in flight.** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
@@ -42,7 +42,7 @@ parameter count is stated once, with an adapter-side count check proposed for Po
 is the owner's default; the record proposes its shape, and its code lands in its own lane PR.
 The VT-6 lane wrote 0086, **accepted** by the owner on 2026-10-08 (Postgres and Neon keep mint-once with a documented
 re-mint; mint-per-open declined; default-refusing detection ruled out after 1.0).
-Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change. #86 wrote 0089, accepted by the owner on 2026-10-11: VT-14 is frozen on the RTL corpus run (`experiments/identifier-validation/`), and its explicit bidirectional controls are nine, not seven.
+Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change. #86 wrote 0089, accepted by the owner on 2026-10-11: VT-14 is frozen on the RTL corpus run (`experiments/identifier-validation/`), and its explicit bidirectional controls are nine, not seven. #81 wrote 0094, accepted by the owner on 2026-10-12 (`wi-378078`): PS-39 is frozen on a live Neon run of `projection_ids_round_trip_by_bytes`.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
 why they are out of order with the numbers around them. 0026 and 0027 are still
 unwritten.
@@ -155,12 +155,12 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 29 `[PROVISIONAL]` clauses
+### The 28 `[PROVISIONAL]` clauses
 
 Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, VT-10 at phase 17
 by ADR-0073, ES-41 and PS-22 at phase 17 by ADR-0028, PS-9 and PS-11 at phase 17
 by ADR-0074, PS-15, PS-23 and PS-24 at phase 17 by ADR-0075, and ES-17 at phase 17 by
-ADR-0080, ES-11 and ES-12 at phase 17 by ADR-0087, and VT-14 at phase 17b by ADR-0089. PS-39 was minted provisional at phase 17 by ADR-0082. Their rows stay, struck,
+ADR-0080, ES-11 and ES-12 at phase 17 by ADR-0087, VT-14 at phase 17b by ADR-0089, and PS-39, minted provisional at phase 17 by ADR-0082, at phase 17b by ADR-0094. Their rows stay, struck,
 because rule 4 keeps it; `cargo xtask lints` now checks the count in this
 heading against §7.2 rather than matching it, so the next freeze changes one number
 here and nothing in the lint.
@@ -189,7 +189,7 @@ separate open questions overstated the exposure by that factor.
 | Checkpoint regression | ~~PS-22~~ | ~~a legitimate need to move a checkpoint backwards without clearing rows; a compacting store that renumbers~~ | **frozen at 17 — ADR-0028.** ES-38 forbids renumbering, and retention never rewinds a checkpoint over kept rows |
 | Compensation's shape and the merge rule's details | SY-7, SY-10, SY-20 – SY-23, SY-29, SY-30 | two unlike peers that cannot both express it | 13 |
 | Where a per-peer watermark lives | SY-31 | a peer with no transaction to put it in | 13 |
-| Projection-id keys | PS-39 | a store whose key column cannot hold a 255-byte UTF-8 id byte-faithfully | 17b |
+| Projection-id keys | ~~PS-39~~ | ~~a store whose key column cannot hold a 255-byte UTF-8 id byte-faithfully~~ | **frozen at 17b — ADR-0094.** Green on memory, SQLite and both Postgres stores at 17, then on live Neon in CI's branch-per-run `live-neon` job (run 38271947822, at `8b52528`), the last projection adapter in the workspace to run it. Reopened by a backing store whose key column cannot hold a 255-byte UTF-8 id byte-faithfully and cannot be configured to |
 | Membership as a port operation | ~~ES-41~~ | ~~an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip~~ | **frozen at 17 — ADR-0028.** Neon meets the transport wording's letter: its probe is one extra read-only round trip, over the pair VT-8 indexes, and passes live. It is accepted because no required path pays it — ingest deduplicates inside the write (`crates/happenstance-sync/src/ingest.rs:97-101`) — and ADR-0066:160 dispositioned the half as answered. The completeness half is settled by decision: `false` is store-relative. Held-versus-visible under ES-10's frontier is left open, to phase 13 |
 | Checkpoint visibility after commit | PS-38 | a store answering `checkpoint` from a replica that may lag its own `commit` — the shape a projection store over an eventually-consistent read model has. If real, the obligation narrows to "a subsequent read through the same handle" and every rule downstream gains a handle constraint | 7 — the first projection adapter over storage this workspace does not control |
 | A fixture's fault-injection promise | ~~CF-39~~ | ~~a real adapter whose only injectable mid-batch fault is one its driver transparently absorbs — a connection killed mid-statement behind a reconnect-and-retry pool — which would make "the append returns `Err`" a promise no fixture over that adapter can keep~~ | **frozen at 16 — ADR-0066.** Owned by 8 and 10, whose row read *"no adapter has armed a fault yet"*; three now do — `happenstance-postgres`, `happenstance-neon` and `happenstance-cloudflare` |
@@ -264,7 +264,7 @@ rows will move every time a phase freezes a clause. CF-39 is not here: ADR-0066
 froze it. Nor is VT-10: ADR-0073 froze it at phase 17. Nor are ES-41 and PS-22:
 ADR-0028 froze both at phase 17. Nor are PS-9 and PS-11, which ADR-0074 froze at
 phase 17, nor PS-15, PS-23 and PS-24, which ADR-0075 froze at phase 17, nor ES-17, which
-ADR-0080 froze at phase 17, nor VT-14, which ADR-0089 froze at phase 17b.
+ADR-0080 froze at phase 17, nor VT-14, which ADR-0089 froze at phase 17b, nor PS-39, which ADR-0094 froze at phase 17b.
 
 **This is the schedule; the owner columns above are history.** Rule 4 keeps those
 rows, and most of them name phases long `done` — they record who owned a
@@ -308,7 +308,6 @@ says why.
 | PS-27 | freeze-by-18 | Phase 18 builds the failure-policy seam and `skip_and_record_is_atomic` with a mutant. ADR-0074 fixed the seam's shape at 17: a provided `on_error` defaulting to halt, handed the failure and the batch; a skip after a server-side failure on a live batch needs a savepoint |
 | PS-30 | freeze-by-18 | With `panicking_apply_rolls_back` and a mutant, if 18 builds the fan-out runner. If it does not, this row becomes `outside-1.0`: a conditional MUST on a runner 1.0 does not ship |
 | PS-38 | freeze-by-18 | Settled against the fan-out runner. ADR-0075 froze PS-23 and documented the no-lagging-replica obligation at 17, on `ProjectionStore::checkpoint` and on `happenstance-neon`'s README and constructor |
-| PS-39 | freeze-by-17b | Green on memory, SQLite and Postgres at 17; freezes once live Neon has run it green (not a required check until L8) |
 | SY-7 | freeze-by-13 | ADR-0027. The falsification test is buildable with `MemorySyncPeer` and two adjudicator configurations |
 | SY-10 | freeze-by-13 | Phase 13's exit criteria already require both topologies to be expressible. Fallback: renew against the marker's own test, since a firing makes the permission redundant, not wrong |
 | SY-14 | freeze-by-13 | Measured against the Neon peer. Phase 17's foreign-identity spike must not foreclose a bounded-round-trip ingest path |
