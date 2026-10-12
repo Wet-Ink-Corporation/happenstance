@@ -46,8 +46,8 @@
 //!   that silence so the day it closes is the day this bullet fails a build.
 //!   The only other instrument is the reviewer who reads the tag in the diff.
 //! * **A Rust example tagged `no_run` is compiled and never executed.** The
-//!   fence walk accepts `no_run` beside `rust` and asks for no allowance, so a
-//!   page fence retagged `rust,no_run` still type-checks while its assertions
+//!   fence walk accepts `no_run`, alone or beside `rust`, and asks for no
+//!   allowance, so a page fence retagged `rust,no_run` still type-checks while its assertions
 //!   stop running, and a false `assert!` on a page passes the gate. A test pins
 //!   that silence with exactly such a fence. The instrument is the reviewer
 //!   who reads the tag in the diff; making `no_run` need an
@@ -5482,8 +5482,9 @@ One writer at a time.
     /// The claim the `no_run` bullet must carry, matched inside one bullet.
     const NO_RUN_CLAIM: &str = "tagged `no_run` is compiled and never executed";
 
-    /// The `no_run` limit, executed: a fence whose assertion is false on its
-    /// face walks clean, and the checker's limits section says so.
+    /// The `no_run` limit, walked: a fence whose assertion is false on its
+    /// face walks clean, and the checker's limits section says so. The walk
+    /// never compiles the fence; the false assertion is there for a reader.
     ///
     /// `no_run` sits in the accepting arm of [`check_fences`] beside `rust`, so
     /// a page fence retagged `rust,no_run` keeps compiling and stops running.
@@ -5493,10 +5494,7 @@ One writer at a time.
     #[test]
     fn a_no_run_fence_with_a_false_assertion_walks_clean_and_the_limit_says_so() {
         let text = "```rust,no_run\nfn main() {\n    assert_eq!(1, 2);\n}\n```\n";
-        let found = walk(
-            &[page_with("append-conditions.md", text)],
-            IGNORE_ALLOWANCES,
-        );
+        let found = walk(&[page_with("append-conditions.md", text)], &[]);
         assert!(
             found.is_empty(),
             "the `no_run` limit is closed: the walk now reports the fence. Delete the \
