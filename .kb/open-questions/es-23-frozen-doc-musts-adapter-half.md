@@ -103,7 +103,7 @@ fourth adapter repeating it is what raises that cost from "one embarrassing gap,
 all four published event-store adapters carry their own `# Cancellation` section —
 `crates/happenstance-sqlite/src/event_store.rs:125`, `crates/happenstance-cloudflare/src/event_store.rs:122`,
 `crates/happenstance-postgres/src/event_store.rs:29` and `crates/happenstance-neon/src/event_store.rs:3`.
-`FROZEN_DOC_MUSTS` still has only the port row (`xtask/src/lint_narrative.rs:1476-1482`).
+`FROZEN_DOC_MUSTS` still has only the port row (`xtask/src/lint_narrative.rs:1483-1489`).
 
 What is left is whether the array's completeness claim owes a third disposition, which is not
 a 1.0 surface question. **Owner now: phase 20**, where the adapter-author pointer this atom's
@@ -118,8 +118,8 @@ no decision atom is written: it changes no clause, and ES-23's text is untouched
 `Disposition::AdapterOwned { targets }` is an obligation that falls on each adapter's
 documentation, discharged per adapter by a test in its own crate. The narrative step points at
 those tests and never runs them. ES-23 is its first row and the array's first two-row clause. The
-port row stays `Pinned` at `xtask/src/lint_narrative.rs:1476-1482`, and the adapter row at
-`:1483-1493` names `crates/happenstance-{sqlite,cloudflare,postgres,neon}/tests/cancellation_statement.rs`.
+port row stays `Pinned` at `xtask/src/lint_narrative.rs:1483-1489`, and the adapter row at
+`:1490-1500` names `crates/happenstance-{sqlite,cloudflare,postgres,neon}/tests/cancellation_statement.rs`.
 The derivation rule above the array says so where the next reader meets it, and the module's
 limits section states what the row cannot do.
 
