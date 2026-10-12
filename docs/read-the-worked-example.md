@@ -1,23 +1,24 @@
 # Read the worked example
 
-> **Answers:** `orientation` — Where can I read a whole DCB program?
+> **Answers:** `orientation` — Where can I read a complete DCB program?
 
-The canonical example is three rules that no single entity can hold on its
-own, and the three decisions taken on them against a running store. It is the
-one place in this repository where the read-decide-append cycle works over
-domain code rather than inside a fence.
+The worked example is a short program about students subscribing to courses,
+with three rules that each depend on more than one thing. It is the best place
+to see the ideas from the first encounter working together in real domain code.
 
-Its own explanation names the model you arrived with, in another voice and
-correctly for its purpose; the single place that model is answered is
+The example's explanation describes the problem in the terms of classical
+event sourcing, which suits its purpose. If those terms leave you wondering
+where your own event streams would go, the answer is under
 [where your streams went](carry-your-invariant.md#where-your-streams-went).
 
-You have just written a `Query` and an `AppendCondition` by hand, and the
-example holds neither: `happenstance::commit` derives both from a
-`DecisionModel`, so what you are about to read is the same boundary one layer
-up rather than a different library.
+The code will look different from what you have written so far. You built a
+`Query` and an `AppendCondition` by hand; the example writes neither. Instead,
+`happenstance::commit` builds both from a `DecisionModel`, a type that says
+which events a decision reads and what it works out from them, and then reads,
+decides, appends and retries for you. It is the same boundary, one layer up.
 
-[The example's own explanation](../examples/course-subscriptions/src/overview.md)
-is where to begin.
+Start with [the example's own explanation](../examples/course-subscriptions/src/overview.md),
+which sets out the three rules and how each decision is taken.
 
-[The example's source](../examples/course-subscriptions/src/main.rs) is the
-program that explanation is about.
+Then read [the example's source](../examples/course-subscriptions/src/main.rs),
+the program that explanation describes.

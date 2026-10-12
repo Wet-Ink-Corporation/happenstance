@@ -570,7 +570,7 @@ fn neither_surface_names_the_prior_model() {
             assert!(
                 !text.contains(word),
                 "{surface} names the prior model (`{word}`); it is named on \
-                 exactly one page in the set, and this is not it"
+                 the bridge's page and the background pages, never on this one"
             );
         }
     }

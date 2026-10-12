@@ -2,90 +2,130 @@
 
 > **Answers:** `how-to` — How do I run the event store inside a Cloudflare Durable Object?
 
-[`happenstance-cloudflare`](../crates/happenstance-cloudflare/README.md) turns one
-Durable Object into an event store. `CloudflareEventStore` writes to the object's
-own SQL storage, on `wasm32-unknown-unknown`, inside Workers. If you have not yet
-decided that a Durable Object is where your log belongs,
-[Choose a store](choose-a-store.md) compares it with the other four stores first.
+This page is for you if you build on Cloudflare Workers and want your event log
+to live inside a Durable Object. By the end you will have a store built inside
+your object's class, decision code that runs there unchanged from your host
+tests, and a clear picture of what the store refuses and what has not yet been
+proven about it.
 
-This page starts from a `#[durable_object]` class and gets a store into it. What
-it says comes from the crate's README, its crate-root documentation or the
-documentation of the item it names. A name in italics is a heading in one of
-those, and the sentence says which.
+Why a Durable Object? Each object is a single-threaded actor that owns its own
+SQL storage. Only one request runs inside it at a time, so the object is a
+natural home for a log whose writes must not race. The store from
+[`happenstance-cloudflare`](../crates/happenstance-cloudflare/README.md),
+`CloudflareEventStore`, writes the log to that storage, compiled for
+`wasm32-unknown-unknown`.
+
+If you have not yet decided that a Durable Object is where your log belongs,
+[choose a store](choose-a-store.md) compares it with the other four stores first.
+
+Everything below comes from the crate's README, its crate-root documentation, or
+the documentation of the item named. Where a name appears *in italics*, it is a
+section heading in one of those, so you can read more there.
 
 ## Build the store in the object
 
-A `#[durable_object]` class is constructed with a `worker::State`. Build the
-store from it, and call `migrate()` before the first append:
+A `#[durable_object]` class is constructed with a `worker::State`. You build the
+store from that state, and create its tables before the first append. Three
+steps:
 
-- **Construct.** `CloudflareEventStore::new(SqlStorage::from_state(&state))`.
+- **Construct.** Call
+  `CloudflareEventStore::new(SqlStorage::from_state(&state))`.
   `SqlStorage::from_state` is shorthand for
-  `SqlStorage::new(state.storage().sql())`, the spelling the README's *Use*
-  section shows. Both of the store's constructors, this one and `namespaced`
-  below, take the object's storage by injection, and nothing in the crate makes
-  storage of its own (`CloudflareEventStore::new`'s and `SqlStorage::new`'s own
-  documentation).
-- **Migrate.** `migrate()` creates the schema with `CREATE … IF NOT EXISTS`
-  throughout, so it is safe to call every time the object starts. Its first run
-  also mints this object's `StoreId` and keeps it in the object's own tables,
-  where every later handle reads it back (the `event_store` module, *Schema*).
-  It is synchronous, and it returns a `CloudflareEventStoreError` if a statement
-  fails.
-- **Use it.** From here the store takes the same calls as any other:
+  `SqlStorage::new(state.storage().sql())`, the spelling in the README's *Use*
+  section. The store never creates storage of its own: both of its
+  constructors, this one and `namespaced` below, take the object's storage as
+  an argument.
+- **Migrate.** Call `migrate()`. It creates the schema with
+  `CREATE … IF NOT EXISTS` throughout, so it is safe to call every time the
+  object starts. Its first run also mints this object's `StoreId` and keeps it
+  in the object's own tables, where every later handle reads it back. It is
+  synchronous, and returns a `CloudflareEventStoreError` if a statement fails.
+- **Use it.** From here the store takes the same calls as any other store:
   `read_decision_model`, then `append` under an `AppendCondition`. The README's
-  *Use* section is a whole enrolment decision written that way. The crate's own
-  doctests compile it, marked `no_run`, because off the target every `worker`
-  binding is a stub that panics.
+  *Use* section shows a whole enrolment decision written that way.
 
-A clone of the store is a second handle onto the same log, not a copy of it:
-cloning a `SqlStorage` aliases the object's storage (its own documentation).
+The README's example is compiled by the crate's tests but marked `no_run`. Off
+the Workers target, every `worker` binding is a stub that panics, so the code can
+be type-checked on a laptop but only runs inside an object.
 
-The conformance harness has a working class, split across two files. It is a
-test harness and is never published, so read it for shape and leave the
-routing:
+Cloning the store gives you a second handle onto the same log, not a copy of it,
+because cloning a `SqlStorage` points at the same storage.
+
+### A working class to read
+
+The repository's test harness for this crate contains a real class, split over
+two files. It is never published, so read it for its shape and ignore its
+request routing:
 
 - [Its object](../harness/workerd/src/object.rs) is the class: a struct holding
   the `State` it was constructed with, and a `fetch` that handles each request.
 - [Its fixture](../harness/workerd/src/fixture.rs) is where a store is built:
   `SqlStorage::from_state(state)`, then `CloudflareEventStore::namespaced`, then
-  `migrate()`. It uses `namespaced` rather than `new` because it keeps one log
-  per fixture instance in one object, which the next section explains.
+  `migrate()`. It uses `namespaced` rather than `new` because it keeps several
+  logs in one object, which the next section explains.
 
 ## Keep several logs in one object
 
-One object holds one log by default. To hold several, build each store with
-`CloudflareEventStore::namespaced(sql, &namespace)`, where `namespace` is a
-`TableNamespace`. Each namespace keeps its log in tables of its own, and two
-namespaces share no rows, no position sequence and no incarnation, so an
-`EventId` minted in one is never found in another. Two handles built under the
-same namespace are two handles onto one log. `migrate()` runs per namespace, so
-call it on each store before its first append (`CloudflareEventStore::namespaced`'s
-own documentation, which carries a compiled `no_run` example).
+By default, one object holds one log. That is often what you want, but sometimes
+you want several separate logs in the same object, for example one per tenant.
 
-`TableNamespace::new` validates the name rather than quoting it, because the name
-becomes part of a SQL identifier. It accepts lowercase ASCII letters, digits and
-`_`, starting with a letter, not beginning `sqlite`, and at most
-`TableNamespace::MAX_LEN` bytes, which is 64. A refused name comes back as an
-`InvalidTableNamespace` naming the first rule it breaks (`TableNamespace::new`'s
-*Errors*). `TableNamespace`'s documentation suggests one log per tenant; the
-`workerd` harness uses it to give each fixture instance its own log in one
-object.
+To do that, build each store with
+`CloudflareEventStore::namespaced(sql, &namespace)`, where `namespace` is a
+`TableNamespace`. Each namespace keeps its log in its own tables. Two namespaces
+share no rows and no position sequence, so an `EventId` written in one is never
+found in another. Two handles built under the same namespace are two handles
+onto one log.
+
+`migrate()` runs per namespace, so call it on each store before its first
+append. `CloudflareEventStore::namespaced`'s own documentation carries a
+compiled example.
+
+The namespace becomes part of a SQL table name. Rather than trying to quote it
+safely, `TableNamespace::new` only accepts names that are already safe:
+
+- lowercase ASCII letters, digits and `_`;
+- starting with a letter, and not beginning with `sqlite`;
+- at most `TableNamespace::MAX_LEN` bytes, which is 64.
+
+A name that breaks a rule comes back as an `InvalidTableNamespace` that names
+the first rule it broke.
 
 ## Keep the store on the object's turn
 
-`CloudflareEventStore` is `!Send` and `!Sync`. The crate holds every JavaScript
-value behind an `Rc`, and `Rc` is `!Send` whatever it holds (the crate root,
-*Findings*, 1). So the store implements the bare `EventStore` flavour and not
-`SendEventStore` (*What this crate is for*), and its error type is `!Send` too
+This is the one part of the page that is specific to Rust, and it is worth
+understanding before you write any code.
+
+**What `Send` means.** In Rust, a type is `Send` if it is safe to move to
+another thread. The compiler works this out for you and refuses, at compile
+time, any code that would move a non-`Send` value across threads. Most types
+are `Send`. A type that is not is written `!Send`.
+
+**Why this store is `!Send`.** Inside Workers, the crate holds every JavaScript
+value behind an `Rc`, a reference-counted pointer that is cheap because it does
+no thread synchronisation. That same fact makes `Rc` `!Send`, whatever it holds,
+and so `CloudflareEventStore` is `!Send` and `!Sync` too. Its error type is
+`!Send` as well, which the contract allows
 ([ES-6](../spec/SPECIFICATION.md#es-6--error-carries-no-send-or-sync-bound-and-the-strength-is-a-marker)).
 
-Write the code that decides generic over `EventStore`
+**Why there are two traits.** happenstance derives two flavours of the store
+contract from one definition. `EventStore`, the bare flavour, asks for no
+`Send`. `SendEventStore` also promises that the store and its futures are `Send`,
+so a multi-threaded runtime can take them. Every `SendEventStore` is also an
+`EventStore`, but not the other way round.
+
+`CloudflareEventStore` can only implement the bare `EventStore`.
+
+### Write decision code against `EventStore`
+
+Write your decision functions generic over `EventStore`, the weaker of the two
 ([ES-1](../spec/SPECIFICATION.md#es-1--one-definition-two-flavours-and-generic-code-binds-the-weaker-one)).
-What that buys here is one function that runs in the object and, unchanged,
-against the memory store in a host test. The program below shows that with a
-stand-in, because this page's examples cannot depend on the Cloudflare crate. `ObjectLocal` holds its storage behind an
-`Rc` and implements only the bare flavour, which is the shape of
-`CloudflareEventStore`:
+Then one function runs in the object and, unchanged, against the in-memory store
+in a host test. You test your rules on your laptop, and deploy the same code.
+
+The program below shows this. This page's examples cannot depend on the
+Cloudflare crate, so it uses a stand-in, `ObjectLocal`, with the same shape as
+`CloudflareEventStore`: its storage sits behind an `Rc`, and it implements only
+the bare flavour.
 
 ```rust
 use std::rc::Rc;
@@ -161,15 +201,20 @@ async fn main() -> Result<(), Failure> {
 }
 ```
 
-In the object, `enrol(&store, …)` takes your `CloudflareEventStore` in the same
+In your object, you pass your `CloudflareEventStore` to `enrol` in the same
 place. Await it in the handler that received the request, on the object's own
 turn.
 
-Do not hand the store to anything that needs `Send`. A `SendEventStore` bound
-refuses it, and so does `tokio::spawn`, which may move the task to another
-thread. The program below captures an `Rc` handle in a spawned task, and the
-compiler refuses it: *future cannot be sent between threads safely*, because
-the captured `Rc<MemoryEventStore>` is not `Send`:
+### Do not hand the store to anything that needs `Send`
+
+Anything that might move work to another thread will refuse the store. A
+`SendEventStore` bound refuses it, and so does `tokio::spawn`, which may run the
+task on a different thread. This is the compiler protecting you, not a
+limitation to work around.
+
+The program below captures an `Rc` handle in a spawned task. The compiler
+refuses it with *future cannot be sent between threads safely*, because the
+captured `Rc<MemoryEventStore>` is not `Send`:
 
 ```rust,compile_fail
 use std::rc::Rc;
@@ -189,10 +234,10 @@ async fn main() {
 }
 ```
 
-A `compile_fail` fence passes whatever stops it compiling, so the fence above
-would also pass if it failed for another reason. This control is the same
-program with the handle behind an `Arc`, which is `Send`, and it compiles and
-runs:
+A `compile_fail` example passes however it fails to compile, so on its own it
+would also pass if it failed for some unrelated reason. The control below is the
+same program with the handle behind an `Arc`, the thread-safe counterpart of
+`Rc`. It compiles and runs, which shows the `Rc` was the only problem:
 
 ```rust
 use std::sync::Arc;
@@ -212,22 +257,32 @@ async fn main() {
 }
 ```
 
-You lose nothing by keeping the store on one turn. A Durable Object is a
-single-threaded actor that owns its storage, so there is no second writer to
-race. `append` awaits nothing between checking the condition and writing the
-batch, so it never reports `AppendError::Busy` (`CloudflareEventStoreError`'s
-*Why this store never reports `AppendError::Busy`*). The conformance suite's
-concurrency family is not run against it, for the same reason (the crate root,
-*The concurrency family is not invoked, and that is a reason rather than a
-silence*).
+### What staying on one turn costs you
+
+Nothing. A Durable Object already runs one request at a time and owns its
+storage, so there is no second writer to race against. `append` does not await
+anything between checking the condition and writing the batch, so it never
+reports `AppendError::Busy`. `CloudflareEventStoreError`'s documentation
+explains this under *Why this store never reports `AppendError::Busy`*.
+
+For the same reason, the conformance suite's concurrency tests, which race
+several threads against one store, are not run against this store. The crate
+root explains why under *The concurrency family is not invoked, and that is a
+reason rather than a silence*.
 
 ## Know what the store refuses
 
-**Capacity.** The store checks a batch against three ceilings before it issues
-any SQL. A batch over one is refused as `AppendError::ExceedsStoreLimit`, naming
-the `StoreLimit` it crossed
+Every store has limits. Knowing these before you deploy saves you from
+discovering them in production.
+
+### Capacity
+
+The store checks each batch against three ceilings before it sends any SQL. A
+batch over one is refused as `AppendError::ExceedsStoreLimit`, naming the
+`StoreLimit` it crossed, so you can tell a capacity refusal apart from a storage
+failure
 ([VT-25](../spec/SPECIFICATION.md#vt-25--a-capacity-refusal-is-distinguishable-from-a-store-failure)).
-The README's *The limits this store declares* states them:
+The README states the ceilings under *The limits this store declares*:
 
 | Limit | Declared |
 | --- | --- |
@@ -235,105 +290,128 @@ The README's *The limits this store declares* states them:
 | tags per event | 1,024 |
 | events per append | 1,024 |
 
-These are the adapter's stated refusal policy, not a measured wall, and the crate
-publishes no constants for them, so copy the numbers from the README rather than
-naming them in code. They are seeded from Cloudflare's documented 2 MiB row cap,
-and the physical wall was never located (the same section).
+These numbers are the store's chosen policy, not a measured physical limit. They
+were set comfortably under Cloudflare's documented 2 MiB row cap, and the real
+wall was never located. The crate publishes no constants for them, so copy the
+numbers from the README rather than naming them in code.
 
-**Query width.** A wide query is not refused. The store splits it across several
-statements and merges the results, because `workerd` caps one statement at 5
-compound-`SELECT` terms, 100 bound parameters and 100,000 bytes (the README, *What
-the conformance suite ran against this adapter, and what it did not*). The two
-widths it splits at are public:
-`CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT`, 5, and
-`CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT`, 90. A 128-item query
-takes 26 statements here
+### Query width
+
+A wide query is not refused, but it may cost several statements. `workerd` caps
+one SQL statement at 5 compound `SELECT` terms, 100 bound parameters and 100,000
+bytes. To stay inside those caps, the store splits a wide query across several
+statements and merges the results.
+
+The two widths it splits at are public:
+`CloudflareEventStore::MAX_QUERY_ARMS_PER_STATEMENT`, which is 5, and
+`CloudflareEventStore::MAX_QUERY_PARAMETERS_PER_STATEMENT`, which is 90. A
+128-item query takes 26 statements here, and every store must accept at least
+that many items
 ([VT-23](../spec/SPECIFICATION.md#vt-23--min_supported_query_items-is-a-floor-of-128)).
-To size a decision model before you deploy it, call
-`CloudflareEventStore::planned_statement_count(&query)`, which counts the plan
-the read path uses (the crate root, *The query widths this store does not
+
+To see what a decision's query will cost before you deploy it, call
+`CloudflareEventStore::planned_statement_count(&query)`. It counts the plan the
+read path will use (the crate root, *The query widths this store does not
 refuse*).
 
-**Positions.** Workers SQL returns integers through a JavaScript number, so a
-position above 2^53 − 1 cannot be read back. A stored position past that bound is
-reported as `CloudflareEventStoreError::StoredPosition` rather than narrowed (the
-README, *The limits this store declares*).
+### Positions
 
-**A failed batch.** The object's turn commits when the handler returns normally,
-and the store turns every throw into an `Err` and returns normally, so the turn
-does not undo a failed batch. All-or-none rests on the write path instead
-([ES-18](../spec/SPECIFICATION.md#es-18--atomicity)). A batch's rows become
-events only at its last statement, which stamps every row with its event
-identity at once. A batch that fails before that stamp leaves rows no read
-treats as events, so nothing of it is visible. The store then sweeps those rows
-away, but the sweep is cleanup and not what makes the batch all-or-none (the
-`event_store` module, *Why the whole object is one consistency boundary*). If
-the sweep itself fails, `append` reports
-`CloudflareEventStoreError::PartialBatch`, and that variant's own documentation
-says the batch did not land and a retry is safe. The crate root's older wording,
-which says the opposite, is tracked in
+Workers SQL hands integers back through a JavaScript number, which can only
+hold whole numbers exactly up to 2^53 − 1. A stored position past that bound is
+reported as `CloudflareEventStoreError::StoredPosition` rather than silently
+rounded.
+
+### A failed batch
+
+A batch of events must land whole or not at all
+([ES-18](../spec/SPECIFICATION.md#es-18--atomicity)). On a Durable Object, the
+platform's own commit does not give you that here. The object's turn commits
+when the handler returns normally, and the store turns every failure into an
+`Err` and returns normally, so the turn would happily commit a half-written
+batch.
+
+So the store makes the batch all-or-nothing itself. A batch's rows only become
+events at its last statement, which stamps every row with its event identity at
+once. If the batch fails before that stamp, its rows are invisible to every
+read. The store then sweeps those rows away, but that sweep is tidying up, not
+what makes the batch safe (the `event_store` module, *Why the whole object is
+one consistency boundary*).
+
+If the sweep itself fails, `append` reports
+`CloudflareEventStoreError::PartialBatch`. Despite the name, the batch did not
+land, and that variant's own documentation says a retry is safe. Older wording
+in the crate root says the opposite; that is tracked in
 [issue #257](https://github.com/Wet-Ink-Corporation/happenstance/issues/257).
 
-**A dropped append.** `append` contains no `.await`, so its future has run to
-completion by the time its first poll returns, and dropping it cannot cancel
-it. That is this
-adapter's answer to
-[ES-23](../spec/SPECIFICATION.md#es-23--cancellation-outcome-is-unspecified-and-that-is-the-contract).
-Code written generic over `EventStore` cannot rely on it, because other stores
-answer differently (the `event_store` module, *Cancellation*).
+### A dropped append
+
+In async Rust, dropping a future before it finishes normally cancels the work.
+The contract leaves open what a dropped `append` does, and asks each store to
+say
+([ES-23](../spec/SPECIFICATION.md#es-23--cancellation-outcome-is-unspecified-and-that-is-the-contract)).
+
+This store's answer is simple: `append` contains no `.await`, so it has run to
+completion by the time it is first polled, and dropping it cannot cancel it.
+Code written generic over `EventStore` should not rely on that, because other
+stores answer differently (the `event_store` module, *Cancellation*).
 
 ## Keep the read model somewhere it can commit
 
-The crate has no projection store. It does not implement the projection port at
-all (the crate root, *Status: what publication this crate is ready for, and what
-it is not*). [Choose a store](choose-a-store.md#put-the-checkpoint-where-the-read-model-is)
+A read model, or projection, is a view you build from the log, such as a table
+of course capacities. This crate does not provide a store for read models: it
+does not implement the projection port at all.
+
+[Choose a store](choose-a-store.md#put-the-checkpoint-where-the-read-model-is)
 names the two projection stores that can run inside the object, and what each
 costs. Read it before you build a read model here.
 
 ## See how the crate checks itself
 
-The adapter's conformance target is one macro call:
-`event_store_conformance!` with `emit = happenstance_testkit::emit_wasm` and a
-`CloudflareFixture`, in
+You may want to know how much to trust this store. Like every store in the
+project, it has to pass the conformance suite: the shared set of tests that
+defines what a correct store does.
+
+Its conformance test is one macro call, `event_store_conformance!`, with
+`emit = happenstance_testkit::emit_wasm` and a `CloudflareFixture`, in
 [`tests/durable_object_conformance.rs`](../crates/happenstance-cloudflare/tests/durable_object_conformance.rs).
-`emit_wasm` wraps each rule for `wasm-bindgen-test`, because the emitter is the
-caller's to choose
-([CF-23](../spec/SPECIFICATION.md#64-runtime-independence)). The gate runs every
-event-store rule that way on `wasm32-unknown-unknown`, against a
-`node:sqlite`-backed host that stands in for the runtime. The fixture declines
-no capability, so the run prints no skip line (the README, *What the conformance
-suite ran against this adapter, and what it did not*).
+`emit_wasm` wraps each test for `wasm-bindgen-test`, because the caller chooses
+how the tests are run
+([CF-23](../spec/SPECIFICATION.md#64-runtime-independence)).
 
-The same rules also run in a real Durable Object, in the `workerd` CI job beside
-the gate, through [`harness/workerd`](../harness/workerd/README.md): once under
-local `workerd` and once on an object deployed to Cloudflare. That covers the
-isolate, the I/O gate and the platform's SQLite limits, which the host does not.
+The project's main build runs every event-store test that way on
+`wasm32-unknown-unknown`, against a stand-in runtime backed by `node:sqlite`. The
+fixture declines no capability, so no test is skipped.
 
-If you are writing an adapter of your own for a runtime like this one,
-[Pass the conformance suite](pass-conformance-suite.md) shows how to choose an
-emitter, `emit_wasm` among them.
+The same tests also run in a real Durable Object, through
+[`harness/workerd`](../harness/workerd/README.md): once under a local `workerd`,
+and once on an object deployed to Cloudflare. That covers what the stand-in
+cannot: the isolate, the I/O gate and the platform's own SQLite limits.
 
-## Status: what this page does not cover
+If you are writing a store of your own for a runtime like this one,
+[pass the conformance suite](pass-conformance-suite.md) shows how to choose the
+test wrapper, `emit_wasm` among them.
 
-The crate's README calls its release the one with the thinnest evidence of the
-seven. Its gaps, all named in the sources above:
+## What has not been proven yet
 
-- **Eviction and hibernation have never been exercised.** The `workerd` harness
-  runs each rule inside a single request, and its `REOPEN` is a fresh storage
-  handle, so what a real isolate restart does to an acknowledged write has not
-  been observed. The harness does not reach the memory ceiling either
+The crate's README is candid that this store has the thinnest evidence of the
+seven published crates. Before you rely on it, know these gaps:
+
+- **Eviction and hibernation have never been tested.** The `workerd` harness runs
+  each test inside a single request, and its "reopen" is a fresh storage handle.
+  What a real isolate restart does to an acknowledged write has not been
+  observed, and the harness does not reach the memory ceiling either
   (`harness/workerd/README.md`, *What it discharges, and what it does not*).
 - **The three capacity ceilings are policy.** The physical wall behind them was
-  never located (the README, *The limits this store declares*).
-- **The concurrency and model families do not run here.** The first needs OS
-  threads and a `Send` store. The second sits behind the testkit's `proptest`
-  feature, which is absent on this target (the README, *What the conformance
-  suite ran against this adapter, and what it did not*).
-- **This crate checks no read model.** It has no projection store, so what you
-  keep beside the log in the object is checked by whichever crate provides it,
-  if any. [Choose a store](choose-a-store.md#put-the-checkpoint-where-the-read-model-is)
+  never located.
+- **The concurrency and model tests do not run here.** The concurrency tests
+  need OS threads and a `Send` store. The model tests, which generate random
+  operation sequences, sit behind the testkit's `proptest` feature, which is not
+  available on this target.
+- **No read model is checked by this crate.** It has no projection store, so
+  whatever you keep beside the log is checked by whichever crate provides it, if
+  any. [Choose a store](choose-a-store.md#put-the-checkpoint-where-the-read-model-is)
   says what each option has and has not run.
 - **Wiring the class into a Worker is not covered.** The Worker's entry point,
-  its `wrangler.toml` and the class's bindings belong to the platform, and no
-  crate here documents them. [`harness/workerd`](../harness/workerd/README.md)
+  its `wrangler.toml` and the class's bindings belong to Cloudflare's platform,
+  and no crate here documents them. [`harness/workerd`](../harness/workerd/README.md)
   has a working set, and its README says why its entry point is JavaScript.
