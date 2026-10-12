@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/project-thread-88m3wc`, on `97f0f36` (`main`, where PR #222 merged). 2026-10-11.
+`claude/project-thread-88m3wc-041`, on `0f87192` (`main`, where PR #268 merged). 2026-10-12.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -20,39 +20,34 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.4.0` ships from the release PR (#96)**, which closes phase 17 and is written
-as of its own merge: it dates the changelog
-heading, re-runs the semver trace on `97f0f36` (eight tool findings, every one a
-T row, and one new hand row, H13), and moves every install and status line to
-`0.4.0`. `EventStore` has been frozen since `0.2.0`, and `ProjectionStore` since
-`0.3.0`. Phases 0–12 and 15–17 are done. Phases 20 and 22 run alongside. What
-remains is sequenced in [`roadmap.md`](roadmap.md): the additive half (17b), then
-the typed runner (18), sync (13) and retention (14), and `1.0.0` (21) last.
+**`0.4.0` is on crates.io** (tag `v0.4.0` at `cb63401e`, published by `release.yml`
+through trusted publishing). **`0.4.1` ships from its release PR (#271)**, a patch
+that `cargo semver-checks --release-type patch` against `0.4.0` finds nothing in. It
+carries the SQLite WAL-conversion fix (#238), six dependency floors that build (#90),
+VT-14's freeze (#86) and the README MSRV sections (#201). Phases 0–12 and 15–17 are
+done; 17b is in progress. CI runs through a merge queue, with a Neon branch and a
+Worker per run (#266). What remains is sequenced in [`roadmap.md`](roadmap.md): the
+rest of 17b, then the typed runner (18), sync (13) and retention (14), and `1.0.0`
+(21) last.
 
-**The tag is cut from #96's merge commit, not from a later `main`.** Publishing
-moves to crates.io trusted publishing: the owner chose this on 2026-10-11 over
-publishing by hand. `.github/workflows/release.yml`, added in the same PR, publishes the seven
-crates in dependency order when a `v*` tag on `main` is pushed. #97 is that tag
-push, made once each crate's trusted publisher is configured on crates.io.
+**A tag is cut from its release PR's merge commit, not from a later `main`.** Cloud
+sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-- **#96, the release PR**, is on this branch. It is left for the owner to merge,
-  because it ticks phase 17's last exit criterion.
-- **Docs and records** (#157, #159, #162 and others) are being worked in separate
-  PRs. None of them touches a crate's code or manifest.
-- **PR #226** (xtask help through a locked handle) is the owner's. It asks him to
-  acknowledge a test rewrite.
+- **#271, the `0.4.1` release PR.** It merges through the queue, and then the owner
+  pushes `v0.4.1` at its merge commit.
+- **#77's PR (#267)** adds `tests/live_projection.rs` to the live Postgres job, and
+  `pipefail` to every run step there. It is CI only.
 
 ## Next action
 
-1. Configure trusted publishing on crates.io, then merge #96 and
-   push `v0.4.0` from its merge commit (#97). Check crates.io and docs.rs for all
-   seven crates, then close #87.
-2. Phase 17b (#62): #86, #90, #77, #149 and #201 are `ready-for-agent`. Each is
-   additive by ADR-0072 and ships in a `0.4.x`.
-3. Phase 18 (#63) is unblocked by the release. Its breaking chains open as
-   `door:one-way` PRs for the owner.
+1. After #271 merges, push `v0.4.1` at its merge commit. Check crates.io and docs.rs
+   for all seven crates.
+2. Phase 17b (#62): #83, #85, #88, #92 and #93 are `door:one-way` and wait on the
+   owner. #79 needs triage and #81 needs the owner. #95 re-runs semver-checks and
+   spec-trace once they land.
+3. Phase 18 (#63): its breaking chains open as `door:one-way` PRs for the owner.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
@@ -60,12 +55,10 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- **Trusted publishing.** Add a trusted publisher on crates.io for each of the
-  seven crates: this repository, workflow `release.yml`, environment `crates-io`.
-- **Merge #96**, which closes phase 17.
+- **Push `v0.4.1`** at #271's merge commit.
+- **Phase 17b's one-way items:** #83, #85, #88, #92 and #93, and #81.
 - **#105 and #106** (ADR-0026 and ADR-0027) gate phase 13. **#102** claims the sync
   crate names. **#118** gates phase 18's checkpoint-id chain.
-- **#75**: re-add the live Neon check to the `Protect main` ruleset.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (17b); PS-25's digest is a hand-written FNV-1a; VT-30 is a
   deprecated alias; new CI jobs are not required checks.

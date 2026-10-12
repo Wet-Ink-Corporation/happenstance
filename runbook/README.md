@@ -97,7 +97,7 @@ handover is rewritten whole each time, so a stale one is visibly stale — its
 | — | **`0.3.1`** | 12 | — | released 2026-09-11 — descriptions only | — |
 | — | **`0.3.2`** | 12 | — | released 2026-09-20 — a dependency advisory (`rustls`) | — |
 | — | **`0.4.0`** | 17 | — | released 2026-10-11 — the breaking window: every semver break traced to a decision; tagged from the release PR's merge commit (#96, #97) | #87 |
-| — | **`0.4.1`** | 17 | — | released 2026-10-12 — a patch cut during phase 17b: the SQLite WAL-conversion fix (#238), six dependency floors that build (#90), and README MSRV sections (#201); semver-checks against `0.4.0` finds nothing | #95 |
+| — | **`0.4.1`** | 17 | — | released 2026-10-12 — a patch cut during phase 17b: the SQLite WAL-conversion fix (#238), six dependency floors that build (#90), VT-14 frozen (#86), and README MSRV sections (#201); semver-checks against `0.4.0` finds nothing | #95 |
 | 15 | [Reconcile the record](phases/15-reconcile.md) | 12 | done | the status lint failing on the pre-split table and passing on this one | — |
 | 16 | [Define 1.0](phases/16-define-1-0.md) | 15 | done | the 1.0 charter, with a disposition for every non-frozen clause on a promised surface | — |
 | 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | 16 | done | `0.4.0` released, every semver break traced to a decision | #61 |
