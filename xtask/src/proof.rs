@@ -352,11 +352,13 @@ const COMPILE_FAIL_PAIR: &[&str] = &[
 /// store. A build that quietly started tolerating the decode failure, or that
 /// stalled every view behind it, would still pass the first test.
 ///
-/// `a_failed_promotion_leaves_the_old_view_whole` holds the promotion to one
-/// transaction (#253). A promotion that retired the old view and then swapped
-/// the tables in a second transaction succeeds whenever the swap does, so the
-/// first test cannot see it. A swap that fails after the retirement committed
-/// leaves an empty table at `NeverRun`, and this test reads that off the run.
+/// `a_failed_promotion_leaves_the_old_view_whole` holds the promotion's route,
+/// `retire` with the swap in the old id's reset batch, to one transaction
+/// (#253). The program sends a deliberately mistyped swap down the same route
+/// as the real one, and this test reads the failure path off the run: a route
+/// that retired the old view and then swapped in a second transaction leaves
+/// an empty table at `NeverRun` there. A promotion that succeeds looks the same
+/// either way, so the first test cannot see a split.
 const REBUILDING_VIEWS_TESTS: &[&str] = &[
     "runs::the_binary_operates_every_view",
     "runs::a_failed_promotion_leaves_the_old_view_whole",

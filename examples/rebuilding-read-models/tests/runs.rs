@@ -112,7 +112,7 @@ mod runs {
         // `NeverRun`, and a later run replays the whole log into it.
         assert!(
             aftermath.contains("daily_dispatches is live through")
-                && aftermath.contains("2026-09-01  2"),
+                && aftermath.contains("2026-09-01  2\n"),
             "the failed swap committed part of the promotion: \
              retirement and swap are not one transaction\n{transcript}"
         );

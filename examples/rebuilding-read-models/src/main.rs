@@ -296,9 +296,9 @@ async fn a_third_view_added_late(
     // scheduled under blue's id would replay the whole log into whichever
     // table has the name it writes to once its checkpoint is reset.
     //
-    // The lines this section adds go through a locked handle, which returns an
-    // error on a closed pipe where `println!` panics. Locked per line, so no
-    // guard is held across an `.await`.
+    // Output from here to the end of the function goes through a locked handle,
+    // which returns an error on a closed pipe where `println!` panics. It is
+    // locked per line, so no guard is held across an `.await`.
     writeln!(
         io::stdout().lock(),
         "\n   -- a promotion whose rename fails --"
@@ -317,7 +317,10 @@ async fn a_third_view_added_late(
         "   the drop ran and was rolled back with the rename: blue is untouched"
     )?;
 
-    println!("\n   -- promoted, and the checkpoint comes with it --");
+    writeln!(
+        io::stdout().lock(),
+        "\n   -- promoted, and the checkpoint comes with it --"
+    )?;
     // The swap is blue's reset batch, so retiring blue and renaming green into
     // its place are one transaction. A reader sees the old table until the
     // reset commits and the new one after it, never an empty one between. Done
@@ -330,7 +333,10 @@ async fn a_third_view_added_late(
 
     dispatch_order(events, "o-3", DAYS[1]).await?;
     let applied = drive(events, models, &mut promoted, CHUNK).await?;
-    println!("   one more dispatch, and the promoted view applied {applied} — not the whole log");
+    writeln!(
+        io::stdout().lock(),
+        "   one more dispatch, and the promoted view applied {applied} — not the whole log"
+    )?;
     print_table(
         app,
         "SELECT day, dispatched FROM daily_dispatches ORDER BY day",
