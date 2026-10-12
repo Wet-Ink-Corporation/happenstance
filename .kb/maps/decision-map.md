@@ -753,6 +753,19 @@ because its body is immutable, and it supersedes nothing: the ranges never chang
 | --- | --- | --- | --- | --- | --- |
 | ADR-0089 | [`kb-decision-0089`](../decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md) | VT-14 is frozen on the RTL corpus run, and the explicit bidirectional controls are nine, not seven | accepted | 17b | — |
 
+## 2026-10-12: phase 17b's one-way items, cleared before an unattended run
+
+Four owner decisions from one planning thread, taken as recommended. They authorise an
+unattended session to build #83, #85, #88, #92, #93, #81 and #109 green and reviewed, and
+leave every merge with the owner.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| — | [`kb-decision-wi-378078`](../decisions/wi-378078-do-93-option-a-on-both-questions-83-queryitem.md) | #93 option A on both questions; #83 `QueryItem::of`; #81 PS-39 scheduled and frozen in 17b; #85 limb 2 retired by record | accepted | 17b | — |
+| — | [`kb-decision-wi-727ec8`](../decisions/wi-727ec8-does-88-keep-trait-variant-s-caret-protected-by.md) | ES-7: `trait-variant` keeps its caret, with a derivation contract and a weekly floating-deps job | accepted | 17b | — |
+| — | [`kb-decision-wi-f97418`](../decisions/wi-f97418-should-92-carve-cf-40-s-cloudflare-metadata.md) | CF-40's Cloudflare metadata ceiling is carved from the documented 2 MB row limit | accepted | 17b | — |
+| — | [`kb-decision-wi-fa5c7b`](../decisions/wi-fa5c7b-may-the-afk-session-build-one-way-17b-prs-83-93.md) | An unattended session builds the one-way 17b PRs; the owner merges them | accepted | 17b | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

@@ -1,0 +1,9 @@
+{
+  "protected": [
+    "**/clippy.toml", "**/.clippy.toml", "**/rustfmt.toml", "**/.rustfmt.toml", "**/deny.toml",
+    "rust-toolchain", "rust-toolchain.toml", ".cargo/**", ".claude/**", ".githooks/**",
+    "CLAUDE.md", "AGENTS.md",
+    ".github/workflows/release.yml", ".github/workflows/pages.yml",
+    ".github/CODEOWNERS", ".github/tracker.yml"
+  ]
+}

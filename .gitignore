@@ -54,7 +54,11 @@ target
 # otherwise stage several gigabytes of build output and a second copy of every
 # source file, and the branch refs that make the worktrees findable live in
 # `.git/` regardless.
-.claude/
+#
+# One file in it is committed: `temper.json`, the temper plugin's project
+# configuration, which every session that opens this repository must read.
+.claude/*
+!.claude/temper.json
 
 # Gate and test transcripts written by hand while debugging — `cargo xtask ci >
 # gate-output.log`, `cargo test > test-output.txt` and the like. They are not
