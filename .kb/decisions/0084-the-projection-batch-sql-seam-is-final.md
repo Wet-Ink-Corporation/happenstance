@@ -91,7 +91,7 @@ The published seam has eight entry points, not the three that phase 16 named:
 
 | Entry point | Signature today | Where |
 |---|---|---|
-| `SqliteBatch::push` | `(sql: &'static str, params: impl IntoIterator<Item = Value>)` | `crates/happenstance-sqlite/src/projection_store.rs:487-489` |
+| `SqliteBatch::push` | `(sql: &'static str, params: impl IntoIterator<Item = Value>)` | `crates/happenstance-sqlite/src/projection_store.rs:511-513` |
 | `SqliteBatch::push_raw_sql` | `(sql: impl Into<String>, params: impl IntoIterator<Item = Value>)` | `:513-522` |
 | `PendingStatement::sql` | `-> &str`, over a private `Box<str>` | `:383-393` |
 | `PostgresProjectionBatch::push` | `(sql: &'static str, params: impl IntoIterator<Item = PgParam>)` | `crates/happenstance-postgres/src/projection_store.rs:252-257` |

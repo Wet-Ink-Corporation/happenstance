@@ -462,8 +462,22 @@ impl SqliteBatch {
     ///
     /// That has to be a type obligation rather than a paragraph, because
     /// nothing in the gate reads prose
-    /// (`standards/rust/70-rustdoc-obligations.md`, RS-70-5). The interpolated
-    /// spelling does not compile:
+    /// (`standards/rust/70-rustdoc-obligations.md`, RS-70-5). A statement
+    /// written in source, with its value bound, compiles:
+    ///
+    /// ```
+    /// use happenstance_sqlite::projection_store::SqliteBatch;
+    /// use happenstance_sqlite::rusqlite::types::Value;
+    ///
+    /// fn queue(batch: &mut SqliteBatch, account: &str) {
+    ///     batch.push(
+    ///         "DELETE FROM balance WHERE account = ?1",
+    ///         [Value::Text(account.to_owned())],
+    ///     );
+    /// }
+    /// ```
+    ///
+    /// and the same statement with the value interpolated does not:
     ///
     /// ```compile_fail,E0308
     /// use happenstance_sqlite::projection_store::SqliteBatch;
@@ -484,6 +498,16 @@ impl SqliteBatch {
     /// guarantee and costs the caller an import and a wrapper for it. Where the
     /// shape genuinely is computed, reach for
     /// [`push_raw_sql`](Self::push_raw_sql) deliberately.
+    ///
+    /// # Parameter count
+    ///
+    /// One value per number up to the highest placeholder `sql` uses (`?N`; a
+    /// bare `?` takes the next number), so `?1 OR ?1` takes one. Nothing counts
+    /// them here; at `commit` (and `reset`) the driver does, and refuses a
+    /// mismatch either way as [`CommitError::Store`] (or [`ResetError::Store`])
+    /// carrying [`Sqlite`](SqliteProjectionStoreError::Sqlite) with
+    /// [`InvalidParameterCount`](rusqlite::Error::InvalidParameterCount).
+    /// Neither the batch's statements nor the checkpoint move (ADR-0084).
     pub fn push(&mut self, sql: &'static str, params: impl IntoIterator<Item = Value>) {
         self.push_raw_sql(sql, params);
     }
@@ -499,8 +523,8 @@ impl SqliteBatch {
     ///
     /// The obligation [`push`](Self::push) discharges in the type system moves
     /// to the caller here, in full, and this method's name is the whole of the
-    /// warning: **no value may be interpolated into `sql`**. What the two
-    /// callers inside this crate do is the pattern
+    /// warning: **no value may be interpolated into `sql`**. This crate's own
+    /// statements show the pattern through [`push`](Self::push)
     /// (`probe_write` and `probe_delete_all` below) — the text is fixed, every
     /// value is a [`Value`] beside it.
     ///
@@ -510,6 +534,12 @@ impl SqliteBatch {
     /// `account` decoded out of an event payload. It runs in the same
     /// transaction that advances the checkpoint, so a successful injection is
     /// recorded as progress and no later run re-derives the corrupted rows.
+    ///
+    /// # Parameter count
+    ///
+    /// As for [`push`](Self::push). A computed `IN (…)` list is where a count
+    /// goes wrong: build the placeholders and the values from the same
+    /// collection.
     pub fn push_raw_sql(
         &mut self,
         sql: impl Into<String>,

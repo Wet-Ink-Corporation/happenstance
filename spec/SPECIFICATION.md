@@ -2853,7 +2853,7 @@ payloads in scope, by crate:
 - **`happenstance-sqlite`** — `Sqlite(rusqlite::Error)` on both
   `SqliteEventStoreError` and `SqliteProjectionStoreError`
   (`crates/happenstance-sqlite/src/event_store.rs:1565`,
-  `crates/happenstance-sqlite/src/projection_store.rs:546`), with
+  `crates/happenstance-sqlite/src/projection_store.rs:576`), with
   `pub use rusqlite` (`crates/happenstance-sqlite/src/lib.rs:148`).
 - **`happenstance-postgres`** — `Driver(sqlx::Error)` on both
   `PostgresEventStoreError` and `PostgresProjectionStoreError`
@@ -2884,10 +2884,10 @@ stated as that rather than as a separate promise. A payload from a crate this
 workspace does **not** re-export is in the public signature just the same:
 `tokio::task::JoinError` (`crates/happenstance-postgres/src/error.rs:106`,
 `crates/happenstance-sqlite/src/event_store.rs:1579`,
-`crates/happenstance-sqlite/src/projection_store.rs:558`) and
+`crates/happenstance-sqlite/src/projection_store.rs:588`) and
 `tokio::runtime::TryCurrentError`
 (`crates/happenstance-sqlite/src/event_store.rs:1587`,
-`crates/happenstance-sqlite/src/projection_store.rs:562`) sit in public variants,
+`crates/happenstance-sqlite/src/projection_store.rs:592`) sit in public variants,
 so a `tokio` release that changed either would force an adapter major too.
 `tokio` is `1.x`, so that happens only at its own major.
 
@@ -5874,7 +5874,7 @@ program that puts one depot's inventory under another depot's checkpoint. What
 that program can no longer do everywhere is *run*: the hole is closed at run
 time by PS-15 rather than at the type level, and since phase 8 an adapter
 outside the testkit closes it — `begin` mints the batch with the store's own
-stamp (`crates/happenstance-sqlite/src/projection_store.rs:646`) and `commit`
+stamp (`crates/happenstance-sqlite/src/projection_store.rs:676`) and `commit`
 compares it before the file is touched.
 
 E2E-19 proposes tying the batch to the receiver's lifetime and calls it "the
