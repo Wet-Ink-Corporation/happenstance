@@ -36,8 +36,8 @@ with programs you can run.
 > - **`happenstance-neon`** — event store, concurrency and projection against a
 >   live Neon endpoint over one-shot HTTP. From `0.4.0` it meets ES-11 and
 >   ES-12, which it failed intermittently before, and the one capability its
->   fixture declines, `READ_YOUR_OWN_WRITES`, carries its reason on the crate's
->   own front page.
+>   event-store fixture declines, `READ_YOUR_OWN_WRITES`, carries its reason on
+>   the crate's own front page.
 > - **`happenstance-ladybug`** — the projection family only, against the real
 >   LadybugDB driver, from phase 11 until it was **retired** at phase 17. It was
 >   never published — `lbug` does not render on docs.rs, this project's bar for a

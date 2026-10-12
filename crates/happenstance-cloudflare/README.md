@@ -19,14 +19,15 @@ one writer, the object's own turn is the transaction, and the consistency
 boundary a DCB query describes fits inside an object rather than across a
 cluster.
 
-> **Status: released since `0.2.0`, in the `0.4.1` release set.** Every
+> **Status: released since `0.2.0`, in the `0.4.1` release set, and the release
+> with the thinnest evidence of the seven.** Every
 > [`EventStore`](https://docs.rs/happenstance-core) body is real — `migrate`,
 > `append`, `head`, `contains_event_id` and `read` all execute SQL against the
 > object's storage — and the event-store conformance suite runs against this
 > adapter twice: inside the repository's own gate, on `wasm32-unknown-unknown`
 > against a `node:sqlite`-backed Durable Object host; and in the `workerd` CI job,
 > a sibling of the gate, in a real Durable Object under local `workerd` and again
-> on an object deployed to Cloudflare, where the account secret is present.
+> on an object deployed to Cloudflare, where the account secrets are present.
 >
 > **What the version number does and does not cover.** It inherits the
 > workspace's version, so the frozen `EventStore` clauses it implements are
@@ -121,8 +122,8 @@ take `workerd`'s four statement limits, which the shim sets when it opens.
 
 **`workerd` runs them too, outside the gate.** The `workerd` CI job, a sibling of
 the gate, runs every rule in a real Durable Object through `harness/workerd`.
-It runs under local `workerd` and again on an object deployed to Cloudflare where the account secret is present. That
-covers the isolate, the I/O gate and the platform's row and length limits, which
+It runs under local `workerd` and again on an object deployed to Cloudflare
+where the account secrets are present. That covers the isolate, the I/O gate and the platform's row and length limits, which
 the shim does not take. Its statement limits are far tighter than SQLite's
 defaults: 5 compound-`SELECT` terms, 100 bound parameters, and 100,000 bytes of
 statement (`experiments/durable-object-limits`). Eviction and hibernation are still not

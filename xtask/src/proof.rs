@@ -854,8 +854,9 @@ pub(crate) const WASM_TARGETS: &[WasmTarget] = &[
 /// for exactly that) and executed none of them: `WASM_TARGETS` holds three
 /// testkit rows, and [`unregistered_wasm_harnesses`] scans only the testkit's
 /// `tests/` directory, so nothing in this file could notice. A host
-/// `cargo test -p happenstance-cloudflare` runs four probes and nothing about
-/// whether the adapter works. That is the same *compiled, never executed* shape
+/// `cargo test -p happenstance-cloudflare` runs the query planner, namespace,
+/// `!Send` probe and host-only cases, and never a store that appends or reads.
+/// That is the same *compiled, never executed* shape
 /// the previous milestone built this machinery to end, one directory over.
 pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
     WasmUnitTarget {
