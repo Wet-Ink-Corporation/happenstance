@@ -604,6 +604,7 @@ jobs:
       # under it, and a trade nobody can read is a trade nobody recorded (CF-18).
       - name: The conformance suite against a live Postgres
         run: |
+          set -o pipefail
           cargo test -p happenstance-postgres --all-features             --test postgres_conformance -- --ignored --show-output --test-threads=1             | tee run.txt
 
       # The vacuity guard, and the reason this job cannot be green having done
@@ -635,6 +636,7 @@ jobs:
       # transcript, one count. A combined run would put two `test result:` lines
       # in one file and the assertion reads the last.
       - name: Every gated projection test is present in the binary
+        if: ${{ !cancelled() }}
         run: |
           cargo test -p happenstance-postgres --all-features \
             --test projection -- --ignored --list | tee gated-projection.txt
@@ -642,8 +644,11 @@ jobs:
       # `--test-threads=1` for the reason the event-store run gives: the pool
       # arithmetic, not the frontier. `pipefail` because a step's shell is
       # `bash -e` without it, so `cargo test | tee` exits with `tee`'s status:
-      # #77's red probe had three rules FAIL here under a green step.
+      # #77's red probe had three rules FAIL here under a green step. Every run
+      # step in this job sets it, so every later list and run step carries
+      # `!cancelled()`: one red suite must not skip the suites after it.
       - name: The projection suite against a live Postgres
+        if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           cargo test -p happenstance-postgres --all-features \
@@ -711,11 +716,13 @@ jobs:
       # `--test-threads=1` because each fixture opens a pool sized for the
       # concurrency family, and the file's own header says why that matters.
       - name: Every gated live-projection test is present in the binary
+        if: ${{ !cancelled() }}
         run: |
           cargo test -p happenstance-postgres --all-features \
             --test live_projection -- --ignored --list | tee gated-live-projection.txt
 
       - name: The live projection store against a live Postgres
+        if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           cargo test -p happenstance-postgres --all-features \
@@ -762,12 +769,15 @@ jobs:
       #
       # `--test-threads=1` for the pool arithmetic the event-store run gives.
       - name: Every gated runtime-seam test is present in the binary
+        if: ${{ !cancelled() }}
         run: |
           cargo test -p happenstance-postgres --all-features \
             --test runtime_seam -- --ignored --list | tee gated-runtime-seam.txt
 
       - name: The runtime-seam reproduction against a live Postgres
+        if: ${{ !cancelled() }}
         run: |
+          set -o pipefail
           cargo test -p happenstance-postgres --all-features \
             --test runtime_seam -- --ignored --show-output --test-threads=1 \
             | tee runtime-seam-run.txt
@@ -839,6 +849,7 @@ jobs:
       # Clippy first, because the gate's `--all-features` clippy used to reach
       # these items and no longer does. It needs no server.
       - name: Clippy over the naive arm, under its cfg
+        if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: -D warnings --cfg happenstance_naive_arm
           CARGO_TARGET_DIR: target/naive-arm
@@ -854,6 +865,7 @@ jobs:
       # projection trio: the list first, then nothing ignored, and executed
       # equal to listed, and it also requires the named tests.
       - name: The rule controls and the naive-arm probe, under their cfg
+        if: ${{ !cancelled() }}
         env:
           RUSTFLAGS: -D warnings --cfg happenstance_naive_arm
           CARGO_TARGET_DIR: target/naive-arm
