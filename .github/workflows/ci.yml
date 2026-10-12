@@ -15,7 +15,15 @@ on:
   # `main` moves.
   merge_group:
   workflow_dispatch:
-  # 07:17 on Tuesdays, driving the `advisories` job below. The offset is
+    # Read by `floating-deps` alone, the last job in this file, and false unless
+    # ticked by hand. It makes that job red on purpose, once, so the red is seen
+    # before the job's green is trusted (ADR-0092).
+    inputs:
+      floating_deps_prove_red:
+        description: "floating-deps only: resolve a trait-variant with its blanket impl cut out, so the derivation contract must fail"
+        type: boolean
+        default: false
+  # 07:17 on Tuesdays, driving `advisories` and `floating-deps` below. The offset is
   # deliberate: GitHub queues the whole fleet's scheduled workflows on the hour
   # and again at midnight UTC, and a run submitted into that queue is delayed by
   # tens of minutes or silently dropped. Nothing here is time-sensitive to the
@@ -1767,3 +1775,80 @@ jobs:
           fi
           grep -nE '^happenstance(-core)? = ' Cargo.toml
           cargo minimal-versions check --workspace --direct --ignore-private --all-features
+
+  # A CONSUMER'S RESOLVE, APPROXIMATED (#88, ADR-0092). The workspace requires
+  # `trait-variant = "0.1.3"`, a caret, and that proc macro is what emits
+  # `SendEventStore`, `SendProjectionStore` and the impls that make each of them
+  # the bare flavour too. The gate builds `--locked`, so it only ever compiles
+  # the version `Cargo.lock` pins. A consumer has no such lock: their resolve
+  # takes the newest `0.1.z`, which may be one this workspace has never built.
+  #
+  # This job does what their resolve does. `cargo update` throws the lock away
+  # and resolves every requirement to its newest compatible version (`resolver =
+  # "3"` keeps that within the 1.97.1 floor). It then checks the derivation
+  # contract in `happenstance-core`'s library code, alone, on the host and on
+  # wasm32, so that a newer `trait-variant` that changed the derivation's shape
+  # is named by the first error in the log. Then it builds and tests the
+  # workspace. `tests/trait_variant_pin.rs` reads the lockfile this job wrote, so
+  # the week a newer `trait-variant` resolves it goes red here whatever the
+  # contract says: that is the signal to read the new expansion and bump the pin.
+  #
+  # NOT A GATE STEP AND NOT A REQUIRED CHECK. Its answer moves without a commit,
+  # so a red run is work for a pull request of its own, not a merge to block.
+  # `schedule` and `workflow_dispatch` only, like `advisories`.
+  #
+  # The token scope is the workflow's `contents: read`, and nothing here raises
+  # it: the job writes to the runner's throwaway checkout and nowhere else.
+  floating-deps:
+    name: floating dependencies (unlocked resolve)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # rust-toolchain.toml pins the channel and the wasm32 target.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Restores the locked build as a head start and never saves: a cache
+          # keyed on a lockfile this job then rewrote would be wrong for the gate.
+          save-if: false
+
+      - name: Resolve without the lockfile
+        run: |
+          cargo update --verbose
+          git diff --stat -- Cargo.lock
+          echo "trait-variant resolves to:"
+          grep -A1 '^name = "trait-variant"$' Cargo.lock
+
+      # The red run ADR-0092 asks to be watched once. Takes the `trait-variant`
+      # the step above resolved, cuts its blanket-impl emission out (the wrong
+      # derivation recorded as W1 in #88), and patches it in for this run. The
+      # `grep` is the assertion: if upstream moved the line, the edit did not
+      # happen and the step fails here instead of letting a green run claim the
+      # contract was tested. `let _ =` keeps the copy free of a dead-code
+      # warning, which `-D warnings` would otherwise turn into a different error.
+      - name: Prove red (dispatch input only)
+        if: ${{ inputs.floating_deps_prove_red }}
+        run: |
+          version=$(grep -A1 '^name = "trait-variant"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+          cargo fetch
+          src=$(ls -d "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*/"trait-variant-$version" | head -n 1)
+          copy="$RUNNER_TEMP/trait-variant-without-the-bridge"
+          cp -R "$src" "$copy"
+          sed -i 's/let blanket_impl = mk_blanket_impl(&name, &item);/let blanket_impl = { let _ = mk_blanket_impl(\&name, \&item); quote! {} };/' "$copy/src/variant.rs"
+          if ! grep -qF 'let blanket_impl = { let _ = mk_blanket_impl(&name, &item); quote! {} };' "$copy/src/variant.rs"; then
+            echo "::error::trait-variant $version no longer has the line this step edits; nothing was patched"
+            exit 1
+          fi
+          printf '\n[patch.crates-io]\ntrait-variant = { path = "%s" }\n' "$copy" >> .cargo/config.toml
+          echo "::notice::trait-variant $version patched with its blanket impl removed; the next step must fail"
+
+      - name: The derivation contract, alone
+        run: |
+          cargo check -p happenstance-core --no-default-features
+          cargo check -p happenstance-core --no-default-features --target wasm32-unknown-unknown
+      - name: Build
+        run: cargo build --workspace --all-features --all-targets
+      - name: Test
+        run: cargo test --workspace --all-features

@@ -33,7 +33,7 @@ establish innocence but cannot act on it would be routed around every time; thre
 is that prediction closing.
 
 **And the severity has risen since that prediction.** CI's `backlog` job
-(`.github/workflows/ci.yml:177`) asserts the `unconsumed-foundation` list is **empty**. So #122 is
+(`.github/workflows/ci.yml:185`) asserts the `unconsumed-foundation` list is **empty**. So #122 is
 not tidiness — it is a **release blocker for the initiative**, to be settled before
 `publication-and-positioning`, not at the PR. Two of the nine (`HS-S0034`, `HS-S0035`) are
 `sqlite-durable-store`'s own stories, so the initiative is now generating the errors it must clear.

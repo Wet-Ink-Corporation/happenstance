@@ -97,7 +97,7 @@ references/evaluation/phase-7-contract-defects.md               ✓ exists — t
 crates/happenstance-neon/Cargo.toml                             ✓ NOW MATCHES the intake exactly — see below
 crates/happenstance-postgres/Cargo.toml                         ✓ same
 Cargo.toml, rust-toolchain.toml                                 ✓ version 0.2.0-alpha.1, rust-version 1.97.1, channel 1.97.1
-.github/workflows/ci.yml:307-321                                ✓ the msrv job, toolchain "1.97.1" spelled out with the divergence comment
+.github/workflows/ci.yml:315-329                                ✓ the msrv job, toolchain "1.97.1" spelled out with the divergence comment
 crates/happenstance/README.md:49                                ✓ "MSRV 1.97.1, checked in CI" — the sentence the atom declines to restate
 xtask/src/package.rs:86-107                                     ✗ PUBLISHABLE names FIVE, not four — Correction 1
 RUNBOOK.md:163, :4681-4703                                      ✗ phase 12 is `not started` — Correction 2
@@ -163,7 +163,7 @@ it is false against the tree:
 
 ```
 Cargo.toml:15       version = "0.2.0-alpha.1"
-CHANGELOG.md:340    ## [0.2.0-alpha.1] — 2026-08-16      ← the only version cut
+CHANGELOG.md:364    ## [0.2.0-alpha.1] — 2026-08-16      ← the only version cut
 RUNBOOK.md:163      | 12 | Publish 0.2.0 | 7, 8 | not started |
 ```
 

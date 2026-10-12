@@ -49,6 +49,11 @@ fn resolved_trait_variant() -> &'static str {
 /// Nothing here can observe the expansion, so the resolved version stands in for
 /// it — the gate builds `--locked`, so it cannot move without someone changing
 /// it deliberately, and that is the moment to re-read `variant.rs`.
+///
+/// That is this workspace's own build. A consumer's resolve is not locked
+/// (ADR-0092). The weekly `floating-deps` CI job runs `cargo update` before the
+/// tests, so this test reads the lockfile that job just wrote and goes red there
+/// the week a newer `trait-variant` resolves, before anyone bumps it here.
 #[test]
 fn the_derivation_still_copies_attributes_at_the_resolved_version() {
     assert_eq!(

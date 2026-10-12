@@ -794,11 +794,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   a third `xtask` test asserting nothing still forwards it). Annotated, not closed.
   **Resolved 2026-09-28** by `kb-decision-0063`: all three of the atom's closing conditions hold
   on `main`.
-- **Open** — [`trait-variant-caret-resolves-past-the-locked-gate.md`](../open-questions/trait-variant-caret-resolves-past-the-locked-gate.md)
+- **Superseded** — [`trait-variant-caret-resolves-past-the-locked-gate.md`](../open-questions/trait-variant-caret-resolves-past-the-locked-gate.md)
   (`kb-open-question-trait-variant-caret-001`) — the blanket impl binding constraint 4 rests on is
   pinned only by a caret (`0.1.3`); every guard on its shape is `#[cfg(test)]` and thus
   `--locked`-only, but `Cargo.lock` does not travel to a consumer of the three already-published
   crates, so a consumer's resolve can float today. Added 2026-09-07.
+  **Resolved 2026-10-12** by `kb-decision-0092`: the caret stays, a derivation contract in
+  `happenstance-core`'s library code holds the shape in every build, a weekly `floating-deps` job
+  resolves without the lock, and ES-7 is frozen.
 - **Open** — [`es-11-ceiling-sample-cost-on-sqlite-read.md`](../open-questions/es-11-ceiling-sample-cost-on-sqlite-read.md)
   (`kb-open-question-es-11-sqlite-ceiling-sample-cost-001`) — `SqliteEventStore::read`'s first poll
   stalls 635ms (39.3x the idle floor) under contention because ES-11 forces `sample_ceiling` to take
