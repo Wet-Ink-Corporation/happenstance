@@ -50,6 +50,17 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **A projection store that keys a checkpoint on anything but the id's exact
+  bytes is now ruled out for good** (#81). No behaviour changed. PS-39 says a
+  store keys a checkpoint on the `ProjectionId`'s exact bytes, so two ids that
+  differ in any byte are two checkpoints, and no store folds case, trims, pads or
+  normalises them. Its rule, `projection_ids_round_trip_by_bytes`, already passed
+  on the in-memory, SQLite and both Postgres stores. It has now also passed on a
+  live Neon endpoint in CI, and Neon was the last projection store in the
+  workspace that had not run it. PS-39 is `[FROZEN]`, so from `1.0.0` loosening
+  it, or narrowing which ids `ProjectionId::new` accepts to suit a store, is a
+  major release
+  ([ADR-0094](.kb/decisions/0094-ps-39-is-frozen-on-a-live-neon-run.md)).
 - **`happenstance` now documents two typed-layer rules it always had** (#93). No
   behaviour or signature changed.
   - A tuple boundary folds one domain enum. Every member must share the first
