@@ -51,6 +51,34 @@ not the same as what a user needed to be told.
   crate's rustdoc pages show the happenstance badge as the sidebar logo and the
   browser favicon, served from `assets/brand/favicon.svg` on `main`. This is
   documentation only; no code or behaviour changed.
+- **`happenstance-testkit`: `contains_event_id_reports_a_held_row_above_the_frontier`,
+  and the capability it runs behind** (#109,
+  [ADR-0095](.kb/decisions/0095-es-41-membership-means-held.md)). ES-41 now says
+  what `contains_event_id` means where ES-10's frontier separates a committed row
+  from a visible one: **held**. The probe MUST answer `true` for a row the store
+  has committed and the frontier has not yet passed. `happenstance-postgres` and
+  `happenstance-neon` already answered that way, so no published behaviour changes;
+  their notes at the method cite ADR-0095 in place of "recorded, not settled".
+  The rule appends an anchor, asks the fixture to arm and requires the answer
+  `Armed::Staged`, appends again, requires that `read` not show the second event,
+  and then requires `Ok(true)` from the probe. The defect it rejects is
+  `FrontierFilteredMembershipStore`: a probe with the read path's frontier
+  predicate copied in. `UnarmedFrontierFixture`, the forgotten override, pins the
+  arming check, and `EmptyArmFrontierFixture`, an override that answers `Staged`
+  and arms nothing, pins the staging check.
+
+  `Fixture` gains `HELD_ABOVE_FRONTIER`, defaulted to a declension whose reason is
+  the new public constant `UNSTATED_HELD_ABOVE_FRONTIER`, and
+  `arm_held_above_frontier`, which returns the new public enum `Armed`. Its
+  provided body arms nothing and answers `Armed::Nothing`. A store with no
+  frontier needs no change and reports one more skip. Adding a rule is a testkit
+  minor that can turn an adapter's CI red, and here one fixture shape does: CF-18's
+  `every_declined_capability_is_stated_by_this_fixture` now rejects a fixture that
+  declines `READ_YOUR_OWN_WRITES` and inherits `HELD_ABOVE_FRONTIER`'s default,
+  because for that fixture the default's "no frontier" is false. State the
+  declension, or support the capability and override `arm_held_above_frontier`.
+  The Postgres and Neon fixtures support it with a `BEFORE INSERT` trigger that
+  lifts the new row's `xact_id` above any frontier.
 - **`AppendCondition::after_every_guard` and `after_every_guard_opt`** (#85,
   [ADR-0096](.kb/decisions/0096-vt-30-is-frozen-and-after-every-guard-names-its-scope.md)).
   They do what `after` and `after_opt` always did, and the name now says so: the

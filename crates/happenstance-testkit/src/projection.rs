@@ -2308,7 +2308,7 @@ fn no_orphan_projection_rules() {
 ///
 /// **The set itself is pinned elsewhere, and that is deliberate.**
 /// `assert_reference_projection_declensions`
-/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:3593`) asserts the
+/// (`crates/happenstance-testkit/tests/mutation_coverage.rs:4817`) asserts the
 /// reference fixture's skip set by *equality*, in enumeration order, with each
 /// skip's capability and stated reason. Read that assertion as the authority for
 /// which rules skip and how many: a count restated in prose is a number nothing

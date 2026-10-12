@@ -921,19 +921,19 @@ impl<T: SqlTransport> EventStore for NeonEventStore<T> {
 
     /// Whether this store holds the event `id` names.
     ///
-    /// # The frontier disagreement, answered rather than settled
+    /// # Held, not visible: ES-41's reading, settled by ADR-0095
     ///
     /// This asks whether the store *holds* an event, and under the frontier
     /// mechanism that is a different question from whether `read` would yield it:
     /// a committed row above the frontier is held but invisible. **This method
     /// answers `true` for a held-but-invisible row** — it does not carry the
-    /// frontier predicate — for the reason `happenstance-postgres` gives at the
-    /// same method. Answering `false` would let a replication ingest re-accept an
-    /// event the store already holds, and duplicate history is not recoverable by
-    /// retrying; answering `true` makes this briefly disagree with `read`, and
-    /// that disagreement resolves itself as the frontier advances.
+    /// frontier predicate — which is the reading ES-41 requires. It agrees with
+    /// the append condition, which ES-25 evaluates over what the store holds, and
+    /// with VT-8's uniqueness on the origin pair; it briefly disagrees with `read`,
+    /// and that disagreement resolves itself as the frontier advances.
     ///
-    /// Recorded, not settled: ES-41 is frozen (ADR-0028), but this reading is phase 13's.
+    /// `contains_event_id_reports_a_held_row_above_the_frontier` is the rule that
+    /// checks it, against a row this crate's fixture lifts above any frontier.
     ///
     /// # Errors
     ///
