@@ -91,3 +91,30 @@ jobs:
           -p happenstance-core -p happenstance -p happenstance-testkit
           -p happenstance-sqlite -p happenstance-cloudflare
           -p happenstance-postgres -p happenstance-neon
+
+  marketplace:
+    # Refreshes the `marketplace` branch: the tag's tree plus the release binaries.
+    # Install with: /plugin marketplace add Wet-Ink-Corporation/anneal#marketplace
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "*-*-*"
+          path: plugin/libexec
+      - name: commit the tag's tree with binaries to the marketplace branch
+        run: |
+          chmod +x plugin/libexec/*/anneal
+          cp plugin/libexec/x86_64-pc-windows-msvc/anneal.exe plugin/libexec/anneal.exe
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan marketplace
+          git add -A
+          git add -f plugin/libexec
+          git commit -q -m "marketplace: ${GITHUB_REF_NAME} ($(git rev-parse --short "$GITHUB_SHA"))"
+          git push --force origin marketplace
