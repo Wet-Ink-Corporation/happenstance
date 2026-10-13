@@ -42,6 +42,12 @@
 //! [`restart::MintsPerOpen`], fail exactly the rules the registry lists for
 //! them, and only when the restart happens.
 //!
+//! [`idle`] asks the converse: that an idle object holding the adapter, with or
+//! without a partly read stream, keeps nothing pending, so `workerd`'s
+//! inactivity timer evicts it. [`idle::IdleHold`] parks the store and the
+//! stream inside one future the object owns and polls by hand, and the runner
+//! compares the instance that armed it with the one that answers later.
+//!
 //! [`probe`] is the other half of the job: the platform's SQLite walls, measured
 //! on the runtime that imposes them (`experiments/durable-object-limits`).
 //!
@@ -52,6 +58,7 @@
 
 pub mod dispatch;
 pub mod fixture;
+pub mod idle;
 pub mod incarnation;
 mod object;
 pub mod probe;

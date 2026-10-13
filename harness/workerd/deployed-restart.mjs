@@ -1,13 +1,20 @@
 // The deployed leg's hibernation cells: each cross-restart rule against
 // `happenstance-cloudflare` on a deployed Durable Object, with a hibernatable
 // WebSocket held open over `wss://` and the object left alone until
-// Cloudflare's own inactivity timer hibernates it.
+// Cloudflare's own inactivity timer hibernates it. Alongside them, the idle
+// cells (#262 item 2, test/idle.test.ts): an object holding the adapter, with
+// and without a partly read stream, and the timer control, each left alone and
+// then asked which instance answers.
 //
 //   node deployed-restart.mjs <base-url> <run-id>      (HARNESS_TOKEN in the environment)
 //
 // RECORD-ONLY. It prints, per rule, whether the object restarted, after how
-// long, whether the wasm instance changed, and the after-half's verdict, and it
-// exits 0 whatever it saw. Local `workerd` already produces a real hibernation
+// long, whether the wasm instance changed, and the after-half's verdict; per
+// idle cell, whether the object was evicted and the two witnesses; and it
+// exits 0 whatever it saw. For the idle cells this is decision D4 of #262's
+// plan: nothing pinned here states when production evicts an object that holds
+// no hibernatable socket, so "not evicted at 12 s" would be the platform's
+// policy, not the adapter keeping the object alive. Local `workerd` already produces a real hibernation
 // and runs these cells strictly (test/restart.test.ts); Cloudflare's timing is
 // not documented by anything this repository pins, and a red here would be a
 // timing question in the merge queue rather than an answer about the adapter.
@@ -120,11 +127,62 @@ async function cell(rule) {
   }
 }
 
+// The idle cells, as test/idle.test.ts runs them locally: `prefix` is the
+// route (`idle-control` adds the pending interval), `wait` how long the object
+// is left alone between the arm and the release.
+const IDLE_CELLS = [
+  { name: "plain", prefix: "idle", stream: "none", wait: 12_000 },
+  { name: "held-stream", prefix: "idle", stream: "held", wait: 12_000 },
+  { name: "plain", prefix: "idle", stream: "none", wait: 8_000 },
+  { name: "held-stream", prefix: "idle", stream: "held", wait: 8_000 },
+  { name: "timer-control", prefix: "idle-control", stream: "held", wait: 12_000 },
+];
+
+async function idleCell({ name, prefix, stream, wait }) {
+  const label = `${name}@${wait / 1000}s`;
+  const object = `${runId}-idle-${name}-${wait}`;
+  try {
+    const armed = await callPastPropagation(call, object, `${prefix}/arm?stream=${stream}`, {
+      pause,
+      log: console.log,
+    });
+    if (armed.status !== 200) {
+      return { label, note: `arm ${failureLine(armed.status, armed.body)}` };
+    }
+    // Nothing touches the object now: any request would reset its timer.
+    await pause(wait);
+    const released = await call(object, `${prefix}/release`, { method: "POST" });
+    if (released.status !== 200) {
+      return { label, note: `release ${failureLine(released.status, released.body)}` };
+    }
+    const evicted = field(released.body, "instance") !== field(armed.body, "instance");
+    const wasmChanged = field(released.body, "wasm") !== field(armed.body, "wasm");
+    return { label, evicted, wasmChanged, released: released.body };
+  } catch (error) {
+    return { label, note: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function printIdle(results) {
+  console.log("--- deployed idle objects (record-only) ---");
+  for (const r of results) {
+    if (r.note !== undefined) {
+      console.log(`?    ${r.label}  could not run: ${r.note}`);
+    } else {
+      console.log(`${r.label.padEnd(20)} evicted=${r.evicted} wasm changed=${r.wasmChanged}  ${r.released}`);
+    }
+  }
+}
+
+// Started before the hibernation run so the waits overlap. idleCell never
+// rejects, so the table is printed on every path, the catch included.
+const idle = Promise.all(IDLE_CELLS.map(idleCell));
 try {
   const pastPropagation = (object, route) => callPastPropagation(call, object, route, { pause, log: console.log });
   const listing = await pastPropagation(`${runId}-restart-registry`, "restart/registry");
   if (listing.status !== 200) {
     console.log(`::warning::the restart registry did not answer: ${failureLine(listing.status, listing.body)}`);
+    printIdle(await idle);
     process.exit(0);
   }
   const rules = listing.body
@@ -151,6 +209,8 @@ try {
   if (observed < rules.length || passed < observed) {
     console.log("::warning::the deployed hibernation cells were not all observed and passed; record-only, see the table");
   }
+  printIdle(await idle);
 } catch (error) {
   console.log(`::warning::the deployed hibernation run did not complete: ${error instanceof Error ? error.message : error}`);
+  printIdle(await idle);
 }
