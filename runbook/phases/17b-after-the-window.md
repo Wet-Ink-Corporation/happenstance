@@ -60,7 +60,7 @@ ES-41's reading of "holds" where ES-10's frontier separates committed from visib
       **Done:** empty (PR #239), and VT-14 is `[FROZEN]` by
       [ADR-0089](../../.kb/decisions/0089-vt-14-is-frozen-and-the-bidi-count-is-nine.md),
       which also corrects the clause's count of bidirectional controls from seven to nine.
-- [ ] #88 · **ES-7 — frozen in the record that answers
+- [x] #88 · **ES-7 — frozen in the record that answers
       `trait-variant-caret-resolves-past-the-locked-gate`.** The research
       recommends keeping the caret, and buying the protection with a derivation
       contract compiled into `happenstance-core`'s library code (a `const _`
@@ -75,6 +75,9 @@ ES-41's reading of "holds" where ES-10's frontier separates committed from visib
       derivations compiled green before it and fail it after. The box stays open
       until the `floating-deps` job has been watched failing once, through its
       `floating_deps_prove_red` dispatch input, which needs a push.
+      **Done:** watched red, then green, on `484a1bf`: run 38329295330 failed at the
+      contract step with `E0277` in `derivation.rs`, and run 38330909804, a plain
+      dispatch, passed.
 - [x] #90 · **A minimal-versions CI job.** After a lockstep `1.0.0` the crates version
       independently (ADR-0066), and each adapter declares the core it needs as
       `happenstance-core = "1.N"`. A lower bound nothing ever resolves against is
@@ -126,17 +129,17 @@ a red then green run URL for each new sibling job, in this file's session log.
 
 **Exit criteria**
 
-- [ ] `QueryItem`'s total constructor (ADR-0069) is in the tree.
-- [ ] VT-14, VT-30 and ES-7 are `[FROZEN]`, or re-dispositioned by a record that
+- [x] `QueryItem`'s total constructor (ADR-0069) is in the tree.
+- [x] VT-14, VT-30 and ES-7 are `[FROZEN]`, or re-dispositioned by a record that
       says why.
 - [x] PS-39 is `[FROZEN]` on a green live Neon run of
       `projection_ids_round_trip_by_bytes`, with the run's id recorded.
-- [ ] The minimal-versions and floating-dependency jobs exist, and each has been
+- [x] The minimal-versions and floating-dependency jobs exist, and each has been
       watched failing once.
 - [x] CF-40's `MetadataLen` is built, with a named wrong implementation per branch.
 - [x] Both typed-layer open questions are closed: ADR-0090 and ADR-0091.
-- [ ] #95 · `cargo-semver-checks` against `0.4.0` reports no major finding.
-- [ ] The specification is reconciled against this phase's changes (session
+- [x] #95 · `cargo-semver-checks` against `0.4.0` reports no major finding.
+- [x] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
 
 **Estimate.** 8–10 days.
@@ -199,3 +202,18 @@ a red then green run URL for each new sibling job, in this file's session log.
   and stale `path:N` citations. On `main` now: `QueryItem::of`, and VT-14, VT-30 and ES-7
   `[FROZEN]`. The exit boxes are left to the phase-finishing PR; the sibling jobs' red runs
   and a semver-checks run at the current head are still owed.
+
+- 2026-10-13 — `0.4.2`, the release that closes the phase. #88's owed runs, both
+  `workflow_dispatch` on `484a1bf`: run 38329295330, with `floating_deps_prove_red`,
+  went red at the contract step with `E0277` in `derivation.rs`; run 38330909804, plain,
+  went green. The minimal-versions job was red locally before #90's floors moved, and
+  is red in CI in both runs: its published-release leg resolves the adapters against
+  `happenstance-core` `0.4.1`, which lacks `after_every_guard_opt` and
+  `StoreLimit::MetadataLen`. `0.4.2` raises the workspace requirement on
+  `happenstance-core` and `happenstance` to `0.4.2`, so that leg resolves against a
+  core that has them once the tag publishes. #95 closed with PR #295 (`0032d2e`), which
+  reconciled the specification; `spec-trace` passes. `cargo semver-checks` (0.51.0)
+  against `0.4.1`, with `--release-type minor` because 0.51 maps a `0.y.z` bump to its
+  minor level, reports only the deliberate `after` / `after_opt` deprecation, and
+  `0.4.1` against `0.4.0` reported nothing, so nothing major stands against `0.4.0`.
+  Every exit box is ticked, and the phase is `done` when this PR merges.
