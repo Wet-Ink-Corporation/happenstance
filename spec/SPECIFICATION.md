@@ -2864,7 +2864,7 @@ payloads in scope, by crate:
   holds an `Rc<worker::Error>` and is built by a public
   `JsThrow::from_error(worker::Error)`
   (`crates/happenstance-cloudflare/src/js.rs:168-173`, `:188`), with
-  `pub use worker` (`crates/happenstance-cloudflare/src/lib.rs:596`).
+  `pub use worker` (`crates/happenstance-cloudflare/src/lib.rs:612`).
 - **`happenstance-neon`** — `NeonError::MalformedResponse(serde_json::Error)`
   (`crates/happenstance-neon/src/error.rs:104`), with `pub use serde_json`
   (`crates/happenstance-neon/src/lib.rs:175`).
@@ -2925,7 +2925,7 @@ impls now do, and one of them is the proof rather than the breadth: `LocalMemory
 (`crates/happenstance-testkit/tests/local_conformance.rs:198`) is a direct `impl
 EventStore for` in a genuinely downstream crate, beside the blanket impl without
 `error[E0119]`, passing every rule natively and on `wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:1118`) and `happenstance-neon`'s two
+(`crates/happenstance-cloudflare/src/event_store.rs:1170`) and `happenstance-neon`'s two
 (`crates/happenstance-neon/src/event_store.rs:797`, `:1515`) widen the evidence without
 adding to it. ADR-0001's marker was lifted on that basis at phase 1 (`references/adr/0001-async-port-flavours.md:5-6`).
 
@@ -4465,7 +4465,7 @@ today, four of them skeletons — `happenstance-sqlite` was the fifth until phas
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
 `crates/happenstance-sqlite/src/event_store.rs:1704`,
 `crates/happenstance-postgres/src/event_store.rs:485`,
-`crates/happenstance-cloudflare/src/event_store.rs:1118` and
+`crates/happenstance-cloudflare/src/event_store.rs:1170` and
 `crates/happenstance-neon/src/event_store.rs:797`, `:1515`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven

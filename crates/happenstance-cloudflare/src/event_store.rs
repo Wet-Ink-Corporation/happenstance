@@ -366,12 +366,11 @@ pub struct CloudflareEventStore {
     /// clone of the store and every read stream it opens carry the same names,
     /// and the store is `!Send` already.
     tables: Rc<Tables>,
-    // There is deliberately no cached incarnation here. One used to sit in a
-    // `RefCell<Option<StoreId>>`, filled by `migrate` or the first `append`,
-    // and a clone copied it. After `remint_identity` that let every other
-    // handle go on stamping the retired incarnation onto positions a restore
-    // had handed out again, which is the pair VT-6 forbids. Every `append` now
-    // reads the row instead: one single-row `SELECT`, still synchronous.
+    // There is deliberately no cached incarnation here. Every `append` reads
+    // the `store_meta` row, one single-row `SELECT` and still synchronous, so
+    // a handle built or cloned before `remint_identity` stamps the new
+    // incarnation. A per-handle cache would go on stamping the retired one
+    // onto positions a restore hands out again, which is the pair VT-6 forbids.
     /// What this store refuses a batch against.
     ceilings: Ceilings,
     /// How many rows one page of a read asks for.
@@ -601,8 +600,8 @@ impl CloudflareEventStore {
     ///
     /// The platform tells a restarted object nothing about a restore: no event,
     /// no flag, no property. And a restore rolls back every row this store could
-    /// have kept as a witness, `store_meta` included. `worker` 0.8.5 binds none
-    /// of the three bookmark calls either. Minting on every open would need no
+    /// have kept as a witness, `store_meta` included. The `worker` crate binds
+    /// none of the three bookmark calls either. Minting on every open would need no
     /// signal, and it lost because an object is evicted and revived routinely:
     /// every wake would add an origin to every peer's watermark for ever.
     ///
@@ -625,10 +624,8 @@ impl CloudflareEventStore {
     /// [`CloudflareEventStoreError::RowShape`] if what is read back is not a
     /// 16-byte blob.
     ///
-    /// The `UPDATE` and its read-back are not atomic: a Durable Object accepts
-    /// no `BEGIN` through `exec`, and the turn commits when the handler returns
-    /// normally. So when the read-back fails after the `UPDATE` landed, the new
-    /// incarnation stays. That is safe, because a re-mint never makes an
+    /// The `UPDATE` is not rolled back if the read-back fails after it, so the
+    /// new incarnation stays. That is safe, because a re-mint never makes an
     /// identity collide, and calling again is the remedy.
     ///
     /// # Examples
@@ -3153,13 +3150,6 @@ mod write_path_tests {
     }
 }
 
-/// ADR-0011's ceiling-and-page, observed the way a caller observes it.
-///
-/// Every test here reaches the store through the one construction root
-/// `CloudflareEventStore::new(sql)` and reads through `EventStore::read`, and
-/// every assertion about position compares against positions the store actually
-/// assigned — never a literal, because the specification permits gaps and a
-/// conformant adapter may leave them.
 // Test modules that live in their own files, under `event_store/tests/`,
 // because this file is already the crate's largest and a third inline module
 // would only make it larger (ARC-06).
@@ -3168,6 +3158,13 @@ mod tests {
     mod remint;
 }
 
+/// ADR-0011's ceiling-and-page, observed the way a caller observes it.
+///
+/// Every test here reaches the store through the one construction root
+/// `CloudflareEventStore::new(sql)` and reads through `EventStore::read`, and
+/// every assertion about position compares against positions the store actually
+/// assigned — never a literal, because the specification permits gaps and a
+/// conformant adapter may leave them.
 #[cfg(all(test, target_arch = "wasm32"))]
 mod read_path_tests {
     use core::future::poll_fn;

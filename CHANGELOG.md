@@ -123,7 +123,9 @@ not the same as what a user needed to be told.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity
-  instead of the retired one. No signature changed.
+  instead of the retired one. An append through a handle whose `store_meta` row
+  is gone now refuses with `CloudflareEventStoreError::Sql` instead of stamping a
+  cached id. No signature changed.
 
 ### Deprecated
 
