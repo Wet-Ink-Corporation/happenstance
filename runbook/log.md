@@ -10,6 +10,31 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-13 — `0.4.2`, phase 17b's release
+
+*Committed on `release-0.4.2`, on `0032d2e`.* `[Unreleased]` becomes
+`[0.4.2] — 2026-10-13`, and all seven crates move to `0.4.2`, with the workspace
+requirement on `happenstance-core` and `happenstance` raised to match: the adapters
+use core items added since `0.4.1` (`StoreLimit::MetadataLen`,
+`after_every_guard_opt`), and the minimal-versions job's published-release leg was red
+for that reason. It carries phase 17b's additive half: `QueryItem::of` (#83), VT-30
+frozen and `after` deprecated (#85, ADR-0096), ES-7 frozen with the derivation
+contract and the `floating-deps` job (#88, ADR-0092), `StoreLimit::MetadataLen` and
+Cloudflare's 512 KiB metadata ceiling (#92, ADR-0093), the typed-layer open questions
+closed by record (#93, ADR-0090, ADR-0091), PS-39 frozen on a live Neon run (#81,
+ADR-0094) and `contains_event_id` meaning held (#109, ADR-0095), with the spec
+reconciled (#95, PR #295). Phase 17b's exit boxes are ticked and it reads `done`.
+
+**Verified.** The `floating-deps` job was watched red (run 38329295330, `E0277` in
+`derivation.rs`) and then green (run 38330909804), both on `484a1bf`.
+`cargo semver-checks` (0.51.0) against `0.4.1`, with `--release-type minor` because
+0.51 maps a `0.y.z` bump to its minor level, reports only the deliberate `after` /
+`after_opt` deprecation. `cargo check --workspace --all-features`, `cargo xtask
+lints`, `spec-trace`, `lint-constitution`, `lint-kb` and `cargo fmt --check` pass.
+The full `cargo xtask ci` was not run locally; CI runs it.
+
+---
+
 ## 2026-10-12 — `0.4.1`, a patch release in phase 17b
 
 *Committed on `claude/project-thread-88m3wc-041`, on `0f87192`.* `[Unreleased]` becomes
