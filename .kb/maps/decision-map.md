@@ -836,6 +836,17 @@ number skips them.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0092 | [`kb-decision-0092`](../decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md) | The trait-variant caret stays, a derivation contract compiled into happenstance-core holds the shape, and ES-7 is frozen | accepted | 17b | supersedes `kb-open-question-trait-variant-caret-001` |
 
+## 2026-10-13: happenstance-cloudflare earns mint-once with a documented re-mint (#262)
+
+The owner chose option A of `wi-690259` on 2026-10-11 and reconfirmed it on 2026-10-13. #262
+item 3 builds it: `CloudflareEventStore::remint_identity`, the procedure in the crate README,
+and the row in `references/adapter-shapes.md` §7 that VT-6 requires. No ADR is owed, because
+the name and shape mirror `happenstance-sqlite`'s, which ADR-0086 already committed to.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| — | [`kb-decision-wi-690259`](../decisions/wi-690259-should-happenstance-cloudflare-own-the-identity.md) | `happenstance-cloudflare` owns a documented re-mint after a point-in-time restore | accepted | — | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

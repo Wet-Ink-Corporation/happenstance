@@ -246,7 +246,7 @@ open. Writing the answer into ES-6's prose is phase 17's
 
 Sub-questions 1–3 are additive or process-only. `store_error_crosses_a_join_handle` is still
 unwritten and still a `Scheduled` entry in `UNRESOLVABLE_RULE_NAMES` (`xtask/src/spec_trace.rs:1247`).
-`crates/happenstance-cloudflare/src/lib.rs:350-355` records it as unwritable against today's port
+`crates/happenstance-cloudflare/src/lib.rs:366-371` records it as unwritable against today's port
 for every adapter, and a testkit rule can land in any minor. Whether an unresolvable entry must
 carry an owning phase is `xtask` policy. **Owner now: phase 17** for the prose; sub-questions 1–3
 stay open with no phase, not blocking 1.0.

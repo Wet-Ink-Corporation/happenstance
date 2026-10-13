@@ -34,8 +34,26 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
+  after a point-in-time restore** (#262). Restoring a Durable Object to a
+  bookmark rolls back its `StoreId` row and its position counter together, so a
+  restored object re-issues `EventId`s it already gave to other events, and a
+  replication peer drops the new events as duplicates. Call it on every log in
+  the object before the restored object accepts its first append. The crate
+  README's *After a point-in-time restore* section has the procedure. It mirrors
+  `SqliteEventStore::remint_identity`. The platform gives an object no way to
+  detect a restore, so the call is the deployment's to make.
+
 ### Changed
 
+- **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
+  rather than once per handle. Each append issues one more single-row `SELECT`.
+  A handle that was built or cloned before a re-mint now stamps the new identity
+  instead of the retired one. An append through a handle whose `store_meta` row
+  is gone now refuses with `CloudflareEventStoreError::Sql` instead of stamping a
+  cached id. No signature changed.
 - **`happenstance-cloudflare` is now run across a real restart of its Durable
   Object** (#262). Documentation only; no behaviour or signature changed. The
   `workerd` CI job runs five rules whose halves sit on either side of an eviction

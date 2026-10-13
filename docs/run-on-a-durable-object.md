@@ -363,6 +363,33 @@ completion by the time it is first polled, and dropping it cannot cancel it.
 Code written generic over `EventStore` should not rely on that, because other
 stores answer differently (the `event_store` module, *Cancellation*).
 
+## Restore the object to an earlier point
+
+Cloudflare lets you roll a Durable Object's storage back to a bookmark: take one
+with `getBookmarkForTime` or `getCurrentBookmark`, then call
+`onNextSessionRestoreBookmark(bookmark)` and restart the object with
+`ctx.abort()`. The restore rolls back everything the store keeps, including the
+row that holds its `StoreId` and the counter that hands out positions.
+
+That combination is a hazard. The restored object hands out positions it already
+gave to events written after the bookmark, under the same `StoreId`, so it issues
+`EventId`s that already name other events. A replication peer that saw the
+originals drops the new events as duplicates, and nothing reports an error.
+
+So after a restore, and before the object accepts its first append, call
+`remint_identity` on every log in the object: the store `new` builds, and one
+for each `TableNamespace` you use. It returns the new `StoreId`, which is worth
+logging.
+
+The object cannot tell it was restored. The platform sends no signal, and
+anything the store could write to remember is rolled back too. So whatever
+performed the restore has to make this call, and has to keep appends away until
+it has. Events from before the bookmark keep their identities, and a re-mint
+when no restore happened does no harm: it only starts a new origin. The
+procedure is in the
+[crate README](../crates/happenstance-cloudflare/README.md), *After a
+point-in-time restore*.
+
 ## Keep the read model somewhere it can commit
 
 A read model, or projection, is a view you build from the log, such as a table
@@ -409,6 +436,10 @@ seven published crates. Before you rely on it, know these gaps:
   What a real isolate restart does to an acknowledged write has not been
   observed, and the harness does not reach the memory ceiling either
   (`harness/workerd/README.md`, *What it discharges, and what it does not*).
+- **A real bookmark restore has not been run.** The re-mint is tested against a
+  simulated restore in the crate's Node host, which rolls back the whole
+  database the way the platform describes. No test restores a real object from
+  a bookmark.
 - **The three capacity ceilings are policy.** The physical wall behind them was
   never located.
 - **The concurrency and model tests do not run here.** The concurrency tests

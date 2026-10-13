@@ -61,10 +61,11 @@
 //!   and tags to join back to `event`, which on a metered runtime is rows read
 //!   and billed for nothing.
 //! * **`store_meta` carries this object's own [`StoreId`]**, minted once at the
-//!   first `migrate` and read back on every later open. Through `exec` like
-//!   everything else, so the store's only injected seam stays
-//!   [`SqlStorage`] — reaching the Durable Object's KV would be a second handle
-//!   every fixture and every host then has to supply.
+//!   first `migrate`, read back by every `append`, and replaced only by
+//!   [`CloudflareEventStore::remint_identity`] after a point-in-time restore.
+//!   Through `exec` like everything else, so the store's only injected seam
+//!   stays [`SqlStorage`] — reaching the Durable Object's KV would be a second
+//!   handle every fixture and every host then has to supply.
 //!
 //! [`contains_event_id`]: EventStore::contains_event_id
 //!
@@ -161,7 +162,6 @@
 //! anything the caller dropped.
 //!
 
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -366,14 +366,11 @@ pub struct CloudflareEventStore {
     /// clone of the store and every read stream it opens carry the same names,
     /// and the store is `!Send` already.
     tables: Rc<Tables>,
-    /// This object's incarnation, read back from `store_meta` on first use.
-    ///
-    /// A cache, never a source: it is filled from the row `migrate` wrote, so a
-    /// second handle onto the same object reads the same value rather than
-    /// minting its own. The `RefCell` is always *tried* — a Durable Object is
-    /// re-entrant, and a `borrow_mut` that panicked would take the object down
-    /// where [`SqlError::AlreadyBorrowed`] is recoverable.
-    identity: RefCell<Option<StoreId>>,
+    // There is deliberately no cached incarnation here. Every `append` reads
+    // the `store_meta` row, one single-row `SELECT` and still synchronous, so
+    // a handle built or cloned before `remint_identity` stamps the new
+    // incarnation. A per-handle cache would go on stamping the retired one
+    // onto positions a restore hands out again, which is the pair VT-6 forbids.
     /// What this store refuses a batch against.
     ceilings: Ceilings,
     /// How many rows one page of a read asks for.
@@ -503,7 +500,6 @@ impl CloudflareEventStore {
         Self {
             sql,
             tables: Rc::new(tables),
-            identity: RefCell::new(None),
             ceilings: Ceilings::DECLARED,
             page_size: PAGE_SIZE,
         }
@@ -574,36 +570,92 @@ impl CloudflareEventStore {
         )?;
 
         // The read-back is the load-bearing half. `INSERT OR IGNORE` makes only
-        // one mint land; reading the row back is what makes every later opener
-        // adopt it rather than believe the value it would have generated.
-        let store_id = self.read_identity()?;
-        *self
-            .identity
-            .try_borrow_mut()
-            .map_err(|_| SqlError::AlreadyBorrowed)? = Some(store_id);
+        // one mint land; reading the row back is what makes this call report a
+        // row it cannot read rather than return as if the object had one.
+        self.store_id()?;
         Ok(())
     }
 
-    /// This object's incarnation, read back from storage the first time it is
-    /// asked for.
-    fn store_id(&self) -> Result<StoreId, CloudflareEventStoreError> {
-        if let Some(store_id) = *self
-            .identity
-            .try_borrow()
-            .map_err(|_| SqlError::AlreadyBorrowed)?
-        {
-            return Ok(store_id);
-        }
-        let store_id = self.read_identity()?;
-        *self
-            .identity
-            .try_borrow_mut()
-            .map_err(|_| SqlError::AlreadyBorrowed)? = Some(store_id);
-        Ok(store_id)
+    /// Replaces this log's persisted incarnation with a freshly minted one.
+    ///
+    /// # When a deployment invokes this
+    ///
+    /// After a point-in-time restore: `onNextSessionRestoreBookmark(bookmark)`
+    /// followed by a restart of the object (`ctx.abort()`). Call it **before
+    /// the restored object accepts its first append**, and once **per log** —
+    /// the store [`new`](Self::new) builds and each [`namespaced`](Self::namespaced)
+    /// one — because a restore rolls back every table in the object.
+    ///
+    /// A restore rolls back the `AUTOINCREMENT` counter that hands out positions
+    /// and the `store_meta` row that holds this log's [`StoreId`] together. So
+    /// without this call the restored object hands out `(StoreId,
+    /// SequencePosition)` pairs it already gave to events written after the
+    /// bookmark, and a replication peer that saw those events drops the new
+    /// ones as duplicates, with no error anywhere. This store mints its
+    /// identity once and keeps it, and VT-6 permits that only because the
+    /// deployment is documented to invoke this re-mint: the crate README's
+    /// *After a point-in-time restore* section is that document.
+    ///
+    /// # Why the store cannot do this for you
+    ///
+    /// The platform tells a restarted object nothing about a restore: no event,
+    /// no flag, no property. And a restore rolls back every row this store could
+    /// have kept as a witness, `store_meta` included. The `worker` crate binds
+    /// none of the three bookmark calls either. Minting on every open would need no
+    /// signal, and it lost because an object is evicted and revived routinely:
+    /// every wake would add an origin to every peer's watermark for ever.
+    ///
+    /// # What it does not change
+    ///
+    /// Events already in the object keep the origin they were stamped with. A
+    /// re-mint when no restore happened breaks nothing; it only starts a new
+    /// origin for later events.
+    ///
+    /// # Handles
+    ///
+    /// Every handle reads the identity on each append, so a handle built or
+    /// cloned before this call stamps the new incarnation too.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CloudflareEventStoreError::Sql`] if a migration statement or
+    /// the `UPDATE` fails, or if the identity row cannot be read back, and
+    /// [`CloudflareEventStoreError::ColumnType`] or
+    /// [`CloudflareEventStoreError::RowShape`] if what is read back is not a
+    /// 16-byte blob.
+    ///
+    /// The `UPDATE` is not rolled back if the read-back fails after it, so the
+    /// new incarnation stays. That is safe, because a re-mint never makes an
+    /// identity collide, and calling again is the remedy.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use happenstance_cloudflare::{CloudflareEventStore, CloudflareEventStoreError, SqlStorage};
+    ///
+    /// # fn after_restore(sql: SqlStorage) -> Result<(), CloudflareEventStoreError> {
+    /// let store = CloudflareEventStore::new(sql);
+    /// let _new_incarnation = store.remint_identity()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn remint_identity(&self) -> Result<StoreId, CloudflareEventStoreError> {
+        self.migrate()?;
+        // An `UPDATE` rather than `INSERT OR REPLACE`: `migrate` has just made
+        // sure the row exists, and an `UPDATE` cannot create a second key.
+        self.sql.exec(
+            &format!(
+                "UPDATE {} SET v = randomblob(16) WHERE k = ?",
+                self.tables.store_meta
+            ),
+            &[SqlValue::Text(STORE_ID_KEY.to_owned())],
+        )?;
+        self.store_id()
     }
 
-    /// Reads the incarnation row, without consulting or filling the cache.
-    fn read_identity(&self) -> Result<StoreId, CloudflareEventStoreError> {
+    /// This log's incarnation, read from `store_meta` every time it is asked
+    /// for, so that no handle can go on believing one a re-mint has replaced.
+    fn store_id(&self) -> Result<StoreId, CloudflareEventStoreError> {
         let mut cursor = self.sql.exec(
             &format!(
                 "SELECT v AS store_id FROM {} WHERE k = ?",
@@ -3096,6 +3148,14 @@ mod write_path_tests {
             u64::try_from(super::MAX_SAFE_POSITION).ok()
         );
     }
+}
+
+// Test modules that live in their own files, under `event_store/tests/`,
+// because this file is already the crate's largest and a third inline module
+// would only make it larger (ARC-06).
+#[cfg(all(test, target_arch = "wasm32"))]
+mod tests {
+    mod remint;
 }
 
 /// ADR-0011's ceiling-and-page, observed the way a caller observes it.

@@ -380,9 +380,10 @@ that the second MUST was undischarged for every adapter in the workspace.
 | adapter | mechanism | what earns it | where it is |
 | --- | --- | --- | --- |
 | `happenstance-sqlite` | **mint once, persist, read back on every open** | An explicit, documented re-mint operation — `SqliteEventStore::remint_identity`. Detection is *not* available: a SQLite file copied from Friday's backup is indistinguishable from the original from inside SQLite, so the documented-procedure arm of VT-6 is the only one open to it | `crates/happenstance-sqlite/src/event_store.rs` — minted by `migrate` into `store_meta`, replaced by `remint_identity` |
+| `happenstance-cloudflare` | **mint once, persist, read back on every append** | An explicit, documented re-mint operation, `CloudflareEventStore::remint_identity`, that the deployment invokes after a point-in-time restore (owner decision `wi-690259`, #262). Detection is *not* available. The platform tells a restarted object nothing about a restore: `getCurrentBookmark`, `getBookmarkForTime` and `onNextSessionRestoreBookmark` are the whole API, and `worker` 0.8.5 binds none of them. A restore also rolls back every row the object could have kept as a witness. Mint-per-open was declined because an object is evicted and revived routinely, so it would add an origin to every peer's watermark on every wake: the harm VT-6's own marker names | `crates/happenstance-cloudflare/src/event_store.rs`: minted by `migrate` into `store_meta` (per namespace for a `namespaced` store), replaced by `remint_identity`, read by every `append` |
 | `happenstance-core`'s `MemoryEventStore` | mint per construction | Nothing to earn: the store has no medium that outlives the process, so "restored from a backup" is not a state it can be in | `crates/happenstance-core/src/memory.rs` |
 | the testkit's `DurableFixture` | mint once | A fixture instrument rather than an adapter, switched to mint-once so that `recorded_time_survives_a_reopen` and `reopened_store_does_not_reissue_an_event_id` are askable at all | `crates/happenstance-testkit/tests/fixture_instruments.rs:75-90` |
-| `happenstance-cloudflare`, `happenstance-postgres`, `happenstance-neon`, `happenstance-ladybug` | **undecided** | Skeletons. Each owes this row before it can claim to have passed the suite | — |
+| `happenstance-postgres`, `happenstance-neon`, `happenstance-ladybug` | **undecided** | Skeletons. Each owes this row before it can claim to have passed the suite | — |
 
 **Why mint-once and not mint-per-open, for a file-backed store.** Mint-per-open
 splits one store's history into many origins whose interleaving is no longer
@@ -399,3 +400,9 @@ before it accepts its first append. Two copies of one file that keep one
 incarnation are two stores minting `EventId`s that collide — a failure VT-6
 describes as having no error path and no observable symptom, until a replication
 peer sees the same identity twice.
+
+**What the re-mint costs an operator on a Durable Object.** After restoring an
+object to a bookmark, call `remint_identity` on every log in it before it accepts
+its first append. The object cannot detect the restore, so whatever performed it
+has to make the call, while appends are held off. The crate README's *After a
+point-in-time restore* section is the procedure.

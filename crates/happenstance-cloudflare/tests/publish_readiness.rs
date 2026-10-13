@@ -641,6 +641,38 @@ fn the_readme_states_the_metadata_ceiling() {
     );
 }
 
+/// The restore procedure VT-6 lets this store rely on is written down where an
+/// operator looks for it (#262).
+///
+/// This store mints its `StoreId` once, and VT-6 allows that only because the
+/// deployment is *documented* to call `remint_identity` after a point-in-time
+/// restore. A rename of the method, or a README that lost the procedure, would
+/// leave that permission resting on nothing. VT-6 also requires the mechanism
+/// to be recorded in `references/adapter-shapes.md`, which is checked when the
+/// repository is there to read.
+#[test]
+fn the_restore_procedure_is_documented_where_an_operator_looks() {
+    let readme = packaged("README.md");
+    assert!(
+        readme.contains("remint_identity"),
+        "the README does not name the re-mint a restored object needs"
+    );
+    assert!(
+        readme.contains("onNextSessionRestoreBookmark"),
+        "the README does not name the restore the re-mint follows"
+    );
+
+    if let Some(shapes) = repository("references/adapter-shapes.md") {
+        assert!(
+            shapes.lines().any(|line| {
+                line.starts_with("| `happenstance-cloudflare` |")
+                    && line.contains("CloudflareEventStore::remint_identity")
+            }),
+            "references/adapter-shapes.md has no row recording this adapter's identity mechanism"
+        );
+    }
+}
+
 /// AC-011. No unimplemented body and no scoped allow survives.
 ///
 /// This story **verifies** rather than causes it: the scoped
