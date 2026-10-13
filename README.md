@@ -20,7 +20,7 @@ three short programs that end with the store refusing a write that would have
 broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
 
 > **Status: `0.4.2`, and worth being precise about what that number claims.** The
-> contract, the typed layer and a 120-rule conformance suite across four families
+> contract, the typed layer and a 121-rule conformance suite across four families
 > are real and tested, and **five adapters have run the suite** — SQLite against a
 > real file on disk, across the event-store, projection, concurrency and model
 > families; a Cloudflare Durable Object on `wasm32`; a live PostgreSQL 17.10,
@@ -152,7 +152,7 @@ is retired and outside the workspace, for the reason its row gives.
 |---|---|---|
 | [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ in the `0.4.2` release set |
 | [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ in the `0.4.2` release set |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ in the `0.4.2` release set — 120 rules across four families |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ in the `0.4.2` release set — 121 rules across four families |
 | [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ in the `0.4.2` release set; passes the suite against a real file |
 | [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ in the `0.4.2` release set; passes the suite on `wasm32` — read the note below |
 | [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.4.2` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
@@ -345,7 +345,7 @@ reason rather than disappearing.
 The macro expands to one `#[tokio::test]` per rule, so a failure names the rule
 that broke. **An adapter is not finished until it passes.**
 
-There are 120 rules in four families. The **event-store** family (95) covers
+There are 121 rules in four families. The **event-store** family (96) covers
 query semantics, read options, position uniqueness and monotonicity, append
 atomicity and the full append-condition matrix including the exact `after`
 boundary. The **concurrency** family (6) supplies the second caller a
