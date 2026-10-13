@@ -297,7 +297,7 @@ Durable Object adapter would actually fail. `MemoryEventStore` cannot surface it
 **Falsifies:** that the documented resume recipe is safe on a gapped store.
 `ProjectionStore::checkpoint` says to feed its result to `ReadOptions::from`
 "after advancing past it" (`crates/happenstance-core/src/projection.rs:87-88`), `from`
-is inclusive (`query.rs:272-273`), and the only advance is
+is inclusive (`query.rs:314`), and the only advance is
 `SequencePosition::next()`, whose own documentation says it is "only meaningful
 for adapters that allocate positions densely" (`event.rs:138-144`). Every existing
 rule feeds `from` a position the store actually assigned
@@ -323,7 +323,7 @@ positions came from a counter and the author assumed density. The purge and the
 
 **Falsifies:** that `ReadOptions` supports the two-worker split every
 backfill-beside-tail deployment wants. `ReadOptions` has `from`, `backwards` and
-`limit` and no upper bound (`query.rs:268-278`), and `limit` cannot stand in
+`limit` and no upper bound (`query.rs:313-333`), and `limit` cannot stand in
 because `event.rs:94-96` explicitly forbids treating position arithmetic as a
 count.
 
@@ -1492,7 +1492,7 @@ That is the completeness failure, and it needs building explicitly rather than a
 
 **What survives regardless:** the trick itself needs no new type — just a tag — and
 `AppendCondition::new` already makes the position-free form the default
-(`append.rs:65-70`), with `after`/`after_opt` as opt-in builders. **The API already makes
+(`append.rs:146-153`), with `after_every_guard`/`after_every_guard_opt` as opt-in builders (`append.rs:189-212`). **The API already makes
 the replicable shape the easy one**, which is worth recording because the only read helper
 in the crate (`read_decision_model`, `store.rs:387-397`) exists to produce the
 *position-relative* form and has no counterpart for the replicable one. If the sync design

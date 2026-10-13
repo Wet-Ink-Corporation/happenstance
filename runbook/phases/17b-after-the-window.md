@@ -18,6 +18,8 @@ published crate, it belongs to phase 17, and is not landed here.
 alias and builder-state). The closures of `tuple-boundary-heterogeneous-event-type`
 and `then-empty-emission-idiom-and-the-nothing-to-do-channel`. `QueryItem::of`'s
 spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078`, #81).
+ES-41's reading of "holds" where ES-10's frontier separates committed from visible
+(ADR-0095, #109).
 
 **Work**
 
@@ -73,7 +75,7 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       derivations compiled green before it and fail it after. The box stays open
       until the `floating-deps` job has been watched failing once, through its
       `floating_deps_prove_red` dispatch input, which needs a push.
-- [ ] #90 · **A minimal-versions CI job.** After a lockstep `1.0.0` the crates version
+- [x] #90 · **A minimal-versions CI job.** After a lockstep `1.0.0` the crates version
       independently (ADR-0066), and each adapter declares the core it needs as
       `happenstance-core = "1.N"`. A lower bound nothing ever resolves against is
       a guess, so a sibling job builds the workspace at its minimal versions.
@@ -108,6 +110,15 @@ spelling, settled by compiling it. PS-39's freeze on a live Neon run (`wi-378078
       run is the proof rather than the pull request's own, because a prose-only diff
       skips `live-neon` on a pull request (`changes` says `code=false`). The merge queue
       runs it again before `main` moves, as a required check.
+- [x] #109 · **ES-41 — what `contains_event_id` answers above the frontier.** Where
+      ES-10's frontier separates a committed row from a visible one, the clause left
+      "holds" unsettled and no rule staged the row.
+      **Done:** "holds" means held in the committed log, by
+      [ADR-0095](../../.kb/decisions/0095-es-41-membership-means-held.md) (PR #291), with
+      ES-41's marker unchanged. `contains_event_id_reports_a_held_row_above_the_frontier`
+      stages the row through `Fixture::HELD_ABOVE_FRONTIER` (defaulted to declined) and
+      `Fixture::arm_held_above_frontier`; the Postgres and Neon fixtures support it, and
+      `FrontierFilteredMembershipStore` is the wrong implementation it rejects.
 
 **Proof artefact.** The freezes of VT-14, VT-30, ES-7 and PS-39 in
 `spec/SPECIFICATION.md`, PS-39's with the id of the live Neon run it rests on, and
@@ -180,3 +191,11 @@ a red then green run URL for each new sibling job, in this file's session log.
   512 KiB, carved from the documented row limit: one row at all four ceilings is
   1,835,264 B against 2,000,000. ADR-0093 records the share, accepted 2026-10-12: refusing more
   metadata than that narrows published behaviour, and the owner accepted it in 17b.
+
+- 2026-10-13 — #109: ES-41's "holds" is settled as held by ADR-0095 (PR #291), with a rule
+  that stages a committed row above the frontier; recorded here, where it was missing. #95:
+  the specification is reconciled against 17b's changes — counts, CF-18's six declined
+  defaults, ES-41's gate, CF-40's marker evidence, `Guard::after` naming, VT-30's pin tests
+  and stale `path:N` citations. On `main` now: `QueryItem::of`, and VT-14, VT-30 and ES-7
+  `[FROZEN]`. The exit boxes are left to the phase-finishing PR; the sibling jobs' red runs
+  and a semver-checks run at the current head are still owed.
