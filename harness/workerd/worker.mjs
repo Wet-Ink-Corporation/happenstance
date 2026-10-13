@@ -11,13 +11,41 @@
 // The shim reinitialises the instance on the next call.
 import { ConformanceObject as RustObject } from "./build/index.js";
 
+// The idle measurement's positive control: `/idle-control/<route>` is
+// `/idle/<route>` with a timer pending in between.
+const CONTROL = "/idle-control/";
+
 export class ConformanceObject {
   constructor(ctx, env) {
     this.inner = new RustObject(ctx, env);
   }
 
   fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith(CONTROL)) {
+      return this.control(url, request);
+    }
     return relayed(() => this.inner.fetch(request));
+  }
+
+  // The positive control for the idle measurement (#262 item 2,
+  // test/idle.test.ts): the same hold as `/idle/...`, plus a pending timer of
+  // the kind a write-behind store would keep for its flush. An object with a
+  // timer pending is not idle, so the platform must NOT evict it, which is
+  // what shows that the measurement can tell a busy object from an idle one.
+  // The interval is owned: set only once Rust has armed, cleared on release.
+  async control(url, request) {
+    const route = url.pathname.slice(CONTROL.length);
+    if (route === "release") {
+      clearInterval(this.flush);
+      this.flush = undefined;
+    }
+    url.pathname = `/idle/${route}`;
+    const response = await relayed(() => this.inner.fetch(new Request(url, request)));
+    if (route === "arm" && response.status === 200 && this.flush === undefined) {
+      this.flush = setInterval(() => {}, 1_000);
+    }
+    return response;
   }
 
   // A hibernatable WebSocket's events arrive here, on whichever construction of

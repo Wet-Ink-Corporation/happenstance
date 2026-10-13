@@ -11,9 +11,10 @@
 //! without an `#[allow]` and without touching the lint table. `wasm-bindgen`
 //! exports the class to JavaScript whatever its Rust visibility.
 
+mod idling;
 mod restarts;
 
-use core::cell::OnceCell;
+use core::cell::{OnceCell, RefCell};
 
 use worker::{
     DurableObject, Env, Request, Response, Result, State, WebSocket, WebSocketIncomingMessage,
@@ -21,6 +22,7 @@ use worker::{
 };
 
 use crate::dispatch::{self, Dispatched};
+use crate::idle::IdleHold;
 use crate::incarnation::Incarnation;
 use crate::probe;
 
@@ -37,6 +39,13 @@ pub(crate) struct ConformanceObject {
     /// once per instance and only read after, so a shared reference to it may
     /// live across an `await` without any borrow flag to hold.
     held: OnceCell<restarts::Held>,
+    /// The store, and maybe a parked stream, an idle object holds between
+    /// `/idle/arm` and `/idle/release` (#262 item 2). Instance state on
+    /// purpose: whether holding it keeps the instance alive is what is
+    /// measured. A `RefCell` because a release takes it back out through
+    /// `&self`; every borrow is a `try_borrow_mut` with nothing awaited under
+    /// it.
+    idle: RefCell<Option<IdleHold>>,
 }
 
 /// The global `worker.mjs` installs to hear about a panic.
@@ -87,6 +96,7 @@ impl DurableObject for ConformanceObject {
             state,
             incarnation: Incarnation::mint(),
             held: OnceCell::new(),
+            idle: RefCell::new(None),
         }
     }
 
@@ -125,6 +135,14 @@ impl DurableObject for ConformanceObject {
                 }
                 Err(unknown) => Response::error(unknown.to_string(), 404),
             },
+            (Some("idle"), Some(route)) => {
+                let idle = idling::Idle {
+                    state: &self.state,
+                    witness: self.witness(),
+                    slot: &self.idle,
+                };
+                idle.run(route, &req).await
+            }
             (Some("probe"), None) => {
                 let sql = happenstance_cloudflare::SqlStorage::from_state(&self.state);
                 let report = probe::report(&sql).await;

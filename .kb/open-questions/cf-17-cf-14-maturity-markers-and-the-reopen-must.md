@@ -30,7 +30,7 @@ related:
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/stated-only-defects-and-the-reopen-must.md
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-13
 ---
 
 # A declaration MUST landed on CF-17's text; its marker and CF-14's did not move with it
@@ -100,3 +100,27 @@ The marker text is half stale: it still says HS-P0013 and HS-P0014 *"have not an
 (`spec/SPECIFICATION.md:8782-8783`), and Neon has. The renewal edit corrects that. The surface is
 additive either way: `Fixture`'s capability consts are defaulted (ADR-0042). **Owner now:
 phase 19a, or phase 17's `workerd` sibling job, whichever observes first.**
+
+## Evidence from #262 — 2026-10-13
+
+Recorded as evidence only. **Neither marker moved**, and no decision record was written: the
+disposition stays the owner's, as phase 16 left it.
+
+The `workerd` job is now the "`workerd`-class run that observes a real Durable Object eviction"
+this atom's phase-16 section names, but it observes it **outside** the one `REOPEN` shape, as
+rules phased across two requests:
+
+- `harness/workerd/src/restart.rs` and `test/restart.test.ts`: five rules write, the object is
+  evicted from the runner (or hibernates through `workerd`'s 10-second inactivity timer with a
+  hibernatable WebSocket held), and the rules assert on the new instance. The adapter passes all
+  five; three wrong stores (`instance-log`, `fresh-high-water`, `mints-per-open`) fail exactly
+  their registry rows and only when the restart happens. Each instance names itself, so no cell
+  passes over a restart that did not happen.
+- `harness/workerd/src/idle.rs` and `test/idle.test.ts`: an idle object holding the store, with
+  and without a partly read stream, is evicted by that timer at 12 s and not at 8 s, and a control
+  with a pending timer is not evicted.
+
+What it does not reach: state in the isolate's globals survives a local eviction (the wasm
+instance stands), and the deployed leg records hibernation and idle eviction without asserting
+them. Whether a local-`workerd` observation outside `Fixture::REOPEN` fires CF-17's falsifier, or
+answers CF-14's question for HS-P0013, is the open part.
