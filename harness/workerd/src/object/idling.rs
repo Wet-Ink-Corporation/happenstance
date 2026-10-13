@@ -69,6 +69,12 @@ impl Idle<'_> {
             Some(Err(err)) => return Response::error(err.to_string(), 400),
             None => return Response::error("stream= is required", 400),
         };
+        // Refused before appending, so a second arm cannot add to the log a
+        // later release counts. The check after the appends still stands.
+        if !self.slot.try_borrow().is_ok_and(|slot| slot.is_none()) {
+            let reason = "this instance already holds an idle store";
+            return Response::error(format!("{} {reason}", self.witness), 409);
+        }
         let store = match self.open() {
             Ok(store) => store,
             Err(fault) => return self.fail(fault).await,

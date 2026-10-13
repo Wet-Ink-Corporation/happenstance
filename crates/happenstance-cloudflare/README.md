@@ -147,9 +147,9 @@ without a partly read stream, is evicted by that same timer, while the same
 object with a pending timer is not: the store keeps nothing pending that would
 hold an idle object open. On the deployed object the hibernation and idle cells
 are recorded rather than asserted, because nothing pinned here documents
-Cloudflare's timing. What a local eviction does not
-reach is state in the isolate's globals, because it tears down the object and
-leaves the wasm instance standing.
+Cloudflare's timing. What a local eviction does not reach is state in the
+isolate's globals, because it tears down the object and leaves the wasm instance
+standing.
 
 **The fixture declines nothing, so the conformance run prints no `SKIP` line.** A
 rule whose capability a fixture declines still runs and reports the fixture's

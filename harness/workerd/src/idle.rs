@@ -172,9 +172,9 @@ impl fmt::Debug for IdleHold {
 }
 
 impl IdleHold {
-    /// Appends [`EVENTS`] events to `store`, then takes ownership of it and,
-    /// for [`StreamHold::Held`], opens a read of the whole log and takes one
-    /// event from it. Then the hold parks.
+    /// Appends [`EVENTS`] events to `store`, then moves it into the parked
+    /// future and, for [`StreamHold::Held`], opens a read of the whole log
+    /// there and takes one event from it. Then the hold parks.
     ///
     /// `S: 'static` because the store is moved into the parked future, which
     /// the object keeps after the request that armed it has answered.

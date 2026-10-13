@@ -151,7 +151,7 @@ async function idleCell({ name, prefix, stream, wait }) {
     }
     // Nothing touches the object now: any request would reset its timer.
     await pause(wait);
-    const released = await call(object, `${prefix}/release`);
+    const released = await call(object, `${prefix}/release`, { method: "POST" });
     if (released.status !== 200) {
       return { label, note: `release ${failureLine(released.status, released.body)}` };
     }
@@ -174,8 +174,10 @@ function printIdle(results) {
   }
 }
 
+// Started before the hibernation run so the waits overlap. idleCell never
+// rejects, so the table is printed on every path, the catch included.
+const idle = Promise.all(IDLE_CELLS.map(idleCell));
 try {
-  const idle = Promise.all(IDLE_CELLS.map(idleCell));
   const pastPropagation = (object, route) => callPastPropagation(call, object, route, { pause, log: console.log });
   const listing = await pastPropagation(`${runId}-restart-registry`, "restart/registry");
   if (listing.status !== 200) {
@@ -210,4 +212,5 @@ try {
   printIdle(await idle);
 } catch (error) {
   console.log(`::warning::the deployed hibernation run did not complete: ${error instanceof Error ? error.message : error}`);
+  printIdle(await idle);
 }
