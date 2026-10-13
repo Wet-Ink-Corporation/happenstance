@@ -141,10 +141,10 @@ driven from the runner between two requests, and a hibernation through
 across. Three named wrong stores fail them only when the restart happens: one
 keeps its log in the object instance, one resumes from a high-water position
 cached in the instance, and one mints its store identity per instance, so its
-events come back under new `EventId`s. The whole
-family also runs on an object evicted after its logs were created. On the
-deployed object the hibernation cells are recorded rather than asserted, because
-nothing pinned here documents Cloudflare's timing. What a local eviction does not
+events come back under new `EventId`s. The whole family also runs on an object
+evicted after its logs were created. On the deployed object the hibernation
+cells are recorded rather than asserted, because nothing pinned here documents
+Cloudflare's timing. What a local eviction does not
 reach is state in the isolate's globals, because it tears down the object and
 leaves the wasm instance standing.
 
