@@ -18,7 +18,10 @@
 
 use core::cell::Cell;
 
-use happenstance_cloudflare::TableNamespace;
+use happenstance_cloudflare::{
+    CloudflareEventStore, CloudflareEventStoreError, InvalidTableNamespace, SqlStorage,
+    TableNamespace,
+};
 use happenstance_testkit::RuleOutcome;
 use worker::State;
 
@@ -43,6 +46,69 @@ pub fn rule_names() -> Vec<&'static str> {
     names
 }
 
+/// The namespaces a rule's fixture instances keep their logs under.
+fn namespace_pool() -> Result<Vec<TableNamespace>, InvalidTableNamespace> {
+    (0..INSTANCES)
+        .map(|n| TableNamespace::new(&format!("f{n}")))
+        .collect()
+}
+
+/// Migrates every namespace a rule may open, which mints each log's identity,
+/// so that a rule run after the object restarts opens logs a previous instance
+/// created rather than creating them itself: the cold start.
+///
+/// # Errors
+///
+/// [`PrimeError`] for the first namespace that could not be built or migrated.
+pub fn prime(state: &State) -> Result<(), PrimeError> {
+    let pool = namespace_pool().map_err(PrimeError::Namespace)?;
+    let sql = SqlStorage::from_state(state);
+    for namespace in &pool {
+        // A clone of the handle, not of the database: `SqlStorage` aliases.
+        CloudflareEventStore::namespaced(sql.clone(), namespace)
+            .migrate()
+            .map_err(|source| PrimeError::Migrate {
+                namespace: namespace.as_str().to_owned(),
+                source,
+            })?;
+    }
+    Ok(())
+}
+
+/// Why [`prime`] could not prepare the object's logs.
+#[derive(Debug)]
+pub enum PrimeError {
+    /// A pool namespace's name was refused.
+    Namespace(InvalidTableNamespace),
+    /// A namespace's migration failed.
+    Migrate {
+        /// The namespace.
+        namespace: String,
+        /// The adapter's error.
+        source: CloudflareEventStoreError,
+    },
+}
+
+impl core::fmt::Display for PrimeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Namespace(err) => write!(f, "namespace pool: {err}"),
+            Self::Migrate { namespace, source } => {
+                write!(f, "migrating namespace {namespace}: {source}")
+            }
+        }
+    }
+}
+
+impl core::error::Error for PrimeError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Namespace(err) => Some(err),
+            Self::Migrate { source, .. } => Some(source),
+        }
+    }
+}
+
 /// What running one rule by name came to.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Dispatched {
@@ -65,10 +131,7 @@ pub enum Dispatched {
 /// in `workerd` that rejects the request, which is how the runner sees it.
 pub async fn run(state: &State, rule: &str) -> Dispatched {
     let faults = HarnessFaults::default();
-    let pool: Result<Vec<TableNamespace>, _> = (0..INSTANCES)
-        .map(|n| TableNamespace::new(&format!("f{n}")))
-        .collect();
-    let pool = match pool {
+    let pool = match namespace_pool() {
         Ok(pool) => pool,
         Err(err) => return Dispatched::HarnessFault(vec![format!("namespace pool: {err}")]),
     };

@@ -27,6 +27,7 @@ $ npm ci
 $ npm run build        # worker-build --release, into build/
 $ npx vitest run       # the rules, then the wall probe
 $ npx vitest run test/limits.test.ts --reporter=verbose   # the probe's report
+$ npx vitest run test/restart.test.ts --reporter=verbose  # across a restart (~15 s)
 ```
 
 To drive the deployed path without deploying, run `wrangler dev` and point
@@ -36,6 +37,7 @@ To drive the deployed path without deploying, run `wrangler dev` and point
 $ printf 'HARNESS_TOKEN=local\n' > .dev.vars
 $ npx wrangler dev --port 8799 &
 $ HARNESS_TOKEN=local node deployed.mjs http://127.0.0.1:8799 local-1
+$ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://127.0.0.1:8799 local-1
 ```
 
 ## How it fits together
@@ -46,9 +48,16 @@ $ HARNESS_TOKEN=local node deployed.mjs http://127.0.0.1:8799 local-1
 | `src/dispatch.rs` | The emitter. `for_each_event_store_rule!` expands into a `match` from rule name to rule. The name list comes from the same enumeration through the testkit's `__rule_names` callback, so a rule missing from the `match` fails as `no such rule` instead of disappearing. |
 | `src/fixture.rs` | Where the adapter is built, the way a production class builds it: `SqlStorage::from_state`, then `CloudflareEventStore::namespaced`, migrated before the first handle. One fixture instance is one log under its own `TableNamespace` in the object's single database. That is how two rules that open two isolated stores at once run inside one object. |
 | `src/probe.rs` | Phase A of `experiments/durable-object-limits`, run on this runtime. |
+| `src/incarnation.rs` | The nonce each construction of the object, and each wasm instance, names itself with: how a run proves a restart happened. |
+| `src/restart.rs` | The cross-restart rules: a before-half and an after-half per rule, the evidence carried between them, and the three wrong stores with the registry of exactly what each fails. |
+| `src/object/restarts.rs` | The `/restart/...` routes, and the store an object instance holds between the halves. |
 | `worker.mjs` | The entry point, in JavaScript on purpose. See below. |
-| `test/*.test.ts` | One `it()` per rule, each against its own object, and the probe. |
+| `test/conformance.test.ts` | One `it()` per rule, each against its own object. |
+| `test/conformance-cold.test.ts` | The same rules, each on an object primed and then evicted first. |
+| `test/restart.test.ts` | The cross-restart rules: evicted (every subject), the no-restart control, and hibernated (the adapter). |
+| `test/limits.test.ts`, `test/platform-miss.test.ts` | The probe, and what the deployed leg retries. |
 | `deployed.mjs` | The deployed leg's runner. |
+| `deployed-restart.mjs` | The deployed leg's hibernation cells, over `wss://`. Record-only. |
 
 ### Why the entry point is JavaScript
 
@@ -72,7 +81,49 @@ Worker within a minute on the first run. The job deletes the Worker at the end.
 ## What it discharges, and what it does not
 
 Of the exclusions ADR-0023 lists for the shim, this harness runs the rules inside
-an isolate, behind the I/O gate, and under the platform's SQLite limits. It does
-not exercise eviction or hibernation: a rule runs inside a single request, and
-`REOPEN` is a fresh storage handle, as it is on the shim. It does not reach the
-memory ceiling either.
+an isolate, behind the I/O gate, and under the platform's SQLite limits.
+
+A testkit rule runs inside a single request, and `REOPEN` is a fresh storage
+handle, as it is on the shim. Eviction and hibernation are exercised by the
+rules in `src/restart.rs` instead, phased across two requests with the restart
+between them:
+
+- **evicted**: `evictDurableObject` from the runner between the halves, for the
+  adapter and for three wrong stores. `instance-log` keeps its log in the
+  object instance. `fresh-high-water` keeps its events in the adapter but
+  caches the high-water position in the instance, answers `head()` from it, and
+  skips the conflict check for a condition at or above it. `mints-per-open`
+  keeps its events in the adapter but mints its store identity per instance and
+  stamps it on every event it reads, so events come back under new `EventId`s.
+  Each must fail exactly the (rule, check) pairs `/restart/registry` lists, and
+  the run prints `mutant rejections observed: N of N`. Two more wrong stores
+  live in the host tests only (`src/restart/tests/stores.rs`), for the two
+  checks no in-object store reaches: one that refuses every conditional append,
+  and one that loses an old event after a reopen while still assigning fresh
+  positions. A host test asserts that every check is some wrong store's verdict.
+- **control**: the same cells with nothing between the halves. Every store
+  passes every rule, so a wrong store's rejection above shows the rule ran
+  across the restart and depended on it.
+- **hibernated**: the adapter only. A hibernatable WebSocket is held open, the
+  object is left alone past `workerd`'s 10-second inactivity timer, and a
+  message on the socket wakes a new instance. The after-half requires the
+  socket to have been restored.
+
+Each construction of the object mints an incarnation nonce, and an after-half
+told to expect a restart refuses with `409` if the before-half's instance
+answers it, so no cell passes over a restart that did not happen. The runner
+also checks that the wasm instance did *not* change: locally a restart tears
+down the object and keeps the module instance, so a changed one means a trap.
+The same fact is the limit of the local runs: state in the isolate's globals
+survives a local restart, so a store that cached its high-water mark in a
+`static` (the variant issue #262 itself describes) would pass here, and is not
+built. The deployed leg runs the hibernation cells again over `wss://`,
+record-only, because nothing pinned here documents Cloudflare's timing, and it
+runs no wrong stores.
+
+`test/conformance-cold.test.ts` also runs the whole family on an object that
+was primed (every log a rule may open migrated, each identity minted) and then
+evicted. Each rule still runs inside one instance, so this is the weaker
+evidence; what it adds is every rule against logs a previous instance created.
+
+It does not reach the memory ceiling.
