@@ -36,15 +36,29 @@ export class ConformanceObject {
   }
 }
 
+// Every call into the Rust object that is still in flight. A panic traps the
+// one wasm instance they all share, so the relay rejects every one of them.
+// A set rather than one slot: calls overlap (the hibernation cells run
+// concurrently), and each call removes only its own entry when it settles, so
+// one call finishing never disarms another's relay.
+const inFlight = new Set();
+globalThis.__harnessPanic = (message) => {
+  for (const reject of inFlight) {
+    reject(new Error(`Rust panic: ${message}`));
+  }
+};
+
 // Races one call into the Rust object against the panic relay.
 async function relayed(call) {
+  let entry;
   const panicked = new Promise((_, reject) => {
-    globalThis.__harnessPanic = (message) => reject(new Error(`Rust panic: ${message}`));
+    entry = reject;
   });
+  inFlight.add(entry);
   try {
     return await Promise.race([call(), panicked]);
   } finally {
-    globalThis.__harnessPanic = undefined;
+    inFlight.delete(entry);
   }
 }
 

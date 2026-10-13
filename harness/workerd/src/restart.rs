@@ -22,6 +22,7 @@
 //! rejection evidence that the rule ran across one.
 
 mod evidence;
+mod map_stream;
 mod run;
 mod subject;
 #[cfg(test)]
@@ -34,7 +35,7 @@ use happenstance_core::EventStore;
 
 pub use evidence::{Evidence, EvidenceError};
 use run::Run;
-pub use subject::{FreshHighWater, InstanceLog, Subject};
+pub use subject::{FreshHighWater, InstanceLog, MintsPerOpen, Subject, UnknownSubject};
 
 use crate::incarnation::Incarnation;
 
@@ -44,7 +45,9 @@ pub enum Rule {
     /// Every event acknowledged before the restart is read back after it,
     /// with its position and identity.
     ///
-    /// Rejects [`InstanceLog`], which keeps its log in the object instance.
+    /// Rejects [`InstanceLog`], which keeps its log in the object instance
+    /// (the events are lost), and [`MintsPerOpen`], which stamps reads with an
+    /// identity minted per instance (the events come back under new ids).
     AcknowledgedWritesSurviveARestart,
     /// `head()` after the restart, before any write, is the last position
     /// acknowledged before it.
@@ -53,7 +56,8 @@ pub enum Rule {
     /// from a high-water mark cached in the instance.
     HeadSurvivesARestart,
     /// The first append after the restart is assigned a position above every
-    /// position acknowledged before it, under an identity not seen before it.
+    /// position acknowledged before it, and the log still holds every
+    /// acknowledged event, in ascending order, beside it.
     ///
     /// Rejects [`InstanceLog`], whose fresh log reissues the first positions.
     PositionsAfterARestartAreNeverReissued,
@@ -137,8 +141,9 @@ pub enum Check {
     /// An append after the restart was assigned a position at or below one
     /// acknowledged before it.
     PositionReissued,
-    /// An append after the restart was given an identity read before it.
-    IdentityReissued,
+    /// An event acknowledged before the restart is read back after it under a
+    /// different identity.
+    IdentityChanged,
     /// A condition that a conflicting event violates was not enforced.
     ConditionNotEnforced,
     /// A condition that nothing violates was refused: the store refuses
@@ -147,6 +152,16 @@ pub enum Check {
 }
 
 impl Check {
+    /// Every check.
+    pub const ALL: [Self; 6] = [
+        Self::AcknowledgedWriteLost,
+        Self::HeadRegressed,
+        Self::PositionReissued,
+        Self::IdentityChanged,
+        Self::ConditionNotEnforced,
+        Self::ConditionRefusedWithoutConflict,
+    ];
+
     /// The check's name, as the runner and the registry spell it.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -154,7 +169,7 @@ impl Check {
             Self::AcknowledgedWriteLost => "acknowledged_write_lost",
             Self::HeadRegressed => "head_regressed",
             Self::PositionReissued => "position_reissued",
-            Self::IdentityReissued => "identity_reissued",
+            Self::IdentityChanged => "identity_changed",
             Self::ConditionNotEnforced => "condition_not_enforced",
             Self::ConditionRefusedWithoutConflict => "condition_refused_without_conflict",
         }
@@ -256,8 +271,9 @@ pub async fn before<S: EventStore>(
     let run = Run::new(rule, store);
     let observed = match rule {
         Rule::AcknowledgedWritesSurviveARestart => run.batch_then_read().await?,
-        Rule::HeadSurvivesARestart => run.two_appends().await?,
-        Rule::PositionsAfterARestartAreNeverReissued => run.two_appends_then_read().await?,
+        Rule::HeadSurvivesARestart | Rule::PositionsAfterARestartAreNeverReissued => {
+            run.two_appends().await?
+        }
         Rule::AConditionFromBeforeARestartStillBinds => {
             run.capture_condition_then_conflict().await?
         }

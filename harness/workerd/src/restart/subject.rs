@@ -1,4 +1,4 @@
-//! The stores a cross-restart rule runs against: the adapter, and two wrong
+//! The stores a cross-restart rule runs against: the adapter, and three wrong
 //! stores that are each conformant within one instance and wrong across a
 //! restart.
 
@@ -9,9 +9,10 @@ use core::str::FromStr;
 use futures_core::Stream;
 use happenstance_core::{
     AppendCondition, AppendError, Event, EventId, EventStore, MemoryEventStore, Query, ReadOptions,
-    SequencePosition, SequencedEvent,
+    SequencePosition, SequencedEvent, StoreId, collect,
 };
 
+use super::map_stream::MapStream;
 use super::{Check, Rule};
 
 /// The store a cross-restart rule runs against. A closed set.
@@ -23,11 +24,18 @@ pub enum Subject {
     InstanceLog,
     /// [`FreshHighWater`] over `CloudflareEventStore`, a wrong store.
     FreshHighWater,
+    /// [`MintsPerOpen`] over `CloudflareEventStore`, a wrong store.
+    MintsPerOpen,
 }
 
 impl Subject {
     /// Every subject, in the order the runner reports them.
-    pub const ALL: [Self; 3] = [Self::Cloudflare, Self::InstanceLog, Self::FreshHighWater];
+    pub const ALL: [Self; 4] = [
+        Self::Cloudflare,
+        Self::InstanceLog,
+        Self::FreshHighWater,
+        Self::MintsPerOpen,
+    ];
 
     /// The subject's name, as the runner and the routes spell it.
     #[must_use]
@@ -36,6 +44,7 @@ impl Subject {
             Self::Cloudflare => "cloudflare",
             Self::InstanceLog => "instance-log",
             Self::FreshHighWater => "fresh-high-water",
+            Self::MintsPerOpen => "mints-per-open",
         }
     }
 
@@ -72,6 +81,10 @@ impl Subject {
                     Check::ConditionNotEnforced,
                 ),
             ],
+            Self::MintsPerOpen => &[(
+                Rule::AcknowledgedWritesSurviveARestart,
+                Check::IdentityChanged,
+            )],
         }
     }
 
@@ -144,8 +157,12 @@ impl EventStore for InstanceLog {
     }
 }
 
-/// **WRONG STORE**, the one issue #262 names: durable events, and a high-water
-/// position cached in the object.
+/// **WRONG STORE**, a per-instance variant of the store issue #262 names:
+/// durable events, and a high-water position cached in the object instance.
+///
+/// The issue's own example caches it in the isolate. That variant is not built:
+/// a local eviction keeps the wasm instance, so an isolate-global cache would
+/// survive it and pass every rule here.
 ///
 /// A new instance starts from the cache's constructed default instead of
 /// reading storage. `head()` answers from the cache, and a conditional append
@@ -212,5 +229,77 @@ impl<S: EventStore> EventStore for FreshHighWater<S> {
 
     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
         self.inner.contains_event_id(id).await
+    }
+}
+
+/// **WRONG STORE.** Durable events, and a store identity minted per object
+/// instance rather than persisted.
+///
+/// Every event it reads back carries an `EventId` under the identity this
+/// instance minted, so within one instance identities are stable and every rule
+/// passes. After a restart the same events come back under different ids, and
+/// every peer that deduplicates by id sees them as new: the mint-per-open
+/// shape VT-6 rules out for a store that is reopened as routinely as a Durable
+/// Object is.
+#[derive(Debug)]
+pub struct MintsPerOpen<S> {
+    inner: S,
+    store: StoreId,
+}
+
+impl<S> MintsPerOpen<S> {
+    /// A new instance over `inner`, under the freshly minted `store`.
+    pub const fn new(inner: S, store: StoreId) -> Self {
+        Self { inner, store }
+    }
+
+    /// The durable store underneath. Handing it to [`MintsPerOpen::new`] with
+    /// a new identity is what a restart does to this store.
+    pub fn into_inner(self) -> S {
+        self.inner
+    }
+}
+
+impl<S: EventStore> EventStore for MintsPerOpen<S> {
+    type Error = S::Error;
+
+    fn read(
+        &self,
+        query: &Query,
+        options: ReadOptions,
+    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        let store = self.store;
+        MapStream::new(
+            self.inner.read(query, options),
+            move |mut event: SequencedEvent| {
+                event.id = EventId::new(store, event.position);
+                Some(event)
+            },
+        )
+    }
+
+    async fn append(
+        &self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<Self::Error>> {
+        self.inner.append(events, condition).await
+    }
+
+    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        self.inner.head().await
+    }
+
+    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        // Consistent with what `read` reports: only this instance's identity,
+        // at a position the log holds.
+        if id.store() != self.store {
+            return Ok(false);
+        }
+        let options = ReadOptions::new().from(id.position()).limit(1);
+        let found = collect(self.inner.read(&Query::all(), options)).await?;
+        Ok(found
+            .first()
+            .is_some_and(|event| event.position == id.position()))
     }
 }

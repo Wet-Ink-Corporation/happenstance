@@ -123,7 +123,7 @@ impl DurableObject for ConformanceObject {
                     };
                     instance.run(route, req).await
                 }
-                Err(unknown) => Response::error(unknown, 404),
+                Err(unknown) => Response::error(unknown.to_string(), 404),
             },
             (Some("probe"), None) => {
                 let sql = happenstance_cloudflare::SqlStorage::from_state(&self.state);

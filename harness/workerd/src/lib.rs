@@ -37,9 +37,10 @@
 //! object (an eviction it drives, or a hibernation through `workerd`'s own
 //! inactivity timer), and an after-half asserts. Each construction of the object
 //! names itself with an [`incarnation::Incarnation`], so an after-half refuses
-//! to run across a restart that did not happen. Two wrong stores,
-//! [`restart::InstanceLog`] and [`restart::FreshHighWater`], fail exactly the
-//! rules the registry lists for them, and only when the restart happens.
+//! to run across a restart that did not happen. Three wrong stores,
+//! [`restart::InstanceLog`], [`restart::FreshHighWater`] and
+//! [`restart::MintsPerOpen`], fail exactly the rules the registry lists for
+//! them, and only when the restart happens.
 //!
 //! [`probe`] is the other half of the job: the platform's SQLite walls, measured
 //! on the runtime that imposes them (`experiments/durable-object-limits`).

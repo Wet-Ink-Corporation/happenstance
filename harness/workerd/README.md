@@ -49,7 +49,7 @@ $ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://1
 | `src/fixture.rs` | Where the adapter is built, the way a production class builds it: `SqlStorage::from_state`, then `CloudflareEventStore::namespaced`, migrated before the first handle. One fixture instance is one log under its own `TableNamespace` in the object's single database. That is how two rules that open two isolated stores at once run inside one object. |
 | `src/probe.rs` | Phase A of `experiments/durable-object-limits`, run on this runtime. |
 | `src/incarnation.rs` | The nonce each construction of the object, and each wasm instance, names itself with: how a run proves a restart happened. |
-| `src/restart.rs` | The cross-restart rules: a before-half and an after-half per rule, the evidence carried between them, and the two wrong stores with the registry of exactly what each fails. |
+| `src/restart.rs` | The cross-restart rules: a before-half and an after-half per rule, the evidence carried between them, and the three wrong stores with the registry of exactly what each fails. |
 | `src/object/restarts.rs` | The `/restart/...` routes, and the store an object instance holds between the halves. |
 | `worker.mjs` | The entry point, in JavaScript on purpose. See below. |
 | `test/conformance.test.ts` | One `it()` per rule, each against its own object. |
@@ -89,12 +89,18 @@ rules in `src/restart.rs` instead, phased across two requests with the restart
 between them:
 
 - **evicted**: `evictDurableObject` from the runner between the halves, for the
-  adapter and for two wrong stores. `instance-log` keeps its log in the object
-  instance; `fresh-high-water` keeps its events in the adapter but caches the
-  high-water position in the instance, answers `head()` from it, and skips the
-  conflict check for a condition at or above it. Each must fail exactly the
-  (rule, check) pairs `/restart/registry` lists, and the run prints
-  `mutant rejections observed: N of N`.
+  adapter and for three wrong stores. `instance-log` keeps its log in the
+  object instance. `fresh-high-water` keeps its events in the adapter but
+  caches the high-water position in the instance, answers `head()` from it, and
+  skips the conflict check for a condition at or above it. `mints-per-open`
+  keeps its events in the adapter but mints its store identity per instance and
+  stamps it on every event it reads, so events come back under new `EventId`s.
+  Each must fail exactly the (rule, check) pairs `/restart/registry` lists, and
+  the run prints `mutant rejections observed: N of N`. Two more wrong stores
+  live in the host tests only (`src/restart/tests/stores.rs`), for the two
+  checks no in-object store reaches: one that refuses every conditional append,
+  and one that loses an old event after a reopen while still assigning fresh
+  positions. A host test asserts that every check is some wrong store's verdict.
 - **control**: the same cells with nothing between the halves. Every store
   passes every rule, so a wrong store's rejection above shows the rule ran
   across the restart and depended on it.
@@ -110,8 +116,10 @@ also checks that the wasm instance did *not* change: locally a restart tears
 down the object and keeps the module instance, so a changed one means a trap.
 The same fact is the limit of the local runs: state in the isolate's globals
 survives a local restart, so a store that cached its high-water mark in a
-`static` would pass here. The deployed leg runs the hibernation cells again over
-`wss://`, record-only, because nothing pinned here documents Cloudflare's timing.
+`static` (the variant issue #262 itself describes) would pass here, and is not
+built. The deployed leg runs the hibernation cells again over `wss://`,
+record-only, because nothing pinned here documents Cloudflare's timing, and it
+runs no wrong stores.
 
 `test/conformance-cold.test.ts` also runs the whole family on an object that
 was primed (every log a rule may open migrated, each identity minted) and then

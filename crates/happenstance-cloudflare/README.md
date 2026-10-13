@@ -33,9 +33,10 @@ cluster.
 > workspace's version, so the frozen `EventStore` clauses it implements are
 > semver-binding here as everywhere. What it is not is *mileage*: the `workerd`
 > job is not a required check, only its local run asserts across an eviction
-> or a hibernation (the deployed run records hibernation), and nothing in the host test matrix exercises a `wasm32`-only crate. The
-> section below says what each run does and does not cover, in the run's own
-> terms.
+> or a hibernation (the deployed run records hibernation without asserting
+> it), and nothing in the host test matrix exercises a `wasm32`-only crate.
+> The section below says what each run does and does not cover, in the run's
+> own terms.
 
 ## Use
 
@@ -131,13 +132,16 @@ own log inside one object, the harness uses `CloudflareEventStore::namespaced`.
 
 Eviction and hibernation are exercised there too, by rules that span a restart
 rather than a request. Five rules write before the object restarts and assert
-after it: acknowledged writes are read back, the head and every later position
-are fresh, `EventId`s are not reissued, and an append condition captured before
-the restart still binds. The restart is an eviction driven from the runner
-between two requests, and a hibernation through `workerd`'s own 10-second
-inactivity timer with a hibernatable WebSocket carried across. Two named wrong
-stores fail them only when the restart happens: one keeps its log in the object
-instance, the other resumes from a high-water position cached there. The whole
+after it: acknowledged writes are read back under the `EventId`s they were read
+under before, `head()` is the last acknowledged position, the next append lands
+above every earlier position with the whole log still there, and an append
+condition captured before the restart still binds. The restart is an eviction
+driven from the runner between two requests, and a hibernation through
+`workerd`'s own 10-second inactivity timer with a hibernatable WebSocket carried
+across. Three named wrong stores fail them only when the restart happens: one
+keeps its log in the object instance, one resumes from a high-water position
+cached in the instance, and one mints its store identity per instance, so its
+events come back under new `EventId`s. The whole
 family also runs on an object evicted after its logs were created. On the
 deployed object the hibernation cells are recorded rather than asserted, because
 nothing pinned here documents Cloudflare's timing. What a local eviction does not

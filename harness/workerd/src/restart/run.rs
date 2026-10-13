@@ -64,15 +64,6 @@ impl<'s, S: EventStore> Run<'s, S> {
         })
     }
 
-    /// Two appends of one, then everything read back for its identities.
-    pub(super) async fn two_appends_then_read(&self) -> Result<Observed, Fault> {
-        let observed = self.two_appends().await?;
-        Ok(Observed {
-            event_ids: self.identities().await?,
-            ..observed
-        })
-    }
-
     /// One scoped event, then a condition captured from a read of the scope.
     pub(super) async fn capture_condition(&self) -> Result<Observed, Fault> {
         let scope = self.scope()?;
@@ -117,14 +108,22 @@ impl<S: EventStore> Run<'_, S> {
             .iter()
             .map(|event| event.event_type().as_str())
             .collect();
-        let ids: Vec<String> = events.iter().map(|event| event.id.to_string()).collect();
         let last = events.last().map(|event| event.position);
-        if types != [FIRST, SECOND] || last != Some(acknowledged) || ids != before.event_ids {
+        if types != [FIRST, SECOND] || last != Some(acknowledged) {
             return Ok(self.reject(
                 Check::AcknowledgedWriteLost,
                 format!(
-                    "read back types {types:?} ending at {last:?} with ids {ids:?}; \
-                     acknowledged {acknowledged} with ids {:?}",
+                    "read back types {types:?} ending at {last:?}; \
+                     acknowledged {FIRST}, {SECOND} ending at {acknowledged}"
+                ),
+            ));
+        }
+        let ids: Vec<String> = events.iter().map(|event| event.id.to_string()).collect();
+        if ids != before.event_ids {
+            return Ok(self.reject(
+                Check::IdentityChanged,
+                format!(
+                    "read back ids {ids:?}; read before the restart {:?}",
                     before.event_ids
                 ),
             ));
@@ -154,8 +153,8 @@ impl<S: EventStore> Run<'_, S> {
         Ok(Ok(()))
     }
 
-    /// A new append lands above every acknowledged position, under a new
-    /// identity, and the log still holds everything acknowledged, in order.
+    /// A new append lands above every acknowledged position, and the log holds
+    /// it and everything acknowledged before the restart, in ascending order.
     pub(super) async fn next_is_fresh(&self, before: &Observed) -> Result<Verdict, Fault> {
         let highest = self.last_acknowledged(before)?;
         let position = self
@@ -168,24 +167,17 @@ impl<S: EventStore> Run<'_, S> {
             ));
         }
         let events = self.read("reading everything back", &Query::all()).await?;
-        let Some(later) = events.iter().find(|event| event.position == position) else {
-            return Ok(self.reject(
-                Check::AcknowledgedWriteLost,
-                format!("the append acknowledged at {position} is not read back"),
-            ));
-        };
-        let id = later.id.to_string();
-        if before.event_ids.contains(&id) {
-            return Ok(self.reject(
-                Check::IdentityReissued,
-                format!("the append after the restart was given {id}, which was read before it"),
-            ));
-        }
         let positions: Vec<SequencePosition> = events.iter().map(|event| event.position).collect();
         let ascending = positions
             .windows(2)
             .all(|pair| matches!(pair, [a, b] if a < b));
-        if !ascending || !before.acknowledged.iter().all(|p| positions.contains(p)) {
+        // The new event must be there too, beside everything acknowledged before.
+        let held = before
+            .acknowledged
+            .iter()
+            .chain(core::iter::once(&position))
+            .all(|p| positions.contains(p));
+        if !ascending || !held {
             return Ok(self.reject(
                 Check::AcknowledgedWriteLost,
                 format!(

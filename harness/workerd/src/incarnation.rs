@@ -49,6 +49,12 @@ impl Incarnation {
         Self(raw)
     }
 
+    /// The raw bits.
+    #[must_use]
+    pub const fn bits(self) -> u64 {
+        self.0
+    }
+
     /// This wasm instance's nonce, minted on first use and kept for the
     /// instance's life.
     ///

@@ -1233,7 +1233,7 @@ jobs:
   #   between `workerd` releases, so no local runner settles it.
   #
   # The local leg also runs the rules across a restart of the object (#262):
-  # five phased rules, evicted from the runner for the adapter and for two
+  # five phased rules, evicted from the runner for the adapter and for three
   # wrong stores, with a no-restart control, and hibernated through workerd's
   # own inactivity timer for the adapter; then the whole family on a
   # cold-started object. The deployed leg repeats the hibernation cells,
@@ -1335,7 +1335,7 @@ jobs:
 
       # The cross-restart rules (harness/workerd/src/restart.rs, #262): each
       # rule writes, the object restarts, and the rule asserts. Evicted from the
-      # runner for the adapter and for two wrong stores, which must fail exactly
+      # runner for the adapter and for three wrong stores, which must fail exactly
       # the registry's (rule, check) pairs; the same cells with no restart,
       # where every store passes; one after-half told to expect a restart that
       # did not happen (409); and the adapter across a hibernation through
@@ -1350,10 +1350,12 @@ jobs:
             | tee vitest-restart.log
 
       # The vacuity guard for the run above, in the shape of the one for the
-      # rules. The floor is today's count (1 listing check + 15 evicted + 15
-      # control + 1 guard + 5 hibernated), a floor for live-neon's reason. The
-      # mutant line must read N of N with N > 0: every rejection the registry
-      # lists was observed, and the registry lists some.
+      # rules. The cell floor is today's count (1 listing check + 20 evicted +
+      # 20 control + 1 guard + 5 hibernated: 5 rules, 4 subjects), a floor for
+      # live-neon's reason. The mutant line must read N of M with N = M: every
+      # rejection the registry lists was observed. And M must be at least
+      # today's registry total (instance-log 5 + fresh-high-water 2 +
+      # mints-per-open 1), so a registry that quietly loses rows fails here.
       - name: The restart run executed every cell and saw every wrong store fail
         if: always()
         run: |
@@ -1363,7 +1365,7 @@ jobs:
           failed=$(jq '.numFailedTests' vitest-restart.json)
           pending=$(jq '.numPendingTests + .numTodoTests' vitest-restart.json)
           echo "collected $total; executed $((passed + failed)) (passed $passed, failed $failed), not run $pending"
-          if [ "$total" -lt 37 ]; then
+          if [ "$total" -lt 47 ]; then
             echo "::error::only $total restart cells were collected; the registry or the runner has lost some"
             exit 1
           fi
@@ -1379,8 +1381,8 @@ jobs:
           line=$(grep -oE 'mutant rejections observed: [0-9]+ of [0-9]+' vitest-restart.log || true)
           echo "${line:-no mutant line}"
           if ! [[ "$line" =~ ^mutant\ rejections\ observed:\ ([0-9]+)\ of\ ([0-9]+)$ ]] \
-            || [ "${BASH_REMATCH[1]}" -ne "${BASH_REMATCH[2]}" ] || [ "${BASH_REMATCH[2]}" -eq 0 ]; then
-            echo "::error::the wrong stores were not all seen to fail"
+            || [ "${BASH_REMATCH[1]}" -ne "${BASH_REMATCH[2]}" ] || [ "${BASH_REMATCH[2]}" -lt 8 ]; then
+            echo "::error::the wrong stores were not all seen to fail, or the registry lists fewer than 8 rejections"
             exit 1
           fi
 

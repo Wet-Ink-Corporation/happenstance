@@ -182,11 +182,13 @@ not the same as what a user needed to be told.
   Object** (#262). Documentation only; no behaviour or signature changed. The
   `workerd` CI job runs five rules whose halves sit on either side of an eviction
   and of a hibernation through `workerd`'s own inactivity timer: acknowledged
-  writes are read back, the head and every later position are fresh, `EventId`s
-  are not reissued, and an append condition captured before the restart still
-  binds. Two wrong stores, one keeping its log in the object and one caching its
-  high-water position there, are shown failing them. The README no longer says
-  eviction and hibernation are not exercised.
+  writes are read back under the `EventId`s they had, `head()` survives, the next
+  append lands above every earlier position with the log intact, and an append
+  condition captured before the restart still binds. Three wrong stores are shown
+  failing them across an eviction: one keeping its log in the object instance,
+  one caching its high-water position there, and one minting its store identity
+  per instance. The README no longer says eviction and hibernation are not
+  exercised.
 
 ## [0.4.1] — 2026-10-12
 
