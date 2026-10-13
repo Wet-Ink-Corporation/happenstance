@@ -795,32 +795,20 @@ fn crate_root_docs() -> String {
         .join("\n")
 }
 
-/// A fence delimiter line by `CommonMark`'s rule: up to three spaces of
-/// indentation, then a run of three or more of one of `` ` `` or `~`. Returns
-/// the character, the run's length and the trimmed rest of the line.
-///
-/// Kept apart from [`fences`], which the page's tests above use with a
-/// backtick-only, unindented reading that their expectations were written
-/// against.
-fn doc_fence_delimiter(line: &str) -> Option<(char, usize, &str)> {
-    let unindented = line.trim_start_matches(' ');
-    if line.len() - unindented.len() > 3 {
-        return None;
-    }
-    let mark = unindented
-        .chars()
-        .next()
-        .filter(|c| matches!(c, '`' | '~'))?;
-    let rest = unindented.trim_start_matches(mark);
-    let run = unindented.len() - rest.len();
-    (run >= 3).then_some((mark, run, rest.trim()))
+// The `CommonMark` fence rule, `doc_fence_delimiter` and `closes`, lives in
+// `tests/support/fence.rs`, shared with `carry_your_invariant.rs` (#279). It is
+// declared here rather than at the top because ADR-0054 cites this file by
+// line. `fences` above keeps its backtick-only, unindented reading, which
+// the page's tests were written against.
+mod support {
+    pub(crate) mod fence;
 }
+use support::fence::{closes, doc_fence_delimiter};
 
 /// Every fence opener in `docs`, as `(line, info)`, 1-based.
 ///
-/// A fence closes only on a delimiter of its own character, at least as long
-/// as its opener, with nothing after it, so a `~~~` line inside a backtick
-/// fence is body rather than a new opener.
+/// A fence closes only by [`closes`], so a `~~~` line inside a backtick fence
+/// is body rather than a new opener.
 fn doc_fence_openers(docs: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
     let mut open: Option<(char, usize)> = None;
@@ -829,7 +817,7 @@ fn doc_fence_openers(docs: &str) -> Vec<(usize, String)> {
             continue;
         };
         match open {
-            Some((opened, length)) if mark == opened && run >= length && info.is_empty() => {
+            Some(opener) if closes(opener, (mark, run, info)) => {
                 open = None;
             }
             Some(_) => {}
@@ -931,9 +919,7 @@ fn doc_headings(docs: &str) -> Vec<(usize, String)> {
     for (index, line) in docs.lines().enumerate() {
         if let Some((mark, run, info)) = doc_fence_delimiter(line) {
             open = match open {
-                Some((opened, length)) if mark == opened && run >= length && info.is_empty() => {
-                    None
-                }
+                Some(opener) if closes(opener, (mark, run, info)) => None,
                 Some(still) => Some(still),
                 None => Some((mark, run)),
             };

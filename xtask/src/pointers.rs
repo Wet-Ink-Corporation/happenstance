@@ -358,7 +358,7 @@ pub const POINTER_REGISTER: &[Pointer] = &[
                 Rung actually taken: rung 2, an in-tree markdown link with a heading fragment, \
                 because the destination is a page and not a Rust item",
         link_text: "tag, query, fold, guard, on where the structure is",
-        // The heading is `docs/carry-your-invariant.md:30`, below two whole
+        // The heading is `docs/carry-your-invariant.md:42`, below two whole
         // sections, so neither it nor the cycle it names is the first screen.
         answer_on_first_screen: false,
         targets_fragment: true,
@@ -383,13 +383,13 @@ pub const POINTER_REGISTER: &[Pointer] = &[
                 Rung actually taken: rung 2, an in-tree markdown link with a heading fragment, \
                 because the destination is a page and not a Rust item",
         link_text: "where your streams went, on modelling versus routing",
-        // The heading is `docs/carry-your-invariant.md:17`. Above it sit the
-        // title, the answered-need declaration and all of `## Your rule, in your
-        // words` (a sentence, a quoted rule, a four-line paragraph), which fill
-        // the 1024x768 first screen `PARAGRAPH` is measured against; the two
-        // answering paragraphs, :19-:28, render below it. Estimated from the
-        // source, not a measured render, and `validate` accepts either value
-        // because `targets_fragment` lands the reader on the heading regardless.
+        // The heading is `docs/carry-your-invariant.md:21`. Above it sit the
+        // title, the answered-need declaration, a three-line opening paragraph
+        // and all of `## Your rule, in your words` (a sentence, a quoted rule, a
+        // three-line paragraph), which fill the 1024x768 first screen `PARAGRAPH`
+        // is measured against; the two answering paragraphs, :23-:31, render
+        // below it. Estimated from the source, not a measured render; `validate`
+        // accepts either value: `targets_fragment` lands on the heading anyway.
         answer_on_first_screen: false,
         targets_fragment: true,
         gates: "(i) DR-4's second stall point, modelling technique or routing technique, \
