@@ -16,15 +16,35 @@ export class ConformanceObject {
     this.inner = new RustObject(ctx, env);
   }
 
-  async fetch(request) {
-    const panicked = new Promise((_, reject) => {
-      globalThis.__harnessPanic = (message) => reject(new Error(`Rust panic: ${message}`));
-    });
-    try {
-      return await Promise.race([this.inner.fetch(request), panicked]);
-    } finally {
-      globalThis.__harnessPanic = undefined;
-    }
+  fetch(request) {
+    return relayed(() => this.inner.fetch(request));
+  }
+
+  // A hibernatable WebSocket's events arrive here, on whichever construction of
+  // the object is current, including one built to receive this very message
+  // after a hibernation.
+  webSocketMessage(ws, message) {
+    return relayed(() => this.inner.webSocketMessage(ws, message));
+  }
+
+  webSocketClose(ws, code, reason, wasClean) {
+    return relayed(() => this.inner.webSocketClose(ws, code, reason, wasClean));
+  }
+
+  webSocketError(ws, error) {
+    return relayed(() => this.inner.webSocketError(ws, error));
+  }
+}
+
+// Races one call into the Rust object against the panic relay.
+async function relayed(call) {
+  const panicked = new Promise((_, reject) => {
+    globalThis.__harnessPanic = (message) => reject(new Error(`Rust panic: ${message}`));
+  });
+  try {
+    return await Promise.race([call(), panicked]);
+  } finally {
+    globalThis.__harnessPanic = undefined;
   }
 }
 
@@ -48,8 +68,12 @@ export default {
     }
     const [, object, route] = match;
     const stub = env.CONFORMANCE.get(env.CONFORMANCE.idFromName(object));
+    // The original request, re-addressed: its method, body and `Upgrade`
+    // header go through, and the object's answer comes back unchanged, so a
+    // `101` carries its WebSocket. The query string goes with the route.
+    const target = `https://harness/${route}${new URL(request.url).search}`;
     try {
-      return await stub.fetch(`https://harness/${route}`);
+      return await stub.fetch(new Request(target, request));
     } catch (error) {
       // The message only — it carries the panic's assertion text, which the
       // runner reports; the error itself would also carry its stack.

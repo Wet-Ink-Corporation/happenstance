@@ -178,6 +178,15 @@ not the same as what a user needed to be told.
   required check. ES-7, that a downstream crate may implement the bare flavour
   directly, is now `[FROZEN]`
   ([ADR-0092](.kb/decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md)).
+- **`happenstance-cloudflare` is now run across a real restart of its Durable
+  Object** (#262). Documentation only; no behaviour or signature changed. The
+  `workerd` CI job runs five rules whose halves sit on either side of an eviction
+  and of a hibernation through `workerd`'s own inactivity timer: acknowledged
+  writes are read back, the head and every later position are fresh, `EventId`s
+  are not reissued, and an append condition captured before the restart still
+  binds. Two wrong stores, one keeping its log in the object and one caching its
+  high-water position there, are shown failing them. The README no longer says
+  eviction and hibernation are not exercised.
 
 ## [0.4.1] — 2026-10-12
 

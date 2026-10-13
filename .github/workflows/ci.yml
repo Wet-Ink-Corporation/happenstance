@@ -1232,6 +1232,13 @@ jobs:
   #   own limits can be observed rather than inferred: the row wall differs
   #   between `workerd` releases, so no local runner settles it.
   #
+  # The local leg also runs the rules across a restart of the object (#262):
+  # five phased rules, evicted from the runner for the adapter and for two
+  # wrong stores, with a no-restart control, and hibernated through workerd's
+  # own inactivity timer for the adapter; then the whole family on a
+  # cold-started object. The deployed leg repeats the hibernation cells,
+  # record-only (`deployed-restart.mjs`).
+  #
   # Both legs end with the wall probe's report in the log
   # (`experiments/durable-object-limits`). Not a required status check.
   workerd:
@@ -1325,6 +1332,93 @@ jobs:
             exit 1
           fi
           echo "no conformance failures"
+
+      # The cross-restart rules (harness/workerd/src/restart.rs, #262): each
+      # rule writes, the object restarts, and the rule asserts. Evicted from the
+      # runner for the adapter and for two wrong stores, which must fail exactly
+      # the registry's (rule, check) pairs; the same cells with no restart,
+      # where every store passes; one after-half told to expect a restart that
+      # did not happen (409); and the adapter across a hibernation through
+      # workerd's own 10 s inactivity timer, woken on a held WebSocket. The
+      # log is kept for the mutant count the next step reads.
+      - name: The rules across a restart under local workerd
+        if: always()
+        run: |
+          set -o pipefail
+          npx vitest run test/restart.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-restart.json \
+            | tee vitest-restart.log
+
+      # The vacuity guard for the run above, in the shape of the one for the
+      # rules. The floor is today's count (1 listing check + 15 evicted + 15
+      # control + 1 guard + 5 hibernated), a floor for live-neon's reason. The
+      # mutant line must read N of N with N > 0: every rejection the registry
+      # lists was observed, and the registry lists some.
+      - name: The restart run executed every cell and saw every wrong store fail
+        if: always()
+        run: |
+          test -f vitest-restart.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq '.numTotalTests' vitest-restart.json)
+          passed=$(jq '.numPassedTests' vitest-restart.json)
+          failed=$(jq '.numFailedTests' vitest-restart.json)
+          pending=$(jq '.numPendingTests + .numTodoTests' vitest-restart.json)
+          echo "collected $total; executed $((passed + failed)) (passed $passed, failed $failed), not run $pending"
+          if [ "$total" -lt 37 ]; then
+            echo "::error::only $total restart cells were collected; the registry or the runner has lost some"
+            exit 1
+          fi
+          if [ "$pending" -ne 0 ] || [ "$((passed + failed))" -ne "$total" ]; then
+            echo "::error::$pending restart cells did not run; executed $((passed + failed)) of $total"
+            exit 1
+          fi
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::restart cells failed:"
+            jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .fullName' vitest-restart.json
+            exit 1
+          fi
+          line=$(grep -oE 'mutant rejections observed: [0-9]+ of [0-9]+' vitest-restart.log || true)
+          echo "${line:-no mutant line}"
+          if ! [[ "$line" =~ ^mutant\ rejections\ observed:\ ([0-9]+)\ of\ ([0-9]+)$ ]] \
+            || [ "${BASH_REMATCH[1]}" -ne "${BASH_REMATCH[2]}" ] || [ "${BASH_REMATCH[2]}" -eq 0 ]; then
+            echo "::error::the wrong stores were not all seen to fail"
+            exit 1
+          fi
+
+      # The whole family again, each rule on an object that was primed (every
+      # log it may open migrated, each identity minted) and then evicted, so the
+      # rule opens state a previous instance created. Weaker than the rules
+      # above, since each rule still runs inside one instance; the rule's
+      # response names its instance, and the runner requires it to be new.
+      - name: The conformance rules on a cold-started object under local workerd
+        if: always()
+        run: |
+          npx vitest run test/conformance-cold.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-cold.json
+
+      # The same guard and the same floor as the warm run's.
+      - name: The cold-start run executed and passed every rule
+        if: always()
+        run: |
+          test -f vitest-cold.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq '.numTotalTests' vitest-cold.json)
+          passed=$(jq '.numPassedTests' vitest-cold.json)
+          failed=$(jq '.numFailedTests' vitest-cold.json)
+          pending=$(jq '.numPendingTests + .numTodoTests' vitest-cold.json)
+          echo "collected $total; executed $((passed + failed)) (passed $passed, failed $failed), not run $pending"
+          if [ "$total" -lt 97 ]; then
+            echo "::error::only $total tests were collected; the enumeration or the dispatcher has lost rules"
+            exit 1
+          fi
+          if [ "$pending" -ne 0 ] || [ "$((passed + failed))" -ne "$total" ]; then
+            echo "::error::$pending tests did not run; executed $((passed + failed)) of $total"
+            exit 1
+          fi
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::conformance failures on a cold-started object:"
+            jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .title' vitest-cold.json
+            exit 1
+          fi
+          echo "no conformance failures on a cold-started object"
 
       - name: The SQLite walls of local workerd
         if: always()
@@ -1431,6 +1525,19 @@ jobs:
           fi
           node deployed.mjs "${{ steps.deploy.outputs.url }}" \
             "run-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      # The hibernation cells again, over `wss://` on the deployed object, waiting
+      # for Cloudflare's own inactivity timer. RECORD-ONLY: the script prints
+      # whether each object restarted, after how long, and the after-half's
+      # verdict, and exits 0 whatever it saw. Local workerd produces a real
+      # hibernation and runs the same cells strictly above; the platform's
+      # timing is pinned by nothing here, and a timing red does not belong in
+      # the merge queue. Covered by the delete step's `if:` below.
+      - name: Restart across a hibernation on a deployed Durable Object (record-only)
+        if: always() && steps.deploy.outputs.url != ''
+        run: |
+          node deployed-restart.mjs "${{ steps.deploy.outputs.url }}" \
+            "restart-${{ github.run_id }}-${{ github.run_attempt }}"
 
       # Nothing is left listening: the Worker and every object's storage go.
       # Keyed on the deploy having *run* rather than on its URL: with a name per

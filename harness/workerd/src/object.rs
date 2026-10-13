@@ -11,9 +11,17 @@
 //! without an `#[allow]` and without touching the lint table. `wasm-bindgen`
 //! exports the class to JavaScript whatever its Rust visibility.
 
-use worker::{DurableObject, Env, Request, Response, Result, State, durable_object, wasm_bindgen};
+mod restarts;
+
+use core::cell::OnceCell;
+
+use worker::{
+    DurableObject, Env, Request, Response, Result, State, WebSocket, WebSocketIncomingMessage,
+    WebSocketPair, durable_object, wasm_bindgen,
+};
 
 use crate::dispatch::{self, Dispatched};
+use crate::incarnation::Incarnation;
 use crate::probe;
 
 /// One Durable Object per rule: the runner names each object after the rule it
@@ -22,6 +30,13 @@ use crate::probe;
 #[derive(Debug)]
 pub(crate) struct ConformanceObject {
     state: State,
+    /// Minted in `new`, so a new construction answers with a new one.
+    incarnation: Incarnation,
+    /// The store a cross-restart rule runs against, opened by the first
+    /// restart request this instance serves. A `OnceCell` because it is set
+    /// once per instance and only read after, so a shared reference to it may
+    /// live across an `await` without any borrow flag to hold.
+    held: OnceCell<restarts::Held>,
 }
 
 /// The global `worker.mjs` installs to hear about a panic.
@@ -68,7 +83,11 @@ fn relay_panics() {
 impl DurableObject for ConformanceObject {
     fn new(state: State, _env: Env) -> Self {
         relay_panics();
-        Self { state }
+        Self {
+            state,
+            incarnation: Incarnation::mint(),
+            held: OnceCell::new(),
+        }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -81,8 +100,31 @@ impl DurableObject for ConformanceObject {
                 // A deployed object is billed for what it stores; a rule's log
                 // is worthless once the rule has answered.
                 self.state.storage().delete_all().await?;
-                answer(outcome)
+                let mut response = answer(outcome)?;
+                // The runner compares it with `/prime`'s to see the cold start.
+                response
+                    .headers_mut()
+                    .set("x-incarnation", &self.incarnation.to_string())?;
+                Ok(response)
             }
+            (Some("prime"), None) => match dispatch::prime(&self.state) {
+                Ok(()) => Response::ok(self.witness()),
+                Err(fault) => Response::error(fault.to_string(), 500),
+            },
+            (Some("incarnation"), None) => Response::ok(self.witness()),
+            (Some("restart"), Some("socket")) => self.accept_socket(),
+            (Some("restart"), Some("registry")) => Response::ok(restarts::registry()),
+            (Some("restart"), Some(route)) => match restarts::Route::parse(route) {
+                Ok(route) => {
+                    let instance = restarts::Instance {
+                        state: &self.state,
+                        incarnation: self.incarnation,
+                        held: &self.held,
+                    };
+                    instance.run(route, req).await
+                }
+                Err(unknown) => Response::error(unknown, 404),
+            },
             (Some("probe"), None) => {
                 let sql = happenstance_cloudflare::SqlStorage::from_state(&self.state);
                 let report = probe::report(&sql).await;
@@ -91,6 +133,53 @@ impl DurableObject for ConformanceObject {
             }
             _ => Response::error(format!("no route {path}"), 404),
         }
+    }
+
+    /// Any message wakes the object; the reply names the instance that woke.
+    async fn websocket_message(
+        &self,
+        ws: WebSocket,
+        _message: WebSocketIncomingMessage,
+    ) -> Result<()> {
+        ws.send_with_str(format!("awake {}", self.witness()))
+    }
+
+    async fn websocket_close(
+        &self,
+        _ws: WebSocket,
+        _code: usize,
+        _reason: String,
+        _was_clean: bool,
+    ) -> Result<()> {
+        // The runner closes its end when a cell is done; the runtime finishes
+        // the close handshake, and there is nothing of this object's to release.
+        Ok(())
+    }
+
+    async fn websocket_error(&self, _ws: WebSocket, error: worker::Error) -> Result<()> {
+        worker::console_error!("a held WebSocket failed: {error}");
+        Ok(())
+    }
+}
+
+impl ConformanceObject {
+    /// `instance=<nonce> wasm=<nonce>`: which construction answered, and in
+    /// which wasm instance.
+    fn witness(&self) -> String {
+        format!(
+            "instance={} wasm={}",
+            self.incarnation,
+            Incarnation::of_wasm_instance()
+        )
+    }
+
+    /// Accepts a hibernatable WebSocket: the runtime, not this instance, holds
+    /// it, so the object may hibernate with it open and is woken by its next
+    /// message.
+    fn accept_socket(&self) -> Result<Response> {
+        let pair = WebSocketPair::new()?;
+        self.state.accept_web_socket(&pair.server);
+        Response::from_websocket(pair.client)
     }
 }
 

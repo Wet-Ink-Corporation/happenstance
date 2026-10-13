@@ -29,6 +29,18 @@
 //! adapter's public constructor — the store under test is the store a consumer
 //! builds, not a test-only variant of it.
 //!
+//! # Across a restart
+//!
+//! A testkit rule runs inside one request, and an object cannot restart itself
+//! mid-request. [`restart`] holds rules phased across two requests instead: a
+//! before-half writes and returns its evidence as text, the runner restarts the
+//! object (an eviction it drives, or a hibernation through `workerd`'s own
+//! inactivity timer), and an after-half asserts. Each construction of the object
+//! names itself with an [`incarnation::Incarnation`], so an after-half refuses
+//! to run across a restart that did not happen. Two wrong stores,
+//! [`restart::InstanceLog`] and [`restart::FreshHighWater`], fail exactly the
+//! rules the registry lists for them, and only when the restart happens.
+//!
 //! [`probe`] is the other half of the job: the platform's SQLite walls, measured
 //! on the runtime that imposes them (`experiments/durable-object-limits`).
 //!
@@ -39,5 +51,7 @@
 
 pub mod dispatch;
 pub mod fixture;
+pub mod incarnation;
 mod object;
 pub mod probe;
+pub mod restart;

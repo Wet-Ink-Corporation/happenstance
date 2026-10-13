@@ -16,7 +16,9 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-happenstance-core = { workspace = true, features = ["std"] }
+# `memory` for `restart::InstanceLog`, a wrong store over `MemoryEventStore`.
+# Stated here rather than inherited through the testkit's edge (the D12 lesson).
+happenstance-core = { workspace = true, features = ["std", "memory"] }
 happenstance-cloudflare = { path = "../../crates/happenstance-cloudflare" }
 happenstance-testkit.workspace = true
 futures-core.workspace = true
