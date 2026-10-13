@@ -34,6 +34,20 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Changed
+
+- **`happenstance-cloudflare` is now run across a real restart of its Durable
+  Object** (#262). Documentation only; no behaviour or signature changed. The
+  `workerd` CI job runs five rules whose halves sit on either side of an eviction
+  and of a hibernation through `workerd`'s own inactivity timer: acknowledged
+  writes are read back under the `EventId`s they had, `head()` survives, the next
+  append lands above every earlier position with the log intact, and an append
+  condition captured before the restart still binds. Three wrong stores are shown
+  failing them across an eviction: one keeping its log in the object instance,
+  one caching its high-water position there, and one minting its store identity
+  per instance. The README no longer says eviction and hibernation are not
+  exercised.
+
 ## [0.4.2] — 2026-10-13
 
 ### Added
@@ -178,17 +192,6 @@ not the same as what a user needed to be told.
   required check. ES-7, that a downstream crate may implement the bare flavour
   directly, is now `[FROZEN]`
   ([ADR-0092](.kb/decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md)).
-- **`happenstance-cloudflare` is now run across a real restart of its Durable
-  Object** (#262). Documentation only; no behaviour or signature changed. The
-  `workerd` CI job runs five rules whose halves sit on either side of an eviction
-  and of a hibernation through `workerd`'s own inactivity timer: acknowledged
-  writes are read back under the `EventId`s they had, `head()` survives, the next
-  append lands above every earlier position with the log intact, and an append
-  condition captured before the restart still binds. Three wrong stores are shown
-  failing them across an eviction: one keeping its log in the object instance,
-  one caching its high-water position there, and one minting its store identity
-  per instance. The README no longer says eviction and hibernation are not
-  exercised.
 
 ## [0.4.1] — 2026-10-12
 
