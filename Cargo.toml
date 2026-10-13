@@ -21,7 +21,7 @@ exclude = ["crates/happenstance-ladybug"] # retired, ADR-0078; a frozen record, 
 # it shipped behind an off-by-default `unstable-projection` feature with a
 # written exemption — and is from the next release, ADR-0063 having lifted the
 # gate once adapters at both ends of the batch-shape axis had passed its suite.
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
@@ -57,8 +57,8 @@ categories = ["database", "data-structures"]
 # `happenstance-core` is live. The testkit carries no version at all (ADR-0057):
 # every use of it is a dev-dependency, and a versionless one is stripped from the
 # packaged manifest. `cargo xtask package-check` keeps it that way.
-happenstance-core = { version = "0.4.1", path = "crates/happenstance-core", default-features = false }
-happenstance = { version = "0.4.1", path = "crates/happenstance", default-features = false }
+happenstance-core = { version = "0.4.2", path = "crates/happenstance-core", default-features = false }
+happenstance = { version = "0.4.2", path = "crates/happenstance", default-features = false }
 happenstance-testkit = { path = "crates/happenstance-testkit" }
 
 # --- external ---

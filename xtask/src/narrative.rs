@@ -132,10 +132,10 @@ mod first_encounter {
     #![doc = include_str!("../../docs/first-encounter.md")]
 }
 
-// The conceptual bridge. Two whole programs one expression apart: the guard
-// tagged to the invariant refuses, and the guard tagged to the row the command
-// writes accepts. The second one's `is_ok()` is the assertion — narrowing that
-// tag back turns this module red rather than turning a paragraph stale.
+// The conceptual bridge. Four whole programs; the first and third are one
+// expression apart: the guard tagged to the course refuses, the guard tagged to
+// the student accepts (`is_ok()`). Between them a newtype refuses a bad tag, and
+// the last shows the corrected item matching. Each assertion is the argument.
 #[cfg(doctest)]
 mod carry_your_invariant {
     #![doc = include_str!("../../docs/carry-your-invariant.md")]

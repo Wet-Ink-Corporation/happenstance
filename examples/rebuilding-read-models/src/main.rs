@@ -52,8 +52,6 @@
 //! to neither. Three shapes over one event set is the situation the
 //! projection port exists for, and one shape cannot demonstrate it.
 
-#![allow(clippy::print_stdout, reason = "the transcript is the point")]
-
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
@@ -138,8 +136,8 @@ async fn main() -> Result<()> {
     let path = database_path();
     remove_database(&path);
 
-    println!("== the database this run writes to ==");
-    println!("   {}", path.display());
+    writeln!(io::stdout().lock(), "== the database this run writes to ==")?;
+    writeln!(io::stdout().lock(), "   {}", path.display())?;
 
     // The run is a function so that every store, connection and projection it
     // builds is dropped before the file is removed — on Windows an open handle
@@ -163,7 +161,7 @@ async fn run(path: &Path) -> Result<()> {
     reset_and_rebuild(&events, &models, &app).await?;
     one_poisoned_view(&events, &models).await?;
 
-    println!("\n== final log ==");
+    writeln!(io::stdout().lock(), "\n== final log ==")?;
     print_log(&events).await?;
 
     Ok(())
@@ -179,7 +177,7 @@ async fn run(path: &Path) -> Result<()> {
 /// rather than of appends: an order for more units than the shelf holds is
 /// rejected against the same boundary that would have let it through.
 async fn seed_the_log(events: &SqliteEventStore) -> Result<()> {
-    println!("\n== seeding the fulfilment log ==");
+    writeln!(io::stdout().lock(), "\n== seeding the fulfilment log ==")?;
 
     receive_stock(events, "sku-1", 13).await?;
     receive_stock(events, "sku-2", 6).await?;
@@ -188,11 +186,14 @@ async fn seed_the_log(events: &SqliteEventStore) -> Result<()> {
     place_order(events, "o-3", "sku-2", 4).await?;
     dispatch_order(events, "o-1", DAYS[0]).await?;
     dispatch_order(events, "o-2", DAYS[0]).await?;
-    println!("   two SKUs received, three orders placed, two dispatched");
+    writeln!(
+        io::stdout().lock(),
+        "   two SKUs received, three orders placed, two dispatched"
+    )?;
 
     match place_order(events, "o-9", "sku-2", 5).await {
         Ok(()) => bail!("an order against an emptied shelf should have been rejected"),
-        Err(err) => println!("   rejected: {err}"),
+        Err(err) => writeln!(io::stdout().lock(), "   rejected: {err}")?,
     }
 
     Ok(())
@@ -210,40 +211,59 @@ async fn two_views_two_checkpoints(
     models: &SqliteProjectionStore,
     app: &Connection,
 ) -> Result<()> {
-    println!("\n== two views over one log, at two checkpoints ==");
+    writeln!(
+        io::stdout().lock(),
+        "\n== two views over one log, at two checkpoints =="
+    )?;
 
     let mut stock = StockOnHand::new();
     let mut status = OrderStatus::new();
     let applied_stock = drive(events, models, &mut stock, CHUNK).await?;
     let applied_status = drive(events, models, &mut status, CHUNK).await?;
-    println!("   stock_on_hand applied {applied_stock}, order_status applied {applied_status}");
+    writeln!(
+        io::stdout().lock(),
+        "   stock_on_hand applied {applied_stock}, order_status applied {applied_status}"
+    )?;
 
     // Both are caught up here, which is the only state in which the skew below
     // is attributable to what this function does next rather than to how they
     // were built.
     print_checkpoints(models, &[stock.id(), status.id()]).await?;
 
-    println!("\n   -- a fourth order is placed, and only one view is run --");
+    writeln!(
+        io::stdout().lock(),
+        "\n   -- a fourth order is placed, and only one view is run --"
+    )?;
     place_order(events, "o-4", "sku-1", 5).await?;
     let applied_stock = drive(events, models, &mut stock, CHUNK).await?;
-    println!("   stock_on_hand applied {applied_stock}, order_status was not run");
+    writeln!(
+        io::stdout().lock(),
+        "   stock_on_hand applied {applied_stock}, order_status was not run"
+    )?;
     print_checkpoints(models, &[stock.id(), status.id()]).await?;
 
-    println!("\n   stock_on_hand:");
+    writeln!(io::stdout().lock(), "\n   stock_on_hand:")?;
     print_table(app, "SELECT sku, on_hand FROM stock_on_hand ORDER BY sku")?;
-    println!("   order_status:");
+    writeln!(io::stdout().lock(), "   order_status:")?;
     print_table(
         app,
         "SELECT order_ref, status FROM order_status ORDER BY order_ref",
     )?;
-    println!(
+    writeln!(
+        io::stdout().lock(),
         "   o-4's five units are already off the shelf and it has no status row:\n   \
          a join across these two tables is a join across two moments"
-    );
+    )?;
 
-    println!("\n   -- order_status is brought level --");
+    writeln!(
+        io::stdout().lock(),
+        "\n   -- order_status is brought level --"
+    )?;
     let applied_status = drive(events, models, &mut status, CHUNK).await?;
-    println!("   order_status applied {applied_status}");
+    writeln!(
+        io::stdout().lock(),
+        "   order_status applied {applied_status}"
+    )?;
     print_checkpoints(models, &[stock.id(), status.id()]).await?;
 
     Ok(())
@@ -271,35 +291,45 @@ async fn a_third_view_added_late(
     models: &SqliteProjectionStore,
     app: &Connection,
 ) -> Result<()> {
-    println!("\n== a third view, added after the fact ==");
+    writeln!(
+        io::stdout().lock(),
+        "\n== a third view, added after the fact =="
+    )?;
 
     let mut blue = DailyDispatches::counting_orders();
     let applied = drive(events, models, &mut blue, CHUNK).await?;
-    println!("   daily_dispatches backfilled from zero: applied {applied}");
+    writeln!(
+        io::stdout().lock(),
+        "   daily_dispatches backfilled from zero: applied {applied}"
+    )?;
     print_table(
         app,
         "SELECT day, dispatched FROM daily_dispatches ORDER BY day",
     )?;
 
-    println!("\n   -- the count was wrong: it wanted units, not orders --");
+    writeln!(
+        io::stdout().lock(),
+        "\n   -- the count was wrong: it wanted units, not orders --"
+    )?;
     let mut green = DailyDispatches::counting_units();
     let applied = drive(events, models, &mut green, CHUNK).await?;
-    println!("   daily_dispatches_v2 backfilled beside it: applied {applied}");
+    writeln!(
+        io::stdout().lock(),
+        "   daily_dispatches_v2 backfilled beside it: applied {applied}"
+    )?;
     print_table(
         app,
         "SELECT day, dispatched FROM daily_dispatches_v2 ORDER BY day",
     )?;
-    println!("   both views are live at once, and neither has stopped answering");
+    writeln!(
+        io::stdout().lock(),
+        "   both views are live at once, and neither has stopped answering"
+    )?;
 
     // From here blue's runner is stopped and green's is paused: neither is
     // driven again until green comes back as `promoted`. A runner still
     // scheduled under blue's id would replay the whole log into whichever
     // table has the name it writes to once its checkpoint is reset.
-    //
-    // The `writeln!` lines below take a locked handle, which returns an error on
-    // a closed pipe where `println!` panics. Each locks for one line, so no
-    // guard is held across an `.await`. The helpers they sit between, and the
-    // rest of this file, print through the crate-level `print_stdout` allow.
     writeln!(
         io::stdout().lock(),
         "\n   -- a promotion whose rename fails --"
@@ -367,7 +397,10 @@ async fn reset_and_rebuild(
     /// The query both rebuilds are compared through.
     const ROWS: &str = "SELECT sku, on_hand FROM stock_on_hand ORDER BY sku";
 
-    println!("\n== reset, and rebuilt at two chunk sizes ==");
+    writeln!(
+        io::stdout().lock(),
+        "\n== reset, and rebuilt at two chunk sizes =="
+    )?;
     let mut rebuilt = Vec::with_capacity(REBUILD_CHUNKS.len());
 
     for chunk in REBUILD_CHUNKS {
@@ -375,17 +408,19 @@ async fn reset_and_rebuild(
         retire(models, stock.id(), &["DELETE FROM stock_on_hand"]).await?;
         let cleared = models.checkpoint(stock.id()).await?;
         let applied = drive(events, models, &mut stock, chunk).await?;
-        println!(
+        writeln!(
+            io::stdout().lock(),
             "   cleared to {}, rebuilt at chunk {chunk}: applied {applied}",
             render_checkpoint(cleared)
-        );
+        )?;
         rebuilt.push(render_table(app, ROWS)?);
     }
 
     match rebuilt.as_slice() {
         [small, large] if small == large => {
-            println!("   both rebuilds produced the same rows:");
-            print!("{small}");
+            let mut out = io::stdout().lock();
+            writeln!(out, "   both rebuilds produced the same rows:")?;
+            write!(out, "{small}")?;
             Ok(())
         }
         [small, large] => {
@@ -417,37 +452,47 @@ async fn one_poisoned_view(
     events: &SqliteEventStore,
     models: &SqliteProjectionStore,
 ) -> Result<()> {
-    println!("\n== one poisoned view does not stall the others ==");
+    writeln!(
+        io::stdout().lock(),
+        "\n== one poisoned view does not stall the others =="
+    )?;
 
     let mut couriered = Couriered::new();
     let (stopped_at, why) = poison(events, models, &mut couriered).await?;
-    println!("   couriered stopped at position {stopped_at}: {why}");
-    println!(
-        "   its checkpoint is {} — the chunk was rolled back and nothing was committed",
-        render_checkpoint(models.checkpoint(couriered.id()).await?)
-    );
+    writeln!(
+        io::stdout().lock(),
+        "   couriered stopped at position {stopped_at}: {why}"
+    )?;
+    // Every `.await` is resolved before the `writeln!` that prints its result:
+    // the locked handle is taken before the format arguments are evaluated, so
+    // an `.await` inside them would hold the guard across a suspension.
+    let checkpoint = render_checkpoint(models.checkpoint(couriered.id()).await?);
+    writeln!(
+        io::stdout().lock(),
+        "   its checkpoint is {checkpoint} — the chunk was rolled back and nothing was committed"
+    )?;
 
-    println!("\n   -- an event arrives while that view is broken --");
+    writeln!(
+        io::stdout().lock(),
+        "\n   -- an event arrives while that view is broken --"
+    )?;
     cancel_order(events, "o-4").await?;
 
     let mut stock = StockOnHand::new();
     let mut status = OrderStatus::new();
     let mut daily = DailyDispatches::promoted();
-    println!(
-        "   stock_on_hand applied {}",
-        drive(events, models, &mut stock, CHUNK).await?
-    );
-    println!(
-        "   order_status applied {}",
-        drive(events, models, &mut status, CHUNK).await?
-    );
-    println!(
-        "   daily_dispatches applied {}",
-        drive(events, models, &mut daily, CHUNK).await?
-    );
+    let applied = drive(events, models, &mut stock, CHUNK).await?;
+    writeln!(io::stdout().lock(), "   stock_on_hand applied {applied}")?;
+    let applied = drive(events, models, &mut status, CHUNK).await?;
+    writeln!(io::stdout().lock(), "   order_status applied {applied}")?;
+    let applied = drive(events, models, &mut daily, CHUNK).await?;
+    writeln!(io::stdout().lock(), "   daily_dispatches applied {applied}")?;
 
     let (still_stuck, _) = poison(events, models, &mut couriered).await?;
-    println!("   couriered is still stuck at position {still_stuck}");
+    writeln!(
+        io::stdout().lock(),
+        "   couriered is still stuck at position {still_stuck}"
+    )?;
 
     Ok(())
 }
@@ -1446,10 +1491,8 @@ async fn retire(
 /// Prints where each named view has got to.
 async fn print_checkpoints(models: &SqliteProjectionStore, ids: &[&ProjectionId]) -> Result<()> {
     for id in ids {
-        println!(
-            "   {id} is {}",
-            render_checkpoint(models.checkpoint(id).await?)
-        );
+        let checkpoint = render_checkpoint(models.checkpoint(id).await?);
+        writeln!(io::stdout().lock(), "   {id} is {checkpoint}")?;
     }
     Ok(())
 }
@@ -1473,7 +1516,8 @@ fn render_checkpoint(checkpoint: Checkpoint) -> String {
 
 /// Prints a read-model query's rows, three spaces in.
 fn print_table(app: &Connection, sql: &str) -> Result<()> {
-    print!("{}", render_table(app, sql)?);
+    let rows = render_table(app, sql)?;
+    write!(io::stdout().lock(), "{rows}")?;
     Ok(())
 }
 
@@ -1517,12 +1561,13 @@ async fn print_log(events: &SqliteEventStore) -> Result<()> {
     let log = collect(events.read(&Query::all(), ReadOptions::new())).await?;
 
     for event in log {
-        println!(
+        writeln!(
+            io::stdout().lock(),
             "   {:>3}  {:<16} {:?}",
             event.position.get(),
             event.event_type().as_str(),
             event.tags()
-        );
+        )?;
     }
 
     Ok(())

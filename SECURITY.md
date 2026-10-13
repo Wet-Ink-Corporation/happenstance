@@ -79,7 +79,7 @@ backporting: a fix lands in the next release, and the release before it is not
 patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
 upgrade.
 
-`0.2.0` was the first stable release and `0.4.1` is current; what each promises
+`0.2.0` was the first stable release and `0.4.2` is current; what each promises
 is worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
 `0.2.0`. `ProjectionStore` was **not** at `0.2.0` — it shipped behind an
@@ -92,7 +92,8 @@ violation of this table.
 
 | Version | Supported |
 |---|---|
-| `0.4.1` | ✅ current |
+| `0.4.2` | ✅ current |
+| `0.4.1` | ❌ superseded by `0.4.2`, an additive release; it deprecates `AppendCondition::after` and `after_opt`, which are kept through 1.x, and `happenstance-cloudflare` now refuses metadata over 512 KiB |
 | `0.4.0` | ❌ superseded by `0.4.1`, a patch release with no API change |
 | `0.3.x` | ❌ superseded by `0.4.0`, a breaking release; [`docs/upgrading-to-0-4.md`](docs/upgrading-to-0-4.md) is the way across |
 | `0.2.0` | ❌ superseded by `0.3.0`; its `unstable-projection` surface was exempt and has moved |
