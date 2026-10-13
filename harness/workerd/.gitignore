@@ -8,3 +8,4 @@
 /deployed-walls.txt
 /deployed-failures.json
 /vitest-*.json
+/vitest-*.log

@@ -111,7 +111,9 @@ impl Fixture for WorkerdFixture<'_> {
     // A fresh handle off the object's state, as the shim fixture's is a fresh
     // handle off its host. Neither is an eviction: workerd's
     // `evictDurableObject` is reachable only from the test runner, between
-    // requests, and a rule runs inside one request.
+    // requests, and a rule runs inside one request. The rules that do span an
+    // eviction, and a hibernation, are phased across two requests; they are
+    // `crate::restart`'s.
     const REOPEN: Capability = Capability::SUPPORTED;
     const MID_BATCH_FAULT: Capability = Capability::SUPPORTED;
     const READ_FAULT: Capability = Capability::declined(
