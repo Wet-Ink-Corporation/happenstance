@@ -6,8 +6,15 @@ status: accepted
 authority_tier: decision
 summary: "In the context of \"Should happenstance-cloudflare own the identity re-mint after a Durable Object point-in-time restore, as a documented re-mint operation mirroring SqliteEventStore::remint_identity?\", facing VT-6 lets a mint-once adapter stand only with restore detection or a documented re-mint, and happenstance-cloudflare has neither, we decided for Adapter owns a documented re-mint and neglected Mint fresh on every open; Belongs outside happenstance, on the premise that deployments can be relied on to call it after a bookmark restore, accepting that if wrong: an operator forgets and identities collide silently."
 depends_on: []
-related: []
-source_paths: []
+related:
+  - kb-decision-0014
+  - kb-decision-0086
+source_paths:
+  - crates/happenstance-cloudflare/src/event_store.rs
+  - crates/happenstance-cloudflare/src/host.rs
+  - crates/happenstance-cloudflare/src/lib.rs
+  - crates/happenstance-cloudflare/README.md
+  - references/adapter-shapes.md
 last_reviewed: "2026-10-11"
 reversibility: low
 phase: null

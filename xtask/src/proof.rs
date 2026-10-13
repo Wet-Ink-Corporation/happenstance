@@ -1086,7 +1086,7 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 /// module takes its own detector with it, and only a list written down
 /// elsewhere notices.
 ///
-/// The five groups, and what each is the last guard on:
+/// The six groups, and what each is the last guard on:
 ///
 /// * the `!Send` twins, including the positive control, which are the only
 ///   assertions that run on a target where `wasm-bindgen`'s
@@ -1098,7 +1098,13 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 ///   site at a time — see below;
 /// * the read path's ceiling detectors and their three committed negative
 ///   controls, which are the whole of ADR-0011 as this adapter implements it;
-/// * the ES-6 reconstruction, which is project AC-005's artefact.
+/// * the ES-6 reconstruction, which is project AC-005's artefact;
+/// * the three re-mint cases that are VT-6's evidence for this adapter's
+///   documented-re-mint mechanism (#262): the re-mint persists, it separates a
+///   restored object's new events from the ones it lost, and it reaches every
+///   handle. Mint-once is permitted here only because the re-mint exists, so a
+///   module that stopped compiling would leave that permission resting on
+///   nothing.
 ///
 /// # Why the stamp needs four names rather than two
 ///
@@ -1143,6 +1149,9 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "es6_reconstruction::transport_fault_reaches_the_caller_distinguishably",
     "es6_reconstruction::an_evidence_discarding_classifier_is_rejected",
     "es6_reconstruction::the_distinction_is_reachable_from_outside_the_crate",
+    "event_store::tests::remint::remint_identity_replaces_the_persisted_incarnation",
+    "event_store::tests::remint::a_remint_after_a_restore_reissues_no_event_id_for_a_different_event",
+    "event_store::tests::remint::a_handle_cloned_before_a_remint_stamps_the_new_incarnation",
 ];
 
 /// The runner that executes a `wasm-bindgen-test` harness.

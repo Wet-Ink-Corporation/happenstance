@@ -119,14 +119,22 @@ const DURABLE_OBJECT_STATE: &str = r"
   // harness/workerd/src/probe.rs. `length` is left at Node's default: workerd's
   // differs by release and by deployment, and nothing here depends on it.
   const walls = { compoundSelect: 5, variableNumber: 100, sqlLength: 100000, exprDepth: 100 };
-  const db = new DatabaseSync(':memory:', { limits: walls });
-  // A Node too old for `limits` ignores the option silently and leaves SQLite's
-  // defaults in place, which would turn every wall below back into a guess.
-  for (const [name, value] of Object.entries(walls)) {
-    if (db.limits?.[name] !== value) {
-      throw new Error(`node:sqlite did not apply the ${name} limit; this host needs a Node whose DatabaseSync supports limits`);
+  // One database carrying the walls. A function because a simulated bookmark
+  // restore (below) opens a second one, and it must carry the same walls and
+  // meet the same refusal.
+  const open = () => {
+    const opened = new DatabaseSync(':memory:', { limits: walls });
+    // A Node too old for `limits` ignores the option silently and leaves SQLite's
+    // defaults in place, which would turn every wall below back into a guess.
+    for (const [name, value] of Object.entries(walls)) {
+      if (opened.limits?.[name] !== value) {
+        throw new Error(`node:sqlite did not apply the ${name} limit; this host needs a Node whose DatabaseSync supports limits`);
+      }
     }
-  }
+    return opened;
+  };
+  // `let`, because a simulated restore replaces it whole.
+  let db = open();
 
   // A Durable Object hands integers back through a JS number. `node:sqlite`
   // hands them back as BigInt when asked to, which is the only way to read a
@@ -208,6 +216,74 @@ const DURABLE_OBJECT_STATE: &str = r"
     // adapter asked a question rather than only what it got back — the
     // difference between one ceiling per read and one per query item.
     get issuedStatements() { return issued.slice(); },
+    // A point-in-time bookmark, simulated: a detached copy of the whole
+    // database — every user table's rows, `sqlite_sequence` (the counter
+    // `AUTOINCREMENT` hands positions out from), and the schema, triggers
+    // included. The platform names a bookmark by an opaque string and restores
+    // it at the object's next session; this shim hands back the copy and
+    // restores it at once, so a test models the restart by binding fresh
+    // handles afterwards.
+    //
+    // A copy in memory rather than `VACUUM INTO` a file, because the gate runs
+    // this target on Windows too, where an open file cannot be unlinked.
+    bookmark() {
+      const schema = db.prepare(
+        `SELECT type, name, sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY rowid`,
+      ).all();
+      const rows = {};
+      for (const entry of schema) {
+        if (entry.type !== 'table') { continue; }
+        const statement = db.prepare(`SELECT * FROM [${entry.name}]`);
+        statement.setReadBigInts(true);
+        statement.setReturnArrays(true);
+        rows[entry.name] = {
+          columns: statement.columns().map((column) => column.name),
+          values: statement.all(),
+        };
+      }
+      const counter = db.prepare(
+        `SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'sqlite_sequence'`,
+      ).get();
+      let sequence = [];
+      if (counter !== undefined) {
+        const statement = db.prepare('SELECT name, seq FROM sqlite_sequence');
+        statement.setReadBigInts(true);
+        statement.setReturnArrays(true);
+        sequence = statement.all();
+      }
+      return { schema, rows, sequence };
+    },
+    // Rolls the whole database back to `snapshot`, the way a restore rolls back
+    // every table in the object at once. Tables first, then their rows, then
+    // the position counter, and indexes and triggers last — after the data, so
+    // a fault trigger cannot fire on the copy. `issued` and `armed` are this
+    // shim's own state rather than the object's, and survive.
+    restoreBookmark(snapshot) {
+      const next = open();
+      for (const entry of snapshot.schema) {
+        if (entry.type === 'table') { next.exec(entry.sql); }
+      }
+      for (const [name, table] of Object.entries(snapshot.rows)) {
+        if (table.values.length === 0) { continue; }
+        const columns = table.columns.map((column) => `[${column}]`).join(', ');
+        const marks = table.columns.map(() => '?').join(', ');
+        const insert = next.prepare(`INSERT INTO [${name}] (${columns}) VALUES (${marks})`);
+        for (const row of table.values) { insert.run(...row); }
+      }
+      const counter = next.prepare(
+        `SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'sqlite_sequence'`,
+      ).get();
+      if (counter !== undefined) {
+        next.exec('DELETE FROM sqlite_sequence');
+        const insert = next.prepare('INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)');
+        for (const [name, seq] of snapshot.sequence) { insert.run(name, seq); }
+      }
+      for (const entry of snapshot.schema) {
+        if (entry.type !== 'table') { next.exec(entry.sql); }
+      }
+      db.close();
+      db = next;
+    },
     exec(query, ...bindings) {
       issued.push(query);
       if (armed !== null && query.includes(armed.match)) {
@@ -408,6 +484,59 @@ fn arm(sql: &SqlStorage, matching: &str, message: &str, times: u32) {
         &JsValue::from_f64(f64::from(times)),
     )
     .expect("arming a throw does not itself throw");
+}
+
+/// A snapshot of one object's whole database, as a platform bookmark names one.
+///
+/// A newtype over the shim's snapshot rather than a bare `JsValue`, so that only
+/// a value [`bookmark`] produced can be handed to [`restore_bookmark`].
+#[cfg(all(test, target_arch = "wasm32"))]
+#[derive(Debug)]
+pub(crate) struct Bookmark(JsHandle);
+
+/// Takes a bookmark of the object `sql` is bound to: every table's rows, the
+/// `AUTOINCREMENT` counter and the schema, triggers included.
+///
+/// # Panics
+///
+/// If the handle is not one of this module's shims.
+#[cfg(all(test, target_arch = "wasm32"))]
+pub(crate) fn bookmark(sql: &SqlStorage) -> Bookmark {
+    let snapshot = hook(sql, "bookmark")
+        .call0(sql.handle().as_js())
+        .expect("taking a bookmark does not throw");
+    Bookmark(JsHandle::new(snapshot))
+}
+
+/// Rolls the object `sql` is bound to back to `bookmark`, the way a
+/// point-in-time restore rolls back every table in a Durable Object at once.
+///
+/// The platform applies a restore at the object's next session; this applies it
+/// immediately, and every existing binding onto the object sees the restored
+/// database. A test models the restart by building fresh handles afterwards.
+/// Borrowed, because a bookmark can be restored more than once.
+///
+/// # Panics
+///
+/// If the handle is not one of this module's shims, or the restore throws.
+#[cfg(all(test, target_arch = "wasm32"))]
+pub(crate) fn restore_bookmark(sql: &SqlStorage, bookmark: &Bookmark) {
+    hook(sql, "restoreBookmark")
+        .call1(sql.handle().as_js(), bookmark.0.as_js())
+        .expect("restoring a bookmark does not throw");
+}
+
+/// The shim's method `name`, as a callable function.
+#[cfg(all(test, target_arch = "wasm32"))]
+fn hook(sql: &SqlStorage, name: &str) -> js_sys::Function {
+    sql.handle()
+        .property(name)
+        .expect("reading a shim hook does not throw")
+        .expect("this module's shim carries the hook")
+        .as_js()
+        .clone()
+        .dyn_into()
+        .expect("the hook is a function")
 }
 
 /// Every statement this object has been asked to run, oldest first.

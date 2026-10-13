@@ -233,6 +233,22 @@
 //! is not a dependency at all. So it is absent here by construction rather than
 //! by choice, and there is nothing for this adapter to opt into.
 //!
+//! # After a point-in-time restore
+//!
+//! A Durable Object rolled back to a bookmark rolls back this store's events, the
+//! row holding its `StoreId` and the counter that hands out positions, all
+//! together. The restored object would then hand out `EventId`s it already gave
+//! to events written after the bookmark, and a replication peer would drop the
+//! new events as duplicates. So before the restored object accepts its first
+//! append, the deployment calls
+//! [`CloudflareEventStore::remint_identity`](event_store::CloudflareEventStore::remint_identity)
+//! on every log in it.
+//!
+//! The store cannot do this itself: the platform sends a restored object no
+//! signal, and anything the store could write to remember is rolled back with
+//! it. VT-6 permits mint-once only because this procedure is documented, which
+//! the README's *After a point-in-time restore* section does in full.
+//!
 //! # What this crate is for
 //!
 //! It implements the **bare** [`EventStore`](happenstance_core::EventStore)

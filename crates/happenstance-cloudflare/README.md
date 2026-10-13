@@ -192,6 +192,51 @@ integer through a JavaScript number on the way out, so a position above
 it. A stored value that crossed the line is reported as
 `CloudflareEventStoreError::StoredPosition` rather than silently narrowed.
 
+## After a point-in-time restore
+
+A Durable Object's storage can be rolled back to a bookmark: `getBookmarkForTime`
+or `getCurrentBookmark`, then `onNextSessionRestoreBookmark(bookmark)` and a
+restart of the object. That rolls back everything this store keeps: its events,
+the `store_meta` row that holds its `StoreId`, and the counter that hands out
+positions. Without a re-mint, the restored object hands out positions it already
+gave to events written after the bookmark, under the same `StoreId`, and every
+replication peer that saw those events drops the new ones as duplicates, with no
+error anywhere.
+
+This store mints its `StoreId` once and keeps it. The specification (VT-6) allows
+that only because the deployment is documented to re-mint after a restore, and
+this is the document:
+
+1. Restore: call `onNextSessionRestoreBookmark(bookmark)` and restart the object
+   with `ctx.abort()`. `worker` 0.8.5 binds neither call, so this step is
+   JavaScript, or `js_sys::Reflect` from Rust.
+2. Before the restored object accepts its first append, call
+   `CloudflareEventStore::remint_identity` on every log in it: the store `new`
+   builds, and one per `TableNamespace`.
+3. Resume appends.
+
+The object cannot tell that it was restored. The platform sends no signal, and
+anything the store could write to remember is rolled back with it. So step 2 has
+to be driven from outside the object, by whatever performed the restore, while it
+keeps appends away. Events from before the bookmark keep the identity they were
+written with. Re-minting when no restore happened breaks nothing; it only starts a
+new origin for later events. Every handle reads the identity on each append, so a
+handle built before the re-mint stamps the new one.
+
+```rust,no_run
+use happenstance_cloudflare::{CloudflareEventStore, CloudflareEventStoreError, SqlStorage};
+
+// Run once, in the first session after the restore, before any append.
+fn after_restore(state: &worker::State) -> Result<(), CloudflareEventStoreError> {
+    let store = CloudflareEventStore::new(SqlStorage::new(state.storage().sql()));
+    let _new_incarnation = store.remint_identity()?;
+    Ok(())
+}
+```
+
+This is tested against a simulated restore in the crate's Node host, not against
+a real bookmark restore.
+
 ## Where it runs
 
 `wasm32-unknown-unknown` is the target this crate exists for and the only one
