@@ -17,7 +17,7 @@ summary: >-
   (4e13ee2), taken under rewrite-the-referent-never-the-reasoning with no
   word of reasoning moved, was refused locally and then not noticed. The
   backlog CI job that would run the check is if: false
-  (.github/workflows/ci.yml:251) and, enabled, would run it against a
+  (.github/workflows/ci.yml:372) and, enabled, would run it against a
   checkout whose working tree is HEAD, so this half has never been able to
   fire there. What is not decided: which remedy — hash the accepted body
   into the atom's own frontmatter so history is what is compared; a
@@ -65,7 +65,7 @@ committed — because at that point the working tree and `HEAD` agree again.
 The honest name for that is a dirty-tree guard, and its honest reach is
 **pre-commit**, not pre-merge. A CI checkout's working tree *is* `HEAD` by
 construction, so the check could never have fired in the disabled `backlog`
-job (`.github/workflows/ci.yml:251`, `if: false` since 2026-09-04) and would
+job (`.github/workflows/ci.yml:372`, `if: false` since 2026-09-04) and would
 not fire there if the job were switched back on tomorrow — a correction
 `CLAUDE.md` itself now carries, having previously listed this rule among
 what the disabled job would have caught.
