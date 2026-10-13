@@ -782,8 +782,8 @@ record says it was met.
 
 ADR-0093 implements `wi-f97418`. #92 builds ADR-0043's `StoreLimit::MetadataLen`, and the
 owner chose to carve `happenstance-cloudflare`'s metadata ceiling from the documented row
-limit. The record chooses the share, 512 KiB, and records the arithmetic. It is proposed and
-waits on the owner.
+limit. The record chooses the share, 512 KiB, and records the arithmetic. The owner accepted
+it, narrowing included, on 2026-10-12.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
