@@ -194,6 +194,7 @@ not the same as what a user needed to be told.
   required check. ES-7, that a downstream crate may implement the bare flavour
   directly, is now `[FROZEN]`
   ([ADR-0092](.kb/decisions/0092-the-trait-variant-caret-stays-behind-a-derivation-contract.md)).
+
 ## [0.4.1] — 2026-10-12
 
 ### Added
