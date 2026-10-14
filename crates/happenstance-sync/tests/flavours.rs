@@ -58,13 +58,15 @@ struct Exchanged<R> {
 /// One pull-and-ingest step, bound the way the runner's will be.
 ///
 /// Every bound is the bare flavour. The body uses all three ports: it pulls from
-/// the peer, ingests through [`IngestStore`], and then asks the store it already
-/// has through [`EventStore::contains_event_id`] — the membership question
-/// `IngestStore` deliberately does not carry.
+/// the peer, ingests through [`IngestStore`] with `answer` as each group's
+/// compensation, and then asks the store it already has through
+/// [`EventStore::contains_event_id`] — the membership question `IngestStore`
+/// deliberately does not carry.
 async fn exchange<S, P>(
     store: &S,
     peer: &P,
     from: Option<&P::Resume>,
+    answer: &[Event],
 ) -> Result<Exchanged<P::Resume>, Failure>
 where
     S: EventStore + IngestStore,
@@ -74,7 +76,7 @@ where
     let groups: Vec<IngestGroup<'_>> = batch
         .groups
         .iter()
-        .map(|group| IngestGroup::new(&group.events, &[]))
+        .map(|group| IngestGroup::new(&group.events, answer))
         .collect();
     let ingested = IngestStore::ingest(store, &groups).await?;
 
@@ -102,6 +104,16 @@ where
 /// alone would satisfy the `Send` flavour and prove nothing. The `RefCell`
 /// inside the second `Rc` is the store's own interior mutability for ingested
 /// rows; no borrow of it is held across an `.await`.
+///
+/// **An instrument for bounds, not an oracle.** Foreign rows sit beside the
+/// local log rather than in it, because `MemoryEventStore` mints every identity
+/// it writes and nothing outside `happenstance-core` can make it keep a foreign
+/// one (see `ingest.rs`). So [`read`](EventStore::read) and
+/// [`head`](EventStore::head) see local appends and compensation only, while
+/// [`contains_event_id`](EventStore::contains_event_id) and the watermark see
+/// both. A sync-owned store that keeps both in one log is phase 13's in-memory
+/// oracle (#108), and the `!Send` store the typed layer instantiates its own
+/// entry points against is `crates/happenstance/tests/flavours.rs`.
 #[derive(Debug)]
 struct LocalStore {
     /// Local appends, and the compensation an ingest writes.
@@ -127,17 +139,10 @@ impl EventStore for LocalStore {
         query: &Query,
         options: ReadOptions,
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
-        // No `+ Send`: the bare flavour is what lets this stream be built
-        // inside a `!Send` store.
-        let selected: Vec<Result<SequencedEvent, MemoryStoreError>> = self
-            .local
-            .snapshot()
-            .into_iter()
-            .filter(|event| query.matches(event.event_type(), event.tags()))
-            .filter(|event| options.from.is_none_or(|from| event.position >= from))
-            .map(Ok)
-            .collect();
-        Replay(selected.into_iter())
+        // The reference store's own read, so every `ReadOptions` field means
+        // what the contract says. Its stream is `Send`; returning it where the
+        // bare flavour asks for no bound is the weaker promise, which is fine.
+        happenstance_core::SendEventStore::read(&*self.local, query, options)
     }
 
     async fn append(
@@ -171,28 +176,36 @@ impl IngestStore for LocalStore {
     async fn ingest(&self, groups: &[IngestGroup<'_>]) -> Result<Ingested, Self::Error> {
         let mut outcome = Ingested::default();
         for group in groups {
-            // The borrow ends before the compensation's await (H-14).
-            let fresh = {
-                let mut rows = self.ingested.borrow_mut();
-                let mut fresh = 0;
-                for event in group.events {
-                    if rows.iter().any(|row| row.id == event.id) {
-                        outcome.skipped += 1;
-                    } else {
-                        // The store keeps the row; the batch stays the runner's.
-                        rows.push(event.clone());
-                        fresh += 1;
-                    }
-                }
-                fresh
+            // Each group lands whole or not at all. Which of its events are new
+            // is decided first, under a shared borrow that ends before the
+            // compensation's await (H-14); the compensation is written next;
+            // and only once it has landed are the foreign rows kept. A failed
+            // append therefore leaves nothing behind, and a re-delivery still
+            // finds the group new and writes its answer.
+            let fresh: Vec<&ReplicatedEvent> = {
+                let rows = self.ingested.borrow();
+                group
+                    .events
+                    .iter()
+                    .filter(|event| rows.iter().all(|row| row.id != event.id))
+                    .collect()
             };
-            outcome.appended += fresh;
-            // SY-11: a group whose events were all re-deliveries writes no
-            // compensation; the first delivery already wrote it.
-            if fresh > 0 && !group.compensation.is_empty() {
+            outcome.skipped += group.events.len() - fresh.len();
+            if fresh.is_empty() {
+                // SY-11: a group whose events were all re-deliveries writes no
+                // compensation; the first delivery already wrote it.
+                continue;
+            }
+            if !group.compensation.is_empty() {
                 EventStore::append(self, group.compensation, None).await?;
                 outcome.compensated += group.compensation.len();
             }
+            outcome.appended += fresh.len();
+            // The store keeps its own copy of each row; the batch stays the
+            // runner's.
+            self.ingested
+                .borrow_mut()
+                .extend(fresh.into_iter().cloned());
         }
         Ok(outcome)
     }
@@ -203,20 +216,6 @@ impl IngestStore for LocalStore {
             watermark.advance(row.id.store(), row.id.position());
         }
         Ok(watermark)
-    }
-}
-
-/// A stream over a snapshot, `!Send` only in that it never leaves this file.
-struct Replay(std::vec::IntoIter<Result<SequencedEvent, MemoryStoreError>>);
-
-impl Stream for Replay {
-    type Item = Result<SequencedEvent, MemoryStoreError>;
-
-    fn poll_next(
-        mut self: core::pin::Pin<&mut Self>,
-        _cx: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<Option<Self::Item>> {
-        core::task::Poll::Ready(self.0.next())
     }
 }
 
@@ -256,8 +255,8 @@ impl SyncPeer for LocalPeer {
 /// The negative half is the `static_assertions` construction, written out: a
 /// trait with two blanket impls, one of them only for `Send` types, so naming
 /// its item through a `Send` type is ambiguous (`error[E0283]`) and through a
-/// `!Send` one is not. Delete the `Rc` from either local type and this module
-/// stops compiling. The positive half shows the two things they wrap are `Send`
+/// `!Send` one is not. Make either local type `Send` — swap `LocalPeer`'s `Rc`
+/// for an `Arc`, or both of `LocalStore`'s — and this module stops compiling. The positive half shows the two things they wrap are `Send`
 /// themselves, so it is the `Rc` that removes it and not something underneath.
 mod not_send {
     use super::{LocalPeer, LocalStore};
@@ -312,23 +311,50 @@ async fn the_runner_step_runs_over_a_not_send_store_and_peer() {
         ))
         .expect("an unpoisoned peer accepts a seed");
     let store = LocalStore::new(StoreId::from_bytes([9; 16]));
+    let answer = [Event::new("SubscriptionReversed", "{}").expect("a valid event type")];
 
-    let first = exchange(&store, &peer, None)
+    // Negative control for `all_held`: before the ingest, the store holds none
+    // of them, so a `contains_event_id` that always said yes would fail here.
+    assert!(
+        !EventStore::contains_event_id(&store, replicated(origin, 1).id)
+            .await
+            .expect("an in-memory probe does not fail"),
+        "the store claims an event nobody has delivered"
+    );
+
+    let first = exchange(&store, &peer, None, &answer)
         .await
         .expect("an in-memory exchange does not fail");
     assert_eq!(first.ingested.appended, 2, "both foreign events landed");
     assert_eq!(first.ingested.skipped, 0);
+    assert_eq!(first.ingested.compensated, 1, "the group was answered once");
     assert!(first.all_held, "the store holds what it ingested");
+    let head = EventStore::head(&store)
+        .await
+        .expect("an in-memory head does not fail");
+    assert!(head.is_some(), "the compensation landed in the local log");
 
-    // Re-delivery from the start is a skip, not a second copy (SY-11).
-    let again = exchange(&store, &peer, Some(&MemoryResume::start()))
+    // Re-delivery from the start is a skip, not a second copy, and writes no
+    // second answer (SY-11).
+    let again = exchange(&store, &peer, Some(&MemoryResume::start()), &answer)
         .await
         .expect("an in-memory exchange does not fail");
     assert_eq!(again.ingested.appended, 0);
     assert_eq!(again.ingested.skipped, 2, "re-delivery is skipped");
+    assert_eq!(
+        again.ingested.compensated, 0,
+        "re-delivery is not re-answered"
+    );
+    assert_eq!(
+        EventStore::head(&store)
+            .await
+            .expect("an in-memory head does not fail"),
+        head,
+        "a re-delivery wrote to the local log"
+    );
 
     // And the token the first exchange returned is past everything.
-    let caught_up = exchange(&store, &peer, Some(&first.resume))
+    let caught_up = exchange(&store, &peer, Some(&first.resume), &answer)
         .await
         .expect("an in-memory exchange does not fail");
     assert_eq!(

@@ -1027,6 +1027,11 @@ const OPTIONAL: &[Step] = &[
             // and never a replacement for it — the probe below is why.
             "-p",
             "happenstance",
+            // The sync port (#116). Its mandatory row checks `--all-features`,
+            // so the configuration a consumer gets by default, `memory` off, is
+            // compiled for this target here.
+            "-p",
+            "happenstance-sync",
             "--target",
             "wasm32-unknown-unknown",
             "--feature-powerset",
