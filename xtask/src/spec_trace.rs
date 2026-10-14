@@ -85,11 +85,14 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 ///
 /// It lives here rather than in `lints` because [`collect_rules`] does, and a
 /// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 4] = [
+pub(crate) const RULE_FILES: [&str; 5] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
     "crates/happenstance-testkit/src/projection.rs",
+    // The sync family (#111), the first rule file outside `happenstance-testkit`.
+    // Joined in the change that creates it, for the reason above.
+    "crates/happenstance-sync-testkit/src/sync_suite.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.
@@ -1010,7 +1013,7 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 63] = [
         "ingest_preserves_origin_identity",
         Unresolvable::Scheduled(
             "the replication suite. `happenstance-sync` is a skeleton and \
-             `happenstance-sync-testkit` does not exist",
+             `happenstance-sync-testkit` does not carry it yet",
         ),
     ),
     (
@@ -1500,7 +1503,7 @@ fn check_case_levels(
 ///
 /// Nine of the thirteen are one fact: the `SY` family names rules for
 /// `happenstance-sync-testkit`, which CF-36's own `Rejects` paragraph points at
-/// and which does not exist. That is not thirteen independent oversights.
+/// and which did not exist then. That is not thirteen independent oversights.
 const CF36_UNDISCHARGED: [(&str, &str); 13] = [
     (
         "VT-21",
@@ -1524,9 +1527,10 @@ const CF36_UNDISCHARGED: [(&str, &str); 13] = [
     ("PS-30", "the same shape as PS-29, against the same case"),
     (
         "SY-2",
-        "the replication family. Its rules would live in `happenstance-sync-testkit`, which \
-         CF-36's own `Rejects` paragraph names as their home and which does not exist \
-         (`crates/happenstance-sync/src/lib.rs:23-24`)",
+        "the replication family; CF-36 homes its rules in `happenstance-sync-testkit`, absent \
+         when measured (`crates/happenstance-sync/src/lib.rs:23-24`) and present since #111. \
+         SY-2's case is still E2E-39 alone, and its rule checks only the transport's half: \
+         compensate-after-commit, which the clause's `Rejects` names, is #320",
     ),
     ("SY-4", "the replication family, as SY-2"),
     ("SY-5", "the replication family, as SY-2"),
@@ -2605,11 +2609,11 @@ fn case_ids(text: &str) -> Vec<String> {
 /// Whether a clause's rules would live in a conformance suite that exists today.
 ///
 /// The event store's suite does, and so does the projection store's, as of the
-/// phase that built it. The replication port's does not and will not until the
-/// phase that builds it — until then `SY` rule names are scheduled work, and the
-/// honest answer is that nothing can check them rather than that they are all
-/// wrong. Checking them against the suites that *do* exist would report every one
-/// as missing, which is noise indistinguishable from a real typo.
+/// phase that built it. The replication port's exists since #111 with two rules,
+/// and phase 13 writes the rest — until then most `SY` rule names are scheduled
+/// work, and the honest answer is that nothing can check them rather than that
+/// they are all wrong. Checking them now would report every unwritten one as
+/// missing, which is noise indistinguishable from a real typo.
 ///
 /// `PS-` was excluded for exactly that reason and the exclusion outlived it. The
 /// projection family's rules live in
@@ -3625,8 +3629,8 @@ mod tests {
         }
         assert!(
             !has_suite("SY-1"),
-            "`happenstance-sync-testkit` does not exist; checking `SY` rule names against \
-             the suites that do exist would report all of them as missing"
+            "`happenstance-sync-testkit` carries two of the family's rules; checking every \
+             `SY` rule name would report the unwritten rest as missing"
         );
         assert!(
             !has_suite("CF-1"),

@@ -255,8 +255,12 @@ fn after_restore(state: &worker::State) -> Result<(), CloudflareEventStoreError>
 }
 ```
 
-This is tested against a simulated restore in the crate's Node host, not against
-a real bookmark restore.
+This is tested against a simulated restore in the crate's Node host, and run
+against a real bookmark restore on a deployed Durable Object by the `workerd` CI
+job: after the restore and the re-mint, no `EventId` is reissued for a different
+event, while a control that skips the re-mint reissues one. That run is asserted
+when the restore runs and recorded when it cannot, and local `workerd` cannot
+make it, because it does not implement a restore.
 
 ## Where it runs
 

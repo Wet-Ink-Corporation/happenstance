@@ -10208,8 +10208,8 @@ between them because its *shape* does not wait on a transport but its
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
-| SY-1 | FROZEN | `ingest_never_rejects` † | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
-| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` † | E2E-39 |
+| SY-1 | FROZEN | `ingest_never_rejects` | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
+| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` | E2E-39 |
 | SY-3 | FROZEN | `compensation_is_idempotent_under_redelivery` † | E2E-33, E2E-39 |
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` † | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` † | E2E-42 |

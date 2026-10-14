@@ -34,6 +34,45 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **`happenstance-sync-testkit`: the replication suite's first two rules,
+  in a crate that is not published yet** (#111). Recorded here because CF-29
+  asks every conformance rule for an entry, not because anything ships: the
+  crate is `publish = false` until phase 13 decides its release, as
+  `happenstance-sync` is. A peer adapter mounts it with
+  `sync_peer_conformance!`, and `MemorySyncPeer` is the reference peer.
+
+  **`ingest_never_rejects`** (SY-1). The defect it detects is a peer that
+  re-evaluates the append condition travelling with a group against what it
+  already holds, and drops or refuses the second of two conflicting facts. Each
+  fact was valid where it was decided, and refusing one guarantees the two logs
+  never converge.
+
+  **`compensation_is_atomic_with_the_losing_event`** (SY-2, the transport's
+  half). The defect it detects is a peer that splits a losing event from the
+  compensation that rode with it — by storing what it is pushed one event per
+  group, or by paging pulls by event count and ending one inside a group — so a
+  reader commits the loser with nothing resolving it. It does **not** reject
+  compensate-after-commit, the authoring-side defect SY-2 itself names: that
+  happens before anything reaches a peer, and the rule for it is tracked by
+  #320.
+
+  The wrong implementations are in the crate's `tests/wrong_peers.rs`, and a
+  test there runs the whole enumeration against each and asserts it fails
+  exactly its rule. The suite also executes on `wasm32-unknown-unknown`, under
+  the gate's `wasm32 run of the conformance rules`.
+
+### Changed
+
+- **`CloudflareEventStore::remint_identity` is now run across a real bookmark
+  restore** (#298). Test harness only; no behaviour or signature changed. The
+  deployed leg of the `workerd` CI job restores a Durable Object to a bookmark,
+  re-mints, and shows that no `EventId` is reissued for a different event, beside
+  a control that skips the re-mint and does reissue one. It is asserted when the
+  restore runs and recorded when it cannot, and it runs on the deployed object
+  only, because local `workerd` does not implement a restore.
+
 ## [0.4.3] — 2026-10-14
 
 ### Added
@@ -69,7 +108,6 @@ not the same as what a user needed to be told.
   exercised. The same job shows an idle object holding the store, with and
   without a partly read stream, evicted by that timer, beside a control holding
   a pending timer that is not.
-
 ## [0.4.2] — 2026-10-13
 
 ### Added
@@ -4465,8 +4503,7 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.3...HEAD
-[0.4.3]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.2...v0.4.3
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.2...HEAD
 [0.4.2]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.3.2...v0.4.0
