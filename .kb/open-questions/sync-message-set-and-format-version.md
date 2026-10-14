@@ -21,12 +21,13 @@ related:
   - kb-decision-0016
   - kb-decision-0026
   - kb-open-question-dcb-no-published-format-001
+  - kb-decision-0097
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
   - references/adr/0016-the-wire-format.md
   - crates/happenstance-sync/src/wire.rs
   - crates/happenstance-sync/src/lib.rs
-last_reviewed: 2026-09-29
+last_reviewed: 2026-10-14
 ---
 
 # FORMAT_VERSION = 1 names a message set that does not exist yet
@@ -104,3 +105,18 @@ per-message field after that is a format break.
 **Owner now: phase 13**, as this atom already said. The work item that puts the format version
 first on the envelope (`runbook/phases/13-sync.md:108-109`) is where sub-question 2 is answered, and
 it has to be answered before phase 13 first publishes the crate.
+
+## #114 — 2026-10-14: answered by a proposed record
+
+[ADR-0097](../decisions/0097-the-sync-message-set-and-a-version-on-every-message.md), status
+**proposed**, answers all three sub-questions. The owner has not accepted it yet.
+
+1. **A message set exists, and it is not an enum.** It is four types, each wrapped as
+   `Envelope<T>`: `PushBatch`, `Ack`, `wire::PullRequest` and `Pulled<wire::ResumeToken>`. An enum
+   of kinds inside the versioned type would make every new kind a version bump.
+2. **Per message.** WF-8's frozen title already says it, and SY-15 leaves no connection to
+   negotiate on.
+3. **Does not arise.** The field stays, and version 1 is this envelope and this message set.
+
+This atom stays open until ADR-0097 is accepted. It is superseded then, or reopened if the record
+is rejected.

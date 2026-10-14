@@ -462,7 +462,9 @@ for the reference, concept, governance and playbook atoms this domain also owns.
 - **Open** — [`sync-message-set-and-format-version.md`](../open-questions/sync-message-set-and-format-version.md)
   (`kb-open-question-sync-message-set-undesigned-001`) — `FORMAT_VERSION = 1`
   is fully tested and names no message set yet; the vocabulary is phase 13's
-  design.
+  design. **Answered 2026-10-14 by a proposed record**, ADR-0097
+  (`kb-decision-0097`): four message types in `Envelope<T>`, the version on
+  every message. Open until the owner accepts it.
 - **Superseded** — [`ps-32-adr-0007-context-correction-is-owed.md`](../open-questions/ps-32-adr-0007-context-correction-is-owed.md)
   (`kb-open-question-ps-32-adr-0007-correction-owed-001`) — PS-32 is `[FROZEN]`
   and states ADR-0007's Context must be corrected: a callback-driven pump

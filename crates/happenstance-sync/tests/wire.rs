@@ -1,4 +1,4 @@
-//! WF-8's two rules, and nothing else: an envelope at a version this build does
+//! WF-8's two rules, then the message set's tests: an envelope at a version this build does
 //! not implement is **refused distinguishably**, and the refusal happens
 //! **before the message's `Deserialize` is ever called**.
 //!
@@ -361,5 +361,302 @@ mod wire {
             while_counting(|| postcard::from_bytes::<Envelope<Witness>>(&supported_postcard));
         assert_eq!(accepted.unwrap().message(), &Witness(SENTINEL));
         assert_eq!(decodes, 1, "and the same in postcard");
+    }
+
+    // =====================================================================
+    // The message set (#114, ADR-0097)
+    //
+    // Each message is its own type in `Envelope<T>`. These tests are about
+    // how those types encode, so they are wire tests and not conformance
+    // rules: a peer adapter does not implement them, it inherits them.
+    // =====================================================================
+
+    use core::fmt::Debug;
+
+    use happenstance_core::{
+        AppendCondition, Event, EventId, EventType, Query, QueryItem, RecordedAt, SequencePosition,
+        StoreId, Tag, Tags,
+    };
+    use happenstance_sync::wire::{PullRequest, ResumeToken};
+    use happenstance_sync::{Ack, EventGroup, Pulled, PushBatch, ReplicatedEvent, Watermark};
+    use serde::de::DeserializeOwned;
+
+    const ORIGIN: StoreId = StoreId::from_bytes([0x5E; 16]);
+    const OTHER_ORIGIN: StoreId = StoreId::from_bytes([0x0A; 16]);
+    const SEAT_CLAIMED: EventType = EventType::from_static("SeatClaimed");
+
+    /// WF-11's measured example: base64 `3q2+7w==`.
+    const PAYLOAD: [u8; 4] = [0xde, 0xad, 0xbe, 0xef];
+
+    fn seat() -> Tags {
+        [Tag::from_static("seat:s1")].into_iter().collect()
+    }
+
+    /// The second position a store assigns, without writing it as a literal.
+    fn second() -> SequencePosition {
+        SequencePosition::FIRST.next().unwrap()
+    }
+
+    fn replicated(origin: StoreId, position: SequencePosition) -> ReplicatedEvent {
+        let event = Event::new(SEAT_CLAIMED, PAYLOAD.to_vec())
+            .unwrap()
+            .with_tags(seat());
+        ReplicatedEvent::new(
+            EventId::new(origin, position),
+            RecordedAt::from_millis(1_800_000_000_000),
+            event,
+        )
+    }
+
+    /// Two groups a receiver must be told apart: one guarded event, then two
+    /// unguarded events that landed together.
+    fn two_groups() -> PushBatch {
+        let guard = AppendCondition::new(Query::from_item(
+            QueryItem::new([SEAT_CLAIMED], seat()).unwrap(),
+        ));
+        PushBatch::new(vec![
+            EventGroup::new(
+                Some(guard),
+                vec![replicated(ORIGIN, SequencePosition::FIRST)],
+            ),
+            EventGroup::new(
+                None,
+                vec![
+                    replicated(OTHER_ORIGIN, SequencePosition::FIRST),
+                    replicated(OTHER_ORIGIN, second()),
+                ],
+            ),
+        ])
+    }
+
+    // The wrong implementations, one per test below.
+
+    /// `#[derive(Deserialize)]` over a real message: reads the message before
+    /// anything can look at the version.
+    #[derive(Debug, Deserialize)]
+    struct DerivedPushEnvelope {
+        format_version: u16,
+        message: PushBatch,
+    }
+
+    /// A message carrying the payload in a field of its own, outside `Event`.
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct RewrappedPayload {
+        data: Vec<u8>,
+    }
+
+    /// A push flattened to its events.
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct FlattenedPush {
+        events: Vec<ReplicatedEvent>,
+    }
+
+    /// The derive `Watermark`'s hand-written `Deserialize` replaces.
+    #[derive(Debug, Deserialize)]
+    #[serde(transparent)]
+    struct DerivedWatermark(Vec<(StoreId, SequencePosition)>);
+
+    fn round_trip<T: Serialize + DeserializeOwned + PartialEq + Debug>(message: &T) {
+        let envelope = Envelope::new(message);
+        let json = serde_json::to_string(&envelope).unwrap();
+        let from_json: Envelope<T> = serde_json::from_str(&json).unwrap();
+        assert_eq!(from_json.message(), message, "JSON: {json}");
+
+        let bytes = postcard::to_stdvec(&envelope).unwrap();
+        let from_postcard: Envelope<T> = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(from_postcard.message(), message, "postcard: {bytes:02x?}");
+    }
+
+    /// The four messages, each in its own envelope, in both formats.
+    #[test]
+    fn the_message_set_round_trips_in_both_formats() {
+        round_trip(&two_groups());
+        round_trip(&PushBatch::empty());
+
+        let mut ack = Ack::default();
+        ack.appended = 2;
+        ack.skipped = 1;
+        ack.confirmed.advance(ORIGIN, SequencePosition::FIRST);
+        ack.confirmed.advance(OTHER_ORIGIN, second());
+        round_trip(&ack);
+
+        round_trip(&PullRequest::from_start());
+        round_trip(&PullRequest::after(ResumeToken::new("group:2")));
+        round_trip(&Pulled::new(two_groups(), ResumeToken::new("group:2")));
+    }
+
+    /// WF-8 over a real message. The message is malformed *and* the version is
+    /// unknown, so the error says which was looked at first.
+    ///
+    /// The derived envelope beside it is the control: it reads the message
+    /// before it can see the version, and reports the malformed message
+    /// instead. Postcard drops error text, so there the version is read off the
+    /// front of the buffer, as `check_format_version`'s documentation says.
+    #[test]
+    fn a_real_message_is_refused_before_it_decodes() {
+        let malformed = serde_json::json!({ "groups": "not a list of groups" });
+
+        let ahead = foreign_json(UNSUPPORTED_VERSION, &malformed);
+        let refused = serde_json::from_str::<Envelope<PushBatch>>(&ahead).unwrap_err();
+        assert!(
+            refused
+                .to_string()
+                .contains(WireError::UNSUPPORTED_FORMAT_VERSION),
+            "the version is refused before the malformed batch is read: {refused}"
+        );
+
+        let current = foreign_json(FORMAT_VERSION, &malformed);
+        let malformed_error = serde_json::from_str::<Envelope<PushBatch>>(&current).unwrap_err();
+        assert!(
+            !malformed_error
+                .to_string()
+                .contains(WireError::UNSUPPORTED_FORMAT_VERSION),
+            "at a supported version the same bytes fail as malformed, not refused: \
+             {malformed_error}"
+        );
+        let sane: DerivedPushEnvelope =
+            serde_json::from_str(&foreign_json(FORMAT_VERSION, PushBatch::empty())).unwrap();
+        assert_eq!(
+            (sane.format_version, sane.message),
+            (FORMAT_VERSION, PushBatch::empty()),
+            "the control decodes a well-formed message, so its failure below is the order's"
+        );
+        let derived = serde_json::from_str::<DerivedPushEnvelope>(&ahead).unwrap_err();
+        assert!(
+            !derived
+                .to_string()
+                .contains(WireError::UNSUPPORTED_FORMAT_VERSION),
+            "the control decodes the message first and never reaches the version: {derived}"
+        );
+
+        let bytes = foreign_postcard(UNSUPPORTED_VERSION, two_groups());
+        assert!(matches!(
+            postcard::from_bytes::<Envelope<PushBatch>>(&bytes),
+            Err(postcard::Error::SerdeDeCustom)
+        ));
+        let (found, _) = postcard::take_from_bytes::<u16>(&bytes).unwrap();
+        assert_eq!(
+            check_format_version(found),
+            Err(WireError::UnsupportedFormatVersion {
+                found: UNSUPPORTED_VERSION,
+                supported: FORMAT_VERSION,
+            })
+        );
+    }
+
+    /// WF-11 through the message set: a forwarded payload renders through
+    /// `happenstance-core`'s own codec, base64 in JSON and raw in postcard.
+    ///
+    /// The control is a message that carries the payload in a field of its
+    /// own rather than inside `Event` — the "simplification" a message set
+    /// invites. It round-trips equal in both formats, and renders the JSON
+    /// array of integers WF-11 exists to forbid, which only an assertion on
+    /// the rendered bytes can see.
+    #[test]
+    fn payload_bytes_render_through_the_core_codec() {
+        let batch = PushBatch::new(vec![EventGroup::new(
+            None,
+            vec![replicated(ORIGIN, SequencePosition::FIRST)],
+        )]);
+        let envelope = Envelope::new(&batch);
+
+        let json = serde_json::to_string(&envelope).unwrap();
+        assert!(json.contains(r#""3q2+7w==""#), "base64 in JSON: {json}");
+        assert!(!json.contains("[222,173,190,239]"), "{json}");
+
+        let bytes = postcard::to_stdvec(&envelope).unwrap();
+        assert!(
+            bytes.windows(PAYLOAD.len()).any(|window| window == PAYLOAD),
+            "four raw bytes in postcard: {bytes:02x?}"
+        );
+        assert!(!bytes.windows(8).any(|window| window == b"3q2+7w=="));
+        let rewrapped = RewrappedPayload {
+            data: PAYLOAD.to_vec(),
+        };
+        let control = serde_json::to_string(&Envelope::new(&rewrapped)).unwrap();
+        let back: Envelope<RewrappedPayload> = serde_json::from_str(&control).unwrap();
+        assert_eq!(back.message(), &rewrapped, "the control round-trips");
+        assert!(
+            !control.contains(r#""3q2+7w==""#),
+            "and fails on the rendered bytes: {control}"
+        );
+    }
+
+    /// SY-30 on the wire: a receiver is told the groups, with each guard on
+    /// its own events. The control flattens the batch to its events, as a
+    /// smaller encoding would; it round-trips every event equal and cannot
+    /// say which landed together.
+    #[test]
+    fn push_batch_preserves_group_boundaries_on_the_wire() {
+        let batch = two_groups();
+        let json: serde_json::Value = serde_json::to_value(Envelope::new(&batch)).unwrap();
+        let groups = json["message"]["groups"].as_array().unwrap();
+        assert_eq!(groups.len(), batch.groups.len());
+        assert!(
+            !groups[0]["guard"].is_null(),
+            "the first group's guard travels"
+        );
+        assert!(
+            groups[1]["guard"].is_null(),
+            "the second group's absent guard travels as null, not as a missing key (WF-2)"
+        );
+        assert_eq!(groups[1]["events"].as_array().unwrap().len(), 2);
+        let flattened = FlattenedPush {
+            events: batch.events().cloned().collect(),
+        };
+        let bytes = postcard::to_stdvec(&Envelope::new(&flattened)).unwrap();
+        let back: Envelope<FlattenedPush> = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(
+            back.message(),
+            &flattened,
+            "the control round-trips its events"
+        );
+        let regrouped = PushBatch::new(
+            back.into_message()
+                .events
+                .into_iter()
+                .map(|event| EventGroup::new(None, vec![event]))
+                .collect(),
+        );
+        assert_ne!(
+            regrouped, batch,
+            "and a receiver regrouping it publishes groups the origin never wrote"
+        );
+    }
+
+    /// WF-10 for the one hand-written impl the message set adds: a watermark
+    /// decodes canonical whatever order the sender wrote, and two marks for one
+    /// store keep the higher. The control is the derive this impl replaces,
+    /// which keeps the sender's order and both marks.
+    #[test]
+    fn a_watermark_decodes_canonical() {
+        let (low, high) = if OTHER_ORIGIN < ORIGIN {
+            (OTHER_ORIGIN, ORIGIN)
+        } else {
+            (ORIGIN, OTHER_ORIGIN)
+        };
+        let unsorted = [
+            (high, second()),
+            (low, SequencePosition::FIRST),
+            (high, SequencePosition::FIRST),
+        ];
+        let json = serde_json::to_string(&unsorted).unwrap();
+
+        let decoded: Watermark = serde_json::from_str(&json).unwrap();
+        let mut expected = Watermark::new();
+        expected.advance(low, SequencePosition::FIRST);
+        expected.advance(high, second());
+        assert_eq!(decoded, expected);
+        assert_eq!(decoded.get(high), Some(second()));
+        let derived: DerivedWatermark = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            derived.0.len(),
+            unsorted.len(),
+            "the control keeps both marks"
+        );
+        assert!(
+            !derived.0.is_sorted_by_key(|(store, _)| *store),
+            "and the sender's order, which a binary search then misses"
+        );
     }
 }

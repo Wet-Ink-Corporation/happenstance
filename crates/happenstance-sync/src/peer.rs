@@ -163,7 +163,7 @@ pub trait SyncPeer {
 /// A named struct rather than `(PushBatch, R)` because both fields are worth
 /// naming at the call site and a two-tuple of a batch and a token invites
 /// exactly the transposition it cannot catch.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct Pulled<R> {
     /// The events, in the far side's forwarding order.
@@ -188,7 +188,7 @@ impl<R> Pulled<R> {
 /// together under one guard; a receiver that flattened the batch and appended
 /// event-by-event would publish a state the origin never had, and no amount of
 /// ordering fixes that.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct PushBatch {
     /// The groups, in forwarding order.
@@ -233,7 +233,7 @@ impl PushBatch {
 /// the origin never saw and re-checking would reject a fact that is already
 /// durable elsewhere. SY-6 settles what it is for: an adjudicator may read it,
 /// and a guard carrying `after` is refused at ingest. Phase 13 builds the refusal.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct EventGroup {
     /// What the origin checked before appending. Evidence only.
@@ -251,7 +251,7 @@ impl EventGroup {
 }
 
 /// What the far side did with a [`push`](SyncPeer::push).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct Ack {
     /// How many events the far side appended, excluding ones it already held.

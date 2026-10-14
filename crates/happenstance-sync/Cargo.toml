@@ -25,7 +25,7 @@ happenstance-core = { workspace = true, features = ["std", "serde"] }
 # Direct as of phase 5. It was not, because the envelope derives were withdrawn
 # pending a versioned wire format; ADR-0016 §11 settles that, and `wire::Envelope`
 # carries a `Serialize` derive and a hand-written `Deserialize`. The message types
-# still carry none — see `lib.rs`.
+# carry derives since #114, when the message set was decided — see `lib.rs`.
 serde.workspace = true
 thiserror.workspace = true
 trait-variant.workspace = true

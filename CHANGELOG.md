@@ -36,6 +36,21 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-sync`: the replication message set, in a crate that is not
+  published yet** (#114, proposed ADR-0097). Four messages, each its own type
+  in `wire::Envelope<T>`: `PushBatch`, `Ack`, the new `wire::PullRequest`, and
+  `Pulled<wire::ResumeToken>`. `PushBatch`, `EventGroup`, `ReplicatedEvent`,
+  `Ack` and `Pulled` derive `serde`'s traits, and `Watermark` has a hand-written
+  pair. The format version stays on every message, and version 1 now names this
+  set. Each new wire test names a defect: `a_real_message_is_refused_before_it_decodes`
+  detects an envelope that decodes the message before the version;
+  `payload_bytes_render_through_the_core_codec` detects a payload carried
+  outside `Event`, which renders in JSON as an array of integers;
+  `push_batch_preserves_group_boundaries_on_the_wire` detects a push flattened
+  to its events; and `a_watermark_decodes_canonical` detects a derived
+  `Watermark` that keeps a peer's unsorted marks, which its binary search then
+  misses.
+
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
   bookmark rolls back its `StoreId` row and its position counter together, so a

@@ -41,7 +41,7 @@ use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
 /// The payload inside `event` is never decoded here. That is the whole payoff of
 /// keeping `happenstance-core` free of `serde` in its default features: a peer
 /// forwards bytes it does not understand and cannot corrupt by re-encoding.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct ReplicatedEvent {
     /// Who minted this event, and where it landed in their log.
@@ -141,5 +141,32 @@ impl Watermark {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.marks.is_empty()
+    }
+}
+
+/// On the wire, a sequence of `(store, position)` pairs in ascending store
+/// order. Hand-written rather than derived, and only for decoding's sake.
+impl serde::Serialize for Watermark {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(&self.marks)
+    }
+}
+
+/// Re-canonicalises on the way in (WF-10): every pair goes through
+/// [`Watermark::advance`], so an unsorted sequence decodes sorted and two marks
+/// for one store keep the higher.
+///
+/// A derive straight onto `marks` is the wrong implementation this replaces. It
+/// would hand a peer's unsorted vector to [`Watermark::get`], whose binary
+/// search then misses marks that are there, and the runner re-sends what the far
+/// side already holds.
+impl<'de> serde::Deserialize<'de> for Watermark {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let marks = Vec::<(StoreId, SequencePosition)>::deserialize(deserializer)?;
+        let mut watermark = Self::new();
+        for (store, position) in marks {
+            watermark.advance(store, position);
+        }
+        Ok(watermark)
     }
 }
