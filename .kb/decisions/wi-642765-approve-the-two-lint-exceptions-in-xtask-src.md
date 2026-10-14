@@ -67,7 +67,7 @@ Turn the allow into an expect with a reason; approve the too_many_lines expect.
 ## Evidence
 
 - `xtask/src/lints.rs:3862`: #![allow(clippy::unwrap_used)] in the test module
-- `xtask/src/lints.rs:3166`: #[expect(clippy::too_many_lines, reason = ...)]
+- `xtask/src/lints.rs:3173`: #[expect(clippy::too_many_lines, reason = ...)]
 - `xtask/src/lints.rs:1651`: the one citation this branch repointed
 
 ## Decision outcome

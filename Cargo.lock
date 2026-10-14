@@ -1005,6 +1005,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "happenstance-sync-testkit"
+version = "0.4.2"
+dependencies = [
+ "happenstance-core",
+ "happenstance-sync",
+ "happenstance-testkit",
+ "tokio",
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "happenstance-testkit"
 version = "0.4.2"
 dependencies = [

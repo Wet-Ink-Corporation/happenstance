@@ -9,10 +9,10 @@
 //! The same three `happenstance-core` gives for `MemoryEventStore`, one port
 //! over, and the same cold start the projection port had without one:
 //!
-//! 1. **The oracle.** `happenstance-sync-testkit`'s suite, which #111 builds,
-//!    will be pointed at this peer first: the reference peer every conformance
-//!    rule must pass against before it may fail a real adapter. A rule red here
-//!    will be a wrong rule, not a wrong peer. So the bodies are real — a fixture
+//! 1. **The oracle.** `happenstance-sync-testkit`'s suite is pointed at this
+//!    peer first (its `memory_sync_conformance` test): the reference peer every
+//!    conformance rule must pass against before it may fail a real adapter. A
+//!    rule red here is a wrong rule, not a wrong peer. So the bodies are real — a fixture
 //!    whose methods are `todo!()` cannot be the thing a suite is pointed at —
 //!    and that is the difference between this type and the two stand-ins in
 //!    this crate's `tests/`.
