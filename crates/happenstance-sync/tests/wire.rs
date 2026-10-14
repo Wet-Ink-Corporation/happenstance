@@ -451,6 +451,12 @@ mod wire {
         events: Vec<ReplicatedEvent>,
     }
 
+    /// `PullRequest` without `#[serde(deny_unknown_fields)]`.
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct PermissivePullRequest {
+        from: Option<ResumeToken>,
+    }
+
     /// The derive `Watermark`'s hand-written `Deserialize` replaces.
     #[derive(Debug, Deserialize)]
     #[serde(transparent)]
@@ -729,12 +735,84 @@ mod wire {
         let derived: DerivedWatermark = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(derived.0.len(), unsorted.len(), "the control, positionally");
         assert!(!derived.0.is_sorted_by_key(|(store, _)| *store));
+
+        // The other way round: the lower mark first. A decoder that kept the
+        // first mark per store passes the input above and fails this one.
+        let lower_first = [
+            (high, SequencePosition::FIRST),
+            (low, SequencePosition::FIRST),
+            (high, second()),
+        ];
+        let json = serde_json::to_string(&lower_first).unwrap();
+        let decoded: Watermark = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, expected, "JSON, lower mark first: {json}");
+        let bytes = postcard::to_stdvec(lower_first.as_slice()).unwrap();
+        let decoded: Watermark = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(
+            decoded, expected,
+            "postcard, lower mark first: {bytes:02x?}"
+        );
+    }
+
+    /// Every ordering of a small input decodes to the watermark that folding
+    /// the same pairs through [`Watermark::advance`] builds, in both formats.
+    ///
+    /// **Wrong implementation it rejects:** a decoder that keeps the first
+    /// mark it sees per store, `dedup_by_key` on the store or the fold without
+    /// its comparison. Some ordering puts a store's lower mark first, and that
+    /// decoder keeps it.
+    #[test]
+    fn a_watermark_decodes_as_advance_folds_it() {
+        let third = second().next().unwrap();
+        let marks = [
+            (ORIGIN, SequencePosition::FIRST),
+            (ORIGIN, third),
+            (OTHER_ORIGIN, second()),
+            (OTHER_ORIGIN, SequencePosition::FIRST),
+            (ORIGIN, second()),
+        ];
+        let orderings = permutations(&marks);
+        assert_eq!(orderings.len(), 120, "every ordering of five marks");
+
+        for ordering in &orderings {
+            let mut expected = Watermark::new();
+            for (store, position) in ordering {
+                expected.advance(*store, *position);
+            }
+
+            let json = serde_json::to_string(ordering).unwrap();
+            let decoded: Watermark = serde_json::from_str(&json).unwrap();
+            assert_eq!(decoded, expected, "JSON: {json}");
+
+            let bytes = postcard::to_stdvec(ordering).unwrap();
+            let decoded: Watermark = postcard::from_bytes(&bytes).unwrap();
+            assert_eq!(decoded, expected, "postcard, from {ordering:?}");
+        }
+    }
+
+    /// Every ordering of `items`, each as its own vector.
+    fn permutations<T: Copy>(items: &[T]) -> Vec<Vec<T>> {
+        let Some((first, rest)) = items.split_first() else {
+            return vec![Vec::new()];
+        };
+        permutations(rest)
+            .into_iter()
+            .flat_map(|ordering| {
+                (0..=ordering.len()).map(move |at| {
+                    let mut with_first = ordering.clone();
+                    with_first.insert(at, *first);
+                    with_first
+                })
+            })
+            .collect()
     }
 
     /// The worst order for a decoder that inserts each mark where it belongs:
     /// strictly descending, every insert at the front, with a repeated store
-    /// whose lower mark arrives last. It decodes to the same canonical
-    /// watermark as ascending input.
+    /// whose lower mark arrives after its higher one. It decodes to the same
+    /// canonical watermark as ascending input. It is about the order of stores,
+    /// not about which of two marks wins: that is
+    /// [`a_watermark_decodes_as_advance_folds_it`]'s.
     #[test]
     fn a_descending_watermark_decodes_canonical() {
         let stores: Vec<StoreId> = (1..=8_u8)
@@ -781,18 +859,33 @@ mod wire {
     /// `#[serde(deny_unknown_fields)]`. Its one field is an `Option`, which a
     /// derive defaults to `None` when the key is absent, so it ignores
     /// `groups` and decodes `PullRequest { from: None }` — fail-open, a full
-    /// re-pull answered to a push.
+    /// re-pull answered to a push. `PermissivePullRequest` is that
+    /// implementation, compiled, and decodes the same push to `Ok`.
     #[test]
     fn a_json_push_is_refused_as_a_pull_request() {
         let push = serde_json::to_string(&Envelope::new(two_groups())).unwrap();
-        let refused = serde_json::from_str::<Envelope<PullRequest>>(&push);
+        let refused = serde_json::from_str::<Envelope<PullRequest>>(&push)
+            .unwrap_err()
+            .to_string();
         assert!(
-            refused.is_err(),
-            "a push is not a pull from the start: {refused:?}"
+            refused.contains("unknown field `groups`"),
+            "a push is not a pull from the start, and the error says why: {refused}"
         );
 
         let empty = serde_json::to_string(&Envelope::new(PushBatch::empty())).unwrap();
-        assert!(serde_json::from_str::<Envelope<PullRequest>>(&empty).is_err());
+        let refused = serde_json::from_str::<Envelope<PullRequest>>(&empty)
+            .unwrap_err()
+            .to_string();
+        assert!(refused.contains("unknown field `groups`"), "{refused}");
+
+        // The control: the same bytes through the derive without the
+        // attribute decode as a pull from the start of the log.
+        let permissive = serde_json::from_str::<Envelope<PermissivePullRequest>>(&push).unwrap();
+        assert_eq!(
+            permissive.into_message(),
+            PermissivePullRequest { from: None },
+            "without `deny_unknown_fields` the push is read as a full re-pull"
+        );
 
         // The real pull still decodes, so the refusal above is the push's.
         let pull = serde_json::to_string(&Envelope::new(PullRequest::from_start())).unwrap();

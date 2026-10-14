@@ -163,12 +163,17 @@ it has a control (a compiled wrong implementation that the same assertions rejec
   round-trips the events equal, and regrouping them gives a different number of groups from the
   ones the origin wrote.
 - `wire::a_watermark_decodes_canonical`: an unsorted, duplicated watermark decodes canonical in
-  JSON and postcard. Its control, the derive, keeps both marks and the sender's order in both.
+  JSON and postcard, with a store's higher mark first and then with its lower mark first. Its
+  control, the derive, keeps both marks and the sender's order in both formats.
   `wire::a_descending_watermark_decodes_canonical` covers strictly descending input, which the
   single sort-and-fold decode handles in one pass.
+- `wire::a_watermark_decodes_as_advance_folds_it`: in both formats, all 120 orderings of five marks
+  decode to the watermark that `Watermark::advance` builds from the same pairs. Its wrong
+  implementation keeps the first mark per store (`dedup_by_key` on the store). Applied locally,
+  that mutant fails this test and the lower-first half of the test above.
 - `wire::a_json_push_is_refused_as_a_pull_request`: a push handed to the `PullRequest` decoder is
-  an error in JSON. Its wrong implementation is `PullRequest` without `deny_unknown_fields`. That
-  version decodes the push as `PullRequest { from: None }`, and this test failed against it first.
+  an error in JSON that names the unknown field `groups`. Its control, a compiled mirror of
+  `PullRequest` without `deny_unknown_fields`, decodes the same push to `{ from: None }`.
 - `wire::a_misrouted_postcard_buffer_decodes_as_another_message`: pins that an empty push and a
   first pull are byte-identical in postcard, and that the push decodes as a pull. It records the
   fail-open case in §1 and does not prevent it.

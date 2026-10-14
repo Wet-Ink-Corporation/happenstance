@@ -49,7 +49,15 @@ not the same as what a user needed to be told.
   `push_batch_preserves_group_boundaries_on_the_wire` detects a push flattened
   to its events; and `a_watermark_decodes_canonical` detects a derived
   `Watermark` that keeps a peer's unsorted marks, which its binary search then
-  misses.
+  misses. `a_watermark_decodes_as_advance_folds_it` detects a decoder that
+  keeps the first of two marks for one store, across every ordering of five
+  marks, and `a_descending_watermark_decodes_canonical` covers strictly
+  descending input. `wire::PullRequest` refuses unknown fields, so a JSON push
+  routed to the pull decoder is an error rather than a pull from the start of
+  the log; `a_json_push_is_refused_as_a_pull_request` detects the derive without
+  that attribute. Postcard has no equivalent: an empty push and a first pull
+  are the same bytes, which `a_misrouted_postcard_buffer_decodes_as_another_message`
+  pins.
 
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
@@ -63,6 +71,9 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`happenstance-sync`: `Ack`'s `appended` and `skipped` are `u64`, not
+  `usize`** (#114, proposed ADR-0097). They cross the wire, so their width is
+  fixed. The crate is not published, so no consumer is affected.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity
