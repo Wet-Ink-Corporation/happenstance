@@ -15,14 +15,15 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::cell::Cell;
 use std::sync::Arc;
 
 use happenstance_core::{SequencePosition, StoreId};
 use happenstance_sync::{
-    Ack, EventGroup, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled, PushBatch,
-    SendSyncPeer,
+    Ack, Classify, EventGroup, FailureClass, MemoryPeerError, MemoryResume, MemorySyncPeer,
+    PeerLimits, Pulled, PushBatch, SendSyncPeer,
 };
-use happenstance_sync_testkit::{SyncFixture, rules};
+use happenstance_sync_testkit::{RefusalsOf, SyncFixture, oversized_push_refusal, rules};
 use happenstance_testkit::{RuleOutcome, block_on};
 
 /// The one mistake a [`WrongPeer`] makes.
@@ -43,6 +44,65 @@ enum Mistake {
     /// SY-2's first wrong implementation: store every event as its own group,
     /// so a losing event and its compensation come back apart.
     FlattensGroups,
+    /// SY-36's wrong implementation: state one class for every failure, so a
+    /// batch that can only ever be split is retried as if it were transient.
+    OneClassForEverything,
+    /// SY-36, the fixture's half: declare no refusal at all, so the rule would
+    /// compare classes over an empty list and pass having checked nothing.
+    DeclaresNoRefusal,
+    /// SY-36, a refusal that never happens: declare a smaller batch limit than
+    /// the peer enforces, so the push built one byte over the declared limit
+    /// is accepted. The fixture's declaration names a refusal the peer does
+    /// not make.
+    AcceptsTheOversizedPush,
+    /// SY-36, a class that is not a function of the error: the first read
+    /// answers the reference peer's class and every later read `Transient`,
+    /// so a runner that reads it twice handles one failure two ways.
+    ClassChangesBetweenReads,
+}
+
+/// The reference peer's error, classified through the wrong peer's mistake.
+#[derive(Debug)]
+struct WrongError {
+    inner: MemoryPeerError,
+    mistake: Mistake,
+    /// Whether [`Classify::class`] has answered once already. A `Cell`, not an
+    /// atomic: the error is never shared across threads, and only
+    /// [`Mistake::ClassChangesBetweenReads`] reads it.
+    read: Cell<bool>,
+}
+
+impl core::fmt::Display for WrongError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl core::error::Error for WrongError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        Some(&self.inner)
+    }
+}
+
+impl Classify for WrongError {
+    fn class(&self) -> FailureClass {
+        match self.mistake {
+            Mistake::OneClassForEverything => FailureClass::Transient,
+            Mistake::ClassChangesBetweenReads => {
+                if self.read.replace(true) {
+                    FailureClass::Transient
+                } else {
+                    self.inner.class()
+                }
+            }
+            Mistake::Faithful
+            | Mistake::EvaluatesTheGuard
+            | Mistake::AcksThenDropsOnTheGuard
+            | Mistake::FlattensGroups
+            | Mistake::DeclaresNoRefusal
+            | Mistake::AcceptsTheOversizedPush => self.inner.class(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -66,6 +126,14 @@ async fn held_by(peer: &MemorySyncPeer) -> Result<Vec<EventGroup>, MemoryPeerErr
 }
 
 impl WrongPeer {
+    fn wrap(&self, inner: MemoryPeerError) -> WrongError {
+        WrongError {
+            inner,
+            mistake: self.mistake,
+            read: Cell::new(false),
+        }
+    }
+
     /// Whether `group`'s travelling guard is violated by what the inner peer
     /// already holds.
     async fn guard_is_violated(&self, group: &EventGroup) -> Result<bool, MemoryPeerError> {
@@ -108,32 +176,56 @@ impl WrongPeer {
 }
 
 impl SendSyncPeer for WrongPeer {
-    type Error = MemoryPeerError;
+    type Error = WrongError;
     type Resume = MemoryResume;
 
     async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
-        self.inner.pull(from).await
+        self.inner
+            .pull(from)
+            .await
+            .map_err(|error| self.wrap(error))
     }
 
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
         match self.mistake {
-            Mistake::Faithful => self.inner.push(batch).await,
+            Mistake::Faithful
+            | Mistake::OneClassForEverything
+            | Mistake::DeclaresNoRefusal
+            | Mistake::AcceptsTheOversizedPush
+            | Mistake::ClassChangesBetweenReads => self
+                .inner
+                .push(batch)
+                .await
+                .map_err(|error| self.wrap(error)),
             Mistake::FlattensGroups => {
                 let singletons = batch
                     .events()
                     .map(|event| EventGroup::new(None, vec![event.clone()]))
                     .collect();
-                self.inner.push(&PushBatch::new(singletons)).await
+                self.inner
+                    .push(&PushBatch::new(singletons))
+                    .await
+                    .map_err(|error| self.wrap(error))
             }
-            Mistake::EvaluatesTheGuard => self.push_guarded(batch, |_| 0).await,
-            Mistake::AcksThenDropsOnTheGuard => {
-                self.push_guarded(batch, |group| group.events.len()).await
-            }
+            Mistake::EvaluatesTheGuard => self
+                .push_guarded(batch, |_| 0)
+                .await
+                .map_err(|error| self.wrap(error)),
+            Mistake::AcksThenDropsOnTheGuard => self
+                .push_guarded(batch, |group| group.events.len())
+                .await
+                .map_err(|error| self.wrap(error)),
         }
     }
 
     fn limits(&self) -> PeerLimits {
-        self.inner.limits()
+        let mut limits = self.inner.limits();
+        if self.mistake == Mistake::AcceptsTheOversizedPush {
+            // Declares half of what the inner peer enforces, so a batch one
+            // byte over the declaration still fits under the real limit.
+            limits.max_batch_bytes /= 2;
+        }
+        limits
     }
 }
 
@@ -160,6 +252,15 @@ impl SyncFixture for WrongFixture {
             inner: Arc::clone(&self.inner),
             mistake: self.mistake,
         }
+    }
+
+    /// The reference fixture's declaration, unchanged, except for the one
+    /// mistake that lives in the fixture rather than the peer.
+    async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
+        if self.mistake == Mistake::DeclaresNoRefusal {
+            return Ok(Vec::new());
+        }
+        oversized_push_refusal(peer).await
     }
 }
 
@@ -245,6 +346,12 @@ impl SyncFixture for PagingFixture {
             inner: Arc::clone(&self.inner),
         }
     }
+
+    /// The reference fixture's declaration: the mistake is in how this peer
+    /// pages, and its push and its errors are the reference peer's own.
+    async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
+        oversized_push_refusal(peer).await
+    }
 }
 
 /// Every rule in the enumeration against one fixture, by name, each verdict
@@ -299,7 +406,7 @@ fn fails_exactly(
 #[test]
 fn the_faithful_wrapper_passes_every_rule() {
     let all = verdicts(async || WrongFixture::new(Mistake::Faithful));
-    assert!(all.len() >= 2, "the enumeration ran no rules: {all:?}");
+    assert!(all.len() >= 3, "the enumeration ran no rules: {all:?}");
     for (name, verdict) in all {
         assert_eq!(verdict, Ok(RuleOutcome::Ran), "`{name}`");
     }
@@ -342,5 +449,41 @@ fn compensation_is_atomic_fails_a_peer_that_ends_a_pull_inside_a_group() {
         }),
         "compensation_is_atomic_with_the_losing_event",
         "SY-2",
+    );
+}
+
+#[test]
+fn every_refusal_states_its_class_fails_a_peer_with_one_class() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::OneClassForEverything)),
+        "every_refusal_states_its_class",
+        "SY-36",
+    );
+}
+
+#[test]
+fn every_refusal_states_its_class_fails_a_fixture_that_declares_no_refusal() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::DeclaresNoRefusal)),
+        "every_refusal_states_its_class",
+        "SY-36",
+    );
+}
+
+#[test]
+fn every_refusal_states_its_class_fails_a_peer_that_accepts_the_oversized_push() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::AcceptsTheOversizedPush)),
+        "every_refusal_states_its_class",
+        "SY-36",
+    );
+}
+
+#[test]
+fn every_refusal_states_its_class_fails_an_error_whose_class_changes_between_reads() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::ClassChangesBetweenReads)),
+        "every_refusal_states_its_class",
+        "SY-36",
     );
 }

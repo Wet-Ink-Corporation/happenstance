@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-# Unfinished, not held back: the suite has its first two rules and phase 13
+# Unfinished, not held back: the suite has its first rules and phase 13
 # builds the rest. Whether and when it publishes is phase 13's release
 # decision, made with `happenstance-sync`'s, which is `publish = false` for the
 # same reason. The crate root says which of the two meanings this key carries.

@@ -21,6 +21,7 @@
 /// peer is the far side.
 pub mod rules {
     use alloc::format;
+    use alloc::string::String;
     use alloc::vec;
     use alloc::vec::Vec;
 
@@ -28,7 +29,7 @@ pub mod rules {
         AppendCondition, Event, EventId, EventType, Query, QueryItem, RecordedAt, SequencePosition,
         StoreId, Tag, Tags,
     };
-    use happenstance_sync::{EventGroup, PushBatch, ReplicatedEvent, SyncPeer};
+    use happenstance_sync::{Classify, EventGroup, PushBatch, ReplicatedEvent, SyncPeer};
     use happenstance_testkit::RuleOutcome;
 
     use crate::SyncFixture;
@@ -190,6 +191,75 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-36: every error a peer reports states its failure class, and the
+    /// class is the one its adapter says it is.
+    ///
+    /// The fixture drives a fresh handle into every refusal it can produce and
+    /// declares each one's class ([`SyncFixture::refusals`]); the rule checks
+    /// that each provocation was refused, and that the error's
+    /// [`Classify::class`] answers what was declared. The class is read twice
+    /// from the same value, because SY-36 makes it a function of the error
+    /// alone.
+    ///
+    /// # Rejects
+    ///
+    /// A peer that reports every failure as one class — the opaque error
+    /// ADR-0026 rejected, with a trait impl bolted on so it compiles.
+    /// `tests/wrong_peers.rs` carries it, as `Transient` for everything, which
+    /// retries a batch that can only ever be split.
+    ///
+    /// The rule's other three refusals each have a mutant there too: a fixture
+    /// that declares no refusal, a peer that accepts the push its fixture says
+    /// it refuses, and an error whose class changes between two reads.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-36 if the fixture declares no refusal, if a
+    /// provocation succeeds, or if a refusal's class is not the declared one or
+    /// changes between two reads.
+    pub async fn every_refusal_states_its_class<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-36";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+
+        let refusals = fixture.refusals(&peer).await?;
+        ensure(!refusals.is_empty(), CLAUSE, || {
+            String::from(
+                "the fixture declared no refusal; every peer can be refused something, and a \
+                 rule checked against nothing has checked nothing",
+            )
+        })?;
+        for refusal in refusals {
+            let Err(error) = refusal.outcome else {
+                return Err(Violation::new(
+                    CLAUSE,
+                    format!(
+                        "the peer accepted {}, which its fixture says it refuses",
+                        refusal.provoked_by
+                    ),
+                ));
+            };
+            let (first, second) = (error.class(), error.class());
+            ensure(first == second, CLAUSE, || {
+                format!(
+                    "the refusal of {} answered {first:?} and then {second:?}; the class must \
+                     be a function of the error alone",
+                    refusal.provoked_by
+                )
+            })?;
+            ensure(first == refusal.declared, CLAUSE, || {
+                format!(
+                    "the refusal of {} ({error}) states {first:?}, and its fixture declares \
+                     {:?}",
+                    refusal.provoked_by, refusal.declared
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// Pulls from the start of the peer's log until it hands back an empty
     /// batch, which the port defines as caught up.
     async fn pull_everything<P: SyncPeer>(
@@ -280,6 +350,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A group travels whole (SY-2) -------------------------------
             compensation_is_atomic_with_the_losing_event,
+
+            // --- Every refusal states its class (SY-36) ---------------------
+            every_refusal_states_its_class,
         }
     };
 }

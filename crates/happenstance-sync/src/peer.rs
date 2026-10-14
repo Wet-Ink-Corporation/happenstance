@@ -80,7 +80,7 @@ use crate::identity::{ReplicatedEvent, Watermark};
 /// the port would force it to answer a question that has two answers.
 #[trait_variant::make(SendSyncPeer: Send)]
 pub trait SyncPeer {
-    /// How this peer's transport fails.
+    /// How this peer's transport fails; each failure states its [class](crate::Classify).
     ///
     /// Carries no `Send` bound. That is what admits the Durable Object peer,
     /// whose errors wrap a `JsValue`-derived string behind an `Rc` and are
@@ -88,7 +88,7 @@ pub trait SyncPeer {
     /// `Send + Sync` here was attempted; the Durable Object stand-in in
     /// `tests/real_peer_shapes.rs` fails it with two `error[E0277]`s — ``Rc<str>``
     /// cannot be sent between threads safely, and the same again for `Sync`.
-    type Error: core::error::Error + 'static;
+    type Error: core::error::Error + crate::Classify + 'static;
 
     /// Where to resume from: opaque to the caller, owned by the caller.
     ///

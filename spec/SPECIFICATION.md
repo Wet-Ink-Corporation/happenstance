@@ -10243,7 +10243,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
-| SY-36 | PROVISIONAL | `every_refusal_states_its_class` † | E2E-45, E2E-35, E2E-44 |
+| SY-36 | PROVISIONAL | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
 
 #### `CF` — conformance obligations (§6)
 

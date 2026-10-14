@@ -63,8 +63,54 @@ not the same as what a user needed to be told.
   exactly its rule. The suite also executes on `wasm32-unknown-unknown`, under
   the gate's `wasm32 run of the conformance rules`.
 
+- **`happenstance-sync`: a peer's error states its failure class** (#243), as
+  ADR-0026 decided. `SyncPeer::Error` is now bounded on `Classify`, whose one
+  method returns a `#[non_exhaustive]` `FailureClass`: `Transient`, `Split`,
+  `Park` or `Stop`. `SyncError` and `MemoryPeerError` implement it. Neither crate
+  is published, so the new bound breaks no consumer.
+
+  **`every_refusal_states_its_class`** (SY-36), in `happenstance-sync-testkit`.
+  The defect it detects is a peer that reports every failure as one class, so a
+  runner retries a batch that can only ever be split, or halts an edge that one
+  retry would have recovered. The fixture drives its peer into each refusal it
+  can produce and declares that refusal's class, through the new required
+  `SyncFixture::refusals`; the rule compares. A peer that honours its own
+  limits can declare its oversized-push refusal with `oversized_push_refusal`;
+  a peer declaring `max_batch_bytes` above 64 MiB must provoke its own, because
+  the helper will not allocate a batch that size. SY-36 stays `[PROVISIONAL]`:
+  its falsification test needs the real peers, which do not exist yet.
+
+- **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
+  after a point-in-time restore** (#262). Restoring a Durable Object to a
+  bookmark rolls back its `StoreId` row and its position counter together, so a
+  restored object re-issues `EventId`s it already gave to other events, and a
+  replication peer drops the new events as duplicates. Call it on every log in
+  the object before the restored object accepts its first append. The crate
+  README's *After a point-in-time restore* section has the procedure. It mirrors
+  `SqliteEventStore::remint_identity`. The platform gives an object no way to
+  detect a restore, so the call is the deployment's to make.
+
 ### Changed
 
+- **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
+  rather than once per handle. Each append issues one more single-row `SELECT`.
+  A handle that was built or cloned before a re-mint now stamps the new identity
+  instead of the retired one. An append through a handle whose `store_meta` row
+  is gone now refuses with `CloudflareEventStoreError::Sql` instead of stamping a
+  cached id. No signature changed.
+- **`happenstance-cloudflare` is now run across a real restart of its Durable
+  Object** (#262). Documentation only; no behaviour or signature changed. The
+  `workerd` CI job runs five rules whose halves sit on either side of an eviction
+  and of a hibernation through `workerd`'s own inactivity timer: acknowledged
+  writes are read back under the `EventId`s they had, `head()` survives, the next
+  append lands above every earlier position with the log intact, and an append
+  condition captured before the restart still binds. Three wrong stores are shown
+  failing them across an eviction: one keeping its log in the object instance,
+  one caching its high-water position there, and one minting its store identity
+  per instance. The README no longer says eviction and hibernation are not
+  exercised. The same job shows an idle object holding the store, with and
+  without a partly read stream, evicted by that timer, beside a control holding
+  a pending timer that is not.
 - **`CloudflareEventStore::remint_identity` is now run across a real bookmark
   restore** (#298). Test harness only; no behaviour or signature changed. The
   deployed leg of the `workerd` CI job restores a Durable Object to a bookmark,
