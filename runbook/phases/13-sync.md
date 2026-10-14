@@ -87,13 +87,16 @@ provides the atomicity and the identity that makes it idempotent.
       Durable Object over a socket and a Postgres over one-shot HTTP with no
       interactive transaction; a `SyncPeer` that cannot be implemented by the second
       is a `SyncPeer` shaped like the first. Phase 2's sketch is the evidence.
-- [ ] #106 · ADR-0027. Record SY-1 – SY-7's ingest and compensation constraints as
+- [x] #106 · ADR-0027. Record SY-1 – SY-7's ingest and compensation constraints as
       settled, not open, and decide the merge rule, whether replication is
       whole-log or scoped (SY-27, SY-28 — a spoke holding a filtered subset cannot
       distinguish "not yet received" from "filtered out", so a position-based resume
       watermark against a hub is unsound), idempotent bulk ingest in bounded round
       trips (SY-14), and hub-and-spoke as a first-class topology beside
-      peer-to-peer.
+      peer-to-peer. **Written and accepted 2026-10-14**
+      ([ADR-0027](../../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md)):
+      whole-log at 1.0, and SY-7, SY-10, SY-14 and SY-23 ratified with three edits.
+      No marker moved to `[FROZEN]`; the items under #124 move them.
 - [ ] #108 · `IngestStore` in `happenstance-sync` (VT-10) — the seam through which a
       foreign identity arrives, and the reason `EventStore::append` never grew a
       slot for one. **VT-10 is frozen by ADR-0073 (phase 17)**: the write path is
@@ -146,7 +149,7 @@ provides the atomicity and the identity that makes it idempotent.
       the same instrument. If it is not built, SY-18 is renewed past 1.0 by a
       record naming the Turnstile experiment — safe, because `PeerLimits` is
       `#[non_exhaustive]` — and not left deferred by default.
-- [ ] #122 · **The filtered-subset store, built here rather than at phase 14.** SY-27's
+- [ ] #122 · ~~**The filtered-subset store, built here rather than at phase 14.** SY-27's
       falsifier, and SY-28's after it, is a spoke holding a deliberately filtered
       subset of a hub's log, attempting a position-based resume against it. That
       is the same testkit-adjacent instrument as CF-27's suffix store
@@ -154,7 +157,11 @@ provides the atomicity and the identity that makes it idempotent.
       and 14 runs after this phase. So either this phase builds the instrument, in
       a shape phase 14 then extends into the suffix store, or a record
       re-dispositions SY-27 and SY-28 before this phase exits. Freezing either
-      clause without the instrument is the decorative kind of freeze.
+      clause without the instrument is the decorative kind of freeze.~~
+      **Leaves the 1.0 path by ADR-0027**, which took whole-log replication: no
+      filtered spoke exists to resume against, so the instrument answers nothing 1.0
+      asks. CF-27's suffix store stays phase 14's, and the sequencing hazard
+      between the two phases is gone. The issue can close as not planned for 1.0.
 - [ ] #124 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-13` row
       in [the 1.0 dispositions](../ledgers.md), and what freezes it:
       - #133 · **VT-6** — `restored_peer_does_not_reissue_identities` in the sync
@@ -169,7 +176,8 @@ provides the atomicity and the identity that makes it idempotent.
         adjudicator configurations, its divergence recorded as the evidence.
       - #137 · **SY-10** — both topologies expressible, as the exit criterion below
         already requires, with `directional_merge_rules_compose`.
-      - **SY-14** — the bulk-ingest measurement against the Neon peer.
+      - **SY-14** — the bulk-ingest measurement against the Neon peer. ADR-0027
+        rewords the bound to one ingest round trip per pulled batch.
       - **SY-18** — the KV-capped peer above.
       - #141 · **SY-20** — `convergent_projection_is_interleaving_independent`, written
         against the convergence declaration phase 18 builds. Phase 18 runs
@@ -178,8 +186,12 @@ provides the atomicity and the identity that makes it idempotent.
       - **SY-22** — the `cost-layers` test; the declaration's placement is fixed
         with SY-21 at phases 17 and 18, both of which precede this phase.
       - **SY-23** — ADR-0027's merge rule.
-      - #140 · **SY-27, SY-28, SY-29** — together, on the filtered-subset store above;
-        a peer-supplied `Query` exists on the port only if replication is scoped.
+      - #140 · **SY-27, SY-28, SY-29** — ~~together, on the filtered-subset store above;
+        a peer-supplied `Query` exists on the port only if replication is scoped.~~
+        Since ADR-0027: SY-27 and SY-28 freeze on `round_trip_preserves_the_whole_log`
+        with a mutant peer that withholds filtered events. SY-29 is renewed past 1.0
+        against the first scoped-replication proposal, because no peer-supplied
+        `Query` is on the 1.0 port.
       - #143 · **SY-30** — the two unlike real peers pushing real envelopes.
       - **SY-31** — the runner half. The reserved `sync/` prefix is phase 17's,
         with `projection-id-is-unvalidated`.
@@ -236,3 +248,10 @@ of E2E-07 (ES-24).
 **Estimate.** 12 days.
 
 **Session log**
+
+- **2026-10-14** — ADR-0027 written and accepted (#106), on the owner's calls
+  `wi-53c544` and `wi-0fbcac`, both option A. Replication is whole-log at 1.0;
+  SY-27 and SY-28 move from `[DEFERRED]` to `[PROVISIONAL]`, SY-29 is renewed past
+  1.0, #122 leaves the 1.0 path, and SY-7, SY-10, SY-14 and SY-23 are ratified with
+  three edits and keep their markers until their rules land. Verified:
+  `cargo xtask spec-trace`, `lint-kb`, `lints` and `lint-constitution`.

@@ -44,13 +44,13 @@ The VT-6 lane wrote 0086, **accepted** by the owner on 2026-10-08 (Postgres and 
 re-mint; mint-per-open declined; default-refusing detection ruled out after 1.0).
 Lane L8 wrote 0087, **accepted** by the owner on 2026-10-08: `happenstance-neon` meets ES-11 and ES-12 through a read-settlement fence, measured on the live endpoint (`experiments/es-11-fence/`). It supersedes ADR-0061, and the fence itself lands as a separate change. #86 wrote 0089, accepted by the owner on 2026-10-11: VT-14 is frozen on the RTL corpus run (`experiments/identifier-validation/`), and its explicit bidirectional controls are nine, not seven. #81 wrote 0094, accepted by the owner on 2026-10-12 (`wi-378078`): PS-39 is frozen on a live Neon run of `projection_ids_round_trip_by_bytes`. #93 wrote 0090 and 0091, closing the two typed-layer open questions as the owner decided on 2026-10-12 (`wi-378078`): one boundary folds one domain enum, and `then(&[])` asserts the decision emitted nothing, with no third channel on `decide`. #85 wrote 0096, accepted on `wi-378078` on 2026-10-12: `after_every_guard` names the blanket setter's scope, `after` is deprecated and kept through 1.x, typestate is rejected, and VT-30 is frozen with limb 2 retired by the record. #88 wrote 0092, accepted by the owner on 2026-10-12 (`wi-727ec8`): the `trait-variant` caret stays, a derivation contract compiled into `happenstance-core`'s library code holds the shape in every build, a weekly `floating-deps` job resolves without the lock, and ES-7 is frozen. #92 wrote 0093, **accepted** by the owner on 2026-10-12, narrowing included: `happenstance-cloudflare`'s metadata ceiling is 512 KiB, carved from the documented row limit as `wi-f97418` directs.
 Numbers 0026–0028 were reserved by the original queue for phases 13 and 14, which is
-why they are out of order with the numbers around them. 0026 and 0027 are still
-unwritten.
+why they are out of order with the numbers around them. 0027 was written at phase 13
+([ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md), 2026-10-14).
 
 | ADR | Phase | The question it answers |
 |---|---|---|
 | **0026** | 13 (published-surface half: 17) | What is a sync *peer* — what may the port assume about a transport it cannot see, and what does ingest promise? (SY-8 – SY-18). ~~Phase 17 must settle the part of this that reaches a published crate~~ **Published half settled at 17 — ADR-0073**: `happenstance-core` needs no foreign-identity write path; the adapter's own row writer takes one, and VT-10 is frozen. ADR-0026 cites it for that half |
-| **0027** | 13 | How do two logs reconcile — the merge rule, the compensation contract, and whether hub-and-spoke and peer-to-peer are one abstraction or two? (SY-1 – SY-7, SY-19 – SY-31). SY-1 – SY-7 already settle *ingest is unconditional, with compensation*; this ADR records it and settles the rest |
+| **0027** | 13 | How do two logs reconcile — the merge rule, the compensation contract, and whether hub-and-spoke and peer-to-peer are one abstraction or two? (SY-1 – SY-7, SY-19 – SY-31). SY-1 – SY-7 already settle *ingest is unconditional, with compensation*; this ADR records it and settles the rest. **Written at 13 — [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md)**, accepted 2026-10-14: replication is whole-log at 1.0 (`wi-53c544`), and SY-7, SY-10, SY-14 and SY-23 are ratified with three edits (`wi-0fbcac`). No marker moved to `[FROZEN]` with it; each moves when its rule lands |
 | **0028** | 14 (decision: 17) | What is a store permitted to forget, and how does it say so? (ES-39, CF-27, SY-32). ~~**The decision moves to phase 17** because one of its two answers adds a method to `EventStore`, which breaks every published adapter, and that is only cheap before 1.0. Phase 14 builds what it decides~~ **Settled at 17 — [ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md)**: the written refusal with an additive reservation. Deletion stays outside the port through 1.x, and a later report arrives only as a provided method defaulting to `Unknown`, which a compiling spike showed is additive (`experiments/provided-method-spike/`). ES-41 and PS-22 are frozen by it; phase 14 builds the instrument and freezes ES-39, ES-40, SY-32 and CF-27 |
 | **0066** | 16 | What does 1.0 promise? The charter phase 16 owes: which crates, what happens to every non-`[FROZEN]` clause on a published surface, adapter and testkit versioning (CF-32), and the MSRV policy after ADR-0037. **Written** as `what-1-0-promises`; the MSRV half is its own record, ADR-0067, and the per-clause answer is [the 1.0 dispositions](#the-10-dispositions) |
 | **0086** | 17 | VT-6 for Postgres and Neon: mint-per-open, or not (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`). **Settled at 17 — [ADR-0086](../.kb/decisions/0086-postgres-and-neon-keep-mint-once.md)**, accepted 2026-10-08: declined for both; mint-once earned by a documented re-mint; the additive arms are phase 13's |
@@ -76,8 +76,8 @@ table when an ADR or a clause settles it, and the archive keeps it either way.
 | ~~An infallible pre-validated `Tags` / `Tag` constructor in `happenstance-core`~~ | 16 | **settled at 16 — ADR-0069**: no infallible `Tags`/`Tag` path is added (the outward face is closed as intended, so ADR-0033 stays closed); `QueryItem` gains a total constructor instead, built in phase 17 (`d-1-the-validated-type-has-no-total-path`) |
 | ~~A named `Chunk` type and an observation seam for `run_projection`~~ | 16 | **settled at 16 — ADR-0070**: a named `Chunk`, which phase 18 builds before it lifts the gate, and no observation seam at 1.0 — one is additive later (`projection-runner-chunk-type-and-observation-seam`) |
 | ~~Whether `remint_identity`'s documented procedure owes an in-process check~~ | 16 | **closed at 16**, with the gap routed to phase 13 (`remint-identity-precondition-is-trust-only`) |
-| Is replication whole-log or scoped | 13 | deferred — SY-27, SY-28 |
-| Idempotent bulk ingest inside one round trip | 13 | deferred — SY-14 |
+| ~~Is replication whole-log or scoped~~ | 13 | **settled at 13 — [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md)**: whole-log at 1.0, a confidential slice is its own store, and scoped replication may follow as an additive opt-in with its own ADR. SY-27 and SY-28 are provisional against a filtered deployment that cannot take one store per slice |
+| Idempotent bulk ingest inside one round trip | 13 | deferred — SY-14. Its bound is reworded by ADR-0027 to one ingest round trip per pulled batch, and its mechanism is built in all four adapters; the Neon measurement is what is left |
 | Does a peer declare its own limits | 13 | deferred — SY-18 |
 | Where a per-peer watermark lives transactionally | 13 | provisional — SY-31 |
 | ~~What is a store permitted to forget, and how does it say so~~ | 17 → 14 | **settled at 17 — ADR-0028**: the written refusal, with a provided-method reservation. Phase 14 builds CF-27's instrument and freezes ES-39, ES-40, SY-32 and CF-27 against it |
@@ -91,14 +91,15 @@ Three obligations, all mechanical to check, all previously answerable only by
 prose search — and the middle one previously not answerable at all, which is why
 phase 12's audit of it had nothing behind it.
 
-### The 12 `[DEFERRED]` clauses
+### The 10 `[DEFERRED]` clauses
 
-Sixteen rows are listed; four are struck. (This sentence said seventeen until
+Sixteen rows are listed; six are struck. (Four until ADR-0027 settled SY-27 and
+SY-28 at phase 13 and moved them to the provisional ledger below.) (This sentence said seventeen until
 phase 16 counted them.) Two were settled at phase 2 and their
 markers moved in the specification at phase 3; the third, CF-13, was settled at
 phase 3 by running the experiment its own marker named; the fourth, PS-33, was
 **demoted rather than settled** — §7.2 carries it as `NON-NORMATIVE`, so it is not
-a deferral at all any more. **Twelve remain.** The struck rows stay because a
+a deferral at all any more. **Ten remain**, since SY-27 and SY-28 left at phase 13. The struck rows stay because a
 reader arriving from an older commit needs to find them, and because a table that
 quietly loses a row cannot be checked against anything.
 
@@ -120,8 +121,8 @@ they moved.
 | PS-30 | a panicking `apply` rolls back | 6 — `projection-store-freeze` (HS-P0010), once a fan-out runner is buildable at all. The runner is not built, so the MUST binds nothing today. Its contingency is a **benchmark rather than an assertion** and is deliberately outside the gate under CF-34; the harness now exists as `experiments/polling-cost`, which is the artefact that reopens this clause |
 | SY-14 | idempotent bulk ingest in bounded round trips | 13 |
 | SY-18 | peer-declared limits | 13 |
-| SY-27 | scoped versus whole-log replication | 13 |
-| SY-28 | scope preservation across a round trip | 13 |
+| ~~SY-27~~ | ~~scoped versus whole-log replication~~ | **settled at 13 — ADR-0027**: whole-log, and `[PROVISIONAL]` against a filtered deployment that cannot take one store per slice. Its row is in the provisional ledger below |
+| ~~SY-28~~ | ~~scope preservation across a round trip~~ | **settled at 13 — ADR-0027**, with SY-27: the round-trip rule asserts whole-log equality. Its row is in the provisional ledger below |
 | SY-32 | retention gaps reported rather than silent | 14 |
 | ~~CF-13~~ | ~~a fixture that can *fail* the visibility rule~~ | **settled at 3**: `PreCommitPositionStore` fails `nothing_below_an_observed_position_appears_later` deterministically on one thread, the `Send + Sync` sub-trait the marker held in reserve was not needed, and the clause is `[FROZEN]`. The **adapter** far end stays open and is §6.5's position-allocation row, owned by phase 10 |
 | CF-14 | durability across a reopen | 8 — the *fixture* half landed early at phase 3 as a named exception (`REOPEN`, `acknowledged_writes_survive_a_reopen`, `LosingFixture`). **Phase 9's reading: the deferral still holds, and one more of the three named implementations has answered with one shape** — `CloudflareFixture` expressed `REOPEN` through the same contract shape `MemoryFixture`, `DurableFixture` and `SqliteFixture` use, and `acknowledged_writes_survive_a_reopen` with its two neighbours ran and passed with **zero** `SKIP` in the wasm32 conformance run, so "durable" needed no grading. **The far end is untouched** — this project supplied no store that can lose an acknowledged write to a *fault* rather than to an instruction, so that half stays phase 8's and `sqlite-durable-store`'s (HS-P0012), and what the run could *not* exercise is in phase 9's session log, *The CF-14 re-read* |
@@ -131,6 +132,8 @@ Checked against `SPECIFICATION.md` §7.2's maturity column, and **the two sets a
 equal again as of the `0.2.0` release pass**. `cargo xtask spec-trace` counts
 **twelve** `[DEFERRED]` clauses — WF-1, ES-39, PS-18, PS-27, PS-30, SY-14, SY-18,
 SY-27, SY-28, SY-32, CF-14, CF-27 — and this table now lists exactly those twelve.
+(Ten since phase 13, when ADR-0027 moved SY-27 and SY-28 to `[PROVISIONAL]`;
+`cargo xtask lints` holds the heading to the live count.)
 
 Phase 9 read this and recorded the drift rather than repairing it, on the ground
 that reconciling a maturity table is a clause question and a prose re-read of
@@ -155,7 +158,7 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 26 `[PROVISIONAL]` clauses
+### The 28 `[PROVISIONAL]` clauses
 
 Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, VT-10 at phase 17
 by ADR-0073, ES-41 and PS-22 at phase 17 by ADR-0028, PS-9 and PS-11 at phase 17
@@ -187,7 +190,8 @@ separate open questions overstated the exposure by that factor.
 | Reset, chunked rebuild, query drift | PS-16, PS-25 | a rebuild that skips event 1, or a projection that cannot refuse a reset. The row read *"PS-16, PS-22 – PS-25"* until PS-22 was frozen, and *"PS-16, PS-23 – PS-25"* until PS-23 and PS-24 were; their struck rows follow | 6 |
 | One id per commit, and the rebuilding variant | ~~PS-23, PS-24~~ | ~~a pair of read models that must be mutually consistent at every instant (PS-23); rebuild in place always wrong (PS-24)~~ | **frozen at 17 — ADR-0075.** A multi-id commit arrives, if ever, as an additive refusing `commit_all` (`experiments/provided-method-spike/`, compiled with a `CommitError` variant; the separate error type ADR-0075 chooses is not yet compiled); `Rebuilding` is kept, because removing it would be a major and a swap protocol is additive |
 | Checkpoint regression | ~~PS-22~~ | ~~a legitimate need to move a checkpoint backwards without clearing rows; a compacting store that renumbers~~ | **frozen at 17 — ADR-0028.** ES-38 forbids renumbering, and retention never rewinds a checkpoint over kept rows |
-| Compensation's shape and the merge rule's details | SY-7, SY-10, SY-20 – SY-23, SY-29, SY-30 | two unlike peers that cannot both express it | 13 |
+| Compensation's shape and the merge rule's details | SY-7, SY-10, SY-20 – SY-23, SY-29, SY-30 | two unlike peers that cannot both express it. ADR-0027 ratified SY-7, SY-10 and SY-23 with edits at 13, and renewed SY-29 past 1.0 against the first scoped-replication proposal | 13 |
+| The scope of replication | SY-27, SY-28 | a real deployment before 1.0 that needs filtered spokes and cannot use one store per slice. Moved here from the deferred ledger when ADR-0027 decided whole-log | 13 |
 | Where a per-peer watermark lives | SY-31 | a peer with no transaction to put it in | 13 |
 | Projection-id keys | ~~PS-39~~ | ~~a store whose key column cannot hold a 255-byte UTF-8 id byte-faithfully~~ | **frozen at 17b — ADR-0094.** Green on memory, SQLite and both Postgres stores at 17, then on live Neon in CI's branch-per-run `live-neon` job (run 38271947822, at `8b52528`), the last projection adapter in the workspace to run it. Reopened by a backing store whose key column cannot hold a 255-byte UTF-8 id byte-faithfully and cannot be configured to |
 | Membership as a port operation | ~~ES-41~~ | ~~an adapter that cannot answer membership without a structure VT-8 does not already oblige. Phase 8 answered the **in-process, connection-holding** half — `happenstance-sqlite` reads the `UNIQUE (origin_store, origin_position)` pair migration 1 already creates. The **transport** half is open: a store with no connection, no interactive transaction and no cursor, for which the probe is a whole extra round trip~~ | **frozen at 17 — ADR-0028.** Neon meets the transport wording's letter: its probe is one extra read-only round trip, over the pair VT-8 indexes, and passes live. It is accepted because no required path pays it — ingest deduplicates inside the write (`crates/happenstance-sync/src/ingest.rs:97-101`) — and ADR-0066:160 dispositioned the half as answered. The completeness half is settled by decision: `false` is store-relative. Held-versus-visible under ES-10's frontier is left open, to phase 13 |
@@ -278,12 +282,14 @@ parse under the grammar above, and the last two kinds must carry their text; and
 rather than now — a phase that closes without freezing its clause turns the gate red
 on this row.
 
-**One sequencing hazard, stated so phase 13 does not discover it.** SY-27 and SY-28
+~~**One sequencing hazard, stated so phase 13 does not discover it.** SY-27 and SY-28
 are `freeze-by-13`, and the instrument they need is the same suffix-holding store
 CF-27 names — which [phase 14](phases/14-retention.md) builds, and phase 14 runs
 after 13. Phase 13 either builds that instrument itself, or a filtered peer that
 answers the same question, or these two rows move to 14 in the same commit that
-says why.
+says why.~~ **Dissolved at 13 by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md).** Whole-log
+replication needs no filtered or suffix store: SY-27 and SY-28 freeze on
+`round_trip_preserves_the_whole_log`, and CF-27's suffix store stays phase 14's.
 
 | Clause | Disposition | Basis |
 |---|---|---|
@@ -307,23 +313,23 @@ says why.
 | PS-27 | freeze-by-18 | Phase 18 builds the failure-policy seam and `skip_and_record_is_atomic` with a mutant. ADR-0074 fixed the seam's shape at 17: a provided `on_error` defaulting to halt, handed the failure and the batch; a skip after a server-side failure on a live batch needs a savepoint |
 | PS-30 | freeze-by-18 | With `panicking_apply_rolls_back` and a mutant, if 18 builds the fan-out runner. If it does not, this row becomes `outside-1.0`: a conditional MUST on a runner 1.0 does not ship |
 | PS-38 | freeze-by-18 | Settled against the fan-out runner. ADR-0075 froze PS-23 and documented the no-lagging-replica obligation at 17, on `ProjectionStore::checkpoint` and on `happenstance-neon`'s README and constructor |
-| SY-7 | freeze-by-13 | ADR-0027. The falsification test is buildable with `MemorySyncPeer` and two adjudicator configurations |
-| SY-10 | freeze-by-13 | Phase 13's exit criteria already require both topologies to be expressible. Fallback: renew against the marker's own test, since a firing makes the permission redundant, not wrong |
-| SY-14 | freeze-by-13 | Measured against the Neon peer. Phase 17's foreign-identity spike must not foreclose a bounded-round-trip ingest path |
+| SY-7 | freeze-by-13 | Ratified as written by ADR-0027. The falsification test is buildable with `MemorySyncPeer` and two adjudicator configurations; the marker moves when it and `only_the_adjudicator_compensates` land |
+| SY-10 | freeze-by-13 | Phase 13's exit criteria already require both topologies to be expressible. Ratified by ADR-0027 with adjudication as its rationale in place of Kestrel Cold Chain's confidentiality slice. Fallback: renew against the marker's own test, since a firing makes the permission redundant, not wrong |
+| SY-14 | freeze-by-13 | Measured against the Neon peer. Phase 17's foreign-identity spike must not foreclose a bounded-round-trip ingest path. Bound reworded by ADR-0027 to one ingest round trip per pulled batch; the mechanism is built, and the marker waits on the measurement |
 | SY-18 | freeze-by-13 | Phase 13's work list carries a 128 KiB-capped fixture peer for it (`phases/13-sync.md:139-148`). If that peer is not built, this row is renewed past 1.0 against the Turnstile experiment, which is safe because `PeerLimits` is `#[non_exhaustive]` |
 | SY-20 | freeze-by-13 | Phase 13 lands the rule; phase 18, which ungates `Projection`, carries the convergence declaration it needs |
 | SY-21 | freeze-by-18 | Decided at 17 by ADR-0074 and reworded to the *arrival* position, `SequencedEvent::position`, because `EventId::position()` is the origin's; built and frozen at 18 on `Delivered`, with the sync rule landed at 13 |
 | SY-22 | freeze-by-13 | Phase 13 runs the cost-layers test; the declaration's placement is fixed with SY-21 |
-| SY-23 | freeze-by-13 | ADR-0027's merge rule. Fallback: renew against the marker's test, since a firing adds a second order and leaves `EventId`'s derived `Ord` alone |
-| SY-27 | freeze-by-13 | ADR-0027. **Sequencing hazard** — see above: its instrument is CF-27's suffix store, which phase 14 builds after 13 |
-| SY-28 | freeze-by-13 | Immediately after SY-27, and with the same sequencing hazard |
-| SY-29 | freeze-by-13 | Jointly with SY-27, because a peer-supplied `Query` exists on the port only if replication is scoped |
+| SY-23 | freeze-by-13 | ADR-0027's merge rule, ratified with the caveat that `EventId` order is neither fair nor temporal and never decides a conflict. Fallback: renew against the marker's test, since a firing adds a second order and leaves `EventId`'s derived `Ord` alone |
+| SY-27 | freeze-by-13 | Decided whole-log by ADR-0027 and `[PROVISIONAL]` since. Frozen on `round_trip_preserves_the_whole_log` with a mutant peer that withholds filtered events. ~~**Sequencing hazard**~~, dissolved: no filtered or suffix store is needed |
+| SY-28 | freeze-by-13 | With SY-27, on the same rule: whole-log equality over `EventId` sets, never over positions |
+| SY-29 | renew-past-1.0: the first scoped-replication proposal, an additive opt-in with its own ADR, puts a peer-supplied `Query` on the port | ADR-0027 took whole-log, so no 1.0 port method takes a peer-supplied `Query` and the MUST binds nothing at 1.0. The proposal that adds one builds `ingest_refuses_an_unbounded_peer_query` with it |
 | SY-30 | freeze-by-13 | Where the two unlike real peers, Durable Object and Neon, push real envelopes |
 | SY-31 | freeze-by-13 | The runner half. The reserved-`ProjectionId` half is settled by ADR-0082: core refuses `sync/` and mints it only through `ProjectionId::sync_watermark` |
 | SY-32 | freeze-by-14 | Surface decided at 17 by ADR-0028: the scalar floor means resumability, not completeness. Built and frozen at 14, whose exit criteria require it no longer `[DEFERRED]` |
 | CF-14 | renew-past-1.0: phase 19a's REOPEN verdict for memory, IndexedDB or OPFS storage, or a workerd run observing a real Durable Object eviction, cannot be expressed with the one reopen shape | Four adapters express `REOPEN` with one shape. Since phase 17 the three reopen rules also pass under workerd and on a deployed object, but as a fresh handle off the object's state, not an eviction (`evictDurableObject` is reachable only from the runner, between requests). The eviction instrument is unbuilt, and 19a's comes after 1.0. Freeze jointly with CF-17. **Evidence since (#262, marker unchanged):** the `workerd` job now observes a real eviction and a hibernation through `workerd`'s 10 s timer between two requests, and five phased rules pass across it (`harness/workerd/src/restart.rs`, `test/restart.test.ts`); idle objects holding the store, with and without a held stream, are evicted by that timer (`test/idle.test.ts`). The disposition is the owner's |
 | CF-17 | renew-past-1.0: a durable adapter cannot express even a reopen through this contract — the candidates are phase 19a's browser storage and the first workerd-class run observing a real eviction | Cloudflare's `REOPEN` now runs under workerd as well as the shim (phase 17's job), still as a fresh handle rather than an observed eviction. So the instrument that could fire it is not yet built. **Evidence since (#262, marker unchanged):** that instrument now exists outside the `REOPEN` shape: the harness's cross-restart rules run against Durable Object storage outliving a real local eviction and hibernation, with three wrong stores failing them only across the restart; the deployed run is record-only. Whether that fires the falsifier is the owner's |
-| CF-27 | freeze-by-14 | The report shape was decided at 17 by ADR-0028: instrument-local, over an arbitrary retained set, with a defaulted-declined removal capability. Built and frozen at 14. Phase 13's SY-27 needs the same instrument, so it may have to be built at 13 |
+| CF-27 | freeze-by-14 | The report shape was decided at 17 by ADR-0028: instrument-local, over an arbitrary retained set, with a defaulted-declined removal capability. Built and frozen at 14. ~~Phase 13's SY-27 needs the same instrument, so it may have to be built at 13~~ It does not since ADR-0027 took whole-log |
 | CF-34 | renew-past-1.0: a complexity property becomes expressible as a deterministic assertion rather than a timing — an instrumented fixture counting rows examined — and the clause splits | Needs an instrumented rows-examined fixture and a record on the scope of CF-33's operation-count ban (`.kb/open-questions/cf-33-cf-34-scope-outside-the-testkit.md`) |
 | CF-40 | freeze-by-13 | ADR-0043's `MetadataLen` is built (#92, phase 17b), and `happenstance-cloudflare` states a metadata ceiling (ADR-0093). Phase 13 decides whether `payload_len` — data plus metadata — is the budget unit |
 

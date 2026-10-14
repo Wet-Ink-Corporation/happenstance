@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 205 clause IDs, of which 198 are normative:
-**160 `[FROZEN]`**, **26 `[PROVISIONAL]`**, **12 `[DEFERRED]`** and **seven
+**160 `[FROZEN]`**, **28 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -488,8 +488,8 @@ answer.
   took the written refusal at phase 17. What stays open is whether a reader needs
   a report, which could only arrive as a provided method, and phase 14's instrument
   answers that.
-- **The scope of replication** — whole-log or filtered (SY-27). It decides whether
-  the sync suite's round-trip rule can assert log equality at all.
+- **The scope of replication** (SY-27). Whole-log at 1.0 by ADR-0027, a slice is
+  its own store, and scoped replication can only arrive later as an opt-in.
 - **A store-assigned time on `SequencedEvent`** (VT-9), provisional.
 - **The tail or subscription seam.** Absent at 0.1 and stated as absent (ES-32),
   not omitted.
@@ -6861,7 +6861,8 @@ its clauses now have something in the tree to disagree with.
 It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
 phase that builds the port against two real peers — five of the thirty-five,
-with a further nine `[PROVISIONAL]`. The rest are frozen, because the shape
+with nine more `[PROVISIONAL]` (three and eleven since ADR-0027 settled SY-27 and
+SY-28 without the experiment). The rest are frozen, because the shape
 does not wait on the transport. They are written anyway, and the reason is
 recorded in the decision ledger: `RUNBOOK.md:438-439` says deferring the
 sync port **"leaks `EventId` and a tail seam back into `EventStore`"**. That was a
@@ -7180,6 +7181,18 @@ currently connected, and the whole premise of this crate is that they are not.
 The fix is not a better guard; it is that adjudication is a **role**, and a role
 is exactly the kind of thing that belongs to a runner rather than to a transport.
 
+**Ratified as written by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md)**, which also
+records why the marker's own escape — compensations made convergent, so duplicates
+collapse — is not available in this contract. An `EventId` is the pair of the store
+that wrote the event and the position it assigned there
+(`crates/happenstance-core/src/identity.rs:96`, VT-5, SY-12), so the same
+compensation authored on two peers carries two identities and never dedupes, and
+SY-13 forbids the content-hash identity that would rescue it. The cost is stated
+there too: while the adjudicator is unreachable, a conflict stays unresolved on
+every other peer, and if it is lost for good an operator moves the role in
+configuration. The marker moves when phase 13 lands this clause's rule and the
+falsification test with two adjudicator configurations, not before.
+
 ---
 
 ### 5.2 One peer, and a runner above it
@@ -7244,12 +7257,21 @@ Cases: E2E-42, E2E-44, E2E-45.
 
 *Rejects:* treating hub-and-spoke as peer-to-peer with one side declining to
 push. `crates/happenstance-sync/src/lib.rs:57-63` already says why and the scenarios confirm it: the hub
-sees every log and can therefore adjudicate; a spoke sees one and cannot. Kestrel
-Cold Chain's edge tier is strictly hub-and-spoke for a *commercial* reason — a
-spoke's slice is a confidentiality boundary, and Scottish subcontractors must not
-hold Yorkshire's parts pricing — so peer-to-peer between spokes would dissolve a
-constraint that has nothing to do with topology. A design that models the
-asymmetric case as a degenerate symmetric one has no place to put that.
+sees every log and can therefore adjudicate; a spoke sees one and cannot. The
+asymmetry is **adjudication**, and the scenarios' merge rule states it: *first to
+the hub, not first to decide* (`references/scenarios/README.md:436`). The hub sees
+every spoke, so it is the natural adjudicator (SY-7) for what spokes push; a spoke
+sees only itself, takes what the hub sends without judging it, and must survive
+the hub refusing its push (SY-34, E2E-45). A design that models the asymmetric
+case as a degenerate symmetric one has no place to put that.
+
+The rationale changed at [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). It used to
+be Kestrel Cold Chain's edge tier, strictly hub-and-spoke for a *commercial*
+reason: a spoke's slice was a confidentiality boundary, and Scottish
+subcontractors must not hold Yorkshire's parts pricing. Under SY-27's whole-log
+answer that slice is its own store rather than a filtered replica, so
+confidentiality no longer argues for the topology, and adjudication carries the
+clause alone. The marker moves when `directional_merge_rules_compose` lands.
 
 ---
 
@@ -7356,8 +7378,8 @@ identity.
 
 ---
 
-**SY-14. Bulk ingest of a batch containing already-seen events MUST complete in a
-number of round trips bounded independently of the batch size.**
+**SY-14. Bulk ingest of a pulled batch MUST complete in one ingest round trip,
+however many of its events the receiver already holds.**
 
 `[DEFERRED — settled by the experiment named in PRESSURE-TEST.md:688-693 and by
 the Kestrel Rotor bulk-ingest measurement: 1,840 events over one-shot HTTP inside
@@ -7393,6 +7415,24 @@ operation, and what an already-written adapter pays to add the unique index. A
 negative result does not restore the per-event condition — it changes the ingest
 path's shape, or it says the one-shot HTTP peer cannot do bulk ingest at Rotor's
 scale, which is a deployment fact rather than a port defect.
+
+**Reworded by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md), and most of it is built.**
+The bound read *"a number of round trips bounded independently of the batch
+size"*, which no rule can assert, because nothing names the bound. A pull is
+already page-bounded (SY-15), so *one ingest round trip per pulled batch* is a
+number a rule can count. ADR-0027 found the mechanism already in the tree. The
+unique `(origin_store, origin_position)` index VT-8 requires is in all four
+adapters (`crates/happenstance-sqlite/src/event_store.rs:294`,
+`crates/happenstance-cloudflare/src/event_store.rs:210`,
+`crates/happenstance-postgres/migrations/0001_event_log.sql:92`,
+`crates/happenstance-neon/migrations/0001_neon_log.sql:117`), so what an
+already-written adapter pays to add it is nothing. The SQLite ingest spike skips
+a held row inside the write, under `ON CONFLICT (origin_store, origin_position)
+DO NOTHING` (`crates/happenstance-sqlite/src/ingest_spike.rs:12`). And
+`IngestStore::ingest` is one call per pulled batch
+(`crates/happenstance-sync/src/ingest.rs:157`). What is left is the measurement,
+and the marker stays `[DEFERRED]` until it passes: Rotor's 1,840 events through
+the Neon peer's one-shot HTTP, inside the 34-minute window.
 
 ---
 
@@ -7674,6 +7714,21 @@ answers the audit question and MUST NOT be a merge rule, and `EventId` order is
 the merge rule and
 MUST NOT be read as a time.
 
+**What this order is not**, stated by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md),
+which ratifies the clause. `EventId` order is deterministic, and it is neither fair
+nor temporal. It sorts by origin store first, so every event of the store whose
+`StoreId` sorts lower comes before every event of the one that sorts higher,
+whatever happened first in the world. It therefore MUST NOT decide who wins a
+conflict. That is arrival at the adjudicator, which is SY-7's role and the
+scenarios' *first to the hub*. A convergent fold that let `EventId` order pick a
+winner would hand every conflict to one store by the accident of a random id. A
+domain that wants *first in real time* carries a writer's clock in a tag (SY-35)
+and accepts the skew. The order already exists and is already published:
+`StoreId` and `EventId` derive `Ord` in `happenstance-core`
+(`crates/happenstance-core/src/identity.rs:43`, `:96`), and `StoreId` is a byte
+array, so the order is the same on every platform. A hybrid logical clock would
+be a new field on a published type, and VT-9 forbids `RecordedAt` as an order.
+
 ---
 
 ### 5.6 Transitivity
@@ -7759,65 +7814,106 @@ a metadata convention no peer can read.
 
 ### 5.8 Scope: whole-log or filtered replication
 
-This is the one place in the section where the honest answer is that nobody
-knows, and `PRESSURE-TEST.md:688-693` names it as an experiment rather than a
-decision. It is stated in full because the consequences reach into the suite.
+This was the one place in the section where the honest answer was that nobody
+knew, and `PRESSURE-TEST.md:688-693` named it as an experiment rather than a
+decision. [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md) decided it at phase 13 on the
+owner's call (`wi-53c544`): whole-log at 1.0. The experiment was not run, because
+it is the scoped build itself, and running it first would have paid for scoped
+replication before knowing it was needed. The three clauses below are stated in
+full because the consequences reach into the suite.
 
 ---
 
-**SY-27. Whether replication is whole-log or scoped is DEFERRED.**
+**SY-27. Replication MUST be whole-log. A peer MUST offer its counterpart every
+event it holds, and the port MUST NOT carry a peer-supplied filter over what is
+replicated. A slice that must not be replicated, for confidentiality or for size,
+is its own store.**
 
-`[DEFERRED — settled by the experiment at PRESSURE-TEST.md:688-693: build a
-spoke holding a deliberately filtered subset of a hub's log and attempt a
-position-based resume against it. The instrument the catalogue asks for is the
-same one — a testkit-adjacent store that holds only a suffix or a filtered subset
-of its own log (E2E-CASES.md:1679-1684). Owning phase: the phase that builds the
-two peer adapters, which must also build that instrument.]`
-Rule: `scoped_replication_resume_is_sound` (new, `happenstance-sync-testkit`),
-unwritable until this is settled.
+`[PROVISIONAL — falsified if a real deployment before 1.0 needs filtered spokes
+and cannot use one store per slice. Falsification test: name the deployment and
+show either that a fact it must hold in two slices cannot be written to two
+stores, or that its adjudicator must see across slices. A firing is answered by
+scoped replication as an additive opt-in with its own ADR, never by changing what
+a whole-log peer does.]`
+Rule: `round_trip_preserves_the_whole_log` (new, `happenstance-sync-testkit`) —
+SY-28's rule, which rejects a peer that withholds the events matching a filter.
 Cases: E2E-33, E2E-36, E2E-44, E2E-46.
 
-*Rejects:* the assumption both plausible answers make and neither states. A spoke
-holding a filtered subset **cannot distinguish "not yet received" from "filtered
-out"**, so a scalar position watermark against the hub is unsound: the spoke
-cannot tell whether the gap between watermark and next-received is a filter or a
-loss. And if replication is scoped, the peer port carries a `Query` — a value
-that bounds nothing about its own cost (E2E-40) and that would land in a write
-path evaluated under the write lock. Kestrel Cold Chain's spokes hold a 90-day
-slice chosen for size *and for commercial confidentiality*, so the scoped answer
-is not merely an optimisation the deployment could decline.
+Decided by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). The clause read *"Whether
+replication is whole-log or scoped is DEFERRED"*, against an experiment: build a
+spoke holding a deliberately filtered subset of a hub's log, and attempt a
+position-based resume against it. Its instrument was the testkit-adjacent store
+holding only a suffix or a filtered subset of its own log
+(E2E-CASES.md:1679-1684), which is CF-27's and which phase 14 builds after this
+phase. Whole-log needs neither, so CF-27 stays phase 14's and the sequencing
+hazard the ledger recorded is gone.
+
+What the decision gives up is stated in the record and repeated here. A fact that
+belongs to two slices is written to two stores. And a hub's adjudicator cannot
+see across slices, because each slice is a separate log with its own
+adjudication. The prior art is a shipped library: LiveStore replicates whole logs
+and partitions data into many small stores, with filtered sync unsupported (#247).
+
+*Rejects:* scoped replication at 1.0, and the assumption both plausible answers
+made and neither stated. A spoke holding a filtered subset **cannot distinguish
+"not yet received" from "filtered out"**, so a scalar position watermark against
+the hub is unsound: the spoke cannot tell whether the gap between watermark and
+next-received is a filter or a loss. Scoped at 1.0 would also have put a `Query`
+on the peer port — a value that bounds nothing about its own cost (E2E-40) and
+that would land in a write path evaluated under the write lock — and so built
+SY-29's policy, a filtered-subset store (#122) and a resume shape for a filtered
+hub, all inside phase 13. Kestrel Cold Chain's spokes hold a 90-day slice chosen
+for size *and for commercial confidentiality*. Under this clause each such slice
+is a store of its own, which is the cost above, paid by that deployment.
 
 ---
 
-**SY-28. The sync suite's round-trip rule MUST assert log equality only over the
-scope the peers agreed on, never over the whole log, unless SY-27 settles on
-whole-log replication.**
+**SY-28. The sync suite's round-trip rule MUST assert equality over the whole
+log: once two peers have pushed and pulled to quiescence, each holds the same set
+of `EventId`s, each with byte-identical type, tags, data and metadata. It MUST NOT
+compare positions.**
 
-`[DEFERRED — same experiment as SY-27; this clause is its consequence and cannot
-be written before it.]`
-Rule: `round_trip_preserves_the_agreed_scope` (new,
-`happenstance-sync-testkit`).
+`[PROVISIONAL — falsified with SY-27, since this clause is its consequence: if
+scoped replication arrives as an opt-in, a scoped edge needs its own round-trip
+rule over the scope its peers agreed. Falsification test: SY-27's. A firing adds
+a rule for the opt-in and leaves this one binding on whole-log edges.]`
+Rule: `round_trip_preserves_the_whole_log` (new, `happenstance-sync-testkit`).
 Cases: E2E-44, E2E-46.
 
-*Rejects:* the round-trip rule everyone will write first — push everything, pull
-everything, assert the two logs are equal. Against a scoped spoke it fails for a
-conformant adapter, which makes it worse than useless: it will be "fixed" by
-weakening it until it passes, and what it is weakened to will be whatever the
-first scoped adapter happens to do.
+Decided with SY-27 by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). The clause
+used to say *"only over the scope the peers agreed on, never over the whole log,
+unless SY-27 settles on whole-log replication"*, and SY-27 did.
+
+*Rejects:* two round-trip rules. The first compares positions, which SY-19 says
+two peers do not share, so it fails a conformant pair. The second is the rule
+this clause warned against while SY-27 was open: a whole-log equality run against
+a scoped spoke, which fails a conformant adapter and gets "fixed" by weakening it
+until it passes. Under whole-log there is no scoped spoke, so the strong rule is
+the right one.
 
 ---
 
 **SY-29. A peer-supplied `Query` MUST be validated against a declared cost policy
 before it is evaluated.**
 
-`[PROVISIONAL — falsified if a cost policy expressible over `Query`'s surface
-(types and tags only, `query.rs:155-159`) can be shown to admit an unbounded scan
-anyway, in which case the seam is in the wrong place and belongs in the adapter.
-Falsification test: construct a query that satisfies any tag-based policy and
-still scans the log.]`
+`[PROVISIONAL — renewed past 1.0 by ADR-0027. Under SY-27's whole-log answer no
+port method takes a peer-supplied `Query`, so this MUST binds nothing on the 1.0
+port. Falsified, and reopened, by the first scoped-replication proposal: the
+additive opt-in SY-27's marker names, which comes with its own ADR, puts a `Query`
+on the port, and must build this clause's rule with it. Falsification test for that
+proposal, unchanged: construct a query that satisfies any tag-based policy over
+`Query`'s surface (types and tags only, `query.rs:155-159`) and still scans the
+log, in which case the seam belongs in the adapter.]`
 Rule: `ingest_refuses_an_unbounded_peer_query` (new,
 `happenstance-sync-testkit`).
 Cases: E2E-40.
+
+**Off the 1.0 path since [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md).** What survives
+whole-log is narrower, and it is not this clause's. A pushed guard still travels
+as evidence (SY-6), and ingest never evaluates it. An adjudicator that chooses to
+run a pushed guard's query against its own log is running a peer-authored query in
+runner code, above the port. Bounding that cost is the adjudicator's job, and this
+clause does not reach it.
 
 *Rejects:* any ingest that treats a wire query as data to evaluate rather than
 input to validate. The threat model is a **buggy** spoke, not a malicious one: a
@@ -9326,7 +9422,7 @@ measurement, and PRESSURE-TEST.md:662-666 is right that it is owed one.
 testkit-adjacent store that deliberately holds only a suffix, or an arbitrary
 retained subset, of its own log, and reports what it withholds through its own
 inherent API, never through an `EventStore` method. `[DEFERRED — settled at phase
-14, or at phase 13 if SY-27 needs it first, by building it as a decorator over any
+14 (SY-27 no longer needs it first: ADR-0027 took whole-log), by building it as a decorator over any
 `EventStore` and running the full suite against it. The outcome that matters is
 the list of rules that pass, which is the list of rules that cannot tell a pruned
 store from a young one. The decision this marker waited on,
@@ -9401,7 +9497,7 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **Yes, since phase 10b, and the far end answered.** This cell read *"**No.** `happenstance-neon` is a phase-2 skeleton, which falsifies a signature and is not a far end"* until ADR-0061. `happenstance-neon` is now a real adapter run against a live endpoint — no connection, no interactive transaction, no cursor — and it was the only far end in this portfolio to have **failed** a clause rather than passed one: `read_result_is_stable_under_concurrent_append` went red intermittently, and ADR-0061 carried the finding. ADR-0087's read-settlement fence is what it passes with since, for operations sharing one transport, and ES-11 and ES-12 are frozen on that record. That is the axis doing its job, twice. A skeleton could not have produced it, which is the difference this column exists to record | Adapter — **done** |
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` (the last retired with its crate at phase 17, ADR-0078) | **Far end yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:653-805`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
-| **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No. Planned for phase 14, or 13 if SY-27 needs it first** (CF-27). ADR-0028 fixed its report as instrument-local, not a port surface | Fixture first; a device adapter second |
+| **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No. Planned for phase 14** (CF-27; ADR-0027's whole-log answer took SY-27 off it). ADR-0028 fixed its report as instrument-local, not a port surface | Fixture first; a device adapter second |
 | **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1330`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
@@ -9901,9 +9997,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
-| §5 `SyncPeer` | `SY` | 35 | 21 | 9 | 5 | 0 |
+| §5 `SyncPeer` | `SY` | 35 | 21 | 11 | 3 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **205** | **160** | **26** | **12** | **7** |
+| **Total** | | **205** | **160** | **28** | **10** | **7** |
 
 ### 7.2 The table
 
@@ -10086,8 +10182,8 @@ between them because its *shape* does not wait on a transport but its
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` † | E2E-42 |
 | SY-25 | FROZEN | `forwarding_order_is_arrival_order` † | E2E-42 |
 | SY-26 | FROZEN | `causality_is_expressible_without_a_contract_change` † | E2E-42, E2E-41 |
-| SY-27 | DEFERRED | `scoped_replication_resume_is_sound` † | E2E-33, E2E-36, E2E-44, E2E-46 |
-| SY-28 | DEFERRED | `round_trip_preserves_the_agreed_scope` † | E2E-44, E2E-46 |
+| SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-33, E2E-36, E2E-44, E2E-46 |
+| SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-44, E2E-46 |
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
 | SY-30 | PROVISIONAL | `push_envelope_preserves_group_boundaries` † | E2E-35, E2E-39 |
 | SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model` † | E2E-33, E2E-44 |
