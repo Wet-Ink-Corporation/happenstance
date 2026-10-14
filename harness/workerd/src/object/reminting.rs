@@ -12,8 +12,10 @@
 //! 200 done (for `after`, the cell passed), 422 the cell failed, 409 the
 //! restart or the restore the runner claims is not what the object sees, 400
 //! a bad `mode=` or ledger, 404 an unknown route, 500 a harness fault. The
-//! storage is cleared after every `after` answer and every fault, since the
-//! cell ends there.
+//! storage is cleared after every `after` answer and every fault, because the
+//! cell ends there, with one exception: the 409 that says the instance which
+//! wrote the ledger answered. The runner retries that one, so the storage it
+//! would judge is left as it is.
 
 use core::fmt;
 
@@ -22,7 +24,9 @@ use happenstance_cloudflare::{
     TableNamespace,
 };
 use happenstance_core::bytes::Bytes;
-use happenstance_core::{AppendError, Event, EventStore, Query, ReadOptions, collect};
+use happenstance_core::{
+    AppendError, Event, EventStore, InvalidEventType, Query, ReadOptions, collect,
+};
 use worker::{Request, Response, Result, State};
 
 use crate::incarnation::Incarnation;
@@ -37,7 +41,7 @@ enum Fault {
     Namespace(InvalidTableNamespace),
     Store(&'static str, CloudflareEventStoreError),
     Append(AppendError<CloudflareEventStoreError>),
-    Event(String),
+    Event(InvalidEventType),
 }
 
 impl fmt::Display for Fault {
@@ -116,8 +120,10 @@ impl Remint<'_> {
         ledger: &Ledger,
     ) -> Result<Response> {
         if ledger.incarnation == self.incarnation {
+            // Not `finish`: the runner retries this refusal on a later
+            // instance, which must still find the log the restore left.
             let reason = "no restart: the instance that wrote the ledger answered";
-            return self.finish(reason.to_owned(), 409).await;
+            return Response::error(format!("{} {reason}", self.witness), 409);
         }
         let now = match sightings(store).await {
             Ok(now) => now,
@@ -187,8 +193,7 @@ async fn append_each(
     types: &[&'static str],
 ) -> core::result::Result<(), Fault> {
     for event_type in types {
-        let event = Event::new(*event_type, Bytes::from_static(b"remint"))
-            .map_err(|err| Fault::Event(err.to_string()))?;
+        let event = Event::new(*event_type, Bytes::from_static(b"remint")).map_err(Fault::Event)?;
         store.append(&[event], None).await.map_err(Fault::Append)?;
     }
     Ok(())

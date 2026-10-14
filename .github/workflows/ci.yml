@@ -1600,12 +1600,13 @@ jobs:
       # restarts), then re-mint and write again; the re-mint cell must reissue
       # no `EventId`, and the control that skips the re-mint must reissue one.
       # Deployed only, because local workerd does not implement a restore (the
-      # local step above pins that). RECORD-ONLY for deployed-restart.mjs's
-      # reason: nothing pinned here documents how a restore lands on
-      # Cloudflare, so the script prints each cell's verdict, warns when one
-      # did not show what it exists to show, and exits 0. Covered by the
-      # delete step's `if:`.
-      - name: Re-mint across a bookmark restore on a deployed Durable Object (record-only)
+      # local step above pins that). Asserted when the restore runs, recorded
+      # when it cannot: a cell that observed the restore and failed the judge
+      # (422) fails the step, while a cell that could not run, or whose restore
+      # or restart never landed, only warns, for deployed-restart.mjs's reason
+      # (nothing pinned here documents how a restore lands on Cloudflare).
+      # Covered by the delete step's `if:`.
+      - name: Re-mint across a bookmark restore on a deployed Durable Object
         if: always() && steps.deploy.outputs.url != ''
         run: |
           node deployed-remint.mjs "${{ steps.deploy.outputs.url }}" \

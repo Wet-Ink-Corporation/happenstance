@@ -66,7 +66,7 @@ $ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://1
 | `test/limits.test.ts`, `test/platform-miss.test.ts` | The probe, and what the deployed leg retries. |
 | `deployed.mjs` | The deployed leg's runner. |
 | `deployed-restart.mjs` | The deployed leg's hibernation cells, over `wss://`, and its idle cells. Record-only. |
-| `deployed-remint.mjs` | The deployed leg's bookmark-restore cells for `remint_identity`. Record-only. |
+| `deployed-remint.mjs` | The deployed leg's bookmark-restore cells for `remint_identity`. Asserted when the restore runs, recorded when it cannot. |
 
 ### Why the entry point is JavaScript
 
@@ -166,7 +166,9 @@ hazard the re-mint exists for. Locally it cannot run: the `workerd` that
 and refuses the restore with "does not implement point-in-time recovery".
 `test/remint.test.ts` pins that refusal, and the two an after-half owes the
 deployed run: across no restart, and across an eviction that restored nothing.
-The deployed cells are recorded rather than asserted, for the hibernation
-cells' reason.
+The deployed cells are asserted when the restore runs and recorded when it
+cannot: a cell that observed the restore and failed the judge fails the step,
+while a cell that could not run, or whose restore or restart never landed, only
+warns, for the hibernation cells' reason.
 
 It does not reach the memory ceiling.

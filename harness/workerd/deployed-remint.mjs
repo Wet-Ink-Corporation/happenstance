@@ -13,10 +13,14 @@
 // `EventId` IS reissued, which is the hazard the re-mint exists for.
 //
 // Deployed only: local workerd does not implement a restore
-// (test/remint.test.ts pins that). RECORD-ONLY, like deployed-restart.mjs: it
-// prints each cell's verdict, warns when a cell did not show what it exists
-// to show, and exits 0, because nothing pinned here documents how fast a
-// restore lands on Cloudflare. A usage error is the only non-zero exit.
+// (test/remint.test.ts pins that). ASSERTED WHEN THE RESTORE RUNS, RECORDED
+// WHEN IT CANNOT. A cell whose after-half answers 422 ran, observed the
+// restore, and failed the judge: that is a `remint_identity` regression (or a
+// control that no longer shows the hazard), and the script exits 1. Anything
+// else short of a pass (a cell that could not run, a restore that did not
+// land, a restart that never came) is printed with a warning and exits 0,
+// like deployed-restart.mjs, because nothing pinned here documents how fast
+// a restore lands on Cloudflare. A usage error exits 2.
 import { callPastPropagation, failureLine } from "./platform-miss.mjs";
 
 const [base, runId] = process.argv.slice(2);
@@ -83,7 +87,7 @@ async function cell(mode) {
     const verdict = after.body.trimStart().startsWith("<")
       ? failureLine(after.status, after.body)
       : `[${after.status}] ${after.body.trim().split("\n").join("; ")}`;
-    return { mode, bookmark: bookmark.body, verdict, passed: after.status === 200 };
+    return { mode, bookmark: bookmark.body, verdict, passed: after.status === 200, judgedFailed: after.status === 422 };
   } catch (error) {
     return { mode, note: error instanceof Error ? error.message : String(error) };
   }
@@ -98,6 +102,11 @@ for (const r of results) {
     console.log(`${r.passed ? "pass" : "fail"} ${r.mode}  bookmark ${r.bookmark}; after-half ${r.verdict}`);
   }
 }
+const judgedFailed = results.filter((r) => r.judgedFailed === true).map((r) => r.mode);
+if (judgedFailed.length > 0) {
+  console.log(`::error::the restore ran and the judge failed: ${judgedFailed.join(", ")}; see the table`);
+  process.exit(1);
+}
 if (!results.every((r) => r.passed === true)) {
-  console.log("::warning::the deployed re-mint cells did not all run and show what they exist to show; record-only, see the table");
+  console.log("::warning::the deployed re-mint cells did not all run; recorded, not asserted, see the table");
 }

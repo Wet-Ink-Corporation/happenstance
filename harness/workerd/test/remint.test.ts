@@ -53,6 +53,13 @@ describe("the re-mint leg under local workerd", () => {
     const after = await call(stub, "remint/after?mode=remint", evidence);
     expect(after.status, after.body).toBe(409);
     expect(after.body).toContain("no restart");
+    // The runner retries that refusal, so it must leave the log alone: the
+    // retry, on a new instance, still finds all four events.
+    await evictDurableObject(stub);
+    const retried = await call(stub, "remint/after?mode=remint", evidence);
+    expect(retried.status, retried.body).toBe(409);
+    expect(retried.body).toContain("the restore was not observed");
+    expect(retried.body).toContain("B2");
   });
 
   for (const mode of ["remint", "control"]) {

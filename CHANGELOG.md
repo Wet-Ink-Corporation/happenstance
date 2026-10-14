@@ -71,9 +71,9 @@ not the same as what a user needed to be told.
   restore** (#298). Test harness only; no behaviour or signature changed. The
   deployed leg of the `workerd` CI job restores a Durable Object to a bookmark,
   re-mints, and shows that no `EventId` is reissued for a different event, beside
-  a control that skips the re-mint and does reissue one. It is recorded rather
-  than asserted, and it runs on the deployed object only, because local `workerd`
-  does not implement a restore.
+  a control that skips the re-mint and does reissue one. It is asserted when the
+  restore runs and recorded when it cannot, and it runs on the deployed object
+  only, because local `workerd` does not implement a restore.
 
 ## [0.4.2] — 2026-10-13
 
