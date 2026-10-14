@@ -111,8 +111,8 @@
 //!   records why they had to.
 //! * **Idempotent ingest.** In the port's contract
 //!   ([`IngestStore::ingest`]), and the write path is the adapter's — see
-//!   [`ingest`]. Not yet checked by a suite, because
-//!   `happenstance-sync-testkit` does not exist.
+//!   [`ingest`]. Not yet checked by a suite: `happenstance-sync-testkit`
+//!   exists, with peer rules, and has no ingest rule yet.
 //! * **Append conditions across a boundary.** Settled by SY-1 – SY-7: ingest
 //!   never refuses, and a conflict is compensated by an ordinary append. The
 //!   origin's condition travels as [`EventGroup::guard`](peer::EventGroup::guard),

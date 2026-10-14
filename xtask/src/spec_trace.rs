@@ -85,11 +85,14 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 ///
 /// It lives here rather than in `lints` because [`collect_rules`] does, and a
 /// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 4] = [
+pub(crate) const RULE_FILES: [&str; 5] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
     "crates/happenstance-testkit/src/projection.rs",
+    // The sync family (#111), the first rule file outside `happenstance-testkit`.
+    // Joined in the change that creates it, for the reason above.
+    "crates/happenstance-sync-testkit/src/sync_suite.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.
@@ -1010,7 +1013,7 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 63] = [
         "ingest_preserves_origin_identity",
         Unresolvable::Scheduled(
             "the replication suite. `happenstance-sync` is a skeleton and \
-             `happenstance-sync-testkit` does not exist",
+             `happenstance-sync-testkit` does not carry it yet",
         ),
     ),
     (
@@ -1524,9 +1527,10 @@ const CF36_UNDISCHARGED: [(&str, &str); 13] = [
     ("PS-30", "the same shape as PS-29, against the same case"),
     (
         "SY-2",
-        "the replication family. Its rules would live in `happenstance-sync-testkit`, which \
-         CF-36's own `Rejects` paragraph names as their home and which does not exist \
-         (`crates/happenstance-sync/src/lib.rs:23-24`)",
+        "the replication family. Its rules live in `happenstance-sync-testkit`, which \
+         CF-36's own `Rejects` paragraph names as their home and which did not exist when \
+         this was measured (`crates/happenstance-sync/src/lib.rs:23-24`); it does since \
+         #111, and SY-2's case is still E2E-39 alone",
     ),
     ("SY-4", "the replication family, as SY-2"),
     ("SY-5", "the replication family, as SY-2"),
@@ -3625,8 +3629,8 @@ mod tests {
         }
         assert!(
             !has_suite("SY-1"),
-            "`happenstance-sync-testkit` does not exist; checking `SY` rule names against \
-             the suites that do exist would report all of them as missing"
+            "`happenstance-sync-testkit` carries two of the family's rules; checking every \
+             `SY` rule name would report the unwritten rest as missing"
         );
         assert!(
             !has_suite("CF-1"),

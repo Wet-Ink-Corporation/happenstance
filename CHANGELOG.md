@@ -36,6 +36,27 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-sync-testkit`: the replication suite's first two rules,
+  in a crate that is not published yet** (#111). Recorded here because CF-29
+  asks every conformance rule for an entry, not because anything ships: the
+  crate is `publish = false` until phase 13 decides its release, as
+  `happenstance-sync` is. A peer adapter mounts it with
+  `sync_peer_conformance!`, and `MemorySyncPeer` is the reference peer.
+
+  **`ingest_never_rejects`** (SY-1). The defect it detects is a peer that
+  re-evaluates the append condition travelling with a group against what it
+  already holds, and drops or refuses the second of two conflicting facts. Each
+  fact was valid where it was decided, and refusing one guarantees the two logs
+  never converge.
+
+  **`compensation_is_atomic_with_the_losing_event`** (SY-2, the transport's
+  half). The defect it detects is a peer that stores what it is pushed one event
+  per group, so a losing event and the compensation that rode with it come back
+  in separate groups and a reader commits the loser with nothing resolving it.
+
+  Both wrong implementations are in the crate's `tests/wrong_peers.rs`, and each
+  fails exactly its rule.
+
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
   bookmark rolls back its `StoreId` row and its position counter together, so a

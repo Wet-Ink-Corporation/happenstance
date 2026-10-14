@@ -2333,7 +2333,7 @@ struct Enumeration {
     macro_file: &'static str,
 }
 
-/// The families this check covers: all five, and the fifth is declared.
+/// The families this check covers: all six, and the benchmark row is declared.
 ///
 /// # Why this is not a scanner in the crate
 ///
@@ -2342,12 +2342,12 @@ struct Enumeration {
 /// three written one at a time". Three more families arrived. The third took a
 /// *second* scanner — `no_orphan_projection_rules`, which is `registry.rs`'s
 /// `declared_rules` verbatim but for the `include_str!` argument — and the other
-/// two got none. Written here it is one scanner for all five, and it reads the
+/// two got none. Written here it is one scanner for all of them, and it reads the
 /// `macro_rules!` body from outside rather than expanding it, so it does not
 /// have the property the in-crate meta-tests have of enumerating *from* the list
 /// they are checking.
 ///
-/// # The fifth row, and why it is not silent
+/// # The benchmark row, and why it is not silent
 ///
 /// `bench.rs` is not one of [`RULE_FILES`], and whether a benchmark scenario is
 /// "a rule" for CF-24's purposes is CF-34's question, not this scanner's. It is
@@ -2357,7 +2357,14 @@ struct Enumeration {
 /// `spec-trace`, `lints`, `lint-changelog`, clippy and the testkit's own tests.
 /// Including it is a decision recorded here; leaving it out silently is the
 /// shape RS-80-2 forbids.
-const ENUMERATIONS: [Enumeration; 5] = [
+const ENUMERATIONS: [Enumeration; 6] = [
+    Enumeration {
+        // The sync family (#111): the first rule file outside
+        // `happenstance-testkit`, joined in the change that creates it.
+        file: "crates/happenstance-sync-testkit/src/sync_suite.rs",
+        macro_name: "for_each_sync_peer_rule",
+        macro_file: "crates/happenstance-sync-testkit/src/sync_suite.rs",
+    },
     Enumeration {
         file: "crates/happenstance-testkit/src/suite.rs",
         macro_name: "for_each_event_store_rule",
