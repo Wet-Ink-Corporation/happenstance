@@ -861,6 +861,21 @@ The `wi-cbaec7` atom was moved here from `.kb/_intake/decisions/`, the way `wi-6
 | ADR-0026 | [`kb-decision-0026`](../decisions/0026-what-a-sync-peer-is.md) | What a sync peer is — one relationship, one round trip, harmless re-delivery, and classified errors | accepted | 13 | — |
 | — | [`kb-decision-wi-cbaec7`](../decisions/wi-cbaec7-adr-0026-105-how-should-syncpeer-error-tell-the.md) | `SyncPeer::Error` states its class: Transient, Split, Park or Stop (owner, Weigh-In) | accepted | 13 | — |
 
+## 2026-10-14: how two logs reconcile (#106)
+
+ADR-0027 takes the number the original queue reserved for phase 13, which is why its number is
+out of order with the records around it. It records the owner's two calls of 2026-10-14, `wi-53c544` and
+`wi-0fbcac`, both option A, and both atoms move here from intake. Replication is whole-log at
+1.0. SY-7, SY-10, SY-14 and SY-23 are ratified with three edits. No marker moves to `[FROZEN]`
+with it; SY-27 and SY-28 move from `[DEFERRED]` to `[PROVISIONAL]`, and SY-29 is renewed past 1.0.
+It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0027 | [`kb-decision-0027`](../decisions/0027-whole-log-replication-and-the-merge-rule.md) | Replication is whole-log at 1.0, and the merge rule, bulk ingest and both topologies are ratified | accepted | 13 | — |
+| — | [`kb-decision-wi-53c544`](../decisions/wi-53c544-adr-0027-106-is-replication-whole-log-or-scoped.md) | Replication is whole-log at 1.0; a confidentiality slice is its own store (SY-27 – SY-29) | accepted | — | — |
+| — | [`kb-decision-wi-0fbcac`](../decisions/wi-0fbcac-adr-0027-106-ratify-sy-7-one-adjudicator-per.md) | SY-7, SY-10, SY-14 and SY-23 ratified with three edits | accepted | — | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

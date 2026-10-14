@@ -43,7 +43,7 @@ table, the same trick every crate under `experiments/` uses — it appears in no
 `verify:` command and no `cargo xtask ci` step, and it adds no dependency to any
 workspace manifest. `Cargo.lock` at the repository root is untouched.
 
-CF-34 (`spec/SPECIFICATION.md:9691`) is why:
+CF-34 (`spec/SPECIFICATION.md:9787`) is why:
 
 > Performance MUST be measured by a separate harness, and that harness MUST NOT
 > be part of the conformance bar. An adapter that is slow is conformant.

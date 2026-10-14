@@ -90,7 +90,9 @@ indistinguishable from a young one at every value in §2.
         run through the full suite, with the rule
         `instrument_report_is_accurate_and_the_suite_cannot_tell`. If phase 13 built
         the filtered-subset store for SY-27, this phase extends that one rather
-        than writing a second.
+        than writing a second. It did not: ADR-0027 (2026-10-14) took whole-log
+        replication, so SY-27 no longer needs the instrument and this phase builds it
+        from scratch.
 
 **Proof artefact.** ~~The suffix store, committed, with a runner and an ingest path
 that both fail against it — plus the rules that catch them. A store that lies about

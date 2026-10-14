@@ -10,6 +10,23 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-14 — ADR-0027, whole-log replication and the merge rule (#106)
+
+*Committed on `claude/project-thread-95afyv-106`.* Phase 13's second ADR, on the owner's
+calls of 2026-10-14: `wi-53c544` (whole-log at 1.0) and `wi-0fbcac` (SY-7, SY-10, SY-14 and
+SY-23 ratified with three edits), both option A. SY-27 and SY-28 move from `[DEFERRED]` to
+`[PROVISIONAL]`; SY-29 is renewed past 1.0 against the first scoped-replication proposal;
+SY-10's rationale becomes adjudication, SY-14's bound one ingest round trip per pulled batch,
+and SY-23 gains its not-fair, not-temporal caveat. No marker moved to `[FROZEN]`. #122 leaves
+the 1.0 path, and the phase 13/14 sequencing hazard is dissolved. Both ledger atoms move from
+intake to `.kb/decisions/`. Specification line citations in prose files are repointed.
+
+**Verified.** `cargo xtask spec-trace` (with `--write` for §7.1–§7.2), `cargo xtask lint-kb`,
+`cargo xtask lints` and `cargo xtask lint-constitution` pass. The full `cargo xtask ci` was not
+run locally; CI runs it.
+
+---
+
 ## 2026-10-14 — ADR-0026, what a sync peer is (#105, #119)
 
 *Committed on `claude/project-thread-95afyv-105`.* Phase 13's first ADR. It records SY-1 – SY-17
