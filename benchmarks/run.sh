@@ -11,7 +11,7 @@
 # rather than trusted from the PRAGMA that issued them.
 #
 # It is NOT a gate step and must never become one. CF-34
-# (`spec/SPECIFICATION.md:8747`) rejects a benchmark result gating a merge: a
+# (`spec/SPECIFICATION.md:9787`) rejects a benchmark result gating a merge: a
 # threshold nobody can justify becomes a threshold everybody raises, and the
 # number stops meaning anything the second time it is moved. Nothing in
 # `.redkiln/config.yaml` or `cargo xtask ci` invokes this, the crate carries an
