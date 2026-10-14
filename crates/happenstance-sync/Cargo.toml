@@ -48,12 +48,27 @@ tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]
 default = []
-# Gates nothing today. It carried `impl IngestStore for MemoryEventStore`, whose
-# bodies could only ever be `todo!()` — a foreign type's write path is out of this
-# crate's reach — and phase 17 deleted it. Kept, not removed, because phase 13's
-# in-memory ingest oracle, a store this crate owns, is planned behind it. Not a
-# default either way.
+# `MemorySyncPeer`: the conformance suite's reference peer, the doctest target,
+# and something an application author can test their sync wiring against before
+# a real peer exists (`src/memory.rs` says why it is all three). Not a default: a
+# deployment never replicates to a peer in its own memory. It forwards
+# `happenstance-core/memory` because the in-memory ingest oracle planned beside
+# it for phase 13, a store this crate owns, is built over the same reference
+# types, and because an author testing against this peer wants the reference
+# store too.
 memory = ["happenstance-core/memory"]
+
+# The test targets that construct a `MemorySyncPeer`. Named rather than gated
+# with `#![cfg(feature = "memory")]` inside the file, so that a run without the
+# feature reports the target as skipped for a missing feature instead of
+# compiling an empty binary that passes. The gate runs `--all-features`.
+[[test]]
+name = "flavours"
+required-features = ["memory"]
+
+[[test]]
+name = "real_peer_shapes"
+required-features = ["memory"]
 
 [lints]
 workspace = true

@@ -1,13 +1,32 @@
-//! An in-memory [`SyncPeer`](crate::SyncPeer), for tests and for the
-//! conformance suite that does not exist yet.
+//! An in-memory [`SyncPeer`](crate::SyncPeer), behind the `memory` feature.
 //!
 //! It is a *peer*, not a store: it holds whatever was pushed to it and hands it
 //! back on pull. Two of them wired to each other is the smallest thing that
 //! exercises a runner.
 //!
-//! Unlike the two stand-ins in this crate's `tests/`, the bodies here are real.
-//! A fixture whose methods are `todo!()` cannot be the thing a conformance suite
-//! is pointed at, and the suite is the reason this type exists.
+//! # Why it exists: three jobs, one type
+//!
+//! The same three `happenstance-core` gives for `MemoryEventStore`, one port
+//! over, and the same cold start the projection port had without one:
+//!
+//! 1. **The oracle.** `happenstance-sync-testkit`'s suite is pointed at this
+//!    peer first: it is the reference peer every conformance rule must pass
+//!    against before a rule is allowed to fail a real adapter. A rule red here
+//!    is a wrong rule, not a wrong peer. So the bodies are real — a fixture
+//!    whose methods are `todo!()` cannot be the thing a suite is pointed at —
+//!    and that is the difference between this type and the two stand-ins in
+//!    this crate's `tests/`.
+//! 2. **The doctest target.** Every example in this crate that needs a peer
+//!    uses this one, so the examples run rather than merely compile.
+//! 3. **Something to test against.** An application author can write and test
+//!    their sync wiring before a real peer exists, as [`MemorySyncPeer`]'s
+//!    example shows.
+//!
+//! # Behind a feature, and not a default
+//!
+//! A deployment never replicates to a peer that lives in its own memory, so the
+//! type is off unless asked for: `features = ["memory"]`, normally in
+//! `[dev-dependencies]`.
 
 use alloc::vec::Vec;
 
@@ -74,6 +93,47 @@ pub enum MemoryPeerError {
 }
 
 /// An in-memory peer.
+///
+/// # Examples
+///
+/// A device pushes what it holds to a hub, and a second device pulls it — the
+/// hub-and-spoke shape, with the hub played by this type:
+///
+/// ```
+/// use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+/// use happenstance_sync::{
+///     EventGroup, MemorySyncPeer, PushBatch, ReplicatedEvent, SyncPeer,
+/// };
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn core::error::Error>> {
+/// let tablet = StoreId::from_bytes([1; 16]);
+/// let hub = MemorySyncPeer::new(StoreId::from_bytes([2; 16]));
+///
+/// // An event the tablet already made durable, carrying the identity it minted.
+/// let recorded = ReplicatedEvent::new(
+///     EventId::new(tablet, SequencePosition::FIRST),
+///     RecordedAt::from_millis(1_700_000_000_000),
+///     Event::new("ReadingTaken", &b"{\"celsius\":4}"[..])?,
+/// );
+/// let batch = PushBatch::new(vec![EventGroup::new(None, vec![recorded])]);
+///
+/// // The hub takes it once; offering it again is a skip, never a second copy.
+/// let first = hub.push(&batch).await?;
+/// assert_eq!((first.appended, first.skipped), (1, 0));
+/// let again = hub.push(&batch).await?;
+/// assert_eq!((again.appended, again.skipped), (0, 1));
+/// assert_eq!(again.confirmed.get(tablet), Some(SequencePosition::FIRST));
+///
+/// // Another device pulls from the start and gets it, with an owned token
+/// // that survives this handle being dropped.
+/// let pulled = hub.pull(None).await?;
+/// assert_eq!(pulled.batch.events().count(), 1);
+/// let caught_up = hub.pull(Some(&pulled.resume)).await?;
+/// assert_eq!(caught_up.batch.events().count(), 0, "empty means caught up");
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// `Send + Sync`, so it implements [`SendSyncPeer`] and gets the bare
 /// [`SyncPeer`](crate::SyncPeer) for free. That is the right choice for a
