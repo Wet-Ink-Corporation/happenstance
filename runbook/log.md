@@ -10,6 +10,21 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-14 — phase 13's names claimed, and its owner calls answered
+
+*Committed on `claude/project-thread-95afyv`, on `a69ded4`.* The owner claimed
+`happenstance-sync` and `happenstance-sync-testkit` on crates.io at `0.0.0`, from
+`cargo xtask reserve` (#102). The owner also answered what ADR-0026 (#105) and
+ADR-0027 (#106) needed: `SyncPeer::Error` is classified (`wi-cbaec7`), replication
+is whole-log at 1.0 (`wi-53c544`), and SY-7, SY-10, SY-14 and SY-23 are ratified
+with three edits (`wi-0fbcac`). The ADRs are written in their own PRs.
+
+**Verified.** The registry API for both crates: owner `Ryan-Britton`, `MIT OR
+Apache-2.0`, README present, `rust-version` 1.85, not yanked. `cargo xtask lints`
+passes. No code changed.
+
+---
+
 ## 2026-10-13 — `0.4.2`, phase 17b's release
 
 *Committed on `release-0.4.2`, on `0032d2e`.* `[Unreleased]` becomes
