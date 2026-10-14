@@ -82,7 +82,7 @@ provides the atomicity and the identity that makes it idempotent.
       phase 17 declined it, the remedy here is one of the additive arms, and
       mint-per-open would be a post-1.0 major.
 
-- [ ] #105 · ADR-0026. Record the ingest boundary SY-1 – SY-7 already fix, and settle
+- [x] #105 · ADR-0026. Record the ingest boundary SY-1 – SY-7 already fix, and settle
       what makes re-delivery harmless and what the port may assume about a transport it cannot see. The two real peers are a
       Durable Object over a socket and a Postgres over one-shot HTTP with no
       interactive transaction; a `SyncPeer` that cannot be implemented by the second
@@ -133,7 +133,7 @@ provides the atomicity and the identity that makes it idempotent.
       `!Send` peer sits mid-chain rather than at a leaf.
 - [ ] #117 · Two real peers — the phase-9 Durable Object and the phase-10 Postgres — plus
       the round trip between a native SQLite store and each.
-- [ ] #119 · Record the DCB wire interop decision (WF-1) in ADR-0026's envelope section:
+- [x] #119 · Record the DCB wire interop decision (WF-1) in ADR-0026's envelope section:
       named, deferred, with the experiment being a specific external implementation
       to interoperate with. Not silence.
 - [ ] #121 · **A KV-capped peer for SY-18.** The two real peers above are a SQL-backed
@@ -236,3 +236,13 @@ of E2E-07 (ES-24).
 **Estimate.** 12 days.
 
 **Session log**
+
+- **2026-10-14** — ADR-0026 written (#105, with #119 folded in). The one new call is the
+  owner's `wi-cbaec7`, option A: every `SyncPeer` error states its failure class
+  (`Transient`, `Split`, `Park`, `Stop`), minted as SY-36 `[PROVISIONAL]` with
+  `every_refusal_states_its_class` as its rule; #243 builds the trait and the rule, #244 the
+  runner's response. SY-1 – SY-17 are recorded, not reopened; the published half cites
+  ADR-0073; SY-18 stays with #121. LiveStore's total order with client rebase is the rejected
+  design (#247 files the audit). The envelope section renews WF-1 past 1.0 against a named
+  experiment, a bridge to a UmaDB server over `umadb.proto`. Long form at
+  `references/adr/0026-what-a-sync-peer-is.md`.

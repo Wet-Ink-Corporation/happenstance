@@ -8,6 +8,7 @@ summary: >-
   WF-1's interoperability half stays DEFERRED, and the reason changed when it was checked: the DCB reference implementation publishes no wire format at all. EventStore.ts contains no serialisation code, and the specification's JSON snippets are explicitly a 'potential' representation rather than a required one. So happenstance's format is not diverging from a standard; there is no standard to diverge from, which is what makes the format private and every reversal in it free. What is not decided is what happens if that changes. Refuted by a DCB implementation that publishes an encoding — at which point the question becomes whether interoperability is worth anything to this project, and the answer is not obviously yes. Owned by phase 13, the sync crate and its testkit, which is the first point at which anything of ours is on a wire another implementation could be at the far end of.
 depends_on: []
 related:
+  - kb-decision-0026
   - kb-decision-0016
   - kb-reference-wire-format-measurements-001
   - kb-open-question-sync-message-set-undesigned-001
@@ -16,7 +17,7 @@ source_paths:
   - references/adr/0016-the-wire-format.md
   - experiments/wire-format/
   - spec/SPECIFICATION.md
-last_reviewed: 2026-08-10
+last_reviewed: 2026-10-14
 ---
 
 # There is no DCB wire format to interoperate with
@@ -98,3 +99,14 @@ at the far end of, DCB-published or not.
    the DCB specification page could change between the 2026-08-05 fetch and
    whenever phase 13 starts — or does it wait to be re-triggered only by a
    concrete interoperability request?
+
+## Renewed by ADR-0026 (2026-10-14)
+
+This atom stays open: a renewal is not a settlement.
+[ADR-0026](../decisions/0026-what-a-sync-peer-is.md)'s envelope section records WF-1's renewal
+past 1.0. Interop, if wanted, is a separate `happenstance-dcb-interop` crate with its own ADR.
+It names the experiment: a bridge that reads a UmaDB server's log over its published
+`umadb.proto` gRPC service. Sub-question 2 is answered: a user's request to read another
+implementation's log forces the question as well. Sub-question 3 is answered by the same
+record: re-checking W7 is not a standing task. The reference still publishes no format, and
+UmaDB's service is one server's client API rather than an interchange format.

@@ -19,6 +19,7 @@ summary: >-
 depends_on: []
 related:
   - kb-decision-0016
+  - kb-decision-0026
   - kb-open-question-dcb-no-published-format-001
 source_paths:
   - .kb/_intake/0016-the-wire-format.md
@@ -49,7 +50,8 @@ version check, and the message set is exactly what phase 13 — the peer protoco
 designed. ADR-0016 settles WF-2 through WF-12 but explicitly does not settle the replication
 protocol; it lands a versioned envelope and nothing else, no message set, no negotiation, no
 `SyncError` extension. Those stay ADR-0027's and ADR-0026's respectively, both still ahead in the
-phase order.
+phase order. (ADR-0026, written 2026-10-14, gives `SyncError` a failure class and no new variant;
+the message set stays ADR-0027's.)
 
 So the field that exists — `format_version` — is fully specified and tested; the field's *meaning*
 is not. `FORMAT_VERSION = 1` currently promises only that some vocabulary is version 1 of itself,
