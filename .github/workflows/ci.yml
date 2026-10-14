@@ -1449,6 +1449,29 @@ jobs:
             exit 1
           fi
 
+      # The re-mint leg's local half (#298, harness/workerd/src/remint.rs).
+      # The leg itself restores a SQLite bookmark, and the pinned workerd does
+      # not implement a restore, so it runs on the deployed object below. Here:
+      # the pin that this workerd refuses the restore (it fails on the bump
+      # that lifts it, which is when the leg moves here), and the two refusals
+      # an after-half owes the deployed run, across no restart and across an
+      # eviction that rolled nothing back. Strict.
+      - name: The re-mint refusals, and the restore local workerd lacks
+        if: always()
+        run: |
+          npx vitest run test/remint.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-remint.json
+          test -f vitest-remint.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq -e '.numTotalTests | numbers' vitest-remint.json) || { echo "::error::the report has no test count"; exit 1; }
+          passed=$(jq -e '.numPassedTests | numbers' vitest-remint.json) || { echo "::error::the report has no pass count"; exit 1; }
+          pending=$(jq -e '.numPendingTests + .numTodoTests | numbers' vitest-remint.json) || { echo "::error::the report has no skip count"; exit 1; }
+          echo "re-mint cells: collected $total, passed $passed, not run $pending"
+          # the missing restore, no restart, no restore for each mode, a bad mode.
+          if [ "$total" -lt 5 ] || [ "$pending" -ne 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "::error::the re-mint run did not execute and pass every cell"
+            exit 1
+          fi
+
       - name: The SQLite walls of local workerd
         if: always()
         run: npx vitest run test/limits.test.ts --reporter=verbose
@@ -1571,6 +1594,22 @@ jobs:
         run: |
           node deployed-restart.mjs "${{ steps.deploy.outputs.url }}" \
             "restart-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      # `remint_identity` across a real bookmark restore (#298): on a deployed
+      # object, take a bookmark, write past it, restore it (the object
+      # restarts), then re-mint and write again; the re-mint cell must reissue
+      # no `EventId`, and the control that skips the re-mint must reissue one.
+      # Deployed only, because local workerd does not implement a restore (the
+      # local step above pins that). RECORD-ONLY for deployed-restart.mjs's
+      # reason: nothing pinned here documents how a restore lands on
+      # Cloudflare, so the script prints each cell's verdict, warns when one
+      # did not show what it exists to show, and exits 0. Covered by the
+      # delete step's `if:`.
+      - name: Re-mint across a bookmark restore on a deployed Durable Object (record-only)
+        if: always() && steps.deploy.outputs.url != ''
+        run: |
+          node deployed-remint.mjs "${{ steps.deploy.outputs.url }}" \
+            "remint-${{ github.run_id }}-${{ github.run_attempt }}"
 
       # Nothing is left listening: the Worker and every object's storage go.
       # Keyed on the deploy having *run* rather than on its URL: with a name per

@@ -29,6 +29,7 @@ $ npx vitest run       # the rules, then the wall probe
 $ npx vitest run test/limits.test.ts --reporter=verbose   # the probe's report
 $ npx vitest run test/restart.test.ts --reporter=verbose  # across a restart (~15 s)
 $ npx vitest run test/idle.test.ts --reporter=verbose     # idle eviction (~15 s)
+$ npx vitest run test/remint.test.ts --reporter=verbose   # the re-mint leg's local half
 ```
 
 To drive the deployed path without deploying, run `wrangler dev` and point
@@ -54,14 +55,18 @@ $ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://1
 | `src/object/restarts.rs` | The `/restart/...` routes, and the store an object instance holds between the halves. |
 | `src/idle.rs` | `IdleHold`: a store, and optionally a read stream opened and advanced by one event, parked inside one future the object owns and polls by hand. No task, no timer, no promise. |
 | `src/object/idling.rs` | The `/idle/arm?stream=none\|held` and `/idle/release` routes. |
-| `worker.mjs` | The entry point, in JavaScript on purpose. See below. |
+| `src/remint.rs` | The re-mint leg's ledger, carried across a bookmark restore, and its verdict. |
+| `src/object/reminting.rs` | The `/remint/seed`, `/remint/lose` and `/remint/after?mode=remint\|control` routes. |
+| `worker.mjs` | The entry point, in JavaScript on purpose. See below. It also answers `/bookmark/current` and `/bookmark/restore`, the bookmark calls the `worker` crate does not bind. |
 | `test/conformance.test.ts` | One `it()` per rule, each against its own object. |
 | `test/conformance-cold.test.ts` | The same rules, each on an object primed and then evicted first. |
 | `test/restart.test.ts` | The cross-restart rules: evicted (every subject), the no-restart control, and hibernated (the adapter). |
+| `test/remint.test.ts` | The re-mint leg's refusals, and the pin that local `workerd` implements no restore. |
 | `test/idle.test.ts` | Idle objects holding the adapter, left alone for 12 s and for 8 s, and the timer control (`/idle-control/` in `worker.mjs`). |
 | `test/limits.test.ts`, `test/platform-miss.test.ts` | The probe, and what the deployed leg retries. |
 | `deployed.mjs` | The deployed leg's runner. |
 | `deployed-restart.mjs` | The deployed leg's hibernation cells, over `wss://`, and its idle cells. Record-only. |
+| `deployed-remint.mjs` | The deployed leg's bookmark-restore cells for `remint_identity`. Record-only. |
 
 ### Why the entry point is JavaScript
 
@@ -144,5 +149,24 @@ that holds no hibernatable socket.
 was primed (every log a rule may open migrated, each identity minted) and then
 evicted. Each rule still runs inside one instance, so this is the weaker
 evidence; what it adds is every rule against logs a previous instance created.
+
+`remint_identity` is run across a real bookmark restore (#298), on the
+deployed object only. Per cell, the object appends two events, the runner
+takes a bookmark (`getCurrentBookmark`), the object appends two more and hands
+the runner a ledger of all four, and the runner restores the bookmark
+(`onNextSessionRestoreBookmark`, then `ctx.abort()`). On the next instance the
+object checks that exactly the first two events remain under their old
+`EventId`s, re-mints or does not, appends three more, and judges what it
+yields against the ledger. The re-mint cell passes when no `EventId` names a
+different event than it did before the restore and a lost position was handed
+out again, so the restore did roll the position counter back. The control
+skips the re-mint and passes when an `EventId` is reissued, which is the
+hazard the re-mint exists for. Locally it cannot run: the `workerd` that
+`package-lock.json` pins answers `getCurrentBookmark` with an all-zero bookmark
+and refuses the restore with "does not implement point-in-time recovery".
+`test/remint.test.ts` pins that refusal, and the two an after-half owes the
+deployed run: across no restart, and across an eviction that restored nothing.
+The deployed cells are recorded rather than asserted, for the hibernation
+cells' reason.
 
 It does not reach the memory ceiling.

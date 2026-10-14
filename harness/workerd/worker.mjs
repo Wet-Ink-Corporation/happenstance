@@ -15,8 +15,18 @@ import { ConformanceObject as RustObject } from "./build/index.js";
 // `/idle/<route>` with a timer pending in between.
 const CONTROL = "/idle-control/";
 
+// The bookmark calls of the re-mint leg (#298, src/remint.rs), which the
+// `worker` crate does not bind: `/bookmark/current` and
+// `/bookmark/restore?bookmark=<b>`.
+const BOOKMARK = "/bookmark/";
+
+// The reason `ctx.abort` is given, and so the text a restore's request fails
+// with: the runner tells this expected failure from any other by it.
+const RESTORING = "restoring a bookmark";
+
 export class ConformanceObject {
   constructor(ctx, env) {
+    this.ctx = ctx;
     this.inner = new RustObject(ctx, env);
   }
 
@@ -24,6 +34,9 @@ export class ConformanceObject {
     const url = new URL(request.url);
     if (url.pathname.startsWith(CONTROL)) {
       return this.control(url, request);
+    }
+    if (url.pathname.startsWith(BOOKMARK)) {
+      return this.bookmark(url);
     }
     return relayed(() => this.inner.fetch(request));
   }
@@ -46,6 +59,35 @@ export class ConformanceObject {
       this.flush = setInterval(() => {}, 1_000);
     }
     return response;
+  }
+
+  // The re-mint leg's bookmark calls. `current` answers the bookmark as text.
+  // `restore` arranges for the next session to start from the bookmark and
+  // then ends this one, because a restore applies only when the object
+  // restarts: its request therefore fails, with RESTORING as the message.
+  // A runtime that does not implement a restore throws instead, and that
+  // throw is answered as a 501 with its own text, which is what local
+  // `workerd` does (test/remint.test.ts pins it).
+  async bookmark(url) {
+    const route = url.pathname.slice(BOOKMARK.length);
+    try {
+      if (route === "current") {
+        return new Response(await this.ctx.storage.getCurrentBookmark());
+      }
+      if (route !== "restore") {
+        return new Response(`no bookmark route ${route}`, { status: 404 });
+      }
+      const bookmark = url.searchParams.get("bookmark");
+      if (!bookmark) {
+        return new Response("bookmark= is required", { status: 400 });
+      }
+      await this.ctx.storage.onNextSessionRestoreBookmark(bookmark);
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : String(error), { status: 501 });
+    }
+    this.ctx.abort(RESTORING);
+    // Not reached: `abort` throws into this request.
+    return new Response("the object did not restart", { status: 500 });
   }
 
   // A hibernatable WebSocket's events arrive here, on whichever construction of
