@@ -126,7 +126,7 @@ nothing: its positions carry on from where they were. What a peer does see is on
 name mid-stream. That is a replication cost and belongs to phase 13; it is not a
 VT-6 violation. The case VT-6 actually fears is the *missing* re-mint after a restore or a copy,
 and no in-process check can see that. VT-6's `Rejects:` paragraph accepts that case explicitly, and
-`references/adapter-shapes.md:395-401` states the operator's procedure.
+`references/adapter-shapes.md:397-403` states the operator's procedure.
 
 **Not answered here:** whether VT-6's documented-procedure branch *obliges* every adapter that
 takes it to carry an equivalent check. That is the clause-level form of this question, which
