@@ -57,12 +57,13 @@ provides the atomicity and the identity that makes it idempotent.
 
 **Work**
 
-- [ ] #102 · **Claim `happenstance-sync` and `happenstance-sync-testkit` on crates.io**, per phase 0's
+- [x] #102 · **Claim `happenstance-sync` and `happenstance-sync-testkit` on crates.io**, per phase 0's
       rule that a name is reserved when its phase starts, not before — the point
       being that by now there is a crate to justify it with. Both were still
       unclaimed on 2026-09-29 (the registry API answered `404` for each), and both
       are among the nine crates 1.0 promises (ADR-0066), so this is the first
-      thing the phase does rather than the last.
+      thing the phase does rather than the last. **Done 2026-10-14:** the owner
+      published both `0.0.0` placeholders from `cargo xtask reserve` at `a69ded4`.
 - [ ] #104 · **The Postgres and Neon `StoreId` has no restore detection**
       (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`,
       VT-6). Both mint once, in a migration —
@@ -248,6 +249,15 @@ of E2E-07 (ES-24).
 **Estimate.** 12 days.
 
 **Session log**
+
+- 2026-10-14 — #102: `happenstance-sync` and `happenstance-sync-testkit` claimed
+  on crates.io at `0.0.0` by the owner, from `cargo xtask reserve` on `a69ded4`.
+  Verified through the registry API: owner `Ryan-Britton`, `MIT OR Apache-2.0`,
+  README present, `rust-version` 1.85, not yanked. The owner also answered the
+  calls ADR-0026 and ADR-0027 need: peer errors are classified (`wi-cbaec7`),
+  replication is whole-log at 1.0 (`wi-53c544`), and SY-7, SY-10, SY-14 and
+  SY-23 are ratified with three edits (`wi-0fbcac`). The ADRs land in their own
+  PRs; no clause marker moves before its rule exists.
 
 - **2026-10-14** — ADR-0027 written and accepted (#106), on the owner's calls
   `wi-53c544` and `wi-0fbcac`, both option A. Replication is whole-log at 1.0;

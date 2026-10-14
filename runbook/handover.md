@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`release-0.4.2`, on `0032d2e` (`main`, where PR #295 merged). 2026-10-13.
+`claude/project-thread-95afyv`, on `a69ded4` (`main`, where PR #297 merged). 2026-10-14.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -20,38 +20,37 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.4.1` is on crates.io** (tag `v0.4.1` at `eb7f41e6`, published by `release.yml`
-through trusted publishing). **`0.4.2` ships from this release PR**, and closes phase
-17b: `QueryItem::of` (#83), VT-30 frozen and `after` deprecated (#85), ES-7 frozen
-with the derivation contract and the `floating-deps` job (#88),
-`StoreLimit::MetadataLen` and Cloudflare's metadata ceiling (#92), the typed-layer
-open questions closed by record (#93), PS-39 frozen on a live Neon run (#81) and
-`contains_event_id` meaning held (#109). `cargo semver-checks --release-type minor`
-against `0.4.1` reports only the deliberate deprecation. The workspace requirement on
-`happenstance-core` and `happenstance` moves to `0.4.2`, so the minimal-versions job's
-published-release leg goes green once the tag publishes. Phases 0–12 and 15–17 are
-done, and 17b is done when this PR merges. What remains is sequenced in
-[`roadmap.md`](roadmap.md): the typed runner (18), sync (13) and retention (14), and
-`1.0.0` (21) last.
+**`0.4.2` is on crates.io** (tag `v0.4.2` at `09d112e`, published by `release.yml`
+through trusted publishing), and phase 17b is done. Since the release, all three
+items of #262 (Letterpress's G-01) are on `main`: `workerd` conformance across a
+real Durable Object restart (#303), idle eviction (#304) and
+`happenstance-cloudflare`'s `remint_identity` (#297). `remint_identity` is
+unreleased and ships in the next release.
+
+**Phase 13's owner calls are answered** (2026-10-14). `happenstance-sync` and
+`happenstance-sync-testkit` are claimed on crates.io at `0.0.0` (#102).
+`SyncPeer::Error` is classified (`wi-cbaec7`, for ADR-0026), replication is
+whole-log at 1.0 (`wi-53c544`, for ADR-0027), and SY-7, SY-10, SY-14 and SY-23 are
+ratified with three edits (`wi-0fbcac`). Phases 0–12 and 15–17b are done. What
+remains is sequenced in [`roadmap.md`](roadmap.md): the typed runner (18), sync (13)
+and retention (14), and `1.0.0` (21) last.
 
 **A tag is cut from its release PR's merge commit, not from a later `main`.** Cloud
 sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-- **The `0.4.2` release PR.** It merges through the queue, and then the owner pushes
-  `v0.4.2` at its merge commit. It ticks phase 17b's exit criteria, for the owner to
-  review.
+- **ADR-0026 (#105) and ADR-0027 (#106)**, written from the three decisions above.
+  Both are `door:one-way`, so the owner merges them. They record decisions; no
+  clause marker moves to `[FROZEN]` until the rule that checks it exists.
 
 ## Next action
 
-1. After the release PR merges, push `v0.4.2` at its merge commit. Check crates.io and
-   docs.rs for all seven crates, then confirm the `minimal dependency versions` job
-   goes green, and close #62.
+1. Land ADR-0026 and ADR-0027. With whole-log decided, #122 (the filtered-subset
+   store) and SY-29's `Query` leave the 1.0 path by ADR-0027's record.
 2. Phase 18 (#63), the typed runner. Its breaking chains open as `door:one-way` PRs,
-   and it needs the owner present.
-3. #262, Letterpress's G-01: `happenstance-cloudflare` conformance across eviction and
-   hibernation. It is `door:one-way` and needs triage.
+   and it needs the owner present. Phase 13's code waits on it (SY-20).
+3. #298, the deployed restore leg of #262.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
@@ -59,10 +58,12 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- **Push `v0.4.2`** at the release PR's merge commit, after reviewing its 17b ticks.
-- **Phase 18** needs the owner present. **#262** needs triage.
-- **#105 and #106** (ADR-0026 and ADR-0027) gate phase 13. **#102** claims the sync
-  crate names. **#118** gates phase 18's checkpoint-id chain.
+- **Merge ADR-0026 and ADR-0027** once they are green.
+- **Trusted publishing for the two sync crates** on crates.io (repository
+  `Wet-Ink-Corporation/happenstance`, workflow `release.yml`, environment
+  `crates-io`), before `0.6.0`. `release.yml`'s publish set gains them in that
+  release.
+- **Phase 18** needs the owner present. **#118** gates phase 18's checkpoint-id chain.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (ADR-0092); PS-25's digest is a hand-written FNV-1a; new CI jobs
   are not required checks.
