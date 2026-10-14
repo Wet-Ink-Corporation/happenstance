@@ -5,5 +5,9 @@
     "CLAUDE.md", "AGENTS.md",
     ".github/workflows/release.yml", ".github/workflows/pages.yml",
     ".github/CODEOWNERS", ".github/tracker.yml"
+  ],
+  "preapprovedDependencies": [
+    "happenstance-core", "happenstance", "happenstance-testkit",
+    "happenstance-sync", "happenstance-sync-testkit"
   ]
 }
