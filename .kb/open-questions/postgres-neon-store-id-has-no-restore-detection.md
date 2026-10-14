@@ -91,7 +91,7 @@ append reads `store_id` inside the same `INSERT … SELECT` statement
 ## Why a clone is not an edge case here
 
 On a file-backed store, a copy is something an operator does deliberately, and
-`references/adapter-shapes.md:395-401` tells them what to do afterwards. On these two platforms a
+`references/adapter-shapes.md:397-403` tells them what to do afterwards. On these two platforms a
 copy is routine:
 
 - **`pg_dump` / `pg_restore`.** A logical dump carries `store_meta`'s row, and it carries the
