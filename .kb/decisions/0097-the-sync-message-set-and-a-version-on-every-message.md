@@ -79,6 +79,14 @@ types keep a fifth message additive. The cost is that a buffer does not say whic
 The transport says it: an HTTP route, a Durable Object method, or the request a response answers.
 That pairing belongs to the peer protocol (#117), not to the envelope.
 
+A transport that gets the pairing wrong is not always told. A mis-routed buffer can decode silently
+as another message, and that fails open. In postcard, `Envelope::new(PushBatch::empty())` and
+`Envelope::new(PullRequest::from_start())` are the same two bytes, `[01 00]`, so an empty push
+handed to the pull decoder is a pull from the start of the log. In JSON, a push decodes as
+`PullRequest { from: None }` too, because a derive defaults a missing `Option` field to `None`.
+`PullRequest` therefore carries `#[serde(deny_unknown_fields)]`, which closes the JSON case.
+Postcard has no equivalent. It carries no field names, so nothing in the bytes can refuse.
+
 `PeerLimits` is not a message. How a remote peer's limits reach the caller is the transport's
 business, and adding it later is the additive case above.
 
@@ -88,13 +96,31 @@ business, and adding it later is the additive case above.
 `Deserialize`. None of them has a constructor invariant to re-run, so the derive meets WF-10.
 `Watermark` is the exception. Its `get` binary-searches a vector it keeps sorted, so a derived
 `Deserialize` would accept a peer's unsorted vector and then miss marks that are there. Its
-hand-written `Deserialize` folds every pair through `advance`. No `skip_serializing_if` is added
-anywhere (WF-2), so an absent guard travels as `null`, not as a missing key.
+hand-written `Deserialize` sorts the pairs and keeps the highest mark per store. No
+`skip_serializing_if` is added anywhere (WF-2), so an absent guard travels as `null`, not as a
+missing key.
+
+`Ack`'s `appended` and `skipped` are `u64`, not `usize`. They cross the wire, and a count must have
+the same width on a 64-bit sender and a 32-bit receiver.
 
 `ResumeToken` is text, not bytes. A token is what an HTTP peer puts in a query string or a Durable
 Object in a cursor column. Bytes would render in JSON as an array of integers (WF-11's own
-measurement), and base64 would add a dependency to this crate for a value that is usually short.
-How a peer's `SyncPeer::Resume` becomes a `ResumeToken` is the peer adapter's choice.
+measurement). How a peer's `SyncPeer::Resume` becomes a `ResumeToken` is the peer adapter's choice.
+
+The alternative is bytes rendered as base64 in JSON, which is how WF-11 renders a payload. Two facts
+weigh for it:
+
+- The codec is already in this crate's graph. `happenstance-core`'s `serde` feature, which this
+  crate enables, pulls in `base64` (`crates/happenstance-core/Cargo.toml:62`). Bytes would cost a
+  manifest line, not a new crate.
+- The workspace's own HTTP peer shape is binary. `real_peer_shapes.rs` declares
+  `struct HttpResume(Box<[u8]>)` (`crates/happenstance-sync/tests/real_peer_shapes.rs:171`), and
+  the cursor probe declares `type Resume = Box<[u8]>`
+  (`crates/happenstance-sync/tests/cursor_shape_probe.rs:149`).
+
+With a text token, every adapter whose resume point is binary text-encodes its own cursor and picks
+its own alphabet. With a bytes token, the wire picks the alphabet once, and a text cursor is the
+adapter that converts. This record proposes text; the choice is the owner's.
 
 ### 3. The version is carried on every message, and version 1 is this set
 
@@ -118,20 +144,34 @@ message set adds no codec, attribute or helper that touches either field.
 
 ## Evidence
 
-In `crates/happenstance-sync/tests/wire.rs`, each test runs in JSON and postcard and has a compiled
-wrong implementation beside it:
+In `crates/happenstance-sync/tests/wire.rs`. Each test says which formats it runs in, and whether
+it has a control (a compiled wrong implementation that the same assertions reject):
 
-- `wire::the_message_set_round_trips_in_both_formats`: all four messages round-trip.
-- `wire::a_real_message_is_refused_before_it_decodes`: a malformed `PushBatch` at an unknown
-  version fails as a version refusal, and a derived envelope over the same bytes fails as malformed
-  instead.
+- `wire::the_message_set_round_trips_in_both_formats`: all four messages round-trip in JSON and
+  postcard, `Ack` with `appended` at `u64::MAX`. It has no control. A derived pair round-trips by
+  construction, so this is a smoke test that each type encodes at all.
+- `wire::a_real_message_is_refused_before_it_decodes`: in JSON, a malformed `PushBatch` at an
+  unknown version fails as a version refusal, and a derived envelope over the same bytes fails as
+  malformed instead. In postcard, the version followed by a batch that claims five groups and ends
+  fails as `SerdeDeCustom`. At the supported version, and through the derived envelope, the same
+  batch fails as `DeserializeUnexpectedEnd`.
 - `wire::payload_bytes_render_through_the_core_codec`: `[de ad be ef]` is `"3q2+7w=="` in JSON
   and four raw bytes in postcard. Its control, a payload carried in a field of its own, round-trips
-  equal and renders the integer array.
-- `wire::push_batch_preserves_group_boundaries_on_the_wire`: the groups and each guard travel. Its
-  control, a flattened push, round-trips its events and cannot be regrouped into the original.
-- `wire::a_watermark_decodes_canonical`: an unsorted, duplicated watermark decodes canonical. Its
-  control, the derive, keeps the sender's order.
+  equal in JSON and renders the integer array.
+- `wire::push_batch_preserves_group_boundaries_on_the_wire`: the groups and each guard travel in
+  JSON and postcard. Its control flattens a guard-free batch to its events in postcard. It
+  round-trips the events equal, and regrouping them gives a different number of groups from the
+  ones the origin wrote.
+- `wire::a_watermark_decodes_canonical`: an unsorted, duplicated watermark decodes canonical in
+  JSON and postcard. Its control, the derive, keeps both marks and the sender's order in both.
+  `wire::a_descending_watermark_decodes_canonical` covers strictly descending input, which the
+  single sort-and-fold decode handles in one pass.
+- `wire::a_json_push_is_refused_as_a_pull_request`: a push handed to the `PullRequest` decoder is
+  an error in JSON. Its wrong implementation is `PullRequest` without `deny_unknown_fields`. That
+  version decodes the push as `PullRequest { from: None }`, and this test failed against it first.
+- `wire::a_misrouted_postcard_buffer_decodes_as_another_message`: pins that an empty push and a
+  first pull are byte-identical in postcard, and that the push decodes as a pull. It records the
+  fail-open case in §1 and does not prevent it.
 
 ## Consequences
 
@@ -142,6 +182,9 @@ wrong implementation beside it:
   falsifier, which this record does not touch.
 - After the first publish, removing a message type, changing one's shape, or moving the version
   into a handshake is a format break. Until then each is a one-line change.
+- A transport that routes a postcard buffer to the wrong decoder can get a valid message of the wrong
+  kind, and nothing in the bytes refuses it (§1). Routing is the transport's correctness to own, and
+  #117 inherits it.
 
 ## What would make this wrong
 

@@ -202,19 +202,22 @@ impl SendSyncPeer for MemorySyncPeer {
         let mut ack = Ack::default();
 
         for group in &batch.groups {
-            let fresh: Vec<ReplicatedEvent> = group
-                .events
-                .iter()
-                .filter(|event| !Self::holds(&state, event.id))
-                .cloned()
-                .collect();
-
-            ack.skipped += group.events.len() - fresh.len();
+            // Counted one event at a time rather than from `len()`, because the
+            // counts are `u64` on the wire and a `usize` length has no
+            // infallible conversion to it.
+            let mut fresh: Vec<ReplicatedEvent> = Vec::with_capacity(group.events.len());
+            for event in &group.events {
+                if Self::holds(&state, event.id) {
+                    ack.skipped += 1;
+                } else {
+                    ack.appended += 1;
+                    fresh.push(event.clone());
+                }
+            }
             if fresh.is_empty() {
                 continue;
             }
 
-            ack.appended += fresh.len();
             for event in &fresh {
                 state.seen.advance(event.id.store(), event.id.position());
             }

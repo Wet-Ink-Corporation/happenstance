@@ -424,6 +424,15 @@ impl ResumeToken {
 /// peer's limits reach the caller is the transport's (#117), and a fifth
 /// message is additive because no enum holds the four.
 ///
+/// # A mis-routed buffer
+///
+/// A buffer does not say which message it holds, so a transport that routes one
+/// to the wrong decoder gets whatever that decoder makes of it. In JSON this
+/// type refuses unknown fields, so a push handed to it is an error rather than
+/// `PullRequest { from: None }`, which its one optional field would otherwise
+/// default to. Postcard has no equivalent: it carries no field names, and an
+/// empty push and a first pull are both `[01 00]` (ADR-0097 §1).
+///
 /// # Examples
 ///
 /// A first pull, and the one after it:
@@ -442,6 +451,7 @@ impl ResumeToken {
 /// # Ok::<(), serde_json::Error>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct PullRequest {
     /// Where to resume from; `None` for the start of the far side's log.

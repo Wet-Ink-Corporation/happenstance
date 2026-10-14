@@ -255,13 +255,13 @@ impl EventGroup {
 #[non_exhaustive]
 pub struct Ack {
     /// How many events the far side appended, excluding ones it already held.
-    pub appended: usize,
+    pub appended: u64,
     /// How many events the far side already held and skipped.
     ///
     /// Re-delivery is a no-op, not an error: a peer *will* see the same event
     /// more than once, and the count is here so a runner can tell a healthy
     /// overlap from a resume token that is not advancing.
-    pub skipped: usize,
+    pub skipped: u64,
     /// What the far side has now durably seen, per origin store.
     ///
     /// A confirmation, deliberately **not** an event. Writing "peer X has seen

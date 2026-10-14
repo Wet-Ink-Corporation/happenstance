@@ -152,9 +152,13 @@ impl serde::Serialize for Watermark {
     }
 }
 
-/// Re-canonicalises on the way in (WF-10): every pair goes through
-/// [`Watermark::advance`], so an unsorted sequence decodes sorted and two marks
-/// for one store keep the higher.
+/// Re-canonicalises on the way in (WF-10): an unsorted sequence decodes sorted,
+/// and two marks for one store keep the higher — the watermark
+/// [`Watermark::advance`] would build from the same pairs.
+///
+/// Sorted once and folded in one pass, not advanced pair by pair: `advance`
+/// inserts into a sorted vector, so a peer's descending sequence would shift
+/// every mark on every insert, quadratic in the length of input it chose.
 ///
 /// A derive straight onto `marks` is the wrong implementation this replaces. It
 /// would hand a peer's unsorted vector to [`Watermark::get`], whose binary
@@ -162,11 +166,19 @@ impl serde::Serialize for Watermark {
 /// side already holds.
 impl<'de> serde::Deserialize<'de> for Watermark {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let marks = Vec::<(StoreId, SequencePosition)>::deserialize(deserializer)?;
-        let mut watermark = Self::new();
-        for (store, position) in marks {
-            watermark.advance(store, position);
-        }
-        Ok(watermark)
+        let mut marks = Vec::<(StoreId, SequencePosition)>::deserialize(deserializer)?;
+        marks.sort_unstable_by_key(|(store, _)| *store);
+        // `dedup_by` hands each later pair with the one it would be merged
+        // into; folding the higher position into the kept pair makes one pass
+        // leave one mark per store, at its maximum, whatever the sort's order
+        // among equal stores.
+        marks.dedup_by(|(store, position), (kept_store, kept_position)| {
+            let same_store = store == kept_store;
+            if same_store && *position > *kept_position {
+                *kept_position = *position;
+            }
+            same_store
+        });
+        Ok(Self { marks })
     }
 }

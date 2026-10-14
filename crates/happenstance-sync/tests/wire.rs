@@ -468,13 +468,20 @@ mod wire {
     }
 
     /// The four messages, each in its own envelope, in both formats.
+    ///
+    /// It has no control, and no compiled wrong implementation fails it: a
+    /// derived pair round-trips by construction. It is a smoke test that each
+    /// message type encodes and decodes at all; the tests below carry the
+    /// controls.
     #[test]
     fn the_message_set_round_trips_in_both_formats() {
         round_trip(&two_groups());
         round_trip(&PushBatch::empty());
 
+        // Fixed-width on the wire (ADR-0097 §2): a count a 64-bit sender can
+        // write, a 32-bit receiver can hold.
         let mut ack = Ack::default();
-        ack.appended = 2;
+        ack.appended = u64::MAX;
         ack.skipped = 1;
         ack.confirmed.advance(ORIGIN, SequencePosition::FIRST);
         ack.confirmed.advance(OTHER_ORIGIN, second());
@@ -529,11 +536,32 @@ mod wire {
             "the control decodes the message first and never reaches the version: {derived}"
         );
 
-        let bytes = foreign_postcard(UNSUPPORTED_VERSION, two_groups());
-        assert!(matches!(
-            postcard::from_bytes::<Envelope<PushBatch>>(&bytes),
-            Err(postcard::Error::SerdeDeCustom)
-        ));
+        // Postcard, the same shape: the version, then a batch that claims five
+        // groups and ends. A decoder that read the message first would run off
+        // the end and say `DeserializeUnexpectedEnd`; the real envelope stops at
+        // the version and says `SerdeDeCustom`, which is all postcard can say.
+        let truncated_batch = |version: u16| {
+            let mut bytes = postcard::to_stdvec(&version).unwrap();
+            bytes.push(5);
+            bytes
+        };
+        let bytes = truncated_batch(UNSUPPORTED_VERSION);
+        assert_eq!(
+            postcard::from_bytes::<Envelope<PushBatch>>(&bytes).unwrap_err(),
+            postcard::Error::SerdeDeCustom,
+            "the version is refused before the truncated batch is read: {bytes:02x?}"
+        );
+        assert_eq!(
+            postcard::from_bytes::<Envelope<PushBatch>>(&truncated_batch(FORMAT_VERSION))
+                .unwrap_err(),
+            postcard::Error::DeserializeUnexpectedEnd,
+            "at a supported version the same batch fails as truncated, not refused"
+        );
+        assert_eq!(
+            postcard::from_bytes::<DerivedPushEnvelope>(&bytes).unwrap_err(),
+            postcard::Error::DeserializeUnexpectedEnd,
+            "the control reads the batch first and runs off its end"
+        );
         let (found, _) = postcard::take_from_bytes::<u16>(&bytes).unwrap();
         assert_eq!(
             check_format_version(found),
@@ -583,9 +611,10 @@ mod wire {
     }
 
     /// SY-30 on the wire: a receiver is told the groups, with each guard on
-    /// its own events. The control flattens the batch to its events, as a
-    /// smaller encoding would; it round-trips every event equal and cannot
-    /// say which landed together.
+    /// its own events, in both formats. The control flattens a guard-free
+    /// batch to its events, as a smaller encoding would; it round-trips every
+    /// event equal and cannot say which landed together, so the count of
+    /// groups a receiver rebuilds is not the count the origin wrote.
     #[test]
     fn push_batch_preserves_group_boundaries_on_the_wire() {
         let batch = two_groups();
@@ -601,8 +630,30 @@ mod wire {
             "the second group's absent guard travels as null, not as a missing key (WF-2)"
         );
         assert_eq!(groups[1]["events"].as_array().unwrap().len(), 2);
+
+        let bytes = postcard::to_stdvec(&Envelope::new(&batch)).unwrap();
+        let back: Envelope<PushBatch> = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(
+            group_shape(back.message()),
+            [(true, 1), (false, 2)],
+            "postcard keeps each group, its guard and its events: {bytes:02x?}"
+        );
+
+        // The control has no guard to lean on: every group's guard is `None`,
+        // so only the boundaries themselves can tell the batches apart.
+        let unguarded = PushBatch::new(
+            batch
+                .groups
+                .iter()
+                .map(|group| EventGroup::new(None, group.events.clone()))
+                .collect(),
+        );
+        let bytes = postcard::to_stdvec(&Envelope::new(&unguarded)).unwrap();
+        let back: Envelope<PushBatch> = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(group_shape(back.message()), [(false, 1), (false, 2)]);
+
         let flattened = FlattenedPush {
-            events: batch.events().cloned().collect(),
+            events: unguarded.events().cloned().collect(),
         };
         let bytes = postcard::to_stdvec(&Envelope::new(&flattened)).unwrap();
         let back: Envelope<FlattenedPush> = postcard::from_bytes(&bytes).unwrap();
@@ -619,15 +670,25 @@ mod wire {
                 .collect(),
         );
         assert_ne!(
-            regrouped, batch,
+            regrouped.groups.len(),
+            unguarded.groups.len(),
             "and a receiver regrouping it publishes groups the origin never wrote"
         );
     }
 
+    /// Each group as (guarded?, how many events), in forwarding order.
+    fn group_shape(batch: &PushBatch) -> Vec<(bool, usize)> {
+        batch
+            .groups
+            .iter()
+            .map(|group| (group.guard.is_some(), group.events.len()))
+            .collect()
+    }
+
     /// WF-10 for the one hand-written impl the message set adds: a watermark
     /// decodes canonical whatever order the sender wrote, and two marks for one
-    /// store keep the higher. The control is the derive this impl replaces,
-    /// which keeps the sender's order and both marks.
+    /// store keep the higher, in both formats. The control is the derive this
+    /// impl replaces, which keeps the sender's order and both marks.
     #[test]
     fn a_watermark_decodes_canonical() {
         let (low, high) = if OTHER_ORIGIN < ORIGIN {
@@ -640,12 +701,12 @@ mod wire {
             (low, SequencePosition::FIRST),
             (high, SequencePosition::FIRST),
         ];
-        let json = serde_json::to_string(&unsorted).unwrap();
-
-        let decoded: Watermark = serde_json::from_str(&json).unwrap();
         let mut expected = Watermark::new();
         expected.advance(low, SequencePosition::FIRST);
         expected.advance(high, second());
+
+        let json = serde_json::to_string(&unsorted).unwrap();
+        let decoded: Watermark = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded, expected);
         assert_eq!(decoded.get(high), Some(second()));
         let derived: DerivedWatermark = serde_json::from_str(&json).unwrap();
@@ -657,6 +718,116 @@ mod wire {
         assert!(
             !derived.0.is_sorted_by_key(|(store, _)| *store),
             "and the sender's order, which a binary search then misses"
+        );
+
+        // A slice, not the array: postcard writes a fixed-size array without
+        // the length prefix a sequence carries, and a watermark is a sequence.
+        let bytes = postcard::to_stdvec(unsorted.as_slice()).unwrap();
+        let decoded: Watermark = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded, expected, "postcard: {bytes:02x?}");
+        assert_eq!(decoded.get(high), Some(second()));
+        let derived: DerivedWatermark = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(derived.0.len(), unsorted.len(), "the control, positionally");
+        assert!(!derived.0.is_sorted_by_key(|(store, _)| *store));
+    }
+
+    /// The worst order for a decoder that inserts each mark where it belongs:
+    /// strictly descending, every insert at the front, with a repeated store
+    /// whose lower mark arrives last. It decodes to the same canonical
+    /// watermark as ascending input.
+    #[test]
+    fn a_descending_watermark_decodes_canonical() {
+        let stores: Vec<StoreId> = (1..=8_u8)
+            .map(|byte| StoreId::from_bytes([byte; 16]))
+            .collect();
+        let mut descending: Vec<(StoreId, SequencePosition)> = stores
+            .iter()
+            .rev()
+            .map(|store| (*store, second()))
+            .collect();
+        descending.push((stores[3], SequencePosition::FIRST));
+
+        let mut expected = Watermark::new();
+        for store in &stores {
+            expected.advance(*store, second());
+        }
+
+        let json = serde_json::to_string(&descending).unwrap();
+        let decoded: Watermark = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, expected, "JSON: {json}");
+        assert!(
+            decoded
+                .iter()
+                .map(|(store, _)| store)
+                .eq(stores.iter().copied())
+        );
+
+        let bytes = postcard::to_stdvec(&descending).unwrap();
+        let decoded: Watermark = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded, expected, "postcard: {bytes:02x?}");
+    }
+
+    // =====================================================================
+    // A mis-routed buffer (ADR-0097 §1)
+    //
+    // A buffer does not say which message it holds; the transport does. These
+    // two tests pin what happens when the transport is wrong.
+    // =====================================================================
+
+    /// In JSON, a push handed to a pull's decoder is refused rather than read
+    /// as a pull from the start of the log.
+    ///
+    /// **Wrong implementation it rejects:** `PullRequest` without
+    /// `#[serde(deny_unknown_fields)]`. Its one field is an `Option`, which a
+    /// derive defaults to `None` when the key is absent, so it ignores
+    /// `groups` and decodes `PullRequest { from: None }` — fail-open, a full
+    /// re-pull answered to a push.
+    #[test]
+    fn a_json_push_is_refused_as_a_pull_request() {
+        let push = serde_json::to_string(&Envelope::new(two_groups())).unwrap();
+        let refused = serde_json::from_str::<Envelope<PullRequest>>(&push);
+        assert!(
+            refused.is_err(),
+            "a push is not a pull from the start: {refused:?}"
+        );
+
+        let empty = serde_json::to_string(&Envelope::new(PushBatch::empty())).unwrap();
+        assert!(serde_json::from_str::<Envelope<PullRequest>>(&empty).is_err());
+
+        // The real pull still decodes, so the refusal above is the push's.
+        let pull = serde_json::to_string(&Envelope::new(PullRequest::from_start())).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Envelope<PullRequest>>(&pull)
+                .unwrap()
+                .into_message(),
+            PullRequest::from_start()
+        );
+    }
+
+    /// In postcard, an empty push and a first pull are the same two bytes, so
+    /// a mis-routed buffer decodes silently as the other message. Postcard
+    /// carries no field names, so it has no `deny_unknown_fields` to refuse
+    /// with: the route is the only thing that tells them apart.
+    ///
+    /// Pinned rather than prevented, so that a reader of ADR-0097 sees the
+    /// fail-open case measured, and so that a change which made the two
+    /// encodings differ is noticed and the ADR's text revisited.
+    #[test]
+    fn a_misrouted_postcard_buffer_decodes_as_another_message() {
+        let push = postcard::to_stdvec(&Envelope::new(PushBatch::empty())).unwrap();
+        let pull = postcard::to_stdvec(&Envelope::new(PullRequest::from_start())).unwrap();
+        assert_eq!(push, pull, "an empty push is a first pull, byte for byte");
+        assert_eq!(
+            push,
+            [postcard::to_stdvec(&FORMAT_VERSION).unwrap(), vec![0x00]].concat(),
+            "the version, then a zero: no groups, or no token"
+        );
+        assert_eq!(
+            postcard::from_bytes::<Envelope<PullRequest>>(&push)
+                .unwrap()
+                .into_message(),
+            PullRequest::from_start(),
+            "and the push decodes as a pull from the start of the log"
         );
     }
 }

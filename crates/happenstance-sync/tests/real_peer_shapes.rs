@@ -235,7 +235,7 @@ impl SendSyncPeer for OneShotHttpPeer {
 /// requirement and therefore accepts both peers. If this function had needed to
 /// know which peer it held — a socket to close, a transaction to commit, a
 /// cursor to advance — the port would have failed its exam here.
-async fn exchange<P: SyncPeer>(peer: &P, outbound: &PushBatch) -> Result<(usize, usize), P::Error> {
+async fn exchange<P: SyncPeer>(peer: &P, outbound: &PushBatch) -> Result<(u64, usize), P::Error> {
     let limits = peer.limits();
     if !limits.admits(outbound) {
         // A capability check the runner can make *before* the round trip, which
