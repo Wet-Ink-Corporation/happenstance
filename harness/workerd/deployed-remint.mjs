@@ -15,8 +15,11 @@
 // Deployed only: local workerd does not implement a restore
 // (test/remint.test.ts pins that). ASSERTED WHEN THE RESTORE RUNS, RECORDED
 // WHEN IT CANNOT. A cell whose after-half answers 422 ran, observed the
-// restore, and failed the judge: that is a `remint_identity` regression (or a
-// control that no longer shows the hazard), and the script exits 1. Anything
+// restore, and failed the judge, and the script exits 1. That is a
+// `remint_identity` regression, a control that no longer shows the hazard, or
+// a remint cell with reused-positions=0: the restore did not roll the
+// position counter back, so the instrument is blind and cannot tell a re-mint
+// from its absence. Anything
 // else short of a pass (a cell that could not run, a restore that did not
 // land, a restart that never came) is printed with a warning and exits 0,
 // like deployed-restart.mjs, because nothing pinned here documents how fast
@@ -94,7 +97,7 @@ async function cell(mode) {
 }
 
 const results = await Promise.all(["remint", "control"].map(cell));
-console.log("--- deployed re-mint across a bookmark restore (record-only) ---");
+console.log("--- deployed re-mint across a bookmark restore (asserted when the restore runs) ---");
 for (const r of results) {
   if (r.note !== undefined) {
     console.log(`?    ${r.mode}  could not run: ${r.note}`);
@@ -104,7 +107,7 @@ for (const r of results) {
 }
 const judgedFailed = results.filter((r) => r.judgedFailed === true).map((r) => r.mode);
 if (judgedFailed.length > 0) {
-  console.log(`::error::the restore ran and the judge failed: ${judgedFailed.join(", ")}; see the table`);
+  console.log(`::error::the restore ran and the judge failed: ${judgedFailed.join(", ")}; a regression, or reused-positions=0 (the restore kept the position counter, so the cell is blind); see the table`);
   process.exit(1);
 }
 if (!results.every((r) => r.passed === true)) {
