@@ -41,3 +41,9 @@ mod narrative;
 // what keeps `dead_code` quiet over a register nothing reads yet and what lets
 // a same-package bin write `use xtask::pointers::…` when HS-P0020's step lands.
 pub mod pointers;
+
+// `CommonMark`'s fence rule, stated once for the bin's `lint-narrative` step,
+// the site renderer and the integration tests (#294). In the lib, and `pub`,
+// for the reason `pointers` is: the bin and each test are separate crates, and
+// only this target's public surface reaches all of them.
+pub mod fence;
