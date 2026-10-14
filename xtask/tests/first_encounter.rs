@@ -795,35 +795,32 @@ fn crate_root_docs() -> String {
         .join("\n")
 }
 
-// The `CommonMark` fence rule, `doc_fence_delimiter` and `closes`, lives in
-// `tests/support/fence.rs`, shared with `carry_your_invariant.rs` (#279). It is
-// declared here rather than at the top because ADR-0054 cites this file by
-// line. `fences` above keeps its backtick-only, unindented reading, which
-// the page's tests were written against.
-mod support {
-    pub(crate) mod fence;
-}
-use support::fence::{closes, doc_fence_delimiter};
+// The `CommonMark` fence rule lives in `xtask::fence`, shared with
+// `carry_your_invariant.rs`, `lint-narrative` and the site renderer (#279,
+// #294). It is imported here rather than at the top because ADR-0054 cites
+// this file by line. `fences` above keeps its backtick-only, unindented
+// reading, which the page's tests were written against.
+use xtask::fence::{self, Opener};
 
 /// Every fence opener in `docs`, as `(line, info)`, 1-based.
 ///
-/// A fence closes only by [`closes`], so a `~~~` line inside a backtick fence
-/// is body rather than a new opener.
+/// A fence closes only by [`fence::Delimiter::closes`], so a `~~~` line
+/// inside a backtick fence is body rather than a new opener.
 fn doc_fence_openers(docs: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
-    let mut open: Option<(char, usize)> = None;
+    let mut open: Option<Opener> = None;
     for (index, line) in docs.lines().enumerate() {
-        let Some((mark, run, info)) = doc_fence_delimiter(line) else {
+        let Some(found) = fence::delimiter(line) else {
             continue;
         };
         match open {
-            Some(opener) if closes(opener, (mark, run, info)) => {
+            Some(opener) if found.closes(opener) => {
                 open = None;
             }
             Some(_) => {}
             None => {
-                out.push((index + 1, info.to_owned()));
-                open = Some((mark, run));
+                out.push((index + 1, found.info.to_owned()));
+                open = Some(found.opener());
             }
         }
     }
@@ -882,6 +879,15 @@ fn a_tilde_or_indented_opt_out_in_the_crate_root_is_caught() {
     }
 }
 
+/// A doc line that opens with an inline code span is prose, not a fence
+/// (#294). Read as an opener, it would pair with the `ignore` fence's opener
+/// as its closer, and the opt-out would never be seen.
+#[test]
+fn a_code_span_at_the_start_of_a_line_hides_no_opt_out() {
+    let docs = "```x``` opens the paragraph.\n\n```ignore\nfn f() {}\n```\n";
+    assert_eq!(opted_out(docs), [(3, "ignore".to_owned())]);
+}
+
 // ---------------------------------------------------------------------------
 // #234 — the crate root's headings, against rustdoc's sidebar
 // ---------------------------------------------------------------------------
@@ -909,19 +915,19 @@ const CRATE_ROOT_HEADING: usize = 22;
 
 /// Every ATX heading in `docs` outside a fence, as `(line, text)`, 1-based.
 ///
-/// A fence is walked by [`doc_fence_delimiter`]'s `CommonMark` reading,
+/// A fence is walked by [`fence::delimiter`]'s `CommonMark` reading,
 /// because a `# ` line inside a doctest is a hidden line rather than a
 /// heading. A heading is up to three spaces of indentation, one to six `#`,
 /// then a space or the end of the line; `#hashtag` is a paragraph.
 fn doc_headings(docs: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
-    let mut open: Option<(char, usize)> = None;
+    let mut open: Option<Opener> = None;
     for (index, line) in docs.lines().enumerate() {
-        if let Some((mark, run, info)) = doc_fence_delimiter(line) {
+        if let Some(found) = fence::delimiter(line) {
             open = match open {
-                Some(opener) if closes(opener, (mark, run, info)) => None,
+                Some(opener) if found.closes(opener) => None,
                 Some(still) => Some(still),
-                None => Some((mark, run)),
+                None => Some(found.opener()),
             };
             continue;
         }
