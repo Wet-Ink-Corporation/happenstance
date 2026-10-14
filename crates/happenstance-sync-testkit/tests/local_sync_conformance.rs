@@ -13,7 +13,7 @@ use happenstance_core::StoreId;
 use happenstance_sync::{
     Ack, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled, PushBatch, SyncPeer,
 };
-use happenstance_sync_testkit::SyncFixture;
+use happenstance_sync_testkit::{RefusalsOf, SyncFixture, oversized_push_refusal};
 
 /// A fixture whose peer is genuinely `!Send`.
 #[derive(Debug)]
@@ -36,6 +36,10 @@ impl SyncFixture for LocalFixture {
         LocalPeer {
             inner: Rc::clone(&self.peer),
         }
+    }
+
+    async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
+        oversized_push_refusal(peer).await
     }
 }
 

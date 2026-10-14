@@ -169,3 +169,8 @@ pub use peer::{
 // says at the call site *which* version it is, and phase 13 will plausibly add a
 // negotiated protocol version that is not this one; a bare `FORMAT_VERSION` at
 // the crate root would make the two indistinguishable in an import list.
+
+// SY-36's failure class. Declared after the rest rather than in alphabetical
+// order, so the lines above keep the numbers the specification cites.
+pub mod classify;
+pub use classify::{Classify, FailureClass};
