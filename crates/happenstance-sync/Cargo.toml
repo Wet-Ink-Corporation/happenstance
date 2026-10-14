@@ -31,6 +31,11 @@ thiserror.workspace = true
 trait-variant.workspace = true
 
 [dev-dependencies]
+# Not a second dependency: the same crate with the in-memory store switched on,
+# for tests only. `tests/flavours.rs` wraps `MemoryEventStore` in an `Rc` to get
+# a store that is genuinely `!Send` (SY-17), and the runtime build of this crate
+# still never pulls the in-memory store unless its own `memory` feature asks.
+happenstance-core = { workspace = true, features = ["std", "serde", "memory"] }
 # Only the cursor-shape probe needs a `Stream`; the port itself does not, which
 # is the finding rather than an omission.
 futures-core.workspace = true

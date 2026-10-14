@@ -8,13 +8,14 @@
 //! # What the gate proves
 //!
 //! Mandatory, in order: formatting; clippy over every target and feature with
-//! `-D warnings`; the test suite; five `wasm32-unknown-unknown` builds, of which
+//! `-D warnings`; the test suite; six `wasm32-unknown-unknown` builds, of which
 //! `happenstance-core`'s is what keeps [ADR-0001]'s `!Send` port flavour honest
 //! and the typed layer's is what compiles the crate a Workers application
 //! actually installs — and none of which says anything about *which* flavour the
 //! code bound, because `Send` is available on that target and only a `Send`
-//! store is not (`crates/happenstance/tests/flavours.rs` is that instrument);
-//! two further `wasm32` rows that are a different claim from those five, because
+//! store is not (`crates/happenstance/tests/flavours.rs` and
+//! `crates/happenstance-sync/tests/flavours.rs` are that instrument);
+//! two further `wasm32` rows that are a different claim from those six, because
 //! they **execute** rather than compile — the conformance targets are held to
 //! their own rule enumerations by a step nothing can skip, and then the rules are
 //! run on the target under `wasm-bindgen-test-runner`, which is where CF-23
@@ -143,6 +144,10 @@ struct Step {
     /// probe is not forced to be an invocation of the thing it is probing.
     probe: Option<&'static [&'static str]>,
 }
+
+/// The `wasm32` check of `happenstance-sync`, spelled once: the step table
+/// names it, and [`wasm_steps`] selects it by this name.
+const SYNC_WASM: &str = "wasm32 build of the sync crate";
 
 const REQUIRED: &[Step] = &[
     Step {
@@ -383,6 +388,38 @@ const REQUIRED: &[Step] = &[
             "--no-default-features",
             "--features",
             "std,json",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
+        // `happenstance-sync`'s own claim, checked. Its crate root has said
+        // "the whole crate builds for `wasm32-unknown-unknown`" since phase 2 and
+        // nothing in this gate compiled it there (#116): the replication port is
+        // the one whose `!Send` peer — SQLite inside a Durable Object — sits in
+        // the *middle* of a chain rather than at a leaf (SY-17), so the edge is
+        // where this crate has to build.
+        //
+        // What it does NOT buy is the same as the typed layer's step above:
+        // `Send` exists on this target, so a green check says nothing about which
+        // port flavour a generic body bound. The instrument for that half is
+        // `crates/happenstance-sync/tests/flavours.rs`, which instantiates the
+        // runner's step against a store and a peer that each hold an `Rc`.
+        //
+        // `--all-features`: the one feature, `memory`, forwards to the contract
+        // crate's, so this also compiles its in-memory store for wasm32 (the
+        // powerset below covers the default). No `--tests`: the crate's test
+        // targets use a multi-threaded tokio runtime with no wasm story.
+        name: SYNC_WASM,
+        program: "cargo",
+        args: &[
+            "check",
+            "--locked",
+            "-p",
+            "happenstance-sync",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--all-features",
         ],
         env: &[],
         probe: None,
@@ -990,6 +1027,11 @@ const OPTIONAL: &[Step] = &[
             // and never a replacement for it — the probe below is why.
             "-p",
             "happenstance",
+            // The sync port (#116). Its mandatory row checks `--all-features`,
+            // so the configuration a consumer gets by default, `memory` off, is
+            // compiled for this target here.
+            "-p",
+            "happenstance-sync",
             "--target",
             "wasm32-unknown-unknown",
             "--feature-powerset",
@@ -1286,6 +1328,11 @@ fn print_help() {
 /// fifth was, and in that order: the guard that cannot be skipped comes before
 /// the run that can.
 ///
+/// Eight since #116. The sync crate's check joined the compile rows after the
+/// typed layer's and before the execution pair, so the family still reads as
+/// compiles first and runs second; its crate root's claim to build for the edge
+/// had been prose until then.
+///
 /// [ADR-0001]: ../../.kb/decisions/0001-async-port-flavours.md
 fn wasm_steps() -> Vec<&'static Step> {
     steps_named(&[
@@ -1294,6 +1341,7 @@ fn wasm_steps() -> Vec<&'static Step> {
         "wasm32 build of the Cloudflare adapter",
         "wasm32 build of the Neon adapter",
         "wasm32 build of the typed layer",
+        SYNC_WASM,
         "wasm32 conformance targets are non-vacuous",
         "wasm32 run of the conformance rules",
     ])
@@ -1438,7 +1486,7 @@ mod tests {
     use std::fs;
 
     use crate::spec_trace::workspace_root;
-    use crate::{OPTIONAL, REQUIRED, Step, wasm_steps};
+    use crate::{OPTIONAL, REQUIRED, SYNC_WASM, Step, wasm_steps};
 
     /// The feature that gated the projection module and its re-exports from
     /// phase 6 until ADR-0063 lifted it. The contract crate carried it on,
@@ -1528,7 +1576,7 @@ mod tests {
 
     /// The `wasm32` family as `cargo xtask wasm` runs it, in order.
     ///
-    /// The five checks keep their position — a reader who knows the transcript
+    /// The checks keep their position — a reader who knows the transcript
     /// should still recognise it — and the two rows that turn the family from a
     /// compile into a run are appended after them, never interleaved.
     const WASM_STEPS: &[&str] = &[
@@ -1537,6 +1585,7 @@ mod tests {
         "wasm32 build of the Cloudflare adapter",
         "wasm32 build of the Neon adapter",
         TYPED_LAYER_WASM,
+        SYNC_WASM,
         WASM_CONFORMANCE_SHAPE,
         WASM_CONFORMANCE_RUN,
     ];
@@ -1866,6 +1915,10 @@ mod tests {
         assert_eq!(
             steps[4].name, TYPED_LAYER_WASM,
             "the typed layer's step is not the appended fifth"
+        );
+        assert_eq!(
+            steps[5].name, SYNC_WASM,
+            "the sync crate's check is not the last compile row"
         );
 
         // And the four originals keep their argument lists byte-for-byte
