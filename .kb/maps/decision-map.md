@@ -847,6 +847,20 @@ the name and shape mirror `happenstance-sqlite`'s, which ADR-0086 already commit
 | --- | --- | --- | --- | --- | --- |
 | — | [`kb-decision-wi-690259`](../decisions/wi-690259-should-happenstance-cloudflare-own-the-identity.md) | `happenstance-cloudflare` owns a documented re-mint after a point-in-time restore | accepted | — | — |
 
+## 2026-10-14: what a sync peer is, and its errors classified (#105)
+
+ADR-0026 fills the number the original queue reserved for phase 13's "what is a peer". It
+makes one new call, the owner's `wi-cbaec7` (option A): every error a `SyncPeer` reports states
+its failure class, minted as SY-36 `[PROVISIONAL]` until its rule exists. Everything else it
+records was already in the specification (SY-1 – SY-17), and the published-surface half is
+ADR-0073's. Its envelope section records WF-1's renewal past 1.0 (#119). It supersedes nothing.
+The `wi-cbaec7` atom was moved here from `.kb/_intake/decisions/`, the way `wi-690259` was.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0026 | [`kb-decision-0026`](../decisions/0026-what-a-sync-peer-is.md) | What a sync peer is — one relationship, one round trip, harmless re-delivery, and classified errors | accepted | 13 | — |
+| — | [`kb-decision-wi-cbaec7`](../decisions/wi-cbaec7-adr-0026-105-how-should-syncpeer-error-tell-the.md) | `SyncPeer::Error` states its class: Transient, Split, Park or Stop (owner, Weigh-In) | accepted | 13 | — |
+
 ## 2026-10-14: how two logs reconcile (#106)
 
 ADR-0027 takes the number the original queue reserved for phase 13, which is why its number is

@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 205 clause IDs, of which 198 are normative:
-**160 `[FROZEN]`**, **28 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
+As assembled, this document carries 206 clause IDs, of which 199 are normative:
+**160 `[FROZEN]`**, **29 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -2067,7 +2067,7 @@ published shape is deferred.
 `[DEFERRED — settled by a bridge exercised against the DCB reference
 implementation's encoding, in a `happenstance-dcb-interop` crate with its own
 ADR, owned by the phase that first needs to read another implementation's log.
-No phase currently needs it. The DCB specification and its reference TypeScript
+No phase needs it, and ADR-0026 renews it past 1.0. The DCB specification and its reference TypeScript
 library publish **no** wire format: `EventStore.ts` contains no serialisation
 code, and the specification's JSON snippets are labelled a "potential JSON
 representation" beside an explicit disclaimer that "implementations are not
@@ -6860,9 +6860,9 @@ its clauses now have something in the tree to disagree with.
 
 It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
-phase that builds the port against two real peers — five of the thirty-five,
-with nine more `[PROVISIONAL]` (three and eleven since ADR-0027 settled SY-27 and
-SY-28 without the experiment). The rest are frozen, because the shape
+phase that builds the port against two real peers — five of the thirty-six,
+with a further ten `[PROVISIONAL]` (three and twelve since ADR-0027 settled SY-27
+and SY-28 without the experiment). The rest are frozen, because the shape
 does not wait on the transport. They are written anyway, and the reason is
 recorded in the decision ledger: `RUNBOOK.md:438-439` says deferring the
 sync port **"leaks `EventId` and a tail seam back into `EventStore`"**. That was a
@@ -8095,6 +8095,47 @@ not is the lie SY-33 exists to prevent, one tier down.
 
 ---
 
+**SY-36. Every error a peer reports MUST carry a failure class, and the class
+MUST be a function of the error alone.**
+
+The class is one of four, each with one remedy: **transient** (retry, with
+jittered and capped backoff), **split** (the batch is over a limit; halve it and
+retry), **park** (this event can never land on this peer, as VT-25's
+`ExceedsStoreLimit` says; hold it and carry on with the rest) and **stop**
+(authorisation or configuration; halt the edge and report it). The runner reads
+the class; it MUST NOT infer one from the error's type or message. No class
+exists for a condition-level refusal, because SY-33 forbids the refusal.
+
+`[PROVISIONAL — falsified by a refusal one of the real peers produces whose
+right remedy depends on something other than the error, such as how often it
+has already been retried or which batch carried it, so that no one class per
+error is correct. Falsification test: drive every refusal the Durable Object
+peer, the one-shot-HTTP Postgres peer and the KV-capped peer of SY-18 can
+produce, and find one whose class cannot be stated without that context. A
+refusal that needs a fifth remedy is not a falsifier: the class set is
+`#[non_exhaustive]`, so a fifth class is additive. Decided by
+[ADR-0026](../.kb/decisions/0026-what-a-sync-peer-is.md), on the owner's
+call `wi-cbaec7`.]`
+Rule: `every_refusal_states_its_class` (new, `happenstance-sync-testkit`) — the
+fixture peer is driven into every refusal it can produce, and the rule asserts
+each reports the class the fixture declares for it. Its mutant reports every
+failure as one class.
+Cases: E2E-45, E2E-35, E2E-44.
+
+*Rejects:* the opaque peer error, which is what an associated `type Error` with
+no further bound produces, and which a runner can only treat one way. If it
+retries everything, an oversized event retries for ever and blocks the edge
+behind it. If it stops on everything, a dropped connection needs a human. Both
+are shipped behaviour: two of LiveStore's four sync providers report every
+failure as `UnknownError`, and as a result they "error out instead of
+reconverging" (`livestorejs/livestore-contrib@c375b5ab`,
+`context/sync/electric/.delta/DELTA-001-no-rebase-signal.md`). It also rejects a
+runner-side table from error type to class. One HTTP status type is a stop at
+401, a split at 413 and a retry at 503, so only the adapter that produced it
+can say which.
+
+---
+
 ### 5.11 The rule ADR-0003 bought, and what it costs
 
 The strongest single piece of evidence in the catalogue is that Kestrel Cold
@@ -8167,7 +8208,8 @@ the shape, not the spelling.
 /// One peer relationship. Not a protocol, not a peer set.
 #[trait_variant::make(SendSyncPeer: Send)]
 pub trait SyncPeer {
-    type Error: core::error::Error + 'static;
+    /// SY-36: every error states its class. The spelling is ADR-0026's sketch.
+    type Error: core::error::Error + Classify + 'static;
 
     /// Opaque, owned, transferable. SY-16: not a handle this peer holds.
     type Resume: Clone;
@@ -8190,6 +8232,14 @@ pub trait SyncPeer {
 pub struct Push {
     pub groups: Box<[(Option<AppendCondition>, Box<[SequencedEvent]>)]>,
 }
+
+/// SY-36: what the runner does next, stated by the adapter that failed.
+pub trait Classify {
+    fn class(&self) -> FailureClass;
+}
+
+#[non_exhaustive]
+pub enum FailureClass { Transient, Split, Park, Stop }
 ```
 
 Four Rust-specific choices in that sketch, each of which had an alternative:
@@ -8236,6 +8286,8 @@ Recorded so that silence is never mistaken for agreement.
   the `serde` feature moves events between happenstance instances and is not an
   interoperability surface. If interop is wanted later its home is a separate
   crate beside the peer adapters, not the peer port and not the contract crate.
+  [ADR-0026](../.kb/decisions/0026-what-a-sync-peer-is.md)'s envelope section
+  records WF-1's renewal past 1.0 and the implementation its experiment names.
 - **A store-assigned time on `SequencedEvent`.** E2E-43. Not undecided — section 2
   takes it as VT-9, provisionally, and this section neither adds to it nor relies
   on it. SY-23 gives a deterministic tiebreak and explicitly refuses to be read
@@ -9997,9 +10049,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
-| §5 `SyncPeer` | `SY` | 35 | 21 | 11 | 3 | 0 |
+| §5 `SyncPeer` | `SY` | 36 | 21 | 12 | 3 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **205** | **160** | **28** | **10** | **7** |
+| **Total** | | **206** | **160** | **29** | **10** | **7** |
 
 ### 7.2 The table
 
@@ -10191,6 +10243,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
+| SY-36 | PROVISIONAL | `every_refusal_states_its_class` † | E2E-45, E2E-35, E2E-44 |
 
 #### `CF` — conformance obligations (§6)
 

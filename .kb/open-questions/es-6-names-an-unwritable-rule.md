@@ -79,7 +79,7 @@ last_reviewed: 2026-09-29
 
 ES-6 (`spec/SPECIFICATION.md:2773`) is `[FROZEN]` and its `Rule:` field names
 `store_error_crosses_a_join_handle`, marked **(new)** (`SPECIFICATION.md:2816`). §7.2's generated
-table renders it with `†` (`SPECIFICATION.md:9900`), where the legend defines `†` as "does not
+table renders it with `†` (`SPECIFICATION.md:9952`), where the legend defines `†` as "does not
 exist yet". That identifier occurs as no `fn` anywhere in the workspace. It occurs only in prose:
 twice in `RUNBOOK.md`, once in `.kb/decisions/0008`, three times in `.kb/decisions/0009`, three times in
 comments in `happenstance-cloudflare`, and in the specification itself. One of those comments
@@ -143,7 +143,7 @@ real gap and not an artifact of one reading.
 One citation in the paragraph above was repaired here rather than by the repoint offered to it, and
 the difference is worth recording because it is the hazard `kb-decision-0045` and
 `kb-playbook-anchoring-citations-001` are about. The `[REOPEN]` lane's brief listed this atom's
-`SPECIFICATION.md:9168` as drifting to `8625`, anchored on the line `nothing. Batch shape's tick is
+`SPECIFICATION.md:9220` as drifting to `8625`, anchored on the line `nothing. Batch shape's tick is
 the *one-sided* one`, and reported the anchor as unique and the repoint as mechanical. Both are
 true and the result is still wrong: that line is §7's batch-shape prose, not §7.2's table row, and
 checking the revision the citation was written against (`76e9424`, 2026-08-19) shows the ES-6 row

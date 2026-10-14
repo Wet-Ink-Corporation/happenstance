@@ -27,6 +27,25 @@ run locally; CI runs it.
 
 ---
 
+## 2026-10-14 — ADR-0026, what a sync peer is (#105, #119)
+
+*Committed on `claude/project-thread-95afyv-105`.* Phase 13's first ADR. It records SY-1 – SY-17
+as settled, cites ADR-0073 for the published half, and makes the owner's one new call
+(`wi-cbaec7`, option A): a `SyncPeer` error states its failure class, `Transient`, `Split`,
+`Park` or `Stop`, through a bound on the associated `Error`. That is minted as SY-36
+`[PROVISIONAL]`, with a `freeze-by-13` disposition, until #243 lands
+`every_refusal_states_its_class` and its single-class mutant. LiveStore's single total order with
+client rebase is cited as the rejected design. The envelope section renews WF-1 past 1.0 against
+a bridge to a UmaDB server's `umadb.proto` service (#119). The `wi-cbaec7` atom moved from intake
+into `.kb/decisions/`, and the decision map, ledgers and phase file followed. Shifted CF-34
+citations were repointed in markdown. Five Rust comments still cite CF-34's old line, and this
+change could not edit them.
+
+**Verified.** `cargo xtask spec-trace`, `lint-kb`, `lints`, `lint-constitution` and
+`cargo fmt --check` pass. The full `cargo xtask ci` was not run locally; CI runs it.
+
+---
+
 ## 2026-10-14 — phase 13's names claimed, and its owner calls answered
 
 *Committed on `claude/project-thread-95afyv`, on `a69ded4`.* The owner claimed
