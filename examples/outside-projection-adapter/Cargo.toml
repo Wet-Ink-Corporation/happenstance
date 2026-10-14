@@ -46,7 +46,7 @@ doc-scrape-examples = true
 # again. `crates/happenstance-core/tests/projection_recipe.rs` derives the
 # requirement from the gates `lib.rs` carries, so this line and the recipe go
 # red together rather than one of them being a documented departure.
-happenstance-core = { version = "0.4.2", path = "../../crates/happenstance-core" }
+happenstance-core = { version = "0.4.3", path = "../../crates/happenstance-core" }
 
 # The one flag this crate declares, and it is declared because the published
 # recipe says to declare it (`happenstance_core::ProjectionProbe`'s own rustdoc).
@@ -75,7 +75,7 @@ conformance = ["happenstance-core/conformance"]
 # exception: every publishable crate reaches the testkit by path alone, and this
 # one stands where a stranger stands, so it declines that convenience too.
 [dev-dependencies]
-happenstance-testkit = { version = "0.4.2", path = "../../crates/happenstance-testkit" }
+happenstance-testkit = { version = "0.4.3", path = "../../crates/happenstance-testkit" }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 # Held to the workspace's own lint bar rather than to rustc's defaults. An
