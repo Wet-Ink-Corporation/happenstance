@@ -130,6 +130,12 @@
 //!   token rather than a stream. **The type checker did not force that choice**,
 //!   and the transcript showing it did not is the most useful thing this sketch
 //!   produced.
+//!
+//! # Features
+//!
+//! * **`memory`**, off by default: `MemorySyncPeer`, the in-memory reference
+//!   peer, for doctests and for testing sync wiring before a real peer exists.
+//!   It turns on `happenstance-core/memory` too.
 
 #![doc(html_no_source)]
 #![cfg_attr(docsrs, feature(doc_cfg))]

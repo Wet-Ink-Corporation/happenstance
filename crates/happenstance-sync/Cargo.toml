@@ -59,9 +59,9 @@ default = []
 memory = ["happenstance-core/memory"]
 
 # The test targets that construct a `MemorySyncPeer`. Named rather than gated
-# with `#![cfg(feature = "memory")]` inside the file, so that a run without the
-# feature reports the target as skipped for a missing feature instead of
-# compiling an empty binary that passes. The gate runs `--all-features`.
+# with `#![cfg(feature = "memory")]` inside the file, so that without the
+# feature the target is not built at all, and naming it with `--test` is an
+# error rather than an empty binary that passes. The gate runs `--all-features`.
 [[test]]
 name = "flavours"
 required-features = ["memory"]

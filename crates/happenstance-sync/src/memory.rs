@@ -9,10 +9,10 @@
 //! The same three `happenstance-core` gives for `MemoryEventStore`, one port
 //! over, and the same cold start the projection port had without one:
 //!
-//! 1. **The oracle.** `happenstance-sync-testkit`'s suite is pointed at this
-//!    peer first: it is the reference peer every conformance rule must pass
-//!    against before a rule is allowed to fail a real adapter. A rule red here
-//!    is a wrong rule, not a wrong peer. So the bodies are real — a fixture
+//! 1. **The oracle.** `happenstance-sync-testkit`'s suite, which #111 builds,
+//!    will be pointed at this peer first: the reference peer every conformance
+//!    rule must pass against before it may fail a real adapter. A rule red here
+//!    will be a wrong rule, not a wrong peer. So the bodies are real — a fixture
 //!    whose methods are `todo!()` cannot be the thing a suite is pointed at —
 //!    and that is the difference between this type and the two stand-ins in
 //!    this crate's `tests/`.
@@ -94,6 +94,17 @@ pub enum MemoryPeerError {
 
 /// An in-memory peer.
 ///
+/// `Send + Sync`, so it implements [`SendSyncPeer`] and gets the bare
+/// [`SyncPeer`](crate::SyncPeer) for free. That is the right choice for a
+/// fixture: a suite written against it can be run under `tokio::spawn`, and the
+/// `!Send` half of the port is exercised by the Durable-Object-shaped stand-in
+/// in `tests/` instead.
+///
+/// `Mutex` rather than `RefCell` for exactly that reason, and the cost is
+/// stated rather than hidden: every method can now fail with
+/// [`MemoryPeerError::Poisoned`], a failure mode a single-threaded peer does not
+/// have.
+///
 /// # Examples
 ///
 /// A device pushes what it holds to a hub, and a second device pulls it — the
@@ -134,17 +145,6 @@ pub enum MemoryPeerError {
 /// # Ok(())
 /// # }
 /// ```
-///
-/// `Send + Sync`, so it implements [`SendSyncPeer`] and gets the bare
-/// [`SyncPeer`](crate::SyncPeer) for free. That is the right choice for a
-/// fixture: a suite written against it can be run under `tokio::spawn`, and the
-/// `!Send` half of the port is exercised by the Durable-Object-shaped stand-in
-/// in `tests/` instead.
-///
-/// `Mutex` rather than `RefCell` for exactly that reason, and the cost is
-/// stated rather than hidden: every method can now fail with
-/// [`MemoryPeerError::Poisoned`], a failure mode a single-threaded peer does not
-/// have.
 #[derive(Debug)]
 pub struct MemorySyncPeer {
     store: StoreId,
