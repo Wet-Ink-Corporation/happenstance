@@ -69,7 +69,7 @@ The sketch already knows the classes; it writes them in prose where no runner ca
   (`crates/happenstance-sync/src/peer.rs:396`), and `SyncError::BatchTooLarge` "Retryable only
   after splitting" (`:404`).
 - `MemoryPeerError::BatchTooLarge` says retrying "will fail identically; it has to be split"
-  (`crates/happenstance-sync/src/memory.rs:62-74`).
+  (`crates/happenstance-sync/src/memory.rs:81-93`).
 - `PullBatchLimit::admits` says an oversized single event "returns `false` for ever", and that
   the runner has to tell "wait" from "this will never move" (`peer.rs:349-351`).
 - VT-25 exists so that a sync runner can tell "this will never be accepted here, park it" from

@@ -130,8 +130,15 @@
 //!   token rather than a stream. **The type checker did not force that choice**,
 //!   and the transcript showing it did not is the most useful thing this sketch
 //!   produced.
+//!
+//! # Features
+//!
+//! * **`memory`**, off by default: `MemorySyncPeer`, the in-memory reference
+//!   peer, for doctests and for testing sync wiring before a real peer exists.
+//!   It turns on `happenstance-core/memory` too.
 
 #![doc(html_no_source)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 // No `#![allow(clippy::todo)]`: the last `todo!()` in `src/` was the
 // `MemoryEventStore` ingest impl, which phase 17 deleted rather than finished
 // (see [`ingest`]). The two stand-in peers in `tests/` carry their own.
@@ -140,6 +147,8 @@ extern crate alloc;
 
 pub mod identity;
 pub mod ingest;
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub mod memory;
 pub mod peer;
 pub mod wire;
@@ -148,6 +157,8 @@ pub mod wire;
 // re-exported: one import path per type, and it is the contract crate's.
 pub use identity::{ReplicatedEvent, Watermark};
 pub use ingest::{IngestGroup, IngestStore, Ingested, SendIngestStore};
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory::{MemoryPeerError, MemoryResume, MemorySyncPeer};
 pub use peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, SyncError,
