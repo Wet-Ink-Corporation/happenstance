@@ -8,6 +8,12 @@
 //! peer adapter in this workspace must clear before it is considered to exist,
 //! exactly as `happenstance-testkit` is for a store.
 //!
+//! Two things are decided before it publishes and deliberately not here: its
+//! `version` key — the workspace's today, where CF-32 gives
+//! `happenstance-testkit` its own, and ADR-0066 §4 makes a new rule in this
+//! crate a minor of *its* number — and whether `happenstance-testkit`'s
+//! `RuleOutcome` stays exposed through every rule's signature.
+//!
 //! # Mounting it
 //!
 //! ```
@@ -37,7 +43,7 @@
 //! rule no peer can fail is decorative.
 //!
 //! **No rule decodes a payload** (SY-35), and **no rule holds two peers**
-//! (SY-8). [`sync_suite`] says how the rules keep both.
+//! (SY-8). [`rules`] says how the rules keep both.
 //!
 //! # Harnesses
 //!
@@ -63,7 +69,7 @@ mod fixture;
 // `sync_suite.rs` and not `suite.rs`: the specification cites the event-store
 // family's file by bare name, and `cargo xtask spec-trace` refuses a bare name
 // two files answer to.
-pub mod sync_suite;
+mod sync_suite;
 mod violation;
 
 pub use fixture::{MemorySyncFixture, MemorySyncHandle, SyncFixture};

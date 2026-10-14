@@ -1,8 +1,14 @@
-//! Every sync rule, failing the wrong implementation it names.
+//! Every sync rule, failing the wrong implementation it names — and only that
+//! rule.
 //!
 //! A rule that no peer can fail is decorative. Each wrong peer here is the
-//! reference peer with one plausible mistake added, and each test asserts that
-//! the rule written against that mistake reports a violation of its own clause.
+//! reference peer with one plausible mistake added, and each test runs the
+//! **whole** enumeration against it: the rule written against that mistake must
+//! report a violation of its own clause, and every other rule must pass. That
+//! second half is what makes "fails exactly its rule" a test rather than a
+//! sentence, and it is what keeps a mutant from passing for the wrong reason —
+//! a peer that broke two rules would prove neither check is needed.
+//!
 //! The faithful wrapper is the control: the same plumbing with no mistake
 //! passes every rule, so a red result below is the mistake's and not the
 //! wrapper's.
@@ -16,20 +22,26 @@ use happenstance_sync::{
     Ack, EventGroup, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled, PushBatch,
     SendSyncPeer,
 };
-use happenstance_sync_testkit::{SyncFixture, Violation, rules};
+use happenstance_sync_testkit::{SyncFixture, rules};
 use happenstance_testkit::{RuleOutcome, block_on};
 
-/// The one mistake a wrong peer makes.
+/// The one mistake a [`WrongPeer`] makes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mistake {
     /// None: the control.
     Faithful,
-    /// SY-1's wrong implementation: re-evaluate the guard that travelled with
-    /// a group against what this peer already holds, and drop the group when
-    /// it is violated.
+    /// SY-1's first wrong implementation: re-evaluate the guard that travelled
+    /// with a group against what this peer already holds, and refuse the group
+    /// — acknowledging it as nothing appended — when it is violated.
     EvaluatesTheGuard,
-    /// SY-2's wrong implementation: store every event as its own group, so a
-    /// losing event and its compensation come back apart.
+    /// SY-1's second: the same evaluation, made *after* acknowledging. The ack
+    /// says `appended: 1` and the group is dropped. It is the shape a peer
+    /// takes when it acknowledges on receipt and adjudicates later, and only
+    /// the rule's pull of the whole log can see it — so it is the mutant that
+    /// isolates that check.
+    AcksThenDropsOnTheGuard,
+    /// SY-2's first wrong implementation: store every event as its own group,
+    /// so a losing event and its compensation come back apart.
     FlattensGroups,
 }
 
@@ -39,19 +51,59 @@ struct WrongPeer {
     mistake: Mistake,
 }
 
-impl WrongPeer {
-    /// Everything the inner peer holds, flattened, for the guard check.
-    async fn held(&self) -> Result<Vec<EventGroup>, MemoryPeerError> {
-        let mut groups = Vec::new();
-        let mut resume = None;
-        loop {
-            let pulled = self.inner.pull(resume.as_ref()).await?;
-            if pulled.batch.groups.is_empty() {
-                return Ok(groups);
-            }
-            groups.extend(pulled.batch.groups);
-            resume = Some(pulled.resume);
+/// Everything `peer` holds, from the start of its log.
+async fn held_by(peer: &MemorySyncPeer) -> Result<Vec<EventGroup>, MemoryPeerError> {
+    let mut groups = Vec::new();
+    let mut resume = None;
+    loop {
+        let pulled = peer.pull(resume.as_ref()).await?;
+        if pulled.batch.groups.is_empty() {
+            return Ok(groups);
         }
+        groups.extend(pulled.batch.groups);
+        resume = Some(pulled.resume);
+    }
+}
+
+impl WrongPeer {
+    /// Whether `group`'s travelling guard is violated by what the inner peer
+    /// already holds.
+    async fn guard_is_violated(&self, group: &EventGroup) -> Result<bool, MemoryPeerError> {
+        let Some(guard) = &group.guard else {
+            return Ok(false);
+        };
+        let held = held_by(&self.inner).await?;
+        Ok(held.iter().flat_map(|held| &held.events).any(|event| {
+            guard.is_violated_by(
+                SequencePosition::FIRST,
+                event.event.event_type(),
+                event.event.tags(),
+            )
+        }))
+    }
+
+    /// Pushes one group at a time, letting `refused` decide what a violated
+    /// guard is acknowledged as.
+    async fn push_guarded(
+        &self,
+        batch: &PushBatch,
+        refused: fn(&EventGroup) -> usize,
+    ) -> Result<Ack, MemoryPeerError> {
+        let mut ack = Ack::default();
+        for group in &batch.groups {
+            if self.guard_is_violated(group).await? {
+                ack.appended += refused(group);
+                continue;
+            }
+            let one = self
+                .inner
+                .push(&PushBatch::new(vec![group.clone()]))
+                .await?;
+            ack.appended += one.appended;
+            ack.skipped += one.skipped;
+            ack.confirmed = one.confirmed;
+        }
+        Ok(ack)
     }
 }
 
@@ -73,31 +125,9 @@ impl SendSyncPeer for WrongPeer {
                     .collect();
                 self.inner.push(&PushBatch::new(singletons)).await
             }
-            Mistake::EvaluatesTheGuard => {
-                let mut ack = Ack::default();
-                for group in &batch.groups {
-                    let held = self.held().await?;
-                    let violated = group.guard.as_ref().is_some_and(|guard| {
-                        held.iter().flat_map(|held| &held.events).any(|event| {
-                            guard.is_violated_by(
-                                SequencePosition::FIRST,
-                                event.event.event_type(),
-                                event.event.tags(),
-                            )
-                        })
-                    });
-                    if violated {
-                        continue;
-                    }
-                    let one = self
-                        .inner
-                        .push(&PushBatch::new(vec![group.clone()]))
-                        .await?;
-                    ack.appended += one.appended;
-                    ack.skipped += one.skipped;
-                    ack.confirmed = one.confirmed;
-                }
-                Ok(ack)
+            Mistake::EvaluatesTheGuard => self.push_guarded(batch, |_| 0).await,
+            Mistake::AcksThenDropsOnTheGuard => {
+                self.push_guarded(batch, |group| group.events.len()).await
             }
         }
     }
@@ -133,39 +163,184 @@ impl SyncFixture for WrongFixture {
     }
 }
 
-fn clause_of(result: Result<RuleOutcome, Violation>) -> Option<&'static str> {
-    result.err().map(|violation| violation.clause())
+/// How many events one [`PagingPeer`] pull carries.
+///
+/// Two, because that is the smallest page that ends SY-2's pull *between* the
+/// losing claim and its reversal: the rule's log is one winning claim, then the
+/// pair, so the first page is the winner and the loser.
+const PAGE_EVENTS: usize = 2;
+
+/// Where a [`PagingPeer`] pull left off: a group, and an event inside it.
+///
+/// The event offset is the mistake made visible. The reference peer's token is a
+/// group index alone, because it never ends a pull inside a group.
+#[derive(Debug, Clone, Copy, Default)]
+struct PageCursor {
+    group: usize,
+    event: usize,
+}
+
+/// SY-2's second wrong implementation: page by event count, cutting a group at
+/// the page boundary and resuming inside it.
+///
+/// Every event comes back, in order, and each push is stored whole — the log is
+/// right and the transport is wrong. It is the natural cut for an adapter whose
+/// backing store pages by row, and it is a different type from [`WrongPeer`]
+/// because its resume token has to carry the offset the reference peer's has no
+/// room for.
+#[derive(Debug)]
+struct PagingPeer {
+    inner: Arc<MemorySyncPeer>,
+}
+
+impl SendSyncPeer for PagingPeer {
+    type Error = MemoryPeerError;
+    type Resume = PageCursor;
+
+    async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
+        let held = held_by(&self.inner).await?;
+        let mut at = from.copied().unwrap_or_default();
+        let mut room = PAGE_EVENTS;
+        let mut page = Vec::new();
+
+        while room > 0 {
+            let Some(group) = held.get(at.group) else {
+                break;
+            };
+            let rest = group.events.get(at.event..).unwrap_or_default();
+            let taken: Vec<_> = rest.iter().take(room).cloned().collect();
+            room = room.saturating_sub(taken.len());
+            at.event += taken.len();
+            if at.event >= group.events.len() {
+                at = PageCursor {
+                    group: at.group + 1,
+                    event: 0,
+                };
+            }
+            page.push(EventGroup::new(group.guard.clone(), taken));
+        }
+
+        Ok(Pulled::new(PushBatch::new(page), at))
+    }
+
+    async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
+        self.inner.push(batch).await
+    }
+
+    fn limits(&self) -> PeerLimits {
+        self.inner.limits()
+    }
+}
+
+#[derive(Debug)]
+struct PagingFixture {
+    inner: Arc<MemorySyncPeer>,
+}
+
+impl SyncFixture for PagingFixture {
+    type Peer = PagingPeer;
+
+    async fn connect(&self) -> Self::Peer {
+        PagingPeer {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
+/// Every rule in the enumeration against one fixture, by name, each verdict
+/// reduced to the clause it reports.
+///
+/// Driven by `for_each_sync_peer_rule!` rather than a list written here, so a
+/// rule added to the suite is run against every mutant below without an edit —
+/// and a mutant that also fails the new rule is reported, rather than silently
+/// counted as a single-rule proof.
+fn verdicts<F, O>(open: O) -> Vec<(&'static str, Result<RuleOutcome, &'static str>)>
+where
+    F: SyncFixture,
+    O: AsyncFn() -> F + Copy,
+{
+    macro_rules! run_each {
+        ($($name:ident),* $(,)?) => {
+            vec![$(
+                (
+                    stringify!($name),
+                    block_on(rules::$name(open)).map_err(|violation| violation.clause()),
+                )
+            ),*]
+        };
+    }
+    happenstance_sync_testkit::for_each_sync_peer_rule!(run_each)
+}
+
+/// `rule` reports `clause`, and every other rule passes.
+fn fails_exactly(
+    verdicts: &[(&'static str, Result<RuleOutcome, &'static str>)],
+    rule: &str,
+    clause: &'static str,
+) {
+    assert!(
+        verdicts.iter().any(|(name, _)| *name == rule),
+        "`{rule}` is not in the enumeration: {verdicts:?}"
+    );
+    for (name, verdict) in verdicts {
+        if *name == rule {
+            assert_eq!(*verdict, Err(clause), "`{name}` must reject its mutant");
+        } else {
+            assert_eq!(
+                *verdict,
+                Ok(RuleOutcome::Ran),
+                "`{name}` failed `{rule}`'s mutant, so that mutant proves nothing about \
+                 `{rule}` alone"
+            );
+        }
+    }
 }
 
 #[test]
 fn the_faithful_wrapper_passes_every_rule() {
-    let open = async || WrongFixture::new(Mistake::Faithful);
-    assert_eq!(
-        block_on(rules::ingest_never_rejects(open)),
-        Ok(RuleOutcome::Ran)
-    );
-    assert_eq!(
-        block_on(rules::compensation_is_atomic_with_the_losing_event(open)),
-        Ok(RuleOutcome::Ran)
-    );
+    let all = verdicts(async || WrongFixture::new(Mistake::Faithful));
+    assert!(all.len() >= 2, "the enumeration ran no rules: {all:?}");
+    for (name, verdict) in all {
+        assert_eq!(verdict, Ok(RuleOutcome::Ran), "`{name}`");
+    }
 }
 
 #[test]
 fn ingest_never_rejects_fails_a_peer_that_evaluates_the_guard() {
-    let open = async || WrongFixture::new(Mistake::EvaluatesTheGuard);
-    assert_eq!(
-        clause_of(block_on(rules::ingest_never_rejects(open))),
-        Some("SY-1")
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::EvaluatesTheGuard)),
+        "ingest_never_rejects",
+        "SY-1",
+    );
+}
+
+/// The mutant that only the log-presence half of SY-1 can see: its ack is the
+/// one a correct peer sends.
+#[test]
+fn ingest_never_rejects_fails_a_peer_that_acks_and_then_drops() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::AcksThenDropsOnTheGuard)),
+        "ingest_never_rejects",
+        "SY-1",
     );
 }
 
 #[test]
 fn compensation_is_atomic_fails_a_peer_that_flattens_groups() {
-    let open = async || WrongFixture::new(Mistake::FlattensGroups);
-    assert_eq!(
-        clause_of(block_on(
-            rules::compensation_is_atomic_with_the_losing_event(open)
-        )),
-        Some("SY-2")
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::FlattensGroups)),
+        "compensation_is_atomic_with_the_losing_event",
+        "SY-2",
+    );
+}
+
+#[test]
+fn compensation_is_atomic_fails_a_peer_that_ends_a_pull_inside_a_group() {
+    fails_exactly(
+        &verdicts(async || PagingFixture {
+            inner: Arc::new(MemorySyncPeer::new(StoreId::from_bytes([0x78; 16]))),
+        }),
+        "compensation_is_atomic_with_the_losing_event",
+        "SY-2",
     );
 }

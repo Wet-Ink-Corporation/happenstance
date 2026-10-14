@@ -50,12 +50,18 @@ not the same as what a user needed to be told.
   never converge.
 
   **`compensation_is_atomic_with_the_losing_event`** (SY-2, the transport's
-  half). The defect it detects is a peer that stores what it is pushed one event
-  per group, so a losing event and the compensation that rode with it come back
-  in separate groups and a reader commits the loser with nothing resolving it.
+  half). The defect it detects is a peer that splits a losing event from the
+  compensation that rode with it — by storing what it is pushed one event per
+  group, or by paging pulls by event count and ending one inside a group — so a
+  reader commits the loser with nothing resolving it. It does **not** reject
+  compensate-after-commit, the authoring-side defect SY-2 itself names: that
+  happens before anything reaches a peer, and the rule for it is tracked by
+  #320.
 
-  Both wrong implementations are in the crate's `tests/wrong_peers.rs`, and each
-  fails exactly its rule.
+  The wrong implementations are in the crate's `tests/wrong_peers.rs`, and a
+  test there runs the whole enumeration against each and asserts it fails
+  exactly its rule. The suite also executes on `wasm32-unknown-unknown`, under
+  the gate's `wasm32 run of the conformance rules`.
 
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a

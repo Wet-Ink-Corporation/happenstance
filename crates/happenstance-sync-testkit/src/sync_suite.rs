@@ -1,23 +1,27 @@
 //! The sync rules, their one enumeration, and the three emitters.
 //!
-//! Each rule is an async function taking `impl AsyncFn() -> F` — not a fixture
-//! but how to make one, as in the event-store family — and returning
-//! `Result<RuleOutcome, Violation>`.
-//!
-//! # What no rule here does
-//!
-//! **Decode a payload** (SY-35). Events are compared whole — identity, recorded
-//! time and the opaque bytes — and never parsed. A suite that parsed `data`
-//! would certify a peer that does, and ADR-0003's guarantee is that no peer
-//! needs to.
-//!
-//! **Hold two peers** (SY-8). Where a clause speaks of two peers, the rule plays
-//! one of them itself: it is the side that pushes and pulls, and the fixture's
-//! peer is the far side.
+//! Private: what a caller reaches is [`rules`], re-exported at the crate root,
+//! and the macros, which `#[macro_export]` puts there regardless.
 
 /// The sync rules. See the [crate documentation](crate) for what each covers.
+///
+/// Each rule is an async function taking `impl AsyncFn() -> F` — not a fixture
+/// but how to make one, as in the event-store family — and returning
+/// `Result<RuleOutcome, Violation>`.
+///
+/// # What no rule here does
+///
+/// **Decode a payload** (SY-35). Events are compared whole — identity, recorded
+/// time and the opaque bytes — and never parsed. A suite that parsed `data`
+/// would certify a peer that does, and ADR-0003's guarantee is that no peer
+/// needs to.
+///
+/// **Hold two peers** (SY-8). Where a clause speaks of two peers, the rule plays
+/// one of them itself: it is the side that pushes and pulls, and the fixture's
+/// peer is the far side.
 pub mod rules {
     use alloc::format;
+    use alloc::vec;
     use alloc::vec::Vec;
 
     use happenstance_core::{
@@ -58,7 +62,10 @@ pub mod rules {
     /// A peer that evaluates the travelling guard against what it holds and
     /// refuses — or silently drops — the second claim. It is the natural first
     /// cut, because the guard arrives on the wire already, and it produces a
-    /// peer set that never converges. `tests/wrong_peers.rs` carries it.
+    /// peer set that never converges. `tests/wrong_peers.rs` carries both
+    /// spellings: one that acknowledges the dropped claim as nothing appended,
+    /// which the ack check catches, and one that acknowledges it as appended
+    /// and drops it anyway, which only the pull of the whole log can see.
     ///
     /// # Errors
     ///
@@ -128,8 +135,18 @@ pub mod rules {
     /// # Rejects
     ///
     /// A peer that flattens what it is pushed into one group per event, or
-    /// that ends a pull between the two. `tests/wrong_peers.rs` carries the
-    /// first.
+    /// that pages by event count and ends a pull between the two.
+    /// `tests/wrong_peers.rs` carries both.
+    ///
+    /// # Does not reject
+    ///
+    /// **Compensate-after-commit**, the defect SY-2's own `Rejects` paragraph
+    /// names: ingest the losing event, return, and author the compensation
+    /// afterwards. That is the authoring side's mistake, made before anything
+    /// reaches a peer, and a rule that holds only a peer cannot see it — this
+    /// rule hands the peer a group that is already whole. The authoring half is
+    /// tracked by #320; until it lands, a green run here certifies the
+    /// transport and nothing upstream of it.
     ///
     /// # Errors
     ///
