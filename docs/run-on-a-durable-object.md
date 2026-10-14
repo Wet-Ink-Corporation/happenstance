@@ -436,10 +436,11 @@ seven published crates. Before you rely on it, know these gaps:
   What a real isolate restart does to an acknowledged write has not been
   observed, and the harness does not reach the memory ceiling either
   (`harness/workerd/README.md`, *What it discharges, and what it does not*).
-- **A real bookmark restore has not been run.** The re-mint is tested against a
-  simulated restore in the crate's Node host, which rolls back the whole
-  database the way the platform describes. No test restores a real object from
-  a bookmark.
+- **A real bookmark restore is recorded, not asserted.** The re-mint is tested
+  against a simulated restore in the crate's Node host. The `workerd` job also
+  restores a deployed object from a bookmark and records whether an `EventId`
+  is reissued, with and without the re-mint. It cannot fail the build, and
+  local `workerd` cannot run it, because it does not implement a restore.
 - **The three capacity ceilings are policy.** The physical wall behind them was
   never located.
 - **The concurrency and model tests do not run here.** The concurrency tests

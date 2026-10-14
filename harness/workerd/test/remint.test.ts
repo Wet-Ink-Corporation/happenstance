@@ -42,7 +42,9 @@ describe("the re-mint leg under local workerd", () => {
     expect(current.status, current.body).toBe(200);
     const restore = await call(stub, `bookmark/restore?bookmark=${encodeURIComponent(current.body)}`);
     expect(restore.status, restore.body).toBe(501);
-    expect(restore.body).toContain("does not implement point-in-time recovery");
+    // The fixed text worker.mjs answers only when the runtime's own refusal
+    // says it implements no point-in-time recovery; any other throw is a 500.
+    expect(restore.body).toBe("this runtime does not implement point-in-time recovery");
   });
 
   it("an after-half in the instance that wrote the ledger refuses", async () => {

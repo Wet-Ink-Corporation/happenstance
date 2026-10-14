@@ -24,6 +24,11 @@ const BOOKMARK = "/bookmark/";
 // with: the runner tells this expected failure from any other by it.
 const RESTORING = "restoring a bookmark";
 
+// How a runtime with no point-in-time recovery refuses a restore (local
+// `workerd` 1.20260815.1), and the fixed text the object answers in its place.
+const NO_PITR = "does not implement point-in-time recovery";
+const NO_PITR_ANSWER = "this runtime does not implement point-in-time recovery";
+
 export class ConformanceObject {
   constructor(ctx, env) {
     this.ctx = ctx;
@@ -66,8 +71,8 @@ export class ConformanceObject {
   // then ends this one, because a restore applies only when the object
   // restarts: its request therefore fails, with RESTORING as the message.
   // A runtime that does not implement a restore throws instead, and that
-  // throw is answered as a 501 with its own text, which is what local
-  // `workerd` does (test/remint.test.ts pins it).
+  // throw is answered as a 501 with NO_PITR_ANSWER, which is what local
+  // `workerd` does (test/remint.test.ts pins it). Any other throw is a 500.
   async bookmark(url) {
     const route = url.pathname.slice(BOOKMARK.length);
     try {
@@ -83,7 +88,14 @@ export class ConformanceObject {
       }
       await this.ctx.storage.onNextSessionRestoreBookmark(bookmark);
     } catch (error) {
-      return new Response(error instanceof Error ? error.message : String(error), { status: 501 });
+      // The caller gets a fixed text, never the error itself: the detail goes
+      // to the Worker's log. The one refusal the runners act on, a runtime
+      // that implements no restore, is recognised here and named.
+      console.error("a bookmark call threw", error);
+      const message = error instanceof Error ? error.message : "";
+      return message.includes(NO_PITR)
+        ? new Response(NO_PITR_ANSWER, { status: 501 })
+        : new Response("the bookmark call failed; the Worker's log has the error", { status: 500 });
     }
     this.ctx.abort(RESTORING);
     // Not reached: `abort` throws into this request.
