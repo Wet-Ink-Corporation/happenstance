@@ -11,6 +11,13 @@
 //! bin, the lib and each integration test are separate crates: only the lib's
 //! public surface reaches all three. `xtask` is `publish = false`, so `pub`
 //! here promises nothing to anyone outside this repository.
+//!
+//! **Top-level blocks only.** The indentation limit is measured from column
+//! zero, which is right for a fence that is a block of its own. A fence inside
+//! a list item or a block quote is indented relative to its container, so it
+//! can sit at four columns or more and still be a fence, and this rule reads
+//! it as an indented code block. The pages these readers walk keep their
+//! fences at the top level.
 
 /// One fence delimiter line, as `CommonMark` reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

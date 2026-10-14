@@ -433,6 +433,19 @@ fn only_a_matching_delimiter_closes_a_fence() {
     assert!(fences("    ```rust\n").is_empty());
 }
 
+/// A prose line that opens with an inline code span is not a fence (#294).
+/// Read as an opener, it would pair with the real fence's opener as its
+/// closer, and the real fence's body would be measured as prose.
+#[test]
+fn a_prose_line_opening_with_a_code_span_opens_no_fence() {
+    let found = fences("```x``` opens the paragraph.\n\n```rust\nlet a = 1;\n```\n");
+    let [fence] = found.as_slice() else {
+        panic!("{} fences seen, not one", found.len());
+    };
+    assert_eq!((fence.info.as_str(), fence.line), ("rust", 3));
+    assert_eq!(fence.body, ["let a = 1;"]);
+}
+
 /// The defect #279 names, whole: a correct page with a trailing tilde fence
 /// carrying the wrong marker and a 100-column line.
 #[test]
