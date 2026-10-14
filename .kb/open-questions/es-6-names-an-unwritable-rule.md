@@ -99,7 +99,7 @@ had no expiry, so a rule scheduled forever printed identically to one scheduled 
 prose guard was retired: check 4 now guards on `!has_suite(&c.id)` alone
 (`xtask/src/spec_trace.rs:822`), `schedules_new` is gone with it, and its own doc comment records
 why the switch could not be repaired in place — the sentence explaining that a rule was unwritten
-*was* the switch that stopped the checker looking (`xtask/src/spec_trace.rs:795-813`). A clause's
+*was* the switch that stopped the checker looking (`xtask/src/spec_trace.rs:798-816`). A clause's
 rule name is now either resolvable or declared in `UNRESOLVABLE_RULE_NAMES`
 (`xtask/src/spec_trace.rs:1006`) with the reason nothing can find it. ES-6 has an entry, and it is
 one of the fifteen `Scheduled` ones whose owner is not a phase:

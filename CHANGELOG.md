@@ -59,6 +59,50 @@ not the same as what a user needed to be told.
   are the same bytes, which `a_misrouted_postcard_buffer_decodes_as_another_message`
   pins.
 
+- **`happenstance-sync-testkit`: the replication suite's first two rules,
+  in a crate that is not published yet** (#111). Recorded here because CF-29
+  asks every conformance rule for an entry, not because anything ships: the
+  crate is `publish = false` until phase 13 decides its release, as
+  `happenstance-sync` is. A peer adapter mounts it with
+  `sync_peer_conformance!`, and `MemorySyncPeer` is the reference peer.
+
+  **`ingest_never_rejects`** (SY-1). The defect it detects is a peer that
+  re-evaluates the append condition travelling with a group against what it
+  already holds, and drops or refuses the second of two conflicting facts. Each
+  fact was valid where it was decided, and refusing one guarantees the two logs
+  never converge.
+
+  **`compensation_is_atomic_with_the_losing_event`** (SY-2, the transport's
+  half). The defect it detects is a peer that splits a losing event from the
+  compensation that rode with it — by storing what it is pushed one event per
+  group, or by paging pulls by event count and ending one inside a group — so a
+  reader commits the loser with nothing resolving it. It does **not** reject
+  compensate-after-commit, the authoring-side defect SY-2 itself names: that
+  happens before anything reaches a peer, and the rule for it is tracked by
+  #320.
+
+  The wrong implementations are in the crate's `tests/wrong_peers.rs`, and a
+  test there runs the whole enumeration against each and asserts it fails
+  exactly its rule. The suite also executes on `wasm32-unknown-unknown`, under
+  the gate's `wasm32 run of the conformance rules`.
+
+- **`happenstance-sync`: a peer's error states its failure class** (#243), as
+  ADR-0026 decided. `SyncPeer::Error` is now bounded on `Classify`, whose one
+  method returns a `#[non_exhaustive]` `FailureClass`: `Transient`, `Split`,
+  `Park` or `Stop`. `SyncError` and `MemoryPeerError` implement it. Neither crate
+  is published, so the new bound breaks no consumer.
+
+  **`every_refusal_states_its_class`** (SY-36), in `happenstance-sync-testkit`.
+  The defect it detects is a peer that reports every failure as one class, so a
+  runner retries a batch that can only ever be split, or halts an edge that one
+  retry would have recovered. The fixture drives its peer into each refusal it
+  can produce and declares that refusal's class, through the new required
+  `SyncFixture::refusals`; the rule compares. A peer that honours its own
+  limits can declare its oversized-push refusal with `oversized_push_refusal`;
+  a peer declaring `max_batch_bytes` above 64 MiB must provoke its own, because
+  the helper will not allocate a batch that size. SY-36 stays `[PROVISIONAL]`:
+  its falsification test needs the real peers, which do not exist yet.
+
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
   bookmark rolls back its `StoreId` row and its position counter together, so a
@@ -93,6 +137,13 @@ not the same as what a user needed to be told.
   exercised. The same job shows an idle object holding the store, with and
   without a partly read stream, evicted by that timer, beside a control holding
   a pending timer that is not.
+- **`CloudflareEventStore::remint_identity` is now run across a real bookmark
+  restore** (#298). Test harness only; no behaviour or signature changed. The
+  deployed leg of the `workerd` CI job restores a Durable Object to a bookmark,
+  re-mints, and shows that no `EventId` is reissued for a different event, beside
+  a control that skips the re-mint and does reissue one. It is asserted when the
+  restore runs and recorded when it cannot, and it runs on the deployed object
+  only, because local `workerd` does not implement a restore.
 
 ## [0.4.2] — 2026-10-13
 

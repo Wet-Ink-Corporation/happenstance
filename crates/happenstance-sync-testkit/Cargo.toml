@@ -1,0 +1,36 @@
+[package]
+name = "happenstance-sync-testkit"
+description = "The conformance suite for happenstance sync peers: the bar a peer adapter must clear to exist."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# Unfinished, not held back: the suite has its first rules and phase 13
+# builds the rest. Whether and when it publishes is phase 13's release
+# decision, made with `happenstance-sync`'s, which is `publish = false` for the
+# same reason. The crate root says which of the two meanings this key carries.
+publish = false
+
+[dependencies]
+happenstance-core = { workspace = true, features = ["std"] }
+# `memory`, because `MemorySyncFixture` is a published item of this crate, not a
+# test helper: it is the reference implementation of `SyncFixture`, and the peer
+# every rule is proven against before it is allowed to fail an adapter.
+happenstance-sync = { path = "../happenstance-sync", features = ["memory"] }
+# `RuleOutcome` and `block_on`, so that a skip is reported in exactly the words
+# the event-store and projection families use, and one blocking driver serves
+# every family. Phase 1's registry, inherited rather than copied.
+happenstance-testkit.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true

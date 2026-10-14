@@ -406,20 +406,20 @@ const REQUIRED: &[Step] = &[
         // `crates/happenstance-sync/tests/flavours.rs`, which instantiates the
         // runner's step against a store and a peer that each hold an `Rc`.
         //
-        // `--all-features`: the one feature, `memory`, forwards to the contract
-        // crate's, so this also compiles its in-memory store for wasm32 (the
-        // powerset below covers the default). No `--tests`: the crate's test
-        // targets use a multi-threaded tokio runtime with no wasm story.
+        // Through its suite since #111: `-p happenstance-sync-testkit --tests`
+        // builds the port with `memory` on, the suite, and its wasm32 harness
+        // (the powerset below covers the port's default). Not the port's own
+        // tests: they use a multi-threaded tokio runtime with no wasm story.
         name: SYNC_WASM,
         program: "cargo",
         args: &[
             "check",
             "--locked",
             "-p",
-            "happenstance-sync",
+            "happenstance-sync-testkit",
             "--target",
             "wasm32-unknown-unknown",
-            "--all-features",
+            "--tests",
         ],
         env: &[],
         probe: None,
@@ -1027,9 +1027,9 @@ const OPTIONAL: &[Step] = &[
             // and never a replacement for it — the probe below is why.
             "-p",
             "happenstance",
-            // The sync port (#116). Its mandatory row checks `--all-features`,
-            // so the configuration a consumer gets by default, `memory` off, is
-            // compiled for this target here.
+            // The sync port (#116). Its mandatory row builds it with `memory` on,
+            // through the suite crate (#111), so the configuration a consumer
+            // gets by default, `memory` off, is compiled for this target here.
             "-p",
             "happenstance-sync",
             "--target",
