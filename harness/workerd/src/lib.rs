@@ -48,6 +48,11 @@
 //! stream inside one future the object owns and polls by hand, and the runner
 //! compares the instance that armed it with the one that answers later.
 //!
+//! [`remint`] runs `CloudflareEventStore::remint_identity` across a real
+//! bookmark restore (`onNextSessionRestoreBookmark`), on a deployed object
+//! only, because local `workerd` does not implement a restore. Beside it runs
+//! the control that skips the re-mint, where an `EventId` must be reissued.
+//!
 //! [`probe`] is the other half of the job: the platform's SQLite walls, measured
 //! on the runtime that imposes them (`experiments/durable-object-limits`).
 //!
@@ -62,4 +67,5 @@ pub mod idle;
 pub mod incarnation;
 mod object;
 pub mod probe;
+pub mod remint;
 pub mod restart;
