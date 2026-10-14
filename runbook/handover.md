@@ -12,7 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/project-thread-95afyv`, on `a69ded4` (`main`, where PR #297 merged). 2026-10-14.
+`claude/project-thread-xp895l-release-043`, on `ab1066c` (`main`, where PR #313
+merged). 2026-10-14.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -20,12 +21,12 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.4.2` is on crates.io** (tag `v0.4.2` at `09d112e`, published by `release.yml`
-through trusted publishing), and phase 17b is done. Since the release, all three
-items of #262 (Letterpress's G-01) are on `main`: `workerd` conformance across a
-real Durable Object restart (#303), idle eviction (#304) and
-`happenstance-cloudflare`'s `remint_identity` (#297). `remint_identity` is
-unreleased and ships in the next release.
+**`0.4.3` is prepared, not yet tagged.** Its release PR moves `[Unreleased]` to
+`[0.4.3] — 2026-10-14` and all seven crates to `0.4.3`. It ships all three items of
+#262 (Letterpress's G-01): `workerd` conformance across a real Durable Object restart
+(#303), idle eviction (#304) and `happenstance-cloudflare`'s `remint_identity`
+(#297). `0.4.2` is on crates.io (tag `v0.4.2` at `09d112e`, published by
+`release.yml` through trusted publishing), and phase 17b is done.
 
 **Phase 13's owner calls are answered** (2026-10-14). `happenstance-sync` and
 `happenstance-sync-testkit` are claimed on crates.io at `0.0.0` (#102).
@@ -40,14 +41,17 @@ sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-- **ADR-0026 (#105) and ADR-0027 (#106)**, written from the three decisions above.
-  Both are `door:one-way`, so the owner merges them. They record decisions; no
-  clause marker moves to `[FROZEN]` until the rule that checks it exists.
+- **The `0.4.3` release PR.** `door:one-way`: the owner merges it and tags the merge
+  commit. The minimal-versions job's published-release leg may stay red until the tag
+  publishes.
+- **ADR-0026 and ADR-0027 are merged** (PRs #306 and #307), written from the decisions
+  above. Both record decisions; no clause marker moves to `[FROZEN]` until the rule
+  that checks it exists.
 
 ## Next action
 
-1. Land ADR-0026 and ADR-0027. With whole-log decided, #122 (the filtered-subset
-   store) and SY-29's `Query` leave the 1.0 path by ADR-0027's record.
+1. Land and tag `0.4.3`. ADR-0027 took #122 (the filtered-subset store) and SY-29's
+   `Query` off the 1.0 path.
 2. Phase 18 (#63), the typed runner. Its breaking chains open as `door:one-way` PRs,
    and it needs the owner present. Phase 13's code waits on it (SY-20).
 3. #298, the deployed restore leg of #262.
@@ -58,7 +62,8 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- **Merge ADR-0026 and ADR-0027** once they are green.
+- **Merge the `0.4.3` release PR, then tag its merge commit** (`git tag -a v0.4.3
+  <merge-sha> -m "0.4.3"` and push the tag); `release.yml` publishes from the tag.
 - **Trusted publishing for the two sync crates** on crates.io (repository
   `Wet-Ink-Corporation/happenstance`, workflow `release.yml`, environment
   `crates-io`), before `0.6.0`. `release.yml`'s publish set gains them in that

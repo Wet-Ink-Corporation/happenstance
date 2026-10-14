@@ -19,7 +19,7 @@ one writer, the object's own turn is the transaction, and the consistency
 boundary a DCB query describes fits inside an object rather than across a
 cluster.
 
-> **Status: released since `0.2.0`, in the `0.4.2` release set, and the release
+> **Status: released since `0.2.0`, in the `0.4.3` release set, and the release
 > with the thinnest evidence of the seven.** Every
 > [`EventStore`](https://docs.rs/happenstance-core) body is real — `migrate`,
 > `append`, `head`, `contains_event_id` and `read` all execute SQL against the
