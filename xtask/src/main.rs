@@ -406,10 +406,10 @@ const REQUIRED: &[Step] = &[
         // `crates/happenstance-sync/tests/flavours.rs`, which instantiates the
         // runner's step against a store and a peer that each hold an `Rc`.
         //
-        // `--all-features` because the crate has one feature, `memory`, and the
-        // in-memory peer behind it is the one a Workers application tests
-        // against; no `--tests`, because the crate's test targets use a
-        // multi-threaded tokio runtime that has no wasm story.
+        // `--all-features`: the one feature, `memory`, forwards to the contract
+        // crate's, so this also compiles its in-memory store for wasm32 (the
+        // powerset below covers the default). No `--tests`: the crate's test
+        // targets use a multi-threaded tokio runtime with no wasm story.
         name: SYNC_WASM,
         program: "cargo",
         args: &[

@@ -255,13 +255,21 @@ impl SyncPeer for LocalPeer {
 /// The negative half is the `static_assertions` construction, written out: a
 /// trait with two blanket impls, one of them only for `Send` types, so naming
 /// its item through a `Send` type is ambiguous (`error[E0283]`) and through a
-/// `!Send` one is not. Make either local type `Send` — swap `LocalPeer`'s `Rc`
-/// for an `Arc`, or both of `LocalStore`'s — and this module stops compiling. The positive half shows the two things they wrap are `Send`
-/// themselves, so it is the `Rc` that removes it and not something underneath.
+/// `!Send` one is not. Make either local type `Send` and this module stops
+/// compiling: for `LocalPeer`, swap its `Rc` for an `Arc`; for `LocalStore`,
+/// swap both `Rc`s for `Arc`s *and* the `RefCell` for a `Mutex`, because
+/// `Arc<RefCell<_>>` is still `!Send` (`RefCell` is `!Sync`, and `Arc<T>` is
+/// `Send` only when `T: Send + Sync`).
+///
+/// The positive half shows that what they wrap is `Send` on its own — the two
+/// reference types, and the bare `RefCell` — so it is the `Rc` that removes
+/// `Send`, not something underneath it.
 mod not_send {
+    use core::cell::RefCell;
+
     use super::{LocalPeer, LocalStore};
     use happenstance_core::MemoryEventStore;
-    use happenstance_sync::MemorySyncPeer;
+    use happenstance_sync::{MemorySyncPeer, ReplicatedEvent};
 
     trait AmbiguousIfSend<Marker> {
         fn some_item() {}
@@ -280,6 +288,7 @@ mod not_send {
     const _: () = {
         is_send::<MemoryEventStore>();
         is_send::<MemorySyncPeer>();
+        is_send::<RefCell<Vec<ReplicatedEvent>>>();
     };
 }
 
