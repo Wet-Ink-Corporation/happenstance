@@ -291,3 +291,37 @@ impl SendSyncPeer for MemorySyncPeer {
         self.limits.clone()
     }
 }
+
+// Declared here, at the end, so the lines above keep the numbers cited
+// elsewhere. Each class follows from the variant alone (SY-36).
+impl crate::Classify for MemoryPeerError {
+    fn class(&self) -> crate::FailureClass {
+        match self {
+            // A torn log does not mend on retry.
+            Self::Poisoned => crate::FailureClass::Stop,
+            Self::BatchTooLarge { .. } => crate::FailureClass::Split,
+        }
+    }
+}
+
+#[cfg(test)]
+mod classify_tests {
+    use super::MemoryPeerError;
+    use crate::{Classify, FailureClass};
+
+    /// `Poisoned` is the one class the conformance fixture cannot provoke, so
+    /// it is pinned here rather than by SY-36's rule.
+    #[test]
+    fn a_poisoned_lock_is_stop() {
+        assert_eq!(MemoryPeerError::Poisoned.class(), FailureClass::Stop);
+    }
+
+    #[test]
+    fn a_batch_too_large_is_split() {
+        let error = MemoryPeerError::BatchTooLarge {
+            actual: 65_537,
+            limit: 65_536,
+        };
+        assert_eq!(error.class(), FailureClass::Split);
+    }
+}

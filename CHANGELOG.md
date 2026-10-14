@@ -63,6 +63,23 @@ not the same as what a user needed to be told.
   exactly its rule. The suite also executes on `wasm32-unknown-unknown`, under
   the gate's `wasm32 run of the conformance rules`.
 
+- **`happenstance-sync`: a peer's error states its failure class** (#243), as
+  ADR-0026 decided. `SyncPeer::Error` is now bounded on `Classify`, whose one
+  method returns a `#[non_exhaustive]` `FailureClass`: `Transient`, `Split`,
+  `Park` or `Stop`. `SyncError` and `MemoryPeerError` implement it. Neither crate
+  is published, so the new bound breaks no consumer.
+
+  **`every_refusal_states_its_class`** (SY-36), in `happenstance-sync-testkit`.
+  The defect it detects is a peer that reports every failure as one class, so a
+  runner retries a batch that can only ever be split, or halts an edge that one
+  retry would have recovered. The fixture drives its peer into each refusal it
+  can produce and declares that refusal's class, through the new required
+  `SyncFixture::refusals`; the rule compares. A peer that honours its own
+  limits can declare its oversized-push refusal with `oversized_push_refusal`;
+  a peer declaring `max_batch_bytes` above 64 MiB must provoke its own, because
+  the helper will not allocate a batch that size. SY-36 stays `[PROVISIONAL]`:
+  its falsification test needs the real peers, which do not exist yet.
+
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
   bookmark rolls back its `StoreId` row and its position counter together, so a
