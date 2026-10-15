@@ -103,6 +103,27 @@ not the same as what a user needed to be told.
   the helper will not allocate a batch that size. SY-36 stays `[PROVISIONAL]`:
   its falsification test needs the real peers, which do not exist yet.
 
+- **`peer_declares_its_own_limits`** (SY-18), in `happenstance-sync-testkit`
+  (#121). The defect it detects is a peer whose declared `PeerLimits` admit an
+  event its ingest then refuses, so the failure is found at ingest, after the
+  origin has committed, rather than prevented by a runner that read the limits
+  first; and a peer that declares `max_event_bytes` below VT-21's 65,536-byte
+  floor. The rule reads `limits()` before it pushes anything, pushes
+  Turnstile's 340,000-byte seat map only if the declaration admits it, and then
+  pushes one event at the declared boundary carrying a 255-byte type and 64
+  tags of 255 bytes. Both must land and come back whole. Its wrong
+  implementations are in `tests/wrong_limits.rs`: a KV peer that declares no
+  value cap, one that declares the raw value cap, and one a byte below the
+  floor.
+
+  **`KvCappedFixture`**, the peer SY-18's marker names: a 128 KiB cap on each
+  value, which reserves the envelope at the contract's floors and declares
+  114,465 bytes per event. It refuses a value over the cap whole, as
+  `KvPeerError::ValueTooLarge`, class `Park`. Across the peer set the floor
+  reads 65,536 = `MemorySyncPeer` < 114,465 for this fixture < 131,072 for the
+  Neon store < 1 MiB for the other stores. SY-18 stays `[DEFERRED]` and VT-21
+  `[PROVISIONAL]`: moving either marker is the owner's decision.
+
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
   bookmark rolls back its `StoreId` row and its position counter together, so a

@@ -26,14 +26,16 @@ pub mod rules {
     use alloc::vec::Vec;
 
     use happenstance_core::{
-        AppendCondition, Event, EventId, EventType, Query, QueryItem, RecordedAt, SequencePosition,
-        StoreId, Tag, Tags,
+        AppendCondition, Event, EventId, EventType, MAX_EVENT_TYPE_LEN, MAX_TAG_LEN,
+        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_TAGS_PER_EVENT, Query, QueryItem, RecordedAt,
+        SequencePosition, StoreId, Tag, Tags,
     };
     use happenstance_sync::{Classify, EventGroup, PushBatch, ReplicatedEvent, SyncPeer};
     use happenstance_testkit::RuleOutcome;
 
-    use crate::SyncFixture;
+    use crate::kv_capped::turnstile_seat_map;
     use crate::violation::{Violation, ensure};
+    use crate::{MAX_PROVOKED_BATCH_BYTES, SyncFixture};
 
     /// The most pulls a rule makes before it decides the peer will never say
     /// it has caught up. Far above what two or three tiny groups need under the
@@ -48,6 +50,11 @@ pub mod rules {
     const ORIGIN_A: StoreId = StoreId::from_bytes([0x11; 16]);
     const ORIGIN_B: StoreId = StoreId::from_bytes([0x22; 16]);
     const HUB: StoreId = StoreId::from_bytes([0x33; 16]);
+
+    /// SY-18's two origins: the one that committed the seat map, and the one
+    /// whose event sits at the declared boundary.
+    const SEAT_MAP_ORIGIN: StoreId = StoreId::from_bytes([0x44; 16]);
+    const BOUNDARY_ORIGIN: StoreId = StoreId::from_bytes([0x55; 16]);
 
     /// SY-1: a peer appends every replicated event it does not already hold,
     /// and never evaluates an append condition — the origin's or its own — as a
@@ -191,6 +198,137 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-18: a peer declares the limits it imposes, synchronously, and the
+    /// declaration is true: an event it admits lands, so a runner that read it
+    /// learns of an event that cannot land *before* pushing, not at ingest.
+    ///
+    /// The rule plays that runner. It reads [`SyncPeer::limits`] before it
+    /// pushes anything, and then:
+    ///
+    /// 1. reads it again, because a declaration that changes between two reads
+    ///    cannot be relied on before a push;
+    /// 2. holds `max_event_bytes` to VT-21's floor,
+    ///    [`MIN_SUPPORTED_EVENT_DATA_LEN`]. Every peer the suite is mounted on
+    ///    passes this line, which is where the floor is compared across the
+    ///    peer set;
+    /// 3. runs the Turnstile experiment: a 340,000-byte seat map, already
+    ///    committed at its origin. If the declaration admits it, it is pushed
+    ///    and must land. If not, the runner parks it without a round trip,
+    ///    which is the prevention, and nothing is pushed;
+    /// 4. pushes one event at the declaration's own boundary and at the
+    ///    contract's envelope floors at once: `max_event_bytes` of data (capped
+    ///    by `max_batch_bytes`), a type of [`MAX_EVENT_TYPE_LEN`] bytes and
+    ///    [`MIN_SUPPORTED_TAGS_PER_EVENT`] tags of [`MAX_TAG_LEN`] bytes each.
+    ///    It must land. A limit on the envelope that the peer imposes without
+    ///    declaring it is a limit discovered at ingest;
+    /// 5. pulls the whole log back: every event that landed is held, byte for
+    ///    byte, which rejects a peer that accepts and truncates.
+    ///
+    /// The asynchronous form of the declaration, which SY-18 also rejects,
+    /// cannot be written: `limits` is not `async` on the port, so the compiler
+    /// is that check and no mutant is needed for it.
+    ///
+    /// A peer that declares more than [`MAX_PROVOKED_BATCH_BYTES`] has its
+    /// boundary tested at that ceiling rather than at its declaration, because
+    /// the event is allocated whole (H-13). The rule still runs.
+    ///
+    /// # Rejects
+    ///
+    /// `tests/wrong_limits.rs` carries three declarations over the KV-capped
+    /// reference peer, each with its behaviour unchanged: one with no value
+    /// cap, which admits the seat map that ingest then parks; one that declares
+    /// the raw 131,072-byte value cap, as if a value held the payload alone,
+    /// which admits a boundary event ingest refuses; and one a byte below
+    /// VT-21's floor.
+    ///
+    /// # Does not reject
+    ///
+    /// A runner that ignores `limits()`. That is the runner's defect, and #244
+    /// owns it; a peer can only make its declaration true. Nor limits that go
+    /// stale between the read and the push: [`PeerLimits::admits`] is advisory,
+    /// and what keeps that survivable is the `Park` and `Split` classes SY-36
+    /// checks.
+    ///
+    /// [`PeerLimits::admits`]: happenstance_sync::PeerLimits::admits
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-18 if the declaration changes between two reads,
+    /// declares below VT-21's floor, admits no event at its own boundary, or
+    /// admits an event the push then refuses or does not hand back whole. The
+    /// floor breach cites VT-21 in its message.
+    pub async fn peer_declares_its_own_limits<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-18";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+
+        let limits = peer.limits();
+        let again = peer.limits();
+        ensure(again == limits, CLAUSE, || {
+            format!(
+                "the peer declared {limits:?} and then {again:?}; a declaration that changes \
+                 between two reads cannot be relied on before a push"
+            )
+        })?;
+        ensure(
+            limits.max_event_bytes >= MIN_SUPPORTED_EVENT_DATA_LEN,
+            CLAUSE,
+            || {
+                format!(
+                    "the peer declares max_event_bytes of {}, below VT-21's floor of \
+                     {MIN_SUPPORTED_EVENT_DATA_LEN}",
+                    limits.max_event_bytes
+                )
+            },
+        )?;
+
+        let mut landed = Vec::new();
+        let seat_map = one_event(turnstile_seat_map(SEAT_MAP_ORIGIN, CLAUSE)?);
+        if limits.admits(&seat_map) {
+            push_admitted(&peer, &seat_map, "the 340,000-byte seat map", CLAUSE).await?;
+            landed.push(seat_map);
+        }
+
+        let size = limits
+            .max_event_bytes
+            .min(limits.max_batch_bytes)
+            .min(MAX_PROVOKED_BATCH_BYTES);
+        let boundary = one_event(event_at_the_envelope_floors(size, CLAUSE)?);
+        ensure(limits.admits(&boundary), CLAUSE, || {
+            format!(
+                "the declaration {limits:?} admits no event of {size} bytes, the size it \
+                 states it accepts"
+            )
+        })?;
+        push_admitted(
+            &peer,
+            &boundary,
+            "an event at the declared boundary and the envelope floors",
+            CLAUSE,
+        )
+        .await?;
+        landed.push(boundary);
+
+        let held: Vec<ReplicatedEvent> = pull_everything(&peer, CLAUSE)
+            .await?
+            .into_iter()
+            .flat_map(|group| group.events)
+            .collect();
+        for expected in landed.iter().flat_map(PushBatch::events) {
+            ensure(held.contains(expected), CLAUSE, || {
+                format!(
+                    "event {} of {} bytes was acknowledged and is not in the peer's log, \
+                     byte for byte",
+                    expected.id,
+                    expected.payload_len()
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// SY-36: every error a peer reports states its failure class, and the
     /// class is the one its adapter says it is.
     ///
@@ -284,6 +422,67 @@ pub mod rules {
         ))
     }
 
+    /// `event` as a batch of one group.
+    fn one_event(event: ReplicatedEvent) -> PushBatch {
+        PushBatch::new(vec![EventGroup::new(None, vec![event])])
+    }
+
+    /// Pushes `batch`, which the peer's declaration admits, and requires it to
+    /// land as one event appended. A refusal here is the failure SY-18 exists
+    /// to move: found at ingest, after the origin committed.
+    async fn push_admitted<P: SyncPeer>(
+        peer: &P,
+        batch: &PushBatch,
+        what: &str,
+        clause: &'static str,
+    ) -> Result<(), Violation> {
+        let ack = peer.push(batch).await.map_err(|error| {
+            Violation::new(
+                clause,
+                format!(
+                    "the declared limits admit {what} and the push refused it ({error}, class \
+                     {:?}): the failure was relocated to ingest, not prevented",
+                    error.class()
+                ),
+            )
+        })?;
+        ensure(ack.appended == 1 && ack.skipped == 0, clause, || {
+            format!(
+                "the peer acknowledged {what} as {} appended and {} skipped; it held nothing \
+                 with that identity, so it must append it",
+                ack.appended, ack.skipped
+            )
+        })
+    }
+
+    /// An event at every envelope floor the contract sets, carrying `size`
+    /// bytes of opaque data (SY-35): a type of [`MAX_EVENT_TYPE_LEN`] bytes and
+    /// [`MIN_SUPPORTED_TAGS_PER_EVENT`] distinct tags of [`MAX_TAG_LEN`] bytes.
+    fn event_at_the_envelope_floors(
+        size: usize,
+        clause: &'static str,
+    ) -> Result<ReplicatedEvent, Violation> {
+        let event_type = EventType::new("L".repeat(MAX_EVENT_TYPE_LEN)).map_err(|error| {
+            Violation::new(clause, format!("the rule's own type is invalid: {error}"))
+        })?;
+        let tags = (0..MIN_SUPPORTED_TAGS_PER_EVENT)
+            .map(|i| Tag::new(format!("{i:0>MAX_TAG_LEN$}")))
+            .collect::<Result<Tags, _>>()
+            .map_err(|error| {
+                Violation::new(clause, format!("the rule's own tag is invalid: {error}"))
+            })?;
+        let event = Event::new(event_type, vec![0_u8; size])
+            .map_err(|error| {
+                Violation::new(clause, format!("the rule's own event is invalid: {error}"))
+            })?
+            .with_tags(tags);
+        Ok(ReplicatedEvent::new(
+            EventId::new(BOUNDARY_ORIGIN, SequencePosition::FIRST),
+            RecordedAt::from_millis(1_800_000_000_000),
+            event,
+        ))
+    }
+
     /// The guard both claims travel under: "nobody has claimed seat s1", with
     /// no position, so it is byte-identical wherever it was written.
     fn seat_guard(clause: &'static str) -> Result<AppendCondition, Violation> {
@@ -350,6 +549,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A group travels whole (SY-2) -------------------------------
             compensation_is_atomic_with_the_losing_event,
+
+            // --- A peer declares its own limits (SY-18) ---------------------
+            peer_declares_its_own_limits,
 
             // --- Every refusal states its class (SY-36) ---------------------
             every_refusal_states_its_class,
