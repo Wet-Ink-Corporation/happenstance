@@ -64,7 +64,10 @@
 use std::sync::Mutex;
 
 use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
-use happenstance_sync::{IngestGroup, IngestStore, Ingested, ReplicatedEvent, Watermark};
+use happenstance_sync::{
+    Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested, ReplicatedEvent,
+    Watermark,
+};
 
 /// Stands in for a store adapter crate's own type.
 ///
@@ -92,6 +95,16 @@ enum AdapterError {
     PositionSpaceExhausted,
 }
 
+/// A poisoned lock and an exhausted position space both need a human, and a
+/// retry would meet either again.
+impl Classify for AdapterError {
+    fn class(&self) -> FailureClass {
+        match self {
+            Self::Poisoned | Self::PositionSpaceExhausted => FailureClass::Stop,
+        }
+    }
+}
+
 impl HypotheticalAdapterStore {
     fn new(identity: StoreId) -> Self {
         Self {
@@ -116,6 +129,61 @@ fn next_position(log: &[Row]) -> Result<SequencePosition, AdapterError> {
     }
 }
 
+/// Writes every group into `log`, for a store whose own identity is `identity`.
+///
+/// The body of the stand-in's transaction: on an error, the caller discards
+/// whatever this pushed.
+fn write_groups(
+    log: &mut Vec<Row>,
+    identity: StoreId,
+    groups: &[IngestGroup<'_>],
+) -> Result<Ingested, IngestError<AdapterError>> {
+    let mut outcome = Ingested::default();
+    for group in groups {
+        let before = outcome.appended;
+        for event in group.events {
+            if log.iter().any(|row| row.id == event.id) {
+                outcome.skipped += 1;
+                continue;
+            }
+
+            // SY-38: this store minted that identity and does not hold it, so
+            // it was restored or rewound without a re-mint. The whole call is
+            // refused.
+            if event.id.store() == identity {
+                return Err(IngestError::UnheldOwnIdentity { id: event.id });
+            }
+
+            // At the tail, always. Placing an ingested event at the position
+            // its origin gave it would rewrite history underneath a projection
+            // that has already read past it.
+            let position = next_position(log).map_err(IngestError::Store)?;
+            log.push(Row {
+                position,
+                id: event.id,
+                recorded_at: event.recorded_at,
+            });
+            outcome.appended += 1;
+        }
+
+        // Compensation answers new events only: a redelivered group already had
+        // its answer written the first time it landed.
+        if outcome.appended == before {
+            continue;
+        }
+        for _ in group.compensation {
+            let position = next_position(log).map_err(IngestError::Store)?;
+            log.push(Row {
+                position,
+                id: EventId::new(identity, position),
+                recorded_at: RecordedAt::from_millis(1_800_000_000_000),
+            });
+            outcome.compensated += 1;
+        }
+    }
+    Ok(outcome)
+}
+
 impl IngestStore for HypotheticalAdapterStore {
     type Error = AdapterError;
 
@@ -123,50 +191,25 @@ impl IngestStore for HypotheticalAdapterStore {
         self.identity
     }
 
-    async fn ingest(&self, groups: &[IngestGroup<'_>]) -> Result<Ingested, Self::Error> {
+    async fn ingest(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<Ingested, IngestError<Self::Error>> {
         // One lock over the whole batch: the stand-in's transaction. The
         // duplicate check and the write happen inside it, which is the property
         // a real adapter buys from its unique index on the origin pair.
-        let mut log = self.log.lock().map_err(|_| AdapterError::Poisoned)?;
-        let mut outcome = Ingested::default();
-
-        for group in groups {
-            let before = outcome.appended;
-            for event in group.events {
-                if log.iter().any(|row| row.id == event.id) {
-                    outcome.skipped += 1;
-                    continue;
-                }
-
-                // At the tail, always. Placing an ingested event at the position
-                // its origin gave it would rewrite history underneath a
-                // projection that has already read past it.
-                let position = next_position(&log)?;
-                log.push(Row {
-                    position,
-                    id: event.id,
-                    recorded_at: event.recorded_at,
-                });
-                outcome.appended += 1;
-            }
-
-            // Compensation answers new events only: a redelivered group already
-            // had its answer written the first time it landed.
-            if outcome.appended == before {
-                continue;
-            }
-            for _ in group.compensation {
-                let position = next_position(&log)?;
-                log.push(Row {
-                    position,
-                    id: EventId::new(self.identity, position),
-                    recorded_at: RecordedAt::from_millis(1_800_000_000_000),
-                });
-                outcome.compensated += 1;
-            }
+        let mut log = self
+            .log
+            .lock()
+            .map_err(|_| IngestError::Store(AdapterError::Poisoned))?;
+        // Where the transaction began. Every error rolls the whole call back to
+        // it, because every `IngestError` arm promises nothing was written.
+        let committed = log.len();
+        let written = write_groups(&mut log, self.identity, groups);
+        if written.is_err() {
+            log.truncate(committed);
         }
-
-        Ok(outcome)
+        written
     }
 
     async fn watermark(&self) -> Result<Watermark, Self::Error> {

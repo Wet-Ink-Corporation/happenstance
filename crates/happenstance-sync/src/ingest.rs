@@ -138,17 +138,17 @@ use crate::identity::{ReplicatedEvent, Watermark};
 /// this for free.
 #[trait_variant::make(SendIngestStore: Send)]
 pub trait IngestStore {
-    /// How this store fails to ingest.
-    type Error: core::error::Error + 'static;
+    /// How this store fails, stating a class so a runner never infers one.
+    type Error: core::error::Error + crate::Classify + 'static;
 
     /// This store's own incarnation identifier.
     ///
-    /// Needed to tell "an event I minted, coming back to me" from "an event a
-    /// peer minted". The first, while this store still holds it, is a skip like
-    /// any other re-delivery. One that claims this store's identity and is
-    /// *not* held means the store was restored or rewound under an identity it
-    /// should have re-minted (VT-6), and what ingest does with it is phase 13's
-    /// to settle.
+    /// Tells "an event I minted, coming back to me" from "an event a peer
+    /// minted". The first, while this store still holds it, is a skip like any
+    /// other re-delivery. One that claims this identity and is *not* held means
+    /// the store was restored or rewound under an identity it should have
+    /// re-minted (VT-6). The ingest then writes nothing and fails with
+    /// [`IngestError::UnheldOwnIdentity`], whose remedy is the re-mint (SY-38).
     fn store_id(&self) -> StoreId;
 
     /// Records events other stores minted, preserving their identity, together
@@ -180,13 +180,16 @@ pub trait IngestStore {
     ///
     /// # Errors
     ///
-    /// The adapter's error, for storage failures and for capacity refusals —
-    /// neither of which is a judgement on the events. An event this store
-    /// already holds is a skip and not an error; disagreeing with an event's
-    /// content is not available as an option, because the event is already
-    /// durable somewhere else and refusing it only guarantees the two logs never
-    /// converge.
-    async fn ingest(&self, groups: &[IngestGroup<'_>]) -> Result<Ingested, Self::Error>;
+    /// An [`IngestError`], and nothing in the call was written: a capacity
+    /// refusal, an unheld own identity (see [`store_id`](Self::store_id)), a
+    /// busy store, or the adapter's own failure. None is a judgement on the
+    /// events. An event this store already holds is a skip and not an error,
+    /// and disagreeing with an event's content is not an option: it is durable
+    /// elsewhere, and refusing it only guarantees the logs never converge.
+    async fn ingest(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<Ingested, IngestError<Self::Error>>;
 
     /// The highest origin position this store holds from each origin store.
     ///
@@ -253,3 +256,8 @@ pub struct Ingested {
     /// Compensation events written, minted here.
     pub compensated: usize,
 }
+
+// Declared last rather than beside the `use`s above, so that the lines of this
+// file keep the numbers the specification cites.
+mod error;
+pub use error::IngestError;

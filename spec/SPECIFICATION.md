@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 206 clause IDs, of which 199 are normative:
-**160 `[FROZEN]`**, **29 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
+As assembled, this document carries 207 clause IDs, of which 200 are normative:
+**160 `[FROZEN]`**, **30 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -1038,7 +1038,7 @@ adapter is the instrument* — was run on that instrument and did not fire.
 `happenstance-sync` publishes) goes through the same private `write_batch` that
 `append` calls — one `INSERT` statement for a local row and a foreign one — and
 what is ingest-only is a transaction frame, a watermark query and the values a
-foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1331`). Neon,
+foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1425`). Neon,
 at the far end of the transport axis, builds a whole ingest batch as one
 statement from the builders its `append` uses; that half is structural and was
 not executed. So **the write path is the adapter's**, and `happenstance-core`
@@ -2718,7 +2718,7 @@ never call the method.
   with `error[E0277]: cannot be shared between threads safely`. That leg carries
   the clause on its own, which is as well, because the second leg this bullet used
   to offer is false: it said `memory.rs:154` and
-  `crates/happenstance-sqlite/src/event_store.rs:998` "both write `+ Send` and
+  `crates/happenstance-sqlite/src/event_store.rs:1029` "both write `+ Send` and
   would both need `+ Send + Sync`", and they would not. Flipping the attribute and
   running `cargo check --workspace --all-features` produced *zero* errors and
   touched neither impl — an RPITIT impl need not restate the trait's auto-trait
@@ -2809,7 +2809,7 @@ could: `MemoryStoreError` is uninhabited (`memory.rs:284-291`) and
 that can, and phase 8 built the rest of them: `SqliteEventStoreError` is now
 fourteen real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
 the crate's own decode and identity failures
-(`crates/happenstance-sqlite/src/event_store.rs:1556-1702`), and
+(`crates/happenstance-sqlite/src/event_store.rs:1666-1812`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
 `SqlError::Thrown` carries a `JsThrow`, whose payload is an `Rc<worker::Error>`
 (`crates/happenstance-cloudflare/src/js.rs:168-173`).
@@ -2852,7 +2852,7 @@ payloads in scope, by crate:
 
 - **`happenstance-sqlite`** — `Sqlite(rusqlite::Error)` on both
   `SqliteEventStoreError` and `SqliteProjectionStoreError`
-  (`crates/happenstance-sqlite/src/event_store.rs:1565`,
+  (`crates/happenstance-sqlite/src/event_store.rs:1675`,
   `crates/happenstance-sqlite/src/projection_store.rs:576`), with
   `pub use rusqlite` (`crates/happenstance-sqlite/src/lib.rs:148`).
 - **`happenstance-postgres`** — `Driver(sqlx::Error)` on both
@@ -2883,10 +2883,10 @@ One more consequence follows mechanically from the same reasoning, and it is
 stated as that rather than as a separate promise. A payload from a crate this
 workspace does **not** re-export is in the public signature just the same:
 `tokio::task::JoinError` (`crates/happenstance-postgres/src/error.rs:106`,
-`crates/happenstance-sqlite/src/event_store.rs:1579`,
+`crates/happenstance-sqlite/src/event_store.rs:1689`,
 `crates/happenstance-sqlite/src/projection_store.rs:588`) and
 `tokio::runtime::TryCurrentError`
-(`crates/happenstance-sqlite/src/event_store.rs:1587`,
+(`crates/happenstance-sqlite/src/event_store.rs:1697`,
 `crates/happenstance-sqlite/src/projection_store.rs:592`) sit in public variants,
 so a `tokio` release that changed either would force an adapter major too.
 `tokio` is `1.x`, so that happens only at its own major.
@@ -3170,7 +3170,7 @@ orders and truncates under the read lock at call time) and `happenstance-sqlite`
 (which does not: `read` is not `async` and may legally be called with no runtime
 in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
 its ceiling is sampled there — `Ceiling::Unsampled` at
-`crates/happenstance-sqlite/src/event_store.rs:1364` is the state the first poll
+`crates/happenstance-sqlite/src/event_store.rs:1460` is the state the first poll
 resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
 to the call site, and ADR-0081 (proposed) reorders it: `Handle::try_current` first, then
 a `tokio::runtime::Handle` captured at construction, so the lazy spawn prefers
@@ -4463,7 +4463,7 @@ is a method the port does not have. The cost of "required" is seven impls
 today, four of them skeletons — `happenstance-sqlite` was the fifth until phase
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
-`crates/happenstance-sqlite/src/event_store.rs:1704`,
+`crates/happenstance-sqlite/src/event_store.rs:1814`,
 `crates/happenstance-postgres/src/event_store.rs:485`,
 `crates/happenstance-cloudflare/src/event_store.rs:1170` and
 `crates/happenstance-neon/src/event_store.rs:797`, `:1515`. The blanket impl
@@ -6999,7 +6999,7 @@ The losing event and its compensation are one batch:
 reads it: under VT-10 `append` re-mints, so the batch that carries the losing
 event's foreign identity is one `IngestGroup` — the losing event plus its
 compensation — committed atomically by `IngestStore::ingest`
-(`crates/happenstance-sync/src/ingest.rs:216`). A reader MUST NOT be able to
+(`crates/happenstance-sync/src/ingest.rs:219`). A reader MUST NOT be able to
 observe a state in which the log holds the losing event with nothing resolving
 it.
 
@@ -7433,6 +7433,54 @@ DO NOTHING` (`crates/happenstance-sqlite/src/ingest_spike.rs:12`). And
 (`crates/happenstance-sync/src/ingest.rs:157`). What is left is the measurement,
 and the marker stays `[DEFERRED]` until it passes: Rotor's 1,840 events through
 the Neon peer's one-shot HTTP, inside the 34-minute window.
+
+---
+
+**SY-38. An ingest that writes an event claiming the receiver's own `StoreId`
+MUST instead refuse the whole call, write nothing in it, and report a failure
+whose class is stop.**
+
+The event claims an identity the receiver minted and the receiver does not hold
+it, so the receiver was restored or rewound under an identity VT-6 required it
+to re-mint. The write decides it, not a lookup ahead of the write: an
+own-identity event the receiver holds meets VT-8's uniqueness and is a
+re-delivery (SY-11), and one that would land is the refusal. The remedy is
+VT-6's re-mint, after which the same events MUST land, the claimed one as a
+foreign event under the identity that minted it.
+
+`[PROVISIONAL — falsified by a deployment in which an unheld own identity is
+expected and benign, so that halting the edge costs more than the wedged append
+it prevents. Falsification test: find a topology the workspace supports in which
+a conformant store, not restored and not rewound, receives an event carrying its
+own identity at a position it does not hold. Decided by
+[ADR-0098](../.kb/decisions/0098-an-unheld-own-identity-stops-ingest.md), which
+is proposed and awaits the owner.]`
+Rule: `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test,
+`crates/happenstance-sqlite/src/ingest_spike.rs`), with
+`local_appends_are_not_wedged_after_a_refused_claim` and
+`a_claim_lands_as_foreign_after_the_store_is_reminted` beside it; and
+`an_unheld_own_identity_stops_the_ingest` (new, `happenstance-sync-testkit`),
+which #108's second part writes.
+Cases: E2E-42, E2E-34.
+
+*Rejects:* the behaviour the SQLite spike pinned before this clause. It ingested
+the claim at the next local position, and the local append later assigned the
+claimed position failed when its stamp met the claim on `UNIQUE (origin_store,
+origin_position)`. The rollback returned the position counter, so every retry
+failed the same way: local appends wedged, far from the cause, on a constraint
+error naming neither the claim nor the remedy. ADR-0073 kept that behaviour on
+the reading that a refusal here is a refusal on local state, which SY-1 forbids.
+This clause reads it otherwise. The refusal is about the receiver's own
+identity, not the content of its log; its remedy is configuration, the class
+SY-33 permits; and after the remedy it converges, where a condition-derived
+refusal never can. It also rejects a store that inspects only the first event of
+a batch, or commits group by group: the claim may sit at any index of any group,
+and nothing in the call may survive it.
+
+What it does not reach is VT-6's undetectable case. A restored store that has
+already re-issued the claimed identity to a different local event holds it, so
+the peer's original is skipped as a re-delivery, and two events carry one
+identity. Only the re-mint VT-6 requires after a restore prevents that.
 
 ---
 
@@ -10049,9 +10097,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
-| §5 `SyncPeer` | `SY` | 36 | 21 | 12 | 3 | 0 |
+| §5 `SyncPeer` | `SY` | 37 | 21 | 13 | 3 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **206** | **160** | **29** | **10** | **7** |
+| **Total** | | **207** | **160** | **30** | **10** | **7** |
 
 ### 7.2 The table
 
@@ -10244,6 +10292,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
 | SY-36 | PROVISIONAL | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
+| SY-38 | PROVISIONAL | `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test, `crat… | E2E-42, E2E-34 |
 
 #### `CF` — conformance obligations (§6)
 

@@ -887,6 +887,19 @@ format version on every message, and says that version 1 is this set. It answers
 | --- | --- | --- | --- | --- | --- |
 | ADR-0097 | [`kb-decision-0097`](../decisions/0097-the-sync-message-set-and-a-version-on-every-message.md) | The sync message set is four types in the envelope, and the format version stays on every message | accepted | 13 | — |
 
+## 2026-10-15: an unheld own identity stops ingest (#108), proposed
+
+ADR-0098 is written straight here with no intake step, and it is **proposed**: it waits for the
+owner. It decides the policy ADR-0073 left to phase 13, for a replicated event that claims this
+store's own `StoreId` at a position the store does not hold. The whole ingest is refused as
+`IngestError::UnheldOwnIdentity`, class `Stop`, with nothing written, and the remedy is VT-6's
+re-mint. It mints SY-38 `[PROVISIONAL]`, and it argues past ADR-0073's sentence about SY-1 without
+editing it. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0098 | [`kb-decision-0098`](../decisions/0098-an-unheld-own-identity-stops-ingest.md) | An event claiming this store's own identity that it does not hold stops the ingest, and nothing is written | proposed | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

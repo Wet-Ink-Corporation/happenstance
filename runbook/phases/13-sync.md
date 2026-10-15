@@ -106,8 +106,16 @@ provides the atomicity and the identity that makes it idempotent.
       building the real peers' ingest the same way, a sync-owned in-memory oracle
       (the `MemoryEventStore` impl was deleted, not finished), ingest's own error
       type, the watermark's plan assertion, and the policy for an event claiming
-      this store's own `StoreId` that it does not hold — pinned, not endorsed, by
-      `pinned_vt6_breach_an_unheld_own_id_is_ingested_and_wedges_the_append_that_reaches_it`.
+      this store's own `StoreId` that it does not hold. **PR A (2026-10-15) built
+      the last three, still `cfg(test)` in SQLite**: `IngestError<E>` with its
+      `Classify` impl and `IngestStore::Error: Classify`; SQLite's error classes;
+      `WATERMARK_SQL` held to the origin index by
+      `watermark_reads_the_origin_index_without_a_sort`; and the own-identity
+      policy, refuse the whole call as `UnheldOwnIdentity`, class `Stop`, nothing
+      written, which replaces the pin that recorded the wedge. The policy is
+      [ADR-0098](../../.kb/decisions/0098-an-unheld-own-identity-stops-ingest.md),
+      **proposed** and awaiting the owner, and SY-38 `[PROVISIONAL]`. The oracle,
+      the ingest rules, the real peers and the `sync` feature are PRs B to F.
 - [x] #109 · **ES-41's held-versus-visible reading.** ADR-0028 froze ES-41 at phase 17
       and left one reading open: where ES-10's frontier separates a committed row
       from a visible one, does `contains_event_id` mean held or visible?

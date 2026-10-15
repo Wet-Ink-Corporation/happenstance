@@ -247,7 +247,7 @@ Two things were owed from that record. The ES-27 edit landed in the same change 
 `kb-decision-0068`, line-neutral, three lines for three. The other is an assertion in the adapter's
 own tests that the guard's plan has no `LIST SUBQUERY`; it is additive, phase 17 owned it, and
 **it is in the tree since 2026-10-07**, so the new falsifier no longer fires only by hand:
-`the_guard_plan_has_no_list_subquery` (`crates/happenstance-sqlite/src/event_store.rs:3191`)
+`the_guard_plan_has_no_list_subquery` (`crates/happenstance-sqlite/src/event_store.rs:3355`)
 plans the exact statements `append` runs, through the private `guard_statements`, over five guard
 shapes on the bundled SQLite, and also asserts each chained seek carries `position=?`;
 `the_guard_plan_instrument_fires_on_the_uncorrelated_chain` keeps the pre-`8c8b215` `IN (SELECT …)`

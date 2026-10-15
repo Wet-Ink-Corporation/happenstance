@@ -59,6 +59,30 @@ not the same as what a user needed to be told.
   are the same bytes, which `a_misrouted_postcard_buffer_decodes_as_another_message`
   pins.
 
+- **`happenstance-sync`: ingest has an error of its own, and an unheld own
+  identity stops it, in a crate that is not published yet** (#108, part A;
+  ADR-0098, proposed; SY-38). `IngestStore::ingest` returns
+  `IngestError<Self::Error>`, with four arms: `ExceedsStoreLimit`,
+  `UnheldOwnIdentity`, `Busy` and `Store`. Every arm means nothing in the call
+  was written, and `IngestStore::Error` is now bound on `Classify`, so each
+  failure states its SY-36 class. An event claiming the store's own `StoreId`
+  at a position the store does not hold now refuses the whole call as
+  `UnheldOwnIdentity`, class `Stop`. Before, it was ingested, and the local
+  append that later reached its position failed on every retry. The remedy is
+  VT-6's re-mint, after which the same batch lands. In `happenstance-sqlite`
+  this is all `#[cfg(test)]`, so nothing published moves: the spike detects
+  the claim with the insert that would have written it, states a class for
+  every `SqliteEventStoreError` variant, reports a write lock held elsewhere
+  as `IngestError::Busy`, and holds the watermark's statement to the origin
+  index with an `EXPLAIN QUERY PLAN` test. Each new test names a defect:
+  `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` detects a store
+  that writes the claim, or the groups before it; `local_appends_are_not_wedged_after_a_refused_claim`
+  detects the old wedge; `a_claim_lands_as_foreign_after_the_store_is_reminted`
+  detects a policy the remedy cannot clear; `ingest_while_another_connection_holds_the_write_lock_is_busy`
+  detects a failed `BEGIN IMMEDIATE` reported as `Store`; and
+  `watermark_reads_the_origin_index_without_a_sort` detects a `GROUP BY` the
+  index cannot serve, such as `origin_store || ''`.
+
 - **`happenstance-sync-testkit`: the replication suite's first two rules,
   in a crate that is not published yet** (#111). Recorded here because CF-29
   asks every conformance rule for an entry, not because anything ships: the

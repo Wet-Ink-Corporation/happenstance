@@ -649,11 +649,12 @@ impl SqliteEventStore {
     ///
     /// # Errors
     ///
-    /// Returns `AppendError::ExceedsStoreLimit` naming which ceiling was
-    /// exceeded and by what magnitude. Never `AppendError::Store`: a caller that
-    /// cannot tell "this will never fit here, park it and tell a human" from
-    /// "the disk is full, retry" has to guess, and a sync runner that guesses
-    /// wrong drops an event permanently.
+    /// A [`CeilingExceeded`] naming which ceiling was exceeded and by what
+    /// magnitude, which `append` reports as `AppendError::ExceedsStoreLimit`
+    /// and an ingest as `IngestError::ExceedsStoreLimit`. Never a store error:
+    /// a caller that cannot tell "this will never fit here, park it and tell a
+    /// human" from "the disk is full, retry" has to guess, and a sync runner
+    /// that guesses wrong drops an event permanently.
     ///
     /// `len` is the number of events the transaction will write, and `events`
     /// yields them. Two arguments rather than one slice because an ingest's
@@ -662,22 +663,22 @@ impl SqliteEventStore {
     fn check_ceilings<'e>(
         len: usize,
         events: impl IntoIterator<Item = &'e Event>,
-    ) -> Result<(), AppendError<SqliteEventStoreError>> {
+    ) -> Result<(), CeilingExceeded> {
         if len > Self::MAX_EVENTS_PER_BATCH {
-            return Err(AppendError::ExceedsStoreLimit {
+            return Err(CeilingExceeded {
                 limit: happenstance_core::StoreLimit::EventsPerBatch,
                 len,
             });
         }
         for event in events {
             if event.data().len() > Self::MAX_EVENT_DATA_LEN {
-                return Err(AppendError::ExceedsStoreLimit {
+                return Err(CeilingExceeded {
                     limit: happenstance_core::StoreLimit::EventDataLen,
                     len: event.data().len(),
                 });
             }
             if event.tags().len() > Self::MAX_TAGS_PER_EVENT {
-                return Err(AppendError::ExceedsStoreLimit {
+                return Err(CeilingExceeded {
                     limit: happenstance_core::StoreLimit::TagsPerEvent,
                     len: event.tags().len(),
                 });
@@ -743,7 +744,7 @@ impl SqliteEventStore {
 
         // First, and before the guards: a condition evaluated against a file
         // this handle no longer speaks for answers a question nobody asked.
-        check_identity(&transaction, store_id)?;
+        check_identity(&transaction, store_id).map_err(AppendError::Store)?;
 
         if let Some(condition) = condition
             && let Some(conflict) = evaluate(&transaction, condition).map_err(store_error)?
@@ -761,7 +762,8 @@ impl SqliteEventStore {
                 origin: Origin::Local { recorded_at },
             })
             .collect();
-        let (_, last) = write_batch(&transaction, store_id, &rows).map_err(store_error)?;
+        let Written { last, .. } =
+            write_batch(&transaction, store_id, &rows).map_err(store_error)?;
         // Every row of an append is local and none is ever skipped, so `None`
         // means the batch was empty — which step 1 of `append` has already
         // refused. Spelled as the decode of position zero because that is what
@@ -789,6 +791,15 @@ impl SqliteEventStore {
     /// What is absent is the point: **no condition is evaluated** (SY-1). An
     /// ingest records a decision another store already took.
     ///
+    /// One refusal is not about the events, and it is decided by the same
+    /// insert: a foreign row that **lands** while carrying this store's own
+    /// identity was not held, so the store was restored or rewound without a
+    /// re-mint (VT-6). The transaction is dropped uncommitted and the call fails
+    /// as `IngestError::UnheldOwnIdentity` (SY-38). An own-identity row the
+    /// store does hold meets the `UNIQUE` constraint and is an ordinary skip.
+    /// No lookup runs ahead of the insert, so the check costs nothing on the
+    /// path every echoed event takes.
+    ///
     /// `#[cfg(test)]` because the trait it serves is `happenstance-sync`'s,
     /// which is not published; see `src/ingest_spike.rs`. Phase 13 turns the
     /// gate into a feature.
@@ -798,11 +809,17 @@ impl SqliteEventStore {
         store_id: StoreId,
         groups: &[happenstance_sync::IngestGroup<'_>],
         recorded_at: RecordedAt,
-    ) -> Result<happenstance_sync::Ingested, AppendError<SqliteEventStoreError>> {
+    ) -> Result<happenstance_sync::Ingested, happenstance_sync::IngestError<SqliteEventStoreError>>
+    {
+        use happenstance_sync::IngestError;
+
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-            .map_err(begin_error)?;
-        check_identity(&transaction, store_id)?;
+            .map_err(ingest_begin_error)?;
+        check_identity(&transaction, store_id).map_err(IngestError::Store)?;
+        let write = |rows: &[NewRow<'_>]| {
+            write_batch(&transaction, store_id, rows).map_err(IngestError::Store)
+        };
 
         let mut ingested = happenstance_sync::Ingested::default();
         for group in groups {
@@ -817,12 +834,17 @@ impl SqliteEventStore {
                     },
                 })
                 .collect();
-            let (inserted, _) =
-                write_batch(&transaction, store_id, &foreign).map_err(store_error)?;
-            ingested.appended += inserted;
-            ingested.skipped += foreign.len() - inserted;
+            let written = write(&foreign)?;
+            if let Some(id) = written.unheld_own {
+                // Dropping the transaction uncommitted rolls back every group
+                // this call has written so far, not only this one.
+                drop(transaction);
+                return Err(IngestError::UnheldOwnIdentity { id });
+            }
+            ingested.appended += written.inserted;
+            ingested.skipped += foreign.len() - written.inserted;
 
-            if inserted > 0 && !group.compensation.is_empty() {
+            if written.inserted > 0 && !group.compensation.is_empty() {
                 let compensation: Vec<NewRow<'_>> = group
                     .compensation
                     .iter()
@@ -831,13 +853,13 @@ impl SqliteEventStore {
                         origin: Origin::Local { recorded_at },
                     })
                     .collect();
-                let (written, _) =
-                    write_batch(&transaction, store_id, &compensation).map_err(store_error)?;
-                ingested.compensated += written;
+                ingested.compensated += write(&compensation)?.inserted;
             }
         }
 
-        transaction.commit().map_err(store_error)?;
+        transaction
+            .commit()
+            .map_err(|error| IngestError::Store(error.into()))?;
         Ok(ingested)
     }
 
@@ -854,15 +876,16 @@ impl SqliteEventStore {
     ///
     /// # Errors
     ///
-    /// `AppendError::ExceedsStoreLimit` for a capacity refusal, and
-    /// `AppendError::Store` for everything else. Neither `NoEvents` nor
-    /// `ConditionViolated` is produced: an empty ingest is a pull that found
-    /// nothing, and no condition is evaluated.
+    /// `IngestError::ExceedsStoreLimit` for a capacity refusal,
+    /// `UnheldOwnIdentity` for an event claiming this store's identity that it
+    /// does not hold, `Busy` when the write lock went elsewhere, and `Store`
+    /// for everything else. Nothing is written in any of them.
     #[cfg(test)]
     pub(crate) fn ingest_groups(
         &self,
         groups: &[happenstance_sync::IngestGroup<'_>],
-    ) -> Result<happenstance_sync::Ingested, AppendError<SqliteEventStoreError>> {
+    ) -> Result<happenstance_sync::Ingested, happenstance_sync::IngestError<SqliteEventStoreError>>
+    {
         let len = groups
             .iter()
             .map(|group| group.events.len() + group.compensation.len())
@@ -879,10 +902,9 @@ impl SqliteEventStore {
         )?;
 
         let recorded_at = now();
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|_| AppendError::Store(SqliteEventStoreError::ConnectionPoisoned))?;
+        let mut connection = self.connection.lock().map_err(|_| {
+            happenstance_sync::IngestError::Store(SqliteEventStoreError::ConnectionPoisoned)
+        })?;
         Self::ingest_locked(&mut connection, self.store_id, groups, recorded_at)
     }
 
@@ -890,11 +912,11 @@ impl SqliteEventStore {
     /// own included, derived from the log.
     ///
     /// One `GROUP BY` on the leading column of the `UNIQUE (origin_store,
-    /// origin_position)` index, which is what lets the index serve it. The spike
-    /// does not assert that plan the way `plan_tests` asserts the read path's;
-    /// phase 13 owes that check if the watermark reaches a hot path. Nothing is
-    /// cached: a counter kept beside the log is a counter that can drift from
-    /// it.
+    /// origin_position)` index, which is what lets the index serve it:
+    /// [`WATERMARK_SQL`], whose plan
+    /// `plan_tests::watermark_reads_the_origin_index_without_a_sort` asserts.
+    /// Nothing is cached: a counter kept beside the log is a counter that can
+    /// drift from it.
     ///
     /// # Errors
     ///
@@ -908,10 +930,7 @@ impl SqliteEventStore {
             .connection
             .lock()
             .map_err(|_| SqliteEventStoreError::ConnectionPoisoned)?;
-        let mut statement = connection.prepare(
-            "SELECT origin_store, max(origin_position) FROM event \
-             WHERE origin_store IS NOT NULL GROUP BY origin_store",
-        )?;
+        let mut statement = connection.prepare(WATERMARK_SQL)?;
         let mut rows = statement.query([])?;
         let mut watermark = happenstance_sync::Watermark::new();
         while let Some(row) = rows.next()? {
@@ -985,6 +1004,18 @@ const PARAMETER_BUDGET: usize = 30_000;
 
 /// Bound parameters one `event_tag` row costs.
 const TAG_ROW_PARAMETERS: usize = 3;
+
+/// The highest origin position held per origin store: the watermark's one
+/// statement.
+///
+/// A constant so that [`SqliteEventStore::origin_watermark`] and the plan test
+/// that holds it to the origin index read the same text and cannot drift. The
+/// `GROUP BY` names the index's leading column bare. Any expression over it,
+/// `origin_store || ''` for one, hides the column from the planner and costs a
+/// temporary B-tree sort of every foreign row on every watermark.
+#[cfg(test)]
+const WATERMARK_SQL: &str = "SELECT origin_store, max(origin_position) FROM event \
+     WHERE origin_store IS NOT NULL GROUP BY origin_store";
 
 /// Milliseconds since the Unix epoch, stamped **once**, at append.
 ///
@@ -1094,6 +1125,20 @@ fn begin_error(error: rusqlite::Error) -> AppendError<SqliteEventStoreError> {
         AppendError::Busy(error.into())
     } else {
         store_error(error)
+    }
+}
+
+/// [`begin_error`] for an ingest: `IngestError::Busy` when the write lock was
+/// not acquired, `IngestError::Store` for anything else, by the same reasoning
+/// and at the same one call site.
+#[cfg(test)]
+fn ingest_begin_error(
+    error: rusqlite::Error,
+) -> happenstance_sync::IngestError<SqliteEventStoreError> {
+    if crate::connection::is_busy(&error) {
+        happenstance_sync::IngestError::Busy(error.into())
+    } else {
+        happenstance_sync::IngestError::Store(error.into())
     }
 }
 
@@ -1248,20 +1293,43 @@ fn guard_statement(matched: &str) -> String {
 ///
 /// # Errors
 ///
-/// `AppendError::Store` carrying `IdentityMoved` when the two differ, or the
-/// driver's failure to read the row.
-fn check_identity(
-    connection: &Connection,
-    store_id: StoreId,
-) -> Result<(), AppendError<SqliteEventStoreError>> {
-    let persisted = read_identity(connection).map_err(AppendError::Store)?;
+/// `IdentityMoved` when the two differ, or the driver's failure to read the
+/// row. The bare adapter error, so that `append` and an ingest each wrap it in
+/// their own port's `Store` arm.
+fn check_identity(connection: &Connection, store_id: StoreId) -> Result<(), SqliteEventStoreError> {
+    let persisted = read_identity(connection)?;
     if persisted != store_id {
-        return Err(AppendError::Store(SqliteEventStoreError::IdentityMoved {
+        return Err(SqliteEventStoreError::IdentityMoved {
             handle: store_id,
             persisted,
-        }));
+        });
     }
     Ok(())
+}
+
+/// Which declared ceiling a write exceeded, and by what magnitude: what
+/// [`SqliteEventStore::check_ceilings`] finds.
+///
+/// Its own type rather than either port's error, because `append` and an
+/// ingest report it through different enums, and neither may report it as a
+/// store failure (VT-25). Building either port's error inside the check would
+/// leave the other path converting an arm it can never receive.
+struct CeilingExceeded {
+    limit: happenstance_core::StoreLimit,
+    len: usize,
+}
+
+impl From<CeilingExceeded> for AppendError<SqliteEventStoreError> {
+    fn from(CeilingExceeded { limit, len }: CeilingExceeded) -> Self {
+        Self::ExceedsStoreLimit { limit, len }
+    }
+}
+
+#[cfg(test)]
+impl From<CeilingExceeded> for happenstance_sync::IngestError<SqliteEventStoreError> {
+    fn from(CeilingExceeded { limit, len }: CeilingExceeded) -> Self {
+        Self::ExceedsStoreLimit { limit, len }
+    }
 }
 
 /// One row for [`write_batch`]: the event, and where its identity comes from.
@@ -1295,6 +1363,32 @@ enum Origin {
         /// When the origin accepted it.
         recorded_at: RecordedAt,
     },
+}
+
+/// What one [`write_batch`] did.
+///
+/// A struct rather than a tuple because an ingest needs a third fact the
+/// writer alone can see, and the two fields only an ingest reads are
+/// `#[cfg(test)]` with the rest of the ingest path.
+struct Written {
+    /// The position of the last row that went in, if any did.
+    last: Option<SequencePosition>,
+    /// How many rows went in. A skipped re-delivery is not counted.
+    #[cfg(test)]
+    inserted: usize,
+    /// The first foreign row that **went in** while carrying this store's own
+    /// identity.
+    ///
+    /// It went in, so the store did not hold it: the store was restored or
+    /// rewound under an identity it should have re-minted (VT-6). The insert
+    /// decides it, against the `UNIQUE` constraint, as it decides a skip.
+    ///
+    /// A field rather than a [`SqliteEventStoreError`] variant. A variant
+    /// would make `IngestError::Store(UnheldOwnIdentity)` representable beside
+    /// the port's own `IngestError::UnheldOwnIdentity`, two spellings of one
+    /// fact that the ingest would have to keep apart at runtime.
+    #[cfg(test)]
+    unheld_own: Option<EventId>,
 }
 
 /// Writes every row of the batch, and returns how many rows went in and the
@@ -1332,9 +1426,11 @@ fn write_batch(
     connection: &Connection,
     store_id: StoreId,
     rows: &[NewRow<'_>],
-) -> Result<(usize, Option<SequencePosition>), SqliteEventStoreError> {
+) -> Result<Written, SqliteEventStoreError> {
     let mut written: Vec<(&Event, i64)> = Vec::with_capacity(rows.len());
     let mut first_local: Option<i64> = None;
+    #[cfg(test)]
+    let mut unheld_own: Option<EventId> = None;
     {
         // One statement for every row, local or foreign. A local row binds its
         // origin as `NULL`, and SQLite's `UNIQUE` treats NULLs as distinct, so
@@ -1386,6 +1482,14 @@ fn write_batch(
             // cardinality, no stamp — may count it.
             if changed == 0 {
                 continue;
+            }
+            // Went in, so not held, and yet minted here: the VT-6 breach. The
+            // caller refuses the ingest and rolls the transaction back.
+            #[cfg(test)]
+            if let Origin::Foreign { id, .. } = row.origin
+                && id.store() == store_id
+            {
+                unheld_own.get_or_insert(id);
             }
             let position = connection.last_insert_rowid();
             if origin_position.is_none() && first_local.is_none() {
@@ -1446,7 +1550,13 @@ fn write_batch(
         .last()
         .map(|&(_, position)| position_from_row(position))
         .transpose()?;
-    Ok((written.len(), last))
+    Ok(Written {
+        last,
+        #[cfg(test)]
+        inserted: written.len(),
+        #[cfg(test)]
+        unheld_own,
+    })
 }
 
 /// Inserts every `(tag, position, event_type)` row, chunked to the parameter
@@ -2721,8 +2831,8 @@ mod tests {
             },
         ];
 
-        let (written, _) = write_batch(&connection, own, &rows).unwrap();
-        assert_eq!(written, 2);
+        let written = write_batch(&connection, own, &rows).unwrap();
+        assert_eq!(written.inserted, 2);
 
         let origins: Vec<(String, Vec<u8>, i64, i64)> = connection
             .prepare("SELECT event_type, origin_store, origin_position, position FROM event")
@@ -2829,6 +2939,60 @@ mod tests {
             Some(landed),
             "the same append succeeds once the holder lets go"
         );
+
+        drop(holder);
+        drop(store);
+    }
+
+    /// The ingest counterpart: a write lock held elsewhere past the busy
+    /// timeout is `IngestError::Busy`, class `Transient`, and nothing is
+    /// written. Here rather than in `ingest_spike.rs` because lowering the
+    /// timeout reaches the store's private connection, which only this module
+    /// can, the way the append case above does.
+    ///
+    /// Rejects an ingest that wraps a failed `BEGIN IMMEDIATE` as `Store`, the
+    /// mistake the append path shipped until `0.4.0`: a runner would then stop
+    /// an edge that one retry would have cleared.
+    #[tokio::test]
+    async fn ingest_while_another_connection_holds_the_write_lock_is_busy() {
+        use happenstance_sync::{
+            Classify, FailureClass, IngestError, IngestGroup, ReplicatedEvent,
+        };
+
+        let file = LockedFile::new();
+        let store = SqliteEventStore::open(&file.0).unwrap();
+        store
+            .connection
+            .lock()
+            .unwrap()
+            .busy_timeout(core::time::Duration::from_millis(50))
+            .unwrap();
+        let holder = Connection::open(&file.0).unwrap();
+        holder.execute_batch("BEGIN IMMEDIATE").unwrap();
+
+        let sent = [ReplicatedEvent::new(
+            EventId::new(StoreId::from_bytes([0xB5; 16]), SequencePosition::FIRST),
+            RecordedAt::from_millis(1),
+            Event::new("Shipped", b"s".to_vec()).unwrap(),
+        )];
+        let refused = store
+            .ingest_groups(&[IngestGroup::new(&sent, &[])])
+            .expect_err("a write lock held elsewhere must refuse the ingest");
+        match &refused {
+            IngestError::Busy(SqliteEventStoreError::Sqlite(driver)) => assert!(
+                crate::connection::is_busy(driver),
+                "the payload is the driver's own busy code: {driver}"
+            ),
+            other => panic!("a write lock held elsewhere must be `Busy`, got {other:?}"),
+        }
+        assert_eq!(refused.class(), FailureClass::Transient);
+
+        holder.execute_batch("ROLLBACK").unwrap();
+        assert!(
+            !store.contains_event_id(sent[0].id).await.unwrap(),
+            "a busy refusal must have written nothing"
+        );
+        assert_eq!(store.head().await.unwrap(), None);
 
         drop(holder);
         drop(store);
@@ -3317,6 +3481,40 @@ mod plan_tests {
             !chained.is_empty() && chained.iter().all(|detail| !detail.contains("position=?")),
             "the dropped-alias chain's `SEARCH m0` row carries `position=?`, so the \
              correlation limb cannot tell it from the shipped shape:\n{}",
+            render(&rows)
+        );
+    }
+
+    /// The watermark reads the `UNIQUE (origin_store, origin_position)` index
+    /// and nothing else: a covering scan in the index's own order, so the
+    /// `GROUP BY` needs no sorter and the table is never visited.
+    ///
+    /// **Named wrong query, checked red:** `GROUP BY origin_store || ''`. The
+    /// expression hides the leading column from the planner, which then plans
+    /// `USE TEMP B-TREE FOR GROUP BY`, a sort of every foreign row on every
+    /// watermark, and this test fails on its second assertion.
+    #[test]
+    fn watermark_reads_the_origin_index_without_a_sort() {
+        let connection = seeded();
+        let rows = plan_rows(&connection, super::WATERMARK_SQL, &[]);
+
+        assert!(
+            rows.iter().any(|(_, _, detail)| {
+                detail.contains("USING COVERING INDEX sqlite_autoindex_event_1")
+            }),
+            "the watermark does not read the origin pair's index:\n{}",
+            render(&rows)
+        );
+        assert!(
+            !rows
+                .iter()
+                .any(|(_, _, detail)| detail.contains("TEMP B-TREE")),
+            "the watermark sorts to group, so it pays for every foreign row:\n{}",
+            render(&rows)
+        );
+        assert!(
+            !rows.iter().any(|(_, _, detail)| detail == "SCAN event"),
+            "the watermark scans the table rather than the index:\n{}",
             render(&rows)
         );
     }
