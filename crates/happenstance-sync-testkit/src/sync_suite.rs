@@ -51,10 +51,11 @@ pub mod rules {
     const ORIGIN_B: StoreId = StoreId::from_bytes([0x22; 16]);
     const HUB: StoreId = StoreId::from_bytes([0x33; 16]);
 
-    /// SY-18's two origins: the one that committed the seat map, and the one
-    /// whose event sits at the declared boundary.
+    /// SY-18's three origins: the one that committed the seat map, and the two
+    /// whose events sit at the declared boundary, in data and in metadata.
     const SEAT_MAP_ORIGIN: StoreId = StoreId::from_bytes([0x44; 16]);
     const BOUNDARY_ORIGIN: StoreId = StoreId::from_bytes([0x55; 16]);
+    const METADATA_ORIGIN: StoreId = StoreId::from_bytes([0x66; 16]);
 
     /// SY-1: a peer appends every replicated event it does not already hold,
     /// and never evaluates an append condition — the origin's or its own — as a
@@ -215,12 +216,15 @@ pub mod rules {
     ///    committed at its origin. If the declaration admits it, it is pushed
     ///    and must land. If not, the runner parks it without a round trip,
     ///    which is the prevention, and nothing is pushed;
-    /// 4. pushes one event at the declaration's own boundary and at the
-    ///    contract's envelope floors at once: `max_event_bytes` of data (capped
-    ///    by `max_batch_bytes`), a type of [`MAX_EVENT_TYPE_LEN`] bytes and
-    ///    [`MIN_SUPPORTED_TAGS_PER_EVENT`] tags of [`MAX_TAG_LEN`] bytes each.
-    ///    It must land. A limit on the envelope that the peer imposes without
-    ///    declaring it is a limit discovered at ingest;
+    /// 4. pushes two events at the declaration's own boundary and at the
+    ///    contract's envelope floors at once: `max_event_bytes` of opaque bytes
+    ///    (capped by `max_batch_bytes`), carried once in data and once in
+    ///    metadata, because the declaration bounds the two together; a type of
+    ///    [`MAX_EVENT_TYPE_LEN`] bytes; and [`MIN_SUPPORTED_TAGS_PER_EVENT`]
+    ///    tags of [`MAX_TAG_LEN`] bytes each. The declaration must admit each,
+    ///    and each must land, acknowledged as appended. A limit on the envelope
+    ///    or on metadata that the peer imposes without declaring it is a limit
+    ///    discovered at ingest;
     /// 5. pulls the whole log back: every event that landed is held, byte for
     ///    byte, which rejects a peer that accepts and truncates.
     ///
@@ -234,12 +238,19 @@ pub mod rules {
     ///
     /// # Rejects
     ///
-    /// `tests/wrong_limits.rs` carries three declarations over the KV-capped
-    /// reference peer, each with its behaviour unchanged: one with no value
-    /// cap, which admits the seat map that ingest then parks; one that declares
-    /// the raw 131,072-byte value cap, as if a value held the payload alone,
-    /// which admits a boundary event ingest refuses; and one a byte below
-    /// VT-21's floor.
+    /// `tests/wrong_limits.rs` carries eight mistakes over the KV-capped
+    /// reference peer, one for each check above:
+    ///
+    /// * declarations rewritten over unchanged behaviour: no value cap, which
+    ///   admits the seat map that ingest then parks; the raw 131,072-byte value
+    ///   cap, as if a value held the payload alone, which admits a boundary
+    ///   event ingest refuses; a byte below VT-21's floor; a declaration that
+    ///   changes between two reads; and `max_batch_events` of zero, which
+    ///   admits no event at all;
+    /// * behaviour changed under an honest declaration: a cap of 1,024 bytes on
+    ///   metadata, Workers KV's, that the declaration does not state; data
+    ///   truncated on a large push and acknowledged as appended; and a large
+    ///   event stored whole and acknowledged as skipped.
     ///
     /// # Does not reject
     ///
@@ -249,14 +260,20 @@ pub mod rules {
     /// and what keeps that survivable is the `Park` and `Split` classes SY-36
     /// checks.
     ///
+    /// Nor a lie about `max_batch_bytes` or `max_batch_events` alone. SY-18
+    /// is about the limits a peer imposes on *an event*; the batch limits are
+    /// read here only to size the boundary event, and a batch over them is
+    /// SY-36's `Split`, not a fact that can never land.
+    ///
     /// [`PeerLimits::admits`]: happenstance_sync::PeerLimits::admits
     ///
     /// # Errors
     ///
     /// A [`Violation`] of SY-18 if the declaration changes between two reads,
-    /// declares below VT-21's floor, admits no event at its own boundary, or
-    /// admits an event the push then refuses or does not hand back whole. The
-    /// floor breach cites VT-21 in its message.
+    /// declares below VT-21's floor, or admits no event at its own boundary;
+    /// or if an event the declaration admits is refused, acknowledged as
+    /// anything but one appended, or not handed back whole. The floor breach
+    /// cites VT-21 in its message.
     pub async fn peer_declares_its_own_limits<F: SyncFixture>(
         open: impl AsyncFn() -> F,
     ) -> Result<RuleOutcome, Violation> {
@@ -295,21 +312,17 @@ pub mod rules {
             .max_event_bytes
             .min(limits.max_batch_bytes)
             .min(MAX_PROVOKED_BATCH_BYTES);
-        let boundary = one_event(event_at_the_envelope_floors(size, CLAUSE)?);
-        ensure(limits.admits(&boundary), CLAUSE, || {
-            format!(
-                "the declaration {limits:?} admits no event of {size} bytes, the size it \
-                 states it accepts"
-            )
-        })?;
-        push_admitted(
-            &peer,
-            &boundary,
-            "an event at the declared boundary and the envelope floors",
-            CLAUSE,
-        )
-        .await?;
-        landed.push(boundary);
+        for carrier in [Carrier::Data, Carrier::Metadata] {
+            let boundary = one_event(event_at_the_envelope_floors(size, carrier, CLAUSE)?);
+            ensure(limits.admits(&boundary), CLAUSE, || {
+                format!(
+                    "the declaration {limits:?} admits no event of {size} bytes in its \
+                     {carrier:?}, the size it states it accepts"
+                )
+            })?;
+            push_admitted(&peer, &boundary, carrier.describe(), CLAUSE).await?;
+            landed.push(boundary);
+        }
 
         let held: Vec<ReplicatedEvent> = pull_everything(&peer, CLAUSE)
             .await?
@@ -455,11 +468,43 @@ pub mod rules {
         })
     }
 
+    /// Which of an event's two opaque fields carries a boundary event's bytes.
+    ///
+    /// Both, one event each, because `max_event_bytes` bounds
+    /// [`ReplicatedEvent::payload_len`], which is data and metadata together:
+    /// a peer that stores metadata somewhere smaller has a limit its
+    /// declaration does not state.
+    #[derive(Debug, Clone, Copy)]
+    enum Carrier {
+        Data,
+        Metadata,
+    }
+
+    impl Carrier {
+        /// What the violation message calls the event this carrier builds.
+        const fn describe(self) -> &'static str {
+            match self {
+                Self::Data => "an event at the declared boundary, in its data",
+                Self::Metadata => "an event at the declared boundary, in its metadata",
+            }
+        }
+
+        /// Each boundary event's origin, so the two are distinct facts.
+        const fn origin(self) -> StoreId {
+            match self {
+                Self::Data => BOUNDARY_ORIGIN,
+                Self::Metadata => METADATA_ORIGIN,
+            }
+        }
+    }
+
     /// An event at every envelope floor the contract sets, carrying `size`
-    /// bytes of opaque data (SY-35): a type of [`MAX_EVENT_TYPE_LEN`] bytes and
-    /// [`MIN_SUPPORTED_TAGS_PER_EVENT`] distinct tags of [`MAX_TAG_LEN`] bytes.
+    /// opaque bytes (SY-35) in `carrier`: a type of [`MAX_EVENT_TYPE_LEN`]
+    /// bytes and [`MIN_SUPPORTED_TAGS_PER_EVENT`] distinct tags of
+    /// [`MAX_TAG_LEN`] bytes.
     fn event_at_the_envelope_floors(
         size: usize,
+        carrier: Carrier,
         clause: &'static str,
     ) -> Result<ReplicatedEvent, Violation> {
         let event_type = EventType::new("L".repeat(MAX_EVENT_TYPE_LEN)).map_err(|error| {
@@ -471,13 +516,19 @@ pub mod rules {
             .map_err(|error| {
                 Violation::new(clause, format!("the rule's own tag is invalid: {error}"))
             })?;
-        let event = Event::new(event_type, vec![0_u8; size])
-            .map_err(|error| {
-                Violation::new(clause, format!("the rule's own event is invalid: {error}"))
-            })?
-            .with_tags(tags);
+        let bytes = vec![0_u8; size];
+        let event = match carrier {
+            Carrier::Data => Event::new(event_type, bytes),
+            Carrier::Metadata => {
+                Event::new(event_type, Vec::new()).map(|event| event.with_metadata(bytes))
+            }
+        }
+        .map_err(|error| {
+            Violation::new(clause, format!("the rule's own event is invalid: {error}"))
+        })?
+        .with_tags(tags);
         Ok(ReplicatedEvent::new(
-            EventId::new(BOUNDARY_ORIGIN, SequencePosition::FIRST),
+            EventId::new(carrier.origin(), SequencePosition::FIRST),
             RecordedAt::from_millis(1_800_000_000_000),
             event,
         ))

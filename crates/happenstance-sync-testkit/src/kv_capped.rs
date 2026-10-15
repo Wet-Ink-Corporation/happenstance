@@ -283,7 +283,10 @@ mod tests {
     };
     use happenstance_testkit::block_on;
 
-    use super::{KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError, turnstile_seat_map};
+    use super::{
+        KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError, TURNSTILE_SEAT_MAP_BYTES,
+        turnstile_seat_map,
+    };
     use crate::{SyncFixture, batch_over_the_limit};
 
     const ORIGIN: StoreId = StoreId::from_bytes([0xE1; 16]);
@@ -380,9 +383,17 @@ mod tests {
         let batch = PushBatch::new(vec![EventGroup::new(None, vec![seat_map])]);
         assert!(batch.payload_len() <= peer.limits().max_batch_bytes);
 
+        // 340,000 of data, a 16-byte type, no tags and the 32-byte key.
+        let expected = TURNSTILE_SEAT_MAP_BYTES + "SeatMapPublished".len() + 32;
+        assert_eq!(expected, 340_048);
+
         let error = block_on(peer.push(&batch)).expect_err("340 KB is over a 128 KiB value");
         assert!(
-            matches!(error, KvPeerError::ValueTooLarge { .. }),
+            matches!(
+                error,
+                KvPeerError::ValueTooLarge { value_len, cap: KV_VALUE_CAP, .. }
+                    if value_len == expected
+            ),
             "{error:?}"
         );
     }

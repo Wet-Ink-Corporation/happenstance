@@ -110,11 +110,16 @@ not the same as what a user needed to be told.
   first; and a peer that declares `max_event_bytes` below VT-21's 65,536-byte
   floor. The rule reads `limits()` before it pushes anything, pushes
   Turnstile's 340,000-byte seat map only if the declaration admits it, and then
-  pushes one event at the declared boundary carrying a 255-byte type and 64
-  tags of 255 bytes. Both must land and come back whole. Its wrong
-  implementations are in `tests/wrong_limits.rs`: a KV peer that declares no
-  value cap, one that declares the raw value cap, and one a byte below the
-  floor.
+  pushes two events at the declared boundary, one carrying its bytes in data
+  and one in metadata, each with a 255-byte type and 64 tags of 255 bytes.
+  Each must land, acknowledged as appended, and come back whole. Its wrong
+  implementations are in `tests/wrong_limits.rs`, one per check: KV peers that
+  declare no value cap, the raw value cap, a byte below the floor, a
+  declaration that changes between reads, or room for no event at all; and KV
+  peers that cap metadata at 1,024 bytes without declaring it, truncate large
+  data, or acknowledge a large event as skipped. It does not check
+  `max_batch_bytes` or `max_batch_events` on their own: those are not limits on
+  an event.
 
   **`KvCappedFixture`**, the peer SY-18's marker names: a 128 KiB cap on each
   value, which reserves the envelope at the contract's floors and declares
