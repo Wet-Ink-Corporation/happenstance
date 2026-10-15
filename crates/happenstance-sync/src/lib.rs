@@ -162,7 +162,7 @@ pub use ingest::{IngestError, IngestGroup, IngestStore, Ingested, SendIngestStor
 pub use memory::{MemoryPeerError, MemoryResume, MemorySyncPeer};
 pub use peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, SyncError,
-    SyncPeer,
+    SyncPeer, Waiting,
 };
 
 // `wire`'s items are deliberately left module-qualified. `wire::FORMAT_VERSION`
