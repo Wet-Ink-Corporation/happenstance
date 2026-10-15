@@ -37,7 +37,7 @@ not the same as what a user needed to be told.
 ### Added
 
 - **`happenstance-sync`: the replication message set, in a crate that is not
-  published yet** (#114, proposed ADR-0097). Four messages, each its own type
+  published yet** (#114, ADR-0097). Four messages, each its own type
   in `wire::Envelope<T>`: `PushBatch`, `Ack`, the new `wire::PullRequest`, and
   `Pulled<wire::ResumeToken>`. `PushBatch`, `EventGroup`, `ReplicatedEvent`,
   `Ack` and `Pulled` derive `serde`'s traits, and `Watermark` has a hand-written
@@ -116,7 +116,7 @@ not the same as what a user needed to be told.
 ### Changed
 
 - **`happenstance-sync`: `Ack`'s `appended` and `skipped` are `u64`, not
-  `usize`** (#114, proposed ADR-0097). They cross the wire, so their width is
+  `usize`** (#114, ADR-0097). They cross the wire, so their width is
   fixed. The crate is not published, so no consumer is affected.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.

@@ -2,7 +2,7 @@
 id: kb-decision-0097
 title: The sync message set is four types in the envelope, and the format version stays on every message
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0097
 reversibility: high
@@ -10,7 +10,7 @@ phase: 13
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed for the owner on 2026-10-14 (#114). The replication message set is four types, one per
+  Accepted by the owner on 2026-10-15 as proposed (#114). The replication message set is four types, one per
   message, each wrapped as Envelope<T> and never gathered into an enum of kinds: PushBatch (push),
   Ack (its answer), PullRequest (pull) and Pulled<ResumeToken> (its answer). Which message a buffer
   holds is the transport's to say, through the route or the request it answers. PushBatch,
@@ -39,12 +39,13 @@ source_paths:
   - crates/happenstance-sync/src/identity.rs
   - crates/happenstance-sync/tests/wire.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-10-14
+last_reviewed: 2026-10-15
 ---
 
 # The sync message set is four types in the envelope, and the format version stays on every message
 
-**Proposed on 2026-10-14 for #114, and not accepted.** The owner accepts or rejects it. No
+**Proposed on 2026-10-14 for #114, and accepted by the owner on 2026-10-15 as proposed**: version 1
+stays, and `ResumeToken` stays text. No
 long-form record exists; this atom is the record. `happenstance-sync` is `publish = false`, so
 every answer here is free to change until the crate first publishes, and none of it is free after.
 
