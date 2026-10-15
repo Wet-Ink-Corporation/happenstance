@@ -114,7 +114,9 @@ provides the atomicity and the identity that makes it idempotent.
       policy, refuse the whole call as `UnheldOwnIdentity`, class `Stop`, nothing
       written, which replaces the pin that recorded the wedge. The policy is
       [ADR-0098](../../.kb/decisions/0098-an-unheld-own-identity-stops-ingest.md),
-      **proposed** and awaiting the owner, and SY-38 `[PROVISIONAL]`. The oracle,
+      **proposed** and awaiting the owner, and SY-38 `[PROVISIONAL]`, an exception that amends the
+      frozen SY-1 and SY-33 once accepted. If the owner declines it, the fallback is P1: restore
+      the pin test and keep only the error type. The oracle,
       the ingest rules, the real peers and the `sync` feature are PRs B to F.
 - [x] #109 · **ES-41's held-versus-visible reading.** ADR-0028 froze ES-41 at phase 17
       and left one reading open: where ES-10's frontier separates a committed row

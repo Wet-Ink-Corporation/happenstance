@@ -893,8 +893,9 @@ ADR-0098 is written straight here with no intake step, and it is **proposed**: i
 owner. It decides the policy ADR-0073 left to phase 13, for a replicated event that claims this
 store's own `StoreId` at a position the store does not hold. The whole ingest is refused as
 `IngestError::UnheldOwnIdentity`, class `Stop`, with nothing written, and the remedy is VT-6's
-re-mint. It mints SY-38 `[PROVISIONAL]`, and it argues past ADR-0073's sentence about SY-1 without
-editing it. It supersedes nothing.
+re-mint. It mints SY-38 `[PROVISIONAL]` as a narrow identity-integrity exception that **amends
+the frozen SY-1 and SY-33**; their texts stay unedited until the owner accepts it, and the record
+lists the edits acceptance makes. It supersedes nothing.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |

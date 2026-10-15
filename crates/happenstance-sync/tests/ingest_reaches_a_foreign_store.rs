@@ -132,9 +132,11 @@ fn next_position(log: &[Row]) -> Result<SequencePosition, AdapterError> {
 /// Writes every group into `log`, for a store whose own identity is `identity`.
 ///
 /// The body of the stand-in's transaction: on an error, the caller discards
-/// whatever this pushed.
+/// whatever this pushed. `committed` is how many rows the log held before the
+/// call began.
 fn write_groups(
     log: &mut Vec<Row>,
+    committed: usize,
     identity: StoreId,
     groups: &[IngestGroup<'_>],
 ) -> Result<Ingested, IngestError<AdapterError>> {
@@ -142,7 +144,12 @@ fn write_groups(
     for group in groups {
         let before = outcome.appended;
         for event in group.events {
-            if log.iter().any(|row| row.id == event.id) {
+            if let Some(at) = log.iter().position(|row| row.id == event.id) {
+                // SY-38 again: an own identity "held" only by a compensation
+                // this call wrote was not held when the call began.
+                if at >= committed && event.id.store() == identity {
+                    return Err(IngestError::unheld_own_identity(event.id));
+                }
                 outcome.skipped += 1;
                 continue;
             }
@@ -151,7 +158,7 @@ fn write_groups(
             // it was restored or rewound without a re-mint. The whole call is
             // refused.
             if event.id.store() == identity {
-                return Err(IngestError::UnheldOwnIdentity { id: event.id });
+                return Err(IngestError::unheld_own_identity(event.id));
             }
 
             // At the tail, always. Placing an ingested event at the position
@@ -205,7 +212,7 @@ impl IngestStore for HypotheticalAdapterStore {
         // Where the transaction began. Every error rolls the whole call back to
         // it, because every `IngestError` arm promises nothing was written.
         let committed = log.len();
-        let written = write_groups(&mut log, self.identity, groups);
+        let written = write_groups(&mut log, committed, self.identity, groups);
         if written.is_err() {
             log.truncate(committed);
         }

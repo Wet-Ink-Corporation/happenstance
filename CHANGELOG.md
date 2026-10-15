@@ -67,7 +67,9 @@ not the same as what a user needed to be told.
   was written, and `IngestStore::Error` is now bound on `Classify`, so each
   failure states its SY-36 class. An event claiming the store's own `StoreId`
   at a position the store does not hold now refuses the whole call as
-  `UnheldOwnIdentity`, class `Stop`. Before, it was ingested, and the local
+  `UnheldOwnIdentity`, class `Stop`, including a claim on a position the same
+  call's own compensation took. This is a proposed exception to the frozen SY-1
+  and SY-33, pending the owner. Before, it was ingested, and the local
   append that later reached its position failed on every retry. The remedy is
   VT-6's re-mint, after which the same batch lands. In `happenstance-sqlite`
   this is all `#[cfg(test)]`, so nothing published moves: the spike detects
@@ -76,7 +78,9 @@ not the same as what a user needed to be told.
   as `IngestError::Busy`, and holds the watermark's statement to the origin
   index with an `EXPLAIN QUERY PLAN` test. Each new test names a defect:
   `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` detects a store
-  that writes the claim, or the groups before it; `local_appends_are_not_wedged_after_a_refused_claim`
+  that writes the claim, or the groups before it; `a_claim_the_calls_own_compensation_would_hide_is_refused`
+  detects a store that counts a claim meeting its own fresh compensation as a
+  re-delivery, committing two events under one identity; `local_appends_are_not_wedged_after_a_refused_claim`
   detects the old wedge; `a_claim_lands_as_foreign_after_the_store_is_reminted`
   detects a policy the remedy cannot clear; `ingest_while_another_connection_holds_the_write_lock_is_busy`
   detects a failed `BEGIN IMMEDIATE` reported as `Store`; and

@@ -740,7 +740,7 @@ mod tests {
             .await
             .expect_err("an unheld own identity must refuse the ingest");
         assert!(
-            matches!(refused, IngestError::UnheldOwnIdentity { id } if id == claimed.claim),
+            matches!(refused, IngestError::UnheldOwnIdentity { id, .. } if id == claimed.claim),
             "expected UnheldOwnIdentity naming {}, got {refused:?}",
             claimed.claim
         );
@@ -846,6 +846,54 @@ mod tests {
             log(&store).await,
             before,
             "a refused ingest left compensation, or a foreign event, behind"
+        );
+    }
+
+    /// A claim this call's **own** compensation would hide is refused too.
+    ///
+    /// Group 1 lands a new foreign event and its compensation, which this
+    /// store stamps with its own identity at the next position but one. Group
+    /// 2 carries the peer's event claiming exactly that identity. The insert
+    /// meets the compensation under the `UNIQUE` constraint and reads as a
+    /// re-delivery, so a store that refuses only the claims that land would
+    /// commit two events under one `EventId`. The store did not hold that
+    /// identity when the call began, and that is what decides.
+    #[tokio::test]
+    async fn a_claim_the_calls_own_compensation_would_hide_is_refused() {
+        let store = SqliteEventStore::open_in_memory().unwrap();
+        let held = store.append(&[event("Local", "a")], None).await.unwrap();
+        let before = log(&store).await;
+        // The foreign event takes the next position and its compensation the
+        // one after: computed from the head the store assigned, never a literal.
+        let compensated_at = held
+            .next()
+            .and_then(SequencePosition::next)
+            .expect("two positions past a fresh head exist");
+        let claim = EventId::new(store.store_id(), compensated_at);
+        let from = peer(0x5B);
+        let first = [shipped(id(from, 1), 1, event("Shipped", "f1"))];
+        let answer = [event("Compensated", "c1")];
+        let second = [
+            shipped(id(from, 2), 2, event("Shipped", "f2")),
+            shipped(claim, 3, event("Local", "forged")),
+        ];
+
+        let refused = ingest(
+            &store,
+            &[
+                IngestGroup::new(&first, &answer),
+                IngestGroup::new(&second, &[]),
+            ],
+        )
+        .await;
+        assert!(
+            matches!(refused, Err(IngestError::UnheldOwnIdentity { id, .. }) if id == claim),
+            "expected UnheldOwnIdentity naming {claim}, got {refused:?}"
+        );
+        assert_eq!(
+            log(&store).await,
+            before,
+            "a refused ingest left its compensation or a foreign event behind"
         );
     }
 

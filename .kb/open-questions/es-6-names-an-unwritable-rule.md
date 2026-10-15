@@ -238,7 +238,7 @@ Whether the dagger convention survives at all, now that the guard it switched is
 ## Phase 16 — 2026-09-29
 
 **Sub-question 4 is answered by `kb-decision-0066`.** Driver error payloads re-exported under
-ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1675`,
+ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1726`,
 are **inside** the 1.0 promise, with a named limit: an adapter's major follows the breaking
 version of the driver it re-exports. That rules out the sealing option `kb-decision-0044` left
 open. Writing the answer into ES-6's prose is phase 17's

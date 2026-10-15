@@ -63,7 +63,7 @@ use crate::classify::{Classify, FailureClass};
 ///
 /// let own = StoreId::from_bytes([7; 16]);
 /// let claim = EventId::new(own, SequencePosition::new(3).ok_or("position zero")?);
-/// let refused: IngestError<DiskFull> = IngestError::UnheldOwnIdentity { id: claim };
+/// let refused: IngestError<DiskFull> = IngestError::unheld_own_identity(claim);
 ///
 /// // Halt this edge: an operator re-mints the store, and the same batch lands.
 /// assert_eq!(refused.class(), FailureClass::Stop);
@@ -84,6 +84,7 @@ pub enum IngestError<E> {
     /// cannot be split further, and what a runner does then is #244's. Every
     /// other limit is about one event, and is [`Park`](FailureClass::Park).
     #[error("ingest exceeds the store's {limit} limit: {len}")]
+    #[non_exhaustive]
     ExceedsStoreLimit {
         /// Which ceiling was exceeded.
         limit: StoreLimit,
@@ -109,6 +110,7 @@ pub enum IngestError<E> {
         "event {id} claims this store's identity and this store does not hold it: \
          the store was restored or rewound without re-minting its identity"
     )]
+    #[non_exhaustive]
     UnheldOwnIdentity {
         /// The first such identity the write met.
         id: EventId,
@@ -126,6 +128,30 @@ pub enum IngestError<E> {
     /// The adapter failed, and its own [`Classify`] impl states the class.
     #[error(transparent)]
     Store(E),
+}
+
+/// Constructors for the two struct arms.
+///
+/// Both arms are `#[non_exhaustive]`, so a field can be added to either
+/// later without breaking a match: the offending event's identity on
+/// `ExceedsStoreLimit` is the likely one, for a runner that parks a single
+/// event. The price is that a struct literal is refused outside this crate,
+/// so an adapter builds the arms through these. A match outside the crate
+/// spells `{ id, .. }`.
+impl<E> IngestError<E> {
+    /// [`ExceedsStoreLimit`](Self::ExceedsStoreLimit): `len`, in `limit`'s
+    /// own unit, is over the store's ceiling.
+    #[must_use]
+    pub const fn exceeds_store_limit(limit: StoreLimit, len: usize) -> Self {
+        Self::ExceedsStoreLimit { limit, len }
+    }
+
+    /// [`UnheldOwnIdentity`](Self::UnheldOwnIdentity): `id` claims this
+    /// store's identity, and this store does not hold it.
+    #[must_use]
+    pub const fn unheld_own_identity(id: EventId) -> Self {
+        Self::UnheldOwnIdentity { id }
+    }
 }
 
 /// Each arm's class is fixed by the arm, except [`Store`](IngestError::Store),

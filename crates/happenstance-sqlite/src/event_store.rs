@@ -800,6 +800,13 @@ impl SqliteEventStore {
     /// No lookup runs ahead of the insert, so the check costs nothing on the
     /// path every echoed event takes.
     ///
+    /// A skip is not always a hold, though. This call's own compensation is
+    /// stamped with this store's identity, so a claim on the position a
+    /// compensation just took meets *that* row under `UNIQUE` and reads as a
+    /// re-delivery. So the head is read once when the transaction begins, and
+    /// an own-identity skip above it is refused too: only this call can have
+    /// written a row there.
+    ///
     /// `#[cfg(test)]` because the trait it serves is `happenstance-sync`'s,
     /// which is not published; see `src/ingest_spike.rs`. Phase 13 turns the
     /// gate into a feature.
@@ -817,6 +824,15 @@ impl SqliteEventStore {
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(ingest_begin_error)?;
         check_identity(&transaction, store_id).map_err(IngestError::Store)?;
+        // The head before this call wrote anything, read once under the write
+        // lock. An own identity above it was not held when the call began,
+        // whatever the insert says, because only this call can have put a row
+        // there. `max` over the `INTEGER PRIMARY KEY` is one B-tree seek.
+        let started_at: i64 = transaction
+            .query_row("SELECT coalesce(max(position), 0) FROM event", [], |row| {
+                row.get(0)
+            })
+            .map_err(|error| IngestError::Store(error.into()))?;
         let write = |rows: &[NewRow<'_>]| {
             write_batch(&transaction, store_id, rows).map_err(IngestError::Store)
         };
@@ -835,11 +851,15 @@ impl SqliteEventStore {
                 })
                 .collect();
             let written = write(&foreign)?;
-            if let Some(id) = written.unheld_own {
+            // Landed, so not held; or skipped against a row this call wrote.
+            let hidden = written
+                .highest_own_echo
+                .filter(|echo| claimed_after(*echo, started_at));
+            if let Some(id) = written.unheld_own.or(hidden) {
                 // Dropping the transaction uncommitted rolls back every group
                 // this call has written so far, not only this one.
                 drop(transaction);
-                return Err(IngestError::UnheldOwnIdentity { id });
+                return Err(IngestError::unheld_own_identity(id));
             }
             ingested.appended += written.inserted;
             ingested.skipped += foreign.len() - written.inserted;
@@ -1128,6 +1148,13 @@ fn begin_error(error: rusqlite::Error) -> AppendError<SqliteEventStoreError> {
     }
 }
 
+/// Whether `id` names a position above `head`, a stored position. A position
+/// past `i64::MAX` is above every stored one.
+#[cfg(test)]
+fn claimed_after(id: EventId, head: i64) -> bool {
+    i64::try_from(id.position().get()).map_or(true, |position| position > head)
+}
+
 /// [`begin_error`] for an ingest: `IngestError::Busy` when the write lock was
 /// not acquired, `IngestError::Store` for anything else, by the same reasoning
 /// and at the same one call site.
@@ -1328,7 +1355,7 @@ impl From<CeilingExceeded> for AppendError<SqliteEventStoreError> {
 #[cfg(test)]
 impl From<CeilingExceeded> for happenstance_sync::IngestError<SqliteEventStoreError> {
     fn from(CeilingExceeded { limit, len }: CeilingExceeded) -> Self {
-        Self::ExceedsStoreLimit { limit, len }
+        Self::exceeds_store_limit(limit, len)
     }
 }
 
@@ -1389,6 +1416,16 @@ struct Written {
     /// fact that the ingest would have to keep apart at runtime.
     #[cfg(test)]
     unheld_own: Option<EventId>,
+    /// The highest-positioned foreign row carrying this store's own identity
+    /// that was **skipped** as already held.
+    ///
+    /// Held by the store, or only by a row this same call already wrote: a
+    /// compensation stamped with that identity a moment earlier meets the claim
+    /// under `UNIQUE` exactly as a held row does. The writer cannot tell the
+    /// two apart, so it reports the highest, and the caller compares it with
+    /// the head the store had when its transaction began.
+    #[cfg(test)]
+    highest_own_echo: Option<EventId>,
 }
 
 /// Writes every row of the batch, and returns how many rows went in and the
@@ -1431,6 +1468,8 @@ fn write_batch(
     let mut first_local: Option<i64> = None;
     #[cfg(test)]
     let mut unheld_own: Option<EventId> = None;
+    #[cfg(test)]
+    let mut highest_own_echo: Option<EventId> = None;
     {
         // One statement for every row, local or foreign. A local row binds its
         // origin as `NULL`, and SQLite's `UNIQUE` treats NULLs as distinct, so
@@ -1481,6 +1520,16 @@ fn write_batch(
             // Held already: a skip, and nothing below — no tag row, no
             // cardinality, no stamp — may count it.
             if changed == 0 {
+                // An own identity skipped as held: the caller decides whether
+                // it was held before this call or only by this call's own
+                // compensation, which the insert alone cannot tell apart.
+                #[cfg(test)]
+                if let Origin::Foreign { id, .. } = row.origin
+                    && id.store() == store_id
+                    && highest_own_echo.is_none_or(|seen: EventId| seen.position() < id.position())
+                {
+                    highest_own_echo = Some(id);
+                }
                 continue;
             }
             // Went in, so not held, and yet minted here: the VT-6 breach. The
@@ -1556,6 +1605,8 @@ fn write_batch(
         inserted: written.len(),
         #[cfg(test)]
         unheld_own,
+        #[cfg(test)]
+        highest_own_echo,
     })
 }
 
@@ -3513,7 +3564,11 @@ mod plan_tests {
             render(&rows)
         );
         assert!(
-            !rows.iter().any(|(_, _, detail)| detail == "SCAN event"),
+            // Any table scan, however a SQLite release words it: a `SCAN` row
+            // that names no index reads every row of `event`.
+            !rows
+                .iter()
+                .any(|(_, _, detail)| detail.starts_with("SCAN") && !detail.contains("INDEX")),
             "the watermark scans the table rather than the index:\n{}",
             render(&rows)
         );

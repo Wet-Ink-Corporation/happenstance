@@ -1038,7 +1038,7 @@ adapter is the instrument* — was run on that instrument and did not fire.
 `happenstance-sync` publishes) goes through the same private `write_batch` that
 `append` calls — one `INSERT` statement for a local row and a foreign one — and
 what is ingest-only is a transaction frame, a watermark query and the values a
-foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1425`). Neon,
+foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1462`). Neon,
 at the far end of the transport axis, builds a whole ingest batch as one
 statement from the builders its `append` uses; that half is structural and was
 not executed. So **the write path is the adapter's**, and `happenstance-core`
@@ -2718,7 +2718,7 @@ never call the method.
   with `error[E0277]: cannot be shared between threads safely`. That leg carries
   the clause on its own, which is as well, because the second leg this bullet used
   to offer is false: it said `memory.rs:154` and
-  `crates/happenstance-sqlite/src/event_store.rs:1029` "both write `+ Send` and
+  `crates/happenstance-sqlite/src/event_store.rs:1049` "both write `+ Send` and
   would both need `+ Send + Sync`", and they would not. Flipping the attribute and
   running `cargo check --workspace --all-features` produced *zero* errors and
   touched neither impl — an RPITIT impl need not restate the trait's auto-trait
@@ -2809,7 +2809,7 @@ could: `MemoryStoreError` is uninhabited (`memory.rs:284-291`) and
 that can, and phase 8 built the rest of them: `SqliteEventStoreError` is now
 fourteen real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
 the crate's own decode and identity failures
-(`crates/happenstance-sqlite/src/event_store.rs:1666-1812`), and
+(`crates/happenstance-sqlite/src/event_store.rs:1717-1863`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
 `SqlError::Thrown` carries a `JsThrow`, whose payload is an `Rc<worker::Error>`
 (`crates/happenstance-cloudflare/src/js.rs:168-173`).
@@ -2852,7 +2852,7 @@ payloads in scope, by crate:
 
 - **`happenstance-sqlite`** — `Sqlite(rusqlite::Error)` on both
   `SqliteEventStoreError` and `SqliteProjectionStoreError`
-  (`crates/happenstance-sqlite/src/event_store.rs:1675`,
+  (`crates/happenstance-sqlite/src/event_store.rs:1726`,
   `crates/happenstance-sqlite/src/projection_store.rs:576`), with
   `pub use rusqlite` (`crates/happenstance-sqlite/src/lib.rs:148`).
 - **`happenstance-postgres`** — `Driver(sqlx::Error)` on both
@@ -2883,10 +2883,10 @@ One more consequence follows mechanically from the same reasoning, and it is
 stated as that rather than as a separate promise. A payload from a crate this
 workspace does **not** re-export is in the public signature just the same:
 `tokio::task::JoinError` (`crates/happenstance-postgres/src/error.rs:106`,
-`crates/happenstance-sqlite/src/event_store.rs:1689`,
+`crates/happenstance-sqlite/src/event_store.rs:1740`,
 `crates/happenstance-sqlite/src/projection_store.rs:588`) and
 `tokio::runtime::TryCurrentError`
-(`crates/happenstance-sqlite/src/event_store.rs:1697`,
+(`crates/happenstance-sqlite/src/event_store.rs:1748`,
 `crates/happenstance-sqlite/src/projection_store.rs:592`) sit in public variants,
 so a `tokio` release that changed either would force an adapter major too.
 `tokio` is `1.x`, so that happens only at its own major.
@@ -3170,7 +3170,7 @@ orders and truncates under the read lock at call time) and `happenstance-sqlite`
 (which does not: `read` is not `async` and may legally be called with no runtime
 in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
 its ceiling is sampled there — `Ceiling::Unsampled` at
-`crates/happenstance-sqlite/src/event_store.rs:1460` is the state the first poll
+`crates/happenstance-sqlite/src/event_store.rs:2100` is the state the first poll
 resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
 to the call site, and ADR-0081 (proposed) reorders it: `Handle::try_current` first, then
 a `tokio::runtime::Handle` captured at construction, so the lazy spawn prefers
@@ -4463,7 +4463,7 @@ is a method the port does not have. The cost of "required" is seven impls
 today, four of them skeletons — `happenstance-sqlite` was the fifth until phase
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
-`crates/happenstance-sqlite/src/event_store.rs:1814`,
+`crates/happenstance-sqlite/src/event_store.rs:1865`,
 `crates/happenstance-postgres/src/event_store.rs:485`,
 `crates/happenstance-cloudflare/src/event_store.rs:1170` and
 `crates/happenstance-neon/src/event_store.rs:797`, `:1515`. The blanket impl
@@ -7436,17 +7436,29 @@ the Neon peer's one-shot HTTP, inside the 34-minute window.
 
 ---
 
-**SY-38. An ingest that writes an event claiming the receiver's own `StoreId`
-MUST instead refuse the whole call, write nothing in it, and report a failure
-whose class is stop.**
+**SY-38. An ingest that meets an event claiming the receiver's own `StoreId`,
+which the receiver did not hold when the ingest began, MUST refuse the whole
+call, write nothing in it, and report a failure whose class is stop. This is an
+exception to SY-1 and to SY-33.**
 
-The event claims an identity the receiver minted and the receiver does not hold
-it, so the receiver was restored or rewound under an identity VT-6 required it
-to re-mint. The write decides it, not a lookup ahead of the write: an
-own-identity event the receiver holds meets VT-8's uniqueness and is a
-re-delivery (SY-11), and one that would land is the refusal. The remedy is
-VT-6's re-mint, after which the same events MUST land, the claimed one as a
-foreign event under the identity that minted it.
+It carves one case out of two `[FROZEN]` clauses, and says so rather than
+reading them narrowly. SY-1 requires that an ingesting peer "MUST append every
+event it receives that it does not already hold", and this refuses such an
+event. SY-33 forbids "any refusal whose truth value depends on which events the
+receiver holds", and this refusal's truth value does. The exception is an
+identity-integrity refusal: the event claims an identity the receiver minted
+and does not hold, so the receiver was restored or rewound under an identity
+VT-6 required it to re-mint. Every event carrying another store's identity is
+still appended or skipped as SY-1 says. The texts of SY-1 and SY-33 are
+unchanged until ADR-0098 is accepted, which adds a pointer here to each.
+
+The write decides it, not a lookup ahead of the write. An own-identity event the
+receiver held when the call began meets VT-8's uniqueness and is a re-delivery
+(SY-11). One that lands was not held. One that meets a row the same call wrote,
+such as a compensation stamped with the receiver's identity a moment earlier,
+was not held either, and is refused too. The remedy is VT-6's re-mint, after
+which the same events MUST land, the claimed one as a foreign event under the
+identity that minted it.
 
 `[PROVISIONAL — falsified by a deployment in which an unheld own identity is
 expected and benign, so that halting the edge costs more than the wedged append
@@ -7454,9 +7466,10 @@ it prevents. Falsification test: find a topology the workspace supports in which
 a conformant store, not restored and not rewound, receives an event carrying its
 own identity at a position it does not hold. Decided by
 [ADR-0098](../.kb/decisions/0098-an-unheld-own-identity-stops-ingest.md), which
-is proposed and awaits the owner.]`
+is proposed and awaits the owner; its acceptance amends SY-1 and SY-33.]`
 Rule: `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test,
 `crates/happenstance-sqlite/src/ingest_spike.rs`), with
+`a_claim_the_calls_own_compensation_would_hide_is_refused`,
 `local_appends_are_not_wedged_after_a_refused_claim` and
 `a_claim_lands_as_foreign_after_the_store_is_reminted` beside it; and
 `an_unheld_own_identity_stops_the_ingest` (new, `happenstance-sync-testkit`),
@@ -7468,19 +7481,23 @@ the claim at the next local position, and the local append later assigned the
 claimed position failed when its stamp met the claim on `UNIQUE (origin_store,
 origin_position)`. The rollback returned the position counter, so every retry
 failed the same way: local appends wedged, far from the cause, on a constraint
-error naming neither the claim nor the remedy. ADR-0073 kept that behaviour on
-the reading that a refusal here is a refusal on local state, which SY-1 forbids.
-This clause reads it otherwise. The refusal is about the receiver's own
-identity, not the content of its log; its remedy is configuration, the class
-SY-33 permits; and after the remedy it converges, where a condition-derived
-refusal never can. It also rejects a store that inspects only the first event of
-a batch, or commits group by group: the claim may sit at any index of any group,
-and nothing in the call may survive it.
+error naming neither the claim nor the remedy. That behaviour kept SY-1 and
+SY-33 as written, which is what ADR-0073 chose it for. The exception is taken
+because the refusal is about the receiver's own identity rather than the content
+of its log, its remedy is configuration, and after the remedy it converges,
+where a condition-derived refusal never can. Its costs are ADR-0098's: Postgres
+and Neon have no re-mint until #104, a buggy or forging peer can halt an edge
+where a re-mint is the wrong remedy, and a stop halts every origin on the edge.
+It also rejects a store that inspects only the first event of a batch, commits
+group by group, or treats every own-identity skip as a re-delivery: the claim
+may sit at any index of any group, nothing in the call may survive it, and a
+claim on a position the call's own compensation took is not held.
 
 What it does not reach is VT-6's undetectable case. A restored store that has
-already re-issued the claimed identity to a different local event holds it, so
-the peer's original is skipped as a re-delivery, and two events carry one
-identity. Only the re-mint VT-6 requires after a restore prevents that.
+already re-issued the claimed identity to a different local event, before the
+call, holds it, so the peer's original is skipped as a re-delivery, and two
+events carry one identity. Only the re-mint VT-6 requires after a restore
+prevents that.
 
 ---
 
