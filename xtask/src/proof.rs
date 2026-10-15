@@ -793,9 +793,16 @@ const CLOUDFLARE_WASM_RULES: &[&str] = &[
     "a_live_read_stream_does_not_block_an_append",
 ];
 
-/// The sync rules named for the replication row: today, all of them.
+/// The sync rules named for the replication row: today, all but SY-18's.
 ///
-/// All three, because each is the first of its clause and none is redundant on
+/// SY-18's `peer_declares_its_own_limits` is left out because its pass does not
+/// depend on a group surviving the transport whole, which is what this list
+/// keeps. It still runs on wasm32: [`wasm_run`] holds this row's listing to the
+/// whole `for_each_sync_peer_rule!` enumeration and fails on any test that
+/// fails. What naming a rule here adds is the transcript check that it was not
+/// silently skipped.
+///
+/// These three, because each is the first of its clause and none is redundant on
 /// this target: SY-36's is here because the `!Send` peer that lives on wasm32
 /// reports its failures through its own error type, and a class it states only
 /// on the host is a class nobody on the platform can act on. The list stops

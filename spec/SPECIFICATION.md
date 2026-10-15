@@ -10225,7 +10225,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
 | SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` † | E2E-35, E2E-36, E2E-44 |
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
-| SY-18 | DEFERRED | `peer_declares_its_own_limits` † | E2E-35 |
+| SY-18 | DEFERRED | `peer_declares_its_own_limits` | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
 | SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-22 |
 | SY-21 | PROVISIONAL | `convergent_projection_cannot_observe_local_position` † | E2E-41 |
