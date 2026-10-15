@@ -51,8 +51,8 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 /// this envelope and the message set below it (ADR-0097). It is bumped whenever
 /// the **shape** of any wire type changes: a field added, removed, retyped or
 /// moved between types — per-type versioning cannot say VT-30's move of `after`
-/// into `Guard`, which changed no single type. Version 1 lacked
-/// [`Pulled::waiting`](crate::Pulled::waiting), the field that bumped it (#245).
+/// into `Guard`, which changed no single type. The set this version names
+/// includes [`Pulled::waiting`](crate::Pulled::waiting) on the pulled message.
 ///
 /// # What must never bump it
 ///
@@ -424,8 +424,8 @@ impl ResumeToken {
 /// peer's limits reach the caller is the transport's (#117), and a fifth
 /// message is additive because no enum holds the four.
 ///
-/// Since version 2, pulled carries [`waiting`](crate::Pulled::waiting) after
-/// its token, always present (SY-37, WF-2): what the far side still holds, so a
+/// Pulled carries [`waiting`](crate::Pulled::waiting) after its token, always
+/// present (SY-37, WF-2): what the far side still holds, so a
 /// runner told [`Nothing`](crate::Waiting::Nothing) skips the empty pull.
 ///
 /// # A mis-routed buffer
@@ -435,8 +435,8 @@ impl ResumeToken {
 /// type refuses unknown fields, so a push handed to it is an error rather than
 /// `PullRequest { from: None }`, which its one optional field would otherwise
 /// default to. Postcard has no equivalent: it carries no field names, and an
-/// empty push and a first pull are both the version and then `00` (ADR-0097 §1
-/// measured `[01 00]`, at version 1).
+/// empty push and a first pull are both the version and then `00`
+/// (ADR-0097 §1).
 ///
 /// # Examples
 ///

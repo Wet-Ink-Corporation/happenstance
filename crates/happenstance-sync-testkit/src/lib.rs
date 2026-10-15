@@ -78,7 +78,7 @@ pub use fixture::{
     MAX_PROVOKED_BATCH_BYTES, MemorySyncFixture, MemorySyncHandle, Refusal, RefusalsOf,
     SyncFixture, batch_over_the_limit, oversized_push_refusal,
 };
-pub use sync_suite::rules;
+pub use sync_suite::{NO_SECOND_PAGE, NO_SECOND_PAGE_REASON, rules};
 pub use violation::Violation;
 
 /// Generates the sync conformance suite for a peer adapter.

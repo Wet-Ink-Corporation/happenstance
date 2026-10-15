@@ -91,10 +91,10 @@ large for the peer. `SyncError` (`peer.rs:393-421`) covers only the runner's own
    - `Stop`: authorisation or configuration; halt the edge and report it.
 
    The class is a function of the error alone. No class exists for a condition-level refusal,
-   because SY-33 forbids that refusal (`spec/SPECIFICATION.md:8092-8115`). `SyncError`, the
+   because SY-33 forbids that refusal (`spec/SPECIFICATION.md:8104-8127`). `SyncError`, the
    runner's own enum, states a class too: `BatchTooLarge` is `Split`, `BelowRetentionFloor` and
    `UnknownPeer` are `Stop`. It gains no variant here; the message set is ADR-0027's.
-2. **It is minted as SY-36 `[PROVISIONAL]`** (`spec/SPECIFICATION.md:8136-8174`), with the rule
+2. **It is minted as SY-36 `[PROVISIONAL]`** (`spec/SPECIFICATION.md:8148-8186`), with the rule
    `every_refusal_states_its_class` in `happenstance-sync-testkit` and a mutant that reports
    every failure as one class. The marker moves when the rule exists in the tree, not before;
    its 1.0 disposition is `freeze-by-13` (`runbook/ledgers.md`, the SY-36 row).

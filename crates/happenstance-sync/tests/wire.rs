@@ -516,21 +516,22 @@ mod wire {
     /// every buffer a peer already sent.
     #[test]
     fn pulled_carries_waiting_in_both_formats() {
-        let three = NonZeroU64::new(3).unwrap();
+        const ENCODES: &str = "a `Pulled` of an empty batch always encodes";
+        let three = NonZeroU64::new(3).expect("three is not zero");
         let pulled = Pulled::new(PushBatch::empty(), ResumeToken::new("group:0"));
         let nothing = pulled.clone().with_waiting(Waiting::Nothing);
         let counted = pulled.clone().with_waiting(Waiting::Events(three));
 
         assert_eq!(
-            serde_json::to_string(&nothing).unwrap(),
+            serde_json::to_string(&nothing).expect(ENCODES),
             r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"nothing"}"#
         );
         assert_eq!(
-            serde_json::to_string(&counted).unwrap(),
+            serde_json::to_string(&counted).expect(ENCODES),
             r#"{"batch":{"groups":[]},"resume":"group:0","waiting":{"events":3}}"#
         );
         assert_eq!(
-            serde_json::to_string(&pulled).unwrap(),
+            serde_json::to_string(&pulled).expect(ENCODES),
             r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"unknown"}"#,
             "the default travels too, never as a missing key (WF-2)"
         );
@@ -538,11 +539,14 @@ mod wire {
         // The fields before `waiting`, encoded positionally as postcard
         // encodes the struct, so only the trailing bytes are asserted here.
         let before =
-            postcard::to_stdvec(&(PushBatch::empty(), ResumeToken::new("group:0"))).unwrap();
+            postcard::to_stdvec(&(PushBatch::empty(), ResumeToken::new("group:0"))).expect(ENCODES);
         let tail = |pulled: &Pulled<ResumeToken>| {
-            let bytes = postcard::to_stdvec(pulled).unwrap();
+            let bytes = postcard::to_stdvec(pulled).expect(ENCODES);
             assert!(bytes.starts_with(&before), "{bytes:02x?}");
-            bytes.get(before.len()..).unwrap().to_vec()
+            bytes
+                .get(before.len()..)
+                .expect("the prefix was just checked")
+                .to_vec()
         };
         assert_eq!(tail(&nothing), [0x00]);
         assert_eq!(tail(&pulled), [0x01]);
@@ -555,21 +559,27 @@ mod wire {
     #[test]
     fn a_zero_event_count_is_refused() {
         let refused = serde_json::from_str::<Waiting>(r#"{"events":0}"#)
-            .unwrap_err()
+            .expect_err("a zero count is refused in JSON")
             .to_string();
         assert!(refused.contains("expected a nonzero u64"), "{refused}");
         assert_eq!(
-            postcard::from_bytes::<Waiting>(&[0x02, 0x00]).unwrap_err(),
+            postcard::from_bytes::<Waiting>(&[0x02, 0x00])
+                .expect_err("a zero count is refused in postcard"),
             postcard::Error::SerdeDeCustom,
             "postcard drops the text, as it does for every refusal"
         );
 
         let one = Waiting::Events(NonZeroU64::MIN);
         assert_eq!(
-            serde_json::from_str::<Waiting>(r#"{"events":1}"#).unwrap(),
+            serde_json::from_str::<Waiting>(r#"{"events":1}"#)
+                .expect("a count of one decodes in JSON"),
             one
         );
-        assert_eq!(postcard::from_bytes::<Waiting>(&[0x02, 0x01]).unwrap(), one);
+        assert_eq!(
+            postcard::from_bytes::<Waiting>(&[0x02, 0x01])
+                .expect("a count of one decodes in postcard"),
+            one
+        );
     }
 
     /// WF-8 over a real message. The message is malformed *and* the version is

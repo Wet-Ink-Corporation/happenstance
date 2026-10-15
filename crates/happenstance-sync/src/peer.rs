@@ -160,8 +160,8 @@ pub trait SyncPeer {
 
 /// What one [`pull`](SyncPeer::pull) returned.
 ///
-/// A named struct rather than `(PushBatch, R)` because both fields are worth
-/// naming at the call site and a two-tuple of a batch and a token invites
+/// A named struct rather than `(PushBatch, R, Waiting)` because each field is
+/// worth naming at the call site, and a tuple of a batch and a token invites
 /// exactly the transposition it cannot catch.
 ///
 /// [`new`](Self::new) says [`Waiting::Unknown`], which costs a runner one more
@@ -491,8 +491,10 @@ pub enum SyncError {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Waiting {
-    /// Nothing: the next pull from this answer's token returns an empty batch,
-    /// unless the far side takes a write in between (SY-37).
+    /// Nothing: no group lies past this answer's token, so the next pull from
+    /// it returns an empty batch unless the far side takes a write in between
+    /// (SY-37). A peer stalled behind a group it cannot carry says
+    /// [`Events`](Self::Events), never this.
     Nothing,
     /// The peer did not say. The caller pulls again to find out, which is what
     /// every pull cost before this field existed.

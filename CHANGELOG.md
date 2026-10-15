@@ -117,10 +117,14 @@ not the same as what a user needed to be told.
   `[PROVISIONAL]`), in `happenstance-sync-testkit`. The defect it detects is a
   peer that says nothing is waiting because its page ran out rather than its
   log, so a runner that believes it stops short and leaves the rest of the log
-  for the next wake. The rule fills the peer one group past what a pull may
-  carry under its declared limits, follows the tokens, and pulls once more after
-  the first `Nothing`: that pull must be empty. A peer that never says `Nothing`
-  passes, and a wrong `Events` count is not checked, because it is advisory.
+  for the next wake. The rule writes two logs, each one group past what a pull
+  may carry under the peer's declared limits — one cut by the event count, one
+  by the byte budget, so a peer that reads any short page as the end is caught —
+  follows the tokens, and pulls once more after the first `Nothing`: that pull
+  must be empty. A peer that never says `Nothing` passes, and a wrong `Events`
+  count is not checked, because it is advisory. A peer whose limits let one pull
+  carry both logs is reported as a skip naming `NO_SECOND_PAGE`, because the
+  rule could not have failed it.
 
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a

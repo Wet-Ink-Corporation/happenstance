@@ -7569,7 +7569,8 @@ survivable; neither makes it avoidable.
 
 **SY-37. A peer that answers a pull with nothing waiting MUST return an empty
 batch on the next pull from the token that answer carried, unless it has taken a
-write in between. A peer MAY say how many events are waiting, and MAY decline to
+write in between. A peer MUST NOT answer nothing waiting while any group lies
+past that token. A peer MAY say how many events are waiting, and MAY decline to
 say.**
 
 The answer travels on `Pulled::waiting` as one of three cases: `Nothing`,
@@ -7578,7 +7579,9 @@ the pull's own round trip says `Unknown`, which is what `Pulled::new` says, and
 its runner spends one more pull to find out — the round trip SY-15 makes the
 expensive one on the Neon peer, and the one `Nothing` exists to save. The count
 is advisory: more may have arrived since, and a group the next pull's budget
-cannot admit can hold that pull empty while the count is non-zero.
+cannot admit can hold that pull empty while the count is non-zero. That stall is
+why the second MUST is separate from the first: a peer stalled behind such a
+group returns an empty next pull and still must not say nothing is waiting.
 
 `[PROVISIONAL — falsified by a real peer that cannot tell, inside the pull's own
 round trip, whether anything lies past the token it mints, so that it can never
@@ -7588,11 +7591,20 @@ fetching one row past the page, and the Durable Object peer does the same in its
 cursor query; either one needing a second statement fires it. Decided for
 #245.]`
 Rule: `nothing_waiting_means_the_next_pull_is_empty` (new,
-`happenstance-sync-testkit`) — the rule fills the peer one group past what a
-pull may carry under its declared limits, follows its tokens, and on the first
-`Nothing` pulls once more from that token and asserts an empty batch. Its mutant
-always says `Nothing`.
+`happenstance-sync-testkit`) — the rule writes two logs, each one group past
+what a pull may carry under the peer's declared limits, one cut by the event
+count and one by the byte budget; it follows the tokens, and on the first
+`Nothing` pulls once more from that token and asserts an empty batch. A peer
+whose limits let one pull carry both logs is reported as a skip, not a pass. Its
+mutants always say `Nothing`, and say it on any page that carried fewer events
+than the declared event limit. The rule does not check the second MUST: a conformant push
+cannot place a group too large for any pull on the far side.
 Cases: E2E-36.
+
+E2E-36 is the case because it states the budget this clause spends: a bounded
+number of round trips over a transport that costs one per operation. A catch-up
+loop's closing empty pull is one of those round trips, and `Nothing` is what
+lets a runner skip it.
 
 *Rejects:* the peer that says `Nothing` because it ran out of page rather than
 out of log, and with it a runner that would believe it and leave the rest of the

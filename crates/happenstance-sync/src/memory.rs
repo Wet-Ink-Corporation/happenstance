@@ -249,7 +249,8 @@ impl SendSyncPeer for MemorySyncPeer {
         // Counted under the guard the fill loop held, so the count describes
         // exactly what lies past the token returned (SY-37). One event at a
         // time, as `push` counts, because a `usize` length has no infallible
-        // conversion to `u64`.
+        // conversion to `u64`. O(remaining) on every pull: fine for a reference
+        // peer, and not how a real adapter should count.
         let remaining = state
             .groups
             .iter()

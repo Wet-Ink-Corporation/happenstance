@@ -23,7 +23,9 @@ use happenstance_sync::{
     Ack, Classify, EventGroup, FailureClass, MemoryPeerError, MemoryResume, MemorySyncPeer,
     PeerLimits, Pulled, PushBatch, SendSyncPeer, Waiting,
 };
-use happenstance_sync_testkit::{RefusalsOf, SyncFixture, oversized_push_refusal, rules};
+use happenstance_sync_testkit::{
+    NO_SECOND_PAGE, NO_SECOND_PAGE_REASON, RefusalsOf, SyncFixture, oversized_push_refusal, rules,
+};
 use happenstance_testkit::{RuleOutcome, block_on};
 
 /// The one mistake a [`WrongPeer`] makes.
@@ -63,6 +65,11 @@ enum Mistake {
     /// waiting", whether the page ran out or the log did. A runner that
     /// believes it stops one page in.
     AlwaysSaysNothingWaiting,
+    /// SY-37's second: say "nothing is waiting" whenever a page carried fewer
+    /// events than `max_batch_events`, as an adapter does that reads a short
+    /// page as the end of the log. Honest when the event count cuts the page,
+    /// and a lie when `max_batch_bytes` cuts it first.
+    SaysNothingOnAShortPage,
 }
 
 /// The reference peer's error, classified through the wrong peer's mistake.
@@ -105,7 +112,8 @@ impl Classify for WrongError {
             | Mistake::FlattensGroups
             | Mistake::DeclaresNoRefusal
             | Mistake::AcceptsTheOversizedPush
-            | Mistake::AlwaysSaysNothingWaiting => self.inner.class(),
+            | Mistake::AlwaysSaysNothingWaiting
+            | Mistake::SaysNothingOnAShortPage => self.inner.class(),
         }
     }
 }
@@ -190,10 +198,11 @@ impl SendSyncPeer for WrongPeer {
             .pull(from)
             .await
             .map_err(|error| self.wrap(error))?;
-        Ok(if self.mistake == Mistake::AlwaysSaysNothingWaiting {
-            pulled.with_waiting(Waiting::Nothing)
-        } else {
-            pulled
+        let short_page = pulled.batch.events().count() < self.inner.limits().max_batch_events;
+        Ok(match self.mistake {
+            Mistake::AlwaysSaysNothingWaiting => pulled.with_waiting(Waiting::Nothing),
+            Mistake::SaysNothingOnAShortPage if short_page => pulled.with_waiting(Waiting::Nothing),
+            _ => pulled,
         })
     }
 
@@ -204,7 +213,8 @@ impl SendSyncPeer for WrongPeer {
             | Mistake::DeclaresNoRefusal
             | Mistake::AcceptsTheOversizedPush
             | Mistake::ClassChangesBetweenReads
-            | Mistake::AlwaysSaysNothingWaiting => self
+            | Mistake::AlwaysSaysNothingWaiting
+            | Mistake::SaysNothingOnAShortPage => self
                 .inner
                 .push(batch)
                 .await
@@ -251,8 +261,16 @@ struct WrongFixture {
 
 impl WrongFixture {
     fn new(mistake: Mistake) -> Self {
+        Self::with_limits(mistake, PeerLimits::minimum())
+    }
+
+    /// The reference peer behind the wrapper, declaring `limits`.
+    fn with_limits(mistake: Mistake, limits: PeerLimits) -> Self {
         Self {
-            inner: Arc::new(MemorySyncPeer::new(StoreId::from_bytes([0x77; 16]))),
+            inner: Arc::new(MemorySyncPeer::with_limits(
+                StoreId::from_bytes([0x77; 16]),
+                limits,
+            )),
             mistake,
         }
     }
@@ -508,5 +526,38 @@ fn nothing_waiting_means_the_next_pull_is_empty_fails_a_peer_that_always_says_no
         &verdicts(async || WrongFixture::new(Mistake::AlwaysSaysNothingWaiting)),
         "nothing_waiting_means_the_next_pull_is_empty",
         "SY-37",
+    );
+}
+
+/// The mutant only a page cut by `max_batch_bytes` can see: when the event
+/// count cuts the page, its short page really is the last one.
+#[test]
+fn nothing_waiting_means_the_next_pull_is_empty_fails_a_peer_that_reads_a_short_page_as_the_end() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::SaysNothingOnAShortPage)),
+        "nothing_waiting_means_the_next_pull_is_empty",
+        "SY-37",
+    );
+}
+
+/// A faithful peer whose declared limits let one pull carry everything the
+/// rule is willing to write has shown the rule no second page, so the rule
+/// cannot have failed it. It says so, rather than reporting a pass.
+#[test]
+fn nothing_waiting_means_the_next_pull_is_empty_skips_a_peer_that_never_pages() {
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_events = 1_000;
+    limits.max_batch_bytes = 64 * 1024 * 1024;
+
+    let outcome = block_on(rules::nothing_waiting_means_the_next_pull_is_empty(
+        async || WrongFixture::with_limits(Mistake::Faithful, limits.clone()),
+    ));
+
+    assert_eq!(
+        outcome.map_err(|violation| violation.clause()),
+        Ok(RuleOutcome::Skipped {
+            capability: NO_SECOND_PAGE,
+            reason: NO_SECOND_PAGE_REASON,
+        })
     );
 }
