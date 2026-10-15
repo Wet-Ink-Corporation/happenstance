@@ -795,14 +795,24 @@ const CLOUDFLARE_WASM_RULES: &[&str] = &[
 
 /// The sync rules named for the replication row.
 ///
-/// The list names a rule when its pass depends on a group surviving the
-/// transport whole, since a single-threaded runtime is where a peer that pages
-/// by row is most likely to be written, or when its clause is about what the
-/// `!Send` peer that lives on wasm32 reports: SY-36's is here because that peer
-/// states its failure classes through its own error type, and a class it states
-/// only on the host is a class nobody on the platform can act on. Every other
-/// sync rule, SY-37's among them, still runs on this target through the
-/// exhaustive enumeration check, and is simply not named here.
+/// Every sync rule runs on wasm32: [`wasm_run`] holds this row's listing to the
+/// whole `for_each_sync_peer_rule!` enumeration and fails on any test that
+/// fails. What naming a rule here adds is the transcript check that it was not
+/// silently skipped, and the list names a rule for one of two reasons:
+///
+/// * its pass depends on a group surviving the transport whole, since a
+///   single-threaded runtime is where a peer that pages by row is most likely
+///   to be written — SY-1's and SY-2's;
+/// * its clause is about what the `!Send` peer that lives on wasm32 reports —
+///   SY-36's, because that peer states its failure classes through its own
+///   error type, and a class it states only on the host is a class nobody on
+///   the platform can act on.
+///
+/// SY-18's `peer_declares_its_own_limits` and SY-37's
+/// `nothing_waiting_means_the_next_pull_is_empty` meet neither: one checks a
+/// declaration against single events, the other what a pull says about the
+/// rest of the log, and neither pass depends on a group crossing whole or on
+/// how the peer reports a failure.
 const SYNC_WASM_RULES: &[&str] = &[
     "ingest_never_rejects",
     "compensation_is_atomic_with_the_losing_event",

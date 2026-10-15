@@ -17,10 +17,11 @@ pub const NO_SECOND_PAGE: &str = "PeerLimits::max_batch_events, PeerLimits::max_
 /// `happenstance_testkit::NO_CEILING_REASON` is, because it is the same
 /// sentence for every peer that earns it. What the skip leaves unverified is
 /// the whole of SY-37: the rule cannot fail a peer whose every answer fits in
-/// one pull.
-pub const NO_SECOND_PAGE_REASON: &str = "this peer's declared limits let one pull carry everything the rule will \
-     write, so no page boundary was observed and a `Nothing` answered at one \
-     could not be checked; SY-37 is unverified for this peer";
+/// one pull, or that would not take the logs the rule sized from its limits.
+pub const NO_SECOND_PAGE_REASON: &str = "this peer showed no page boundary: one pull carried everything the rule \
+     wrote, or the peer refused the writes the rule sized from its declared \
+     limits (SY-18's subject), so a `Nothing` answered at a boundary could not \
+     be checked; SY-37 is unverified for this peer";
 
 /// The sync rules. See the [crate documentation](crate) for what each covers.
 ///
@@ -45,16 +46,18 @@ pub mod rules {
     use alloc::vec::Vec;
 
     use happenstance_core::{
-        AppendCondition, Event, EventId, EventType, Query, QueryItem, RecordedAt, SequencePosition,
-        StoreId, Tag, Tags,
+        AppendCondition, Event, EventId, EventType, MAX_EVENT_TYPE_LEN, MAX_TAG_LEN,
+        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_TAGS_PER_EVENT, Query, QueryItem, RecordedAt,
+        SequencePosition, StoreId, Tag, Tags,
     };
     use happenstance_sync::{
         Classify, EventGroup, PeerLimits, PushBatch, ReplicatedEvent, SyncPeer, Waiting,
     };
     use happenstance_testkit::RuleOutcome;
 
-    use crate::SyncFixture;
+    use crate::kv_capped::turnstile_seat_map;
     use crate::violation::{Violation, ensure};
+    use crate::{MAX_PROVOKED_BATCH_BYTES, SyncFixture};
 
     /// The most pulls a rule makes before it decides the peer will never say
     /// it has caught up. Far above what two or three tiny groups need under the
@@ -64,7 +67,7 @@ pub mod rules {
 
     /// The most groups past one that SY-37's rule writes to a peer in one log,
     /// whatever limits the peer declares (H-13). Twice the minimum conformant
-    /// `max_batch_events`, so the reference peer is filled one past its page.
+    /// `max_batch_events`, so the reference peer pages more than once.
     const FILL_CAP: usize = 256;
 
     const SEAT_CLAIMED: EventType = EventType::from_static("SeatClaimed");
@@ -75,6 +78,12 @@ pub mod rules {
     const ORIGIN_A: StoreId = StoreId::from_bytes([0x11; 16]);
     const ORIGIN_B: StoreId = StoreId::from_bytes([0x22; 16]);
     const HUB: StoreId = StoreId::from_bytes([0x33; 16]);
+
+    /// SY-18's three origins: the one that committed the seat map, and the two
+    /// whose events sit at the declared boundary, in data and in metadata.
+    const SEAT_MAP_ORIGIN: StoreId = StoreId::from_bytes([0x44; 16]);
+    const BOUNDARY_ORIGIN: StoreId = StoreId::from_bytes([0x55; 16]);
+    const METADATA_ORIGIN: StoreId = StoreId::from_bytes([0x66; 16]);
 
     /// SY-1: a peer appends every replicated event it does not already hold,
     /// and never evaluates an append condition — the origin's or its own — as a
@@ -218,6 +227,149 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-18: a peer declares the limits it imposes, synchronously, and the
+    /// declaration is true: an event it admits lands, so a runner that read it
+    /// learns of an event that cannot land *before* pushing, not at ingest.
+    ///
+    /// The rule plays that runner. It reads [`SyncPeer::limits`] before it
+    /// pushes anything, and then:
+    ///
+    /// 1. reads it again, because a declaration that changes between two reads
+    ///    cannot be relied on before a push;
+    /// 2. holds `max_event_bytes` to VT-21's floor,
+    ///    [`MIN_SUPPORTED_EVENT_DATA_LEN`]. Every peer the suite is mounted on
+    ///    passes this line, which is where the floor is compared across the
+    ///    peer set;
+    /// 3. runs the Turnstile experiment: a 340,000-byte seat map, already
+    ///    committed at its origin. If the declaration admits it, it is pushed
+    ///    and must land. If not, the runner parks it without a round trip,
+    ///    which is the prevention, and nothing is pushed;
+    /// 4. pushes two events at the declaration's own boundary and at the
+    ///    contract's envelope floors at once: `max_event_bytes` of opaque bytes
+    ///    (capped by `max_batch_bytes`), carried once in data and once in
+    ///    metadata, because the declaration bounds the two together; a type of
+    ///    [`MAX_EVENT_TYPE_LEN`] bytes; and [`MIN_SUPPORTED_TAGS_PER_EVENT`]
+    ///    tags of [`MAX_TAG_LEN`] bytes each. The declaration must admit each,
+    ///    and each must land, acknowledged as appended. A limit on the envelope
+    ///    or on metadata that the peer imposes without declaring it is a limit
+    ///    discovered at ingest;
+    /// 5. pulls the whole log back: every event that landed is held, byte for
+    ///    byte, which rejects a peer that accepts and truncates.
+    ///
+    /// The asynchronous form of the declaration, which SY-18 also rejects,
+    /// cannot be written: `limits` is not `async` on the port, so the compiler
+    /// is that check and no mutant is needed for it.
+    ///
+    /// A peer that declares more than [`MAX_PROVOKED_BATCH_BYTES`] has its
+    /// boundary tested at that ceiling rather than at its declaration, because
+    /// the event is allocated whole (H-13). The rule still runs.
+    ///
+    /// # Rejects
+    ///
+    /// `tests/wrong_limits.rs` carries eight mistakes over the KV-capped
+    /// reference peer, one for each check above:
+    ///
+    /// * declarations rewritten over unchanged behaviour: no value cap, which
+    ///   admits the seat map that ingest then parks; the raw 131,072-byte value
+    ///   cap, as if a value held the payload alone, which admits a boundary
+    ///   event ingest refuses; a byte below VT-21's floor; a declaration that
+    ///   changes between two reads; and `max_batch_events` of zero, which
+    ///   admits no event at all;
+    /// * behaviour changed under an honest declaration: a cap of 1,024 bytes on
+    ///   metadata, Workers KV's, that the declaration does not state; data
+    ///   truncated on a large push and acknowledged as appended; and a large
+    ///   event stored whole and acknowledged as skipped.
+    ///
+    /// # Does not reject
+    ///
+    /// A runner that ignores `limits()`. That is the runner's defect, and #244
+    /// owns it; a peer can only make its declaration true. Nor limits that go
+    /// stale between the read and the push: [`PeerLimits::admits`] is advisory,
+    /// and what keeps that survivable is the `Park` and `Split` classes SY-36
+    /// checks.
+    ///
+    /// Nor a lie about `max_batch_bytes` or `max_batch_events` alone. SY-18
+    /// is about the limits a peer imposes on *an event*; the batch limits are
+    /// read here only to size the boundary event, and a batch over them is
+    /// SY-36's `Split`, not a fact that can never land.
+    ///
+    /// [`PeerLimits::admits`]: happenstance_sync::PeerLimits::admits
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-18 if the declaration changes between two reads,
+    /// declares below VT-21's floor, or admits no event at its own boundary;
+    /// or if an event the declaration admits is refused, acknowledged as
+    /// anything but one appended, or not handed back whole. The floor breach
+    /// cites VT-21 in its message.
+    pub async fn peer_declares_its_own_limits<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-18";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+
+        let limits = peer.limits();
+        let again = peer.limits();
+        ensure(again == limits, CLAUSE, || {
+            format!(
+                "the peer declared {limits:?} and then {again:?}; a declaration that changes \
+                 between two reads cannot be relied on before a push"
+            )
+        })?;
+        ensure(
+            limits.max_event_bytes >= MIN_SUPPORTED_EVENT_DATA_LEN,
+            CLAUSE,
+            || {
+                format!(
+                    "the peer declares max_event_bytes of {}, below VT-21's floor of \
+                     {MIN_SUPPORTED_EVENT_DATA_LEN}",
+                    limits.max_event_bytes
+                )
+            },
+        )?;
+
+        let mut landed = Vec::new();
+        let seat_map = one_event(turnstile_seat_map(SEAT_MAP_ORIGIN, CLAUSE)?);
+        if limits.admits(&seat_map) {
+            push_admitted(&peer, &seat_map, "the 340,000-byte seat map", CLAUSE).await?;
+            landed.push(seat_map);
+        }
+
+        let size = limits
+            .max_event_bytes
+            .min(limits.max_batch_bytes)
+            .min(MAX_PROVOKED_BATCH_BYTES);
+        for carrier in [Carrier::Data, Carrier::Metadata] {
+            let boundary = one_event(event_at_the_envelope_floors(size, carrier, CLAUSE)?);
+            ensure(limits.admits(&boundary), CLAUSE, || {
+                format!(
+                    "the declaration {limits:?} admits no event of {size} bytes in its \
+                     {carrier:?}, the size it states it accepts"
+                )
+            })?;
+            push_admitted(&peer, &boundary, carrier.describe(), CLAUSE).await?;
+            landed.push(boundary);
+        }
+
+        let held: Vec<ReplicatedEvent> = pull_everything(&peer, CLAUSE)
+            .await?
+            .into_iter()
+            .flat_map(|group| group.events)
+            .collect();
+        for expected in landed.iter().flat_map(PushBatch::events) {
+            ensure(held.contains(expected), CLAUSE, || {
+                format!(
+                    "event {} of {} bytes was acknowledged and is not in the peer's log, \
+                     byte for byte",
+                    expected.id,
+                    expected.payload_len()
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// SY-36: every error a peer reports states its failure class, and the
     /// class is the one its adapter says it is.
     ///
@@ -290,25 +442,27 @@ pub mod rules {
     /// SY-37: a peer that answers a pull with [`Waiting::Nothing`] hands back
     /// an empty batch on the next pull from the token that answer carried.
     ///
-    /// The rule writes two logs, each to a fresh peer from `open`, and each one
-    /// group longer than one pull may carry under the peer's own declared
-    /// limits:
+    /// The rule writes two logs, each to a fresh peer from `open`:
     ///
-    /// 1. **Cut by count**: [`PeerLimits::max_batch_events`] plus one
-    ///    single-event groups of a few bytes (the count capped at 256).
-    /// 2. **Cut by bytes**: single-event groups whose payloads are sized so
-    ///    [`PeerLimits::max_batch_bytes`] ends a page before the event count
-    ///    does. Written only where the bytes do cut first, and the log fits in
-    ///    257 groups and 64 MiB.
+    /// 1. **Cut by count**: 257 single-event groups of a few bytes, pushed at
+    ///    most [`PeerLimits::max_batch_events`] to a push, so a peer that pages
+    ///    at any event count up to 256 shows a page boundary.
+    /// 2. **Cut by bytes**: single-event groups whose payloads are sized from
+    ///    the declared limits so [`PeerLimits::max_batch_bytes`] ends a page
+    ///    before the event count does, one group past that page. Written only
+    ///    where the bytes do cut first, and the log fits in 257 groups and
+    ///    64 MiB.
     ///
     /// On each it follows the peer's tokens from the start, and on the first
     /// `Nothing` pulls once more from that token. That pull must be empty. A
     /// peer that never says `Nothing` passes: it costs its runner the empty
     /// pull, and never a missed event.
     ///
-    /// If neither log showed a second non-empty page, the rule could not have
-    /// failed the peer, and it reports a skip naming [`NO_SECOND_PAGE`]
-    /// rather than a pass.
+    /// A log the peer refuses to take is not built, and shows no page: a peer
+    /// refusing writes made inside its own declaration is SY-18's subject, and
+    /// its rule judges it. If neither log showed a second non-empty page, the
+    /// rule could not have failed the peer, and it reports a skip naming
+    /// [`NO_SECOND_PAGE`] rather than a pass.
     ///
     /// The bound on pulls — one more than the log has groups — is the suite's
     /// liveness guard, not SY-37's claim: a peer that ignores its token and
@@ -340,10 +494,9 @@ pub mod rules {
     ///
     /// # Errors
     ///
-    /// A [`Violation`] of SY-37 if the peer refuses a push inside its own
-    /// limits, refuses a pull, keeps handing back groups past the log the rule
-    /// wrote, or hands back events on the pull after it said nothing was
-    /// waiting.
+    /// A [`Violation`] of SY-37 if the peer refuses a pull, keeps handing back
+    /// groups past the log the rule wrote, or hands back events on the pull
+    /// after it said nothing was waiting.
     pub async fn nothing_waiting_means_the_next_pull_is_empty<F: SyncFixture>(
         open: impl AsyncFn() -> F,
     ) -> Result<RuleOutcome, Violation> {
@@ -352,19 +505,17 @@ pub mod rules {
         let paged_by_count = {
             let fixture = open().await;
             let peer = fixture.connect().await;
-            let limits = peer.limits();
-            let fill = Fill::cut_by_count(&limits);
-            fill_with_readings(&peer, &limits, fill, CLAUSE).await?;
-            follow_tokens(&peer, fill.groups, CLAUSE).await?
+            let fill = Fill::cut_by_count(&peer.limits());
+            fill_with_readings(&peer, fill, CLAUSE).await?
+                && follow_tokens(&peer, fill.groups, CLAUSE).await?
         };
 
         let fixture = open().await;
         let peer = fixture.connect().await;
-        let limits = peer.limits();
-        let paged_by_bytes = match Fill::cut_by_bytes(&limits) {
+        let paged_by_bytes = match Fill::cut_by_bytes(&peer.limits()) {
             Some(fill) => {
-                fill_with_readings(&peer, &limits, fill, CLAUSE).await?;
-                follow_tokens(&peer, fill.groups, CLAUSE).await?
+                fill_with_readings(&peer, fill, CLAUSE).await?
+                    && follow_tokens(&peer, fill.groups, CLAUSE).await?
             }
             None => false,
         };
@@ -389,10 +540,12 @@ pub mod rules {
     }
 
     impl Fill {
-        /// One group more than `max_batch_events`, capped, with tiny payloads.
+        /// The cap plus one groups with tiny payloads, whatever the peer
+        /// declares: a peer that pages at any count up to the cap shows a
+        /// second page, including one whose declaration understates it.
         fn cut_by_count(limits: &PeerLimits) -> Self {
             Self {
-                groups: limits.max_batch_events.min(FILL_CAP).saturating_add(1),
+                groups: FILL_CAP.saturating_add(1),
                 payload: 0,
                 per_push: limits.max_batch_events.max(1),
             }
@@ -408,7 +561,7 @@ pub mod rules {
             let bytes = groups.checked_mul(payload)?;
             let fits = per_page < limits.max_batch_events
                 && groups <= FILL_CAP.saturating_add(1)
-                && bytes <= crate::MAX_PROVOKED_BATCH_BYTES;
+                && bytes <= MAX_PROVOKED_BATCH_BYTES;
             fits.then_some(Self {
                 groups,
                 payload,
@@ -466,14 +619,12 @@ pub mod rules {
     }
 
     /// Pushes `fill.groups` single-event groups from [`ORIGIN_A`], at most
-    /// `fill.per_push` to a push, each push checked against `limits` before it
-    /// is offered.
+    /// `fill.per_push` to a push. Answers whether the peer took them all.
     async fn fill_with_readings<P: SyncPeer>(
         peer: &P,
-        limits: &PeerLimits,
         fill: Fill,
         clause: &'static str,
-    ) -> Result<(), Violation> {
+    ) -> Result<bool, Violation> {
         let Fill {
             groups: count,
             payload,
@@ -503,23 +654,15 @@ pub mod rules {
 
             if groups.len() == chunk || reading == count {
                 let batch = PushBatch::new(core::mem::take(&mut groups));
-                ensure(limits.admits(&batch), clause, || {
-                    format!(
-                        "the peer's declared limits do not admit a batch of {} single-event \
-                         groups the rule sized from those limits ({} payload bytes): {limits:?}",
-                        batch.events().count(),
-                        batch.payload_len()
-                    )
-                })?;
-                peer.push(&batch).await.map_err(|error| {
-                    Violation::new(
-                        clause,
-                        format!("the peer refused a push inside its own limits: {error}"),
-                    )
-                })?;
+                // A refusal here is the peer disagreeing with its own
+                // declaration, which is SY-18's to judge. This log is simply
+                // not built, and the caller counts it as showing no page.
+                if peer.push(&batch).await.is_err() {
+                    return Ok(false);
+                }
             }
         }
-        Ok(())
+        Ok(true)
     }
 
     /// Pulls from the start of the peer's log until it hands back an empty
@@ -546,6 +689,105 @@ pub mod rules {
         Err(Violation::new(
             clause,
             format!("the peer was still handing back groups after {MAX_PULLS} pulls"),
+        ))
+    }
+
+    /// `event` as a batch of one group.
+    fn one_event(event: ReplicatedEvent) -> PushBatch {
+        PushBatch::new(vec![EventGroup::new(None, vec![event])])
+    }
+
+    /// Pushes `batch`, which the peer's declaration admits, and requires it to
+    /// land as one event appended. A refusal here is the failure SY-18 exists
+    /// to move: found at ingest, after the origin committed.
+    async fn push_admitted<P: SyncPeer>(
+        peer: &P,
+        batch: &PushBatch,
+        what: &str,
+        clause: &'static str,
+    ) -> Result<(), Violation> {
+        let ack = peer.push(batch).await.map_err(|error| {
+            Violation::new(
+                clause,
+                format!(
+                    "the declared limits admit {what} and the push refused it ({error}, class \
+                     {:?}): the failure was relocated to ingest, not prevented",
+                    error.class()
+                ),
+            )
+        })?;
+        ensure(ack.appended == 1 && ack.skipped == 0, clause, || {
+            format!(
+                "the peer acknowledged {what} as {} appended and {} skipped; it held nothing \
+                 with that identity, so it must append it",
+                ack.appended, ack.skipped
+            )
+        })
+    }
+
+    /// Which of an event's two opaque fields carries a boundary event's bytes.
+    ///
+    /// Both, one event each, because `max_event_bytes` bounds
+    /// [`ReplicatedEvent::payload_len`], which is data and metadata together:
+    /// a peer that stores metadata somewhere smaller has a limit its
+    /// declaration does not state.
+    #[derive(Debug, Clone, Copy)]
+    enum Carrier {
+        Data,
+        Metadata,
+    }
+
+    impl Carrier {
+        /// What the violation message calls the event this carrier builds.
+        const fn describe(self) -> &'static str {
+            match self {
+                Self::Data => "an event at the declared boundary, in its data",
+                Self::Metadata => "an event at the declared boundary, in its metadata",
+            }
+        }
+
+        /// Each boundary event's origin, so the two are distinct facts.
+        const fn origin(self) -> StoreId {
+            match self {
+                Self::Data => BOUNDARY_ORIGIN,
+                Self::Metadata => METADATA_ORIGIN,
+            }
+        }
+    }
+
+    /// An event at every envelope floor the contract sets, carrying `size`
+    /// opaque bytes (SY-35) in `carrier`: a type of [`MAX_EVENT_TYPE_LEN`]
+    /// bytes and [`MIN_SUPPORTED_TAGS_PER_EVENT`] distinct tags of
+    /// [`MAX_TAG_LEN`] bytes.
+    fn event_at_the_envelope_floors(
+        size: usize,
+        carrier: Carrier,
+        clause: &'static str,
+    ) -> Result<ReplicatedEvent, Violation> {
+        let event_type = EventType::new("L".repeat(MAX_EVENT_TYPE_LEN)).map_err(|error| {
+            Violation::new(clause, format!("the rule's own type is invalid: {error}"))
+        })?;
+        let tags = (0..MIN_SUPPORTED_TAGS_PER_EVENT)
+            .map(|i| Tag::new(format!("{i:0>MAX_TAG_LEN$}")))
+            .collect::<Result<Tags, _>>()
+            .map_err(|error| {
+                Violation::new(clause, format!("the rule's own tag is invalid: {error}"))
+            })?;
+        let bytes = vec![0_u8; size];
+        let event = match carrier {
+            Carrier::Data => Event::new(event_type, bytes),
+            Carrier::Metadata => {
+                Event::new(event_type, Vec::new()).map(|event| event.with_metadata(bytes))
+            }
+        }
+        .map_err(|error| {
+            Violation::new(clause, format!("the rule's own event is invalid: {error}"))
+        })?
+        .with_tags(tags);
+        Ok(ReplicatedEvent::new(
+            EventId::new(carrier.origin(), SequencePosition::FIRST),
+            RecordedAt::from_millis(1_800_000_000_000),
+            event,
         ))
     }
 
@@ -615,6 +857,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A group travels whole (SY-2) -------------------------------
             compensation_is_atomic_with_the_losing_event,
+
+            // --- A peer declares its own limits (SY-18) ---------------------
+            peer_declares_its_own_limits,
 
             // --- Every refusal states its class (SY-36) ---------------------
             every_refusal_states_its_class,
