@@ -155,7 +155,7 @@ impl WrongPeer {
     async fn push_guarded(
         &self,
         batch: &PushBatch,
-        refused: fn(&EventGroup) -> usize,
+        refused: fn(&EventGroup) -> u64,
     ) -> Result<Ack, MemoryPeerError> {
         let mut ack = Ack::default();
         for group in &batch.groups {
@@ -212,7 +212,9 @@ impl SendSyncPeer for WrongPeer {
                 .await
                 .map_err(|error| self.wrap(error)),
             Mistake::AcksThenDropsOnTheGuard => self
-                .push_guarded(batch, |group| group.events.len())
+                .push_guarded(batch, |group| {
+                    u64::try_from(group.events.len()).unwrap_or(u64::MAX)
+                })
                 .await
                 .map_err(|error| self.wrap(error)),
         }

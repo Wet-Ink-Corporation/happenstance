@@ -36,6 +36,29 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-sync`: the replication message set, in a crate that is not
+  published yet** (#114, proposed ADR-0097). Four messages, each its own type
+  in `wire::Envelope<T>`: `PushBatch`, `Ack`, the new `wire::PullRequest`, and
+  `Pulled<wire::ResumeToken>`. `PushBatch`, `EventGroup`, `ReplicatedEvent`,
+  `Ack` and `Pulled` derive `serde`'s traits, and `Watermark` has a hand-written
+  pair. The format version stays on every message, and version 1 now names this
+  set. Each new wire test names a defect: `a_real_message_is_refused_before_it_decodes`
+  detects an envelope that decodes the message before the version;
+  `payload_bytes_render_through_the_core_codec` detects a payload carried
+  outside `Event`, which renders in JSON as an array of integers;
+  `push_batch_preserves_group_boundaries_on_the_wire` detects a push flattened
+  to its events; and `a_watermark_decodes_canonical` detects a derived
+  `Watermark` that keeps a peer's unsorted marks, which its binary search then
+  misses. `a_watermark_decodes_as_advance_folds_it` detects a decoder that
+  keeps the first of two marks for one store, across every ordering of five
+  marks, and `a_descending_watermark_decodes_canonical` covers strictly
+  descending input. `wire::PullRequest` refuses unknown fields, so a JSON push
+  routed to the pull decoder is an error rather than a pull from the start of
+  the log; `a_json_push_is_refused_as_a_pull_request` detects the derive without
+  that attribute. Postcard has no equivalent: an empty push and a first pull
+  are the same bytes, which `a_misrouted_postcard_buffer_decodes_as_another_message`
+  pins.
+
 - **`happenstance-sync-testkit`: the replication suite's first two rules,
   in a crate that is not published yet** (#111). Recorded here because CF-29
   asks every conformance rule for an entry, not because anything ships: the
@@ -92,6 +115,9 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`happenstance-sync`: `Ack`'s `appended` and `skipped` are `u64`, not
+  `usize`** (#114, proposed ADR-0097). They cross the wire, so their width is
+  fixed. The crate is not published, so no consumer is affected.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity

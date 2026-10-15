@@ -75,7 +75,7 @@
 //! this crate depends on `happenstance-core/serde` explicitly: the envelope is
 //! serialised, the payload is passed through.
 //!
-//! **What is serialisable here is the envelope, and only the envelope.**
+//! **Nothing here travels except inside the envelope.**
 //! [`wire::Envelope`] carries a `Serialize` derive and a **hand-written**
 //! `Deserialize` that reads the format version and refuses before the message is
 //! touched — ADR-0016 §11, WF-8. The derive is not an option for the decoding
@@ -83,12 +83,12 @@
 //! the partial decode WF-8's MUST NOT forbids. [`wire`] says so at the impl,
 //! because that is where someone will try to simplify it.
 //!
-//! [`PushBatch`], [`EventGroup`] and [`ReplicatedEvent`] still
-//! carry **no** derives. They did briefly, the derives were withdrawn, and phase
-//! 5 has not restored them: a `#[derive]` on a public message type *is* a wire
-//! format, and **what travels is phase 13's** — the message set, version
-//! negotiation, and how the guard SY-6 describes is carried. This ADR lands
-//! the envelope and nothing else. In particular [`SyncError`] is not extended
+//! [`PushBatch`], [`EventGroup`], [`ReplicatedEvent`], [`Ack`] and [`Pulled`]
+//! carry `serde` derives again, and [`Watermark`] a hand-written pair. Phase 5
+//! withdrew them because a derive on a public message type *is* a wire format,
+//! and **what travels was phase 13's**. #114 decided it: the message set is
+//! [`wire`]'s four messages, each a type *in* an envelope and never a kind in an
+//! enum around one, and ADR-0097 records why. [`SyncError`] is still not extended
 //! (SY-30 is untouched): a version refusal is a decoding failure with its own
 //! error, [`wire::WireError`], and folding it into the runner's enum would take a
 //! phase-13 design decision inside an encoding change.

@@ -41,7 +41,7 @@ use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
 /// The payload inside `event` is never decoded here. That is the whole payoff of
 /// keeping `happenstance-core` free of `serde` in its default features: a peer
 /// forwards bytes it does not understand and cannot corrupt by re-encoding.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct ReplicatedEvent {
     /// Who minted this event, and where it landed in their log.
@@ -141,5 +141,44 @@ impl Watermark {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.marks.is_empty()
+    }
+}
+
+/// On the wire, a sequence of `(store, position)` pairs in ascending store
+/// order. Hand-written rather than derived, and only for decoding's sake.
+impl serde::Serialize for Watermark {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(&self.marks)
+    }
+}
+
+/// Re-canonicalises on the way in (WF-10): an unsorted sequence decodes sorted,
+/// and two marks for one store keep the higher — the watermark
+/// [`Watermark::advance`] would build from the same pairs.
+///
+/// Sorted once and folded in one pass, not advanced pair by pair: `advance`
+/// inserts into a sorted vector, so a peer's descending sequence would shift
+/// every mark on every insert, quadratic in the length of input it chose.
+///
+/// A derive straight onto `marks` is the wrong implementation this replaces. It
+/// would hand a peer's unsorted vector to [`Watermark::get`], whose binary
+/// search then misses marks that are there, and the runner re-sends what the far
+/// side already holds.
+impl<'de> serde::Deserialize<'de> for Watermark {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut marks = Vec::<(StoreId, SequencePosition)>::deserialize(deserializer)?;
+        marks.sort_unstable_by_key(|(store, _)| *store);
+        // `dedup_by` hands each later pair with the one it would be merged
+        // into; folding the higher position into the kept pair makes one pass
+        // leave one mark per store, at its maximum, whatever the sort's order
+        // among equal stores.
+        marks.dedup_by(|(store, position), (kept_store, kept_position)| {
+            let same_store = store == kept_store;
+            if same_store && *position > *kept_position {
+                *kept_position = *position;
+            }
+            same_store
+        });
+        Ok(Self { marks })
     }
 }
