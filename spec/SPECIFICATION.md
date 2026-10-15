@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 206 clause IDs, of which 199 are normative:
-**160 `[FROZEN]`**, **29 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
+As assembled, this document carries 207 clause IDs, of which 200 are normative:
+**160 `[FROZEN]`**, **30 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -6860,8 +6860,8 @@ its clauses now have something in the tree to disagree with.
 
 It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
-phase that builds the port against two real peers — five of the thirty-six,
-with a further ten `[PROVISIONAL]` (three and twelve since ADR-0027 settled SY-27
+phase that builds the port against two real peers — five of the thirty-seven,
+with a further eleven `[PROVISIONAL]` (three and thirteen since ADR-0027 settled SY-27
 and SY-28 without the experiment). The rest are frozen, because the shape
 does not wait on the transport. They are written anyway, and the reason is
 recorded in the decision ledger: `RUNBOOK.md:438-439` says deferring the
@@ -7564,6 +7564,58 @@ value a runner can read **before** pushing rather than an error it discovers
 after. The floor makes the declaration meaningful (a peer below 64 KiB is
 non-conformant, not merely small); `ExceedsStoreLimit` makes the failure
 survivable; neither makes it avoidable.
+
+---
+
+**SY-37. A peer that answers a pull with nothing waiting MUST return an empty
+batch on the next pull from the token that answer carried, unless it has taken a
+write in between. A peer MUST NOT answer nothing waiting while any group lies
+past that token. A peer MAY say how many events are waiting, and MAY decline to
+say.**
+
+The answer travels on `Pulled::waiting` as one of three cases: `Nothing`,
+`Unknown`, or `Events(n)` with `n` at least one. A peer that cannot tell inside
+the pull's own round trip says `Unknown`, which is what `Pulled::new` says, and
+its runner spends one more pull to find out — the round trip SY-15 makes the
+expensive one on the Neon peer, and the one `Nothing` exists to save. The count
+is advisory: more may have arrived since, and a group the next pull's budget
+cannot admit can hold that pull empty while the count is non-zero. That stall is
+why the second MUST is separate from the first: a peer stalled behind such a
+group returns an empty next pull and still must not say nothing is waiting.
+
+`[PROVISIONAL — falsified by a real peer that cannot tell, inside the pull's own
+round trip, whether anything lies past the token it mints, so that it can never
+answer `Nothing` and the field buys no round trip. Falsification test: the
+one-shot-HTTP Neon peer computes `waiting` in the same statement as its page, by
+fetching one row past the page, and the Durable Object peer does the same in its
+cursor query; either one needing a second statement fires it. Decided for
+#245.]`
+Rule: `nothing_waiting_means_the_next_pull_is_empty` (new,
+`happenstance-sync-testkit`) — the rule writes two logs, one of 257 small
+events for a page the event count ends, and one sized from the declared limits
+for a page the byte budget ends; it follows the tokens, and on the first
+`Nothing` pulls once more from that token and asserts an empty batch. A peer
+that shows no page boundary on either log, because one pull carries it or the
+peer refuses writes made inside its own declaration (SY-18's subject), is
+reported as a skip, not a pass. Its
+mutants always say `Nothing`, and say it on any page that carried fewer events
+than the declared event limit. The rule does not check the second MUST: a conformant push
+cannot place a group too large for any pull on the far side.
+Cases: E2E-36.
+
+E2E-36 is the case because it states the budget this clause spends: a bounded
+number of round trips over a transport that costs one per operation. A catch-up
+loop's closing empty pull is one of those round trips, and `Nothing` is what
+lets a runner skip it.
+
+*Rejects:* the peer that says `Nothing` because it ran out of page rather than
+out of log, and with it a runner that would believe it and leave the rest of the
+log for the next wake. The three-case shape is LiveStore's `pageInfo`,
+`MoreKnown{remaining} | MoreUnknown | NoMore` (`livestorejs/livestore@3cb74e62`,
+`packages/@livestore/common/src/sync/sync-backend.ts:45-93`), adopted without
+its live stream, which SY-15 forbids on the port. A zero count is not a fourth
+spelling of nothing: the count is a `NonZeroU64`, and its decoder refuses `0`
+from the wire.
 
 ---
 
@@ -10049,9 +10101,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
-| §5 `SyncPeer` | `SY` | 36 | 21 | 12 | 3 | 0 |
+| §5 `SyncPeer` | `SY` | 37 | 21 | 13 | 3 | 0 |
 | §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **206** | **160** | **29** | **10** | **7** |
+| **Total** | | **207** | **160** | **30** | **10** | **7** |
 
 ### 7.2 The table
 
@@ -10244,6 +10296,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
 | SY-36 | PROVISIONAL | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
+| SY-37 | PROVISIONAL | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
 
 #### `CF` — conformance obligations (§6)
 

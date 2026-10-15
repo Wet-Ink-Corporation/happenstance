@@ -103,6 +103,30 @@ not the same as what a user needed to be told.
   the helper will not allocate a batch that size. SY-36 stays `[PROVISIONAL]`:
   its falsification test needs the real peers, which do not exist yet.
 
+- **`happenstance-sync`: a pull says whether more is waiting** (#245). `Pulled`
+  gains a `waiting` field, a `Waiting` of `Nothing`, `Unknown` or
+  `Events(NonZeroU64)`, so a runner told `Nothing` stops without spending one
+  more round trip on an empty pull. `Pulled::new` says `Unknown`, which is never
+  a lie; a peer that can tell says more with `Pulled::with_waiting`, and
+  `Waiting::counted` turns a count into the right case. `MemorySyncPeer` counts
+  what lies past the token it returns. The field is a shape change on the
+  wire, so `wire::FORMAT_VERSION` is now 2, as ADR-0097 §3 requires; neither
+  crate is published, so no consumer is affected.
+
+  **`nothing_waiting_means_the_next_pull_is_empty`** (SY-37, minted
+  `[PROVISIONAL]`), in `happenstance-sync-testkit`. The defect it detects is a
+  peer that says nothing is waiting because its page ran out rather than its
+  log, so a runner that believes it stops short and leaves the rest of the log
+  for the next wake. The rule writes two logs — 257 small events for a page the
+  event count ends, and one sized from the declared limits for a page the byte
+  budget ends, so a peer that reads any short page as the end is caught —
+  follows the tokens, and pulls once more after the first `Nothing`: that pull
+  must be empty. A peer that never says `Nothing` passes, and a wrong `Events`
+  count is not checked, because it is advisory. A peer that shows no page
+  boundary on either log — one pull carries it, or the peer refuses writes made
+  inside its own declaration, which is SY-18's to judge — is reported as a skip
+  naming `NO_SECOND_PAGE`, because the rule could not have failed it.
+
 - **`peer_declares_its_own_limits`** (SY-18), in `happenstance-sync-testkit`
   (#121). The defect it detects is a peer whose declared `PeerLimits` admit an
   event its ingest then refuses, so the failure is found at ingest, after the

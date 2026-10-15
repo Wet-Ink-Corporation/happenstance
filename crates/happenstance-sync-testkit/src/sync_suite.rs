@@ -3,6 +3,26 @@
 //! Private: what a caller reaches is [`rules`], re-exported at the crate root,
 //! and the macros, which `#[macro_export]` puts there regardless.
 
+/// The `capability` SY-37's rule reports when the peer never showed it a
+/// second page: the two declared limits that decide how much one pull carries.
+///
+/// Not a fixture constant, which is why it is spelled with its path: the
+/// limits are the peer's own declaration, and they are what an adapter author
+/// changes (or a fixture narrows) to let the rule see a page boundary.
+pub const NO_SECOND_PAGE: &str = "PeerLimits::max_batch_events, PeerLimits::max_batch_bytes";
+
+/// The reason SY-37's rule reports when the peer never showed it a second page.
+///
+/// Written by this crate rather than by the fixture, as
+/// `happenstance_testkit::NO_CEILING_REASON` is, because it is the same
+/// sentence for every peer that earns it. What the skip leaves unverified is
+/// the whole of SY-37: the rule cannot fail a peer whose every answer fits in
+/// one pull, or that would not take the logs the rule sized from its limits.
+pub const NO_SECOND_PAGE_REASON: &str = "this peer showed no page boundary: one pull carried everything the rule \
+     wrote, or the peer refused the writes the rule sized from its declared \
+     limits (SY-18's subject), so a `Nothing` answered at a boundary could not \
+     be checked; SY-37 is unverified for this peer";
+
 /// The sync rules. See the [crate documentation](crate) for what each covers.
 ///
 /// Each rule is an async function taking `impl AsyncFn() -> F` — not a fixture
@@ -30,7 +50,9 @@ pub mod rules {
         MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_TAGS_PER_EVENT, Query, QueryItem, RecordedAt,
         SequencePosition, StoreId, Tag, Tags,
     };
-    use happenstance_sync::{Classify, EventGroup, PushBatch, ReplicatedEvent, SyncPeer};
+    use happenstance_sync::{
+        Classify, EventGroup, PeerLimits, PushBatch, ReplicatedEvent, SyncPeer, Waiting,
+    };
     use happenstance_testkit::RuleOutcome;
 
     use crate::kv_capped::turnstile_seat_map;
@@ -43,8 +65,14 @@ pub mod rules {
     /// failure rather than a hang (H-13).
     const MAX_PULLS: usize = 64;
 
+    /// The most groups past one that SY-37's rule writes to a peer in one log,
+    /// whatever limits the peer declares (H-13). Twice the minimum conformant
+    /// `max_batch_events`, so the reference peer pages more than once.
+    const FILL_CAP: usize = 256;
+
     const SEAT_CLAIMED: EventType = EventType::from_static("SeatClaimed");
     const CLAIM_REVERSED: EventType = EventType::from_static("ClaimReversed");
+    const READING_TAKEN: EventType = EventType::from_static("ReadingTaken");
 
     /// Two origins and an adjudicating hub, as raw store identities.
     const ORIGIN_A: StoreId = StoreId::from_bytes([0x11; 16]);
@@ -411,8 +439,237 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-37: a peer that answers a pull with [`Waiting::Nothing`] hands back
+    /// an empty batch on the next pull from the token that answer carried.
+    ///
+    /// The rule writes two logs, each to a fresh peer from `open`:
+    ///
+    /// 1. **Cut by count**: 257 single-event groups of a few bytes, pushed at
+    ///    most [`PeerLimits::max_batch_events`] to a push, so a peer that pages
+    ///    at any event count up to 256 shows a page boundary.
+    /// 2. **Cut by bytes**: single-event groups whose payloads are sized from
+    ///    the declared limits so [`PeerLimits::max_batch_bytes`] ends a page
+    ///    before the event count does, one group past that page. Written only
+    ///    where the bytes do cut first, and the log fits in 257 groups and
+    ///    64 MiB.
+    ///
+    /// On each it follows the peer's tokens from the start, and on the first
+    /// `Nothing` pulls once more from that token. That pull must be empty. A
+    /// peer that never says `Nothing` passes: it costs its runner the empty
+    /// pull, and never a missed event.
+    ///
+    /// A log the peer refuses to take is not built, and shows no page: a peer
+    /// refusing writes made inside its own declaration is SY-18's subject, and
+    /// its rule judges it. If neither log showed a second non-empty page, the
+    /// rule could not have failed the peer, and it reports a skip naming
+    /// [`NO_SECOND_PAGE`] rather than a pass.
+    ///
+    /// The bound on pulls — one more than the log has groups — is the suite's
+    /// liveness guard, not SY-37's claim: a peer that ignores its token and
+    /// keeps handing back groups is reported here, and fails SY-1's and SY-2's
+    /// rules too.
+    ///
+    /// [`NO_SECOND_PAGE`]: crate::NO_SECOND_PAGE
+    ///
+    /// # Rejects
+    ///
+    /// A peer that says `Nothing` because its page ran out rather than its log
+    /// — the natural slip for an adapter that reports "this page is the last
+    /// one I fetched" — so a runner that believes it stops short and the rest
+    /// of the log waits for the next wake. `tests/wrong_peers.rs` carries two:
+    /// a peer that says `Nothing` on every pull, which the count-cut log
+    /// catches, and one that says it whenever a page carried fewer events than
+    /// `max_batch_events`, which only the byte-cut log can catch.
+    ///
+    /// # Does not reject
+    ///
+    /// A wrong [`Waiting::Events`] count: it is advisory, and checking it would
+    /// need a snapshot of the far side the port does not offer. Nor a peer
+    /// that says `Nothing` while stalled behind a group too large for any pull:
+    /// SY-37 forbids it, but a conformant push cannot put such a group on the
+    /// far side, so the rule cannot build the case. Nor a peer whose single
+    /// pull carries all of both logs, which it reports as a skip; the caps
+    /// bound the work against a peer that declares huge limits (H-13), at that
+    /// price.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-37 if the peer refuses a pull, keeps handing back
+    /// groups past the log the rule wrote, or hands back events on the pull
+    /// after it said nothing was waiting.
+    pub async fn nothing_waiting_means_the_next_pull_is_empty<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-37";
+
+        let paged_by_count = {
+            let fixture = open().await;
+            let peer = fixture.connect().await;
+            let fill = Fill::cut_by_count(&peer.limits());
+            fill_with_readings(&peer, fill, CLAUSE).await?
+                && follow_tokens(&peer, fill.groups, CLAUSE).await?
+        };
+
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+        let paged_by_bytes = match Fill::cut_by_bytes(&peer.limits()) {
+            Some(fill) => {
+                fill_with_readings(&peer, fill, CLAUSE).await?
+                    && follow_tokens(&peer, fill.groups, CLAUSE).await?
+            }
+            None => false,
+        };
+
+        Ok(if paged_by_count || paged_by_bytes {
+            RuleOutcome::Ran
+        } else {
+            RuleOutcome::Skipped {
+                capability: crate::NO_SECOND_PAGE,
+                reason: crate::NO_SECOND_PAGE_REASON,
+            }
+        })
+    }
+
+    /// One log SY-37's rule writes: how many single-event groups, how many
+    /// payload bytes each carries at least, and how many groups go in a push.
+    #[derive(Debug, Clone, Copy)]
+    struct Fill {
+        groups: usize,
+        payload: usize,
+        per_push: usize,
+    }
+
+    impl Fill {
+        /// The cap plus one groups with tiny payloads, whatever the peer
+        /// declares: a peer that pages at any count up to the cap shows a
+        /// second page, including one whose declaration understates it.
+        fn cut_by_count(limits: &PeerLimits) -> Self {
+            Self {
+                groups: FILL_CAP.saturating_add(1),
+                payload: 0,
+                per_push: limits.max_batch_events.max(1),
+            }
+        }
+
+        /// One group more than `max_batch_bytes` admits at the largest payload
+        /// the peer takes, when that is fewer events than `max_batch_events`;
+        /// `None` when the count cuts first or the log would pass either cap.
+        fn cut_by_bytes(limits: &PeerLimits) -> Option<Self> {
+            let payload = limits.max_event_bytes.min(limits.max_batch_bytes);
+            let per_page = limits.max_batch_bytes.checked_div(payload)?;
+            let groups = per_page.checked_add(1)?;
+            let bytes = groups.checked_mul(payload)?;
+            let fits = per_page < limits.max_batch_events
+                && groups <= FILL_CAP.saturating_add(1)
+                && bytes <= MAX_PROVOKED_BATCH_BYTES;
+            fits.then_some(Self {
+                groups,
+                payload,
+                per_push: per_page.max(1),
+            })
+        }
+    }
+
+    /// Follows `peer`'s tokens from the start of a log of `groups` groups, and
+    /// checks the pull after the first `Nothing`. Answers whether a second
+    /// non-empty page was seen, which is when a `Nothing` could have been a
+    /// lie about a page boundary.
+    async fn follow_tokens<P: SyncPeer>(
+        peer: &P,
+        groups: usize,
+        clause: &'static str,
+    ) -> Result<bool, Violation> {
+        let refused = |error| Violation::new(clause, format!("the peer refused a pull: {error}"));
+        let mut resume = None;
+        let mut pages = 0_usize;
+        // The suite's liveness guard: a log of `groups` groups cannot fill more
+        // non-empty pulls than that unless the peer repeats itself; one more for
+        // the pull that ends it.
+        for _ in 0..=groups {
+            let pulled = peer.pull(resume.as_ref()).await.map_err(refused)?;
+            if !pulled.batch.groups.is_empty() {
+                pages = pages.saturating_add(1);
+            }
+            match pulled.waiting {
+                Waiting::Nothing => {
+                    let next = peer.pull(Some(&pulled.resume)).await.map_err(refused)?;
+                    let missed = next.batch.events().count();
+                    ensure(missed == 0, clause, || {
+                        format!(
+                            "the peer said nothing was waiting, and the next pull from the token \
+                             it returned carried {missed} event(s); a runner that believed it \
+                             stopped short of them"
+                        )
+                    })?;
+                    return Ok(pages >= 2);
+                }
+                Waiting::Unknown | Waiting::Events(_) if pulled.batch.groups.is_empty() => {
+                    return Ok(pages >= 2);
+                }
+                Waiting::Unknown | Waiting::Events(_) => resume = Some(pulled.resume),
+            }
+        }
+        Err(Violation::new(
+            clause,
+            format!(
+                "the peer was still handing back groups of a {groups}-group log after {} pulls",
+                groups.saturating_add(1)
+            ),
+        ))
+    }
+
+    /// Pushes `fill.groups` single-event groups from [`ORIGIN_A`], at most
+    /// `fill.per_push` to a push. Answers whether the peer took them all.
+    async fn fill_with_readings<P: SyncPeer>(
+        peer: &P,
+        fill: Fill,
+        clause: &'static str,
+    ) -> Result<bool, Violation> {
+        let Fill {
+            groups: count,
+            payload,
+            per_push: chunk,
+        } = fill;
+        let mut position = SequencePosition::FIRST;
+        let mut groups = Vec::with_capacity(chunk.min(count));
+        for reading in 1..=count {
+            // Distinct opaque bytes per event, padded to the fill's payload
+            // size, and never parsed (SY-35).
+            let mut data = reading.to_string().into_bytes();
+            data.resize(data.len().max(payload), 0);
+            let event = Event::new(READING_TAKEN, data).map_err(|error| {
+                Violation::new(clause, format!("the rule's own event is invalid: {error}"))
+            })?;
+            groups.push(EventGroup::new(
+                None,
+                vec![ReplicatedEvent::new(
+                    EventId::new(ORIGIN_A, position),
+                    RecordedAt::from_millis(1_800_000_000_000),
+                    event,
+                )],
+            ));
+            position = position
+                .next()
+                .ok_or_else(|| Violation::new(clause, "the rule's log ran out of positions"))?;
+
+            if groups.len() == chunk || reading == count {
+                let batch = PushBatch::new(core::mem::take(&mut groups));
+                // A refusal here is the peer disagreeing with its own
+                // declaration, which is SY-18's to judge. This log is simply
+                // not built, and the caller counts it as showing no page.
+                if peer.push(&batch).await.is_err() {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
+
     /// Pulls from the start of the peer's log until it hands back an empty
     /// batch, which the port defines as caught up.
+    ///
+    /// It ignores [`Pulled::waiting`](happenstance_sync::Pulled::waiting) on
+    /// purpose, so a peer wrong about it fails SY-37's rule and only that one.
     async fn pull_everything<P: SyncPeer>(
         peer: &P,
         clause: &'static str,
@@ -606,6 +863,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- Every refusal states its class (SY-36) ---------------------
             every_refusal_states_its_class,
+
+            // --- Nothing waiting means nothing waiting (SY-37) --------------
+            nothing_waiting_means_the_next_pull_is_empty,
         }
     };
 }
