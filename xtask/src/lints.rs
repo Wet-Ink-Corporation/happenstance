@@ -1381,7 +1381,10 @@ fn true_rule_counts(root: &Path) -> Result<Vec<(usize, String)>> {
         let name = file.rsplit('/').next().unwrap_or(file);
         counts.push((rules.len(), name.to_owned()));
     }
-    counts.push((all_rules(root)?.len(), "all four rule files".to_owned()));
+    counts.push((
+        all_rules(root)?.len(),
+        format!("all {} rule files", RULE_FILES.len()),
+    ));
     counts.sort_unstable();
     Ok(counts)
 }
