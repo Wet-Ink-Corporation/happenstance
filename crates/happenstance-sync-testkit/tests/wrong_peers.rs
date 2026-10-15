@@ -21,7 +21,7 @@ use std::sync::Arc;
 use happenstance_core::{SequencePosition, StoreId};
 use happenstance_sync::{
     Ack, Classify, EventGroup, FailureClass, MemoryPeerError, MemoryResume, MemorySyncPeer,
-    PeerLimits, Pulled, PushBatch, SendSyncPeer,
+    PeerLimits, Pulled, PushBatch, SendSyncPeer, Waiting,
 };
 use happenstance_sync_testkit::{RefusalsOf, SyncFixture, oversized_push_refusal, rules};
 use happenstance_testkit::{RuleOutcome, block_on};
@@ -59,6 +59,10 @@ enum Mistake {
     /// answers the reference peer's class and every later read `Transient`,
     /// so a runner that reads it twice handles one failure two ways.
     ClassChangesBetweenReads,
+    /// SY-37's wrong implementation: answer every pull with "nothing is
+    /// waiting", whether the page ran out or the log did. A runner that
+    /// believes it stops one page in.
+    AlwaysSaysNothingWaiting,
 }
 
 /// The reference peer's error, classified through the wrong peer's mistake.
@@ -100,7 +104,8 @@ impl Classify for WrongError {
             | Mistake::AcksThenDropsOnTheGuard
             | Mistake::FlattensGroups
             | Mistake::DeclaresNoRefusal
-            | Mistake::AcceptsTheOversizedPush => self.inner.class(),
+            | Mistake::AcceptsTheOversizedPush
+            | Mistake::AlwaysSaysNothingWaiting => self.inner.class(),
         }
     }
 }
@@ -180,10 +185,16 @@ impl SendSyncPeer for WrongPeer {
     type Resume = MemoryResume;
 
     async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
-        self.inner
+        let pulled = self
+            .inner
             .pull(from)
             .await
-            .map_err(|error| self.wrap(error))
+            .map_err(|error| self.wrap(error))?;
+        Ok(if self.mistake == Mistake::AlwaysSaysNothingWaiting {
+            pulled.with_waiting(Waiting::Nothing)
+        } else {
+            pulled
+        })
     }
 
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
@@ -192,7 +203,8 @@ impl SendSyncPeer for WrongPeer {
             | Mistake::OneClassForEverything
             | Mistake::DeclaresNoRefusal
             | Mistake::AcceptsTheOversizedPush
-            | Mistake::ClassChangesBetweenReads => self
+            | Mistake::ClassChangesBetweenReads
+            | Mistake::AlwaysSaysNothingWaiting => self
                 .inner
                 .push(batch)
                 .await
@@ -487,5 +499,14 @@ fn every_refusal_states_its_class_fails_an_error_whose_class_changes_between_rea
         &verdicts(async || WrongFixture::new(Mistake::ClassChangesBetweenReads)),
         "every_refusal_states_its_class",
         "SY-36",
+    );
+}
+
+#[test]
+fn nothing_waiting_means_the_next_pull_is_empty_fails_a_peer_that_always_says_nothing() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::AlwaysSaysNothingWaiting)),
+        "nothing_waiting_means_the_next_pull_is_empty",
+        "SY-37",
     );
 }

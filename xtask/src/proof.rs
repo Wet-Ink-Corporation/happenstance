@@ -793,16 +793,17 @@ const CLOUDFLARE_WASM_RULES: &[&str] = &[
     "a_live_read_stream_does_not_block_an_append",
 ];
 
-/// The sync rules named for the replication row: today, all of them.
+/// The sync rules named for the replication row: the first three, of four.
 ///
-/// All three, because each is the first of its clause and none is redundant on
-/// this target: SY-36's is here because the `!Send` peer that lives on wasm32
+/// Those three, because each is the first of its clause and none is redundant
+/// on this target: SY-36's is here because the `!Send` peer that lives on wasm32
 /// reports its failures through its own error type, and a class it states only
-/// on the host is a class nobody on the platform can act on. The list stops
-/// being the whole enumeration as phase 13 adds rules; what it should then keep
-/// is the rules whose pass depends on a group surviving the transport whole,
-/// since a single-threaded runtime is where a peer that pages by row is most
-/// likely to be written.
+/// on the host is a class nobody on the platform can act on. The list stopped
+/// being the whole enumeration when #245 added SY-37's rule, which still runs
+/// here through the exhaustive enumeration check and is not named, because its
+/// pass does not depend on a group surviving the transport whole. That is what
+/// the list keeps, since a single-threaded runtime is where a peer that pages by
+/// row is most likely to be written.
 const SYNC_WASM_RULES: &[&str] = &[
     "ingest_never_rejects",
     "compensation_is_atomic_with_the_losing_event",

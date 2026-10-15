@@ -1,6 +1,6 @@
 //! The conformance suite for `happenstance-sync` peers.
 //!
-//! # Status: three rules, and the shape every later one plugs into
+//! # Status: four rules, and the shape every later one plugs into
 //!
 //! `publish = false` because the suite is **unfinished**, not because it is
 //! held back: phase 13 grows it rule by rule, and whether it publishes is
@@ -38,6 +38,7 @@
 //! | [`ingest_never_rejects`](rules::ingest_never_rejects) | SY-1 | a peer that evaluates the travelling guard and refuses or drops a conflicting fact |
 //! | [`compensation_is_atomic_with_the_losing_event`](rules::compensation_is_atomic_with_the_losing_event) | SY-2 | a peer that splits a losing event from the compensation that rode with it |
 //! | [`every_refusal_states_its_class`](rules::every_refusal_states_its_class) | SY-36 | a peer whose errors all state one failure class, whatever the failure |
+//! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //!
 //! Each rule names a wrong implementation, and that implementation lives in
 //! this crate's `tests/wrong_peers.rs`, where the rule is shown to fail it. A

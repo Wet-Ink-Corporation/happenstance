@@ -103,6 +103,25 @@ not the same as what a user needed to be told.
   the helper will not allocate a batch that size. SY-36 stays `[PROVISIONAL]`:
   its falsification test needs the real peers, which do not exist yet.
 
+- **`happenstance-sync`: a pull says whether more is waiting** (#245). `Pulled`
+  gains a `waiting` field, a `Waiting` of `Nothing`, `Unknown` or
+  `Events(NonZeroU64)`, so a runner told `Nothing` stops without spending one
+  more round trip on an empty pull. `Pulled::new` says `Unknown`, which is never
+  a lie; a peer that can tell says more with `Pulled::with_waiting`, and
+  `Waiting::counted` turns a count into the right case. `MemorySyncPeer` counts
+  what lies past the token it returns. The field is a shape change on the
+  wire, so `wire::FORMAT_VERSION` is now 2, as ADR-0097 §3 requires; neither
+  crate is published, so no consumer is affected.
+
+  **`nothing_waiting_means_the_next_pull_is_empty`** (SY-37, minted
+  `[PROVISIONAL]`), in `happenstance-sync-testkit`. The defect it detects is a
+  peer that says nothing is waiting because its page ran out rather than its
+  log, so a runner that believes it stops short and leaves the rest of the log
+  for the next wake. The rule fills the peer one group past what a pull may
+  carry under its declared limits, follows the tokens, and pulls once more after
+  the first `Nothing`: that pull must be empty. A peer that never says `Nothing`
+  passes, and a wrong `Events` count is not checked, because it is advisory.
+
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
   bookmark rolls back its `StoreId` row and its position counter together, so a

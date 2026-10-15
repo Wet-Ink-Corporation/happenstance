@@ -47,12 +47,12 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 ///
 /// # What bumping it means
 ///
-/// Carried on every message, never negotiated per connection, and version 1 is
+/// Carried on every message, never negotiated per connection, and version 2 is
 /// this envelope and the message set below it (ADR-0097). It is bumped whenever
 /// the **shape** of any wire type changes: a field added, removed, retyped or
 /// moved between types — per-type versioning cannot say VT-30's move of `after`
-/// into `Guard`, which changed no single type. Landing the message set did not
-/// bump it: nothing at version 1 had crossed a wire before.
+/// into `Guard`, which changed no single type. Version 1 lacked
+/// [`Pulled::waiting`](crate::Pulled::waiting), the field that bumped it (#245).
 ///
 /// # What must never bump it
 ///
@@ -63,7 +63,7 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 /// them raises a limit — the raiser bumps the version, and every peer that has
 /// not been redeployed refuses every message from it, including the ones well
 /// inside the old bound.
-pub const FORMAT_VERSION: u16 = 1;
+pub const FORMAT_VERSION: u16 = 2;
 
 /// The field names `Envelope`'s `Deserialize` announces to the format, in
 /// declaration order.
@@ -82,7 +82,7 @@ const FIELDS: &[&str] = &["format_version", "message"];
 /// assert_eq!(envelope.format_version(), FORMAT_VERSION);
 ///
 /// let json = serde_json::to_string(&envelope)?;
-/// assert_eq!(json, r#"{"format_version":1,"message":"hello"}"#);
+/// assert_eq!(json, r#"{"format_version":2,"message":"hello"}"#);
 ///
 /// let decoded: Envelope<String> = serde_json::from_str(&json)?;
 /// assert_eq!(decoded.message(), "hello");
@@ -424,6 +424,10 @@ impl ResumeToken {
 /// peer's limits reach the caller is the transport's (#117), and a fifth
 /// message is additive because no enum holds the four.
 ///
+/// Since version 2, pulled carries [`waiting`](crate::Pulled::waiting) after
+/// its token, always present (SY-37, WF-2): what the far side still holds, so a
+/// runner told [`Nothing`](crate::Waiting::Nothing) skips the empty pull.
+///
 /// # A mis-routed buffer
 ///
 /// A buffer does not say which message it holds, so a transport that routes one
@@ -431,7 +435,8 @@ impl ResumeToken {
 /// type refuses unknown fields, so a push handed to it is an error rather than
 /// `PullRequest { from: None }`, which its one optional field would otherwise
 /// default to. Postcard has no equivalent: it carries no field names, and an
-/// empty push and a first pull are both `[01 00]` (ADR-0097 §1).
+/// empty push and a first pull are both the version and then `00` (ADR-0097 §1
+/// measured `[01 00]`, at version 1).
 ///
 /// # Examples
 ///
@@ -443,7 +448,7 @@ impl ResumeToken {
 /// let first = Envelope::new(PullRequest::from_start());
 /// assert_eq!(
 ///     serde_json::to_string(&first)?,
-///     r#"{"format_version":1,"message":{"from":null}}"#
+///     r#"{"format_version":2,"message":{"from":null}}"#
 /// );
 ///
 /// let next = PullRequest::after(ResumeToken::new("group:42"));
