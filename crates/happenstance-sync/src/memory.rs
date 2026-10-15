@@ -36,7 +36,9 @@ use std::sync::Mutex;
 use happenstance_core::{EventId, StoreId};
 
 use crate::identity::{ReplicatedEvent, Watermark};
-use crate::peer::{Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer};
+use crate::peer::{
+    Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, Waiting,
+};
 
 /// Where a [`MemorySyncPeer`] pull left off.
 ///
@@ -143,6 +145,7 @@ pub enum MemoryPeerError {
 /// assert_eq!(pulled.batch.events().count(), 1);
 /// let caught_up = hub.pull(Some(&pulled.resume)).await?;
 /// assert_eq!(caught_up.batch.events().count(), 0, "empty means caught up");
+/// assert_eq!(caught_up.waiting, happenstance_sync::Waiting::Nothing);
 /// # Ok(())
 /// # }
 /// ```
@@ -248,10 +251,22 @@ impl SendSyncPeer for MemorySyncPeer {
             next += 1;
         }
 
-        Ok(Pulled::new(
-            PushBatch::new(groups),
-            MemoryResume { next_group: next },
-        ))
+        // Counted under the guard the fill loop held, so the count describes
+        // exactly what lies past the token returned (SY-37). One event at a
+        // time, as `push` counts, because a `usize` length has no infallible
+        // conversion to `u64`. O(remaining) on every pull: fine for a reference
+        // peer, and not how a real adapter should count.
+        let remaining = state
+            .groups
+            .iter()
+            .skip(next)
+            .flat_map(|group| group.events.iter())
+            .fold(0_u64, |count, _| count.saturating_add(1));
+
+        Ok(
+            Pulled::new(PushBatch::new(groups), MemoryResume { next_group: next })
+                .with_waiting(Waiting::counted(remaining)),
+        )
     }
 
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
@@ -379,5 +394,95 @@ mod dedupe_tests {
         let again = peer.push(&one(first)).await.expect("the push fits");
         assert_eq!((again.appended, again.skipped), (0, 1), "and only once");
         assert_eq!(peer.group_count().expect("the lock is not poisoned"), 2);
+    }
+}
+
+#[cfg(test)]
+mod waiting_tests {
+    use alloc::vec;
+    use alloc::vec::Vec;
+
+    use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+
+    use super::MemorySyncPeer;
+    use crate::{EventGroup, PeerLimits, ReplicatedEvent, SendSyncPeer, Waiting};
+
+    const ORIGIN: StoreId = StoreId::from_bytes([0x0C; 16]);
+
+    /// A peer holding `count` single-event groups of `payload` bytes each,
+    /// seeded rather than pushed, so the limits do not cut the seed.
+    fn seeded(limits: PeerLimits, count: usize, payload: usize) -> MemorySyncPeer {
+        let peer = MemorySyncPeer::with_limits(StoreId::from_bytes([0x0D; 16]), limits);
+        let mut position = SequencePosition::FIRST;
+        for _ in 0..count {
+            let event = Event::new("Seeded", vec![0_u8; payload]).expect("a valid event");
+            let replicated = ReplicatedEvent::new(
+                EventId::new(ORIGIN, position),
+                RecordedAt::from_millis(1_800_000_000_000),
+                event,
+            );
+            peer.seed(EventGroup::new(None, vec![replicated]))
+                .expect("an unpoisoned lock");
+            position = position.next().expect("positions left");
+        }
+        peer
+    }
+
+    fn events(count: usize) -> u64 {
+        u64::try_from(count).expect("a test-sized count")
+    }
+
+    #[tokio::test]
+    async fn an_empty_log_answers_nothing() {
+        let peer = seeded(PeerLimits::minimum(), 0, 1);
+
+        let pulled = peer.pull(None).await.expect("a pull");
+
+        assert_eq!(pulled.waiting, Waiting::Nothing);
+    }
+
+    #[tokio::test]
+    async fn a_log_that_fits_one_pull_answers_nothing() {
+        let peer = seeded(PeerLimits::minimum(), 3, 1);
+
+        let pulled = peer.pull(None).await.expect("a pull");
+
+        assert_eq!(pulled.batch.events().count(), 3);
+        assert_eq!(pulled.waiting, Waiting::Nothing);
+    }
+
+    #[tokio::test]
+    async fn a_pull_stopped_at_the_limit_counts_the_events_left() {
+        let limits = PeerLimits::minimum();
+        let seeded_count = limits.max_batch_events + 1;
+        let peer = seeded(limits, seeded_count, 1);
+
+        let first = peer.pull(None).await.expect("a first pull");
+        let left = seeded_count - first.batch.events().count();
+        let second = peer.pull(Some(&first.resume)).await.expect("a second pull");
+
+        assert_eq!(first.waiting, Waiting::counted(events(left)));
+        assert_ne!(
+            first.waiting,
+            Waiting::Nothing,
+            "the first pull stopped short"
+        );
+        assert_eq!(second.batch.events().count(), left);
+        assert_eq!(second.waiting, Waiting::Nothing);
+    }
+
+    /// An empty batch with events still waiting is the truthful answer to a
+    /// pull stalled behind a group the budget can never admit.
+    #[tokio::test]
+    async fn a_stall_behind_an_oversized_group_counts_it() {
+        let limits = PeerLimits::minimum();
+        let oversized = limits.max_event_bytes + 1;
+        let peer = seeded(limits, 1, oversized);
+
+        let pulled = peer.pull(None).await.expect("a pull");
+
+        let stalled: Vec<_> = pulled.batch.events().collect();
+        assert_eq!(stalled, Vec::<&ReplicatedEvent>::new());
+        assert_eq!(pulled.waiting, Waiting::counted(events(1)));
     }
 }

@@ -103,6 +103,56 @@ not the same as what a user needed to be told.
   the helper will not allocate a batch that size. SY-36 stays `[PROVISIONAL]`:
   its falsification test needs the real peers, which do not exist yet.
 
+- **`happenstance-sync`: a pull says whether more is waiting** (#245). `Pulled`
+  gains a `waiting` field, a `Waiting` of `Nothing`, `Unknown` or
+  `Events(NonZeroU64)`, so a runner told `Nothing` stops without spending one
+  more round trip on an empty pull. `Pulled::new` says `Unknown`, which is never
+  a lie; a peer that can tell says more with `Pulled::with_waiting`, and
+  `Waiting::counted` turns a count into the right case. `MemorySyncPeer` counts
+  what lies past the token it returns. The field is a shape change on the
+  wire, so `wire::FORMAT_VERSION` is now 2, as ADR-0097 §3 requires; neither
+  crate is published, so no consumer is affected.
+
+  **`nothing_waiting_means_the_next_pull_is_empty`** (SY-37, minted
+  `[PROVISIONAL]`), in `happenstance-sync-testkit`. The defect it detects is a
+  peer that says nothing is waiting because its page ran out rather than its
+  log, so a runner that believes it stops short and leaves the rest of the log
+  for the next wake. The rule writes two logs — 257 small events for a page the
+  event count ends, and one sized from the declared limits for a page the byte
+  budget ends, so a peer that reads any short page as the end is caught —
+  follows the tokens, and pulls once more after the first `Nothing`: that pull
+  must be empty. A peer that never says `Nothing` passes, and a wrong `Events`
+  count is not checked, because it is advisory. A peer that shows no page
+  boundary on either log — one pull carries it, or the peer refuses writes made
+  inside its own declaration, which is SY-18's to judge — is reported as a skip
+  naming `NO_SECOND_PAGE`, because the rule could not have failed it.
+
+- **`peer_declares_its_own_limits`** (SY-18), in `happenstance-sync-testkit`
+  (#121). The defect it detects is a peer whose declared `PeerLimits` admit an
+  event its ingest then refuses, so the failure is found at ingest, after the
+  origin has committed, rather than prevented by a runner that read the limits
+  first; and a peer that declares `max_event_bytes` below VT-21's 65,536-byte
+  floor. The rule reads `limits()` before it pushes anything, pushes
+  Turnstile's 340,000-byte seat map only if the declaration admits it, and then
+  pushes two events at the declared boundary, one carrying its bytes in data
+  and one in metadata, each with a 255-byte type and 64 tags of 255 bytes.
+  Each must land, acknowledged as appended, and come back whole. Its wrong
+  implementations are in `tests/wrong_limits.rs`, one per check: KV peers that
+  declare no value cap, the raw value cap, a byte below the floor, a
+  declaration that changes between reads, or room for no event at all; and KV
+  peers that cap metadata at 1,024 bytes without declaring it, truncate large
+  data, or acknowledge a large event as skipped. It does not check
+  `max_batch_bytes` or `max_batch_events` on their own: those are not limits on
+  an event.
+
+  **`KvCappedFixture`**, the peer SY-18's marker names: a 128 KiB cap on each
+  value, which reserves the envelope at the contract's floors and declares
+  114,465 bytes per event. It refuses a value over the cap whole, as
+  `KvPeerError::ValueTooLarge`, class `Park`. Across the peer set the floor
+  reads 65,536 = `MemorySyncPeer` < 114,465 for this fixture < 131,072 for the
+  Neon store < 1 MiB for the other stores. SY-18 stays `[DEFERRED]` and VT-21
+  `[PROVISIONAL]`: moving either marker is the owner's decision.
+
 - **`happenstance-sync-testkit`: the model family, seeded peer topologies
   behind a new `proptest` feature** (#246). Not published, and recorded because
   CF-29 asks every conformance rule for an entry. `sync_model_conformance!`

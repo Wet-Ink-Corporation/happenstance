@@ -372,13 +372,16 @@ mod wire {
     // =====================================================================
 
     use core::fmt::Debug;
+    use core::num::NonZeroU64;
 
     use happenstance_core::{
         AppendCondition, Event, EventId, EventType, Query, QueryItem, RecordedAt, SequencePosition,
         StoreId, Tag, Tags,
     };
     use happenstance_sync::wire::{PullRequest, ResumeToken};
-    use happenstance_sync::{Ack, EventGroup, Pulled, PushBatch, ReplicatedEvent, Watermark};
+    use happenstance_sync::{
+        Ack, EventGroup, Pulled, PushBatch, ReplicatedEvent, Waiting, Watermark,
+    };
     use serde::de::DeserializeOwned;
 
     const ORIGIN: StoreId = StoreId::from_bytes([0x5E; 16]);
@@ -496,6 +499,87 @@ mod wire {
         round_trip(&PullRequest::from_start());
         round_trip(&PullRequest::after(ResumeToken::new("group:2")));
         round_trip(&Pulled::new(two_groups(), ResumeToken::new("group:2")));
+        for waiting in [
+            Waiting::Nothing,
+            Waiting::Unknown,
+            Waiting::Events(NonZeroU64::MAX),
+        ] {
+            round_trip(
+                &Pulled::new(two_groups(), ResumeToken::new("group:2")).with_waiting(waiting),
+            );
+        }
+    }
+
+    /// `Pulled::waiting` on the wire (SY-37): always present, declared last,
+    /// externally tagged. Postcard's variant index is the declaration order, so
+    /// the trailing bytes are pinned — reordering the variants would re-mean
+    /// every buffer a peer already sent.
+    #[test]
+    fn pulled_carries_waiting_in_both_formats() {
+        const ENCODES: &str = "a `Pulled` of an empty batch always encodes";
+        let three = NonZeroU64::new(3).expect("three is not zero");
+        let pulled = Pulled::new(PushBatch::empty(), ResumeToken::new("group:0"));
+        let nothing = pulled.clone().with_waiting(Waiting::Nothing);
+        let counted = pulled.clone().with_waiting(Waiting::Events(three));
+
+        assert_eq!(
+            serde_json::to_string(&nothing).expect(ENCODES),
+            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"nothing"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&counted).expect(ENCODES),
+            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":{"events":3}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&pulled).expect(ENCODES),
+            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"unknown"}"#,
+            "the default travels too, never as a missing key (WF-2)"
+        );
+
+        // The fields before `waiting`, encoded positionally as postcard
+        // encodes the struct, so only the trailing bytes are asserted here.
+        let before =
+            postcard::to_stdvec(&(PushBatch::empty(), ResumeToken::new("group:0"))).expect(ENCODES);
+        let tail = |pulled: &Pulled<ResumeToken>| {
+            let bytes = postcard::to_stdvec(pulled).expect(ENCODES);
+            assert!(bytes.starts_with(&before), "{bytes:02x?}");
+            bytes
+                .get(before.len()..)
+                .expect("the prefix was just checked")
+                .to_vec()
+        };
+        assert_eq!(tail(&nothing), [0x00]);
+        assert_eq!(tail(&pulled), [0x01]);
+        assert_eq!(tail(&counted), [0x02, 0x03]);
+    }
+
+    /// `Events(0)` would be a second spelling of `Nothing`, so the decoder
+    /// refuses a zero count from the wire in both formats (WF-10). The control
+    /// is the smallest count that is allowed, at the same bytes otherwise.
+    #[test]
+    fn a_zero_event_count_is_refused() {
+        let refused = serde_json::from_str::<Waiting>(r#"{"events":0}"#)
+            .expect_err("a zero count is refused in JSON")
+            .to_string();
+        assert!(refused.contains("expected a nonzero u64"), "{refused}");
+        assert_eq!(
+            postcard::from_bytes::<Waiting>(&[0x02, 0x00])
+                .expect_err("a zero count is refused in postcard"),
+            postcard::Error::SerdeDeCustom,
+            "postcard drops the text, as it does for every refusal"
+        );
+
+        let one = Waiting::Events(NonZeroU64::MIN);
+        assert_eq!(
+            serde_json::from_str::<Waiting>(r#"{"events":1}"#)
+                .expect("a count of one decodes in JSON"),
+            one
+        );
+        assert_eq!(
+            postcard::from_bytes::<Waiting>(&[0x02, 0x01])
+                .expect("a count of one decodes in postcard"),
+            one
+        );
     }
 
     /// WF-8 over a real message. The message is malformed *and* the version is

@@ -22,7 +22,7 @@ summary: >-
   binding. A third instance, 2026-09-09, and the first deliberately unreachable from the gate:
   ops/host/preflight.sh asserts on the measurement host's environment (sysfs, systemd,
   --version) before any sample exists, which is what separates it from a budget and keeps it
-  inside CF-34 (spec/SPECIFICATION.md:9787); nothing in xtask's step table, .redkiln/config.yaml's
+  inside CF-34 (spec/SPECIFICATION.md:9839); nothing in xtask's step table, .redkiln/config.yaml's
   verify: block or CI invokes it, and ops/ is on affected.rs's INERT list. ADR-0064
   (kb-decision-0064) names the residual: registering the host as a self-hosted runner would make
   the preflight reachable from a merge-blocking job, and that is a decision, not a configuration
@@ -53,7 +53,7 @@ reading a clock, measuring elapsed time, or asserting an operation count, enforc
 `sleep`. The scope is deliberate — the clause "constrains conformance rules, which are the
 library's," not `tests/` or an adapter's own crate.
 
-**CF-34** (`spec/SPECIFICATION.md:9787-9800`, `[PROVISIONAL]`) requires performance to be measured
+**CF-34** (`spec/SPECIFICATION.md:9839-9852`, `[PROVISIONAL]`) requires performance to be measured
 by a separate harness that MUST NOT be part of the conformance bar, and rejects "a benchmark
 result gating a merge."
 
@@ -172,4 +172,4 @@ off-by-default `bench` feature, and `ops/host/preflight.sh` ships in no crate. *
 after 1.0**, with the CF-34 renewal. The ratio principle can go into
 `standards/rust/60-what-a-test-must-prove.md` at any time. The drifted anchor stands:
 `ops/host/preflight.sh:11` still cites CF-34 at `:8747`, and the clause is at
-`spec/SPECIFICATION.md:9787`.
+`spec/SPECIFICATION.md:9839`.
