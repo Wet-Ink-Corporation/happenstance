@@ -267,6 +267,15 @@ HS-P0022, 214 in all, checked against the tree, and the narrative checks watched
 failing on deliberately broken pages. It decides nothing; the gaps it found are
 filed as #232 – #236.
 
+[`livestore-prior-art-2026-10-11.md`](livestore-prior-art-2026-10-11.md)
+(2026-10-11, pinned to `6da1032`) has the same lifecycle. It audits LiveStore, a
+shipped TypeScript local-first library at the other end of the axis §5 of the
+specification decides, against DCB and the sync clauses: thirty findings, each
+adopted, adapted, rejected or already aligned. It decides nothing. ADR-0026 and
+ADR-0027 carry the reasoning it informed and list it in their `source_paths`, and
+the six issues it proposed are #242 – #247. It was converted from the audit's HTML
+report when #247 filed it; only the markup changed.
+
 ## Every crate name in here is one rename out of date
 
 All fourteen were written against commits `9fd2337` and `2a65d76`, before `7d6c1b0`

@@ -52,6 +52,7 @@ source_paths:
   - crates/happenstance-sync/tests/cursor_shape_probe.rs
   - runbook/ledgers.md
   - references/adr/0026-what-a-sync-peer-is.md
+  - references/evaluation/livestore-prior-art-2026-10-11.md
 last_reviewed: 2026-10-14
 ---
 

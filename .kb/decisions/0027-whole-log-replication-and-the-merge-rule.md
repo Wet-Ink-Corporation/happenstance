@@ -45,6 +45,7 @@ source_paths:
   - crates/happenstance-sqlite/src/ingest_spike.rs
   - references/scenarios/README.md
   - references/adr/0027-whole-log-replication-and-the-merge-rule.md
+  - references/evaluation/livestore-prior-art-2026-10-11.md
 last_reviewed: 2026-10-14
 ---
 
