@@ -2357,13 +2357,19 @@ struct Enumeration {
 /// `spec-trace`, `lints`, `lint-changelog`, clippy and the testkit's own tests.
 /// Including it is a decision recorded here; leaving it out silently is the
 /// shape RS-80-2 forbids.
-const ENUMERATIONS: [Enumeration; 6] = [
+const ENUMERATIONS: [Enumeration; 7] = [
     Enumeration {
         // The sync family (#111): the first rule file outside
         // `happenstance-testkit`, joined in the change that creates it.
         file: "crates/happenstance-sync-testkit/src/sync_suite.rs",
         macro_name: "for_each_sync_peer_rule",
         macro_file: "crates/happenstance-sync-testkit/src/sync_suite.rs",
+    },
+    Enumeration {
+        // The sync model family (#246), joined in the change that creates it.
+        file: "crates/happenstance-sync-testkit/src/sync_model.rs",
+        macro_name: "for_each_sync_model_rule",
+        macro_file: "crates/happenstance-sync-testkit/src/sync_model.rs",
     },
     Enumeration {
         file: "crates/happenstance-testkit/src/suite.rs",

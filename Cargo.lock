@@ -1011,6 +1011,7 @@ dependencies = [
  "happenstance-core",
  "happenstance-sync",
  "happenstance-testkit",
+ "proptest",
  "tokio",
  "wasm-bindgen-test",
 ]

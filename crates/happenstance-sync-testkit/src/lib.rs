@@ -43,8 +43,40 @@
 //! this crate's `tests/wrong_peers.rs`, where the rule is shown to fail it. A
 //! rule no peer can fail is decorative.
 //!
-//! **No rule decodes a payload** (SY-35), and **no rule holds two peers**
-//! (SY-8). [`rules`] says how the rules keep both.
+//! **No rule decodes a payload** (SY-35), and **no rule in [`rules`] holds two
+//! peers** (SY-8). [`rules`] says how the rules keep both. The model family
+//! below is the one exception to the second, and its module says why.
+//!
+//! # The model family
+//!
+//! Behind the off-by-default `proptest` feature, and absent on wasm32 because
+//! `proptest` does not build there. `sync_model` generates peer topologies of
+//! three to six peers — chains whose ends never meet included — and drives them
+//! from one seed through writes, partitions, lost acks, duplicated pushes and
+//! delayed pages, then checks every peer at quiescence against a model of its
+//! own. It opens **one fixture per node**, so the fixture expression must build
+//! a fresh, isolated peer each time it is evaluated.
+//!
+//! | Rule | Clause | What it rejects |
+//! |---|---|---|
+//! | `transitive_convergence_over_a_partial_mesh` | SY-24, SY-4 | a peer that quarantines what it accepted, or never forwards it |
+//! | `redelivery_of_an_accepted_group_is_a_no_op` | SY-11 | a peer that dedupes per batch (SF-03), or miscounts its acknowledgement |
+//! | `forwarding_order_is_arrival_order` | SY-25 | a peer that re-sorts what it forwards |
+//!
+//! The names are written out rather than linked, because the module they live
+//! in does not exist without the feature. A failure names its seed in hex and
+//! the smallest scenario it shrank to; `tests/wrong_topologies.rs` pins every
+//! rule's verdict against four wrong peers.
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! #[cfg(not(target_arch = "wasm32"))]
+//! happenstance_sync_testkit::sync_model_conformance!(
+//!     happenstance_sync_testkit::MemorySyncFixture::new()
+//! );
+//! # }
+//! ```
 //!
 //! # Harnesses
 //!
@@ -72,6 +104,12 @@ mod fixture;
 // two files answer to.
 mod sync_suite;
 mod violation;
+// Declared after the existing modules so their line numbers do not move. The
+// gate is `happenstance-testkit`'s `model`'s: `proptest` does not build for
+// wasm32, and a Cargo feature is not target-scoped.
+#[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "proptest")))]
+pub mod sync_model;
 
 pub use fixture::{
     MAX_PROVOKED_BATCH_BYTES, MemorySyncFixture, MemorySyncHandle, Refusal, RefusalsOf,
@@ -149,6 +187,8 @@ macro_rules! sync_peer_conformance {
 #[doc(hidden)]
 pub mod __private {
     pub use crate::fixture::SyncFixture;
+    #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
+    pub use crate::sync_model::rules as model_rules;
     pub use crate::sync_suite::rules;
     pub use happenstance_testkit::block_on;
 }
