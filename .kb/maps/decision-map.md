@@ -876,17 +876,16 @@ It supersedes nothing.
 | — | [`kb-decision-wi-53c544`](../decisions/wi-53c544-adr-0027-106-is-replication-whole-log-or-scoped.md) | Replication is whole-log at 1.0; a confidentiality slice is its own store (SY-27 – SY-29) | accepted | — | — |
 | — | [`kb-decision-wi-0fbcac`](../decisions/wi-0fbcac-adr-0027-106-ratify-sy-7-one-adjudicator-per.md) | SY-7, SY-10, SY-14 and SY-23 ratified with three edits | accepted | — | — |
 
-## 2026-10-14: the sync message set, proposed (#114)
+## 2026-10-14: the sync message set (#114), accepted 2026-10-15
 
-ADR-0097 is written straight here with no intake step, and it is **proposed**, not accepted: the
-owner decides it. It names the four messages, each its own type in `Envelope<T>`, keeps the
+ADR-0097 is written straight here with no intake step. It was proposed on 2026-10-14 and the
+owner accepted it as proposed on 2026-10-15. It names the four messages, each its own type in `Envelope<T>`, keeps the
 format version on every message, and says that version 1 is this set. It answers
-`kb-open-question-sync-message-set-undesigned-001`, which is amended to point here and closes when
-this record is accepted. It supersedes nothing.
+`kb-open-question-sync-message-set-undesigned-001`, which is superseded by it. It supersedes nothing.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0097 | [`kb-decision-0097`](../decisions/0097-the-sync-message-set-and-a-version-on-every-message.md) | The sync message set is four types in the envelope, and the format version stays on every message | proposed | 13 | — |
+| ADR-0097 | [`kb-decision-0097`](../decisions/0097-the-sync-message-set-and-a-version-on-every-message.md) | The sync message set is four types in the envelope, and the format version stays on every message | accepted | 13 | — |
 
 ## Adding a row
 

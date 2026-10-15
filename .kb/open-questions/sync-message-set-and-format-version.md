@@ -2,7 +2,7 @@
 id: kb-open-question-sync-message-set-undesigned-001
 title: FORMAT_VERSION = 1 names a message set that does not exist yet
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ADR-0016 ships a generic envelope with a hand-written Deserialize that refuses an unknown
@@ -27,7 +27,7 @@ source_paths:
   - references/adr/0016-the-wire-format.md
   - crates/happenstance-sync/src/wire.rs
   - crates/happenstance-sync/src/lib.rs
-last_reviewed: 2026-10-14
+last_reviewed: 2026-10-15
 ---
 
 # FORMAT_VERSION = 1 names a message set that does not exist yet
@@ -120,3 +120,7 @@ it has to be answered before phase 13 first publishes the crate.
 
 This atom stays open until ADR-0097 is accepted. It is superseded then, or reopened if the record
 is rejected.
+
+## 2026-10-15: superseded
+
+The owner accepted ADR-0097 as proposed on 2026-10-15, so this question is superseded by it.
