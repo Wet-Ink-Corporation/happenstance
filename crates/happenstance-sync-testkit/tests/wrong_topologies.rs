@@ -144,8 +144,7 @@ impl SendSyncPeer for MutantPeer {
         // `MemoryResume::default()` is the start, as `None` is.
         let from = from.copied().unwrap_or_default();
         let pulled = SendSyncPeer::pull(&*self.inner, Some(&from.inner)).await?;
-        let mut groups: Vec<EventGroup> =
-            pulled.batch.groups.into_iter().skip(from.skip).collect();
+        let mut groups: Vec<EventGroup> = pulled.batch.groups.into_iter().skip(from.skip).collect();
         if self.mistake == TopologyMutant::ResortsByEventId {
             groups.sort_by_key(|group| group.events.first().map(|event| event.id));
         }

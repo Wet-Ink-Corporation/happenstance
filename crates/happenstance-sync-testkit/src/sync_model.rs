@@ -457,6 +457,9 @@ mod tests {
         let first = describe(1, 0, 256, scenario, "");
         assert!(first.contains("(case 1 of 256)"), "{first}");
         let last = describe(1, u32::MAX, u32::MAX, scenario, "");
-        assert!(last.contains(&format!("(case {0} of {0})", u32::MAX)), "{last}");
+        assert!(
+            last.contains(&format!("(case {0} of {0})", u32::MAX)),
+            "{last}"
+        );
     }
 }
