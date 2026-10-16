@@ -169,7 +169,10 @@ not the same as what a user needed to be told.
   group as appended and holds it back for review, so the event is never handed
   back and a peer two hops away never sees it. It also detects a peer that
   dedupes by the highest position seen per origin, which drops an event that
-  arrives after a later one from the same origin, under SY-1.
+  arrives after a later one from the same origin, under SY-1. And it detects a
+  peer whose caught-up resume token points one group past the end of its log:
+  the next group it takes in is never forwarded along a lane that had caught
+  up, under SY-24.
 
   **`redelivery_of_an_accepted_group_is_a_no_op`** (SY-11). The defect it
   detects is a peer that dedupes per batch rather than per event: a page half of

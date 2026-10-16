@@ -13,6 +13,7 @@
 //! | `DedupesByPositionPrefix` | SY-1 | SY-11 | Ok |
 //! | `DedupesPerBatch` | Ok | SY-11 | Ok |
 //! | `ResortsByEventId` | Ok | Ok | SY-25 |
+//! | `ResumeSkips` | SY-24 | Ok | Ok |
 
 #![cfg(not(target_arch = "wasm32"))]
 
@@ -47,6 +48,22 @@ enum TopologyMutant {
     /// SY-25's wrong implementation: hand back each page re-sorted by the
     /// identity of each group's first event.
     ResortsByEventId,
+    /// An off-by-one at the tail of the log: a pull that returns nothing hands
+    /// back a token one group past the end, so the next group the peer takes
+    /// in is skipped by every lane that had caught up with it. A walk from the
+    /// start never resumes from a caught-up token, so the peer's own log reads
+    /// whole; only forwarding loses the group.
+    ResumeSkips,
+}
+
+/// The mutant's resume token: the inner peer's, and how many groups past it
+/// the next pull drops unseen. Zero for every mutant but
+/// [`TopologyMutant::ResumeSkips`], so the others resume exactly as the inner
+/// peer does.
+#[derive(Debug, Clone, Copy, Default)]
+struct MutantResume {
+    inner: MemoryResume,
+    skip: usize,
 }
 
 /// The mutant's own record of what it has accepted. Shared by every handle on
@@ -121,17 +138,22 @@ impl MutantPeer {
 
 impl SendSyncPeer for MutantPeer {
     type Error = MemoryPeerError;
-    type Resume = MemoryResume;
+    type Resume = MutantResume;
 
     async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
-        let mut pulled = SendSyncPeer::pull(&*self.inner, from).await?;
+        // `MemoryResume::default()` is the start, as `None` is.
+        let from = from.copied().unwrap_or_default();
+        let pulled = SendSyncPeer::pull(&*self.inner, Some(&from.inner)).await?;
+        let mut groups: Vec<EventGroup> =
+            pulled.batch.groups.into_iter().skip(from.skip).collect();
         if self.mistake == TopologyMutant::ResortsByEventId {
-            pulled
-                .batch
-                .groups
-                .sort_by_key(|group| group.events.first().map(|event| event.id));
+            groups.sort_by_key(|group| group.events.first().map(|event| event.id));
         }
-        Ok(pulled)
+        let resume = MutantResume {
+            inner: pulled.resume,
+            skip: usize::from(self.mistake == TopologyMutant::ResumeSkips && groups.is_empty()),
+        };
+        Ok(Pulled::new(PushBatch::new(groups), resume).with_waiting(pulled.waiting))
     }
 
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
@@ -269,6 +291,16 @@ fn the_model_family_fails_a_peer_that_resorts_what_it_forwards() {
         TopologyMutant::ResortsByEventId,
         [None, None, Some("SY-25")],
     );
+}
+
+/// The one mutant that reaches SY-24's `NotForwarded` attribution through the
+/// simulator rather than a hand-built trace: the skipped group is never pushed
+/// along that lane, so the node beyond it was never offered the event.
+#[test]
+fn the_model_family_fails_a_peer_whose_resume_skips_a_group() {
+    let all = pins(TopologyMutant::ResumeSkips, [Some("SY-24"), None, None]);
+    let message = message_of(&all, UNION);
+    assert!(message.contains("nothing forwarded it there"), "{message}");
 }
 
 /// The mutant table's premise: each fixture is its own peer, so a rule that

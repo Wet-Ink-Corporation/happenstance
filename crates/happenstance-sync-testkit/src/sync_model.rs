@@ -103,7 +103,10 @@ pub mod rules {
     /// end-to-end check that a failure prints its seed. And a peer that dedupes
     /// by the highest position seen per origin, which drops an event that
     /// arrives after a later one from the same origin; that is caught by the
-    /// pinned regression `delayed_page_lands_after_a_later_one`.
+    /// pinned regression `delayed_page_lands_after_a_later_one`. And a peer
+    /// whose caught-up resume token points one group past the end of its log,
+    /// so the next group it takes in is never forwarded along a lane that had
+    /// caught up: SY-24 itself.
     ///
     /// # Errors
     ///
