@@ -261,7 +261,11 @@ where
 
 /// The failure message: the seed in hex, the case, the smallest scenario, and
 /// what the peers did.
+///
+/// `case` is zero-based and printed from one. `case < cases`, so the
+/// saturation never bites; it is there so the addition cannot overflow.
 fn describe(seed: u64, case: u32, cases: u32, scenario: &Scenario, message: &str) -> String {
+    let case = case.saturating_add(1);
     let topology = scenario.topology();
     let steps: Vec<String> = scenario
         .steps()
@@ -434,10 +438,22 @@ mod tests {
         let scenario = &all.first().expect("there is a regression").scenario;
         let text = describe(0xdead_beef, 7, 256, scenario, "what the peers did");
         assert!(
-            text.starts_with("seed 0x00000000deadbeef (case 7 of 256)"),
+            text.starts_with("seed 0x00000000deadbeef (case 8 of 256)"),
             "{text}"
         );
         assert!(text.contains("3 peers"), "{text}");
         assert!(text.ends_with("what the peers did"), "{text}");
+    }
+
+    /// The case is counted from one, as "of N" reads, and the last one a
+    /// `u32` can name does not overflow.
+    #[test]
+    fn describe_counts_cases_from_one() {
+        let all = regressions().expect("the regressions are valid");
+        let scenario = &all.first().expect("there is a regression").scenario;
+        let first = describe(1, 0, 256, scenario, "");
+        assert!(first.contains("(case 1 of 256)"), "{first}");
+        let last = describe(1, u32::MAX, u32::MAX, scenario, "");
+        assert!(last.contains(&format!("(case {0} of {0})", u32::MAX)), "{last}");
     }
 }
