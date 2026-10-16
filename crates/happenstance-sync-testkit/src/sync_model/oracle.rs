@@ -67,9 +67,11 @@ struct Node {
     held: BTreeSet<EventId>,
     /// First arrivals, in order.
     arrival: Vec<EventId>,
-    /// Whether any push to this node was acknowledged with fewer appended
-    /// events than it had never been offered before.
-    under_acked: bool,
+    /// The events whose first offer to this node came in a push acknowledged
+    /// with fewer appended events than it carried new ones. Per event, so an
+    /// under-count on one push never reclassifies an event another push
+    /// carried.
+    under_acked: BTreeSet<EventId>,
 }
 
 struct Model {
@@ -91,17 +93,23 @@ fn model(trace: &Trace) -> Result<Model, Failure> {
                 ),
             )
         })?;
+        // The events this push offered first: the ones its own acknowledgement
+        // must count as appended.
+        let mut new = Vec::new();
         let (mut fresh, mut stale) = (0_u64, 0_u64);
         for id in &delivery.ids {
             if node.held.insert(*id) {
                 node.arrival.push(*id);
+                new.push(*id);
                 fresh += 1;
             } else {
                 stale += 1;
             }
         }
         let ack = &delivery.ack;
-        node.under_acked |= ack.appended < fresh;
+        if ack.appended < fresh {
+            node.under_acked.extend(new);
+        }
         if first_miscount.is_none() && (ack.appended, ack.skipped) != (fresh, stale) {
             first_miscount = Some(format!(
                 "push {index} to node {}: acknowledged ({} appended, {} skipped) for {} events \
@@ -178,7 +186,7 @@ fn union(trace: &Trace, model: &Model) -> Result<(), Failure> {
                     Miss::NotForwarded,
                     format!("node {index} never received {id}: nothing forwarded it there"),
                 ),
-                None if node.under_acked => (
+                None if node.under_acked.contains(id) => (
                     Miss::CalledHeld,
                     format!(
                         "node {index} was offered {id} and does not hold it; it acknowledged \
@@ -341,6 +349,18 @@ mod tests {
         trace.logs[1].retain(|event| event.id != a.id);
         trace.deliveries[2].ack = ack(0, 1);
         assert_eq!(clause(Check::Union, &trace), Some("SY-1"));
+    }
+
+    /// An under-count on one delivery says nothing about an event that
+    /// arrived in another: each missing event is judged by its own.
+    #[test]
+    fn an_undercount_elsewhere_leaves_a_quarantined_event_sy_4() {
+        let (mut trace, a, b) = consistent();
+        trace.logs[1].retain(|event| event.id != a.id);
+        let unrelated = &mut trace.deliveries[1];
+        assert_eq!((unrelated.to, &unrelated.ids), (1, &vec![b.id]));
+        unrelated.ack = ack(0, 1);
+        assert_eq!(clause(Check::Union, &trace), Some("SY-4"));
     }
 
     #[test]
