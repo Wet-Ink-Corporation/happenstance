@@ -269,6 +269,19 @@ impl SendSyncPeer for MemorySyncPeer {
         )
     }
 
+    /// Appends each event this peer has never held, skips each it has, and
+    /// acknowledges with what it now holds.
+    ///
+    /// [`Ack::confirmed`] is a per-origin **high-water mark**, not a contiguous
+    /// prefix: dedupe is by exact identity, so after a delayed page this peer
+    /// can confirm an origin's position 2 while it still lacks position 1.
+    /// Read it as "the highest position held", never as "everything up to".
+    ///
+    /// # Errors
+    ///
+    /// [`MemoryPeerError::BatchTooLarge`] for a batch over the declared
+    /// `max_batch_bytes`, and [`MemoryPeerError::Poisoned`] if the log lock
+    /// was poisoned.
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
         let offered = batch.payload_len();
         if offered > self.limits.max_batch_bytes {
@@ -394,6 +407,20 @@ mod dedupe_tests {
         let again = peer.push(&one(first)).await.expect("the push fits");
         assert_eq!((again.appended, again.skipped), (0, 1), "and only once");
         assert_eq!(peer.group_count().expect("the lock is not poisoned"), 2);
+    }
+
+    /// What `push`'s rustdoc says of `Ack::confirmed`: a high-water mark,
+    /// which names position 2 while position 1 is still missing.
+    #[tokio::test]
+    async fn confirmed_is_a_high_water_mark_not_a_prefix() {
+        let second = SequencePosition::FIRST
+            .next()
+            .expect("the second position exists");
+        let peer = MemorySyncPeer::new(StoreId::from_bytes([0x41; 16]));
+
+        let ack = peer.push(&one(second)).await.expect("the push fits");
+        assert_eq!(ack.confirmed.get(ORIGIN), Some(second));
+        assert_eq!(peer.group_count().expect("the lock is not poisoned"), 1);
     }
 }
 
