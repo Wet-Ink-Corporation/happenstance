@@ -49,6 +49,7 @@
 //! dependency are absent on that target whatever the feature says.
 
 mod oracle;
+mod regressions;
 mod scenario;
 mod simulate;
 
@@ -64,7 +65,8 @@ use happenstance_testkit::RuleOutcome;
 
 use crate::{SyncFixture, Violation};
 use oracle::{Check, Failure, judge};
-use scenario::{Scenario, any_scenario, regressions, seed_bytes};
+use regressions::regressions;
+use scenario::{Scenario, any_scenario, seed_bytes};
 use simulate::simulate;
 
 /// How many times the shrinker may move before it reports the smallest
@@ -397,7 +399,7 @@ mod tests {
     use alloc::vec::Vec;
 
     use super::describe;
-    use super::scenario::regressions;
+    use super::regressions::regressions;
 
     /// Every `pub async fn` in this file's `rules` module.
     fn declared_rules() -> Vec<&'static str> {
