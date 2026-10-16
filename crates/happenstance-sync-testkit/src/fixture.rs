@@ -35,8 +35,12 @@ const SY_36: &str = "SY-36";
 ///
 /// # One peer handle per rule
 ///
-/// A fixture yields peers, never a peer set, and every rule holds exactly one
-/// (SY-8). A rule that needed two would be testing the runner.
+/// A fixture yields peers, never a peer set, and every rule in
+/// [`rules`](crate::rules) holds exactly one (SY-8). A rule that needed two
+/// would be testing the runner. The model family (`sync_model`, behind the
+/// `proptest` feature) is the exception, and says so: it plays the runner
+/// itself over one fixture **per node**, so each call of the opener it is given
+/// must build a fresh, isolated peer.
 pub trait SyncFixture {
     /// The peer adapter under test.
     type Peer: happenstance_sync::SyncPeer;

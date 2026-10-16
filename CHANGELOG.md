@@ -153,6 +153,36 @@ not the same as what a user needed to be told.
   Neon store < 1 MiB for the other stores. SY-18 stays `[DEFERRED]` and VT-21
   `[PROVISIONAL]`: moving either marker is the owner's decision.
 
+- **`happenstance-sync-testkit`: the model family, seeded peer topologies
+  behind a new `proptest` feature** (#246). Not published, and recorded because
+  CF-29 asks every conformance rule for an entry. `sync_model_conformance!`
+  opens one fixture per node of a generated topology of three to six peers,
+  drives push and pull from one seed through writes, partitions, lost acks,
+  duplicated pushes and delayed pages, and judges every peer at quiescence
+  against a model of its own. A failure prints its seed in hex and the smallest
+  scenario it shrank to. Three scenarios pinned by value run before any
+  generated case. The wrong peers are in `tests/wrong_topologies.rs`, which pins
+  every rule's verdict against each.
+
+  **`transitive_convergence_over_a_partial_mesh`** (SY-24, SY-4). The defect it
+  detects is a peer that quarantines what it accepted: it acknowledges a guarded
+  group as appended and holds it back for review, so the event is never handed
+  back and a peer two hops away never sees it. It also detects a peer that
+  dedupes by the highest position seen per origin, which drops an event that
+  arrives after a later one from the same origin, under SY-1. And it detects a
+  peer whose caught-up resume token points one group past the end of its log:
+  the next group it takes in is never forwarded along a lane that had caught
+  up, under SY-24.
+
+  **`redelivery_of_an_accepted_group_is_a_no_op`** (SY-11). The defect it
+  detects is a peer that dedupes per batch rather than per event: a page half of
+  which it already holds (SF-03) is applied whole, the half it held is appended
+  a second time, and the acknowledgement counts it as new.
+
+  **`forwarding_order_is_arrival_order`** (SY-25). The defect it detects is a
+  peer that re-sorts what it forwards by `EventId`. The order looks tidy, and a
+  downstream scalar cursor skips an old event that arrived late, for ever.
+
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
   bookmark rolls back its `StoreId` row and its position counter together, so a
@@ -168,6 +198,14 @@ not the same as what a user needed to be told.
 - **`happenstance-sync`: `Ack`'s `appended` and `skipped` are `u64`, not
   `usize`** (#114, ADR-0097). They cross the wire, so their width is
   fixed. The crate is not published, so no consumer is affected.
+- **`happenstance-sync`: `MemorySyncPeer` dedupes by exact `EventId`** (#246).
+  It used to treat any position at or below the highest it had seen from an
+  origin as already held. So when a delayed page made an origin's lower position
+  arrive after its higher one, it acknowledged the event as skipped, dropped it,
+  and no downstream peer ever saw it. The model family found this in the
+  reference peer. `Ack::confirmed` still reports the high-water mark per origin,
+  which can now claim a position whose predecessor the peer does not hold. No
+  signature changed, and the crate is not published.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity
