@@ -6967,6 +6967,10 @@ An ingesting peer MUST append every event it receives that it does not already
 hold. In particular it MUST NOT evaluate an `AppendCondition` — its own or the
 origin's — as a precondition on the append.
 
+SY-38 is the single exception: an event that claims the receiving store's own
+`StoreId`, where the store did not hold that identity when the ingest began, is
+refused with its whole call (ADR-0098).
+
 `[FROZEN]`
 Rule: `ingest_never_rejects` (new, `happenstance-sync-testkit`) — two peers each
 accept a conflicting fact under byte-identical position-free conditions; assert
@@ -7449,8 +7453,8 @@ receiver holds", and this refusal's truth value does. The exception is an
 identity-integrity refusal: the event claims an identity the receiver minted
 and does not hold, so the receiver was restored or rewound under an identity
 VT-6 required it to re-mint. Every event carrying another store's identity is
-still appended or skipped as SY-1 says. The texts of SY-1 and SY-33 are
-unchanged until ADR-0098 is accepted, which adds a pointer here to each.
+still appended or skipped as SY-1 says. ADR-0098's acceptance added a pointer
+to this clause to the texts of SY-1 and SY-33.
 
 The write decides it, not a lookup ahead of the write. An own-identity event the
 receiver held when the call began meets VT-8's uniqueness and is a re-delivery
@@ -7466,7 +7470,7 @@ it prevents. Falsification test: find a topology the workspace supports in which
 a conformant store, not restored and not rewound, receives an event carrying its
 own identity at a position it does not hold. Decided by
 [ADR-0098](../.kb/decisions/0098-an-unheld-own-identity-stops-ingest.md), which
-is proposed and awaits the owner; its acceptance amends SY-1 and SY-33.]`
+the owner accepted on 2026-10-17; it amends SY-1 and SY-33.]`
 Rule: `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test,
 `crates/happenstance-sqlite/src/ingest_spike.rs`), with
 `a_claim_the_calls_own_compensation_would_hide_is_refused`,
@@ -8173,7 +8177,10 @@ reasons. It MUST NOT refuse for a condition-level reason.**
 
 Refusals permitted: unreachable, unauthenticated, unauthorised for the tag space
 pushed, malformed envelope, quota. Refusals forbidden: any refusal whose truth
-value depends on which events the receiver holds.
+value depends on which events the receiver holds. The one refusal that depends
+on which events the receiver holds and is permitted is SY-38's, of an event
+claiming the receiver's own identity that it does not hold; it is an
+identity-integrity refusal, not a condition-level one (ADR-0098).
 
 `[FROZEN]`
 Rule: `refusal_is_never_condition_derived` (new, `happenstance-sync-testkit`) —

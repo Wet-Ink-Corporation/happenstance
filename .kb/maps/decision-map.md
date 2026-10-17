@@ -887,19 +887,18 @@ format version on every message, and says that version 1 is this set. It answers
 | --- | --- | --- | --- | --- | --- |
 | ADR-0097 | [`kb-decision-0097`](../decisions/0097-the-sync-message-set-and-a-version-on-every-message.md) | The sync message set is four types in the envelope, and the format version stays on every message | accepted | 13 | — |
 
-## 2026-10-15: an unheld own identity stops ingest (#108), proposed
+## 2026-10-15: an unheld own identity stops ingest (#108), accepted 2026-10-17
 
-ADR-0098 is written straight here with no intake step, and it is **proposed**: it waits for the
-owner. It decides the policy ADR-0073 left to phase 13, for a replicated event that claims this
+ADR-0098 is written straight here with no intake step. It was **proposed** on 2026-10-15 and the
+owner accepted it as proposed on 2026-10-17. It decides the policy ADR-0073 left to phase 13, for a replicated event that claims this
 store's own `StoreId` at a position the store does not hold. The whole ingest is refused as
 `IngestError::UnheldOwnIdentity`, class `Stop`, with nothing written, and the remedy is VT-6's
 re-mint. It mints SY-38 `[PROVISIONAL]` as a narrow identity-integrity exception that **amends
-the frozen SY-1 and SY-33**; their texts stay unedited until the owner accepts it, and the record
-lists the edits acceptance makes. It supersedes nothing.
+the frozen SY-1 and SY-33**; acceptance added a pointer to SY-38 in each of their texts. It supersedes nothing.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0098 | [`kb-decision-0098`](../decisions/0098-an-unheld-own-identity-stops-ingest.md) | An event claiming this store's own identity that it does not hold stops the ingest, and nothing is written | proposed | 13 | — |
+| ADR-0098 | [`kb-decision-0098`](../decisions/0098-an-unheld-own-identity-stops-ingest.md) | An event claiming this store's own identity that it does not hold stops the ingest, and nothing is written | accepted | 13 | — |
 
 ## Adding a row
 

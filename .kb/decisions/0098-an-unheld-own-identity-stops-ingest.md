@@ -2,7 +2,7 @@
 id: kb-decision-0098
 title: An event claiming this store's own identity that it does not hold stops the ingest, and nothing is written
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0098
 reversibility: high
@@ -10,7 +10,7 @@ phase: 13
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed on 2026-10-15 for #108, awaiting the owner. ADR-0073 left one ingest policy to phase 13:
+  Accepted by the owner on 2026-10-17 as proposed (#108). ADR-0073 left one ingest policy to phase 13:
   what a store does with a replicated event that claims the store's own StoreId at a position it
   did not hold. Until now the SQLite spike ingested it, and the local append that later reached
   the claimed position failed on UNIQUE (origin_store, origin_position) on every retry. This record
@@ -34,15 +34,15 @@ source_paths:
   - crates/happenstance-sqlite/src/event_store.rs
   - crates/happenstance-sqlite/src/ingest_spike.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-10-15
+last_reviewed: 2026-10-17
 ---
 
 # An event claiming this store's own identity that it does not hold stops the ingest, and nothing is written
 
-**Proposed on 2026-10-15 for #108, and awaiting the owner.** The session that wrote it built the
+**Proposed on 2026-10-15 for #108, and accepted by the owner on 2026-10-17 as proposed.** The session that wrote it built the
 recommended option, because `happenstance-sync` is `publish = false` and every adapter impl of
 `IngestStore` is still `#[cfg(test)]`, so the choice is free to change until the first publish. It
-is not accepted until the owner accepts it. No long-form record exists; this atom is the record.
+was not accepted until the owner accepted it. No long-form record exists; this atom is the record.
 
 **This record amends two `[FROZEN]` clauses, SY-1 and SY-33.** It does not read them narrowly, and
 it does not claim that the refusal it adds falls outside their words. It does. Acceptance is the

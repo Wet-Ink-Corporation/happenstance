@@ -61,15 +61,15 @@ not the same as what a user needed to be told.
 
 - **`happenstance-sync`: ingest has an error of its own, and an unheld own
   identity stops it, in a crate that is not published yet** (#108, part A;
-  ADR-0098, proposed; SY-38). `IngestStore::ingest` returns
+  ADR-0098; SY-38). `IngestStore::ingest` returns
   `IngestError<Self::Error>`, with four arms: `ExceedsStoreLimit`,
   `UnheldOwnIdentity`, `Busy` and `Store`. Every arm means nothing in the call
   was written, and `IngestStore::Error` is now bound on `Classify`, so each
   failure states its SY-36 class. An event claiming the store's own `StoreId`
   at a position the store does not hold now refuses the whole call as
   `UnheldOwnIdentity`, class `Stop`, including a claim on a position the same
-  call's own compensation took. This is a proposed exception to the frozen SY-1
-  and SY-33, pending the owner. Before, it was ingested, and the local
+  call's own compensation took. This is an exception to the frozen SY-1 and
+  SY-33, accepted by the owner in ADR-0098. Before, it was ingested, and the local
   append that later reached its position failed on every retry. The remedy is
   VT-6's re-mint, after which the same batch lands. In `happenstance-sqlite`
   this is all `#[cfg(test)]`, so nothing published moves: the spike detects
