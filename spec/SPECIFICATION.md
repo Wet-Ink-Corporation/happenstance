@@ -10328,14 +10328,14 @@ between them because its *shape* does not wait on a transport but its
 | SY-1 | FROZEN | `ingest_never_rejects` | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
 | SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` | E2E-39 |
 | SY-3 | FROZEN | `compensation_is_idempotent_under_redelivery` † | E2E-33, E2E-39 |
-| SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` † | E2E-42 |
+| SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` † | E2E-42 |
 | SY-6 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56, E2E-14 |
 | SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` † | E2E-39, E2E-42, E2E-45 |
 | SY-8 | FROZEN | the whole of `happenstance-sync-testkit` — every rule in it takes exactly one … | E2E-33, E2E-35, E2E-36, E2E-42 |
 | SY-9 | FROZEN | `one_adapter_serves_both_roles` † | E2E-42, E2E-45 |
 | SY-10 | PROVISIONAL | `directional_merge_rules_compose` † | E2E-42, E2E-44, E2E-45 |
-| SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` † | E2E-33, E2E-34, E2E-36 |
+| SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` | E2E-33, E2E-34, E2E-36 |
 | SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` † | E2E-33, E2E-34, E2E-36 |
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
 | SY-14 | DEFERRED | `bulk_ingest_is_idempotent_in_bounded_round_trips` † | E2E-36, E2E-35 |
@@ -10348,8 +10348,8 @@ between them because its *shape* does not wait on a transport but its
 | SY-21 | PROVISIONAL | `convergent_projection_cannot_observe_local_position` † | E2E-41 |
 | SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` † | E2E-41 |
 | SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` † | E2E-41, E2E-43 |
-| SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` † | E2E-42 |
-| SY-25 | FROZEN | `forwarding_order_is_arrival_order` † | E2E-42 |
+| SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
+| SY-25 | FROZEN | `forwarding_order_is_arrival_order` | E2E-42 |
 | SY-26 | FROZEN | `causality_is_expressible_without_a_contract_change` † | E2E-42, E2E-41 |
 | SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-33, E2E-36, E2E-44, E2E-46 |
 | SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-44, E2E-46 |

@@ -26,6 +26,28 @@ happenstance-sync = { path = "../happenstance-sync", features = ["memory"] }
 # every family. Phase 1's registry, inherited rather than copied.
 happenstance-testkit.workspace = true
 
+[features]
+# The model family (`sync_model`): seeded peer topologies driven through push
+# and pull from one seed, checked at quiescence against a model of its own.
+# Off by default, because `proptest` does not build for wasm32 and this crate
+# has a wasm32 harness; the gate's `--all-features` steps turn it on. The same
+# split `happenstance-testkit`'s `proptest` feature makes, for the same reason.
+proptest = ["dep:proptest"]
+
+# Target-scoped as well as optional: a Cargo feature is not target-scoped, so
+# `--all-features` reaches `wasm32-unknown-unknown` too, and the dependency has
+# to be absent there whatever the feature says.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+proptest = { workspace = true, optional = true }
+
+[[test]]
+name = "memory_sync_model_conformance"
+required-features = ["proptest"]
+
+[[test]]
+name = "wrong_topologies"
+required-features = ["proptest"]
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
 

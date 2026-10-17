@@ -465,6 +465,11 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   design. **Answered 2026-10-14 by ADR-0097** (`kb-decision-0097`), accepted
   2026-10-15: four message types in `Envelope<T>`, the version on every
   message.
+- **Open** — [`sy-8-rule-line-versus-multi-peer-rules.md`](../open-questions/sy-8-rule-line-versus-multi-peer-rules.md)
+  (`kb-open-question-sy-8-rule-line-multi-peer-001`) — SY-8's frozen `Rule:`
+  line says every sync testkit rule takes one peer handle; the model family
+  (#246) holds one per node, as SY-24's own rule line already implied. Added
+  2026-10-15; the text was left alone and the crate docs narrowed.
 - **Superseded** — [`ps-32-adr-0007-context-correction-is-owed.md`](../open-questions/ps-32-adr-0007-context-correction-is-owed.md)
   (`kb-open-question-ps-32-adr-0007-correction-owed-001`) — PS-32 is `[FROZEN]`
   and states ADR-0007's Context must be corrected: a callback-driven pump

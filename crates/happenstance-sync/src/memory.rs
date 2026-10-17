@@ -28,6 +28,7 @@
 //! type is off unless asked for: `features = ["memory"]`, normally in
 //! `[dev-dependencies]`.
 
+use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
 use std::sync::Mutex;
@@ -158,7 +159,17 @@ pub struct MemorySyncPeer {
 #[derive(Debug, Default)]
 struct PeerState {
     groups: Vec<EventGroup>,
+    /// What [`Ack::confirmed`] reports: the highest position held per origin.
+    /// A high-water mark, so it is **not** what dedupe consults — see `held`.
     seen: Watermark,
+    /// Every identity this peer holds, which is what dedupe consults (SY-11).
+    ///
+    /// Exact membership, not the watermark above. A page held in flight can
+    /// land after a later one, so an origin's lower position can arrive after
+    /// its higher one; a peer that dedupes by "at or below the highest position
+    /// seen" calls that event held and drops it, and nothing downstream ever
+    /// sees it. The sync testkit's model family found this in this peer.
+    held: BTreeSet<EventId>,
 }
 
 impl MemorySyncPeer {
@@ -201,6 +212,7 @@ impl MemorySyncPeer {
         let mut state = self.state.lock().map_err(|_| MemoryPeerError::Poisoned)?;
         for event in &group.events {
             state.seen.advance(event.id.store(), event.id.position());
+            state.held.insert(event.id);
         }
         state.groups.push(group);
         Ok(())
@@ -214,13 +226,6 @@ impl MemorySyncPeer {
     pub fn group_count(&self) -> Result<usize, MemoryPeerError> {
         let state = self.state.lock().map_err(|_| MemoryPeerError::Poisoned)?;
         Ok(state.groups.len())
-    }
-
-    fn holds(state: &PeerState, id: EventId) -> bool {
-        state
-            .seen
-            .get(id.store())
-            .is_some_and(|high| high >= id.position())
     }
 }
 
@@ -264,6 +269,19 @@ impl SendSyncPeer for MemorySyncPeer {
         )
     }
 
+    /// Appends each event this peer has never held, skips each it has, and
+    /// acknowledges with what it now holds.
+    ///
+    /// [`Ack::confirmed`] is a per-origin **high-water mark**, not a contiguous
+    /// prefix: dedupe is by exact identity, so after a delayed page this peer
+    /// can confirm an origin's position 2 while it still lacks position 1.
+    /// Read it as "the highest position held", never as "everything up to".
+    ///
+    /// # Errors
+    ///
+    /// [`MemoryPeerError::BatchTooLarge`] for a batch over the declared
+    /// `max_batch_bytes`, and [`MemoryPeerError::Poisoned`] if the log lock
+    /// was poisoned.
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
         let offered = batch.payload_len();
         if offered > self.limits.max_batch_bytes {
@@ -282,11 +300,13 @@ impl SendSyncPeer for MemorySyncPeer {
             // infallible conversion to it.
             let mut fresh: Vec<ReplicatedEvent> = Vec::with_capacity(group.events.len());
             for event in &group.events {
-                if Self::holds(&state, event.id) {
-                    ack.skipped += 1;
-                } else {
+                // One lookup that both answers and records, so an identity
+                // offered twice inside one batch is appended once.
+                if state.held.insert(event.id) {
                     ack.appended += 1;
                     fresh.push(event.clone());
+                } else {
+                    ack.skipped += 1;
                 }
             }
             if fresh.is_empty() {
@@ -341,6 +361,66 @@ mod classify_tests {
             limit: 65_536,
         };
         assert_eq!(error.class(), FailureClass::Split);
+    }
+}
+
+#[cfg(test)]
+mod dedupe_tests {
+    use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+
+    use super::MemorySyncPeer;
+    use crate::{EventGroup, PushBatch, ReplicatedEvent, SyncPeer};
+
+    const ORIGIN: StoreId = StoreId::from_bytes([0x40; 16]);
+
+    fn one(position: SequencePosition) -> PushBatch {
+        let event = Event::new("Written", position.to_string().into_bytes())
+            .expect("a static event type is valid");
+        PushBatch::new(vec![EventGroup::new(
+            None,
+            vec![ReplicatedEvent::new(
+                EventId::new(ORIGIN, position),
+                RecordedAt::from_millis(1_800_000_000_000),
+                event,
+            )],
+        )])
+    }
+
+    /// A page held in flight lands after a later one, so the origin's first
+    /// event arrives after its second. Dedupe is by exact identity (SY-11): a
+    /// peer that dedupes by the highest position seen calls the first event
+    /// held and drops it, and a downstream peer never sees it (SY-1, SY-24).
+    #[tokio::test]
+    async fn a_lower_position_arriving_after_a_higher_one_is_appended() {
+        let first = SequencePosition::FIRST;
+        let second = first.next().expect("the second position exists");
+        let peer = MemorySyncPeer::new(StoreId::from_bytes([0x41; 16]));
+
+        let later = peer.push(&one(second)).await.expect("the push fits");
+        assert_eq!((later.appended, later.skipped), (1, 0));
+        let earlier = peer.push(&one(first)).await.expect("the push fits");
+        assert_eq!(
+            (earlier.appended, earlier.skipped),
+            (1, 0),
+            "the peer has never held the origin's first event, so it must append it"
+        );
+        let again = peer.push(&one(first)).await.expect("the push fits");
+        assert_eq!((again.appended, again.skipped), (0, 1), "and only once");
+        assert_eq!(peer.group_count().expect("the lock is not poisoned"), 2);
+    }
+
+    /// What `push`'s rustdoc says of `Ack::confirmed`: a high-water mark,
+    /// which names position 2 while position 1 is still missing.
+    #[tokio::test]
+    async fn confirmed_is_a_high_water_mark_not_a_prefix() {
+        let second = SequencePosition::FIRST
+            .next()
+            .expect("the second position exists");
+        let peer = MemorySyncPeer::new(StoreId::from_bytes([0x41; 16]));
+
+        let ack = peer.push(&one(second)).await.expect("the push fits");
+        assert_eq!(ack.confirmed.get(ORIGIN), Some(second));
+        assert_eq!(peer.group_count().expect("the lock is not poisoned"), 1);
     }
 }
 
