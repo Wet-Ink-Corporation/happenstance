@@ -8,7 +8,7 @@
 # is no budget here, no threshold on any elapsed time, and nothing that gets
 # *raised* when a run comes in slow.
 #
-# CF-34 (`spec/SPECIFICATION.md:8747`) rejects "a benchmark result gating a
+# CF-34 (`spec/SPECIFICATION.md:9787`) rejects "a benchmark result gating a
 # merge". This gates nothing: no `cargo xtask ci` step, no `.redkiln/config.yaml`
 # `verify:` command and no CI job invokes it, and `xtask/src/affected.rs`'s INERT
 # list names `ops/` so a diff here does not widen the affected gate. Its only
