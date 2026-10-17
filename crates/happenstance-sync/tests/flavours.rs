@@ -33,8 +33,9 @@ use happenstance_core::{
     Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
 use happenstance_sync::{
-    EventGroup, IngestGroup, IngestStore, Ingested, MemoryPeerError, MemoryResume, MemorySyncPeer,
-    PeerLimits, Pulled, PushBatch, ReplicatedEvent, SyncPeer, Watermark,
+    Classify, EventGroup, FailureClass, IngestError, IngestGroup, IngestStore, Ingested,
+    MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled, PushBatch, ReplicatedEvent,
+    SyncPeer, Watermark,
 };
 
 /// The failure [`exchange`] reports: any of the three ports' own errors.
@@ -166,14 +167,35 @@ impl EventStore for LocalStore {
     }
 }
 
+/// How [`LocalStore`]'s ingest fails: the compensation's append.
+///
+/// A newtype rather than `AppendError<MemoryStoreError>` itself, because
+/// `IngestStore::Error` must implement [`Classify`], and this crate defines
+/// neither that trait nor the core type: the orphan rule refuses the impl
+/// (`error[E0117]`), exactly as it refuses a third crate's `IngestStore` impl.
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+struct LocalStoreError(#[from] AppendError<MemoryStoreError>);
+
+impl Classify for LocalStoreError {
+    fn class(&self) -> FailureClass {
+        // The in-memory store cannot fail, and a compensation's condition is
+        // `None`, so none of these arrives; were one to, it is not a retry.
+        FailureClass::Stop
+    }
+}
+
 impl IngestStore for LocalStore {
-    type Error = AppendError<MemoryStoreError>;
+    type Error = LocalStoreError;
 
     fn store_id(&self) -> StoreId {
         self.local.store_id()
     }
 
-    async fn ingest(&self, groups: &[IngestGroup<'_>]) -> Result<Ingested, Self::Error> {
+    async fn ingest(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<Ingested, IngestError<Self::Error>> {
         let mut outcome = Ingested::default();
         for group in groups {
             // Each group lands whole or not at all. Which of its events are new
@@ -197,7 +219,9 @@ impl IngestStore for LocalStore {
                 continue;
             }
             if !group.compensation.is_empty() {
-                EventStore::append(self, group.compensation, None).await?;
+                EventStore::append(self, group.compensation, None)
+                    .await
+                    .map_err(|error| IngestError::Store(error.into()))?;
                 outcome.compensated += group.compensation.len();
             }
             outcome.appended += fresh.len();
