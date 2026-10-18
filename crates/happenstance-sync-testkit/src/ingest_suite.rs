@@ -781,12 +781,12 @@ pub mod ingest_rules {
     /// 3. **Over, in the compensation.** One group whose compensation's second
     ///    event is one over: refused in the same way.
     ///
-    /// A ceiling at or above [`MAX_PROVOKED_TAGS`](crate::MAX_PROVOKED_TAGS)
-    /// tags or [`MAX_PROVOKED_BATCH_BYTES`](crate::MAX_PROVOKED_BATCH_BYTES)
+    /// A ceiling at or above [`MAX_PROVOKED_TAGS`]
+    /// tags or [`MAX_PROVOKED_BATCH_BYTES`]
     /// bytes is not exercised, because the over-ceiling event is allocated
     /// whole (H-13). A fixture that leaves the rule nothing to exercise is
     /// reported [`Skipped`](RuleOutcome::Skipped) with
-    /// [`NO_PER_EVENT_LIMITS`](crate::NO_PER_EVENT_LIMITS).
+    /// [`NO_PER_EVENT_LIMITS`].
     ///
     /// # Rejects
     ///
