@@ -948,6 +948,7 @@ mod tests {
     /// this is the bar every adapter that implements the port clears.
     mod ingest_family {
         use happenstance_sync_testkit::IngestFixture;
+        use happenstance_testkit::Capability;
 
         use super::TempFile;
         use crate::event_store::SqliteEventStore;
@@ -971,6 +972,18 @@ mod tests {
 
         impl IngestFixture for SqliteIngestFixture {
             type Store = SqliteEventStore;
+
+            /// Supported, through an `AFTER INSERT` trigger another connection
+            /// installs: the mechanism this module's
+            /// `a_compensation_that_fails_in_the_transaction_takes_the_losing_event_with_it`
+            /// already uses.
+            ///
+            /// The event-store fixture in `tests/support/mod.rs` declines
+            /// `MID_BATCH_FAULT` by scope, because arming it would retire
+            /// ES-35's residual falsifier. That scoping does not reach here:
+            /// this is a different fixture, a different capability and a
+            /// different port, and ES-35 is about `EventStore` durability.
+            const MID_GROUP_FAULT: Capability = Capability::SUPPORTED;
 
             async fn connect(&self) -> Self::Store {
                 SqliteEventStore::open(&self.file.0)

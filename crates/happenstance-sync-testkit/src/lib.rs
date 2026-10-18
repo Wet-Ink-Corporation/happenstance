@@ -168,7 +168,10 @@ mod ingest_fixture;
 // `ingest_suite.rs` for `sync_suite.rs`'s reason: a bare name two files answer
 // to is one `cargo xtask spec-trace` refuses.
 mod ingest_suite;
-pub use ingest_fixture::{IngestFixture, MemoryIngestFixture, MemoryIngestHandle};
+pub use ingest_fixture::{
+    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, UNSTATED_MID_GROUP_FAULT,
+    ingest_declensions_are_stated,
+};
 pub use ingest_suite::{NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, ingest_rules};
 
 /// Generates the ingest conformance suite for a store adapter.
@@ -212,6 +215,18 @@ macro_rules! ingest_store_conformance {
             // Re-evaluated per call, so every arrangement gets its own fixture.
             async fn __ingest_fixture() -> impl $crate::__private::IngestFixture {
                 $fixture
+            }
+
+            // CF-18's machine-checked half, emitted here rather than through
+            // `$emit` so a caller's emitter cannot drop it:
+            // `happenstance_testkit::event_store_conformance!`'s copy carries
+            // the argument, and the reason the `cfg_attr` pair stays inert on
+            // a native build.
+            #[cfg_attr(not(target_arch = "wasm32"), test)]
+            #[cfg_attr(target_arch = "wasm32", ::wasm_bindgen_test::wasm_bindgen_test)]
+            fn every_declined_capability_is_stated_by_this_fixture()
+            -> ::core::result::Result<(), $crate::Violation> {
+                $crate::__private::ingest_declensions_are_stated(__ingest_fixture)
             }
 
             $crate::for_each_ingest_store_rule!($emit);
@@ -302,7 +317,7 @@ macro_rules! sync_peer_conformance {
 #[doc(hidden)]
 pub mod __private {
     pub use crate::fixture::SyncFixture;
-    pub use crate::ingest_fixture::IngestFixture;
+    pub use crate::ingest_fixture::{IngestFixture, ingest_declensions_are_stated};
     pub use crate::ingest_suite::ingest_rules;
     #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
     pub use crate::sync_model::rules as model_rules;
