@@ -15,12 +15,22 @@
 //!
 //! * the `Origin::Foreign` arm of `write_batch`'s `match` — which binds the
 //!   origin the peer sent instead of `NULL`, and refuses one past `i64::MAX`
-//!   rather than saturating it;
+//!   rather than saturating it — and the `Written::unheld_own` field it fills
+//!   when a foreign row carrying this store's own identity **lands**, which
+//!   only happens when the store did not hold it (SY-38);
 //! * `ingest_locked`, beside `append_locked` — the same transaction and the
-//!   same identity check, with no condition evaluated (SY-1), and compensation
-//!   written only for a group that landed something (SY-11);
+//!   same identity check, with no condition evaluated (SY-1), compensation
+//!   written only for a group that landed something (SY-11), and the whole
+//!   call rolled back as `IngestError::UnheldOwnIdentity` on that field;
 //! * `ingest_groups` and `origin_watermark`, the `&self` entry points: the
-//!   ceilings and the lock, and one `GROUP BY` over the origin index.
+//!   ceilings and the lock, and `WATERMARK_SQL`, one `GROUP BY` over the
+//!   origin index, whose plan `plan_tests` asserts;
+//! * `ingest_begin_error`, `begin_error`'s twin, which reports a write lock
+//!   that went elsewhere as `IngestError::Busy`.
+//!
+//! The port's error is `IngestError<SqliteEventStoreError>`, and this file
+//! states the adapter error's class for each variant (SY-36), so a runner
+//! never infers one.
 //!
 //! # Why here, and why `cfg(test)`
 //!
@@ -38,8 +48,9 @@
 //! `tests/`. Phase 13 publishes the port and turns the gate into a feature,
 //! which is additive.
 
-use happenstance_core::{AppendError, StoreId};
-use happenstance_sync::{IngestGroup, Ingested, Watermark};
+use happenstance_core::StoreId;
+use happenstance_sync::{Classify, FailureClass, IngestError, IngestGroup, Ingested, Watermark};
+use rusqlite::ErrorCode;
 
 use crate::event_store::{SqliteEventStore, SqliteEventStoreError};
 
@@ -48,27 +59,76 @@ use crate::event_store::{SqliteEventStore, SqliteEventStoreError};
 // `trait_variant`'s blanket impl hands generic code bound on `IngestStore` the
 // other one for free, which the tests below rely on.
 impl happenstance_sync::SendIngestStore for SqliteEventStore {
-    // `AppendError` rather than the bare adapter error, so that a capacity
-    // refusal arrives as `ExceedsStoreLimit` and a runner can tell "park this
-    // batch, it will never fit here" from "retry". Its `NoEvents` and
-    // `ConditionViolated` arms are never produced by an ingest. Whether the
-    // port wants an ingest-specific error enum is phase 13's to settle.
-    type Error = AppendError<SqliteEventStoreError>;
+    // The bare adapter error. The port's `IngestError` carries the capacity
+    // refusal, the busy store and the unheld own identity in arms of its own,
+    // so a runner tells them apart without knowing this adapter.
+    type Error = SqliteEventStoreError;
 
     fn store_id(&self) -> StoreId {
         // The inherent method, which path resolution prefers over this one.
         Self::store_id(self)
     }
 
-    async fn ingest(&self, groups: &[IngestGroup<'_>]) -> Result<Ingested, Self::Error> {
+    async fn ingest(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<Ingested, IngestError<Self::Error>> {
         self.ingest_groups(groups)
     }
 
     async fn watermark(&self) -> Result<Watermark, Self::Error> {
-        self.origin_watermark().map_err(AppendError::Store)
+        self.origin_watermark()
     }
 }
 
+/// SY-36's class for each way this adapter fails.
+///
+/// Exhaustive over this crate's own enum, with no wildcard, so a new variant
+/// does not compile until somebody decides its class. A busy code reaching
+/// `Store` is `Transient` too: it is the same contention, raised after
+/// `BEGIN IMMEDIATE`, and the transaction rolled back. So are a full disk, a
+/// failed read or write and an exhausted allocator, which an operator or time
+/// can fix while the batch waits. Every other driver failure is `Stop`: a
+/// constraint, a corrupt file or a misused statement fails the same way again.
+impl Classify for SqliteEventStoreError {
+    fn class(&self) -> FailureClass {
+        match self {
+            Self::Sqlite(error) if transient_driver_failure(error) => FailureClass::Transient,
+            // A cancelled blocking task did not run; a panicked one would again.
+            Self::Worker(error) if error.is_cancelled() => FailureClass::Transient,
+            // Over SQLite's `INTEGER`, so it can never land here, and the rest
+            // of the batch can: VT-25's "park it".
+            Self::OriginPositionOutOfRange { .. } => FailureClass::Park,
+            Self::Sqlite(_)
+            | Self::Worker(_)
+            | Self::ConnectionPoisoned
+            | Self::NoRuntime(_)
+            | Self::InvalidPosition(_)
+            | Self::StoredEventType(_)
+            | Self::StoredTag(_)
+            | Self::UnsupportedSchemaVersion { .. }
+            | Self::MissingIdentity
+            | Self::MalformedIdentity { .. }
+            | Self::IdentityMoved { .. }
+            | Self::UnstampedEvent { .. }
+            | Self::CorruptTags => FailureClass::Stop,
+        }
+    }
+}
+
+/// Whether a driver failure is one that waiting can cure: the write lock held
+/// elsewhere, a full disk, an I/O failure, or memory exhausted.
+fn transient_driver_failure(error: &rusqlite::Error) -> bool {
+    crate::connection::is_busy(error)
+        || matches!(
+            error.sqlite_error_code(),
+            Some(ErrorCode::DiskFull | ErrorCode::SystemIoFailure | ErrorCode::OutOfMemory)
+        )
+}
+
+// The whole file is `cfg(test)` already, through its declaration in `lib.rs`.
+// Said again here so the module reads as test code where it stands.
+#[cfg(test)]
 mod tests {
     //! Each test names the clause it exercises. None asserts a literal local
     //! position: every position compared is one the store assigned, read back
@@ -86,7 +146,10 @@ mod tests {
         AppendCondition, AppendError, Event, EventId, EventStore, Query, QueryItem, ReadOptions,
         RecordedAt, SequencePosition, SequencedEvent, StoreId, StoreLimit, Tags,
     };
-    use happenstance_sync::{IngestGroup, IngestStore, Ingested, ReplicatedEvent, Watermark};
+    use happenstance_sync::{
+        Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested, ReplicatedEvent,
+        Watermark,
+    };
 
     use crate::event_store::{SqliteEventStore, SqliteEventStoreError};
 
@@ -117,7 +180,7 @@ mod tests {
     async fn ingest<S: IngestStore>(
         store: &S,
         groups: &[IngestGroup<'_>],
-    ) -> Result<Ingested, S::Error> {
+    ) -> Result<Ingested, IngestError<S::Error>> {
         store.ingest(groups).await
     }
 
@@ -351,7 +414,7 @@ mod tests {
         let refused = ingest(&store, &[IngestGroup::new(&doomed, &never_fits)]).await;
         assert!(matches!(
             refused,
-            Err(AppendError::ExceedsStoreLimit {
+            Err(IngestError::ExceedsStoreLimit {
                 limit: StoreLimit::EventDataLen,
                 ..
             })
@@ -385,7 +448,7 @@ mod tests {
 
         assert!(matches!(
             failed,
-            Err(AppendError::Store(SqliteEventStoreError::Sqlite(_)))
+            Err(IngestError::Store(SqliteEventStoreError::Sqlite(_)))
         ));
         assert!(
             !store.contains_event_id(losing[0].id).await.unwrap(),
@@ -452,7 +515,7 @@ mod tests {
 
         let refused = ingest(&store, &[IngestGroup::new(&batch, &[])]).await;
         match refused {
-            Err(AppendError::Store(SqliteEventStoreError::OriginPositionOutOfRange {
+            Err(IngestError::Store(SqliteEventStoreError::OriginPositionOutOfRange {
                 position,
             })) => assert_eq!(position.get(), u64::MAX - 1),
             other => panic!("expected OriginPositionOutOfRange, got {other:?}"),
@@ -590,76 +653,290 @@ mod tests {
         store.watermark().await.unwrap()
     }
 
-    /// **A pin, not an endorsement.** What happens today when an event claims
-    /// this store's own `StoreId` at a position the store does not hold — the
-    /// VT-6 breach, a store restored or rewound under an identity it should
-    /// have re-minted. Phase 13 owns the policy; this records the behaviour
-    /// that policy starts from, so that changing it is a visible decision.
-    ///
-    /// An own-id event the store *does* hold is an ordinary skip. One it does
-    /// not hold is **ingested**: the insert sees no conflict, and refusing it
-    /// would be a refusal on local state, which SY-1 forbids. The row takes the
-    /// next local position and carries the claimed identity. The cost arrives
-    /// later, at the local append whose assigned position equals the claim: its
-    /// stamp collides on `UNIQUE (origin_store, origin_position)`, the append
-    /// fails as a store error and rolls back — and because the rollback returns
-    /// `AUTOINCREMENT` to where it was, **every retry is assigned the same
-    /// position and collides again.** Local appends are wedged until something
-    /// moves the sequence or the identity.
+    /// An own-identity event this store **does** hold is an ordinary
+    /// re-delivery: a skip, decided by the insert like any other.
     #[tokio::test]
-    async fn pinned_vt6_breach_an_unheld_own_id_is_ingested_and_wedges_the_append_that_reaches_it()
-    {
+    async fn an_echo_of_an_own_event_is_a_skip() {
         let store = SqliteEventStore::open_in_memory().unwrap();
-        let own = store.store_id();
         let held = store.append(&[event("Local", "a")], None).await.unwrap();
 
-        let back_home = [shipped(EventId::new(own, held), 1, event("Local", "a"))];
+        let back_home = [shipped(
+            EventId::new(store.store_id(), held),
+            1,
+            event("Local", "a"),
+        )];
         let skipped = ingest(&store, &[IngestGroup::new(&back_home, &[])])
             .await
-            .unwrap();
+            .expect("an echo of a held event is not an error");
         assert_eq!((skipped.appended, skipped.skipped), (0, 1));
+        assert_eq!(store.head().await.unwrap(), Some(held));
+    }
 
-        // Three past the head this store assigned: past the position the
-        // ingested row itself will take, and within reach of the appends below.
-        let claim = id(own, held.get() + 3);
-        let forged = [shipped(claim, 1, event("Local", "forged"))];
-        let ingested = ingest(&store, &[IngestGroup::new(&forged, &[])])
-            .await
-            .unwrap();
-        assert_eq!(ingested.appended, 1);
-        assert!(store.contains_event_id(claim).await.unwrap());
+    /// The arrangement every unheld-own-identity test starts from.
+    ///
+    /// One local event is held. Then a call of two groups, the second of which
+    /// carries, at index 1 rather than 0, an event claiming this store's own
+    /// identity three positions past its head: the VT-6 breach of a store
+    /// restored or rewound under an identity it should have re-minted. The
+    /// claim sits neither first in its group nor in the first group, so a store
+    /// that inspects only the head of a batch, or writes group by group and
+    /// commits between them, fails the tests below.
+    struct Claimed {
+        /// The identity the forged event claims, which this store minted and
+        /// does not hold.
+        claim: EventId,
+        /// The first group's foreign events, all new.
+        first: [ReplicatedEvent; 1],
+        /// The second group's: one new foreign event, then the claim.
+        second: [ReplicatedEvent; 2],
+    }
 
-        let mut collision = None;
-        for _ in 0..4 {
-            match store.append(&[event("Local", "next")], None).await {
-                Ok(_) => {}
-                Err(error) => {
-                    collision = Some(error);
-                    break;
-                }
+    impl Claimed {
+        async fn on(store: &SqliteEventStore) -> Self {
+            let held = store.append(&[event("Local", "a")], None).await.unwrap();
+            // Computed from the position the store assigned, never a literal:
+            // past the positions this call's own rows would take, and within
+            // reach of the appends that follow.
+            let claimed = held
+                .next()
+                .and_then(SequencePosition::next)
+                .and_then(SequencePosition::next)
+                .expect("three positions past a fresh head exist");
+            let claim = EventId::new(store.store_id(), claimed);
+            let from = peer(0x4A);
+            Self {
+                claim,
+                first: [shipped(id(from, 1), 1, event("Shipped", "f1"))],
+                second: [
+                    shipped(id(from, 2), 2, event("Shipped", "f2")),
+                    shipped(claim, 3, event("Local", "forged")),
+                ],
             }
         }
-        let Some(AppendError::Store(SqliteEventStoreError::Sqlite(error))) = collision else {
-            panic!("no local append collided with the claimed identity: {collision:?}");
-        };
-        assert_eq!(
-            error.sqlite_error_code(),
-            Some(rusqlite::ErrorCode::ConstraintViolation)
-        );
-        let stuck_at = store.head().await.unwrap().unwrap();
-        assert!(
-            stuck_at < claim.position(),
-            "an append took the claimed position"
-        );
 
-        let retry = store.append(&[event("Local", "retry")], None).await;
+        fn groups(&self) -> [IngestGroup<'_>; 2] {
+            [
+                IngestGroup::new(&self.first, &[]),
+                IngestGroup::new(&self.second, &[]),
+            ]
+        }
+    }
+
+    /// SY-38: an event claiming this store's identity at a position it does
+    /// not hold refuses the **whole** call as `UnheldOwnIdentity`, class
+    /// `Stop`, and writes nothing — not the claim, not the new foreign event
+    /// beside it, not the group before it.
+    ///
+    /// Replaces the pin that recorded the policy before it: the claim was
+    /// ingested, and the local append that later reached its position wedged.
+    #[tokio::test]
+    async fn an_unheld_own_identity_stops_the_ingest_and_writes_nothing() {
+        let store = SqliteEventStore::open_in_memory().unwrap();
+        let claimed = Claimed::on(&store).await;
+        let head = store.head().await.unwrap();
+        let watermark = ingest_watermark(&store).await;
+
+        let refused = ingest(&store, &claimed.groups())
+            .await
+            .expect_err("an unheld own identity must refuse the ingest");
         assert!(
-            matches!(
-                retry,
-                Err(AppendError::Store(SqliteEventStoreError::Sqlite(_)))
-            ),
-            "the retry was assigned a new position: {retry:?}"
+            matches!(refused, IngestError::UnheldOwnIdentity { id, .. } if id == claimed.claim),
+            "expected UnheldOwnIdentity naming {}, got {refused:?}",
+            claimed.claim
         );
-        assert_eq!(store.head().await.unwrap(), Some(stuck_at));
+        assert_eq!(refused.class(), FailureClass::Stop);
+
+        for sent in [&claimed.first[0], &claimed.second[0], &claimed.second[1]] {
+            assert!(
+                !store.contains_event_id(sent.id).await.unwrap(),
+                "{} was written by a refused ingest",
+                sent.id
+            );
+        }
+        assert_eq!(store.head().await.unwrap(), head);
+        assert_eq!(ingest_watermark(&store).await, watermark);
+    }
+
+    /// The refusal leaves local appends working. Under the old policy the
+    /// claim was written, and the append assigned its position collided on the
+    /// origin pair's `UNIQUE` and rolled back, so every retry collided again.
+    ///
+    /// That one of the five appends lands at the claimed position is this
+    /// adapter's fact rather than the contract's: SQLite assigns positions
+    /// here without gaps, which is what made the old wedge reachable at all.
+    #[tokio::test]
+    async fn local_appends_are_not_wedged_after_a_refused_claim() {
+        let store = SqliteEventStore::open_in_memory().unwrap();
+        let claimed = Claimed::on(&store).await;
+        ingest(&store, &claimed.groups())
+            .await
+            .expect_err("the claim is refused");
+
+        let mut assigned = Vec::new();
+        for _ in 0..5 {
+            assigned.push(
+                store
+                    .append(&[event("Local", "next")], None)
+                    .await
+                    .expect("a local append after a refused claim lands"),
+            );
+        }
+        assert!(
+            assigned.contains(&claimed.claim.position()),
+            "no append reached the claimed position, so this proves nothing \
+             about the wedge: {assigned:?}"
+        );
+        assert!(
+            store.contains_event_id(claimed.claim).await.unwrap(),
+            "the local event at the claimed position carries this store's identity"
+        );
+    }
+
+    /// The remedy SY-38 names converges. After the operator re-mints the
+    /// store's identity, the same batch lands whole, and the claim is held as
+    /// the foreign event it now is, under the identity that minted it.
+    #[tokio::test]
+    async fn a_claim_lands_as_foreign_after_the_store_is_reminted() {
+        let file = TempFile::new();
+        let store = SqliteEventStore::open(&file.0).unwrap();
+        let claimed = Claimed::on(&store).await;
+        ingest(&store, &claimed.groups())
+            .await
+            .expect_err("before the re-mint the claim is refused");
+        drop(store);
+
+        let reminted = SqliteEventStore::remint_identity(&file.0).unwrap();
+        let store = SqliteEventStore::open(&file.0).unwrap();
+        assert_eq!(store.store_id(), reminted);
+        assert_ne!(store.store_id(), claimed.claim.store());
+
+        let landed = ingest(&store, &claimed.groups())
+            .await
+            .expect("after the re-mint the claim is a foreign event");
+        assert_eq!((landed.appended, landed.skipped), (3, 0));
+        assert!(store.contains_event_id(claimed.claim).await.unwrap());
+        let log = log(&store).await;
+        let held = carrying(&log, claimed.claim);
+        assert_eq!(held.id.store(), claimed.claim.store());
+        assert_ne!(held.id.store(), store.store_id());
+    }
+
+    /// The whole call rolls back, so the compensation is absent too: the
+    /// refusing group's and the one written for the group before it.
+    #[tokio::test]
+    async fn a_compensation_whose_group_carries_an_unheld_own_identity_is_not_written() {
+        let store = SqliteEventStore::open_in_memory().unwrap();
+        let claimed = Claimed::on(&store).await;
+        let before = log(&store).await;
+        let answers = [[event("Compensated", "one")], [event("Compensated", "two")]];
+
+        let refused = ingest(
+            &store,
+            &[
+                IngestGroup::new(&claimed.first, &answers[0]),
+                IngestGroup::new(&claimed.second, &answers[1]),
+            ],
+        )
+        .await;
+        assert!(
+            matches!(refused, Err(IngestError::UnheldOwnIdentity { .. })),
+            "{refused:?}"
+        );
+        assert_eq!(
+            log(&store).await,
+            before,
+            "a refused ingest left compensation, or a foreign event, behind"
+        );
+    }
+
+    /// A claim this call's **own** compensation would hide is refused too.
+    ///
+    /// Group 1 lands a new foreign event and its compensation, which this
+    /// store stamps with its own identity at the next position but one. Group
+    /// 2 carries the peer's event claiming exactly that identity. The insert
+    /// meets the compensation under the `UNIQUE` constraint and reads as a
+    /// re-delivery, so a store that refuses only the claims that land would
+    /// commit two events under one `EventId`. The store did not hold that
+    /// identity when the call began, and that is what decides.
+    #[tokio::test]
+    async fn a_claim_the_calls_own_compensation_would_hide_is_refused() {
+        let store = SqliteEventStore::open_in_memory().unwrap();
+        let held = store.append(&[event("Local", "a")], None).await.unwrap();
+        let before = log(&store).await;
+        // The foreign event takes the next position and its compensation the
+        // one after: computed from the head the store assigned, never a literal.
+        let compensated_at = held
+            .next()
+            .and_then(SequencePosition::next)
+            .expect("two positions past a fresh head exist");
+        let claim = EventId::new(store.store_id(), compensated_at);
+        let from = peer(0x5B);
+        let first = [shipped(id(from, 1), 1, event("Shipped", "f1"))];
+        let answer = [event("Compensated", "c1")];
+        let second = [
+            shipped(id(from, 2), 2, event("Shipped", "f2")),
+            shipped(claim, 3, event("Local", "forged")),
+        ];
+
+        let refused = ingest(
+            &store,
+            &[
+                IngestGroup::new(&first, &answer),
+                IngestGroup::new(&second, &[]),
+            ],
+        )
+        .await;
+        assert!(
+            matches!(refused, Err(IngestError::UnheldOwnIdentity { id, .. }) if id == claim),
+            "expected UnheldOwnIdentity naming {claim}, got {refused:?}"
+        );
+        assert_eq!(
+            log(&store).await,
+            before,
+            "a refused ingest left its compensation or a foreign event behind"
+        );
+    }
+
+    /// D6's table, at the boundaries a runner acts on.
+    #[test]
+    fn sqlite_errors_state_their_class() {
+        let driver = |code| {
+            SqliteEventStoreError::Sqlite(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(code),
+                None,
+            ))
+        };
+        let cases = [
+            (driver(rusqlite::ffi::SQLITE_BUSY), FailureClass::Transient),
+            (
+                driver(rusqlite::ffi::SQLITE_LOCKED),
+                FailureClass::Transient,
+            ),
+            (driver(rusqlite::ffi::SQLITE_FULL), FailureClass::Transient),
+            (driver(rusqlite::ffi::SQLITE_IOERR), FailureClass::Transient),
+            (driver(rusqlite::ffi::SQLITE_NOMEM), FailureClass::Transient),
+            (driver(rusqlite::ffi::SQLITE_CONSTRAINT), FailureClass::Stop),
+            (driver(rusqlite::ffi::SQLITE_CORRUPT), FailureClass::Stop),
+            (
+                SqliteEventStoreError::OriginPositionOutOfRange {
+                    position: SequencePosition::FIRST,
+                },
+                FailureClass::Park,
+            ),
+            (
+                SqliteEventStoreError::IdentityMoved {
+                    handle: peer(1),
+                    persisted: peer(2),
+                },
+                FailureClass::Stop,
+            ),
+            (
+                SqliteEventStoreError::ConnectionPoisoned,
+                FailureClass::Stop,
+            ),
+        ];
+        for (error, class) in cases {
+            assert_eq!(error.class(), class, "{error}");
+        }
     }
 }

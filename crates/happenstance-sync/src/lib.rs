@@ -156,7 +156,7 @@ pub mod wire;
 // `EventId`, `StoreId` and `RecordedAt` are `happenstance_core`'s and are not
 // re-exported: one import path per type, and it is the contract crate's.
 pub use identity::{ReplicatedEvent, Watermark};
-pub use ingest::{IngestGroup, IngestStore, Ingested, SendIngestStore};
+pub use ingest::{IngestError, IngestGroup, IngestStore, Ingested, SendIngestStore};
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory::{MemoryPeerError, MemoryResume, MemorySyncPeer};
