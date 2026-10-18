@@ -157,8 +157,8 @@ pub use fixture::{
 };
 pub use kv_capped::{KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError};
 pub use sync_suite::{
-    BYTE_LOG_REFUSED_REASON, COUNT_LOG_REFUSED_REASON, LOG_REFUSED, NO_SECOND_PAGE,
-    NO_SECOND_PAGE_REASON, rules,
+    BYTE_LOG_REFUSED_REASON, COUNT_LOG_REFUSED_REASON, LOG_REFUSED, NO_CONFIRMATION,
+    NO_CONFIRMATION_REASON, NO_SECOND_PAGE, NO_SECOND_PAGE_REASON, rules,
 };
 pub use violation::Violation;
 

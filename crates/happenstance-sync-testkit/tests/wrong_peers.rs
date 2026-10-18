@@ -16,16 +16,18 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::cell::Cell;
-use std::sync::Arc;
+use std::collections::BTreeSet;
+use std::sync::{Arc, Mutex};
 
-use happenstance_core::{SequencePosition, StoreId};
+use happenstance_core::{EventId, SequencePosition, StoreId};
 use happenstance_sync::{
     Ack, Classify, EventGroup, FailureClass, MemoryPeerError, MemoryResume, MemorySyncPeer,
-    PeerLimits, Pulled, PushBatch, ReplicatedEvent, SendSyncPeer, Waiting,
+    PeerLimits, Pulled, PushBatch, ReplicatedEvent, SendSyncPeer, Waiting, Watermark,
 };
 use happenstance_sync_testkit::{
-    BYTE_LOG_REFUSED_REASON, COUNT_LOG_REFUSED_REASON, LOG_REFUSED, NO_SECOND_PAGE,
-    NO_SECOND_PAGE_REASON, RefusalsOf, SyncFixture, oversized_push_refusal, rules,
+    BYTE_LOG_REFUSED_REASON, COUNT_LOG_REFUSED_REASON, LOG_REFUSED, NO_CONFIRMATION,
+    NO_CONFIRMATION_REASON, NO_SECOND_PAGE, NO_SECOND_PAGE_REASON, RefusalsOf, SyncFixture,
+    oversized_push_refusal, rules,
 };
 use happenstance_testkit::{RuleOutcome, block_on};
 
@@ -88,6 +90,16 @@ enum Mistake {
     /// SY-18 for it: its byte-cut log goes one event to a push, takes it, and
     /// pages at the limit the peer really imposes.
     DeclaresMoreBatchBytesThanItTakes,
+    /// SY-31's wrong implementation: a write-behind cache. It acknowledges a
+    /// push on admission, with the ack the reference peer would have sent,
+    /// and commits the batch only on this handle's next push or pull. A
+    /// handle dropped in between loses what it confirmed, which is a crash
+    /// between the ack and the commit.
+    AcksOnAdmission,
+    /// Not a mistake: a peer that stores everything and confirms nothing.
+    /// Safe, because a spoke re-pushes, and SY-31's rule cannot hold an empty
+    /// confirmation to anything, so it must say so rather than pass.
+    ConfirmsNothing,
 }
 
 /// How many events a push to [`Mistake::TakesFewerEventsThanItDeclares`] may
@@ -170,7 +182,9 @@ impl Classify for WrongError {
             | Mistake::TakesFewerEventsThanItDeclares
             | Mistake::TakesSmallerEventsThanItDeclares
             | Mistake::TakesLessOfBothThanItDeclares
-            | Mistake::DeclaresMoreBatchBytesThanItTakes => self.cause.class(),
+            | Mistake::DeclaresMoreBatchBytesThanItTakes
+            | Mistake::AcksOnAdmission
+            | Mistake::ConfirmsNothing => self.cause.class(),
         }
     }
 }
@@ -179,6 +193,11 @@ impl Classify for WrongError {
 struct WrongPeer {
     inner: Arc<MemorySyncPeer>,
     mistake: Mistake,
+    /// What [`Mistake::AcksOnAdmission`] has acknowledged and not yet
+    /// committed. One per handle, so dropping the handle loses it. A
+    /// `std::sync::Mutex` because the peer's futures must be `Send`; no guard
+    /// is held across an `.await`.
+    admitted: Mutex<Vec<PushBatch>>,
 }
 
 /// Everything `peer` holds, from the start of its log.
@@ -251,6 +270,57 @@ impl WrongPeer {
         }))
     }
 
+    /// Commits everything [`Mistake::AcksOnAdmission`] has acknowledged on
+    /// this handle.
+    async fn flush(&self) -> Result<(), MemoryPeerError> {
+        let pending = core::mem::take(
+            &mut *self
+                .admitted
+                .lock()
+                .map_err(|_| MemoryPeerError::Poisoned)?,
+        );
+        for batch in &pending {
+            self.inner.push(batch).await?;
+        }
+        Ok(())
+    }
+
+    /// [`Mistake::AcksOnAdmission`]'s push: refuse what the reference peer
+    /// refuses, predict the ack it would send, and buffer the batch.
+    async fn admit(&self, batch: &PushBatch) -> Result<Ack, MemoryPeerError> {
+        let limit = self.inner.limits().max_batch_bytes;
+        let offered = batch.payload_len();
+        if offered > limit {
+            return Err(MemoryPeerError::BatchTooLarge {
+                actual: offered,
+                limit,
+            });
+        }
+        self.flush().await?;
+        let mut held: BTreeSet<EventId> = held_by(&self.inner)
+            .await?
+            .iter()
+            .flat_map(|group| &group.events)
+            .map(|event| event.id)
+            .collect();
+        // The reference peer's confirmation before this batch, advanced by
+        // each event it would append: the ack a faithful peer sends.
+        let mut ack = self.inner.push(&PushBatch::empty()).await?;
+        for event in batch.events() {
+            if held.insert(event.id) {
+                ack.appended += 1;
+                ack.confirmed.advance(event.id.store(), event.id.position());
+            } else {
+                ack.skipped += 1;
+            }
+        }
+        self.admitted
+            .lock()
+            .map_err(|_| MemoryPeerError::Poisoned)?
+            .push(batch.clone());
+        Ok(ack)
+    }
+
     /// Pushes one group at a time, letting `refused` decide what a violated
     /// guard is acknowledged as.
     async fn push_guarded(
@@ -281,6 +351,11 @@ impl SendSyncPeer for WrongPeer {
     type Resume = MemoryResume;
 
     async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
+        // A write-behind cache serves its own handle's reads, so on one handle
+        // it is indistinguishable from the faithful peer.
+        if self.mistake == Mistake::AcksOnAdmission {
+            self.flush().await.map_err(|error| self.wrap(error))?;
+        }
         let pulled = self
             .inner
             .pull(from)
@@ -328,6 +403,16 @@ impl SendSyncPeer for WrongPeer {
                 })
                 .await
                 .map_err(|error| self.wrap(error)),
+            Mistake::AcksOnAdmission => self.admit(batch).await.map_err(|error| self.wrap(error)),
+            Mistake::ConfirmsNothing => {
+                let mut ack = self
+                    .inner
+                    .push(batch)
+                    .await
+                    .map_err(|error| self.wrap(error))?;
+                ack.confirmed = Watermark::new();
+                Ok(ack)
+            }
             Mistake::TakesFewerEventsThanItDeclares
             | Mistake::TakesSmallerEventsThanItDeclares
             | Mistake::TakesLessOfBothThanItDeclares => {
@@ -387,6 +472,7 @@ impl SyncFixture for WrongFixture {
         WrongPeer {
             inner: Arc::clone(&self.inner),
             mistake: self.mistake,
+            admitted: Mutex::new(Vec::new()),
         }
     }
 
@@ -586,6 +672,35 @@ fn compensation_is_atomic_fails_a_peer_that_ends_a_pull_inside_a_group() {
         "compensation_is_atomic_with_the_losing_event",
         "SY-2",
     );
+}
+
+/// The mutant only a fresh handle can see: on the handle that pushed, its
+/// buffer is flushed before every read.
+#[test]
+fn ack_never_confirms_a_non_durable_event_fails_a_peer_that_acks_on_admission() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::AcksOnAdmission)),
+        "ack_never_confirms_a_non_durable_event",
+        "SY-31",
+    );
+}
+
+/// A peer that confirms nothing has given the rule no confirmation to hold to
+/// the log, so the rule cannot have failed it. It says so, and every other rule
+/// runs.
+#[test]
+fn ack_never_confirms_a_non_durable_event_skips_a_peer_that_confirms_nothing() {
+    for (name, verdict) in verdicts(async || WrongFixture::new(Mistake::ConfirmsNothing)) {
+        let expected = if name == "ack_never_confirms_a_non_durable_event" {
+            RuleOutcome::Skipped {
+                capability: NO_CONFIRMATION,
+                reason: NO_CONFIRMATION_REASON,
+            }
+        } else {
+            RuleOutcome::Ran
+        };
+        assert_eq!(verdict, Ok(expected), "`{name}`");
+    }
 }
 
 #[test]
