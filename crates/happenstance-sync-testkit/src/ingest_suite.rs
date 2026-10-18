@@ -804,6 +804,7 @@ pub mod ingest_rules {
 ///
 /// let names = happenstance_sync_testkit::for_each_ingest_store_rule!(rule_names);
 /// assert!(names.contains(&"ingest_preserves_origin_identity"));
+/// assert!(names.contains(&"an_unheld_own_identity_stops_the_ingest"));
 /// ```
 #[macro_export]
 macro_rules! for_each_ingest_store_rule {

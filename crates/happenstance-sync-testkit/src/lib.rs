@@ -1,6 +1,7 @@
-//! The conformance suite for `happenstance-sync` peers.
+//! The conformance suite for `happenstance-sync` peers, and for the stores
+//! they ingest into.
 //!
-//! # Status: five rules, and the shape every later one plugs into
+//! # Status: two peer families and an ingest family, and the shape every later rule plugs into
 //!
 //! `publish = false` because the suite is **unfinished**, not because it is
 //! held back: phase 13 grows it rule by rule, and whether it publishes is
@@ -81,6 +82,38 @@
 //! # }
 //! ```
 //!
+//! # The ingest family
+//!
+//! The other side of a peer: the store an
+//! [`IngestStore`](happenstance_sync::IngestStore) writes into. A store adapter
+//! that implements the port mounts it beside the event-store suite:
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! happenstance_sync_testkit::ingest_store_conformance!(
+//!     happenstance_sync_testkit::MemoryIngestFixture::new()
+//! );
+//! # }
+//! ```
+//!
+//! The expression builds an [`IngestFixture`], whose store is both an
+//! `EventStore` and an `IngestStore`. The reference is
+//! [`MemoryIngestFixture`], over `happenstance-sync`'s `MemoryIngestStore`, and
+//! `happenstance-sqlite`'s ingest spike mounts the family too.
+//!
+//! | Rule | Clause | What it rejects |
+//! |---|---|---|
+//! | [`ingest_preserves_origin_identity`](ingest_rules::ingest_preserves_origin_identity) | VT-5, VT-9 | a store that re-mints an ingested event, or restamps its recorded time |
+//! | [`ingested_events_land_above_the_local_head`](ingest_rules::ingested_events_land_above_the_local_head) | SY-5 | an order-preserving merge, which hides an event below a checkpoint already read past |
+//! | [`dedupe_reaches_identity_without_decoding`](ingest_rules::dedupe_reaches_identity_without_decoding) | SY-12, SY-11 | content-keyed dedupe, and a compensation written again on redelivery |
+//! | [`an_unheld_own_identity_stops_the_ingest`](ingest_rules::an_unheld_own_identity_stops_the_ingest) | SY-38 | a dropped claim, a check of the batch's head only, a group-by-group commit, a claim hidden by the call's own compensation, and a refused held echo |
+//!
+//! Each wrong store lives in `tests/wrong_ingest_stores.rs`, where a test runs
+//! the whole family against it and asserts it fails exactly its rule. SY-33's
+//! rule, which must exempt SY-38's refusal (ADR-0098), is not written yet; the
+//! exemption is carried forward to it.
+//!
 //! # Harnesses
 //!
 //! The emitter is a parameter, as in the event-store family, so the suite never
@@ -88,7 +121,10 @@
 //! [`emit_sync_tokio!`](crate::emit_sync_tokio) (the default),
 //! [`emit_sync_blocking!`](crate::emit_sync_blocking) — no runtime and no
 //! `Send` bound, which is what a `!Send` peer runs under — and
-//! [`emit_sync_wasm!`](crate::emit_sync_wasm).
+//! [`emit_sync_wasm!`](crate::emit_sync_wasm). The ingest family has
+//! [`emit_ingest_tokio!`](crate::emit_ingest_tokio) (the default) and
+//! [`emit_ingest_blocking!`](crate::emit_ingest_blocking); its `wasm32`
+//! emitter arrives with the first store that runs it there.
 //!
 //! # Failure is a value
 //!
