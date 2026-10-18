@@ -72,8 +72,8 @@ pub mod ingest_rules {
     const DEDUPE_ORIGIN: StoreId = StoreId::from_bytes([0x73; 16]);
     const TWIN_ORIGIN: StoreId = StoreId::from_bytes([0x74; 16]);
 
-    /// Bytes that are not UTF-8 and parse as no codec: a lone continuation
-    /// pair, a NUL and a truncated two-byte sequence. A store that had to
+    /// Bytes that are not UTF-8 and parse as no codec: two bytes UTF-8 never
+    /// uses, a NUL and a two-byte sequence cut off by a non-continuation byte. A store that had to
     /// decode a payload to dedupe it fails on these (SY-35).
     const UNDECODABLE: &[u8; 5] = b"\xFF\xFE\x00\xC3\x28";
 
