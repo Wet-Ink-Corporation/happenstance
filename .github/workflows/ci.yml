@@ -825,7 +825,7 @@ jobs:
           cargo test -p happenstance-postgres --all-features \
             --lib -- --ignored --list | tee gated-lib.txt
 
-      - name: The library's live tests against a live Postgres
+      - name: The live tests in the library target against a live Postgres
         if: ${{ !cancelled() }}
         run: |
           set -o pipefail
