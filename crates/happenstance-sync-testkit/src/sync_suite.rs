@@ -74,6 +74,26 @@ pub const BYTE_LOG_REFUSED_REASON: &str = "this peer refused a one-event push of
      it declares (SY-18's subject, judged by its rule), and the count-cut log \
      showed no page; SY-37 is unverified for this peer";
 
+/// The `capability` SY-31's rule reports when the peer's
+/// acknowledgement confirmed none of what the rule pushed.
+///
+/// Not a fixture constant, as [`NO_SECOND_PAGE`] is not: it names the field
+/// whose value left the rule nothing to check.
+pub const NO_CONFIRMATION: &str = "Ack::confirmed";
+
+/// The reason SY-31's rule reports when the peer confirmed none of what it
+/// pushed.
+///
+/// Written by this crate rather than by the fixture, because it is the same
+/// sentence for every peer that earns it. Confirming nothing is safe, since a
+/// spoke re-pushes and a re-delivery is a no-op, but it leaves the rule no
+/// confirmation to hold to the log.
+pub const NO_CONFIRMATION_REASON: &str = "this peer acknowledged the rule's push and confirmed none of the events \
+     in it, so no confirmation could be held to what a fresh handle reads \
+     back; confirming nothing is safe, because a spoke re-pushes and a \
+     re-delivery is a no-op, but SY-31's durability half is unverified for \
+     this peer";
+
 /// The sync rules. See the [crate documentation](crate) for what each covers.
 ///
 /// Each rule is an async function taking `impl AsyncFn() -> F` — not a fixture
@@ -135,6 +155,10 @@ pub mod rules {
     const SEAT_MAP_ORIGIN: StoreId = StoreId::from_bytes([0x44; 16]);
     const BOUNDARY_ORIGIN: StoreId = StoreId::from_bytes([0x55; 16]);
     const METADATA_ORIGIN: StoreId = StoreId::from_bytes([0x66; 16]);
+
+    /// SY-31's two origins, whose events the rule pushes in one batch.
+    const DURABLE_ORIGIN: StoreId = StoreId::from_bytes([0x81; 16]);
+    const DURABLE_TWIN: StoreId = StoreId::from_bytes([0x82; 16]);
 
     /// SY-1: a peer appends every replicated event it does not already hold,
     /// and never evaluates an append condition — the origin's or its own — as a
@@ -604,6 +628,118 @@ pub mod rules {
         })
     }
 
+    /// SY-31: an [`Ack`] confirms only what the far side still holds once the
+    /// handle that acknowledged is gone.
+    ///
+    /// SY-31's confirmation watermark is advanced to [`Ack::confirmed`], "what
+    /// the far side has now durably seen", and SY-24's forwarding never offers
+    /// anything at or below it again. So a confirmation sent before the write
+    /// is durable loses that write for good: the spoke's watermark has passed
+    /// it, and nothing re-sends it.
+    ///
+    /// The rule pushes one batch of two groups from two origins, at origin
+    /// positions 3 and 7 and 2, drops the handle that pushed, connects a fresh
+    /// one onto the same fixture and pulls everything. Then every pushed event
+    /// at or below the confirmed mark for its origin is held, byte for byte,
+    /// and every confirmed mark names an event the fresh handle holds.
+    /// `confirmed` is read as a high-water mark, never as everything up to: no
+    /// position below a mark that the rule did not push is assumed held.
+    ///
+    /// "Not durable" is observed as "gone once the acking handle is dropped",
+    /// which is the strongest crash a [`SyncFixture`] can express today: one
+    /// fixture is one backing peer, and each `connect` one handle onto it. A
+    /// peer that buffers in fixture-wide memory and loses it to a process crash
+    /// passes here, until the fixture contract gains a reopen capability with
+    /// the first durable peer adapter.
+    ///
+    /// A peer whose ack confirms none of the pushed events has given the rule
+    /// nothing to check, so the rule reports
+    /// [`Skipped`](RuleOutcome::Skipped) with
+    /// [`NO_CONFIRMATION`](crate::NO_CONFIRMATION) rather than a pass.
+    ///
+    /// [`Ack`]: happenstance_sync::Ack
+    /// [`Ack::confirmed`]: happenstance_sync::Ack::confirmed
+    ///
+    /// # Rejects
+    ///
+    /// A write-behind cache that acknowledges a push on admission and commits
+    /// it later, so a handle dropped in between has confirmed what the peer
+    /// never held. `tests/wrong_peers.rs` carries it, and the peer that
+    /// confirms nothing, which this rule must skip.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-31 if the peer refuses the push or a pull, if a
+    /// confirmed event is not held by a fresh handle, or if a confirmed mark
+    /// names no event the fresh handle holds.
+    pub async fn ack_never_confirms_a_non_durable_event<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-31";
+        let fixture = open().await;
+        let first = durable_reading(DURABLE_ORIGIN, 3, b"sy31-p-3", CLAUSE)?;
+        let second = durable_reading(DURABLE_ORIGIN, 7, b"sy31-p-7", CLAUSE)?;
+        let other = durable_reading(DURABLE_TWIN, 2, b"sy31-q-2", CLAUSE)?;
+        let batch = PushBatch::new(vec![
+            EventGroup::new(None, vec![first, second]),
+            EventGroup::new(None, vec![other]),
+        ]);
+
+        let ack = {
+            let peer = fixture.connect().await;
+            peer.push(&batch).await.map_err(|error| {
+                Violation::new(
+                    CLAUSE,
+                    format!("the peer refused a batch well inside the minimum limits: {error}"),
+                )
+            })?
+            // The acking handle is dropped here: what it confirmed must
+            // outlive it.
+        };
+
+        let fresh = fixture.connect().await;
+        let held: Vec<ReplicatedEvent> = pull_everything(&fresh, CLAUSE)
+            .await?
+            .into_iter()
+            .flat_map(|group| group.events)
+            .collect();
+        let covered: Vec<&ReplicatedEvent> = batch
+            .events()
+            .filter(|event| {
+                ack.confirmed
+                    .get(event.id.store())
+                    .is_some_and(|confirmed| event.id.position() <= confirmed)
+            })
+            .collect();
+        if covered.is_empty() {
+            return Ok(RuleOutcome::Skipped {
+                capability: crate::NO_CONFIRMATION,
+                reason: crate::NO_CONFIRMATION_REASON,
+            });
+        }
+        for event in covered {
+            ensure(held.contains(event), CLAUSE, || {
+                format!(
+                    "the peer confirmed {} and a fresh handle onto it does not hold it, byte for \
+                     byte; a spoke's watermark passes it, so it is never pushed again",
+                    event.id
+                )
+            })?;
+        }
+        // The high-water reading: each mark names a position the peer holds,
+        // and nothing is inferred about the positions below it.
+        for (origin, position) in ack.confirmed.iter() {
+            let id = EventId::new(origin, position);
+            ensure(held.iter().any(|event| event.id == id), CLAUSE, || {
+                format!(
+                    "the peer confirmed {id} as the highest position it holds from {origin}, \
+                     and a fresh handle onto it holds no event with that identity"
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What one log SY-37's rule wrote showed it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Log {
@@ -925,6 +1061,26 @@ pub mod rules {
         replicated(origin, SEAT_CLAIMED, clause)
     }
 
+    /// A reading `origin` recorded at its own `position`, carrying `data` as
+    /// opaque bytes (SY-35).
+    fn durable_reading(
+        origin: StoreId,
+        position: u64,
+        data: &[u8],
+        clause: &'static str,
+    ) -> Result<ReplicatedEvent, Violation> {
+        let position = SequencePosition::new(position)
+            .ok_or_else(|| Violation::new(clause, "the rule's origin position is zero"))?;
+        let event = Event::new(READING_TAKEN, data.to_vec()).map_err(|error| {
+            Violation::new(clause, format!("the rule's own event is invalid: {error}"))
+        })?;
+        Ok(ReplicatedEvent::new(
+            EventId::new(origin, position),
+            RecordedAt::from_millis(1_800_000_000_000),
+            event,
+        ))
+    }
+
     fn replicated(
         origin: StoreId,
         event_type: EventType,
@@ -982,6 +1138,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- Nothing waiting means nothing waiting (SY-37) --------------
             nothing_waiting_means_the_next_pull_is_empty,
+
+            // --- An ack confirms only what is durable (SY-31) ---------------
+            ack_never_confirms_a_non_durable_event,
         }
     };
 }

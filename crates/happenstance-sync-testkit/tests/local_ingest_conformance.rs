@@ -22,6 +22,7 @@ use happenstance_sync::{
 // Only the bare flavour of each port is imported, so method calls are never
 // ambiguous; the oracle's `Send` flavour is reached by full path below.
 use happenstance_sync_testkit::IngestFixture;
+use happenstance_testkit::Capability;
 
 /// A fixture whose store is genuinely `!Send`.
 #[derive(Debug, Default)]
@@ -37,6 +38,14 @@ impl LocalFixture {
 
 impl IngestFixture for LocalFixture {
     type Store = LocalStore;
+
+    /// Declined for the oracle's reason, which this fixture reaches through an
+    /// `Rc`: the store writes a call in one step and cannot fail inside it.
+    const MID_GROUP_FAULT: Capability = Capability::declined(
+        "this fixture reaches the in-memory oracle through an `Rc`, and the oracle writes a \
+         whole ingest in one step with an error type that cannot be built, so nothing can fail \
+         between two rows of a group",
+    );
 
     async fn connect(&self) -> Self::Store {
         LocalStore {

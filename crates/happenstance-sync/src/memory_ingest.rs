@@ -792,15 +792,26 @@ mod tests {
             .await
             .expect("a group and its compensation land");
 
-        for row in log(&store).await {
-            if row.id.store() == store.store_id() {
-                assert!(
-                    row.recorded_at.as_millis() > 0,
-                    "{} was stamped {}, not by the host clock",
-                    row.id,
-                    row.recorded_at
-                );
-            }
+        let held = log(&store).await;
+        let own: Vec<_> = held
+            .iter()
+            .filter(|row| row.id.store() == store.store_id())
+            .collect();
+        // The local append and the compensation: without this count the loop
+        // below passes over a log that holds no row of the store's own.
+        assert_eq!(
+            own.len(),
+            2,
+            "the store minted {} rows of its own; it wrote one append and one compensation",
+            own.len()
+        );
+        for row in own {
+            assert!(
+                row.recorded_at.as_millis() > 0,
+                "{} was stamped {}, not by the host clock",
+                row.id,
+                row.recorded_at
+            );
         }
     }
 }

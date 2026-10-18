@@ -22,6 +22,34 @@ pub const NO_HIDDEN_CLAIM_REASON: &str = "this store did not put the rule's comp
      hide was never arranged; SY-38's unheld-claim half held, and its compensation-hidden half is \
      unverified for this store";
 
+/// The `capability` SY-18's ingest rule reports when the fixture declares no
+/// per-event ceiling it can exercise.
+///
+/// Names all three [`IngestFixture`](crate::IngestFixture) constants, because
+/// the rule needs every one of them absent, or too large to allocate, before
+/// it has nothing to do: `happenstance_testkit::NO_STORE_LIMITS` is the
+/// precedent.
+pub const NO_PER_EVENT_LIMITS: &str = "MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_METADATA_LEN";
+
+/// The reason SY-18's ingest rule reports when it exercised no ceiling.
+///
+/// Written by this crate rather than by the fixture, because it is the same
+/// sentence for every store that earns it.
+pub const NO_PER_EVENT_LIMITS_REASON: &str = "this fixture declares no per-event ceiling the rule can exercise, none \
+     at all or only ones at or above the sizes this crate will allocate, so a \
+     store that checks only the head of each group could not be told from one \
+     that checks every event; the rule is unverified for this store";
+
+/// The most tags SY-18's ingest rule puts on one event, whatever ceiling the
+/// fixture declares (H-13).
+///
+/// A declared `MAX_TAGS_PER_EVENT` at or above this is not exercised: the
+/// over-ceiling event carries one tag more than the ceiling, and the rule does
+/// not allocate a number it was handed. Byte ceilings are capped by
+/// [`MAX_PROVOKED_BATCH_BYTES`](crate::MAX_PROVOKED_BATCH_BYTES) for the same
+/// reason.
+pub const MAX_PROVOKED_TAGS: usize = 4_096;
+
 /// The ingest rules. See the [crate documentation](crate) for what each covers.
 ///
 /// Each rule is an async function taking `impl AsyncFn() -> F`, how to make a
@@ -45,9 +73,11 @@ pub mod ingest_rules {
     use alloc::string::String;
     use alloc::vec::Vec;
 
+    use alloc::vec;
+
     use happenstance_core::{
         Event, EventId, EventStore, EventType, Query, ReadOptions, RecordedAt, SequencePosition,
-        SequencedEvent, StoreId, Tag, collect,
+        SequencedEvent, StoreId, StoreLimit, Tag, Tags, collect,
     };
     use happenstance_sync::{
         Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested, ReplicatedEvent,
@@ -55,10 +85,13 @@ pub mod ingest_rules {
     };
     use happenstance_testkit::RuleOutcome;
 
-    use super::{NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON};
+    use super::{
+        MAX_PROVOKED_TAGS, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, NO_PER_EVENT_LIMITS,
+        NO_PER_EVENT_LIMITS_REASON,
+    };
 
-    use crate::IngestFixture;
     use crate::violation::{Violation, ensure};
+    use crate::{IngestFixture, MAX_PROVOKED_BATCH_BYTES};
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -79,6 +112,12 @@ pub mod ingest_rules {
 
     /// SY-38's origin, for the foreign events around each claim.
     const CLAIM_ORIGIN: StoreId = StoreId::from_bytes([0x75; 16]);
+
+    /// SY-30's origin, for the group a fault is armed inside.
+    const ATOMIC_ORIGIN: StoreId = StoreId::from_bytes([0x77; 16]);
+
+    /// SY-18's origin, for the events held to the declared ceilings.
+    const CEILING_ORIGIN: StoreId = StoreId::from_bytes([0x78; 16]);
 
     /// VT-5: an ingested event keeps the [`EventId`] its origin minted, and
     /// VT-9's [`RecordedAt`] with it.
@@ -404,7 +443,7 @@ pub mod ingest_rules {
             shipped(CLAIM_ORIGIN, 2, 1_800_000_000_001, b"sy38-a-2", SY_38)?,
             forged(claim, b"sy38-a-claim")?,
         ];
-        let before = observe(&store).await?;
+        let before = observe(&store, SY_38).await?;
 
         let refused = store
             .ingest(&[
@@ -414,7 +453,13 @@ pub mod ingest_rules {
             .await;
 
         ensure_refused(refused, claim, "a claim three positions past the head")?;
-        ensure_unchanged(&store, &before, "an ingest refused for an unheld claim").await?;
+        ensure_unchanged(
+            &store,
+            &before,
+            "an ingest refused for an unheld claim",
+            SY_38,
+        )
+        .await?;
         for id in [first[0].id, second[0].id, claim] {
             ensure(!holds(&store, id, SY_38).await?, SY_38, || {
                 format!("the refused ingest left {id} held")
@@ -427,7 +472,7 @@ pub mod ingest_rules {
     async fn a_held_echo_is_a_skip<F: IngestFixture>(fixture: &F) -> Result<(), Violation> {
         let store = fixture.connect().await;
         append(&store, &[opaque(LOCAL, b"sy38-c-local", SY_38)?], SY_38).await?;
-        let before = observe(&store).await?;
+        let before = observe(&store, SY_38).await?;
         let held = before
             .log
             .last()
@@ -458,7 +503,7 @@ pub mod ingest_rules {
             )
         })?;
         ensure_counts(echoed, (0, 1, 0), "an echo of a held local event", SY_38)?;
-        ensure_unchanged(&store, &before, "an echo of a held event").await
+        ensure_unchanged(&store, &before, "an echo of a held event", SY_38).await
     }
 
     /// SY-38's third arrangement: the claim the call's own compensation would
@@ -482,7 +527,7 @@ pub mod ingest_rules {
             shipped(CLAIM_ORIGIN, 12, 1_800_000_000_012, b"sy38-b-2", SY_38)?,
             forged(claimed, b"sy38-b-claim")?,
         ];
-        let before = observe(&store).await?;
+        let before = observe(&store, SY_38).await?;
 
         let refused = store
             .ingest(&[
@@ -496,7 +541,13 @@ pub mod ingest_rules {
             claimed,
             "a claim on the position the call's compensation takes",
         )?;
-        ensure_unchanged(&store, &before, "an ingest refused for a hidden claim").await?;
+        ensure_unchanged(
+            &store,
+            &before,
+            "an ingest refused for a hidden claim",
+            SY_38,
+        )
+        .await?;
 
         ingest(&store, &[IngestGroup::new(&first, &answer)], SY_38).await?;
         let log = read_all(&store, SY_38).await?;
@@ -561,6 +612,453 @@ pub mod ingest_rules {
         })
     }
 
+    /// SY-30: an [`IngestGroup`] lands whole or not at all, even when the
+    /// store fails between two of its rows.
+    ///
+    /// SY-30 rejects a receiver that, after a crash mid-ingest, holds four
+    /// events of a seven-event batch. A conformant store decides every refusal
+    /// before it writes, so the case no other rule reaches is a fault inside
+    /// the write, and only the adapter can inject one:
+    /// [`IngestFixture::MID_GROUP_FAULT`]. A fixture that declines it is
+    /// reported [`Skipped`](RuleOutcome::Skipped) with its stated reason.
+    ///
+    /// Three arrangements, each on a fresh fixture, one per cut inside a
+    /// four-row group of three foreign events and one compensation event:
+    /// after the first, the second and the third row the store writes. Each
+    /// appends a local event, so "unchanged" is not "empty", and ingests an
+    /// unarmed control group of the same shape, which must land as three
+    /// appended and one compensation. Then it arms the fault and ingests the
+    /// armed group. The ingest must return `Err`. The log, head and watermark
+    /// must be as they were, and the store must hold none of the group's
+    /// events.
+    ///
+    /// On the ingest path a losing event and its compensation are one group,
+    /// so a cut between them is the state SY-2 forbids a reader to see. The
+    /// claim is SY-30's because SY-2 is frozen.
+    ///
+    /// # Rejects
+    ///
+    /// A store that decides the whole call and then writes it in separately
+    /// committed chunks; one that commits a group's foreign rows and its
+    /// compensation as two writes; one that rolls the group back and answers
+    /// `Ok`, so a runner advances past a group that never landed; and a
+    /// fixture whose arm does nothing. `tests/wrong_ingest_stores.rs` carries
+    /// all four. A store that absorbs every fault its fixture can arm, and
+    /// commits the group anyway, must decline the capability: this rule
+    /// requires the armed ingest to fail.
+    ///
+    /// # Does not reject
+    ///
+    /// A store that commits group by group, each group whole. That is SY-38's
+    /// mistake and its rule's to catch (every arm of `IngestError` means
+    /// nothing in the call was written), and this rule faults one group only.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-30 if the fixture cannot arm the fault, if the
+    /// control group is refused or miscounted, if the armed ingest returns
+    /// `Ok`, or if it leaves anything of the group behind.
+    pub async fn ingest_group_is_atomic_under_a_mid_group_fault<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        if let Some(reason) = F::MID_GROUP_FAULT.reason() {
+            return Ok(RuleOutcome::Skipped {
+                capability: "MID_GROUP_FAULT",
+                reason,
+            });
+        }
+        // Every cut inside a four-row group, so the rule does not depend on
+        // the store writing the compensation before or after the foreign rows.
+        for after in 1..=3 {
+            a_fault_inside_the_group(&open().await, after).await?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// SY-30, the clause rule 1's arrangement reports under.
+    const SY_30: &str = "SY-30";
+
+    /// One arrangement of SY-30's rule: a group of three foreign rows and one
+    /// compensation row, faulted while its `after + 1`-th row is written.
+    async fn a_fault_inside_the_group<F: IngestFixture>(
+        fixture: &F,
+        after: usize,
+    ) -> Result<(), Violation> {
+        let store = fixture.connect().await;
+        ensure_foreign(&store, &[ATOMIC_ORIGIN], SY_30)?;
+        append(&store, &[opaque(LOCAL, b"sy30-local", SY_30)?], SY_30).await?;
+        // The control: the same shape, unarmed, lands whole.
+        let control = [
+            shipped(
+                ATOMIC_ORIGIN,
+                1,
+                1_800_000_000_001,
+                b"sy30-control-1",
+                SY_30,
+            )?,
+            shipped(
+                ATOMIC_ORIGIN,
+                2,
+                1_800_000_000_002,
+                b"sy30-control-2",
+                SY_30,
+            )?,
+            shipped(
+                ATOMIC_ORIGIN,
+                3,
+                1_800_000_000_003,
+                b"sy30-control-3",
+                SY_30,
+            )?,
+        ];
+        let control_answer = [opaque(COMPENSATED, b"sy30-control-compensation", SY_30)?];
+        let landed = ingest(
+            &store,
+            &[IngestGroup::new(&control, &control_answer)],
+            SY_30,
+        )
+        .await?;
+        ensure_counts(landed, (3, 0, 1), "the unarmed control group", SY_30)?;
+
+        let armed = [
+            shipped(ATOMIC_ORIGIN, 4, 1_800_000_000_004, b"sy30-armed-1", SY_30)?,
+            shipped(ATOMIC_ORIGIN, 5, 1_800_000_000_005, b"sy30-armed-2", SY_30)?,
+            shipped(ATOMIC_ORIGIN, 6, 1_800_000_000_006, b"sy30-armed-3", SY_30)?,
+        ];
+        let answer = [opaque(COMPENSATED, b"sy30-armed-compensation", SY_30)?];
+        let before = observe(&store, SY_30).await?;
+        fixture.arm_mid_group_fault(after).await?;
+
+        let outcome = store.ingest(&[IngestGroup::new(&armed, &answer)]).await;
+
+        let row = after.saturating_add(1);
+        ensure(outcome.is_err(), SY_30, || {
+            format!(
+                "the fixture armed a fault at row {row} of a four-row group and the ingest \
+                 returned Ok; a fault that never fires shows nothing about what a failed group \
+                 leaves, so a store that absorbs every fault must decline MID_GROUP_FAULT"
+            )
+        })?;
+        ensure_unchanged(
+            &store,
+            &before,
+            &format!("an ingest faulted at row {row} of one group"),
+            SY_30,
+        )
+        .await?;
+        for event in &armed {
+            ensure(!holds(&store, event.id, SY_30).await?, SY_30, || {
+                format!(
+                    "an ingest faulted at row {row} of one group left {} held; a group lands \
+                     whole or not at all",
+                    event.id
+                )
+            })?;
+        }
+        Ok(())
+    }
+
+    /// SY-18: a store holds **every** event an ingest writes to the
+    /// per-event ceilings it declares, not the head of each group, and an
+    /// event over one refuses the whole call.
+    ///
+    /// SY-18 says an event that cannot land is discovered at ingest, so the
+    /// refusal has to be a true one: [`IngestError::ExceedsStoreLimit`]
+    /// naming the limit and the magnitude, class [`FailureClass::Park`], with
+    /// nothing written. The rule reads the ceilings from the fixture's
+    /// [`MAX_EVENT_DATA_LEN`](IngestFixture::MAX_EVENT_DATA_LEN),
+    /// [`MAX_TAGS_PER_EVENT`](IngestFixture::MAX_TAGS_PER_EVENT) and
+    /// [`MAX_METADATA_LEN`](IngestFixture::MAX_METADATA_LEN), and for each
+    /// declared one, on a fresh fixture, after one local event:
+    ///
+    /// 1. **The control.** Two groups, the second carrying an event exactly
+    ///    at the ceiling behind its head and a compensation whose second event
+    ///    is exactly at it too, land as three appended and two compensations,
+    ///    each sized event found by its bytes.
+    /// 2. **Over, in the foreign events.** Two groups, the second's second
+    ///    event one over the ceiling: refused, the log, head and watermark as
+    ///    they were, and none of the three events held.
+    /// 3. **Over, in the compensation.** One group whose compensation's second
+    ///    event is one over: refused in the same way.
+    ///
+    /// A ceiling at or above [`MAX_PROVOKED_TAGS`]
+    /// tags or [`MAX_PROVOKED_BATCH_BYTES`]
+    /// bytes is not exercised, because the over-ceiling event is allocated
+    /// whole (H-13). A fixture that leaves the rule nothing to exercise is
+    /// reported [`Skipped`](RuleOutcome::Skipped) with
+    /// [`NO_PER_EVENT_LIMITS`].
+    ///
+    /// # Rejects
+    ///
+    /// A store that holds only each group's first event to its ceilings; one
+    /// that never checks the compensation it writes itself; and one that
+    /// refuses an event exactly at a ceiling, which only the control sees.
+    /// `tests/wrong_ingest_stores.rs` carries all three.
+    ///
+    /// # Does not reject
+    ///
+    /// A head-only check of the store's own identity. That is SY-38's rule's,
+    /// whose unheld claim already sits behind a group's head, so a mutant
+    /// that checked only each group's head for it would fail that rule too.
+    /// Nor the batch limit, which is `Split`, not a fact about one event.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-18 if the control is refused or miscounted, or if
+    /// an over-ceiling call is accepted, refused as anything but that limit
+    /// and magnitude or with a class other than `Park`, or leaves anything
+    /// behind. The wrong-arm message cites VT-25.
+    pub async fn ingest_validates_every_event_not_the_head<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let declared = [
+            (
+                StoreLimit::EventDataLen,
+                F::MAX_EVENT_DATA_LEN,
+                MAX_PROVOKED_BATCH_BYTES,
+            ),
+            (
+                StoreLimit::TagsPerEvent,
+                F::MAX_TAGS_PER_EVENT,
+                MAX_PROVOKED_TAGS,
+            ),
+            (
+                StoreLimit::MetadataLen,
+                F::MAX_METADATA_LEN,
+                MAX_PROVOKED_BATCH_BYTES,
+            ),
+        ];
+        let mut exercised = false;
+        for (limit, ceiling, cap) in declared {
+            // Below the cap, so one over the ceiling is still inside it (H-13).
+            let Some(ceiling) = ceiling.filter(|ceiling| *ceiling < cap) else {
+                continue;
+            };
+            every_event_is_held_to(&open().await, limit, ceiling).await?;
+            exercised = true;
+        }
+        Ok(if exercised {
+            RuleOutcome::Ran
+        } else {
+            RuleOutcome::Skipped {
+                capability: NO_PER_EVENT_LIMITS,
+                reason: NO_PER_EVENT_LIMITS_REASON,
+            }
+        })
+    }
+
+    /// SY-18, the clause rule 2's arrangements report under.
+    const SY_18: &str = "SY-18";
+
+    /// SY-18's arrangements for one declared `ceiling` on `limit`.
+    async fn every_event_is_held_to<F: IngestFixture>(
+        fixture: &F,
+        limit: StoreLimit,
+        ceiling: usize,
+    ) -> Result<(), Violation> {
+        let over = ceiling
+            .checked_add(1)
+            .ok_or_else(|| Violation::new(SY_18, "the declared ceiling has no size past it"))?;
+        let store = fixture.connect().await;
+        ensure_foreign(&store, &[CEILING_ORIGIN], SY_18)?;
+        append(&store, &[opaque(LOCAL, b"sy18-local", SY_18)?], SY_18).await?;
+
+        // The control: the same shapes, each sized event exactly at the
+        // ceiling, land. Found by their bytes, never their identities.
+        let head_group = [shipped(
+            CEILING_ORIGIN,
+            1,
+            1_800_000_000_001,
+            b"sy18-control-1",
+            SY_18,
+        )?];
+        let at_ceiling = [
+            shipped(
+                CEILING_ORIGIN,
+                2,
+                1_800_000_000_002,
+                b"sy18-control-2",
+                SY_18,
+            )?,
+            sized_shipped(CEILING_ORIGIN, 3, AT_FOREIGN, limit, ceiling)?,
+        ];
+        let at_answer = [
+            opaque(COMPENSATED, b"sy18-control-compensation", SY_18)?,
+            sized(AT_COMPENSATION, limit, ceiling)?,
+        ];
+        let landed = ingest(
+            &store,
+            &[
+                IngestGroup::new(&head_group, &[]),
+                IngestGroup::new(&at_ceiling, &at_answer),
+            ],
+            SY_18,
+        )
+        .await?;
+        ensure_counts(
+            landed,
+            (3, 0, 2),
+            "two groups whose sized events are exactly at the ceiling",
+            SY_18,
+        )?;
+        let log = read_all(&store, SY_18).await?;
+        held_once(&log, &at_ceiling[1].event, SY_18)?;
+        held_once(&log, &at_answer[1], SY_18)?;
+        let before = observe(&store, SY_18).await?;
+
+        // A: an event over the ceiling behind the second group's head, so a
+        // store that holds only each group's first event to it writes it.
+        let first = [shipped(
+            CEILING_ORIGIN,
+            4,
+            1_800_000_000_004,
+            b"sy18-a-1",
+            SY_18,
+        )?];
+        let second = [
+            shipped(CEILING_ORIGIN, 5, 1_800_000_000_005, b"sy18-a-2", SY_18)?,
+            sized_shipped(CEILING_ORIGIN, 6, OVER_FOREIGN, limit, over)?,
+        ];
+        let refused = store
+            .ingest(&[
+                IngestGroup::new(&first, &[]),
+                IngestGroup::new(&second, &[]),
+            ])
+            .await;
+        let what = "a group whose foreign event is one over the ceiling";
+        ensure_exceeds(refused, limit, over, what)?;
+        ensure_unchanged(&store, &before, what, SY_18).await?;
+        for id in [first[0].id, second[0].id, second[1].id] {
+            ensure(!holds(&store, id, SY_18).await?, SY_18, || {
+                format!("{what} was refused and left {id} held")
+            })?;
+        }
+
+        // B: an event over the ceiling behind the head of a group's
+        // compensation, which the store writes itself.
+        let lone = [shipped(
+            CEILING_ORIGIN,
+            7,
+            1_800_000_000_007,
+            b"sy18-b-1",
+            SY_18,
+        )?];
+        let answer = [
+            opaque(COMPENSATED, b"sy18-b-compensation", SY_18)?,
+            sized(OVER_COMPENSATION, limit, over)?,
+        ];
+        let refused = store.ingest(&[IngestGroup::new(&lone, &answer)]).await;
+        let what = "a group whose compensation is one over the ceiling";
+        ensure_exceeds(refused, limit, over, what)?;
+        ensure_unchanged(&store, &before, what, SY_18).await?;
+        ensure(!holds(&store, lone[0].id, SY_18).await?, SY_18, || {
+            format!("{what} was refused and left {} held", lone[0].id)
+        })
+    }
+
+    /// What a sized event's bytes are filled with. Never parsed (SY-35), and
+    /// ASCII so a store that decodes a payload fails SY-12's rule and not this
+    /// one.
+    const FILLER: u8 = b'.';
+
+    // The event types that tell the rule's sized events apart, since their
+    // sized field is filler.
+    const AT_FOREIGN: EventType = EventType::from_static("CeilingAtForeign");
+    const AT_COMPENSATION: EventType = EventType::from_static("CeilingAtCompensation");
+    const OVER_FOREIGN: EventType = EventType::from_static("CeilingOverForeign");
+    const OVER_COMPENSATION: EventType = EventType::from_static("CeilingOverCompensation");
+
+    /// An event of `event_type` whose `limit` field measures `len` in that
+    /// limit's unit: `len` opaque bytes of data or metadata, or `len` distinct
+    /// tags. Nothing else is set, so no other ceiling is approached.
+    fn sized(event_type: EventType, limit: StoreLimit, len: usize) -> Result<Event, Violation> {
+        let invalid = |error: &dyn core::fmt::Display| {
+            Violation::new(SY_18, format!("the rule's own event is invalid: {error}"))
+        };
+        let data = if limit == StoreLimit::EventDataLen {
+            vec![FILLER; len]
+        } else {
+            Vec::new()
+        };
+        let event = Event::new(event_type, data).map_err(|error| invalid(&error))?;
+        match limit {
+            StoreLimit::EventDataLen => Ok(event),
+            StoreLimit::MetadataLen => Ok(event.with_metadata(vec![FILLER; len])),
+            StoreLimit::TagsPerEvent => {
+                let tags = (0..len)
+                    .map(|i| Tag::new(format!("t:{i}")))
+                    .collect::<Result<Tags, _>>()
+                    .map_err(|error| invalid(&error))?;
+                Ok(event.with_tags(tags))
+            }
+            // The batch limit is not about one event, and `StoreLimit` is
+            // `#[non_exhaustive]`: the rule only ever builds the three above.
+            _ => Err(Violation::new(
+                SY_18,
+                format!("the rule cannot size an event against the {limit} limit"),
+            )),
+        }
+    }
+
+    /// A foreign event from `origin` at origin `position`, sized by [`sized`].
+    fn sized_shipped(
+        origin: StoreId,
+        position: u64,
+        event_type: EventType,
+        limit: StoreLimit,
+        len: usize,
+    ) -> Result<ReplicatedEvent, Violation> {
+        let position = SequencePosition::new(position)
+            .ok_or_else(|| Violation::new(SY_18, "the rule's origin position is zero"))?;
+        Ok(ReplicatedEvent::new(
+            EventId::new(origin, position),
+            RecordedAt::from_millis(1_800_000_000_000),
+            sized(event_type, limit, len)?,
+        ))
+    }
+
+    /// `outcome` is the refusal of `len` against `limit`, and states `Park`.
+    fn ensure_exceeds<E: core::error::Error + Classify>(
+        outcome: Result<Ingested, IngestError<E>>,
+        limit: StoreLimit,
+        len: usize,
+        arrangement: &str,
+    ) -> Result<(), Violation> {
+        let error = match outcome {
+            Ok(ingested) => {
+                return Err(Violation::new(
+                    SY_18,
+                    format!(
+                        "the store accepted {arrangement} as {ingested:?}; it declares that \
+                         ceiling, so every event an ingest writes is held to it, not the head of \
+                         each group"
+                    ),
+                ));
+            }
+            Err(error) => error,
+        };
+        let named = match &error {
+            IngestError::ExceedsStoreLimit {
+                limit: refused,
+                len: measured,
+                ..
+            } => Some((*refused, *measured)),
+            _ => None,
+        };
+        ensure(named == Some((limit, len)), SY_18, || {
+            format!(
+                "{arrangement} was refused as `{error}`, not as the {limit} limit exceeded by \
+                 {len}; VT-25 makes a capacity refusal one a runner can tell from a retry"
+            )
+        })?;
+        ensure(error.class() == FailureClass::Park, SY_18, || {
+            format!(
+                "the refusal of {arrangement} states {:?}; a per-event ceiling is Park",
+                error.class()
+            )
+        })
+    }
+
     /// What a refused or skipped ingest must leave as it found it.
     #[derive(Debug, PartialEq)]
     struct Observed {
@@ -569,11 +1067,14 @@ pub mod ingest_rules {
         watermark: Watermark,
     }
 
-    async fn observe<S: EventStore + IngestStore>(store: &S) -> Result<Observed, Violation> {
+    async fn observe<S: EventStore + IngestStore>(
+        store: &S,
+        clause: &'static str,
+    ) -> Result<Observed, Violation> {
         Ok(Observed {
-            log: read_all(store, SY_38).await?,
-            head: head(store, SY_38).await?,
-            watermark: watermark(store, SY_38).await?,
+            log: read_all(store, clause).await?,
+            head: head(store, clause).await?,
+            watermark: watermark(store, clause).await?,
         })
     }
 
@@ -582,9 +1083,10 @@ pub mod ingest_rules {
         store: &S,
         before: &Observed,
         what: &str,
+        clause: &'static str,
     ) -> Result<(), Violation> {
-        let after = observe(store).await?;
-        ensure(after == *before, SY_38, || {
+        let after = observe(store, clause).await?;
+        ensure(after == *before, clause, || {
             format!(
                 "{what} changed the store: it held {} events at head {:?} before and holds {} at \
                  head {:?} after, or its watermark moved",
@@ -825,6 +1327,12 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- An unheld own identity stops the ingest (SY-38) ------------
             an_unheld_own_identity_stops_the_ingest,
+
+            // --- A group lands whole under a fault (SY-30) ------------------
+            ingest_group_is_atomic_under_a_mid_group_fault,
+
+            // --- Every event is held to the declared ceilings (SY-18) -------
+            ingest_validates_every_event_not_the_head,
         }
     };
 }
@@ -927,4 +1435,45 @@ fn no_orphan_ingest_rules() {
         missing.is_empty(),
         "these rules are registered but not declared in `ingest_suite.rs`: {missing:?}"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use core::future::Future;
+
+    use happenstance_testkit::{RuleOutcome, block_on};
+
+    use super::{MAX_PROVOKED_TAGS, NO_PER_EVENT_LIMITS, NO_PER_EVENT_LIMITS_REASON, ingest_rules};
+    use crate::{IngestFixture, MemoryIngestFixture, MemoryIngestHandle};
+
+    /// The oracle, declaring a tag ceiling at the rule's cap and nothing else.
+    struct TagsAtTheCap(MemoryIngestFixture);
+
+    impl IngestFixture for TagsAtTheCap {
+        type Store = MemoryIngestHandle;
+        const MAX_TAGS_PER_EVENT: Option<usize> = Some(MAX_PROVOKED_TAGS);
+
+        fn connect(&self) -> impl Future<Output = Self::Store> {
+            self.0.connect()
+        }
+    }
+
+    /// A ceiling the rule would have to allocate past its cap to exceed is
+    /// not exercised (H-13), and a fixture with nothing else declared is a
+    /// skip, not a pass. The oracle enforces no ceiling, so an exercised one
+    /// would fail here.
+    #[test]
+    fn a_ceiling_at_the_cap_is_not_exercised() {
+        let outcome = block_on(ingest_rules::ingest_validates_every_event_not_the_head(
+            async || TagsAtTheCap(MemoryIngestFixture::new()),
+        ));
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(RuleOutcome::Skipped {
+                capability: NO_PER_EVENT_LIMITS,
+                reason: NO_PER_EVENT_LIMITS_REASON,
+            })
+        );
+    }
 }

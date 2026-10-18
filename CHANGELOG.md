@@ -132,6 +132,41 @@ not the same as what a user needed to be told.
   `happenstance-sqlite` gains only test code, which mounts the family on its
   ingest spike, and a path-only dev-dependency that cargo strips on publish.
 
+- **`happenstance-sync-testkit`: three rules from the LiveStore audit, in a
+  crate that is not published yet** (#242). Recorded here because CF-29 asks
+  every conformance rule for an entry. `IngestFixture` gains defaulted items, so
+  every fixture written before them still compiles: `MID_GROUP_FAULT` and
+  `arm_mid_group_fault`, and three per-event ceilings. `ingest_store_conformance!`
+  now also emits `every_declined_capability_is_stated_by_this_fixture`, CF-18's
+  check that a declined capability carries the fixture's own reason. The
+  in-memory oracle declines the fault and declares no ceiling, so it reports
+  the first two rules as skipped, with reasons; the faithful wrong store and the
+  SQLite ingest spike run them.
+
+  **`ingest_group_is_atomic_under_a_mid_group_fault`** (SY-30). The defect it
+  detects is a store that, with a fault armed between two rows of one ingest
+  group, keeps part of the group: one that writes a decided call in separately
+  committed chunks, and one that commits a group's foreign rows and its
+  compensation as two writes, which leaves a losing event with nothing
+  answering it. It also detects a store that rolls the group back and answers
+  `Ok`, and a fixture whose armed fault never fires.
+
+  **`ingest_validates_every_event_not_the_head`** (SY-18). The defect it detects
+  is a store that holds only the first event of each group to the per-event
+  ceilings it declares, so an event over one behind the head is written; one
+  that never checks the compensation it writes itself; and a ceiling off by
+  one, which refuses an event exactly at the declared limit.
+
+  **`ack_never_confirms_a_non_durable_event`** (SY-31). The defect it detects
+  is a peer that acknowledges a push on admission and commits it later, so a
+  handle dropped in between has confirmed events the peer never held. A
+  spoke's confirmation watermark then passes the lost write, and SY-24's
+  forwarding never offers it again. A peer that confirms nothing is reported
+  as skipped, not passed.
+
+  `happenstance-sqlite` gains only test code: its ingest fixture arms the fault
+  with an `AFTER INSERT` trigger and mirrors its data and tag ceilings.
+
 - **`happenstance-sync-testkit`: the replication suite's first two rules,
   in a crate that is not published yet** (#111). Recorded here because CF-29
   asks every conformance rule for an entry, not because anything ships: the
