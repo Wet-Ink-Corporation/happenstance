@@ -177,7 +177,11 @@ not the same as what a user needed to be told.
   the store's own identity is judged against the snapshot the transaction takes
   first, so a claim meeting a row this call wrote, or one another transaction
   committed during it, is refused. The ingest family is mounted on it and runs
-  in CI's `live-postgres` job; SY-38's rule reports its hidden-claim half as
+  in CI's `live-postgres` job, with #242's items stated as SQLite's fixture
+  states them: the fixture arms SY-30's fault with an `AFTER INSERT` row
+  trigger that counts the rows one transaction inserts, and mirrors the data
+  and tag ceilings append enforces, declaring no metadata ceiling because the
+  store imposes none. SY-30 and SY-18 run; SY-38's rule reports its hidden-claim half as
   skipped here, because a refused call has already consumed sequence values,
   and `a_claim_the_calls_own_compensation_would_hide_is_refused` and
   `a_claim_on_a_row_committed_during_the_call_is_refused` verify that half
