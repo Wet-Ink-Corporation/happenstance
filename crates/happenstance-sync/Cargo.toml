@@ -52,10 +52,10 @@ default = []
 # and something an application author can test their sync wiring against before
 # a real peer exists (`src/memory.rs` says why it is all three). Not a default: a
 # deployment never replicates to a peer in its own memory. It forwards
-# `happenstance-core/memory` because the in-memory ingest oracle planned beside
-# it for phase 13, a store this crate owns, is built over the same reference
-# types, and because an author testing against this peer wants the reference
-# store too.
+# `happenstance-core/memory` because the in-memory ingest oracle beside it,
+# `MemoryIngestStore` (#108), is built over the same reference types, and
+# because an author testing against this peer wants the reference store too.
+# The feature gates both: the peer and the store this crate owns.
 memory = ["happenstance-core/memory"]
 
 # The test targets that construct a `MemorySyncPeer`. Named rather than gated
