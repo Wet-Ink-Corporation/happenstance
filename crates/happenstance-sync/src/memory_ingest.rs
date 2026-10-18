@@ -3,7 +3,7 @@
 //!
 //! # Why it exists: three jobs, one type
 //!
-//! The three [`MemorySyncPeer`](crate::MemorySyncPeer) gives, one port over:
+//! The three jobs [`MemorySyncPeer`](crate::MemorySyncPeer) does, one port over:
 //!
 //! 1. **The oracle.** `happenstance-sync-testkit`'s ingest family is pointed at
 //!    this store first. A rule red here is a wrong rule, not a wrong store.
@@ -42,7 +42,7 @@ use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use happenstance_core::futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventId, MemoryEventStore,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventType, MemoryEventStore,
     MemoryStoreError, Query, ReadOptions, RecordedAt, SendEventStore, SequencePosition,
     SequencedEvent, StoreId,
 };
@@ -236,17 +236,30 @@ impl State {
     }
 }
 
+/// The type of the one empty event [`now`] has core's reference store stamp.
+/// It is never written to this store.
+const CLOCK_SAMPLE: EventType = EventType::from_static("ClockSample");
+
 /// The time this process's clock gives an event written now.
 ///
 /// Read through `MemoryEventStore::with_events`, which stamps what it is given
 /// with core's clock, so this store inherits core's answer on a target with no
 /// clock (zero) rather than a second copy of the `cfg` that gives it. The
-/// fallback is that same zero, and is not reached: a store built from one
+/// sample is an empty event of its own, not one of the caller's, so a write
+/// never copies a payload to learn the time.
+///
+/// Neither fallback is reached, and both are that same zero: `Event::new`
+/// cannot refuse an `EventType` already built, and a store built from one
 /// event holds one event.
-fn now(sample: &Event) -> RecordedAt {
-    MemoryEventStore::with_events(core::iter::once(sample.clone()))
-        .snapshot()
-        .first()
+fn now() -> RecordedAt {
+    Event::new(CLOCK_SAMPLE, happenstance_core::bytes::Bytes::new())
+        .ok()
+        .and_then(|sample| {
+            MemoryEventStore::with_events([sample])
+                .snapshot()
+                .into_iter()
+                .next()
+        })
         .map_or(RecordedAt::from_millis(0), |stamped| stamped.recorded_at)
 }
 
@@ -316,10 +329,10 @@ impl SendEventStore for MemoryIngestStore {
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
         // Emptiness first, above the lock (ES-20).
-        let Some(first) = events.first() else {
+        if events.is_empty() {
             return Err(AppendError::NoEvents);
-        };
-        let recorded_at = now(first);
+        }
+        let recorded_at = now();
 
         let mut state = self.write_guard();
         if let Some(condition) = condition {
@@ -374,10 +387,11 @@ impl SendIngestStore for MemoryIngestStore {
     ) -> Result<Ingested, IngestError<Self::Error>> {
         // Stamped outside the lock, and only when a group carries compensation
         // to stamp. With none, the time is never written.
-        let recorded_at = groups
-            .iter()
-            .find_map(|group| group.compensation.first())
-            .map_or(RecordedAt::from_millis(0), now);
+        let recorded_at = if groups.iter().any(|group| !group.compensation.is_empty()) {
+            now()
+        } else {
+            RecordedAt::from_millis(0)
+        };
 
         let mut state = self.write_guard();
         let (rows, counts) = state.stage(self.store_id, groups, recorded_at)?;
@@ -757,5 +771,36 @@ mod tests {
         }
         let Ok(stranger) = store.contains_event_id(id(ORIGIN, 99)).await;
         assert!(!stranger);
+    }
+
+    /// On a host with a clock, what this store writes itself is stamped with
+    /// it. A clock read that fell back to zero, as on a target with none,
+    /// would stamp 1970. Host-only, because `wasm32-unknown-unknown` has no
+    /// clock and zero is the right answer there.
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    #[tokio::test]
+    async fn what_this_store_writes_is_stamped_by_the_host_clock() {
+        let store = MemoryIngestStore::new();
+        store
+            .append(&[event("Local", "a")], None)
+            .await
+            .expect("an unconditioned append lands");
+        let sent = [shipped(id(ORIGIN, 1), 1, event("Shipped", "b"))];
+        let answer = [event("Compensated", "c")];
+        store
+            .ingest(&[IngestGroup::new(&sent, &answer)])
+            .await
+            .expect("a group and its compensation land");
+
+        for row in log(&store).await {
+            if row.id.store() == store.store_id() {
+                assert!(
+                    row.recorded_at.as_millis() > 0,
+                    "{} was stamped {}, not by the host clock",
+                    row.id,
+                    row.recorded_at
+                );
+            }
+        }
     }
 }
