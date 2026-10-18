@@ -985,6 +985,12 @@ mod tests {
             /// different port, and ES-35 is about `EventStore` durability.
             const MID_GROUP_FAULT: Capability = Capability::SUPPORTED;
 
+            /// Mirrored from the constants `check_ceilings` enforces on every
+            /// foreign and compensation event before the transaction opens.
+            /// No metadata ceiling: that check does not bound it.
+            const MAX_EVENT_DATA_LEN: Option<usize> = Some(SqliteEventStore::MAX_EVENT_DATA_LEN);
+            const MAX_TAGS_PER_EVENT: Option<usize> = Some(SqliteEventStore::MAX_TAGS_PER_EVENT);
+
             async fn connect(&self) -> Self::Store {
                 SqliteEventStore::open(&self.file.0)
                     .expect("a fresh temporary file opens as a store")

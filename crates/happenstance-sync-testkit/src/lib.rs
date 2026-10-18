@@ -172,7 +172,10 @@ pub use ingest_fixture::{
     IngestFixture, MemoryIngestFixture, MemoryIngestHandle, UNSTATED_MID_GROUP_FAULT,
     ingest_declensions_are_stated,
 };
-pub use ingest_suite::{NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, ingest_rules};
+pub use ingest_suite::{
+    MAX_PROVOKED_TAGS, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, NO_PER_EVENT_LIMITS,
+    NO_PER_EVENT_LIMITS_REASON, ingest_rules,
+};
 
 /// Generates the ingest conformance suite for a store adapter.
 ///

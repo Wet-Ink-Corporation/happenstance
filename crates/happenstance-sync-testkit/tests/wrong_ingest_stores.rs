@@ -19,10 +19,11 @@
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use happenstance_core::bytes::Bytes;
 use happenstance_core::futures_core::Stream;
 use happenstance_core::{
     AppendCondition, AppendError, ConditionViolated, Event, EventId, Query, ReadOptions,
-    RecordedAt, SendEventStore, SequencePosition, SequencedEvent, StoreId,
+    RecordedAt, SendEventStore, SequencePosition, SequencedEvent, StoreId, StoreLimit,
 };
 use happenstance_sync::{
     Classify, FailureClass, IngestError, IngestGroup, Ingested, ReplicatedEvent, SendIngestStore,
@@ -97,7 +98,24 @@ enum Mistake {
     /// `Ok` with the counts it would have written. The log is untouched, and
     /// a runner advances its watermark past a group that never landed.
     SwallowsTheFault,
+    /// SY-18's, the shape the `LiveStore` audit names, on the per-event check
+    /// SY-38's rule does not already own: hold only each group's first
+    /// foreign event to the ceilings, so a later event over one is written.
+    ChecksOnlyEachGroupsHead,
+    /// SY-18's second: hold the foreign events to the ceilings and never the
+    /// compensation, which the store writes itself.
+    LeavesCompensationUnchecked,
+    /// SY-18's third: refuse an event exactly at a ceiling, so the
+    /// declaration is one larger than what the store takes.
+    RefusesAtTheLimit,
 }
+
+/// The ceilings every [`WrongIngestStore`] declares and enforces, far above
+/// what any other rule writes: 15-byte strings, 6-byte undecodable payloads
+/// and one tag.
+const WRONG_MAX_DATA_LEN: usize = 512;
+const WRONG_MAX_TAGS: usize = 8;
+const WRONG_MAX_METADATA_LEN: usize = 512;
 
 /// The time this store stamps everything it writes itself.
 const ARRIVAL: RecordedAt = RecordedAt::from_millis(1_234_567_890_123);
@@ -220,6 +238,65 @@ impl WrongIngestStore {
             return Ok(counts);
         }
         Err(IngestError::Store(WrongError::Faulted))
+    }
+
+    /// Holds the events of `groups` to the declared ceilings before anything
+    /// is decided: every one, foreign and compensation, or the ones the
+    /// mistake checks.
+    fn check_ceilings(&self, groups: &[IngestGroup<'_>]) -> Result<(), IngestError<WrongError>> {
+        let foreign = if self.mistake == Mistake::ChecksOnlyEachGroupsHead {
+            1
+        } else {
+            usize::MAX
+        };
+        let compensation = if self.mistake == Mistake::LeavesCompensationUnchecked {
+            0
+        } else {
+            usize::MAX
+        };
+        for group in groups {
+            let checked = group
+                .events
+                .iter()
+                .take(foreign)
+                .map(|shipped| &shipped.event)
+                .chain(group.compensation.iter().take(compensation));
+            for event in checked {
+                self.within_ceilings(event)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// `event` is within every ceiling this store declares.
+    fn within_ceilings(&self, event: &Event) -> Result<(), IngestError<WrongError>> {
+        let over = |len: usize, ceiling: usize| {
+            if self.mistake == Mistake::RefusesAtTheLimit {
+                len >= ceiling
+            } else {
+                len > ceiling
+            }
+        };
+        let measured = [
+            (
+                StoreLimit::EventDataLen,
+                event.data().len(),
+                WRONG_MAX_DATA_LEN,
+            ),
+            (StoreLimit::TagsPerEvent, event.tags().len(), WRONG_MAX_TAGS),
+            (
+                StoreLimit::MetadataLen,
+                event.metadata().map_or(0, Bytes::len),
+                WRONG_MAX_METADATA_LEN,
+            ),
+        ];
+        match measured
+            .into_iter()
+            .find(|(_, len, ceiling)| over(*len, *ceiling))
+        {
+            Some((limit, len, _)) => Err(IngestError::exceeds_store_limit(limit, len)),
+            None => Ok(()),
+        }
     }
 
     /// Decides `groups` against `rows`: every group or none, except under
@@ -470,6 +547,7 @@ impl SendIngestStore for WrongIngestStore {
         &self,
         groups: &[IngestGroup<'_>],
     ) -> Result<Ingested, IngestError<Self::Error>> {
+        self.check_ceilings(groups)?;
         let mut rows = self.rows().map_err(IngestError::Store)?;
         let written = self.write_groups(&mut rows, groups)?;
         self.apply(&mut rows, written)
@@ -526,6 +604,12 @@ impl IngestFixture for WrongFixture {
     /// `ingest` commits through [`WrongIngestStore::apply`], which can fail
     /// at any row.
     const MID_GROUP_FAULT: Capability = Capability::SUPPORTED;
+
+    /// Mirrored from the constants the store enforces, so SY-18's ingest
+    /// rule runs against every mistake here.
+    const MAX_EVENT_DATA_LEN: Option<usize> = Some(WRONG_MAX_DATA_LEN);
+    const MAX_TAGS_PER_EVENT: Option<usize> = Some(WRONG_MAX_TAGS);
+    const MAX_METADATA_LEN: Option<usize> = Some(WRONG_MAX_METADATA_LEN);
 
     async fn connect(&self) -> Self::Store {
         WrongHandle(Arc::clone(&self.0))
@@ -803,5 +887,34 @@ fn ingest_group_is_atomic_under_a_mid_group_fault_fails_a_fixture_that_arms_noth
         &verdicts(async || WrongFixture::new(Mistake::ArmsNothing)),
         "ingest_group_is_atomic_under_a_mid_group_fault",
         "SY-30",
+    );
+}
+
+#[test]
+fn ingest_validates_every_event_not_the_head_fails_a_store_that_checks_only_each_groups_head() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::ChecksOnlyEachGroupsHead)),
+        "ingest_validates_every_event_not_the_head",
+        "SY-18",
+    );
+}
+
+#[test]
+fn ingest_validates_every_event_not_the_head_fails_a_store_that_leaves_compensation_unchecked() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::LeavesCompensationUnchecked)),
+        "ingest_validates_every_event_not_the_head",
+        "SY-18",
+    );
+}
+
+/// The declaration off by one: only the rule's control, which writes events
+/// exactly at each ceiling, can see it.
+#[test]
+fn ingest_validates_every_event_not_the_head_fails_a_store_that_refuses_at_the_limit() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::RefusesAtTheLimit)),
+        "ingest_validates_every_event_not_the_head",
+        "SY-18",
     );
 }
