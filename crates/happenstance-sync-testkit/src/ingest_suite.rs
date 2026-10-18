@@ -956,13 +956,13 @@ pub mod ingest_rules {
         })
     }
 
-    /// The event types that tell the rule's sized events apart, since their
-    /// sized field is filler.
     /// What a sized event's bytes are filled with. Never parsed (SY-35), and
     /// ASCII so a store that decodes a payload fails SY-12's rule and not this
     /// one.
     const FILLER: u8 = b'.';
 
+    // The event types that tell the rule's sized events apart, since their
+    // sized field is filler.
     const AT_FOREIGN: EventType = EventType::from_static("CeilingAtForeign");
     const AT_COMPENSATION: EventType = EventType::from_static("CeilingAtCompensation");
     const OVER_FOREIGN: EventType = EventType::from_static("CeilingOverForeign");

@@ -250,7 +250,7 @@ macro_rules! ingest_store_conformance {
             #[cfg_attr(target_arch = "wasm32", ::wasm_bindgen_test::wasm_bindgen_test)]
             fn every_declined_capability_is_stated_by_this_fixture()
             -> ::core::result::Result<(), $crate::Violation> {
-                $crate::__private::ingest_declensions_are_stated(__ingest_fixture)
+                $crate::ingest_declensions_are_stated(__ingest_fixture)
             }
 
             $crate::for_each_ingest_store_rule!($emit);
@@ -341,7 +341,7 @@ macro_rules! sync_peer_conformance {
 #[doc(hidden)]
 pub mod __private {
     pub use crate::fixture::SyncFixture;
-    pub use crate::ingest_fixture::{IngestFixture, ingest_declensions_are_stated};
+    pub use crate::ingest_fixture::IngestFixture;
     pub use crate::ingest_suite::ingest_rules;
     #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
     pub use crate::sync_model::rules as model_rules;
