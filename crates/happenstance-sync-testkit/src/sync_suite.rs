@@ -513,9 +513,11 @@ pub mod rules {
     /// failed the peer, and it reports a skip rather than a pass: naming
     /// [`LOG_REFUSED`] if the peer refused a log, with
     /// [`COUNT_LOG_REFUSED_REASON`] or [`BYTE_LOG_REFUSED_REASON`] saying which
-    /// (the count-cut one if both), and [`NO_SECOND_PAGE`] if it took both and
-    /// one pull carried each. The two need opposite fixes: a push that honours
-    /// the declared limits, and narrower limits.
+    /// (the count-cut one if both), and [`NO_SECOND_PAGE`] if it took every log
+    /// the rule wrote and one pull carried each. The two need opposite fixes: a
+    /// push that honours the declared limits, and narrower limits. One log that
+    /// paged is enough for the rule to have run, so a refusal of the other is
+    /// not reported over it.
     ///
     /// The bound on pulls — one more than the log has groups — is the suite's
     /// liveness guard, not SY-37's claim: a peer that ignores its token and
