@@ -8,6 +8,8 @@
 //! `a_claim_on_a_row_committed_during_the_call_is_refused` verify it here
 //! instead, on arrangements this store's allocation is shown to produce.
 
+use std::time::Duration;
+
 use happenstance_core::{EventId, SequencePosition, StoreId};
 use happenstance_sync::{Classify, FailureClass, IngestError, IngestGroup, ReplicatedEvent};
 use sqlx::PgPool;
@@ -289,28 +291,51 @@ async fn a_claim_on_a_row_committed_during_the_call_is_refused() {
     );
 }
 
-/// Polls until exactly one advisory lock request is waiting: the ingest,
-/// blocked in the gate. A round trip per poll, and no sleep.
+/// The ingest's backend, waiting on the gate: an ungranted advisory lock on
+/// the `bigint` key 108 (`classid` 0, `objid` 108, `objsubid` 1), in this
+/// database, held up in an `INSERT INTO event`. Narrowed so that another
+/// client's advisory wait on the server cannot satisfy it.
+const BLOCKED_GATE_SQL: &str = "SELECT count(*) FROM pg_locks AS l \
+     JOIN pg_stat_activity AS a ON a.pid = l.pid \
+     WHERE l.locktype = 'advisory' AND NOT l.granted \
+     AND l.classid = 0 AND l.objid = 108 AND l.objsubid = 1 \
+     AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database()) \
+     AND a.query LIKE 'INSERT INTO event%'";
+
+/// How long the ingest may take to reach the gate before the arrangement is
+/// declared wrong. Far above the few round trips it needs.
+const GATE_DEADLINE: Duration = Duration::from_secs(30);
+
+/// The pause between two polls, so the wait is bounded by time and does not
+/// spin the server.
+const GATE_POLL: Duration = Duration::from_millis(10);
+
+/// Polls until the ingest is blocked in the gate.
 ///
 /// # Panics
 ///
-/// After a thousand polls, because then the arrangement is wrong.
+/// After [`GATE_DEADLINE`], because then the arrangement is wrong.
 async fn wait_for_a_blocked_gate(pool: &PgPool) {
-    for _ in 0..1_000 {
-        let waiting: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted",
-        )
-        .fetch_one(pool)
-        .await
-        .expect("pg_locks reads");
-        if waiting == 1 {
-            return;
+    let blocked = async {
+        loop {
+            let waiting: i64 = sqlx::query_scalar(BLOCKED_GATE_SQL)
+                .fetch_one(pool)
+                .await
+                .expect("pg_locks and pg_stat_activity read");
+            if waiting == 1 {
+                return;
+            }
+            tokio::time::sleep(GATE_POLL).await;
         }
-    }
-    panic!(
-        "a broken arrangement, or a server not left quiet: the ingest never blocked on the \
-         advisory gate within a thousand polls"
-    );
+    };
+    tokio::time::timeout(GATE_DEADLINE, blocked)
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "a broken arrangement: the ingest never blocked on the advisory gate within \
+                 {GATE_DEADLINE:?}"
+            )
+        });
 }
 
 /// No permanent wedge after a refused claim, and a refused claim leaves no row
