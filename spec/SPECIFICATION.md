@@ -7601,7 +7601,7 @@ with a 128 KiB value cap, against an origin store that has already durably
 committed a 340 KB payload. The experiment is whether a capability declaration
 prevents the failure or merely relocates it. Owning phase: the phase that builds
 the two peer adapters.]`
-Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`).
+Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group.
 Cases: E2E-35.
 
 *Rejects:* the asynchronous form of the declaration, which is the shape a peer
@@ -8063,8 +8063,8 @@ event list.
 groups, requiring an atomicity the store cannot supply. Falsification test:
 express it as one append and show `EventStore::append`'s single condition is
 insufficient rather than merely inconvenient.]`
-Rule: `push_envelope_preserves_group_boundaries` (new,
-`happenstance-sync-testkit`).
+Rule: `push_envelope_preserves_group_boundaries` (new, `happenstance-sync-testkit`); for the store's half,
+`ingest_group_is_atomic_under_a_mid_group_fault` (`happenstance-sync-testkit`, #242): a fault between two rows of one `IngestGroup` leaves nothing of it.
 Cases: E2E-35, E2E-39.
 
 *Rejects:* the flat wire format, which is what a first implementation produces
@@ -8091,8 +8091,8 @@ written through `ProjectionStore` under a reserved `ProjectionId`.**
 transaction with a read model whose adapter is a different `ProjectionStore` than
 the sync runner's. Falsification test: name one and show the two stores cannot be
 the same handle.]`
-Rule: `watermark_advances_transactionally_with_a_read_model` (new,
-`happenstance-sync-testkit`).
+Rule: `watermark_advances_transactionally_with_a_read_model` (new, `happenstance-sync-testkit`); and
+`ack_never_confirms_a_non_durable_event` (`happenstance-sync-testkit`, #242), which holds the value this watermark advances to: an `Ack` confirms only what the far side still holds once the acking handle is gone.
 Cases: E2E-33, E2E-44.
 
 *Rejects:* two implementations and one plausible objection.
@@ -10349,7 +10349,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
 | SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` † | E2E-35, E2E-36, E2E-44 |
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
-| SY-18 | DEFERRED | `peer_declares_its_own_limits` | E2E-35 |
+| SY-18 | DEFERRED | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head` | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
 | SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-22 |
 | SY-21 | PROVISIONAL | `convergent_projection_cannot_observe_local_position` † | E2E-41 |
@@ -10361,8 +10361,8 @@ between them because its *shape* does not wait on a transport but its
 | SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-33, E2E-36, E2E-44, E2E-46 |
 | SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-44, E2E-46 |
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
-| SY-30 | PROVISIONAL | `push_envelope_preserves_group_boundaries` † | E2E-35, E2E-39 |
-| SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model` † | E2E-33, E2E-44 |
+| SY-30 | PROVISIONAL | `push_envelope_preserves_group_boundaries` †, `ingest_group_is_atomic_under_a_… | E2E-35, E2E-39 |
+| SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model` †, `ack_never_confirms_… | E2E-33, E2E-44 |
 | SY-32 | DEFERRED | `retention_gap_is_reported_not_silent` † | E2E-44, E2E-46, E2E-47 |
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |

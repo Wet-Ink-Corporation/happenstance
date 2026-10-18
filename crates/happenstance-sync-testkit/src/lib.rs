@@ -41,6 +41,7 @@
 //! | [`peer_declares_its_own_limits`](rules::peer_declares_its_own_limits) | SY-18 | a peer whose declared limits admit an event its ingest then refuses, or that declares below VT-21's floor |
 //! | [`every_refusal_states_its_class`](rules::every_refusal_states_its_class) | SY-36 | a peer whose errors all state one failure class, whatever the failure |
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
+//! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
 //!
 //! Each rule names a wrong implementation, and that implementation lives in
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
@@ -108,11 +109,31 @@
 //! | [`ingested_events_land_above_the_local_head`](ingest_rules::ingested_events_land_above_the_local_head) | SY-5 | an order-preserving merge, which hides an event below a checkpoint already read past |
 //! | [`dedupe_reaches_identity_without_decoding`](ingest_rules::dedupe_reaches_identity_without_decoding) | SY-12, SY-11 | content-keyed dedupe, and a compensation written again on redelivery |
 //! | [`an_unheld_own_identity_stops_the_ingest`](ingest_rules::an_unheld_own_identity_stops_the_ingest) | SY-38 | a dropped claim, a check of the batch's head only, a group-by-group commit, a claim hidden by the call's own compensation, and a refused held echo |
+//! | [`ingest_group_is_atomic_under_a_mid_group_fault`](ingest_rules::ingest_group_is_atomic_under_a_mid_group_fault) | SY-30 | a group written in chunks without a transaction, a compensation committed apart, a fault answered `Ok`, and an armed fault that never fires |
+//! | [`ingest_validates_every_event_not_the_head`](ingest_rules::ingest_validates_every_event_not_the_head) | SY-18 | per-event ceilings checked on each group's head only, a compensation never checked, and a ceiling off by one |
 //!
 //! Each wrong store lives in `tests/wrong_ingest_stores.rs`, where a test runs
 //! the whole family against it and asserts it fails exactly its rule. SY-33's
 //! rule, which must exempt SY-38's refusal (ADR-0098), is not written yet; the
 //! exemption is carried forward to it.
+//!
+//! ## Capabilities
+//!
+//! Two rules need the fixture's co-operation, and say so rather than pass when
+//! they do not get it. SY-30's needs
+//! [`MID_GROUP_FAULT`](IngestFixture::MID_GROUP_FAULT) and
+//! [`arm_mid_group_fault`](IngestFixture::arm_mid_group_fault), because only
+//! the adapter can fail its own write between two rows. SY-18's reads
+//! [`MAX_EVENT_DATA_LEN`](IngestFixture::MAX_EVENT_DATA_LEN),
+//! [`MAX_TAGS_PER_EVENT`](IngestFixture::MAX_TAGS_PER_EVENT) and
+//! [`MAX_METADATA_LEN`](IngestFixture::MAX_METADATA_LEN), each mirrored from
+//! the adapter's own constant. [`MemoryIngestFixture`] declines the fault in
+//! its own words and declares no ceiling, so it reports both rules skipped;
+//! the faithful store in `tests/wrong_ingest_stores.rs` and
+//! `happenstance-sqlite`'s ingest spike run them. The mount also emits
+//! `every_declined_capability_is_stated_by_this_fixture`, which fails a
+//! fixture whose declension is this crate's default
+//! ([`ingest_declensions_are_stated`]).
 //!
 //! # Harnesses
 //!

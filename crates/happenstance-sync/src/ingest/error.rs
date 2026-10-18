@@ -30,7 +30,7 @@ use crate::classify::{Classify, FailureClass};
 /// (SY-1, SY-33). [`UnheldOwnIdentity`](Self::UnheldOwnIdentity) is not such
 /// a refusal: it is about this store's own identity, not the event's.
 ///
-/// `#[non_exhaustive]`, so an arm added for per-event validation (#242) is not
+/// `#[non_exhaustive]`, so an arm added later, such as SY-33's, is not
 /// a breaking change. No bounds sit on the enum itself (they go on the
 /// `impl`s), so `IngestError<E>` is `Send` and `Sync` exactly when `E` is, and
 /// the Durable Object's `Rc`-holding error stays legal (ADR-0009).
