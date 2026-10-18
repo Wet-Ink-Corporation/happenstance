@@ -76,7 +76,7 @@ before this workspace noticed.
 (`xtask/src/spec_trace.rs:3601-3608`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
 directly, so a future regression — narrowing the prefix list back to exclude `PS` — fails the build
 rather than silently reopening the blind spot. The companion test,
-`the_replication_family_still_abstains_and_the_rest_do_not` (`:3623-3639`), asserts the reverse for
+`the_replication_family_still_abstains_and_the_rest_do_not` (`:3617-3633`), asserts the reverse for
 the one family still legitimately excluded: `has_suite("SY-1")` must stay `false`, because
 `happenstance-sync-testkit` carries only two of the family's rules (#111) and checking every `SY`
 rule name would report the unwritten rest as missing — exactly the false-positive noise the original
