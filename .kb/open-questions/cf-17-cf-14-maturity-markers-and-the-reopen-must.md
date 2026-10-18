@@ -92,7 +92,7 @@ jointly (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`). The 
 in-browser storage (memory, IndexedDB, OPFS), or a `workerd`-class run that observes a real Durable
 Object eviction. That answers the first question here: **the declaration MUST is not enough to
 lift CF-17.** Freezing it on the Neon and Postgres declarations
-(`crates/happenstance-neon/tests/support/mod.rs:133`, `crates/happenstance-postgres/tests/support/mod.rs:431`)
+(`crates/happenstance-neon/tests/support/mod.rs:133`, `crates/happenstance-postgres/tests/support/mod.rs:433`)
 was proposed and refuted on 2026-09-29, because Cloudflare's `REOPEN` is expressed over a
 `node:sqlite` shim rather than over Durable Object storage outliving its isolate.
 

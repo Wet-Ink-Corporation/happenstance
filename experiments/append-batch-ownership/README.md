@@ -195,8 +195,8 @@ wasm32 and `Instant` on the host. Quartiles are nearest-rank.
   statement cost there is not workerd's, and the ratio of statement cost to
   allocation cost is what the verdict rests on. `harness/workerd` could carry
   these arms; it has not.
-* **Postgres**, the second owning adapter (`insert_batch`'s `to_owned`/`to_vec`
-  at `crates/happenstance-postgres/src/event_store.rs:1028-1030`). It was optional
+* **Postgres**, the second owning adapter (`insert_statement`'s `to_owned`/`to_vec`
+  at `crates/happenstance-postgres/src/event_store.rs:1130-1135`). It was optional
   and was not taken. Whether sqlx 0.8's `QueryBuilder<'args>` can bind those
   columns borrowed, an internal fix with no signature change, is unchecked.
 * **SQLite and Neon**, which are null by construction: SQLite binds from the

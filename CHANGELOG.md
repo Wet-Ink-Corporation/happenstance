@@ -167,6 +167,24 @@ not the same as what a user needed to be told.
   `happenstance-sqlite` gains only test code: its ingest fixture arms the fault
   with an `AFTER INSERT` trigger and mirrors its data and tag ceilings.
 
+- **`happenstance-postgres`: the ingest port runs here too, in test code only**
+  (#108, part D). Nothing published moves. `src/event_store/ingest.rs`, under
+  `#[cfg(test)]`, implements `happenstance-sync`'s ingest port over the row
+  writer `append` uses: append's private `insert_batch` now builds its `INSERT`
+  through a shared writer, and ingest sends that same text with an
+  `ON CONFLICT` clause on the origin index added. It is VT-10's second run, and
+  the first against a store whose writers do not serialise. An unheld claim on
+  the store's own identity is judged against the snapshot the transaction takes
+  first, so a claim meeting a row this call wrote, or one another transaction
+  committed during it, is refused. The ingest family is mounted on it and runs
+  in CI's `live-postgres` job; SY-38's rule reports its hidden-claim half as
+  skipped here, because a refused call has already consumed sequence values,
+  and `a_claim_the_calls_own_compensation_would_hide_is_refused` and
+  `a_claim_on_a_row_committed_during_the_call_is_refused` verify that half
+  directly. No rule is added, so no defect sentence is owed. Two path-only
+  dev-dependencies, `happenstance-sync` and `happenstance-sync-testkit`, which
+  cargo strips on publish.
+
 - **`happenstance-sync-testkit`: the replication suite's first two rules,
   in a crate that is not published yet** (#111). Recorded here because CF-29
   asks every conformance rule for an entry, not because anything ships: the

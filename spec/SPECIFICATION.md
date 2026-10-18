@@ -4464,7 +4464,7 @@ today, four of them skeletons — `happenstance-sqlite` was the fifth until phas
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
 `crates/happenstance-sqlite/src/event_store.rs:1865`,
-`crates/happenstance-postgres/src/event_store.rs:485`,
+`crates/happenstance-postgres/src/event_store.rs:467`,
 `crates/happenstance-cloudflare/src/event_store.rs:1170` and
 `crates/happenstance-neon/src/event_store.rs:797`, `:1515`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
