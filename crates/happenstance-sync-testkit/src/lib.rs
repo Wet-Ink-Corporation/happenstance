@@ -156,7 +156,10 @@ pub use fixture::{
     SyncFixture, batch_over_the_limit, oversized_push_refusal,
 };
 pub use kv_capped::{KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError};
-pub use sync_suite::{NO_SECOND_PAGE, NO_SECOND_PAGE_REASON, rules};
+pub use sync_suite::{
+    BYTE_LOG_REFUSED_REASON, COUNT_LOG_REFUSED_REASON, LOG_REFUSED, NO_SECOND_PAGE,
+    NO_SECOND_PAGE_REASON, rules,
+};
 pub use violation::Violation;
 
 // The ingest family (#108), declared after the peer families so their lines

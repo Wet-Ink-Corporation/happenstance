@@ -194,9 +194,16 @@ not the same as what a user needed to be told.
   follows the tokens, and pulls once more after the first `Nothing`: that pull
   must be empty. A peer that never says `Nothing` passes, and a wrong `Events`
   count is not checked, because it is advisory. A peer that shows no page
-  boundary on either log — one pull carries it, or the peer refuses writes made
-  inside its own declaration, which is SY-18's to judge — is reported as a skip
-  naming `NO_SECOND_PAGE`, because the rule could not have failed it.
+  boundary on either log is reported as a skip, because the rule could not
+  have failed it, and the skip names its cause (#326): `NO_SECOND_PAGE` when
+  one pull carried each log, and `LOG_REFUSED` when the peer refused a push its
+  own declaration admits, with `COUNT_LOG_REFUSED_REASON` or
+  `BYTE_LOG_REFUSED_REASON` saying which log. The two need opposite fixes. The
+  byte-cut log goes one event to a push, each sized from `max_event_bytes`, so
+  refusing it is SY-18's to judge, and a peer that overstates only
+  `max_batch_bytes` takes it and pages. A refused count-cut log is a lie about
+  the batch limits, which no rule judges, so the skip is the only place it can
+  be reported, and only when the byte-cut log did not page.
 
 - **`peer_declares_its_own_limits`** (SY-18), in `happenstance-sync-testkit`
   (#121). The defect it detects is a peer whose declared `PeerLimits` admit an
