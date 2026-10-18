@@ -80,6 +80,9 @@ pub mod ingest_rules {
     /// SY-38's origin, for the foreign events around each claim.
     const CLAIM_ORIGIN: StoreId = StoreId::from_bytes([0x75; 16]);
 
+    /// SY-30's origin, for the group a fault is armed inside.
+    const ATOMIC_ORIGIN: StoreId = StoreId::from_bytes([0x77; 16]);
+
     /// VT-5: an ingested event keeps the [`EventId`] its origin minted, and
     /// VT-9's [`RecordedAt`] with it.
     ///
@@ -404,7 +407,7 @@ pub mod ingest_rules {
             shipped(CLAIM_ORIGIN, 2, 1_800_000_000_001, b"sy38-a-2", SY_38)?,
             forged(claim, b"sy38-a-claim")?,
         ];
-        let before = observe(&store).await?;
+        let before = observe(&store, SY_38).await?;
 
         let refused = store
             .ingest(&[
@@ -414,7 +417,13 @@ pub mod ingest_rules {
             .await;
 
         ensure_refused(refused, claim, "a claim three positions past the head")?;
-        ensure_unchanged(&store, &before, "an ingest refused for an unheld claim").await?;
+        ensure_unchanged(
+            &store,
+            &before,
+            "an ingest refused for an unheld claim",
+            SY_38,
+        )
+        .await?;
         for id in [first[0].id, second[0].id, claim] {
             ensure(!holds(&store, id, SY_38).await?, SY_38, || {
                 format!("the refused ingest left {id} held")
@@ -427,7 +436,7 @@ pub mod ingest_rules {
     async fn a_held_echo_is_a_skip<F: IngestFixture>(fixture: &F) -> Result<(), Violation> {
         let store = fixture.connect().await;
         append(&store, &[opaque(LOCAL, b"sy38-c-local", SY_38)?], SY_38).await?;
-        let before = observe(&store).await?;
+        let before = observe(&store, SY_38).await?;
         let held = before
             .log
             .last()
@@ -458,7 +467,7 @@ pub mod ingest_rules {
             )
         })?;
         ensure_counts(echoed, (0, 1, 0), "an echo of a held local event", SY_38)?;
-        ensure_unchanged(&store, &before, "an echo of a held event").await
+        ensure_unchanged(&store, &before, "an echo of a held event", SY_38).await
     }
 
     /// SY-38's third arrangement: the claim the call's own compensation would
@@ -482,7 +491,7 @@ pub mod ingest_rules {
             shipped(CLAIM_ORIGIN, 12, 1_800_000_000_012, b"sy38-b-2", SY_38)?,
             forged(claimed, b"sy38-b-claim")?,
         ];
-        let before = observe(&store).await?;
+        let before = observe(&store, SY_38).await?;
 
         let refused = store
             .ingest(&[
@@ -496,7 +505,13 @@ pub mod ingest_rules {
             claimed,
             "a claim on the position the call's compensation takes",
         )?;
-        ensure_unchanged(&store, &before, "an ingest refused for a hidden claim").await?;
+        ensure_unchanged(
+            &store,
+            &before,
+            "an ingest refused for a hidden claim",
+            SY_38,
+        )
+        .await?;
 
         ingest(&store, &[IngestGroup::new(&first, &answer)], SY_38).await?;
         let log = read_all(&store, SY_38).await?;
@@ -561,6 +576,152 @@ pub mod ingest_rules {
         })
     }
 
+    /// SY-30: an [`IngestGroup`] lands whole or not at all, even when the
+    /// store fails between two of its rows.
+    ///
+    /// SY-30 rejects a receiver that, after a crash mid-ingest, holds four
+    /// events of a seven-event batch. A conformant store decides every refusal
+    /// before it writes, so the case no other rule reaches is a fault inside
+    /// the write, and only the adapter can inject one:
+    /// [`IngestFixture::MID_GROUP_FAULT`]. A fixture that declines it is
+    /// reported [`Skipped`](RuleOutcome::Skipped) with its stated reason.
+    ///
+    /// Three arrangements, each on a fresh fixture, one per cut inside a
+    /// four-row group of three foreign events and one compensation event:
+    /// after the first, the second and the third row the store writes. Each
+    /// appends a local event, so "unchanged" is not "empty", and ingests an
+    /// unarmed control group of the same shape, which must land as three
+    /// appended and one compensation. Then it arms the fault and ingests the
+    /// armed group. The ingest must return `Err`. The log, head and watermark
+    /// must be as they were, and the store must hold none of the group's
+    /// events.
+    ///
+    /// On the ingest path a losing event and its compensation are one group,
+    /// so a cut between them is the state SY-2 forbids a reader to see. The
+    /// claim is SY-30's because SY-2 is frozen.
+    ///
+    /// # Rejects
+    ///
+    /// A store that decides the whole call and then writes it in separately
+    /// committed chunks; one that commits a group's foreign rows and its
+    /// compensation as two writes; one that rolls the group back and answers
+    /// `Ok`, so a runner advances past a group that never landed; and a
+    /// fixture whose arm does nothing. `tests/wrong_ingest_stores.rs` carries
+    /// all four. A store that absorbs every fault its fixture can arm, and
+    /// commits the group anyway, must decline the capability: this rule
+    /// requires the armed ingest to fail.
+    ///
+    /// # Does not reject
+    ///
+    /// A store that commits group by group, each group whole. That is SY-38's
+    /// mistake and its rule's to catch (every arm of `IngestError` means
+    /// nothing in the call was written), and this rule faults one group only.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-30 if the fixture cannot arm the fault, if the
+    /// control group is refused or miscounted, if the armed ingest returns
+    /// `Ok`, or if it leaves anything of the group behind.
+    pub async fn ingest_group_is_atomic_under_a_mid_group_fault<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        if let Some(reason) = F::MID_GROUP_FAULT.reason() {
+            return Ok(RuleOutcome::Skipped {
+                capability: "MID_GROUP_FAULT",
+                reason,
+            });
+        }
+        // Every cut inside a four-row group, so the rule does not depend on
+        // the store writing the compensation before or after the foreign rows.
+        for after in 1..=3 {
+            a_fault_inside_the_group(&open().await, after).await?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// SY-30, the clause rule 1's arrangement reports under.
+    const SY_30: &str = "SY-30";
+
+    /// One arrangement of SY-30's rule: a group of three foreign rows and one
+    /// compensation row, faulted while its `after + 1`-th row is written.
+    async fn a_fault_inside_the_group<F: IngestFixture>(
+        fixture: &F,
+        after: usize,
+    ) -> Result<(), Violation> {
+        let store = fixture.connect().await;
+        ensure_foreign(&store, &[ATOMIC_ORIGIN], SY_30)?;
+        append(&store, &[opaque(LOCAL, b"sy30-local", SY_30)?], SY_30).await?;
+        // The control: the same shape, unarmed, lands whole.
+        let control = [
+            shipped(
+                ATOMIC_ORIGIN,
+                1,
+                1_800_000_000_001,
+                b"sy30-control-1",
+                SY_30,
+            )?,
+            shipped(
+                ATOMIC_ORIGIN,
+                2,
+                1_800_000_000_002,
+                b"sy30-control-2",
+                SY_30,
+            )?,
+            shipped(
+                ATOMIC_ORIGIN,
+                3,
+                1_800_000_000_003,
+                b"sy30-control-3",
+                SY_30,
+            )?,
+        ];
+        let control_answer = [opaque(COMPENSATED, b"sy30-control-compensation", SY_30)?];
+        let landed = ingest(
+            &store,
+            &[IngestGroup::new(&control, &control_answer)],
+            SY_30,
+        )
+        .await?;
+        ensure_counts(landed, (3, 0, 1), "the unarmed control group", SY_30)?;
+
+        let armed = [
+            shipped(ATOMIC_ORIGIN, 4, 1_800_000_000_004, b"sy30-armed-1", SY_30)?,
+            shipped(ATOMIC_ORIGIN, 5, 1_800_000_000_005, b"sy30-armed-2", SY_30)?,
+            shipped(ATOMIC_ORIGIN, 6, 1_800_000_000_006, b"sy30-armed-3", SY_30)?,
+        ];
+        let answer = [opaque(COMPENSATED, b"sy30-armed-compensation", SY_30)?];
+        let before = observe(&store, SY_30).await?;
+        fixture.arm_mid_group_fault(after).await?;
+
+        let outcome = store.ingest(&[IngestGroup::new(&armed, &answer)]).await;
+
+        let row = after.saturating_add(1);
+        ensure(outcome.is_err(), SY_30, || {
+            format!(
+                "the fixture armed a fault at row {row} of a four-row group and the ingest \
+                 returned Ok; a fault that never fires shows nothing about what a failed group \
+                 leaves, so a store that absorbs every fault must decline MID_GROUP_FAULT"
+            )
+        })?;
+        ensure_unchanged(
+            &store,
+            &before,
+            &format!("an ingest faulted at row {row} of one group"),
+            SY_30,
+        )
+        .await?;
+        for event in &armed {
+            ensure(!holds(&store, event.id, SY_30).await?, SY_30, || {
+                format!(
+                    "an ingest faulted at row {row} of one group left {} held; a group lands \
+                     whole or not at all",
+                    event.id
+                )
+            })?;
+        }
+        Ok(())
+    }
+
     /// What a refused or skipped ingest must leave as it found it.
     #[derive(Debug, PartialEq)]
     struct Observed {
@@ -569,11 +730,14 @@ pub mod ingest_rules {
         watermark: Watermark,
     }
 
-    async fn observe<S: EventStore + IngestStore>(store: &S) -> Result<Observed, Violation> {
+    async fn observe<S: EventStore + IngestStore>(
+        store: &S,
+        clause: &'static str,
+    ) -> Result<Observed, Violation> {
         Ok(Observed {
-            log: read_all(store, SY_38).await?,
-            head: head(store, SY_38).await?,
-            watermark: watermark(store, SY_38).await?,
+            log: read_all(store, clause).await?,
+            head: head(store, clause).await?,
+            watermark: watermark(store, clause).await?,
         })
     }
 
@@ -582,9 +746,10 @@ pub mod ingest_rules {
         store: &S,
         before: &Observed,
         what: &str,
+        clause: &'static str,
     ) -> Result<(), Violation> {
-        let after = observe(store).await?;
-        ensure(after == *before, SY_38, || {
+        let after = observe(store, clause).await?;
+        ensure(after == *before, clause, || {
             format!(
                 "{what} changed the store: it held {} events at head {:?} before and holds {} at \
                  head {:?} after, or its watermark moved",
@@ -825,6 +990,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- An unheld own identity stops the ingest (SY-38) ------------
             an_unheld_own_identity_stops_the_ingest,
+
+            // --- A group lands whole under a fault (SY-30) ------------------
+            ingest_group_is_atomic_under_a_mid_group_fault,
         }
     };
 }

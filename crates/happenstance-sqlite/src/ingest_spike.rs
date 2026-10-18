@@ -947,7 +947,7 @@ mod tests {
     /// integration test. The unit tests above pin the spike's own behaviour;
     /// this is the bar every adapter that implements the port clears.
     mod ingest_family {
-        use happenstance_sync_testkit::IngestFixture;
+        use happenstance_sync_testkit::{IngestFixture, Violation};
         use happenstance_testkit::Capability;
 
         use super::TempFile;
@@ -988,6 +988,40 @@ mod tests {
             async fn connect(&self) -> Self::Store {
                 SqliteEventStore::open(&self.file.0)
                     .expect("a fresh temporary file opens as a store")
+            }
+
+            /// Installs an `AFTER INSERT` trigger that raises once the
+            /// `event` table holds more than `after` rows past what it holds
+            /// now, so the `after + 1`-th row the next ingest inserts aborts
+            /// its transaction. The trigger counts only rows actually
+            /// inserted, so a row the store skips is not counted, and it stays
+            /// for the fixture's life, which the arm's contract allows.
+            async fn arm_mid_group_fault(&self, after: usize) -> Result<(), Violation> {
+                let unarmable = |error: rusqlite::Error| {
+                    Violation::new(
+                        "SY-30",
+                        format!("the SQLite fixture could not arm its trigger: {error}"),
+                    )
+                };
+                let connection = self.file.inspect();
+                let held: i64 = connection
+                    .query_row("SELECT count(*) FROM event", [], |row| row.get(0))
+                    .map_err(unarmable)?;
+                // Integers only are formatted into the statement, so there is
+                // nothing to inject.
+                let ceiling = i64::try_from(after)
+                    .ok()
+                    .and_then(|after| held.checked_add(after))
+                    .ok_or_else(|| {
+                        Violation::new("SY-30", format!("a cut at row {after} overflows an i64"))
+                    })?;
+                connection
+                    .execute_batch(&format!(
+                        "CREATE TRIGGER mid_group_fault AFTER INSERT ON event \
+                         WHEN (SELECT count(*) FROM event) > {ceiling} \
+                         BEGIN SELECT RAISE(ABORT, 'the fixture armed a mid-group fault'); END;"
+                    ))
+                    .map_err(unarmable)
             }
         }
 
