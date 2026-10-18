@@ -17,11 +17,54 @@ pub const NO_SECOND_PAGE: &str = "PeerLimits::max_batch_events, PeerLimits::max_
 /// `happenstance_testkit::NO_CEILING_REASON` is, because it is the same
 /// sentence for every peer that earns it. What the skip leaves unverified is
 /// the whole of SY-37: the rule cannot fail a peer whose every answer fits in
-/// one pull, or that would not take the logs the rule sized from its limits.
+/// one pull.
+///
+/// A peer that refused one of the rule's logs earns [`LOG_REFUSED`] instead,
+/// because the fix is the opposite one: not narrower limits, but a push that
+/// honours the limits already declared.
 pub const NO_SECOND_PAGE_REASON: &str = "this peer showed no page boundary: one pull carried everything the rule \
-     wrote, or the peer refused the writes the rule sized from its declared \
-     limits (SY-18's subject), so a `Nothing` answered at a boundary could not \
-     be checked; SY-37 is unverified for this peer";
+     wrote, so a `Nothing` answered at a boundary could not be checked; narrow \
+     the declared batch limits to let the rule see a page. SY-37 is unverified \
+     for this peer";
+
+/// The `capability` SY-37's rule reports when the peer showed no page boundary
+/// and refused a push of one of its logs that its own declaration admits.
+///
+/// Distinct from [`NO_SECOND_PAGE`] because the two need opposite fixes: that
+/// one asks for smaller limits, this one for a peer that takes what its limits
+/// already say it takes. Which log was refused is in the reason:
+/// [`COUNT_LOG_REFUSED_REASON`] or [`BYTE_LOG_REFUSED_REASON`].
+pub const LOG_REFUSED: &str = "SyncPeer::push, within the peer's own PeerLimits";
+
+/// The reason SY-37's rule reports when the peer refused its count-cut log.
+///
+/// That log pushes at most [`PeerLimits::max_batch_events`] events of at most
+/// three payload bytes to a push, so a refusal is the peer stating batch
+/// limits it does not impose. **No rule in this suite judges that:** SY-18's
+/// rule reads the batch limits only to size its boundary event, and says in
+/// its own `# Does not reject` that a batch over them is SY-36's `Split`. So
+/// this skip is the only place the lie is reported. When both logs are
+/// refused this is the reason given, because SY-18's rule already reports the
+/// other refusal.
+///
+/// [`PeerLimits::max_batch_events`]: happenstance_sync::PeerLimits::max_batch_events
+pub const COUNT_LOG_REFUSED_REASON: &str = "this peer refused a push of the count-cut log, whose pushes carry at \
+     most `max_batch_events` events of at most three bytes each: its declared \
+     batch limits are not the limits it imposes, which no rule in this suite \
+     judges, and the log showed no page; SY-37 is unverified for this peer";
+
+/// The reason SY-37's rule reports when the peer refused its byte-cut log, and
+/// the count-cut log showed no page.
+///
+/// That log's events are sized from [`PeerLimits::max_event_bytes`], so a
+/// refusal is the peer imposing a smaller per-event limit than it declares:
+/// SY-18's subject, and `peer_declares_its_own_limits` judges it.
+///
+/// [`PeerLimits::max_event_bytes`]: happenstance_sync::PeerLimits::max_event_bytes
+pub const BYTE_LOG_REFUSED_REASON: &str = "this peer refused a push of the byte-cut log, whose events are sized from \
+     its declared `max_event_bytes`: it imposes a smaller limit than it \
+     declares (SY-18's subject, judged by its rule), and the count-cut log \
+     showed no page; SY-37 is unverified for this peer";
 
 /// The sync rules. See the [crate documentation](crate) for what each covers.
 ///
@@ -458,11 +501,21 @@ pub mod rules {
     /// peer that never says `Nothing` passes: it costs its runner the empty
     /// pull, and never a missed event.
     ///
-    /// A log the peer refuses to take is not built, and shows no page: a peer
-    /// refusing writes made inside its own declaration is SY-18's subject, and
-    /// its rule judges it. If neither log showed a second non-empty page, the
-    /// rule could not have failed the peer, and it reports a skip naming
-    /// [`NO_SECOND_PAGE`] rather than a pass.
+    /// A log the peer refuses to take is not built, and shows no page. Whose
+    /// failure the refusal is depends on the log. The byte-cut log's events are
+    /// sized from [`PeerLimits::max_event_bytes`], so refusing it is SY-18's
+    /// subject, and `peer_declares_its_own_limits` judges it. The count-cut
+    /// log is tiny events, at most `max_batch_events` to a push, so refusing it
+    /// is a lie about the batch limits, which that rule says it does not judge
+    /// and no other rule does either.
+    ///
+    /// If neither log showed a second non-empty page, the rule could not have
+    /// failed the peer, and it reports a skip rather than a pass: naming
+    /// [`LOG_REFUSED`] if the peer refused a log, with
+    /// [`COUNT_LOG_REFUSED_REASON`] or [`BYTE_LOG_REFUSED_REASON`] saying which
+    /// (the count-cut one if both), and [`NO_SECOND_PAGE`] if it took both and
+    /// one pull carried each. The two need opposite fixes: a push that honours
+    /// the declared limits, and narrower limits.
     ///
     /// The bound on pulls — one more than the log has groups — is the suite's
     /// liveness guard, not SY-37's claim: a peer that ignores its token and
@@ -470,6 +523,9 @@ pub mod rules {
     /// rules too.
     ///
     /// [`NO_SECOND_PAGE`]: crate::NO_SECOND_PAGE
+    /// [`LOG_REFUSED`]: crate::LOG_REFUSED
+    /// [`COUNT_LOG_REFUSED_REASON`]: crate::COUNT_LOG_REFUSED_REASON
+    /// [`BYTE_LOG_REFUSED_REASON`]: crate::BYTE_LOG_REFUSED_REASON
     ///
     /// # Rejects
     ///
@@ -502,31 +558,68 @@ pub mod rules {
     ) -> Result<RuleOutcome, Violation> {
         const CLAUSE: &str = "SY-37";
 
-        let paged_by_count = {
+        let by_count = {
             let fixture = open().await;
             let peer = fixture.connect().await;
-            let fill = Fill::cut_by_count(&peer.limits());
-            fill_with_readings(&peer, fill, CLAUSE).await?
-                && follow_tokens(&peer, fill.groups, CLAUSE).await?
+            write_log(&peer, Fill::cut_by_count(&peer.limits()), CLAUSE).await?
         };
 
         let fixture = open().await;
         let peer = fixture.connect().await;
-        let paged_by_bytes = match Fill::cut_by_bytes(&peer.limits()) {
-            Some(fill) => {
-                fill_with_readings(&peer, fill, CLAUSE).await?
-                    && follow_tokens(&peer, fill.groups, CLAUSE).await?
-            }
-            None => false,
+        let by_bytes = match Fill::cut_by_bytes(&peer.limits()) {
+            Some(fill) => write_log(&peer, fill, CLAUSE).await?,
+            // Not written: the count cuts first, or the log would pass a cap.
+            None => Log::NoPage,
         };
 
-        Ok(if paged_by_count || paged_by_bytes {
-            RuleOutcome::Ran
-        } else {
-            RuleOutcome::Skipped {
+        Ok(match (by_count, by_bytes) {
+            (Log::Paged, _) | (_, Log::Paged) => RuleOutcome::Ran,
+            // The count-cut refusal first: nothing else reports it, while
+            // SY-18's rule reports the byte-cut one.
+            (Log::Refused, _) => RuleOutcome::Skipped {
+                capability: crate::LOG_REFUSED,
+                reason: crate::COUNT_LOG_REFUSED_REASON,
+            },
+            (Log::NoPage, Log::Refused) => RuleOutcome::Skipped {
+                capability: crate::LOG_REFUSED,
+                reason: crate::BYTE_LOG_REFUSED_REASON,
+            },
+            (Log::NoPage, Log::NoPage) => RuleOutcome::Skipped {
                 capability: crate::NO_SECOND_PAGE,
                 reason: crate::NO_SECOND_PAGE_REASON,
-            }
+            },
+        })
+    }
+
+    /// What one log SY-37's rule wrote showed it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Log {
+        /// Built, and a second non-empty page was seen: a `Nothing` at a
+        /// boundary could have been a lie, and was checked.
+        Paged,
+        /// Built, or not written at all, and no page boundary was seen.
+        NoPage,
+        /// The peer refused a push of it, so it was not built.
+        Refused,
+    }
+
+    /// Whether the peer took every push of a log.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Pushed {
+        All,
+        Refused,
+    }
+
+    /// Writes `fill` to `peer` and, if the peer took it, follows its tokens.
+    async fn write_log<P: SyncPeer>(
+        peer: &P,
+        fill: Fill,
+        clause: &'static str,
+    ) -> Result<Log, Violation> {
+        Ok(match fill_with_readings(peer, fill, clause).await? {
+            Pushed::Refused => Log::Refused,
+            Pushed::All if follow_tokens(peer, fill.groups, clause).await? => Log::Paged,
+            Pushed::All => Log::NoPage,
         })
     }
 
@@ -624,7 +717,7 @@ pub mod rules {
         peer: &P,
         fill: Fill,
         clause: &'static str,
-    ) -> Result<bool, Violation> {
+    ) -> Result<Pushed, Violation> {
         let Fill {
             groups: count,
             payload,
@@ -655,14 +748,17 @@ pub mod rules {
             if groups.len() == chunk || reading == count {
                 let batch = PushBatch::new(core::mem::take(&mut groups));
                 // A refusal here is the peer disagreeing with its own
-                // declaration, which is SY-18's to judge. This log is simply
-                // not built, and the caller counts it as showing no page.
+                // declaration. Whose failure that is depends on the log: for
+                // the byte-cut log, sized from `max_event_bytes`, it is SY-18's
+                // to judge; for the count-cut log, tiny events at most
+                // `max_batch_events` to a push, it is a lie about batch limits
+                // that no rule judges. The caller reports which, as a skip.
                 if peer.push(&batch).await.is_err() {
-                    return Ok(false);
+                    return Ok(Pushed::Refused);
                 }
             }
         }
-        Ok(true)
+        Ok(Pushed::All)
     }
 
     /// Pulls from the start of the peer's log until it hands back an empty

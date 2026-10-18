@@ -21,10 +21,11 @@ use std::sync::Arc;
 use happenstance_core::{SequencePosition, StoreId};
 use happenstance_sync::{
     Ack, Classify, EventGroup, FailureClass, MemoryPeerError, MemoryResume, MemorySyncPeer,
-    PeerLimits, Pulled, PushBatch, SendSyncPeer, Waiting,
+    PeerLimits, Pulled, PushBatch, ReplicatedEvent, SendSyncPeer, Waiting,
 };
 use happenstance_sync_testkit::{
-    NO_SECOND_PAGE, NO_SECOND_PAGE_REASON, RefusalsOf, SyncFixture, oversized_push_refusal, rules,
+    BYTE_LOG_REFUSED_REASON, COUNT_LOG_REFUSED_REASON, LOG_REFUSED, NO_SECOND_PAGE,
+    NO_SECOND_PAGE_REASON, RefusalsOf, SyncFixture, oversized_push_refusal, rules,
 };
 use happenstance_testkit::{RuleOutcome, block_on};
 
@@ -70,7 +71,21 @@ enum Mistake {
     /// page as the end of the log. Honest when the event count cuts the page,
     /// and a lie when `max_batch_bytes` cuts it first.
     SaysNothingOnAShortPage,
+    /// A peer that declares more events to a push than it takes: it refuses
+    /// any push of more than [`TAKES_EVENTS`], whatever its declaration says.
+    /// SY-37's rule must report the refused count-cut log as refused, because
+    /// no other rule judges a lie about the batch limits.
+    TakesFewerEventsThanItDeclares,
+    /// A peer that declares larger events than it takes: it refuses any event
+    /// over half its declared `max_event_bytes`. SY-37's rule must report the
+    /// refused byte-cut log as refused, and as SY-18's subject.
+    TakesSmallerEventsThanItDeclares,
 }
+
+/// How many events a push to [`Mistake::TakesFewerEventsThanItDeclares`] may
+/// carry: the reference peer's minimum declaration, and fewer than the 257 the
+/// count-cut log puts in one push when the declaration admits them.
+const TAKES_EVENTS: usize = 128;
 
 /// The reference peer's error, classified through the wrong peer's mistake.
 #[derive(Debug)]
@@ -113,7 +128,9 @@ impl Classify for WrongError {
             | Mistake::DeclaresNoRefusal
             | Mistake::AcceptsTheOversizedPush
             | Mistake::AlwaysSaysNothingWaiting
-            | Mistake::SaysNothingOnAShortPage => self.inner.class(),
+            | Mistake::SaysNothingOnAShortPage
+            | Mistake::TakesFewerEventsThanItDeclares
+            | Mistake::TakesSmallerEventsThanItDeclares => self.inner.class(),
         }
     }
 }
@@ -239,6 +256,32 @@ impl SendSyncPeer for WrongPeer {
                 })
                 .await
                 .map_err(|error| self.wrap(error)),
+            // The reference peer's one refusal variant, so the class is its
+            // own `Split`; its message says bytes, and the count is in it.
+            Mistake::TakesFewerEventsThanItDeclares => {
+                let actual = batch.events().count();
+                if actual > TAKES_EVENTS {
+                    return Err(self.wrap(MemoryPeerError::BatchTooLarge {
+                        actual,
+                        limit: TAKES_EVENTS,
+                    }));
+                }
+                self.inner
+                    .push(batch)
+                    .await
+                    .map_err(|error| self.wrap(error))
+            }
+            Mistake::TakesSmallerEventsThanItDeclares => {
+                let limit = self.inner.limits().max_event_bytes / 2;
+                let over = batch.events().map(ReplicatedEvent::payload_len).max();
+                if let Some(actual) = over.filter(|&len| len > limit) {
+                    return Err(self.wrap(MemoryPeerError::BatchTooLarge { actual, limit }));
+                }
+                self.inner
+                    .push(batch)
+                    .await
+                    .map_err(|error| self.wrap(error))
+            }
         }
     }
 
@@ -558,6 +601,67 @@ fn nothing_waiting_means_the_next_pull_is_empty_skips_a_peer_that_never_pages() 
         Ok(RuleOutcome::Skipped {
             capability: NO_SECOND_PAGE,
             reason: NO_SECOND_PAGE_REASON,
+        })
+    );
+}
+
+/// SY-37's verdict alone against `mistake` behind a peer declaring `limits`.
+fn sy37_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'static str> {
+    block_on(rules::nothing_waiting_means_the_next_pull_is_empty(
+        async || WrongFixture::with_limits(mistake, limits.clone()),
+    ))
+    .map_err(|violation| violation.clause())
+}
+
+/// A peer that refuses the count-cut log has lied about its batch limits,
+/// which no rule judges. The skip says so, and not that its limits are too
+/// large to page: the fix is the opposite one.
+#[test]
+fn nothing_waiting_means_the_next_pull_is_empty_reports_a_refused_count_cut_log() {
+    // 1,000 events to a push and 64 MiB: the count-cut log goes in one push of
+    // 257, and the byte-cut log would need 1,025 groups, so it is not written.
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_events = 1_000;
+    limits.max_batch_bytes = 64 * 1024 * 1024;
+
+    assert_eq!(
+        sy37_against(Mistake::Faithful, &limits),
+        Ok(RuleOutcome::Skipped {
+            capability: NO_SECOND_PAGE,
+            reason: NO_SECOND_PAGE_REASON,
+        }),
+        "the control: the same limits, honoured, are a peer that never pages"
+    );
+    assert_eq!(
+        sy37_against(Mistake::TakesFewerEventsThanItDeclares, &limits),
+        Ok(RuleOutcome::Skipped {
+            capability: LOG_REFUSED,
+            reason: COUNT_LOG_REFUSED_REASON,
+        })
+    );
+}
+
+/// A peer that refuses the byte-cut log, where the count-cut log showed no
+/// page, is reported as refusing that log: SY-18's subject, not a limit too
+/// large to page.
+#[test]
+fn nothing_waiting_means_the_next_pull_is_empty_reports_a_refused_byte_cut_log() {
+    // 1,000 events and 128 KiB: the count-cut log's 257 tiny events fit one
+    // pull, and the byte-cut log is three 64 KiB events, two to a page.
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_events = 1_000;
+    limits.max_batch_bytes = 128 * 1024;
+
+    assert_eq!(
+        sy37_against(Mistake::Faithful, &limits),
+        Ok(RuleOutcome::Ran),
+        "the control: the same limits, honoured, page on the byte-cut log"
+    );
+    assert_eq!(
+        sy37_against(Mistake::TakesSmallerEventsThanItDeclares, &limits),
+        Ok(RuleOutcome::Skipped {
+            capability: LOG_REFUSED,
+            reason: BYTE_LOG_REFUSED_REASON,
         })
     );
 }
