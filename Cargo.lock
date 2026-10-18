@@ -984,6 +984,7 @@ dependencies = [
  "futures-core",
  "happenstance-core",
  "happenstance-sync",
+ "happenstance-sync-testkit",
  "happenstance-testkit",
  "rusqlite",
  "thiserror",

@@ -509,9 +509,14 @@ fn the_publication_pin_rejects_a_paraphrase_and_states_what_it_cannot_see() {
 ///
 /// `happenstance-testkit` for CF-32's release order, and `happenstance-sync`
 /// because it is `publish = false` and unclaimed: a version requirement on it
-/// could never resolve at publish time. Both reasons are in `Cargo.toml` beside
-/// the lines.
-const PATH_ONLY_DEV_DEPENDENCIES: [&str; 2] = ["happenstance-testkit", "happenstance-sync"];
+/// could never resolve at publish time. `happenstance-sync-testkit` for the
+/// second reason, which it shares. The reasons are in `Cargo.toml` beside the
+/// lines.
+const PATH_ONLY_DEV_DEPENDENCIES: [&str; 3] = [
+    "happenstance-testkit",
+    "happenstance-sync",
+    "happenstance-sync-testkit",
+];
 
 /// The `name` dependency lines this manifest declares, with their line numbers.
 ///
