@@ -23,11 +23,12 @@
 /// fails VT-5's rule and only that one.
 pub mod ingest_rules {
     use alloc::format;
+    use alloc::string::String;
     use alloc::vec::Vec;
 
     use happenstance_core::{
         Event, EventId, EventStore, EventType, Query, ReadOptions, RecordedAt, SequencePosition,
-        SequencedEvent, StoreId, collect,
+        SequencedEvent, StoreId, Tag, collect,
     };
     use happenstance_sync::{IngestGroup, IngestStore, Ingested, ReplicatedEvent, Watermark};
     use happenstance_testkit::RuleOutcome;
@@ -43,6 +44,14 @@ pub mod ingest_rules {
     const IDENTITY_ORIGIN: StoreId = StoreId::from_bytes([0x71; 16]);
     /// SY-5's origin.
     const TAIL_ORIGIN: StoreId = StoreId::from_bytes([0x72; 16]);
+    /// SY-12's two origins, which record one byte-identical fact each.
+    const DEDUPE_ORIGIN: StoreId = StoreId::from_bytes([0x73; 16]);
+    const TWIN_ORIGIN: StoreId = StoreId::from_bytes([0x74; 16]);
+
+    /// Bytes that are not UTF-8 and parse as no codec: a lone continuation
+    /// pair, a NUL and a truncated two-byte sequence. A store that had to
+    /// decode a payload to dedupe it fails on these (SY-35).
+    const UNDECODABLE: [u8; 5] = [0xFF, 0xFE, 0x00, 0xC3, 0x28];
 
     /// VT-5: an ingested event keeps the [`EventId`] its origin minted, and
     /// VT-9's [`RecordedAt`] with it.
@@ -200,6 +209,108 @@ pub mod ingest_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-12: a re-delivery is decided on the event's identity alone, which
+    /// the store reaches without decoding a byte of the payload. With SY-11's
+    /// store half: a group that was wholly a re-delivery writes no
+    /// compensation.
+    ///
+    /// Every payload and metadata here is bytes that are not UTF-8 and parse
+    /// as no codec. One group carries two events from one origin and a third
+    /// from a second origin whose type, tags, data, metadata and recorded time
+    /// are byte-identical to the first's, so only the identity tells them
+    /// apart, and one compensation event. The first delivery lands all three
+    /// and the compensation; the same batch again lands nothing, writes no
+    /// compensation and leaves the log and head as they were; and a batch of
+    /// one held event and one new one lands exactly the new one.
+    ///
+    /// # Rejects
+    ///
+    /// A store that dedupes on content, which drops the second origin's
+    /// identical fact as though it were the first again, and one that writes a
+    /// group's compensation again when the group was a re-delivery.
+    /// `tests/wrong_ingest_stores.rs` carries both.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-12 if the store refuses an ingest, miscounts one,
+    /// or holds other than what the three deliveries should leave.
+    pub async fn dedupe_reaches_identity_without_decoding<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-12";
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        ensure_foreign(&store, &[DEDUPE_ORIGIN, TWIN_ORIGIN], CLAUSE)?;
+        let first = undecodable(DEDUPE_ORIGIN, 1, b'1', CLAUSE)?;
+        let second = undecodable(DEDUPE_ORIGIN, 2, b'2', CLAUSE)?;
+        // The twin shares every byte with `first`, recorded time included:
+        // the duplication is the arrangement.
+        let twin = ReplicatedEvent::new(
+            EventId::new(TWIN_ORIGIN, first.id.position()),
+            first.recorded_at,
+            first.event.clone(),
+        );
+        let answer = [opaque(COMPENSATED, &undecodable_bytes(b'c'), CLAUSE)?];
+        let batch = [first, second.clone(), twin];
+        let group = [IngestGroup::new(&batch, &answer)];
+
+        let delivered = ingest(&store, &group, CLAUSE).await?;
+        ensure_counts(delivered, (3, 0, 1), "the first delivery", CLAUSE)?;
+        let log = read_all(&store, CLAUSE).await?;
+        let twins = log.iter().filter(|row| row.event == batch[0].event).count();
+        ensure(twins == 2, CLAUSE, || {
+            format!(
+                "two origins each sent one byte-identical event and the store holds {twins}; \
+                 only their identities differ, and both are new"
+            )
+        })?;
+        held_once(&log, &answer[0], CLAUSE)?;
+        let head_before = head(&store, CLAUSE).await?;
+
+        let again = ingest(&store, &group, CLAUSE).await?;
+        ensure_counts(again, (0, 3, 0), "the same batch again", CLAUSE)?;
+        ensure(read_all(&store, CLAUSE).await? == log, CLAUSE, || {
+            String::from("a re-delivery of a held batch changed the log")
+        })?;
+        let head_after = head(&store, CLAUSE).await?;
+        ensure(head_after == head_before, CLAUSE, || {
+            format!("a re-delivery moved the head from {head_before:?} to {head_after:?}")
+        })?;
+
+        let third = undecodable(DEDUPE_ORIGIN, 3, b'3', CLAUSE)?;
+        let partial = [second, third];
+        let landed = ingest(&store, &[IngestGroup::new(&partial, &[])], CLAUSE).await?;
+        ensure_counts(landed, (1, 1, 0), "one held event and one new one", CLAUSE)?;
+        let grown = read_all(&store, CLAUSE).await?;
+        held_once(&grown, &partial[1].event, CLAUSE)?;
+        // Identity, time and bytes, and not position: where the new event
+        // lands, and whether anything moved for it, is SY-5's to judge.
+        let rest: Vec<&SequencedEvent> = grown
+            .iter()
+            .filter(|row| row.event != partial[1].event)
+            .collect();
+        let kept = |before: &SequencedEvent| {
+            rest.iter().any(|after| {
+                after.id == before.id
+                    && after.recorded_at == before.recorded_at
+                    && after.event == before.event
+            })
+        };
+        ensure(
+            rest.len() == log.len() && log.iter().all(kept),
+            CLAUSE,
+            || {
+                format!(
+                    "a batch of one held event and one new one changed the log by more than the \
+                 new event: {} other events were held before and {} are now",
+                    log.len(),
+                    rest.len()
+                )
+            },
+        )?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// Every origin a rule uses is foreign to the store under test, or the
     /// rule would be testing SY-38 by accident.
     fn ensure_foreign<S: IngestStore>(
@@ -257,6 +368,64 @@ pub mod ingest_rules {
                 format!("the store refused an ingest it must accept: {error}"),
             )
         })
+    }
+
+    /// [`UNDECODABLE`] followed by `suffix`, so each event's bytes are its own.
+    fn undecodable_bytes(suffix: u8) -> Vec<u8> {
+        let mut bytes = UNDECODABLE.to_vec();
+        bytes.push(suffix);
+        bytes
+    }
+
+    /// A foreign event from `origin` whose data and metadata are both
+    /// undecodable, tagged so a content comparison has a tag to compare too.
+    fn undecodable(
+        origin: StoreId,
+        position: u64,
+        suffix: u8,
+        clause: &'static str,
+    ) -> Result<ReplicatedEvent, Violation> {
+        let mut event = shipped(
+            origin,
+            position,
+            1_800_000_000_000,
+            &undecodable_bytes(suffix),
+            clause,
+        )?;
+        event.event = event
+            .event
+            .with_metadata(undecodable_bytes(suffix.wrapping_add(0x80)))
+            .with_tags([Tag::from_static("item:undecodable")].into_iter().collect());
+        Ok(event)
+    }
+
+    /// `ingested` is `(appended, skipped, compensated)`, or a violation naming
+    /// `what` was ingested.
+    fn ensure_counts(
+        ingested: Ingested,
+        (appended, skipped, compensated): (usize, usize, usize),
+        what: &str,
+        clause: &'static str,
+    ) -> Result<(), Violation> {
+        let got = (ingested.appended, ingested.skipped, ingested.compensated);
+        ensure(got == (appended, skipped, compensated), clause, || {
+            format!(
+                "{what} was counted as (appended, skipped, compensated) {got:?}; it should be \
+                 {:?}",
+                (appended, skipped, compensated)
+            )
+        })
+    }
+
+    /// The store's head.
+    async fn head<S: EventStore>(
+        store: &S,
+        clause: &'static str,
+    ) -> Result<Option<SequencePosition>, Violation> {
+        store
+            .head()
+            .await
+            .map_err(|error| Violation::new(clause, format!("the store refused its head: {error}")))
     }
 
     /// Appends `events` locally, without a condition, and returns the last
@@ -350,6 +519,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- An ingested event lands at the tail (SY-5) -----------------
             ingested_events_land_above_the_local_head,
+
+            // --- Dedupe is by identity, never content (SY-12, SY-11) --------
+            dedupe_reaches_identity_without_decoding,
         }
     };
 }

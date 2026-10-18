@@ -46,6 +46,12 @@ enum Mistake {
     /// its origin numbered it and every later row is renumbered, so an event
     /// lands below a checkpoint a projection already read past.
     PlacesAtOriginPosition,
+    /// SY-12's: decide a re-delivery on content, so a second origin's
+    /// byte-identical fact is skipped as if it were the first one again.
+    DedupesOnContent,
+    /// SY-11's store half, through SY-12's rule: write a group's compensation
+    /// again when the whole group was a re-delivery.
+    RecompensatesOnRedelivery,
 }
 
 /// The time this store stamps everything it writes itself.
@@ -105,7 +111,9 @@ impl WrongIngestStore {
             let landed_before = counts.appended;
             for shipped in group.events {
                 let id = shipped.id;
-                if held.contains(&id) {
+                let same_content = self.mistake == Mistake::DedupesOnContent
+                    && working.iter().any(|row| row.stored.event == shipped.event);
+                if held.contains(&id) || same_content {
                     counts.skipped += 1;
                     continue;
                 }
@@ -141,7 +149,8 @@ impl WrongIngestStore {
                 }
                 counts.appended += 1;
             }
-            if counts.appended > landed_before {
+            if counts.appended > landed_before || self.mistake == Mistake::RecompensatesOnRedelivery
+            {
                 for event in group.compensation {
                     let position = next_position(&working);
                     let id = EventId::new(self.own, position);
@@ -457,5 +466,23 @@ fn ingested_events_land_above_the_local_head_fails_a_store_that_places_at_origin
         &verdicts(async || WrongFixture::new(Mistake::PlacesAtOriginPosition)),
         "ingested_events_land_above_the_local_head",
         "SY-5",
+    );
+}
+
+#[test]
+fn dedupe_reaches_identity_without_decoding_fails_a_store_that_dedupes_on_content() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::DedupesOnContent)),
+        "dedupe_reaches_identity_without_decoding",
+        "SY-12",
+    );
+}
+
+#[test]
+fn dedupe_reaches_identity_without_decoding_fails_a_store_that_recompensates_on_redelivery() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::RecompensatesOnRedelivery)),
+        "dedupe_reaches_identity_without_decoding",
+        "SY-12",
     );
 }
