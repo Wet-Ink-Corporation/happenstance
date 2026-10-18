@@ -3,6 +3,25 @@
 //! Private: what a caller reaches is [`ingest_rules`], re-exported at the
 //! crate root, and the macros, which `#[macro_export]` puts there regardless.
 
+/// The `capability` SY-38's rule reports when the store did not put the
+/// rule's compensation where its arrangement needed it.
+///
+/// Not a fixture constant, which is why it is a description rather than an
+/// identifier: SY-37's [`NO_SECOND_PAGE`](crate::NO_SECOND_PAGE) is the
+/// precedent. Gaps are legal, so a store may place a compensation anywhere
+/// above the head.
+pub const NO_HIDDEN_CLAIM: &str = "the position an ingest's compensation takes";
+
+/// The reason SY-38's rule reports when it could not arrange a claim hidden
+/// by the call's own compensation.
+///
+/// Written by this crate rather than by the fixture, because it is the same
+/// sentence for every store that earns it.
+pub const NO_HIDDEN_CLAIM_REASON: &str = "this store did not put the rule's compensation on the identity the rule \
+     claimed, two positions past the head it assigned, so a claim the call's own compensation would \
+     hide was never arranged; SY-38's unheld-claim half held, and its compensation-hidden half is \
+     unverified for this store";
+
 /// The ingest rules. See the [crate documentation](crate) for what each covers.
 ///
 /// Each rule is an async function taking `impl AsyncFn() -> F`, how to make a
@@ -30,8 +49,13 @@ pub mod ingest_rules {
         Event, EventId, EventStore, EventType, Query, ReadOptions, RecordedAt, SequencePosition,
         SequencedEvent, StoreId, Tag, collect,
     };
-    use happenstance_sync::{IngestGroup, IngestStore, Ingested, ReplicatedEvent, Watermark};
+    use happenstance_sync::{
+        Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested, ReplicatedEvent,
+        Watermark,
+    };
     use happenstance_testkit::RuleOutcome;
+
+    use super::{NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON};
 
     use crate::IngestFixture;
     use crate::violation::{Violation, ensure};
@@ -52,6 +76,9 @@ pub mod ingest_rules {
     /// pair, a NUL and a truncated two-byte sequence. A store that had to
     /// decode a payload to dedupe it fails on these (SY-35).
     const UNDECODABLE: [u8; 5] = [0xFF, 0xFE, 0x00, 0xC3, 0x28];
+
+    /// SY-38's origin, for the foreign events around each claim.
+    const CLAIM_ORIGIN: StoreId = StoreId::from_bytes([0x75; 16]);
 
     /// VT-5: an ingested event keeps the [`EventId`] its origin minted, and
     /// VT-9's [`RecordedAt`] with it.
@@ -113,13 +140,7 @@ pub mod ingest_rules {
             ensure(landed.event == event.event, CLAUSE, || {
                 format!("{} is held with bytes other than the ones sent", event.id)
             })?;
-            let held = store.contains_event_id(event.id).await.map_err(|error| {
-                Violation::new(
-                    CLAUSE,
-                    format!("the store refused contains_event_id: {error}"),
-                )
-            })?;
-            ensure(held, CLAUSE, || {
+            ensure(holds(&store, event.id, CLAUSE).await?, CLAUSE, || {
                 format!(
                     "the store holds {} and contains_event_id denies it",
                     event.id
@@ -309,6 +330,283 @@ pub mod ingest_rules {
             },
         )?;
         Ok(RuleOutcome::Ran)
+    }
+
+    /// SY-38: an event claiming the store's own identity at a position the
+    /// store did not hold when the call began refuses the **whole** call as
+    /// [`IngestError::UnheldOwnIdentity`], class [`FailureClass::Stop`], and
+    /// writes nothing. A held own identity is a re-delivery, and a skip.
+    ///
+    /// Three arrangements, each on a fresh fixture, and every claimed position
+    /// computed from the head the store assigned:
+    ///
+    /// 1. **The unheld claim.** After one local event, two groups arrive, and
+    ///    the claim, three positions past the head, is the second event of the
+    ///    second. The call is refused naming the claim; the log, head and
+    ///    watermark are as they were; and the store holds none of the three.
+    /// 2. **The held echo.** The store's own local event, sent back to it, is
+    ///    skipped, and nothing changes.
+    /// 3. **The claim the call's own compensation would hide.** The first group
+    ///    carries a compensation, which a dense store mints two positions past
+    ///    the head; the second group claims exactly that identity. The call is
+    ///    refused naming it, and writes nothing. The rule then ingests the
+    ///    first group alone to see where its compensation lands. A store that
+    ///    leaves a gap there was never shown the hidden claim, which the
+    ///    specification permits, so the rule reports
+    ///    [`Skipped`](RuleOutcome::Skipped) with [`NO_HIDDEN_CLAIM`] rather
+    ///    than a pass.
+    ///
+    /// This refusal is the one SY-33's rule, when it is written, must exempt
+    /// (ADR-0098): it is about the store's own identity, never about an
+    /// event's content.
+    ///
+    /// # Rejects
+    ///
+    /// A store that drops the claim as a re-delivery and writes the rest; one
+    /// that checks only the batch's first event; one that commits group by
+    /// group and keeps the groups before the claim; one that refuses a claim
+    /// only when it lands, so a claim meeting the call's own compensation is
+    /// skipped and two events share one identity; and one that refuses a held
+    /// echo too. `tests/wrong_ingest_stores.rs` carries all five, and the
+    /// conformant store that leaves a gap, which this rule must skip.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-38 if any arrangement's ingest is accepted, or
+    /// refused other than as the unheld claim it carries, or writes anything,
+    /// or if the echo is not a skip.
+    pub async fn an_unheld_own_identity_stops_the_ingest<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        an_unheld_claim_is_refused(&open().await).await?;
+        a_held_echo_is_a_skip(&open().await).await?;
+        a_claim_the_compensation_would_hide(&open().await).await
+    }
+
+    /// SY-38, the clause every arrangement below reports under.
+    const SY_38: &str = "SY-38";
+
+    /// SY-38's first arrangement: the unheld claim.
+    async fn an_unheld_claim_is_refused<F: IngestFixture>(fixture: &F) -> Result<(), Violation> {
+        let store = fixture.connect().await;
+        ensure_foreign(&store, &[CLAIM_ORIGIN], SY_38)?;
+        let head = append(&store, &[opaque(LOCAL, b"sy38-a-local", SY_38)?], SY_38).await?;
+        let claim = EventId::new(store.store_id(), positions_past(head, 3)?);
+        let first = [shipped(
+            CLAIM_ORIGIN,
+            1,
+            1_800_000_000_000,
+            b"sy38-a-1",
+            SY_38,
+        )?];
+        let second = [
+            shipped(CLAIM_ORIGIN, 2, 1_800_000_000_001, b"sy38-a-2", SY_38)?,
+            forged(claim, b"sy38-a-claim")?,
+        ];
+        let before = observe(&store).await?;
+
+        let refused = store
+            .ingest(&[
+                IngestGroup::new(&first, &[]),
+                IngestGroup::new(&second, &[]),
+            ])
+            .await;
+
+        ensure_refused(refused, claim, "a claim three positions past the head")?;
+        ensure_unchanged(&store, &before, "an ingest refused for an unheld claim").await?;
+        for id in [first[0].id, second[0].id, claim] {
+            ensure(!holds(&store, id, SY_38).await?, SY_38, || {
+                format!("the refused ingest left {id} held")
+            })?;
+        }
+        Ok(())
+    }
+
+    /// SY-38's second arrangement: the held echo.
+    async fn a_held_echo_is_a_skip<F: IngestFixture>(fixture: &F) -> Result<(), Violation> {
+        let store = fixture.connect().await;
+        append(&store, &[opaque(LOCAL, b"sy38-c-local", SY_38)?], SY_38).await?;
+        let before = observe(&store).await?;
+        let held = before
+            .log
+            .last()
+            .ok_or_else(|| Violation::new(SY_38, "the store holds nothing after an append"))?;
+        let own = store.store_id();
+        ensure(held.id.store() == own, SY_38, || {
+            format!(
+                "a local append was minted as {}, not under the store's own identity {own}",
+                held.id
+            )
+        })?;
+        let echo = [ReplicatedEvent::new(
+            held.id,
+            held.recorded_at,
+            held.event.clone(),
+        )];
+
+        let echoed = store.ingest(&[IngestGroup::new(&echo, &[])]).await;
+
+        let echoed = echoed.map_err(|error| {
+            Violation::new(
+                SY_38,
+                format!(
+                    "the store refused an echo of {}, which it holds: {error}; a held own \
+                     identity is a re-delivery, not a claim",
+                    held.id
+                ),
+            )
+        })?;
+        ensure_counts(echoed, (0, 1, 0), "an echo of a held local event", SY_38)?;
+        ensure_unchanged(&store, &before, "an echo of a held event").await
+    }
+
+    /// SY-38's third arrangement: the claim the call's own compensation would
+    /// hide, and the check that the store let the rule arrange it.
+    async fn a_claim_the_compensation_would_hide<F: IngestFixture>(
+        fixture: &F,
+    ) -> Result<RuleOutcome, Violation> {
+        let store = fixture.connect().await;
+        ensure_foreign(&store, &[CLAIM_ORIGIN], SY_38)?;
+        let head = append(&store, &[opaque(LOCAL, b"sy38-b-local", SY_38)?], SY_38).await?;
+        let claimed = EventId::new(store.store_id(), positions_past(head, 2)?);
+        let first = [shipped(
+            CLAIM_ORIGIN,
+            11,
+            1_800_000_000_011,
+            b"sy38-b-1",
+            SY_38,
+        )?];
+        let answer = [opaque(COMPENSATED, b"sy38-b-compensation", SY_38)?];
+        let second = [
+            shipped(CLAIM_ORIGIN, 12, 1_800_000_000_012, b"sy38-b-2", SY_38)?,
+            forged(claimed, b"sy38-b-claim")?,
+        ];
+        let before = observe(&store).await?;
+
+        let refused = store
+            .ingest(&[
+                IngestGroup::new(&first, &answer),
+                IngestGroup::new(&second, &[]),
+            ])
+            .await;
+
+        ensure_refused(
+            refused,
+            claimed,
+            "a claim on the position the call's compensation takes",
+        )?;
+        ensure_unchanged(&store, &before, "an ingest refused for a hidden claim").await?;
+
+        ingest(&store, &[IngestGroup::new(&first, &answer)], SY_38).await?;
+        let log = read_all(&store, SY_38).await?;
+        if held_once(&log, &answer[0], SY_38)?.id == claimed {
+            Ok(RuleOutcome::Ran)
+        } else {
+            Ok(RuleOutcome::Skipped {
+                capability: NO_HIDDEN_CLAIM,
+                reason: NO_HIDDEN_CLAIM_REASON,
+            })
+        }
+    }
+
+    /// The position `count` past `head`.
+    fn positions_past(head: SequencePosition, count: usize) -> Result<SequencePosition, Violation> {
+        (0..count).try_fold(head, |position, _| {
+            position
+                .next()
+                .ok_or_else(|| Violation::new(SY_38, "the store's head has no position past it"))
+        })
+    }
+
+    /// An event claiming `id`, which the rule chose, carrying `data`.
+    fn forged(id: EventId, data: &[u8]) -> Result<ReplicatedEvent, Violation> {
+        Ok(ReplicatedEvent::new(
+            id,
+            RecordedAt::from_millis(1_800_000_000_000),
+            opaque(LOCAL, data, SY_38)?,
+        ))
+    }
+
+    /// `outcome` is the refusal naming `claim`, and states the `Stop` class.
+    fn ensure_refused<E: core::error::Error + Classify>(
+        outcome: Result<Ingested, IngestError<E>>,
+        claim: EventId,
+        arrangement: &str,
+    ) -> Result<(), Violation> {
+        let error = match outcome {
+            Ok(ingested) => {
+                return Err(Violation::new(
+                    SY_38,
+                    format!(
+                        "the store accepted {arrangement} as {ingested:?}; {claim} claims its own \
+                         identity at a position it did not hold, so the call must write nothing"
+                    ),
+                ));
+            }
+            Err(error) => error,
+        };
+        let named = match &error {
+            IngestError::UnheldOwnIdentity { id, .. } => Some(*id),
+            _ => None,
+        };
+        ensure(named == Some(claim), SY_38, || {
+            format!("{arrangement} was refused as `{error}`, not as the unheld claim {claim}")
+        })?;
+        ensure(error.class() == FailureClass::Stop, SY_38, || {
+            format!(
+                "the refusal of {claim} states the class {:?}; an unheld own identity is Stop",
+                error.class()
+            )
+        })
+    }
+
+    /// What a refused or skipped ingest must leave as it found it.
+    #[derive(Debug, PartialEq)]
+    struct Observed {
+        log: Vec<SequencedEvent>,
+        head: Option<SequencePosition>,
+        watermark: Watermark,
+    }
+
+    async fn observe<S: EventStore + IngestStore>(store: &S) -> Result<Observed, Violation> {
+        Ok(Observed {
+            log: read_all(store, SY_38).await?,
+            head: head(store, SY_38).await?,
+            watermark: watermark(store, SY_38).await?,
+        })
+    }
+
+    /// The store's log, head and watermark are `before`'s after `what`.
+    async fn ensure_unchanged<S: EventStore + IngestStore>(
+        store: &S,
+        before: &Observed,
+        what: &str,
+    ) -> Result<(), Violation> {
+        let after = observe(store).await?;
+        ensure(after == *before, SY_38, || {
+            format!(
+                "{what} changed the store: it held {} events at head {:?} before and holds {} at \
+                 head {:?} after, or its watermark moved",
+                before.log.len(),
+                before.head,
+                after.log.len(),
+                after.head
+            )
+        })
+    }
+
+    /// Whether the store holds `id`.
+    async fn holds<S: EventStore>(
+        store: &S,
+        id: EventId,
+        clause: &'static str,
+    ) -> Result<bool, Violation> {
+        store.contains_event_id(id).await.map_err(|error| {
+            Violation::new(
+                clause,
+                format!("the store refused contains_event_id: {error}"),
+            )
+        })
     }
 
     /// Every origin a rule uses is foreign to the store under test, or the
@@ -522,6 +820,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- Dedupe is by identity, never content (SY-12, SY-11) --------
             dedupe_reaches_identity_without_decoding,
+
+            // --- An unheld own identity stops the ingest (SY-38) ------------
+            an_unheld_own_identity_stops_the_ingest,
         }
     };
 }

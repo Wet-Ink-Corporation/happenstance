@@ -25,9 +25,12 @@ use happenstance_core::{
     RecordedAt, SendEventStore, SequencePosition, SequencedEvent, StoreId,
 };
 use happenstance_sync::{
-    Classify, FailureClass, IngestError, IngestGroup, Ingested, SendIngestStore, Watermark,
+    Classify, FailureClass, IngestError, IngestGroup, Ingested, ReplicatedEvent, SendIngestStore,
+    Watermark,
 };
-use happenstance_sync_testkit::{IngestFixture, ingest_rules};
+use happenstance_sync_testkit::{
+    IngestFixture, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, ingest_rules,
+};
 use happenstance_testkit::{RuleOutcome, block_on};
 
 /// The one mistake a [`WrongIngestStore`] makes.
@@ -52,6 +55,26 @@ enum Mistake {
     /// SY-11's store half, through SY-12's rule: write a group's compensation
     /// again when the whole group was a re-delivery.
     RecompensatesOnRedelivery,
+    /// SY-38's first, which its ledger row names: count an unheld claim on
+    /// this store's identity as a re-delivery and write the rest of the call.
+    DropsTheClaim,
+    /// SY-38's second, also the ledger's: check only the batch's first event
+    /// for this store's identity, and write any later claim as a foreign row.
+    ChecksOnlyTheHead,
+    /// SY-38's: commit group by group, so a refusal at the claim keeps every
+    /// group before it.
+    KeepsGroupsBeforeTheClaim,
+    /// SY-38's: treat a claim that meets a row this call already wrote, as a
+    /// compensation minted a moment earlier, as held, and skip it. Two events
+    /// then share one identity.
+    RefusesOnlyClaimsThatLand,
+    /// SY-38's over-refusal: refuse an echo of an event this store holds,
+    /// which is an ordinary re-delivery.
+    RefusesEveryOwnIdentity,
+    /// Not a mistake: a store that leaves a gap before each compensation, as
+    /// the specification permits. SY-38's rule cannot arrange a claim hidden by
+    /// the call's own compensation on it, and must say so rather than pass.
+    LeavesAGap,
 }
 
 /// The time this store stamps everything it writes itself.
@@ -97,73 +120,126 @@ impl WrongIngestStore {
         self.rows.lock().map_err(|_| Poisoned)
     }
 
-    /// The groups, written onto a copy of `rows` and returned whole, or the
-    /// refusal; the caller commits.
+    /// Writes `groups` onto `rows`: every group or none, except under
+    /// [`Mistake::KeepsGroupsBeforeTheClaim`].
     fn write_groups(
         &self,
-        rows: &[Row],
+        rows: &mut Vec<Row>,
         groups: &[IngestGroup<'_>],
-    ) -> Result<(Vec<Row>, Ingested), IngestError<Poisoned>> {
+    ) -> Result<Ingested, IngestError<Poisoned>> {
         let held: BTreeSet<EventId> = rows.iter().map(|row| row.origin).collect();
-        let mut working = rows.to_vec();
+        let mut working = rows.clone();
         let mut counts = Ingested::default();
-        for group in groups {
+        for (group_index, group) in groups.iter().enumerate() {
+            // What a group-by-group commit has kept when this group begins.
+            let committed =
+                (self.mistake == Mistake::KeepsGroupsBeforeTheClaim).then(|| working.clone());
             let landed_before = counts.appended;
-            for shipped in group.events {
-                let id = shipped.id;
-                let same_content = self.mistake == Mistake::DedupesOnContent
-                    && working.iter().any(|row| row.stored.event == shipped.event);
-                if held.contains(&id) || same_content {
-                    counts.skipped += 1;
-                    continue;
+            for (event_index, shipped) in group.events.iter().enumerate() {
+                let head_of_batch = group_index == 0 && event_index == 0;
+                match self.verdict(&held, &working, shipped, head_of_batch) {
+                    Verdict::Skip => counts.skipped += 1,
+                    Verdict::Land => {
+                        self.land(&mut working, shipped);
+                        counts.appended += 1;
+                    }
+                    Verdict::Refuse => {
+                        if let Some(kept) = committed {
+                            *rows = kept;
+                        }
+                        return Err(IngestError::unheld_own_identity(shipped.id));
+                    }
                 }
-                if id.store() == self.own {
-                    return Err(IngestError::unheld_own_identity(id));
-                }
-                if working.iter().any(|row| row.origin == id) {
-                    counts.skipped += 1;
-                    continue;
-                }
-                let position = next_position(&working);
-                let stored_id = match self.mistake {
-                    Mistake::RemintsOnIngest => EventId::new(self.own, position),
-                    _ => id,
-                };
-                let recorded_at = match self.mistake {
-                    Mistake::RestampsRecordedAt => ARRIVAL,
-                    _ => shipped.recorded_at,
-                };
-                let row = Row {
-                    stored: SequencedEvent::new(
-                        position,
-                        stored_id,
-                        recorded_at,
-                        shipped.event.clone(),
-                    ),
-                    origin: id,
-                };
-                if self.mistake == Mistake::PlacesAtOriginPosition {
-                    merge_at_origin_position(&mut working, row);
-                } else {
-                    working.push(row);
-                }
-                counts.appended += 1;
             }
             if counts.appended > landed_before || self.mistake == Mistake::RecompensatesOnRedelivery
             {
-                for event in group.compensation {
-                    let position = next_position(&working);
-                    let id = EventId::new(self.own, position);
-                    working.push(Row {
-                        stored: SequencedEvent::new(position, id, ARRIVAL, event.clone()),
-                        origin: id,
-                    });
-                    counts.compensated += 1;
-                }
+                counts.compensated += self.compensate(&mut working, group.compensation);
             }
         }
-        Ok((working, counts))
+        *rows = working;
+        Ok(counts)
     }
+
+    /// What this store does with `shipped`, given what it `held` when the call
+    /// began and what the call has written so far.
+    fn verdict(
+        &self,
+        held: &BTreeSet<EventId>,
+        working: &[Row],
+        shipped: &ReplicatedEvent,
+        head_of_batch: bool,
+    ) -> Verdict {
+        let id = shipped.id;
+        let claims_own = id.store() == self.own;
+        if claims_own && self.mistake == Mistake::RefusesEveryOwnIdentity {
+            return Verdict::Refuse;
+        }
+        let same_content = self.mistake == Mistake::DedupesOnContent
+            && working.iter().any(|row| row.stored.event == shipped.event);
+        if held.contains(&id) || same_content {
+            return Verdict::Skip;
+        }
+        let written_by_this_call = working.iter().any(|row| row.origin == id);
+        let checked = self.mistake != Mistake::ChecksOnlyTheHead || head_of_batch;
+        if claims_own && checked {
+            return match self.mistake {
+                Mistake::DropsTheClaim => Verdict::Skip,
+                Mistake::RefusesOnlyClaimsThatLand if written_by_this_call => Verdict::Skip,
+                _ => Verdict::Refuse,
+            };
+        }
+        if written_by_this_call {
+            Verdict::Skip
+        } else {
+            Verdict::Land
+        }
+    }
+
+    /// Writes one foreign event at the tail, or where the mistake puts it.
+    fn land(&self, working: &mut Vec<Row>, shipped: &ReplicatedEvent) {
+        let position = next_position(working);
+        let stored_id = match self.mistake {
+            Mistake::RemintsOnIngest => EventId::new(self.own, position),
+            _ => shipped.id,
+        };
+        let recorded_at = match self.mistake {
+            Mistake::RestampsRecordedAt => ARRIVAL,
+            _ => shipped.recorded_at,
+        };
+        let row = Row {
+            stored: SequencedEvent::new(position, stored_id, recorded_at, shipped.event.clone()),
+            origin: shipped.id,
+        };
+        if self.mistake == Mistake::PlacesAtOriginPosition {
+            merge_at_origin_position(working, row);
+        } else {
+            working.push(row);
+        }
+    }
+
+    /// Mints `compensation` here, and says how many it wrote.
+    fn compensate(&self, working: &mut Vec<Row>, compensation: &[Event]) -> usize {
+        for event in compensation {
+            let mut position = next_position(working);
+            if self.mistake == Mistake::LeavesAGap {
+                position = position.next().unwrap_or(position);
+            }
+            let id = EventId::new(self.own, position);
+            working.push(Row {
+                stored: SequencedEvent::new(position, id, ARRIVAL, event.clone()),
+                origin: id,
+            });
+        }
+        compensation.len()
+    }
+}
+
+/// What a [`WrongIngestStore`] does with one foreign event.
+#[derive(Debug, Clone, Copy)]
+enum Verdict {
+    Skip,
+    Land,
+    Refuse,
 }
 
 /// [`Mistake::PlacesAtOriginPosition`]'s write: `row` goes where its origin
@@ -282,9 +358,7 @@ impl SendIngestStore for WrongIngestStore {
         groups: &[IngestGroup<'_>],
     ) -> Result<Ingested, IngestError<Self::Error>> {
         let mut rows = self.rows().map_err(IngestError::Store)?;
-        let (written, counts) = self.write_groups(&rows, groups)?;
-        *rows = written;
-        Ok(counts)
+        self.write_groups(&mut rows, groups)
     }
 
     async fn watermark(&self) -> Result<Watermark, Self::Error> {
@@ -485,4 +559,67 @@ fn dedupe_reaches_identity_without_decoding_fails_a_store_that_recompensates_on_
         "dedupe_reaches_identity_without_decoding",
         "SY-12",
     );
+}
+
+#[test]
+fn an_unheld_own_identity_stops_the_ingest_fails_a_store_that_drops_the_claim() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::DropsTheClaim)),
+        "an_unheld_own_identity_stops_the_ingest",
+        "SY-38",
+    );
+}
+
+#[test]
+fn an_unheld_own_identity_stops_the_ingest_fails_a_store_that_checks_only_the_head() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::ChecksOnlyTheHead)),
+        "an_unheld_own_identity_stops_the_ingest",
+        "SY-38",
+    );
+}
+
+#[test]
+fn an_unheld_own_identity_stops_the_ingest_fails_a_store_that_keeps_groups_before_the_claim() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::KeepsGroupsBeforeTheClaim)),
+        "an_unheld_own_identity_stops_the_ingest",
+        "SY-38",
+    );
+}
+
+#[test]
+fn an_unheld_own_identity_stops_the_ingest_fails_a_store_that_refuses_only_claims_that_land() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::RefusesOnlyClaimsThatLand)),
+        "an_unheld_own_identity_stops_the_ingest",
+        "SY-38",
+    );
+}
+
+#[test]
+fn an_unheld_own_identity_stops_the_ingest_fails_a_store_that_refuses_every_own_identity() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::RefusesEveryOwnIdentity)),
+        "an_unheld_own_identity_stops_the_ingest",
+        "SY-38",
+    );
+}
+
+/// A store that leaves a gap before its compensation is conformant, and the
+/// rule cannot arrange the hidden claim on it. It says so, rather than
+/// reporting a pass it did not check, and every other rule runs.
+#[test]
+fn an_unheld_own_identity_stops_the_ingest_skips_a_store_that_leaves_a_gap() {
+    for (name, verdict) in verdicts(async || WrongFixture::new(Mistake::LeavesAGap)) {
+        let expected = if name == "an_unheld_own_identity_stops_the_ingest" {
+            RuleOutcome::Skipped {
+                capability: NO_HIDDEN_CLAIM,
+                reason: NO_HIDDEN_CLAIM_REASON,
+            }
+        } else {
+            RuleOutcome::Ran
+        };
+        assert_eq!(verdict, Ok(expected), "`{name}`");
+    }
 }

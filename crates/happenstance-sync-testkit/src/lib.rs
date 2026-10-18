@@ -130,7 +130,7 @@ mod ingest_fixture;
 // to is one `cargo xtask spec-trace` refuses.
 mod ingest_suite;
 pub use ingest_fixture::{IngestFixture, MemoryIngestFixture, MemoryIngestHandle};
-pub use ingest_suite::ingest_rules;
+pub use ingest_suite::{NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, ingest_rules};
 
 /// Generates the ingest conformance suite for a store adapter.
 ///
