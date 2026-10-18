@@ -196,8 +196,11 @@ impl PostgresIngestStore {
         }
 
         // Owned, because the work crosses onto the runtime and must be
-        // `'static`: the cost `append`'s `events.to_vec()` pays, a refcount
-        // bump per event.
+        // `'static`, as `append`'s `events.to_vec()` is. Not free: the
+        // payload is `Bytes`, a refcount bump, but the event type and each
+        // tag are `Cow`s, so cloning one built from owned strings allocates
+        // for the type, the tag slice and every tag: `t + 2` for `t` tags
+        // (`experiments/event-clone-allocations/README.md`).
         let owned = groups
             .iter()
             .map(OwnedGroup::try_from_group)
