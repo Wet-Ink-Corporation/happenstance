@@ -454,19 +454,10 @@ async fn ingest_in_transaction(
         // A duplicate inside one call lands once and counts as a skip.
         ingested.skipped += group.events.len().saturating_sub(landed.len());
 
-        if !landed.is_empty() && !group.compensation.is_empty() {
-            let positions = allocate_positions(&mut transaction, group.compensation.len()).await?;
-            let rows = group.compensation.iter().map(|event| NewRow {
-                event,
-                origin: Origin::Local,
-                recorded_at,
-            });
-            // No conflict clause: a collision here would mean an own identity
-            // already sits at a fresh sequence value, which must raise.
-            insert_statement(own, rows, &positions)
-                .build()
-                .execute(&mut *transaction)
-                .await?;
+        // Only for a group that landed something (SY-11): the first delivery
+        // of a re-delivered group already wrote its compensation.
+        if !landed.is_empty() {
+            insert_compensation(&mut transaction, own, &group.compensation, recorded_at).await?;
             ingested.compensated += group.compensation.len();
         }
     }
@@ -500,6 +491,34 @@ async fn insert_foreign(
             ))
         })
         .collect()
+}
+
+/// Inserts one group's compensation as local rows, minted here and stamped
+/// `recorded_at`, after the group's foreign rows (SY-2).
+///
+/// No conflict clause: a collision here would mean an own identity already
+/// sits at a fresh sequence value, which must raise rather than skip.
+async fn insert_compensation(
+    transaction: &mut Transaction<'static, Postgres>,
+    own: StoreId,
+    compensation: &[Event],
+    recorded_at: RecordedAt,
+) -> Result<(), PostgresEventStoreError> {
+    // A `VALUES` list cannot be empty.
+    if compensation.is_empty() {
+        return Ok(());
+    }
+    let positions = allocate_positions(transaction, compensation.len()).await?;
+    let rows = compensation.iter().map(|event| NewRow {
+        event,
+        origin: Origin::Local,
+        recorded_at,
+    });
+    insert_statement(own, rows, &positions)
+        .build()
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
 }
 
 /// The statement [`insert_foreign`] sends: append's `INSERT`, over the foreign
