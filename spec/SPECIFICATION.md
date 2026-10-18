@@ -7661,13 +7661,13 @@ cursor query; either one needing a second statement fires it. Decided for
 #245.]`
 Rule: `nothing_waiting_means_the_next_pull_is_empty` (new,
 `happenstance-sync-testkit`) — the rule writes two logs, one of 257 small
-events for a page the event count ends, and one sized from the declared limits
-for a page the byte budget ends; it follows the tokens, and on the first
-`Nothing` pulls once more from that token and asserts an empty batch. A peer
-that shows no page boundary on either log is reported as a skip naming its cause:
-`LOG_REFUSED` if the peer refused a log inside its own declaration (the byte-cut
+events for a page the event count ends, and one sized from the declared limits,
+one event to a push, for a page the byte budget ends; it follows the tokens, and
+on the first `Nothing` pulls once more from that token and asserts an empty batch.
+A peer that shows no page boundary on either log is reported as a skip naming its
+cause: `LOG_REFUSED` if it refused a log inside its own declaration (the byte-cut
 log is SY-18's subject; the count-cut log is a lie about batch limits no rule
-judges), else `NO_SECOND_PAGE`. Its mutants always say `Nothing`, and say it on
+judges, reported only here), else `NO_SECOND_PAGE`. Its mutants always say `Nothing`, and say it on
 any page that carried fewer events than the declared event limit. The rule does not check the second MUST: a conformant push
 cannot place a group too large for any pull on the far side.
 Cases: E2E-36.
