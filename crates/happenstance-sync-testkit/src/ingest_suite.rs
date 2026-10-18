@@ -36,9 +36,13 @@ pub mod ingest_rules {
     use crate::violation::{Violation, ensure};
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
+    const LOCAL: EventType = EventType::from_static("Local");
+    const COMPENSATED: EventType = EventType::from_static("Compensated");
 
     /// VT-5's origin.
     const IDENTITY_ORIGIN: StoreId = StoreId::from_bytes([0x71; 16]);
+    /// SY-5's origin.
+    const TAIL_ORIGIN: StoreId = StoreId::from_bytes([0x72; 16]);
 
     /// VT-5: an ingested event keeps the [`EventId`] its origin minted, and
     /// VT-9's [`RecordedAt`] with it.
@@ -125,6 +129,77 @@ pub mod ingest_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-5: an ingested event, and its compensation, land at the tail, above
+    /// every position assigned before the call, and the log below the old
+    /// head is unchanged.
+    ///
+    /// Three local events are appended. One group then arrives from an origin
+    /// that numbered its events 1 and 2, below the local head, which is what
+    /// tempts a merge, with one compensation event. Read back, every event at
+    /// or below the old head is what was there before, whole, and each foreign
+    /// event and the compensation is held once, above it. Events are found by
+    /// their distinct bytes, never by identity.
+    ///
+    /// # Rejects
+    ///
+    /// An order-preserving merge: a store that inserts an ingested event where
+    /// its origin numbered it and renumbers what follows, so a projection that
+    /// had read past that position never sees it.
+    /// `tests/wrong_ingest_stores.rs` carries it.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-5 if the store refuses a write, rewrites the log
+    /// below the old head, or holds a written event other than once above it.
+    pub async fn ingested_events_land_above_the_local_head<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-5";
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        ensure_foreign(&store, &[TAIL_ORIGIN], CLAUSE)?;
+        let local = [
+            opaque(LOCAL, b"sy5-local-1", CLAUSE)?,
+            opaque(LOCAL, b"sy5-local-2", CLAUSE)?,
+            opaque(LOCAL, b"sy5-local-3", CLAUSE)?,
+        ];
+        let head_before = append(&store, &local, CLAUSE).await?;
+        let prefix = read_all(&store, CLAUSE).await?;
+        let sent = [
+            shipped(TAIL_ORIGIN, 1, 1_800_000_000_000, b"sy5-foreign-1", CLAUSE)?,
+            shipped(TAIL_ORIGIN, 2, 1_800_000_000_001, b"sy5-foreign-2", CLAUSE)?,
+        ];
+        let answer = [opaque(COMPENSATED, b"sy5-compensation", CLAUSE)?];
+
+        ingest(&store, &[IngestGroup::new(&sent, &answer)], CLAUSE).await?;
+
+        let log = read_all(&store, CLAUSE).await?;
+        let below: Vec<&SequencedEvent> = log
+            .iter()
+            .filter(|row| row.position <= head_before)
+            .collect();
+        ensure(below.iter().copied().eq(&prefix), CLAUSE, || {
+            format!(
+                "the log at or below the old head {head_before} changed across an ingest: it \
+                 held {} events there and now holds {}, or holds them differently",
+                prefix.len(),
+                below.len()
+            )
+        })?;
+        for written in sent.iter().map(|event| &event.event).chain(&answer) {
+            let landed = held_once(&log, written, CLAUSE)?;
+            ensure(landed.position > head_before, CLAUSE, || {
+                format!(
+                    "an ingested event of type {} landed at {}, at or below the head {head_before} \
+                     the store had assigned before the call",
+                    written.event_type(),
+                    landed.position
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// Every origin a rule uses is foreign to the store under test, or the
     /// rule would be testing SY-38 by accident.
     fn ensure_foreign<S: IngestStore>(
@@ -184,6 +259,43 @@ pub mod ingest_rules {
         })
     }
 
+    /// Appends `events` locally, without a condition, and returns the last
+    /// position the store assigned.
+    async fn append<S: EventStore>(
+        store: &S,
+        events: &[Event],
+        clause: &'static str,
+    ) -> Result<SequencePosition, Violation> {
+        store.append(events, None).await.map_err(|error| {
+            Violation::new(clause, format!("the store refused a local append: {error}"))
+        })
+    }
+
+    /// The one event in `log` whose bytes are `written`'s, found without its
+    /// identity.
+    fn held_once<'log>(
+        log: &'log [SequencedEvent],
+        written: &Event,
+        clause: &'static str,
+    ) -> Result<&'log SequencedEvent, Violation> {
+        let mut matching = log.iter().filter(|row| row.event == *written);
+        match (matching.next(), matching.next()) {
+            (Some(landed), None) => Ok(landed),
+            (found, _) => Err(Violation::new(
+                clause,
+                format!(
+                    "an event of type {} was written once and is held {}",
+                    written.event_type(),
+                    if found.is_some() {
+                        "more than once"
+                    } else {
+                        "nowhere"
+                    }
+                ),
+            )),
+        }
+    }
+
     /// Every event the store holds, in position order.
     async fn read_all<S: EventStore>(
         store: &S,
@@ -235,6 +347,9 @@ macro_rules! for_each_ingest_store_rule {
         $($callback)+! {
             // --- An ingested event keeps its origin's identity (VT-5) -------
             ingest_preserves_origin_identity,
+
+            // --- An ingested event lands at the tail (SY-5) -----------------
+            ingested_events_land_above_the_local_head,
         }
     };
 }

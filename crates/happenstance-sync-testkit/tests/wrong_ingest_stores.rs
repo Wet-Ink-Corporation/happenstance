@@ -42,6 +42,10 @@ enum Mistake {
     /// VT-9's, through VT-5's rule: stamp an ingested event with the arrival
     /// time instead of the origin's.
     RestampsRecordedAt,
+    /// SY-5's: an order-preserving merge. An ingested event is inserted where
+    /// its origin numbered it and every later row is renumbered, so an event
+    /// lands below a checkpoint a projection already read past.
+    PlacesAtOriginPosition,
 }
 
 /// The time this store stamps everything it writes itself.
@@ -121,7 +125,7 @@ impl WrongIngestStore {
                     Mistake::RestampsRecordedAt => ARRIVAL,
                     _ => shipped.recorded_at,
                 };
-                working.push(Row {
+                let row = Row {
                     stored: SequencedEvent::new(
                         position,
                         stored_id,
@@ -129,7 +133,12 @@ impl WrongIngestStore {
                         shipped.event.clone(),
                     ),
                     origin: id,
-                });
+                };
+                if self.mistake == Mistake::PlacesAtOriginPosition {
+                    merge_at_origin_position(&mut working, row);
+                } else {
+                    working.push(row);
+                }
                 counts.appended += 1;
             }
             if counts.appended > landed_before {
@@ -145,6 +154,25 @@ impl WrongIngestStore {
             }
         }
         Ok((working, counts))
+    }
+}
+
+/// [`Mistake::PlacesAtOriginPosition`]'s write: `row` goes where its origin
+/// numbered it, or at the tail if the log is shorter, and every row from there
+/// on is renumbered densely. Identities are left as they were.
+fn merge_at_origin_position(working: &mut Vec<Row>, row: Row) {
+    let wanted = usize::try_from(row.origin.position().get().saturating_sub(1))
+        .unwrap_or(usize::MAX)
+        .min(working.len());
+    working.insert(wanted, row);
+    let mut position = working
+        .get(..wanted)
+        .and_then(<[Row]>::last)
+        .and_then(|before| before.stored.position.next())
+        .unwrap_or(SequencePosition::FIRST);
+    for later in working.iter_mut().skip(wanted) {
+        later.stored.position = position;
+        position = position.next().unwrap_or(position);
     }
 }
 
@@ -420,5 +448,14 @@ fn ingest_preserves_origin_identity_fails_a_store_that_restamps_recorded_at() {
         &verdicts(async || WrongFixture::new(Mistake::RestampsRecordedAt)),
         "ingest_preserves_origin_identity",
         "VT-5",
+    );
+}
+
+#[test]
+fn ingested_events_land_above_the_local_head_fails_a_store_that_places_at_origin_position() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::PlacesAtOriginPosition)),
+        "ingested_events_land_above_the_local_head",
+        "SY-5",
     );
 }
