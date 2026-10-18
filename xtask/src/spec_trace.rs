@@ -85,7 +85,7 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 ///
 /// It lives here rather than in `lints` because [`collect_rules`] does, and a
 /// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 6] = [
+pub(crate) const RULE_FILES: [&str; 7] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
@@ -93,6 +93,8 @@ pub(crate) const RULE_FILES: [&str; 6] = [
     // The sync families (#111, #246), each joined in the change that creates it.
     "crates/happenstance-sync-testkit/src/sync_suite.rs",
     "crates/happenstance-sync-testkit/src/sync_model.rs",
+    // The ingest family (#108), joined in the change that creates it.
+    "crates/happenstance-sync-testkit/src/ingest_suite.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.
@@ -1006,16 +1008,8 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 63] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 62] = [
     // ---- VT: value types -------------------------------------------------
-    (
-        "VT-5",
-        "ingest_preserves_origin_identity",
-        Unresolvable::Scheduled(
-            "the replication suite. `happenstance-sync` is a skeleton and \
-             `happenstance-sync-testkit` does not carry it yet",
-        ),
-    ),
     (
         "VT-6",
         "restored_peer_does_not_reissue_identities",

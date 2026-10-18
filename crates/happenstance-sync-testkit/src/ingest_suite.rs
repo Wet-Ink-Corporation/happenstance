@@ -75,7 +75,7 @@ pub mod ingest_rules {
     /// Bytes that are not UTF-8 and parse as no codec: a lone continuation
     /// pair, a NUL and a truncated two-byte sequence. A store that had to
     /// decode a payload to dedupe it fails on these (SY-35).
-    const UNDECODABLE: [u8; 5] = [0xFF, 0xFE, 0x00, 0xC3, 0x28];
+    const UNDECODABLE: &[u8; 5] = b"\xFF\xFE\x00\xC3\x28";
 
     /// SY-38's origin, for the foreign events around each claim.
     const CLAIM_ORIGIN: StoreId = StoreId::from_bytes([0x75; 16]);

@@ -7476,8 +7476,8 @@ Rule: `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test,
 `a_claim_the_calls_own_compensation_would_hide_is_refused`,
 `local_appends_are_not_wedged_after_a_refused_claim` and
 `a_claim_lands_as_foreign_after_the_store_is_reminted` beside it; and
-`an_unheld_own_identity_stops_the_ingest` (new, `happenstance-sync-testkit`),
-which #108's second part writes.
+`an_unheld_own_identity_stops_the_ingest` (`happenstance-sync-testkit`), the
+rule #108's second part wrote.
 Cases: E2E-42, E2E-34.
 
 *Rejects:* the behaviour the SQLite spike pinned before this clause. It ingested
@@ -10336,14 +10336,14 @@ between them because its *shape* does not wait on a transport but its
 | SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` | E2E-39 |
 | SY-3 | FROZEN | `compensation_is_idempotent_under_redelivery` † | E2E-33, E2E-39 |
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
-| SY-5 | FROZEN | `ingested_events_land_above_the_local_head` † | E2E-42 |
+| SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
 | SY-6 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56, E2E-14 |
 | SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` † | E2E-39, E2E-42, E2E-45 |
 | SY-8 | FROZEN | the whole of `happenstance-sync-testkit` — every rule in it takes exactly one … | E2E-33, E2E-35, E2E-36, E2E-42 |
 | SY-9 | FROZEN | `one_adapter_serves_both_roles` † | E2E-42, E2E-45 |
 | SY-10 | PROVISIONAL | `directional_merge_rules_compose` † | E2E-42, E2E-44, E2E-45 |
 | SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` | E2E-33, E2E-34, E2E-36 |
-| SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` † | E2E-33, E2E-34, E2E-36 |
+| SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-34, E2E-36 |
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
 | SY-14 | DEFERRED | `bulk_ingest_is_idempotent_in_bounded_round_trips` † | E2E-36, E2E-35 |
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
