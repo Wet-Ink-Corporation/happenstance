@@ -80,6 +80,14 @@ enum Mistake {
     /// over half its declared `max_event_bytes`. SY-37's rule must report the
     /// refused byte-cut log as refused, and as SY-18's subject.
     TakesSmallerEventsThanItDeclares,
+    /// Both of the two above at once, so SY-37's rule sees both logs refused
+    /// and must name the count-cut one, which nothing else reports.
+    TakesLessOfBothThanItDeclares,
+    /// A peer that declares twice the `max_batch_bytes` it enforces. SY-18's
+    /// rule does not judge a batch-limit lie alone, so SY-37's must not blame
+    /// SY-18 for it: its byte-cut log goes one event to a push, takes it, and
+    /// pages at the limit the peer really imposes.
+    DeclaresMoreBatchBytesThanItTakes,
 }
 
 /// How many events a push to [`Mistake::TakesFewerEventsThanItDeclares`] may
@@ -87,10 +95,31 @@ enum Mistake {
 /// count-cut log puts in one push when the declaration admits them.
 const TAKES_EVENTS: usize = 128;
 
+/// What a [`WrongError`] is about.
+#[derive(Debug)]
+enum Cause {
+    /// The reference peer's own refusal.
+    Peer(MemoryPeerError),
+    /// A push carrying more events than [`TAKES_EVENTS`]. Its own case rather
+    /// than a [`MemoryPeerError::BatchTooLarge`], whose message says bytes.
+    TooManyEvents { actual: usize, limit: usize },
+}
+
+impl Cause {
+    /// The reference peer's class, and `Split` for a push with too many
+    /// events, which is the class the reference peer gives an oversized push.
+    fn class(&self) -> FailureClass {
+        match self {
+            Self::Peer(inner) => inner.class(),
+            Self::TooManyEvents { .. } => FailureClass::Split,
+        }
+    }
+}
+
 /// The reference peer's error, classified through the wrong peer's mistake.
 #[derive(Debug)]
 struct WrongError {
-    inner: MemoryPeerError,
+    cause: Cause,
     mistake: Mistake,
     /// Whether [`Classify::class`] has answered once already. A `Cell`, not an
     /// atomic: the error is never shared across threads, and only
@@ -100,13 +129,22 @@ struct WrongError {
 
 impl core::fmt::Display for WrongError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.inner.fmt(f)
+        match &self.cause {
+            Cause::Peer(inner) => inner.fmt(f),
+            Cause::TooManyEvents { actual, limit } => write!(
+                f,
+                "push of {actual} events exceeds the {limit} this peer takes in one push"
+            ),
+        }
     }
 }
 
 impl core::error::Error for WrongError {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        Some(&self.inner)
+        match &self.cause {
+            Cause::Peer(inner) => Some(inner),
+            Cause::TooManyEvents { .. } => None,
+        }
     }
 }
 
@@ -118,7 +156,7 @@ impl Classify for WrongError {
                 if self.read.replace(true) {
                     FailureClass::Transient
                 } else {
-                    self.inner.class()
+                    self.cause.class()
                 }
             }
             Mistake::Faithful
@@ -130,7 +168,9 @@ impl Classify for WrongError {
             | Mistake::AlwaysSaysNothingWaiting
             | Mistake::SaysNothingOnAShortPage
             | Mistake::TakesFewerEventsThanItDeclares
-            | Mistake::TakesSmallerEventsThanItDeclares => self.inner.class(),
+            | Mistake::TakesSmallerEventsThanItDeclares
+            | Mistake::TakesLessOfBothThanItDeclares
+            | Mistake::DeclaresMoreBatchBytesThanItTakes => self.cause.class(),
         }
     }
 }
@@ -157,11 +197,42 @@ async fn held_by(peer: &MemorySyncPeer) -> Result<Vec<EventGroup>, MemoryPeerErr
 
 impl WrongPeer {
     fn wrap(&self, inner: MemoryPeerError) -> WrongError {
+        self.refuse(Cause::Peer(inner))
+    }
+
+    fn refuse(&self, cause: Cause) -> WrongError {
         WrongError {
-            inner,
+            cause,
             mistake: self.mistake,
             read: Cell::new(false),
         }
+    }
+
+    /// Why a peer that takes less than it declares refuses `batch`, if it
+    /// does: more than [`TAKES_EVENTS`] events, or an event over half the
+    /// declared `max_event_bytes`, as its mistake says.
+    fn takes_less(&self, batch: &PushBatch) -> Option<Cause> {
+        let counts = matches!(
+            self.mistake,
+            Mistake::TakesFewerEventsThanItDeclares | Mistake::TakesLessOfBothThanItDeclares
+        );
+        let sizes = matches!(
+            self.mistake,
+            Mistake::TakesSmallerEventsThanItDeclares | Mistake::TakesLessOfBothThanItDeclares
+        );
+        let events = batch.events().count();
+        if counts && events > TAKES_EVENTS {
+            return Some(Cause::TooManyEvents {
+                actual: events,
+                limit: TAKES_EVENTS,
+            });
+        }
+        let limit = self.inner.limits().max_event_bytes / 2;
+        let largest = batch.events().map(ReplicatedEvent::payload_len).max()?;
+        (sizes && largest > limit).then_some(Cause::Peer(MemoryPeerError::BatchTooLarge {
+            actual: largest,
+            limit,
+        }))
     }
 
     /// Whether `group`'s travelling guard is violated by what the inner peer
@@ -231,7 +302,8 @@ impl SendSyncPeer for WrongPeer {
             | Mistake::AcceptsTheOversizedPush
             | Mistake::ClassChangesBetweenReads
             | Mistake::AlwaysSaysNothingWaiting
-            | Mistake::SaysNothingOnAShortPage => self
+            | Mistake::SaysNothingOnAShortPage
+            | Mistake::DeclaresMoreBatchBytesThanItTakes => self
                 .inner
                 .push(batch)
                 .await
@@ -256,26 +328,11 @@ impl SendSyncPeer for WrongPeer {
                 })
                 .await
                 .map_err(|error| self.wrap(error)),
-            // The reference peer's one refusal variant, so the class is its
-            // own `Split`; its message says bytes, and the count is in it.
-            Mistake::TakesFewerEventsThanItDeclares => {
-                let actual = batch.events().count();
-                if actual > TAKES_EVENTS {
-                    return Err(self.wrap(MemoryPeerError::BatchTooLarge {
-                        actual,
-                        limit: TAKES_EVENTS,
-                    }));
-                }
-                self.inner
-                    .push(batch)
-                    .await
-                    .map_err(|error| self.wrap(error))
-            }
-            Mistake::TakesSmallerEventsThanItDeclares => {
-                let limit = self.inner.limits().max_event_bytes / 2;
-                let over = batch.events().map(ReplicatedEvent::payload_len).max();
-                if let Some(actual) = over.filter(|&len| len > limit) {
-                    return Err(self.wrap(MemoryPeerError::BatchTooLarge { actual, limit }));
+            Mistake::TakesFewerEventsThanItDeclares
+            | Mistake::TakesSmallerEventsThanItDeclares
+            | Mistake::TakesLessOfBothThanItDeclares => {
+                if let Some(cause) = self.takes_less(batch) {
+                    return Err(self.refuse(cause));
                 }
                 self.inner
                     .push(batch)
@@ -287,10 +344,14 @@ impl SendSyncPeer for WrongPeer {
 
     fn limits(&self) -> PeerLimits {
         let mut limits = self.inner.limits();
-        if self.mistake == Mistake::AcceptsTheOversizedPush {
+        match self.mistake {
             // Declares half of what the inner peer enforces, so a batch one
             // byte over the declaration still fits under the real limit.
-            limits.max_batch_bytes /= 2;
+            Mistake::AcceptsTheOversizedPush => limits.max_batch_bytes /= 2,
+            // Declares twice what the inner peer enforces, so a push of two
+            // events at the per-event limit is refused although declared.
+            Mistake::DeclaresMoreBatchBytesThanItTakes => limits.max_batch_bytes *= 2,
+            _ => {}
         }
         limits
     }
@@ -605,6 +666,15 @@ fn nothing_waiting_means_the_next_pull_is_empty_skips_a_peer_that_never_pages() 
     );
 }
 
+/// SY-18's verdict alone against `mistake` behind a peer declaring `limits`:
+/// whether the attribution SY-37's skip makes is true.
+fn sy18_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'static str> {
+    block_on(rules::peer_declares_its_own_limits(async || {
+        WrongFixture::with_limits(mistake, limits.clone())
+    }))
+    .map_err(|violation| violation.clause())
+}
+
 /// SY-37's verdict alone against `mistake` behind a peer declaring `limits`.
 fn sy37_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'static str> {
     block_on(rules::nothing_waiting_means_the_next_pull_is_empty(
@@ -663,5 +733,70 @@ fn nothing_waiting_means_the_next_pull_is_empty_reports_a_refused_byte_cut_log()
             capability: LOG_REFUSED,
             reason: BYTE_LOG_REFUSED_REASON,
         })
+    );
+    assert_eq!(
+        sy18_against(Mistake::TakesSmallerEventsThanItDeclares, &limits),
+        Err("SY-18"),
+        "the skip says SY-18's rule judges this peer, so it must"
+    );
+}
+
+/// 1,000 events and 128 KiB: the count-cut log's one push of 257 events is
+/// over [`TAKES_EVENTS`], and the byte-cut log is three 64 KiB events, two to
+/// a page.
+fn both_logs_written() -> PeerLimits {
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_events = 1_000;
+    limits.max_batch_bytes = 128 * 1024;
+    limits
+}
+
+/// Both logs refused: the count-cut refusal is the one named, because
+/// SY-18's rule already reports the byte-cut one and nothing reports this.
+#[test]
+fn nothing_waiting_means_the_next_pull_is_empty_names_the_count_cut_log_when_both_are_refused() {
+    assert_eq!(
+        sy37_against(Mistake::TakesLessOfBothThanItDeclares, &both_logs_written()),
+        Ok(RuleOutcome::Skipped {
+            capability: LOG_REFUSED,
+            reason: COUNT_LOG_REFUSED_REASON,
+        })
+    );
+}
+
+/// A refused count-cut log does not outrank a byte-cut log that paged: the
+/// rule checked a `Nothing` at a boundary, so it ran.
+#[test]
+fn nothing_waiting_means_the_next_pull_is_empty_runs_when_only_the_count_cut_log_is_refused() {
+    assert_eq!(
+        sy37_against(
+            Mistake::TakesFewerEventsThanItDeclares,
+            &both_logs_written()
+        ),
+        Ok(RuleOutcome::Ran)
+    );
+}
+
+/// A peer that overstates only `max_batch_bytes` is a lie SY-18's rule does
+/// not judge, so SY-37's must not report it as SY-18's. Its byte-cut log goes
+/// one event to a push, which the peer takes, and its pulls page at the limit
+/// it really imposes: the rule runs.
+#[test]
+fn nothing_waiting_means_the_next_pull_is_empty_runs_against_a_peer_overstating_its_batch_bytes() {
+    // The inner peer enforces 64 KiB a push and declares 128 KiB: the
+    // byte-cut log is three 64 KiB events, and the count-cut log fits one
+    // pull of 1,000 events.
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_events = 1_000;
+
+    assert_eq!(
+        sy37_against(Mistake::DeclaresMoreBatchBytesThanItTakes, &limits),
+        Ok(RuleOutcome::Ran)
+    );
+    assert_eq!(
+        sy18_against(Mistake::DeclaresMoreBatchBytesThanItTakes, &limits),
+        Ok(RuleOutcome::Ran),
+        "SY-18's rule does not judge a batch-limit lie alone, which is why SY-37's \
+         must not lay it there"
     );
 }

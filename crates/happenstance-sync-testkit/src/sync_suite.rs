@@ -43,9 +43,13 @@ pub const LOG_REFUSED: &str = "SyncPeer::push, within the peer's own PeerLimits"
 /// limits it does not impose. **No rule in this suite judges that:** SY-18's
 /// rule reads the batch limits only to size its boundary event, and says in
 /// its own `# Does not reject` that a batch over them is SY-36's `Split`. So
-/// this skip is the only place the lie is reported. When both logs are
-/// refused this is the reason given, because SY-18's rule already reports the
-/// other refusal.
+/// this skip is the only place the lie can be reported, and it is reported
+/// only when the byte-cut log did not page: a byte-cut log that paged makes
+/// the rule [`RuleOutcome::Ran`] and the refusal goes unreported. When both
+/// logs are refused this is the reason given, because a refused byte-cut log
+/// fails SY-18's rule as well.
+///
+/// [`RuleOutcome::Ran`]: happenstance_testkit::RuleOutcome::Ran
 ///
 /// [`PeerLimits::max_batch_events`]: happenstance_sync::PeerLimits::max_batch_events
 pub const COUNT_LOG_REFUSED_REASON: &str = "this peer refused a push of the count-cut log, whose pushes carry at \
@@ -56,14 +60,18 @@ pub const COUNT_LOG_REFUSED_REASON: &str = "this peer refused a push of the coun
 /// The reason SY-37's rule reports when the peer refused its byte-cut log, and
 /// the count-cut log showed no page.
 ///
-/// That log's events are sized from [`PeerLimits::max_event_bytes`], so a
-/// refusal is the peer imposing a smaller per-event limit than it declares:
-/// SY-18's subject, and `peer_declares_its_own_limits` judges it.
+/// That log pushes one event to a push, its payload
+/// [`PeerLimits::max_event_bytes`] capped by `max_batch_bytes`: no larger than
+/// the boundary event `peer_declares_its_own_limits` pushes alone. So a
+/// refusal is the peer taking smaller events than it declares, SY-18's
+/// subject, and a peer that refuses it on size fails that rule too. Because
+/// each push holds one event, a peer that overstates only `max_batch_bytes`
+/// takes the log and pages it, which no rule could otherwise judge.
 ///
 /// [`PeerLimits::max_event_bytes`]: happenstance_sync::PeerLimits::max_event_bytes
-pub const BYTE_LOG_REFUSED_REASON: &str = "this peer refused a push of the byte-cut log, whose events are sized from \
-     its declared `max_event_bytes`: it imposes a smaller limit than it \
-     declares (SY-18's subject, judged by its rule), and the count-cut log \
+pub const BYTE_LOG_REFUSED_REASON: &str = "this peer refused a one-event push of the byte-cut log, whose events are \
+     sized from its declared `max_event_bytes`: it takes smaller events than \
+     it declares (SY-18's subject, judged by its rule), and the count-cut log \
      showed no page; SY-37 is unverified for this peer";
 
 /// The sync rules. See the [crate documentation](crate) for what each covers.
@@ -492,7 +500,8 @@ pub mod rules {
     ///    at any event count up to 256 shows a page boundary.
     /// 2. **Cut by bytes**: single-event groups whose payloads are sized from
     ///    the declared limits so [`PeerLimits::max_batch_bytes`] ends a page
-    ///    before the event count does, one group past that page. Written only
+    ///    before the event count does, one group past that page, pushed one
+    ///    event to a push so the pull alone draws the boundary. Written only
     ///    where the bytes do cut first, and the log fits in 257 groups and
     ///    64 MiB.
     ///
@@ -502,12 +511,14 @@ pub mod rules {
     /// pull, and never a missed event.
     ///
     /// A log the peer refuses to take is not built, and shows no page. Whose
-    /// failure the refusal is depends on the log. The byte-cut log's events are
-    /// sized from [`PeerLimits::max_event_bytes`], so refusing it is SY-18's
-    /// subject, and `peer_declares_its_own_limits` judges it. The count-cut
-    /// log is tiny events, at most `max_batch_events` to a push, so refusing it
-    /// is a lie about the batch limits, which that rule says it does not judge
-    /// and no other rule does either.
+    /// failure the refusal is depends on the log. The byte-cut log goes one
+    /// event to a push, each sized from [`PeerLimits::max_event_bytes`] and no
+    /// larger than SY-18's boundary event, so refusing it is SY-18's subject,
+    /// and `peer_declares_its_own_limits` judges it; a peer that overstates
+    /// only `max_batch_bytes` takes it. The count-cut log is tiny events, at
+    /// most `max_batch_events` to a push, so refusing it is a lie about the
+    /// batch limits, which that rule says it does not judge and no other rule
+    /// does either: this rule's skip is the only place it can be reported.
     ///
     /// If neither log showed a second non-empty page, the rule could not have
     /// failed the peer, and it reports a skip rather than a pass: naming
@@ -576,7 +587,7 @@ pub mod rules {
 
         Ok(match (by_count, by_bytes) {
             (Log::Paged, _) | (_, Log::Paged) => RuleOutcome::Ran,
-            // The count-cut refusal first: nothing else reports it, while
+            // The count-cut refusal first: nothing else can report it, while
             // SY-18's rule reports the byte-cut one.
             (Log::Refused, _) => RuleOutcome::Skipped {
                 capability: crate::LOG_REFUSED,
@@ -649,6 +660,12 @@ pub mod rules {
         /// One group more than `max_batch_bytes` admits at the largest payload
         /// the peer takes, when that is fewer events than `max_batch_events`;
         /// `None` when the count cuts first or the log would pass either cap.
+        ///
+        /// Pushed one event at a time. The page boundary is the pull's to
+        /// draw, and a push of one event no larger than SY-18's boundary event
+        /// can be refused only for a per-event limit, which SY-18's rule
+        /// judges. A push of a full page would also be refused by a peer that
+        /// overstates `max_batch_bytes` alone, which no rule judges.
         fn cut_by_bytes(limits: &PeerLimits) -> Option<Self> {
             let payload = limits.max_event_bytes.min(limits.max_batch_bytes);
             let per_page = limits.max_batch_bytes.checked_div(payload)?;
@@ -660,7 +677,7 @@ pub mod rules {
             fits.then_some(Self {
                 groups,
                 payload,
-                per_push: per_page.max(1),
+                per_push: 1,
             })
         }
     }
@@ -751,10 +768,11 @@ pub mod rules {
                 let batch = PushBatch::new(core::mem::take(&mut groups));
                 // A refusal here is the peer disagreeing with its own
                 // declaration. Whose failure that is depends on the log: for
-                // the byte-cut log, sized from `max_event_bytes`, it is SY-18's
-                // to judge; for the count-cut log, tiny events at most
-                // `max_batch_events` to a push, it is a lie about batch limits
-                // that no rule judges. The caller reports which, as a skip.
+                // the byte-cut log, one event sized from `max_event_bytes` to a
+                // push, it is SY-18's to judge; for the count-cut log, tiny
+                // events at most `max_batch_events` to a push, it is a lie
+                // about batch limits that no rule judges. The caller reports
+                // which, as a skip, unless the other log paged.
                 if peer.push(&batch).await.is_err() {
                     return Ok(Pushed::Refused);
                 }
