@@ -1,6 +1,7 @@
-//! The conformance suite for `happenstance-sync` peers.
+//! The conformance suite for `happenstance-sync` peers, and for the stores
+//! they ingest into.
 //!
-//! # Status: five rules, and the shape every later one plugs into
+//! # Status: two peer families and an ingest family, and the shape every later rule plugs into
 //!
 //! `publish = false` because the suite is **unfinished**, not because it is
 //! held back: phase 13 grows it rule by rule, and whether it publishes is
@@ -81,6 +82,38 @@
 //! # }
 //! ```
 //!
+//! # The ingest family
+//!
+//! The other side of a peer: the store an
+//! [`IngestStore`](happenstance_sync::IngestStore) writes into. A store adapter
+//! that implements the port mounts it beside the event-store suite:
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! happenstance_sync_testkit::ingest_store_conformance!(
+//!     happenstance_sync_testkit::MemoryIngestFixture::new()
+//! );
+//! # }
+//! ```
+//!
+//! The expression builds an [`IngestFixture`], whose store is both an
+//! `EventStore` and an `IngestStore`. The reference is
+//! [`MemoryIngestFixture`], over `happenstance-sync`'s `MemoryIngestStore`, and
+//! `happenstance-sqlite`'s ingest spike mounts the family too.
+//!
+//! | Rule | Clause | What it rejects |
+//! |---|---|---|
+//! | [`ingest_preserves_origin_identity`](ingest_rules::ingest_preserves_origin_identity) | VT-5, VT-9 | a store that re-mints an ingested event, or restamps its recorded time |
+//! | [`ingested_events_land_above_the_local_head`](ingest_rules::ingested_events_land_above_the_local_head) | SY-5 | an order-preserving merge, which hides an event below a checkpoint already read past |
+//! | [`dedupe_reaches_identity_without_decoding`](ingest_rules::dedupe_reaches_identity_without_decoding) | SY-12, SY-11 | content-keyed dedupe, and a compensation written again on redelivery |
+//! | [`an_unheld_own_identity_stops_the_ingest`](ingest_rules::an_unheld_own_identity_stops_the_ingest) | SY-38 | a dropped claim, a check of the batch's head only, a group-by-group commit, a claim hidden by the call's own compensation, and a refused held echo |
+//!
+//! Each wrong store lives in `tests/wrong_ingest_stores.rs`, where a test runs
+//! the whole family against it and asserts it fails exactly its rule. SY-33's
+//! rule, which must exempt SY-38's refusal (ADR-0098), is not written yet; the
+//! exemption is carried forward to it.
+//!
 //! # Harnesses
 //!
 //! The emitter is a parameter, as in the event-store family, so the suite never
@@ -88,7 +121,10 @@
 //! [`emit_sync_tokio!`](crate::emit_sync_tokio) (the default),
 //! [`emit_sync_blocking!`](crate::emit_sync_blocking) — no runtime and no
 //! `Send` bound, which is what a `!Send` peer runs under — and
-//! [`emit_sync_wasm!`](crate::emit_sync_wasm).
+//! [`emit_sync_wasm!`](crate::emit_sync_wasm). The ingest family has
+//! [`emit_ingest_tokio!`](crate::emit_ingest_tokio) (the default) and
+//! [`emit_ingest_blocking!`](crate::emit_ingest_blocking); its `wasm32`
+//! emitter arrives with the first store that runs it there.
 //!
 //! # Failure is a value
 //!
@@ -125,6 +161,77 @@ pub use sync_suite::{
     NO_SECOND_PAGE_REASON, rules,
 };
 pub use violation::Violation;
+
+// The ingest family (#108), declared after the peer families so their lines
+// do not move.
+mod ingest_fixture;
+// `ingest_suite.rs` for `sync_suite.rs`'s reason: a bare name two files answer
+// to is one `cargo xtask spec-trace` refuses.
+mod ingest_suite;
+pub use ingest_fixture::{IngestFixture, MemoryIngestFixture, MemoryIngestHandle};
+pub use ingest_suite::{NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, ingest_rules};
+
+/// Generates the ingest conformance suite for a store adapter.
+///
+/// Takes an expression that produces an [`IngestFixture`]. The rule list is
+/// not written here; it comes from
+/// [`for_each_ingest_store_rule!`](crate::for_each_ingest_store_rule), which
+/// is the only place it is written at all.
+///
+/// # Examples
+///
+/// The default harness, `#[tokio::test]`:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_sync_testkit::ingest_store_conformance!(
+///     happenstance_sync_testkit::MemoryIngestFixture::new()
+/// );
+/// # }
+/// ```
+///
+/// A different harness, and a module name of your own:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_sync_testkit::ingest_store_conformance!(
+///     mod_name = blocking_ingest_conformance,
+///     emit = happenstance_sync_testkit::emit_ingest_blocking,
+///     fixture = super::MyFixture::new()
+/// );
+/// # }
+/// ```
+#[macro_export]
+macro_rules! ingest_store_conformance {
+    (mod_name = $mod_name:ident, emit = $emit:path, fixture = $fixture:expr) => {
+        mod $mod_name {
+            // Hoisted behind a function, as in the other families, so an
+            // emitter needs to know nothing about the fixture's type.
+            // Re-evaluated per call, so every arrangement gets its own fixture.
+            async fn __ingest_fixture() -> impl $crate::__private::IngestFixture {
+                $fixture
+            }
+
+            $crate::for_each_ingest_store_rule!($emit);
+        }
+    };
+    (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
+        $crate::ingest_store_conformance!(
+            mod_name = $mod_name,
+            emit = $crate::emit_ingest_tokio,
+            fixture = $fixture
+        );
+    };
+    ($fixture:expr) => {
+        $crate::ingest_store_conformance!(
+            mod_name = ingest_conformance,
+            emit = $crate::emit_ingest_tokio,
+            fixture = $fixture
+        );
+    };
+}
 
 /// Generates the sync conformance suite for a peer adapter.
 ///
@@ -195,6 +302,8 @@ macro_rules! sync_peer_conformance {
 #[doc(hidden)]
 pub mod __private {
     pub use crate::fixture::SyncFixture;
+    pub use crate::ingest_fixture::IngestFixture;
+    pub use crate::ingest_suite::ingest_rules;
     #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
     pub use crate::sync_model::rules as model_rules;
     pub use crate::sync_suite::rules;

@@ -87,6 +87,51 @@ not the same as what a user needed to be told.
   `watermark_reads_the_origin_index_without_a_sort` detects a `GROUP BY` the
   index cannot serve, such as `origin_store || ''`.
 
+- **`happenstance-sync`: an in-memory ingest oracle, and `happenstance-sync-testkit`'s
+  ingest family, in crates that are not published yet** (#108, part B).
+  Recorded here because CF-29 asks every conformance rule for an entry, not
+  because anything ships. `MemoryIngestStore`, behind `happenstance-sync`'s
+  `memory` feature, is both an `EventStore` and an `IngestStore`, built from
+  `happenstance-core`'s public API alone; it passes the whole event-store suite,
+  and a differential test holds its `read` to `MemoryEventStore`'s. A store
+  adapter mounts the family with `ingest_store_conformance!` over an
+  `IngestFixture`, and `MemoryIngestFixture` is the reference. Each wrong store
+  is in the crate's `tests/wrong_ingest_stores.rs`, where a test runs the whole
+  family against it and asserts it fails exactly its rule.
+
+  **`ingest_preserves_origin_identity`** (VT-5, with VT-9's recorded time). The
+  defect it detects is a store that re-mints an ingested event under its own
+  identity, keeping the origin's only for its own dedupe and watermark so every
+  count still adds up, or one that restamps the event with its arrival time.
+  Either makes the same fact two different events on two peers.
+
+  **`ingested_events_land_above_the_local_head`** (SY-5). The defect it detects
+  is an order-preserving merge: a store that inserts an ingested event where its
+  origin numbered it, below its own head, and renumbers what follows, so a
+  projection whose checkpoint had already passed that position never sees it.
+
+  **`dedupe_reaches_identity_without_decoding`** (SY-12, with SY-11's store
+  half). The defect it detects is content-keyed dedupe, which drops a second
+  origin's byte-identical fact as though it were the first one again, and a
+  store that writes a group's compensation again when the whole group was a
+  re-delivery. Every payload in it is bytes no codec parses, so it also detects
+  a store that decodes a payload to reach its dedupe key and skips what it
+  cannot parse.
+
+  **`an_unheld_own_identity_stops_the_ingest`** (SY-38). The defect it detects
+  is any store that lets an unheld claim on its own identity through: one that
+  drops the claim as a re-delivery and writes the rest, one that checks only a
+  batch's first event, one that commits group by group and keeps the groups
+  before the claim, and one that skips a claim meeting the call's own
+  compensation, committing two events under one identity. It also rejects the
+  over-refusal of a held echo, which is an ordinary re-delivery. A store that
+  leaves a gap before its compensation is reported as skipped for the hidden
+  claim, not passed. SY-33's rule, which must exempt this refusal (ADR-0098),
+  is not written yet, and the exemption is carried forward to it.
+
+  `happenstance-sqlite` gains only test code, which mounts the family on its
+  ingest spike, and a path-only dev-dependency that cargo strips on publish.
+
 - **`happenstance-sync-testkit`: the replication suite's first two rules,
   in a crate that is not published yet** (#111). Recorded here because CF-29
   asks every conformance rule for an entry, not because anything ships: the

@@ -939,4 +939,48 @@ mod tests {
             assert_eq!(error.class(), class, "{error}");
         }
     }
+
+    /// `happenstance-sync-testkit`'s ingest family, against this adapter.
+    ///
+    /// Mounted here rather than in `tests/` for the reason the module docs
+    /// give: the impl is `cfg(test)`, and a `cfg(test)` impl is invisible to an
+    /// integration test. The unit tests above pin the spike's own behaviour;
+    /// this is the bar every adapter that implements the port clears.
+    mod ingest_family {
+        use happenstance_sync_testkit::IngestFixture;
+
+        use super::TempFile;
+        use crate::event_store::SqliteEventStore;
+
+        /// One file per fixture, and a connection onto it per `connect`.
+        ///
+        /// A file, not `open_in_memory`, so that two handles a rule holds are
+        /// one store. Each handle is dropped before the fixture that backs it,
+        /// so the file unlinks on Windows too.
+        struct SqliteIngestFixture {
+            file: TempFile,
+        }
+
+        impl SqliteIngestFixture {
+            fn new() -> Self {
+                Self {
+                    file: TempFile::new(),
+                }
+            }
+        }
+
+        impl IngestFixture for SqliteIngestFixture {
+            type Store = SqliteEventStore;
+
+            async fn connect(&self) -> Self::Store {
+                SqliteEventStore::open(&self.file.0)
+                    .expect("a fresh temporary file opens as a store")
+            }
+        }
+
+        happenstance_sync_testkit::ingest_store_conformance!(
+            mod_name = ingest_conformance,
+            fixture = super::SqliteIngestFixture::new()
+        );
+    }
 }

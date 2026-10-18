@@ -86,8 +86,8 @@
 //! The in-memory store is the one this leaves without an implementation.
 //! `MemoryEventStore` lives in the contract crate, so the adapter-owned answer
 //! would put an ingest operation in `happenstance-core` — the letter VT-10
-//! forbids even where it would be additive. Its oracle is phase 13's, as a
-//! store this crate owns.
+//! forbids even where it would be additive. Its oracle is `MemoryIngestStore`,
+//! a store this crate owns, behind `memory`.
 //!
 //! # Membership is not on this trait
 //!

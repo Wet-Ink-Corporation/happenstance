@@ -111,8 +111,8 @@
 //!   records why they had to.
 //! * **Idempotent ingest.** In the port's contract
 //!   ([`IngestStore::ingest`]), and the write path is the adapter's — see
-//!   [`ingest`]. Not yet checked by a suite: `happenstance-sync-testkit`
-//!   exists, with peer rules, and has no ingest rule yet.
+//!   [`ingest`]. `happenstance-sync-testkit`'s ingest family checks it against
+//!   `MemoryIngestStore`, this crate's oracle, and against the SQLite spike.
 //! * **Append conditions across a boundary.** Settled by SY-1 – SY-7: ingest
 //!   never refuses, and a conflict is compensated by an ordinary append. The
 //!   origin's condition travels as [`EventGroup::guard`](peer::EventGroup::guard),
@@ -133,9 +133,9 @@
 //!
 //! # Features
 //!
-//! * **`memory`**, off by default: `MemorySyncPeer`, the in-memory reference
-//!   peer, for doctests and for testing sync wiring before a real peer exists.
-//!   It turns on `happenstance-core/memory` too.
+//! * **`memory`**, off by default: `MemorySyncPeer` and `MemoryIngestStore`, the
+//!   in-memory reference peer and ingest oracle, for doctests and for testing
+//!   sync wiring before a real peer exists. Turns on `happenstance-core/memory`.
 
 #![doc(html_no_source)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -174,3 +174,12 @@ pub use peer::{
 // order, so the lines above keep the numbers the specification cites.
 pub mod classify;
 pub use classify::{Classify, FailureClass};
+
+// The in-memory ingest oracle (#108). After `classify`, for the reason that one
+// sits after the rest: the lines above keep the numbers the specification cites.
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+pub mod memory_ingest;
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+pub use memory_ingest::MemoryIngestStore;
