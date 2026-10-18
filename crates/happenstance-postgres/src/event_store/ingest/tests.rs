@@ -18,7 +18,7 @@ use happenstance_sync::{
 };
 use sqlx::postgres::PgPoolOptions;
 
-use super::{OwnedGroup, PostgresIngestStore, foreign_statement};
+use super::{CONFLICT_CLAUSE, OwnedGroup, PostgresIngestStore, foreign_statement};
 use crate::error::PostgresEventStoreError;
 use crate::event_store::tests::server as sqlstate;
 use crate::event_store::{NewRow, Origin, PostgresEventStore, insert_statement};
@@ -279,12 +279,10 @@ fn ingest_sends_appends_insert_plus_the_conflict_clause() {
             local.sql()
         )
     });
-    assert_eq!(
-        suffix,
-        " ON CONFLICT (origin_store, origin_position) \
-         WHERE origin_store IS NOT NULL AND origin_position IS NOT NULL DO NOTHING \
-         RETURNING origin_store, origin_position"
-    );
+    // The clause itself is pinned by the live tests, which the server would
+    // fail on a clause it cannot infer the index from; this pins that it is
+    // the only difference.
+    assert_eq!(suffix, CONFLICT_CLAUSE);
 }
 
 /// SY-36: each failure states its class, at the boundaries a runner acts on.
