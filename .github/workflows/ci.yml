@@ -811,6 +811,49 @@ jobs:
             exit 1
           fi
 
+      # The ingest port's live tests and the ingest family's mount (#108, part
+      # D). They are unit tests in the LIBRARY target, not a `--test` target,
+      # because the impl is `cfg(test)` and a `cfg(test)` impl is invisible to
+      # `tests/`. Every other run in this job filters to a named `--test`
+      # target, and the default gate skips `#[ignore]`, so without this trio
+      # nothing executes them. Its own list/run/assert, STRICT, for the
+      # runtime-seam trio's reasons, and `--test-threads=1` because every rule
+      # reads right after it ingests and the frontier needs a quiet server.
+      - name: Every gated library test is present in the binary
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --lib -- --ignored --list | tee gated-lib.txt
+
+      - name: The library's live tests against a live Postgres
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-postgres --all-features \
+            --lib -- --ignored --show-output --test-threads=1 \
+            | tee lib-run.txt
+
+      - name: The library run executed and passed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' lib-run.txt; then
+            echo "::error::no test result line; the library's live tests did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-lib.txt)
+          result=$(grep -E '^test result:' lib-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
       # The suite must be green, and the failure list is empty on purpose.
       #
       # An earlier draft of this step asserted that two rules
