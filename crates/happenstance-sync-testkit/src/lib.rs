@@ -123,6 +123,11 @@ pub use kv_capped::{KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError};
 pub use sync_suite::{NO_SECOND_PAGE, NO_SECOND_PAGE_REASON, rules};
 pub use violation::Violation;
 
+// The ingest family (#108), declared after the peer families so their lines
+// do not move.
+mod ingest_fixture;
+pub use ingest_fixture::{IngestFixture, MemoryIngestFixture, MemoryIngestHandle};
+
 /// Generates the sync conformance suite for a peer adapter.
 ///
 /// Takes an expression that produces a [`SyncFixture`]. The rule list is not
