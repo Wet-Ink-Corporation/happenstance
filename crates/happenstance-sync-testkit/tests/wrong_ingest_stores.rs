@@ -75,6 +75,9 @@ enum Mistake {
     /// the specification permits. SY-38's rule cannot arrange a claim hidden by
     /// the call's own compensation on it, and must say so rather than pass.
     LeavesAGap,
+    /// SY-12's and SY-35's: decode the payload to reach the dedupe key, and
+    /// skip an event whose data does not parse as UTF-8 text.
+    DecodesPayload,
 }
 
 /// The time this store stamps everything it writes itself.
@@ -176,7 +179,11 @@ impl WrongIngestStore {
         }
         let same_content = self.mistake == Mistake::DedupesOnContent
             && working.iter().any(|row| row.stored.event == shipped.event);
-        if held.contains(&id) || same_content {
+        // A store that parses the payload to find a key it dedupes on, and
+        // treats bytes it cannot parse as nothing to write.
+        let undecodable = self.mistake == Mistake::DecodesPayload
+            && core::str::from_utf8(shipped.event.data()).is_err();
+        if held.contains(&id) || same_content || undecodable {
             return Verdict::Skip;
         }
         let written_by_this_call = working.iter().any(|row| row.origin == id);
@@ -547,6 +554,15 @@ fn ingested_events_land_above_the_local_head_fails_a_store_that_places_at_origin
 fn dedupe_reaches_identity_without_decoding_fails_a_store_that_dedupes_on_content() {
     fails_exactly(
         &verdicts(async || WrongFixture::new(Mistake::DedupesOnContent)),
+        "dedupe_reaches_identity_without_decoding",
+        "SY-12",
+    );
+}
+
+#[test]
+fn dedupe_reaches_identity_without_decoding_fails_a_store_that_decodes_the_payload() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::DecodesPayload)),
         "dedupe_reaches_identity_without_decoding",
         "SY-12",
     );

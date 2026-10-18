@@ -247,9 +247,10 @@ pub mod ingest_rules {
     /// # Rejects
     ///
     /// A store that dedupes on content, which drops the second origin's
-    /// identical fact as though it were the first again, and one that writes a
-    /// group's compensation again when the group was a re-delivery.
-    /// `tests/wrong_ingest_stores.rs` carries both.
+    /// identical fact as though it were the first again; one that decodes a
+    /// payload to reach its dedupe key, and skips bytes it cannot parse; and
+    /// one that writes a group's compensation again when the group was a
+    /// re-delivery. `tests/wrong_ingest_stores.rs` carries all three.
     ///
     /// # Errors
     ///

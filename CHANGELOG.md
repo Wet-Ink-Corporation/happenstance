@@ -114,7 +114,9 @@ not the same as what a user needed to be told.
   half). The defect it detects is content-keyed dedupe, which drops a second
   origin's byte-identical fact as though it were the first one again, and a
   store that writes a group's compensation again when the whole group was a
-  re-delivery. Every payload in it is bytes no codec parses.
+  re-delivery. Every payload in it is bytes no codec parses, so it also detects
+  a store that decodes a payload to reach its dedupe key and skips what it
+  cannot parse.
 
   **`an_unheld_own_identity_stops_the_ingest`** (SY-38). The defect it detects
   is any store that lets an unheld claim on its own identity through: one that
