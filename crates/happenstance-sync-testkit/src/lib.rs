@@ -126,7 +126,73 @@ pub use violation::Violation;
 // The ingest family (#108), declared after the peer families so their lines
 // do not move.
 mod ingest_fixture;
+// `ingest_suite.rs` for `sync_suite.rs`'s reason: a bare name two files answer
+// to is one `cargo xtask spec-trace` refuses.
+mod ingest_suite;
 pub use ingest_fixture::{IngestFixture, MemoryIngestFixture, MemoryIngestHandle};
+pub use ingest_suite::ingest_rules;
+
+/// Generates the ingest conformance suite for a store adapter.
+///
+/// Takes an expression that produces an [`IngestFixture`]. The rule list is
+/// not written here; it comes from
+/// [`for_each_ingest_store_rule!`](crate::for_each_ingest_store_rule), which
+/// is the only place it is written at all.
+///
+/// # Examples
+///
+/// The default harness, `#[tokio::test]`:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_sync_testkit::ingest_store_conformance!(
+///     happenstance_sync_testkit::MemoryIngestFixture::new()
+/// );
+/// # }
+/// ```
+///
+/// A different harness, and a module name of your own:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_sync_testkit::ingest_store_conformance!(
+///     mod_name = blocking_ingest_conformance,
+///     emit = happenstance_sync_testkit::emit_ingest_blocking,
+///     fixture = super::MyFixture::new()
+/// );
+/// # }
+/// ```
+#[macro_export]
+macro_rules! ingest_store_conformance {
+    (mod_name = $mod_name:ident, emit = $emit:path, fixture = $fixture:expr) => {
+        mod $mod_name {
+            // Hoisted behind a function, as in the other families, so an
+            // emitter needs to know nothing about the fixture's type.
+            // Re-evaluated per call, so every arrangement gets its own fixture.
+            async fn __ingest_fixture() -> impl $crate::__private::IngestFixture {
+                $fixture
+            }
+
+            $crate::for_each_ingest_store_rule!($emit);
+        }
+    };
+    (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
+        $crate::ingest_store_conformance!(
+            mod_name = $mod_name,
+            emit = $crate::emit_ingest_tokio,
+            fixture = $fixture
+        );
+    };
+    ($fixture:expr) => {
+        $crate::ingest_store_conformance!(
+            mod_name = ingest_conformance,
+            emit = $crate::emit_ingest_tokio,
+            fixture = $fixture
+        );
+    };
+}
 
 /// Generates the sync conformance suite for a peer adapter.
 ///
@@ -197,6 +263,8 @@ macro_rules! sync_peer_conformance {
 #[doc(hidden)]
 pub mod __private {
     pub use crate::fixture::SyncFixture;
+    pub use crate::ingest_fixture::IngestFixture;
+    pub use crate::ingest_suite::ingest_rules;
     #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
     pub use crate::sync_model::rules as model_rules;
     pub use crate::sync_suite::rules;
