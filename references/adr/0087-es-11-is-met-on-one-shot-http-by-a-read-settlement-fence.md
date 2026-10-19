@@ -51,10 +51,10 @@ three. The owner made the job non-required until L8 (`wi-0f1291`; §9).
 (`crates/happenstance-testkit/src/suite.rs:6265`) do the same thing on one handle: seed, read
 `before`, build a stream and poll it **once**, append a late event, drain, and assert that the drain
 equals `before` and does not hold the late event. On Neon the first poll moves the stream from
-`Unsent` to `InFlight` by calling `round_trip` (`crates/happenstance-neon/src/event_store.rs:1409`);
+`Unsent` to `InFlight` by calling `round_trip` (`crates/happenstance-neon/src/event_store.rs:1465`);
 the test transport spawns the HTTPS request at call time
 (`crates/happenstance-neon/tests/support/transport.rs:407`). `append`
-(`crates/happenstance-neon/src/event_store.rs:818`) then spawns a second, independent request.
+(`crates/happenstance-neon/src/event_store.rs:894`) then spawns a second, independent request.
 Nothing orders the read's snapshot against the append's commit, and when the commit wins, the read's
 visibility frontier admits the row. The failure is always in that direction.
 
