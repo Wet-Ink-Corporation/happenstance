@@ -366,6 +366,7 @@ pub(crate) enum HyperTransportError {
 /// the concurrency family's contended appends, and short enough that a hang
 /// reports as a failed rule rather than as a job killed at its own limit.
 const ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(30);
+// Twinned, as `CONNECTION_ENV` and `CONNECTION_HEADER` are, in the ingest tests' endpoint.rs.
 
 impl SqlTransport for HyperTransport {
     type Error = HyperTransportError;
