@@ -868,39 +868,9 @@ impl CloudflareEventStore {
         recorded_at: RecordedAt,
         positions: &mut Vec<SequencePosition>,
     ) -> Result<SequencePosition, CloudflareEventStoreError> {
-        let insert = format!(
-            "INSERT INTO {} (event_type, data, metadata, tags, recorded_at) \
-             VALUES (?, ?, ?, ?, ?) RETURNING position",
-            self.tables.event
-        );
+        let insert = insert_statement(&self.tables);
         for event in events {
-            let metadata = event
-                .metadata()
-                .map_or(SqlValue::Null, |bytes| SqlValue::Blob(bytes.to_vec()));
-            let mut cursor = self.sql.exec(
-                &insert,
-                &[
-                    SqlValue::Text(event.event_type().as_str().to_owned()),
-                    SqlValue::Blob(event.data().to_vec()),
-                    metadata,
-                    SqlValue::Blob(encode_tags(event.tags())),
-                    SqlValue::Integer(recorded_at.as_millis()),
-                ],
-            )?;
-            let row = cursor
-                .next_row()
-                .transpose()?
-                .ok_or_else(|| SqlError::internal("INSERT … RETURNING position yielded no row"))?;
-            let position = match row.values() {
-                [value] => decode_position(value, "position")?,
-                values => {
-                    return Err(CloudflareEventStoreError::RowShape {
-                        expected: 1,
-                        actual: values.len(),
-                    });
-                }
-            };
-            positions.push(position);
+            positions.push(self.insert_row(&insert, event, recorded_at)?);
         }
 
         self.write_tag_rows(events, positions)?;
@@ -935,6 +905,48 @@ impl CloudflareEventStore {
             .last()
             .copied()
             .ok_or_else(|| SqlError::internal("an append of no events reached write_batch").into())
+    }
+
+    /// Inserts one row carrying no identity yet, and returns the position it
+    /// was given.
+    ///
+    /// `write_rows`' loop body, lifted out unchanged so that ingest writes a
+    /// foreign row with the same statement and the same bindings as `append`
+    /// writes a local one (VT-10). `insert` is [`insert_statement`]'s text,
+    /// rendered once per write rather than once per row.
+    ///
+    /// The bindings are owned copies of the event's bytes, because `worker`'s
+    /// binding type owns what it binds.
+    fn insert_row(
+        &self,
+        insert: &str,
+        event: &Event,
+        recorded_at: RecordedAt,
+    ) -> Result<SequencePosition, CloudflareEventStoreError> {
+        let metadata = event
+            .metadata()
+            .map_or(SqlValue::Null, |bytes| SqlValue::Blob(bytes.to_vec()));
+        let mut cursor = self.sql.exec(
+            insert,
+            &[
+                SqlValue::Text(event.event_type().as_str().to_owned()),
+                SqlValue::Blob(event.data().to_vec()),
+                metadata,
+                SqlValue::Blob(encode_tags(event.tags())),
+                SqlValue::Integer(recorded_at.as_millis()),
+            ],
+        )?;
+        let row = cursor
+            .next_row()
+            .transpose()?
+            .ok_or_else(|| SqlError::internal("INSERT … RETURNING position yielded no row"))?;
+        match row.values() {
+            [value] => decode_position(value, "position"),
+            values => Err(CloudflareEventStoreError::RowShape {
+                expected: 1,
+                actual: values.len(),
+            }),
+        }
     }
 
     /// Discards every row at or above `from`, sweeping up a batch that failed
@@ -1042,6 +1054,19 @@ impl Ceilings {
             .map(|(limit, actual, _)| (limit, actual))
         })
     }
+}
+
+/// The one `INSERT INTO event` that `append` and ingest both issue, rendered
+/// once per write.
+///
+/// It writes no origin: a row gets its identity afterwards, through the
+/// `origin_position IS NULL` marker (see [`STAMPED`]).
+fn insert_statement(tables: &Tables) -> String {
+    format!(
+        "INSERT INTO {} (event_type, data, metadata, tags, recorded_at) \
+         VALUES (?, ?, ?, ?, ?) RETURNING position",
+        tables.event
+    )
 }
 
 /// How [`CloudflareEventStore`] fails for its own reasons.
