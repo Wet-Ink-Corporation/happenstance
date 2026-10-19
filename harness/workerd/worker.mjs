@@ -29,6 +29,104 @@ const RESTORING = "restoring a bookmark";
 const NO_PITR = "does not implement point-in-time recovery";
 const NO_PITR_ANSWER = "this runtime does not implement point-in-time recovery";
 
+// The `transactionSync` probe (#108, part F): `/transaction-probe/<case>`. The
+// ingest store behind `cfg(test)` in
+// `crates/happenstance-cloudflare/src/event_store/ingest.rs` runs each call in
+// one `ctx.storage.transactionSync`, and the gate checks it against a
+// `node:sqlite` model of that primitive (`ingest/model.rs`). These cases measure
+// the properties the model assumes on the real runtime. JavaScript, because the
+// `worker` crate binds no `transactionSync`.
+const TRANSACTION_PROBE = "/transaction-probe/";
+
+// The probe's tables. Neither collides with the adapter's: its tables are
+// `event`, `event_tag`, `store_meta` and their namespaced twins.
+const PROBE_COUNTED = "transaction_probe_counted";
+const PROBE_UNIQUE = "transaction_probe_unique";
+
+// Each case, by name, over one object's storage. Each answers a plain object
+// the runner asserts on; none asserts here.
+const TRANSACTION_CASES = {
+  // 1. The primitive is there to call.
+  "is-a-function": (storage) => ({ type: typeof storage.transactionSync }),
+
+  // 2. A throwing callback takes its rows and the AUTOINCREMENT counter with
+  // it, and the caller receives the very value thrown. The row written before
+  // the call puts a `sqlite_sequence` row in place to compare.
+  "throw-rolls-back": (storage) => {
+    const sql = storage.sql;
+    sql.exec(`CREATE TABLE IF NOT EXISTS ${PROBE_COUNTED} (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)`);
+    sql.exec(`INSERT INTO ${PROBE_COUNTED} (v) VALUES ('before')`);
+    const before = counted(sql);
+    const thrown = new Error("the probe's own throw");
+    let caught;
+    try {
+      storage.transactionSync(() => {
+        sql.exec(`INSERT INTO ${PROBE_COUNTED} (v) VALUES ('one')`);
+        sql.exec(`INSERT INTO ${PROBE_COUNTED} (v) VALUES ('two')`);
+        throw thrown;
+      });
+    } catch (error) {
+      caught = error;
+    }
+    return { before, after: counted(sql), rethrownSame: caught === thrown };
+  },
+
+  // 3. A returning callback commits, and its value is the call's.
+  "return-commits": (storage) => {
+    const sql = storage.sql;
+    sql.exec(`CREATE TABLE IF NOT EXISTS ${PROBE_COUNTED} (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)`);
+    const before = counted(sql);
+    const returned = storage.transactionSync(() => {
+      sql.exec(`INSERT INTO ${PROBE_COUNTED} (v) VALUES ('kept')`);
+      return 7;
+    });
+    return { before, after: counted(sql), returned };
+  },
+
+  // 4. `UPDATE OR IGNORE … RETURNING` yields no row when the update meets a
+  // UNIQUE conflict, and leaves the row alone; the control, with no conflict,
+  // yields one. This is how the ingest stamp tells a redelivery from a landing.
+  "update-or-ignore-returning": (storage) => {
+    const sql = storage.sql;
+    sql.exec(`CREATE TABLE IF NOT EXISTS ${PROBE_UNIQUE} (id INTEGER PRIMARY KEY, v TEXT UNIQUE)`);
+    sql.exec(`INSERT INTO ${PROBE_UNIQUE} (id, v) VALUES (1, 'a'), (2, 'b')`);
+    const conflicting = sql
+      .exec(`UPDATE OR IGNORE ${PROBE_UNIQUE} SET v = 'a' WHERE id = 2 RETURNING id`)
+      .toArray().length;
+    const untouched = sql.exec(`SELECT v FROM ${PROBE_UNIQUE} WHERE id = 2`).toArray()[0]?.v;
+    const control = sql
+      .exec(`UPDATE OR IGNORE ${PROBE_UNIQUE} SET v = 'c' WHERE id = 2 RETURNING id`)
+      .toArray().length;
+    return { conflicting, untouched, control };
+  },
+
+  // 5. Transaction control through `exec` is refused, which is the crate's
+  // own claim (`event_store.rs`'s module docs) and why the primitive is used.
+  "savepoint-through-exec": (storage) => ({
+    savepoint: refusal(() => storage.sql.exec("SAVEPOINT transaction_probe")),
+    begin: refusal(() => storage.sql.exec("BEGIN")),
+  }),
+};
+
+// The counted table's rows and its `sqlite_sequence` value.
+function counted(sql) {
+  const rows = sql.exec(`SELECT count(*) AS n FROM ${PROBE_COUNTED}`).toArray()[0].n;
+  const sequence = sql
+    .exec("SELECT seq FROM sqlite_sequence WHERE name = ?", PROBE_COUNTED)
+    .toArray()[0]?.seq ?? null;
+  return { rows, sequence };
+}
+
+// Whether `statement` threw, and with what message.
+function refusal(statement) {
+  try {
+    statement();
+    return { refused: false };
+  } catch (error) {
+    return { refused: true, message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export class ConformanceObject {
   constructor(ctx, env) {
     this.ctx = ctx;
@@ -43,7 +141,26 @@ export class ConformanceObject {
     if (url.pathname.startsWith(BOOKMARK)) {
       return this.bookmark(url);
     }
+    if (url.pathname.startsWith(TRANSACTION_PROBE)) {
+      return this.transactionProbe(url);
+    }
     return relayed(() => this.inner.fetch(request));
+  }
+
+  // One `transactionSync` case, answered as JSON; test/transaction.test.ts
+  // asserts. A case that throws where it should not is a 500 carrying the
+  // message, so the runner reports what the runtime said.
+  transactionProbe(url) {
+    const name = url.pathname.slice(TRANSACTION_PROBE.length);
+    if (!Object.hasOwn(TRANSACTION_CASES, name)) {
+      return new Response(`no transaction probe ${name}`, { status: 404 });
+    }
+    try {
+      return Response.json(TRANSACTION_CASES[name](this.ctx.storage));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return new Response(`the probe threw: ${message}`, { status: 500 });
+    }
   }
 
   // The positive control for the idle measurement (#262 item 2,

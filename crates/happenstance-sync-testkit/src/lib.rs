@@ -100,8 +100,8 @@
 //!
 //! The expression builds an [`IngestFixture`], whose store is both an
 //! `EventStore` and an `IngestStore`. The reference is
-//! [`MemoryIngestFixture`], over `happenstance-sync`'s `MemoryIngestStore`, and
-//! `happenstance-sqlite`'s ingest spike mounts the family too.
+//! [`MemoryIngestFixture`], over `happenstance-sync`'s `MemoryIngestStore`;
+//! `happenstance-sqlite`'s spike and the Durable Object mount the family too.
 //!
 //! | Rule | Clause | What it rejects |
 //! |---|---|---|
@@ -143,9 +143,9 @@
 //! [`emit_sync_blocking!`](crate::emit_sync_blocking) — no runtime and no
 //! `Send` bound, which is what a `!Send` peer runs under — and
 //! [`emit_sync_wasm!`](crate::emit_sync_wasm). The ingest family has
-//! [`emit_ingest_tokio!`](crate::emit_ingest_tokio) (the default) and
-//! [`emit_ingest_blocking!`](crate::emit_ingest_blocking); its `wasm32`
-//! emitter arrives with the first store that runs it there.
+//! [`emit_ingest_tokio!`](crate::emit_ingest_tokio) (the default),
+//! [`emit_ingest_blocking!`](crate::emit_ingest_blocking) and
+//! [`emit_ingest_wasm!`](crate::emit_ingest_wasm), the Durable Object's.
 //!
 //! # Failure is a value
 //!

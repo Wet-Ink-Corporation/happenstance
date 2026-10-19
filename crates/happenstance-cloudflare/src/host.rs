@@ -564,3 +564,13 @@ pub fn statements(sql: &SqlStorage) -> Vec<String> {
         .filter_map(|value| value.as_string())
         .collect()
 }
+
+// Appended last, so no cited line above moves.
+#[cfg(all(test, target_arch = "wasm32"))]
+impl DurableObjectHost {
+    /// The object's `state`, for the ingest tests (#108), which reach
+    /// `state.storage` to install and call `transactionSync`.
+    pub(crate) const fn state(&self) -> &JsHandle {
+        &self.state
+    }
+}

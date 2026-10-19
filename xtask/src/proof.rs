@@ -654,6 +654,22 @@ static SYNC_FAMILY: RuleFamily = RuleFamily {
     emitter: "emit_sync_wasm",
 };
 
+/// The ingest suite: `happenstance-sync-testkit`'s second enumeration, the
+/// fourth family.
+///
+/// Registered when the Durable Object became the first `!Send` store to mount
+/// it (#108, part F). Its reference harness gained a `wasm32` twin in the same
+/// change, and [`HARNESS_DIRS`] reads that directory, so without this family the
+/// twin would have been a harness with no row — the shape
+/// `every_wasm32_capable_harness_has_a_row` exists to refuse.
+static INGEST_FAMILY: RuleFamily = RuleFamily {
+    enumeration: "for_each_ingest_store_rule!",
+    source: "crates/happenstance-sync-testkit/src/ingest_suite.rs",
+    head: "macro_rules! for_each_ingest_store_rule {",
+    suite: "ingest_store_conformance!",
+    emitter: "emit_ingest_wasm",
+};
+
 /// The rules a wasm32-only subset would reach for first.
 ///
 /// Transcribed rather than derived, and the two lists in this row do different
@@ -819,6 +835,18 @@ const SYNC_WASM_RULES: &[&str] = &[
     "every_refusal_states_its_class",
 ];
 
+/// The ingest rules named for the reference store's `wasm32` row.
+///
+/// Every ingest rule runs here, held to the whole enumeration as every row is.
+/// The two named are the ones a single-threaded runtime is likeliest to bend:
+/// SY-38's rule, whose hidden half reports `Ran` only when a refused call
+/// leaves the store's counter where it was, and SY-12's, whose pass depends on
+/// a redelivery being recognised by identity alone, never by its content.
+const INGEST_WASM_RULES: &[&str] = &[
+    "an_unheld_own_identity_stops_the_ingest",
+    "dedupe_reaches_identity_without_decoding",
+];
+
 /// Every conformance target the gate executes on `wasm32-unknown-unknown`.
 ///
 /// Three rows, and the shape is the deliverable. `every-rule-under-workerd`
@@ -885,6 +913,18 @@ pub(crate) const WASM_TARGETS: &[WasmTarget] = &[
         source: "crates/happenstance-sync-testkit/tests/memory_sync_conformance_wasm.rs",
         family: &SYNC_FAMILY,
         rules: SYNC_WASM_RULES,
+    },
+    WasmTarget {
+        // The sixth row, and the fourth family: the ingest suite's reference
+        // store on wasm32. The Durable Object's own mount of this family is a
+        // `--lib` module behind `cfg(test)` until part E publishes the store,
+        // so it is held by `CLOUDFLARE_UNIT_TESTS` rather than by a row here.
+        package: "happenstance-sync-testkit",
+        target: "memory_ingest_conformance_wasm",
+        module: "ingest_conformance_wasm",
+        source: "crates/happenstance-sync-testkit/tests/memory_ingest_conformance_wasm.rs",
+        family: &INGEST_FAMILY,
+        rules: INGEST_WASM_RULES,
     },
 ];
 
@@ -1140,7 +1180,7 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 /// module takes its own detector with it, and only a list written down
 /// elsewhere notices.
 ///
-/// The six groups, and what each is the last guard on:
+/// The seven groups, and what each is the last guard on:
 ///
 /// * the `!Send` twins, including the positive control, which are the only
 ///   assertions that run on a target where `wasm-bindgen`'s
@@ -1158,7 +1198,13 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 ///   restored object's new events from the ones it lost, and it reaches every
 ///   handle. Mint-once is permitted here only because the re-mint exists, so a
 ///   module that stopped compiling would leave that permission resting on
-///   nothing.
+///   nothing;
+/// * the ingest store behind `cfg(test)` (#108, part F): the six ingest rules
+///   and the fixture's capability check, mounted in a `--lib` module because
+///   the store is not yet public and so has no `WASM_TARGETS` row to be held
+///   to the enumeration by; and the unit cases the store's atomicity rests on
+///   — the settle table, the throw that takes the counter, one transaction per
+///   call, and the two claims refused before a row is written.
 ///
 /// # Why the stamp needs four names rather than two
 ///
@@ -1206,6 +1252,19 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::tests::remint::remint_identity_replaces_the_persisted_incarnation",
     "event_store::tests::remint::a_remint_after_a_restore_reissues_no_event_id_for_a_different_event",
     "event_store::tests::remint::a_handle_cloned_before_a_remint_stamps_the_new_incarnation",
+    "event_store::ingest::tests::family::ingest_conformance::an_unheld_own_identity_stops_the_ingest",
+    "event_store::ingest::tests::family::ingest_conformance::dedupe_reaches_identity_without_decoding",
+    "event_store::ingest::tests::family::ingest_conformance::every_declined_capability_is_stated_by_this_fixture",
+    "event_store::ingest::tests::family::ingest_conformance::ingest_group_is_atomic_under_a_mid_group_fault",
+    "event_store::ingest::tests::family::ingest_conformance::ingest_preserves_origin_identity",
+    "event_store::ingest::tests::family::ingest_conformance::ingest_validates_every_event_not_the_head",
+    "event_store::ingest::tests::family::ingest_conformance::ingested_events_land_above_the_local_head",
+    "event_store::ingest::transaction::tests::every_transaction_outcome_is_settled",
+    "event_store::ingest::tests::writes::ingest_writes_a_foreign_row_with_appends_insert_text",
+    "event_store::ingest::tests::writes::a_throw_inside_the_call_takes_every_row_and_the_counter_with_it",
+    "event_store::ingest::tests::writes::one_call_is_one_transaction_and_issues_no_transaction_control",
+    "event_store::ingest::tests::claims::an_unheld_own_identity_stops_the_ingest_and_writes_nothing",
+    "event_store::ingest::tests::claims::a_claim_the_calls_own_compensation_would_hide_is_refused",
 ];
 
 /// The runner that executes a `wasm-bindgen-test` harness.

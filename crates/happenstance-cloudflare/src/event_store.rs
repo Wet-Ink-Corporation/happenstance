@@ -692,35 +692,11 @@ impl CloudflareEventStore {
         &self,
         events: &[Event],
     ) -> Result<(), AppendError<CloudflareEventStoreError>> {
-        if events.len() > self.ceilings.events_per_batch {
-            return Err(AppendError::ExceedsStoreLimit {
-                limit: StoreLimit::EventsPerBatch,
-                len: events.len(),
-            });
-        }
-        for event in events {
-            if event.data().len() > self.ceilings.event_data_len {
-                return Err(AppendError::ExceedsStoreLimit {
-                    limit: StoreLimit::EventDataLen,
-                    len: event.data().len(),
-                });
-            }
-            if event.tags().len() > self.ceilings.tags_per_event {
-                return Err(AppendError::ExceedsStoreLimit {
-                    limit: StoreLimit::TagsPerEvent,
-                    len: event.tags().len(),
-                });
-            }
-            if let Some(metadata) = event.metadata()
-                && metadata.len() > self.ceilings.metadata_len
-            {
-                return Err(AppendError::ExceedsStoreLimit {
-                    limit: StoreLimit::MetadataLen,
-                    len: metadata.len(),
-                });
-            }
-        }
-        Ok(())
+        self.ceilings
+            .exceeded(events.len(), events)
+            .map_or(Ok(()), |(limit, len)| {
+                Err(AppendError::ExceedsStoreLimit { limit, len })
+            })
     }
 
     /// The position violating a guard of `condition`, if one exists.
@@ -892,39 +868,9 @@ impl CloudflareEventStore {
         recorded_at: RecordedAt,
         positions: &mut Vec<SequencePosition>,
     ) -> Result<SequencePosition, CloudflareEventStoreError> {
-        let insert = format!(
-            "INSERT INTO {} (event_type, data, metadata, tags, recorded_at) \
-             VALUES (?, ?, ?, ?, ?) RETURNING position",
-            self.tables.event
-        );
+        let insert = insert_statement(&self.tables);
         for event in events {
-            let metadata = event
-                .metadata()
-                .map_or(SqlValue::Null, |bytes| SqlValue::Blob(bytes.to_vec()));
-            let mut cursor = self.sql.exec(
-                &insert,
-                &[
-                    SqlValue::Text(event.event_type().as_str().to_owned()),
-                    SqlValue::Blob(event.data().to_vec()),
-                    metadata,
-                    SqlValue::Blob(encode_tags(event.tags())),
-                    SqlValue::Integer(recorded_at.as_millis()),
-                ],
-            )?;
-            let row = cursor
-                .next_row()
-                .transpose()?
-                .ok_or_else(|| SqlError::internal("INSERT … RETURNING position yielded no row"))?;
-            let position = match row.values() {
-                [value] => decode_position(value, "position")?,
-                values => {
-                    return Err(CloudflareEventStoreError::RowShape {
-                        expected: 1,
-                        actual: values.len(),
-                    });
-                }
-            };
-            positions.push(position);
+            positions.push(self.insert_row(&insert, event, recorded_at)?);
         }
 
         self.write_tag_rows(events, positions)?;
@@ -959,6 +905,48 @@ impl CloudflareEventStore {
             .last()
             .copied()
             .ok_or_else(|| SqlError::internal("an append of no events reached write_batch").into())
+    }
+
+    /// Inserts one row carrying no identity yet, and returns the position it
+    /// was given.
+    ///
+    /// `write_rows`' loop body, lifted out unchanged so that ingest writes a
+    /// foreign row with the same statement and the same bindings as `append`
+    /// writes a local one (VT-10). `insert` is [`insert_statement`]'s text,
+    /// rendered once per write rather than once per row.
+    ///
+    /// The bindings are owned copies of the event's bytes, because `worker`'s
+    /// binding type owns what it binds.
+    fn insert_row(
+        &self,
+        insert: &str,
+        event: &Event,
+        recorded_at: RecordedAt,
+    ) -> Result<SequencePosition, CloudflareEventStoreError> {
+        let metadata = event
+            .metadata()
+            .map_or(SqlValue::Null, |bytes| SqlValue::Blob(bytes.to_vec()));
+        let mut cursor = self.sql.exec(
+            insert,
+            &[
+                SqlValue::Text(event.event_type().as_str().to_owned()),
+                SqlValue::Blob(event.data().to_vec()),
+                metadata,
+                SqlValue::Blob(encode_tags(event.tags())),
+                SqlValue::Integer(recorded_at.as_millis()),
+            ],
+        )?;
+        let row = cursor
+            .next_row()
+            .transpose()?
+            .ok_or_else(|| SqlError::internal("INSERT … RETURNING position yielded no row"))?;
+        match row.values() {
+            [value] => decode_position(value, "position"),
+            values => Err(CloudflareEventStoreError::RowShape {
+                expected: 1,
+                actual: values.len(),
+            }),
+        }
     }
 
     /// Discards every row at or above `from`, sweeping up a batch that failed
@@ -1022,6 +1010,63 @@ impl CloudflareEventStore {
         }
         Ok(())
     }
+}
+
+// A second block rather than a method beside `DECLARED`, so that the lines the
+// specification and the decision records cite above `check_ceilings` keep
+// their numbers.
+impl Ceilings {
+    /// The first of these ceilings that a write of `len` events, these
+    /// `events`, exceeds, with the magnitude that exceeds it.
+    ///
+    /// The batch length first, then each event's data, tags and metadata, in
+    /// that order: the order `append` has always refused in. `len` is passed
+    /// apart from `events` because a caller whose events are not one slice
+    /// (ingest, whose call is several groups of foreign events and
+    /// compensation) knows the count without collecting them.
+    fn exceeded<'e>(
+        &self,
+        len: usize,
+        events: impl IntoIterator<Item = &'e Event>,
+    ) -> Option<(StoreLimit, usize)> {
+        if len > self.events_per_batch {
+            return Some((StoreLimit::EventsPerBatch, len));
+        }
+        events.into_iter().find_map(|event| {
+            let metadata_len = event
+                .metadata()
+                .map_or(0, happenstance_core::bytes::Bytes::len);
+            [
+                (
+                    StoreLimit::EventDataLen,
+                    event.data().len(),
+                    self.event_data_len,
+                ),
+                (
+                    StoreLimit::TagsPerEvent,
+                    event.tags().len(),
+                    self.tags_per_event,
+                ),
+                (StoreLimit::MetadataLen, metadata_len, self.metadata_len),
+            ]
+            .into_iter()
+            .find(|(_, actual, ceiling)| actual > ceiling)
+            .map(|(limit, actual, _)| (limit, actual))
+        })
+    }
+}
+
+/// The one `INSERT INTO event` that `append` and ingest both issue, rendered
+/// once per write.
+///
+/// It writes no origin: a row gets its identity afterwards, through the
+/// `origin_position IS NULL` marker (see [`STAMPED`]).
+fn insert_statement(tables: &Tables) -> String {
+    format!(
+        "INSERT INTO {} (event_type, data, metadata, tags, recorded_at) \
+         VALUES (?, ?, ?, ?, ?) RETURNING position",
+        tables.event
+    )
 }
 
 /// How [`CloudflareEventStore`] fails for its own reasons.
@@ -1164,6 +1209,30 @@ pub enum CloudflareEventStoreError {
         /// permits one `#[source]` per variant, `cause` is what a caller must
         /// act on, and this field stays out of the chain rather than hiding it.
         while_discarding: Box<CloudflareEventStoreError>,
+    },
+
+    /// An ingested event's origin position is past 2^53 − 1, the largest
+    /// integer a Workers SQL binding carries exactly (a JS number), so it is
+    /// refused before any statement rather than stored as a neighbour.
+    ///
+    /// Test-only with the rest of ingest (#108): the variant does not exist in
+    /// a consumer's build.
+    #[cfg(test)]
+    #[error("origin position {position} is past the largest a Workers SQL binding carries exactly")]
+    OriginPositionOutOfRange {
+        /// The origin position the peer sent.
+        position: SequencePosition,
+    },
+
+    /// An ingested event's recorded time is outside ±(2^53 − 1) ms, which a
+    /// Workers SQL binding cannot carry exactly. Refused before any statement.
+    ///
+    /// Test-only with the rest of ingest (#108).
+    #[cfg(test)]
+    #[error("recorded time {recorded_at} is outside what a Workers SQL binding carries exactly")]
+    RecordedAtOutOfRange {
+        /// The recorded time the peer sent.
+        recorded_at: RecordedAt,
     },
 }
 
@@ -2455,6 +2524,9 @@ mod write_path_tests {
                 CloudflareEventStoreError::UnstampedEvent { .. } => "unstamped event",
                 CloudflareEventStoreError::StoredPosition { .. } => "stored position",
                 CloudflareEventStoreError::PartialBatch { .. } => "partial batch",
+                // Ingest's two refusals (#108), test-only like the port.
+                CloudflareEventStoreError::OriginPositionOutOfRange { .. } => "origin position",
+                CloudflareEventStoreError::RecordedAtOutOfRange { .. } => "recorded at",
             }
         }
 
@@ -5003,3 +5075,11 @@ mod wrapper_tests {
         }
     }
 }
+
+// `happenstance-sync`'s ingest port over this module's row writer (#108, part
+// F). A child so it reaches the writer, the identity read and the decoders
+// without widening any of them, and `cfg(test)` because the port is a
+// dev-dependency until part E. Declared last, so the lines above keep the
+// numbers the specification and the decision records cite.
+#[cfg(test)]
+mod ingest;

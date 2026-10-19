@@ -921,6 +921,8 @@ version = "0.4.3"
 dependencies = [
  "futures-core",
  "happenstance-core",
+ "happenstance-sync",
+ "happenstance-sync-testkit",
  "happenstance-testkit",
  "postcard",
  "serde_json",

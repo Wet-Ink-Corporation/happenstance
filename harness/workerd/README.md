@@ -30,6 +30,7 @@ $ npx vitest run test/limits.test.ts --reporter=verbose   # the probe's report
 $ npx vitest run test/restart.test.ts --reporter=verbose  # across a restart (~15 s)
 $ npx vitest run test/idle.test.ts --reporter=verbose     # idle eviction (~15 s)
 $ npx vitest run test/remint.test.ts --reporter=verbose   # the re-mint leg's local half
+$ npx vitest run test/transaction.test.ts --reporter=verbose  # transactionSync's properties
 ```
 
 To drive the deployed path without deploying, run `wrangler dev` and point
@@ -57,11 +58,12 @@ $ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://1
 | `src/object/idling.rs` | The `/idle/arm?stream=none\|held` and `/idle/release` routes. |
 | `src/remint.rs` | The re-mint leg's ledger, carried across a bookmark restore, and its verdict. |
 | `src/object/reminting.rs` | The `/remint/seed`, `/remint/lose` and `/remint/after?mode=remint\|control` routes. |
-| `worker.mjs` | The entry point, in JavaScript on purpose. See below. It also answers `/bookmark/current` and `/bookmark/restore`, the bookmark calls the `worker` crate does not bind. |
+| `worker.mjs` | The entry point, in JavaScript on purpose. See below. It also answers `/bookmark/current` and `/bookmark/restore`, the bookmark calls the `worker` crate does not bind, and `/transaction-probe/<case>`, which drives `ctx.storage.transactionSync`, which it does not bind either. |
 | `test/conformance.test.ts` | One `it()` per rule, each against its own object. |
 | `test/conformance-cold.test.ts` | The same rules, each on an object primed and then evicted first. |
 | `test/restart.test.ts` | The cross-restart rules: evicted (every subject), the no-restart control, and hibernated (the adapter). |
 | `test/remint.test.ts` | The re-mint leg's refusals, and the pin that local `workerd` implements no restore. |
+| `test/transaction.test.ts` | The `transactionSync` properties the `cfg(test)` ingest store's `node:sqlite` model assumes: a throw rolls back rows and `sqlite_sequence` and is rethrown, a return commits, `UPDATE OR IGNORE … RETURNING` answers no row on a conflict, and `exec` refuses `SAVEPOINT` and `BEGIN`. The routes are `/transaction-probe/<case>` in `worker.mjs`. |
 | `test/idle.test.ts` | Idle objects holding the adapter, left alone for 12 s and for 8 s, and the timer control (`/idle-control/` in `worker.mjs`). |
 | `test/limits.test.ts`, `test/platform-miss.test.ts` | The probe, and what the deployed leg retries. |
 | `deployed.mjs` | The deployed leg's runner. |
