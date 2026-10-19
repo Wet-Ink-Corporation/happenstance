@@ -6,7 +6,7 @@
 - **Amends:** ES-11's asynchronous-driver paragraph in `spec/SPECIFICATION.md` §3 — a **narrowing** of a sufficiency condition, not a widening of the obligation
 - **Records:** that `happenstance-neon` does not satisfy ES-11, as a stated limitation
 - **Does not change:** ES-11's MUST, its maturity, its `Rule`, its `Cases`, or ES-12's normative content
-- **Evidence:** `crates/happenstance-neon/tests/support/transport.rs:20-102`; `crates/happenstance-neon/src/event_store.rs:1015-1035`; `crates/happenstance-testkit/src/suite.rs:6065-6122` and `:6169-6224`
+- **Evidence:** `crates/happenstance-neon/tests/support/transport.rs:20-102`; `crates/happenstance-neon/src/event_store.rs:1020-1040`; `crates/happenstance-testkit/src/suite.rs:6065-6122` and `:6169-6224`
 - **Supersedes nothing.** It is the first ES-11 escalation to survive the check below; the previous one was retracted at `2e0a0ae`.
 
 ## The question
@@ -53,7 +53,7 @@ sees the append that followed it, never the reverse — which is what a lost
 ordering race looks like and not what a paging defect looks like. And the paging
 defect ES-11 is mostly about is **unreachable here by construction**: one read is
 one statement, buffered whole in one round trip
-(`crates/happenstance-neon/src/event_store.rs:1015-1022`), so there is no second
+(`crates/happenstance-neon/src/event_store.rs:1020-1027`), so there is no second
 sample for the answer to drift against.
 
 ## What actually fails, and the numbers

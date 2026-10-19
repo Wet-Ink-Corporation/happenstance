@@ -715,6 +715,11 @@ impl<T: SqlTransport> NeonEventStore<T> {
         // `ingest_carries_foreign_origin_and_stamps_compensation_like_append`
         // counts it to prove the foreign insert does not stamp. This is a read
         // to compare against, under the same snapshot, so it is the same value.
+        //
+        // `c`'s gate is `(SELECT count(*) FROM claimed) = 0` rather than
+        // `NOT EXISTS`, which is how this adapter spells an append condition's
+        // guard: the shape test forbids that text in an ingest (SY-1), and a
+        // gate spelled the same way would be indistinguishable from a guard.
         let sql = format!(
             "WITH own AS (SELECT m.v FROM {meta} AS m WHERE m.k = 'store_id'), \
              f AS ({f}), \
