@@ -1039,9 +1039,9 @@ struct NewRow<'a> {
 enum Origin {
     /// Minted here: this store's identity, at the position the row is given.
     Local,
-    /// Minted elsewhere and bound as sent. Test-only with the rest of ingest
-    /// (#108): see `event_store/ingest.rs`.
-    #[cfg(test)]
+    /// Minted elsewhere and bound as sent. Behind `sync` with the rest of
+    /// ingest (#108): see `event_store/ingest.rs`.
+    #[cfg(feature = "sync")]
     Foreign(StoredOrigin),
 }
 
@@ -1051,14 +1051,14 @@ enum Origin {
 /// position past `i64::MAX`, so the writer never re-checks it and never
 /// saturates it. [`as_i64`] saturates, and saturating here would write two
 /// origins at `i64::MAX` and report the second as a re-delivery.
-#[cfg(test)]
+#[cfg(feature = "sync")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct StoredOrigin {
     store: StoreId,
     position: i64,
 }
 
-#[cfg(test)]
+#[cfg(feature = "sync")]
 impl TryFrom<EventId> for StoredOrigin {
     type Error = PostgresEventStoreError;
 
@@ -1121,7 +1121,7 @@ fn insert_statement<'r>(
             } = new;
             let (origin_store, origin_position) = match origin {
                 Origin::Local => (store_id, *position),
-                #[cfg(test)]
+                #[cfg(feature = "sync")]
                 Origin::Foreign(foreign) => (foreign.store, foreign.position),
             };
             let tags: Vec<String> = event
@@ -1328,6 +1328,6 @@ mod tests {
 
 // `happenstance-sync`'s ingest port over the writer above (#108). A child
 // module so it reaches this module's private writer without widening it, and
-// `cfg(test)` because the port's crate is unpublished: see its module docs.
-#[cfg(test)]
+// behind `sync`, off by default: see its module docs.
+#[cfg(feature = "sync")]
 mod ingest;

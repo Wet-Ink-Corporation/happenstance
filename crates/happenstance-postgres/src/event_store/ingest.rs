@@ -13,7 +13,7 @@
 //!
 //! * the `Origin::Foreign` arm of the writer and `StoredOrigin`, which refuses
 //!   an origin position past `i64::MAX` rather than saturating it, in
-//!   `event_store.rs` under `#[cfg(test)]`;
+//!   `event_store.rs` behind `sync`;
 //! * [`CONFLICT_CLAUSE`], appended to the foreign rows' statement, so a
 //!   re-delivery is a skip decided inside the `INSERT` on the origin pair's
 //!   partial unique index, never by a lookup ahead of it (VT-8, SY-11);
@@ -73,18 +73,18 @@
 //! aborts one whole with `40P01`, which classifies as transient. Batch order is
 //! kept rather than sorted, so a group's local positions follow its origin's.
 //!
-//! # Why here, and why `cfg(test)`
+//! # Why here, and why behind `sync`
 //!
 //! **Here**, as a child of `event_store`, because privacy is per module and a
 //! module's private items are visible to its descendants: this reaches the
 //! writer, the pool, the cached identity and `on_runtime` without any of them
 //! being widened. Coherence allows the impl: a foreign trait on a local type.
 //!
-//! **`cfg(test)`** because `happenstance-sync` is `publish = false` and its name
-//! is unclaimed, so it can only be a path-only dev-dependency, which cargo
-//! strips on publish. Every test is therefore a unit test under this module: a
-//! `cfg(test)` impl is invisible to `tests/`. Part E turns the gate into a
-//! feature.
+//! **Behind `sync`**, off by default, so a consumer who never replicates
+//! compiles none of it. It was `cfg(test)` while `happenstance-sync` was
+//! unpublished; #108 part E turned the gate into the feature. The tests stay
+//! unit tests under this module, because they seed the private cache, and
+//! `tests/ingest_port.rs` holds the published impl to the port from outside.
 
 use std::collections::HashSet;
 
@@ -226,6 +226,7 @@ impl PostgresEventStore {
 // The `Send` flavour, as `PostgresEventStore`'s `SendEventStore` is, and only
 // that name in scope here (constraint 4): `trait_variant` derives the bare
 // one, which the tests bind on.
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl SendIngestStore for PostgresEventStore {
     // The bare adapter error, as `happenstance-sqlite`'s spike: the port's
     // `IngestError` carries capacity and the unheld identity in arms of its own.
@@ -259,6 +260,7 @@ impl SendIngestStore for PostgresEventStore {
 /// operator cures it: the network, the pool, a serialisation failure, a
 /// deadlock, an administrator's shutdown, or exhausted resources. Every other
 /// driver failure, and every decoding variant, fails the same way again.
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl Classify for PostgresEventStoreError {
     fn class(&self) -> FailureClass {
         match self {
@@ -535,8 +537,8 @@ fn stored_store_id(stored: &[u8]) -> Result<StoreId, PostgresEventStoreError> {
     Ok(StoreId::from_bytes(bytes))
 }
 
-// The whole file is `cfg(test)` already, through its declaration in
-// `event_store.rs`. Said again here so the module reads as test code where it
-// stands.
+// The whole file is behind `sync`, through its declaration in
+// `event_store.rs`, so these are `cfg(all(test, feature = "sync"))`: the gate's
+// `--all-features` and the live job's `--all-features --lib` run them.
 #[cfg(test)]
 mod tests;

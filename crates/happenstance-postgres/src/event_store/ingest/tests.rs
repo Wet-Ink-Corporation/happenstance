@@ -184,8 +184,9 @@ async fn store_id_through_the_port_answers_the_seeded_identity_without_the_wire(
 /// classed `Transient`, and only after every refusal that needs no identity.
 ///
 /// Rejects an ingest that treats an unread identity as "no claims" and
-/// writes, and one that reads the identity before the ceilings: the same
-/// store still refuses a batch over the ceiling as that.
+/// writes, and one that reads the identity before the ceilings or before the
+/// origin check: the same store still refuses a batch over the ceiling as
+/// that, and an origin position past a `bigint` as that.
 #[tokio::test]
 async fn ingest_reports_an_unreadable_identity_as_a_store_error() {
     let store = unidentified_store();
@@ -220,6 +221,23 @@ async fn ingest_reports_an_unreadable_identity_as_a_store_error() {
             }
         ),
         "{refused:?}"
+    );
+
+    let past_a_bigint = SequencePosition::new(u64::MAX).expect("u64::MAX is not zero");
+    let unstorable = [shipped(
+        EventId::new(from, past_a_bigint),
+        1,
+        event("Shipped", "a"),
+    )];
+    let refused = ingest(&store, &[IngestGroup::new(&unstorable, &[])])
+        .await
+        .expect_err("an origin position past a bigint cannot be stored");
+    assert!(
+        matches!(
+            refused,
+            IngestError::Store(PostgresEventStoreError::OriginPositionOutOfRange { .. })
+        ),
+        "the origin check must answer before the identity read reaches the wire: {refused:?}"
     );
 }
 
