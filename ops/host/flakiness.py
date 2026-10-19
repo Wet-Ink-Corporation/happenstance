@@ -39,7 +39,7 @@ So three things, per arm x scenario cell:
               paired.rs already prints.
 
 It asserts nothing. There is no threshold here on any budget, and there must not
-be: CF-34 (`spec/SPECIFICATION.md:9787`) rejects a benchmark result gating a
+be: CF-34 (`spec/SPECIFICATION.md:9911`) rejects a benchmark result gating a
 merge, and every number below is derived from samples this repository measured --
 which is exactly the input `ops/host/preflight.sh` is careful never to read. This
 prints a table and a human reads it.

@@ -452,7 +452,7 @@ pub fn query_matching_one(ordinal: usize) -> Query {
 /// CF-34's own worked case: a two-item query where one item selects a handful
 /// of events and the other selects millions.
 ///
-/// `spec/SPECIFICATION.md:9752-9758` uses exactly this shape to argue that
+/// `spec/SPECIFICATION.md:9876-9882` uses exactly this shape to argue that
 /// complexity is a benchmark and not an assertion — *"an adapter that scans
 /// where it should seek passes every rule that can be written"*. It is the one
 /// workload in this module that exists because a specification clause names it.

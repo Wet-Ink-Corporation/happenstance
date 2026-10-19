@@ -28,7 +28,7 @@
 //! into directly. A runner figure taken against only one of them is a figure
 //! about that batch shape rather than about the runner — which is CF-25's
 //! anti-monoculture argument applied one port over
-//! (`spec/SPECIFICATION.md:9442`).
+//! (`spec/SPECIFICATION.md:9566`).
 //!
 //! # The idle poll is measured, but the fan-out is not
 //!
