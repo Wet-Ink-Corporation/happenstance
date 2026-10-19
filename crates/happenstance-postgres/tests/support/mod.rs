@@ -450,6 +450,12 @@ impl Fixture for PostgresFixture {
     /// container; the same commit fails on a CI runner at op 0 of case 1 with
     /// *"the log holds 0 event(s); 3 were accepted"*. That is a flake, and
     /// `[FROZEN]` CF-33 names a flaky conformance rule as worse than none.
+    ///
+    /// Declining no longer skips the rule (#79). The family holds this store to
+    /// its trailing model, under which that same read is lag rather than a
+    /// failure: a prefix of what was accepted, never shrinking, with every
+    /// condition verdict judged over what the store holds. So the rule runs
+    /// against this fixture, and the CI job checks that it did.
     const READ_YOUR_OWN_WRITES: Capability = Capability::declined(
         "reads and `head` admit only rows whose `xact_id` is below \
          `pg_snapshot_xmin(pg_current_snapshot())`, so an append this caller \

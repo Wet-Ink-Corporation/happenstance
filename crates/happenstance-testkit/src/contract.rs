@@ -285,18 +285,45 @@ pub trait Fixture {
     /// there is the right one — a flaky suite teaches adapter authors to re-run
     /// until green, and that habit is what lets a real failure through.
     ///
-    /// **Relaxing the equality to a prefix does not reach far enough.** The
-    /// [model family](crate::model) does not merely compare a read against what
-    /// it appended; it *predicts* whether the store will reject a conditional
-    /// append, from what a read showed it. ES-25 evaluates a condition over what
-    /// the store **holds**, while ES-10 and ES-11 govern what a read **shows** —
-    /// and a frontier store deliberately keeps those two sets apart, because
+    /// **Relaxing the equality to a prefix alone does not reach far enough.**
+    /// The [model family](crate::model) does not merely compare a read against
+    /// what it appended; it *predicts* whether the store will reject a
+    /// conditional append. ES-25 evaluates a condition over what the store
+    /// **holds**, while ES-10 and ES-11 govern what a read **shows**, and a
+    /// frontier store deliberately keeps those two sets apart, because
     /// filtering a committed row out of a condition would admit an append the
-    /// consistency boundary forbids. So on such a store the model has no oracle
-    /// for the prediction, and no weakening of the comparison supplies one.
+    /// consistency boundary forbids. A model that predicted from what a read
+    /// showed would have no oracle for the verdict.
     ///
-    /// The honest move is therefore to say the family does not apply, in the
-    /// fixture's own words, rather than to run it and hope the server is quiet.
+    /// # What the model family does with a declining fixture
+    ///
+    /// Through `0.4.3` this paragraph concluded that no weakening supplies that
+    /// oracle, and the model family skipped. That was true of a prefix-only
+    /// weakening and false of a slightly larger one, so the family now **runs**
+    /// a trailing model on a fixture that declines this capability. It
+    /// predicts over what the store *holds*, which the model knows by content
+    /// and order from its own accepted appends. Where it does not know a held
+    /// event's position, it bounds it between the nearest known ones. And it
+    /// defers a verdict it cannot decide yet, re-judging it as later reads and
+    /// returned positions narrow the bounds. Reads are held to a prefix that
+    /// never shrinks, and each read to some frontier between the full reads
+    /// around it.
+    ///
+    /// It waits for nothing, so it gives some things up. Against a fixture
+    /// that declines this capability, the family **no longer catches**:
+    ///
+    /// - an accepted write that never becomes visible, which reads as lag;
+    /// - part of a batch becoming visible before the rest;
+    /// - a read that drops its newest matching events, when the frontier moved
+    ///   during that read and a lower frontier explains the result;
+    /// - a condition verdict whose deciding event is never shown and is not
+    ///   the last of its batch, or that is still open when the sequence ends.
+    ///
+    /// And it **assumes**, without a clause to cite, that visibility never
+    /// moves backward: a later full read never shows less than an earlier one.
+    /// Both frontier adapters in this workspace meet that by construction. A
+    /// store that does not fails the rule with a message naming the
+    /// assumption.
     const READ_YOUR_OWN_WRITES: Capability = Capability::SUPPORTED;
 
     /// Whether this fixture can make its store **fail part way through writing

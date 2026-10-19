@@ -26,11 +26,16 @@ with programs you can run.
 > different transport and clears it too. It has been on crates.io since
 > `0.2.0`.
 >
-> **One of those gated tests is a stated declension rather than a run.** The
-> fixture declines `READ_YOUR_OWN_WRITES`, so the generated model family reports
-> a skip carrying its reason instead of executing. That family predicts whether a
-> conditional append will be refused from what a read showed it, and this store
-> keeps those two sets apart on purpose — see *What this store costs a caller*.
+> **One of those gated tests runs a weaker check than the rest.** The fixture
+> declines `READ_YOUR_OWN_WRITES`, so the generated model family holds this store
+> to the testkit's trailing model instead of its exact one. Before #79 it
+> skipped. That family predicts whether a conditional append will be refused,
+> and this store judges a condition over every committed row while a read shows
+> only the rows below its frontier — see *What this store costs a caller*. The
+> trailing model predicts over what is held and defers a verdict it cannot
+> decide yet. What it gives up is listed on `Fixture::READ_YOUR_OWN_WRITES` in
+> `happenstance-testkit`: chiefly, a write that never becomes visible reads as
+> lag rather than as a lost write.
 
 ## Which crate do I want?
 

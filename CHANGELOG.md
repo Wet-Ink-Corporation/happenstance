@@ -437,6 +437,27 @@ not the same as what a user needed to be told.
   re-delivering the call converges, because an event the store already holds
   is a skip (SY-11). No signature changes; publication is what turned the
   sentence into a promise.
+- **`happenstance-testkit`: `ops_agree_with_the_model` runs on a fixture that
+  declines `READ_YOUR_OWN_WRITES` instead of skipping** (#79, IMPL-7). Such a
+  fixture is held to a trailing model. A full read must be a prefix of what was
+  accepted that never shrinks, and each read must be explained by some frontier
+  between the full reads around it. Each condition verdict is predicted from
+  what the store holds, with an unknown position bounded by its neighbours, and
+  deferred when it cannot be decided yet. It reads no clock and never waits
+  (CF-33). The rule still reports `Ran`, and no signature changed. It runs
+  weaker than the strict model, and `Fixture::READ_YOUR_OWN_WRITES`'s rustdoc
+  lists what it no longer catches: an accepted write that never appears, part
+  of a batch shown before the rest, a read missing its newest events while the
+  frontier moved, and a verdict nothing later decides. Run at zero lag against
+  every wrong store in the testkit's registry, it misses none the strict model
+  catches. It assumes, and checks, that visibility never moves backward, which
+  no clause states yet. **This can turn a passing adapter red**: a declining
+  fixture that skipped this rule now has to pass it. `happenstance-postgres` and
+  `happenstance-neon` decline the capability, so their live CI jobs now run the
+  rule and check that it did. The rustdoc argument that no weakening could
+  supply an oracle for the verdict is rewritten, because it held only for a
+  prefix-only weakening; the plan is
+  `.temper/plans/model-family-behind-a-frontier.md`.
 - **`happenstance-sync`: `Ack`'s `appended` and `skipped` are `u64`, not
   `usize`** (#114, ADR-0097). They cross the wire, so their width is
   fixed. The crate is not published, so no consumer is affected.

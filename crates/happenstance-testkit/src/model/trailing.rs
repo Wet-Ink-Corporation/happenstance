@@ -1,4 +1,79 @@
 //! The model a store is held to when its reads trail its commits.
+//!
+//! A fixture that declines `READ_YOUR_OWN_WRITES` has said that `append`
+//! returning `Ok(P)` does not promise a read straight afterwards shows `P`.
+//! The strict `Model` assumes the opposite at every step, so for such a
+//! store the rule runs this model instead. It reads no clock and never waits
+//! (CF-33): every check is decided from what the store has already answered.
+//!
+//! # What a trailing store still promises
+//!
+//! The model drives one handle, strictly sequentially, so these follow from
+//! existing clauses:
+//!
+//! - **Held is accepted.** `Ok(P)` is a durability promise, so every accepted
+//!   batch is held from the moment `append` returns.
+//! - **Visible is a position prefix of held.** Position order is visibility
+//!   order (ES-10), and one sequential writer assigns positions in append
+//!   order.
+//! - **Nothing is reused.** Positions strictly increase (VT-11), the batch's
+//!   last position is `Ok(P)` (ES-19), and an event keeps the position it was
+//!   first shown at.
+//! - **A condition is judged over what is held, not what is visible** (ES-25,
+//!   ADR-0095's reading). So a verdict can turn on rows no read has shown yet.
+//!   Their content and order are known; their positions may not be.
+//! - **A read is one snapshot** (ES-11), so its frontier lies between the
+//!   frontiers of the full reads before and after it.
+//!
+//! And one thing **no clause states**: the frontier never moves backward. It
+//! holds for `pg_snapshot_xmin` on one primary, both frontier adapters meet it
+//! by construction, and the strict model implies it. The model asserts it as a
+//! stated assumption, with `RetreatingFrontierStore` in the testkit's
+//! `tests/mutation_coverage/trailing.rs` as the store that breaks it. Making it
+//! normative is an ADR's question, not this module's.
+//!
+//! # The three checks
+//!
+//! - **T1, the log.** Every full read is a prefix of what is held, by content
+//!   and order; no shorter than the last one; strictly increasing; agrees on
+//!   every position already shown; shows each visible batch-last where `append`
+//!   said; and shows nothing at or above a returned position whose batch is
+//!   still invisible.
+//! - **T2, reads.** A read's result is the selection over **some** prefix
+//!   between the full read before it and the full read after it.
+//! - **T3, verdicts.** Each held event gets an exact position, or an open
+//!   interval between its nearest exact neighbours. A violation is monotone in
+//!   position, so probing the interval's two ends gives a three-valued
+//!   prediction: refuse, accept, or either. A verdict that could go either way
+//!   is deferred and re-judged at every later full read, and a contradiction
+//!   then fails naming the op that received it.
+//!
+//! At zero lag every interval collapses and every bracket is one prefix, so
+//! the three checks are the strict model's, less one: an accepted write that
+//! has not appeared reads as lag rather than as a lost write.
+//!
+//! # What it no longer catches
+//!
+//! Each of these the strict model catches and this one, by design, does not:
+//!
+//! 1. **A lost write.** An accepted batch that never becomes visible is
+//!    indistinguishable from lag without waiting. That includes a frontier
+//!    that stalls for good (`StalledFrontierStore`, a measured miss) and a
+//!    tail write lost at zero lag.
+//! 2. **A non-atomic reveal.** Part of a batch may be visible without the
+//!    rest; the strict model's whole-log length check is what refuses that.
+//! 3. **A read defect above the bracket's floor.** When the frontier moves
+//!    during a read, a result that drops the newest matching events is
+//!    explained by a lower frontier, so it passes.
+//! 4. **A verdict nothing decides.** A deferred verdict whose deciding event
+//!    is never shown, and is not the last of its batch, stays unjudged. So
+//!    does any verdict still open when the sequence ends.
+//! 5. **The exact position of a non-last batch member** until a read shows
+//!    it. Gaps are legal, so only its bounds are known.
+//!
+//! Run at zero lag against every registered store, the measured cost is
+//! nothing: `WEAKENING_COSTS` in the testkit's `tests/mutation_coverage.rs`
+//! pins that set, and it is empty.
 
 use core::mem;
 
