@@ -1687,6 +1687,26 @@ mod tests {
     /// must not grow a query against any table.
     #[test]
     fn no_statement_leaves_a_name_unqualified() {
+        // The refusal's exemption is an allowlist, not a blocklist: outside its
+        // quoted literals it may hold these words and nothing else, so no word
+        // that reaches a relation (`FROM`, `PERFORM`, `nextval`, ...) can be
+        // added to it unseen.
+        const REFUSAL_WORDS: [&str; 14] = [
+            "DO",
+            "$sy38$",
+            "BEGIN",
+            "IF",
+            "current_setting",
+            "true",
+            "THEN",
+            "RAISE",
+            "EXCEPTION",
+            "USING",
+            "ERRCODE",
+            "MESSAGE",
+            "DETAIL",
+            "END",
+        ];
         let store = store();
         let tags = Tags::from_pairs([("k", "v")]).unwrap();
         let condition =
@@ -1695,10 +1715,17 @@ mod tests {
         let event = Event::new("T", b"x".to_vec()).unwrap().with_tags(tags);
         let foreign = foreign_rows(1);
         let refusal = refusal_statement().query;
-        assert!(
-            !refusal.contains("FROM") && !refusal.contains("INTO") && !refusal.contains("JOIN"),
-            "the refusal names a relation, so it must be qualified too: {refusal}"
-        );
+        let unquoted: String = refusal.split('\'').step_by(2).collect::<Vec<_>>().join(" ");
+        for word in unquoted
+            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
+            .filter(|word| !word.is_empty())
+        {
+            assert!(
+                REFUSAL_WORDS.contains(&word),
+                "the refusal is exempt only while it names no relation, and `{word}` is not \
+                 one of its words: {refusal}"
+            );
+        }
 
         let requests = [
             store.read_request(&Query::all(), ReadOptions::new()),
