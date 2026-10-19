@@ -3074,6 +3074,8 @@ macro_rules! for_each_trailing_subject {
     ($($callback:tt)+) => {
         $($callback)+! {
             crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::Settling>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::GappedSettling>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::Draining>,
             crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::FrontierFilteredCondition>,
             crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::HoleyFrontier>,
             crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::RetreatingFrontier>,
@@ -3137,24 +3139,45 @@ fn trailing_subject_names() -> Vec<&'static str> {
     for_each_trailing_subject!(names)
 }
 
-/// What the trailing model does to each store built to test it, and why
-/// that store is plausible.
+/// What the trailing model does to each store built to test it, what the
+/// verdict must say, and why that store is plausible.
 ///
 /// `MODEL_COVERAGE`'s twin for the trailing path of the same rule. Every row
 /// carries its provenance, as a `REGISTRY` row does, because these stores are
-/// not in `REGISTRY` and nothing else would hold them to CF-4.
+/// not in `REGISTRY` and nothing else would hold them to CF-4. The middle
+/// column is a substring of the verdict's description: a `Rejected` row names
+/// the assertion that caught the store, so a store rejected for a reason other
+/// than its own defect fails the row rather than passing it.
 #[cfg(feature = "proptest")]
-const TRAILING_MODEL_COVERAGE: &[(&str, ModelOutcome, &str)] = &[
+const TRAILING_MODEL_COVERAGE: &[(&str, ModelOutcome, &str, &str)] = &[
     (
         "TrailingFrontierStore",
         ModelOutcome::Agreed,
+        "passed",
         "the conformant control: a monotone prefix that lags by zero, one or two reads, \
          and a condition judged over every held row, which is the shape of \
          happenstance-postgres and happenstance-neon behind pg_snapshot_xmin",
     ),
     (
+        "GappedTrailingFrontierStore",
+        ModelOutcome::Agreed,
+        "passed",
+        "the conformant control over a Postgres sequence's positions: from 4096 in \
+         steps of seven, and a position burned by each refused conditional append, as \
+         nextval() burns one in a transaction that rolls back",
+    ),
+    (
+        "DrainingFrontierStore",
+        ModelOutcome::Agreed,
+        "passed",
+        "the conformant control with a frontier that drains one batch per read, so a \
+         read lands strictly between the full reads either side of it, as a Postgres \
+         read does while concurrent writers commit one by one",
+    ),
+    (
         "FrontierFilteredConditionStore",
         ModelOutcome::Rejected,
+        "but a held event violates",
         "the condition SQL reuses the read path's xact_id < pg_snapshot_xmin(...) \
          predicate, the defect happenstance-postgres's evaluate warns of with \"No \
          frontier predicate here\"",
@@ -3162,18 +3185,21 @@ const TRAILING_MODEL_COVERAGE: &[(&str, ModelOutcome, &str)] = &[
     (
         "HoleyFrontierStore",
         ModelOutcome::Rejected,
+        "position order is visibility order",
         "happenstance-postgres's naive arm: nextval() outside the transaction, so a \
          later writer commits first and a read shows its row above a hole",
     ),
     (
         "RetreatingFrontierStore",
         ModelOutcome::Rejected,
+        "the frontier went backward",
         "a frontier read off a replica, or through a pooler that hops between servers, \
          so consecutive snapshots disagree on what has committed",
     ),
     (
         "TrailingAfterIsInclusiveStore",
         ModelOutcome::Rejected,
+        "but no held event can violate",
         "AfterIsInclusiveStore behind a frontier: after is exclusive, from is inclusive, \
          and one comparison served both",
     ),
@@ -3183,6 +3209,7 @@ const TRAILING_MODEL_COVERAGE: &[(&str, ModelOutcome, &str)] = &[
     (
         "StalledFrontierStore",
         ModelOutcome::Agreed,
+        "passed",
         "a transaction left open on the cluster holds pg_snapshot_xmin back for good \
          (ADR-0024, ADR-0071). Without waiting, which CF-33 forbids, a frontier that \
          never moves cannot be told from one that has not moved yet: liveness is the \
@@ -5296,7 +5323,7 @@ mod mutation_coverage {
         for name in &names {
             let rows = TRAILING_MODEL_COVERAGE
                 .iter()
-                .filter(|(row, _, _)| row == name)
+                .filter(|(row, _, _, _)| row == name)
                 .count();
             assert_eq!(
                 rows, 1,
@@ -5304,7 +5331,11 @@ mod mutation_coverage {
                  {rows} row(s) in `TRAILING_MODEL_COVERAGE`; it needs exactly one"
             );
         }
-        for (row, _, provenance) in TRAILING_MODEL_COVERAGE {
+        for (row, _, saw, provenance) in TRAILING_MODEL_COVERAGE {
+            assert!(
+                !saw.trim().is_empty(),
+                "`{row}` states no verdict substring, so any reason would satisfy it"
+            );
             assert!(
                 names.contains(row),
                 "`TRAILING_MODEL_COVERAGE` has a row for `{row}`, which \
@@ -5337,9 +5368,9 @@ mod mutation_coverage {
             "every trailing subject must be driven exactly once"
         );
         for (name, outcome, description) in &observed {
-            let Some((_, claimed, _)) = TRAILING_MODEL_COVERAGE
+            let Some((_, claimed, saw, _)) = TRAILING_MODEL_COVERAGE
                 .iter()
-                .find(|(row, _, _)| row == name)
+                .find(|(row, _, _, _)| row == name)
             else {
                 panic!("`{name}` was driven and has no `TRAILING_MODEL_COVERAGE` row");
             };
@@ -5353,6 +5384,11 @@ mod mutation_coverage {
                 outcome, claimed,
                 "`{name}`: `TRAILING_MODEL_COVERAGE` claims {claimed:?} and the \
                  trailing model answered {outcome:?}. Saw: {description}"
+            );
+            assert!(
+                description.contains(saw),
+                "`{name}` was {outcome:?} as claimed, but not by the assertion its row \
+                 names: expected `{saw}`. Saw: {description}"
             );
         }
     }
