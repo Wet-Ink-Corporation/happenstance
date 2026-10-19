@@ -13,7 +13,8 @@ use happenstance_sync::{Classify, FailureClass, IngestError, IngestGroup, Waterm
 
 use super::super::WATERMARK_SQL;
 use super::{
-    append, carrying, event, holds, id, ingest, live_store, log, peer, rows, shipped, watermark,
+    append, carrying, event, holds, id, ingest, live_store, log, own, peer, rows, shipped,
+    watermark,
 };
 use crate::error::PostgresEventStoreError;
 
@@ -178,7 +179,7 @@ async fn compensation_is_atomic_with_the_losing_event_and_skipped_on_redelivery(
     assert!(answer.position > lost.position);
     assert_eq!(
         answer.id,
-        EventId::new(store.store_id, answer.position),
+        EventId::new(own(&store).await, answer.position),
         "compensation is minted here, like any local append"
     );
 
@@ -227,7 +228,7 @@ async fn a_compensation_that_fails_in_the_transaction_takes_the_losing_event_wit
          CREATE TRIGGER poison BEFORE INSERT ON event FOR EACH ROW \
          WHEN (NEW.event_type = 'Poisoned') EXECUTE FUNCTION poison();",
     )
-    .execute(store.store.pool())
+    .execute(store.pool())
     .await
     .expect("the fault installs");
 
@@ -274,10 +275,8 @@ async fn a_local_append_after_ingest_does_not_restamp_foreign_rows() {
     for sent in &batch {
         assert_eq!(carrying(&log, sent.id).id, sent.id);
     }
-    let local: Vec<&SequencedEvent> = log
-        .iter()
-        .filter(|held| held.id.store() == store.store_id)
-        .collect();
+    let here = own(&store).await;
+    let local: Vec<&SequencedEvent> = log.iter().filter(|held| held.id.store() == here).collect();
     assert_eq!(local.len(), 2);
     for held in local {
         assert_eq!(held.id.position(), held.position);
@@ -319,7 +318,7 @@ async fn contains_event_id_answers_for_a_foreign_id() {
     assert!(holds(&store, sent).await);
     assert!(!holds(&store, id(peer(0x18), 42)).await);
     let landed = carrying(&log(&store).await, sent).position;
-    assert!(!holds(&store, EventId::new(store.store_id, landed)).await);
+    assert!(!holds(&store, EventId::new(own(&store).await, landed)).await);
 }
 
 /// SY-1: an ingest evaluates no condition, including one every append would
@@ -428,12 +427,7 @@ async fn watermark_reads_the_origin_index_without_a_sort() {
         .await
         .expect("two new foreign events land");
 
-    let mut transaction = store
-        .store
-        .pool()
-        .begin()
-        .await
-        .expect("a transaction opens");
+    let mut transaction = store.pool().begin().await.expect("a transaction opens");
     sqlx::raw_sql(
         "SET LOCAL enable_seqscan = off; SET LOCAL enable_bitmapscan = off; \
          SET LOCAL enable_hashagg = off; SET LOCAL enable_sort = off;",

@@ -17,7 +17,6 @@ use happenstance_testkit::Capability;
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
 
-use super::super::PostgresIngestStore;
 use super::server;
 use crate::event_store::PostgresEventStore;
 
@@ -47,7 +46,7 @@ impl PostgresIngestFixture {
 }
 
 impl IngestFixture for PostgresIngestFixture {
-    type Store = PostgresIngestStore;
+    type Store = PostgresEventStore;
 
     /// Supported, by an `AFTER INSERT` row trigger in this fixture's schema
     /// that counts the rows the armed transaction inserts and raises on the
@@ -66,10 +65,10 @@ impl IngestFixture for PostgresIngestFixture {
 
     async fn connect(&self) -> Self::Store {
         // A refcounted handle onto the one pool, which every handle shares.
+        // A new store rather than a clone, so each handle reads its identity
+        // for itself on first use.
         let pool = self.pool().await.clone();
-        PostgresIngestStore::open(PostgresEventStore::new(pool))
-            .await
-            .expect("a broken test environment: a freshly migrated schema has an identity")
+        PostgresEventStore::new(pool)
     }
 
     /// Installs the trigger `MID_GROUP_FAULT` describes. The counter is a

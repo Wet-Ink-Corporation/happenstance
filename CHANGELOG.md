@@ -379,6 +379,14 @@ not the same as what a user needed to be told.
   `#[cfg(test)]`, are kept for now and answer from the identity they read.
   Neither `happenstance-sync` nor `happenstance-sync-testkit` is published, and
   the Postgres/Neon wrappers are `#[cfg(test)]`, so no consumer is affected.
+- **`happenstance-postgres`: the ingest port is on `PostgresEventStore`, not a
+  wrapper** (#108, part E1). The test-only `PostgresIngestStore` and its
+  `async fn open` are gone. The port's `store_id` is the store's own identity
+  read, cached per handle, the one `append` stamps from. An ingest asks for it
+  after the ceilings and the origin-position check, so those refusals still
+  never reach the wire, and a failed read is `IngestError::Store`. Tests that
+  need no server seed the private cache. All of it is still `#[cfg(test)]`, so
+  nothing published moves.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity
