@@ -7,17 +7,13 @@
 //! the 5 of `event_store_concurrency_conformance!` at `CONTENDERS = 64`, the
 //! model family, and this crate's own six.
 //!
-//! One of those runs is **weaker than the rest**, and it is named here rather
-//! than left to be discovered in a log: the fixture declines
-//! `READ_YOUR_OWN_WRITES`, so `ops_agree_with_the_model` holds this store to the
-//! testkit's trailing model rather than its exact one. It used to skip. The
-//! model family predicts whether a conditional append will be rejected, and on
-//! this store what a condition judges (every committed row) and what a read
-//! shows (rows below the frontier) are deliberately different sets — see *What
-//! this store costs a caller* on the crate root. The trailing model predicts
-//! over what is held and defers what it cannot decide yet, and the testkit's
-//! `Fixture::READ_YOUR_OWN_WRITES` rustdoc lists what it no longer catches. The
-//! counts above read 101 and 89 until the `0.2.0` pass. The family was 93 rules
+//! One of those 105 **runs weaker than the rest**, and it is named here: the
+//! fixture declines `READ_YOUR_OWN_WRITES`, so `ops_agree_with_the_model` runs
+//! its trailing model (#79; it used to skip), whose rustdoc lists what it gives
+//! up. A condition here judges every committed row and a read shows only rows
+//! below the frontier, deliberately different sets — see *What this store
+//! costs a caller* on the crate root. The trailing model predicts over the
+//! first. The counts above read 101 and 89 until the `0.2.0` pass. The family was 93 rules
 //! and had been since before this crate cleared it, so both numbers were
 //! arithmetic on a stale one; it is 95 now, because ES-27 gained the two rules
 //! that check a condition item's tags are AND-ed rather than keyed on the first.

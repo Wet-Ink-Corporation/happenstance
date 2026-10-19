@@ -748,17 +748,30 @@ pub mod rules {
     /// to a **trailing** model instead of the exact one. Each full read must
     /// be a prefix of what was accepted that never shrinks, each read must be
     /// explained by some frontier between the full reads around it, and each
-    /// condition verdict is predicted from what the store holds, deferred when
-    /// the positions that decide it are not known yet. It reads no clock and
-    /// never waits (CF-33). It does give things up: a write that never
-    /// appears reads as lag, and a verdict nothing later decides is never
-    /// judged. That capability's documentation lists every such loss. The rule
-    /// still reports [`RuleOutcome::Ran`]; which model ran is a fact about the
-    /// fixture's declared capability, not something the outcome carries.
+    /// condition verdict is predicted from what the store holds, with an
+    /// unknown position bounded by its neighbours' and the verdict deferred
+    /// when those bounds do not decide it. It reads no clock and never waits
+    /// (CF-33). The rule still reports [`RuleOutcome::Ran`]; which model ran
+    /// is a fact about the fixture's declared capability, not something the
+    /// outcome carries.
+    ///
+    /// Waiting for nothing has a price. Against a declining fixture the rule
+    /// **no longer catches**:
+    ///
+    /// - an accepted write that never becomes visible, which reads as lag;
+    /// - part of a batch becoming visible before the rest;
+    /// - a read that drops its newest matching events, when the frontier moved
+    ///   during that read and a lower frontier explains the result;
+    /// - a condition verdict whose deciding event is never shown and is not
+    ///   the last of its batch, or that is still open when the sequence ends.
+    ///
+    /// Run at zero lag against every wrong store in the testkit's own
+    /// registry, it misses none the exact model catches.
     ///
     /// It assumes one thing no clause states yet: visibility never moves
-    /// backward. A store whose frontier retreats fails with a message that
-    /// says so.
+    /// backward, so a later full read never shows less than an earlier one.
+    /// Both frontier adapters in this workspace meet that by construction. A
+    /// store whose frontier retreats fails with a message that says so.
     pub async fn ops_agree_with_the_model<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
         let strategy = proptest::collection::vec(any_op(), 1..=MAX_OPS);
         let config = Config::default();

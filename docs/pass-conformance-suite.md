@@ -104,8 +104,8 @@ this capability (`Fixture::READ_YOUR_OWN_WRITES`, read by
 `ops_agree_with_the_model`). Without it the family does not skip: it runs a
 weaker check. Each full read must be a prefix of what you accepted that never
 shrinks, and each condition verdict is judged over what your store holds,
-deferred while the positions that decide it are unknown. The capability's
-rustdoc lists what that check no longer catches. It also assumes your store's
+deferred while the positions that decide it are unknown. The rule's rustdoc
+lists what that check no longer catches. It also assumes your store's
 visibility never moves backward, so a later read never shows less than an
 earlier one.
 

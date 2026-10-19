@@ -445,8 +445,8 @@ not the same as what a user needed to be told.
   what the store holds, with an unknown position bounded by its neighbours, and
   deferred when it cannot be decided yet. It reads no clock and never waits
   (CF-33). The rule still reports `Ran`, and no signature changed. It runs
-  weaker than the strict model, and `Fixture::READ_YOUR_OWN_WRITES`'s rustdoc
-  lists what it no longer catches: an accepted write that never appears, part
+  weaker than the strict model, and the rule's rustdoc lists what it no longer
+  catches: an accepted write that never appears, part
   of a batch shown before the rest, a read missing its newest events while the
   frontier moved, and a verdict nothing later decides. Run at zero lag against
   every wrong store in the testkit's registry, it misses none the strict model

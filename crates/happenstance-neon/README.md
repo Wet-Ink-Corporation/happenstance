@@ -184,7 +184,7 @@ Before #79 the declension made the generated model family report a stated skip.
 Now the family runs a weaker, trailing model against this store. It holds each
 read to a prefix of what was accepted that never shrinks, and judges each
 condition verdict over what the store holds, deferring a verdict it cannot
-decide yet. What it gives up is listed on `Fixture::READ_YOUR_OWN_WRITES` in
+decide yet. What it gives up is listed on `ops_agree_with_the_model` in
 `happenstance-testkit`: chiefly, a write that never becomes visible reads as lag
 rather than as a lost write.
 

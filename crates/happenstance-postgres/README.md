@@ -33,7 +33,7 @@ with programs you can run.
 > and this store judges a condition over every committed row while a read shows
 > only the rows below its frontier — see *What this store costs a caller*. The
 > trailing model predicts over what is held and defers a verdict it cannot
-> decide yet. What it gives up is listed on `Fixture::READ_YOUR_OWN_WRITES` in
+> decide yet. What it gives up is listed on `ops_agree_with_the_model` in
 > `happenstance-testkit`: chiefly, a write that never becomes visible reads as
 > lag rather than as a lost write.
 

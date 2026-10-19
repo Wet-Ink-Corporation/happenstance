@@ -28,9 +28,6 @@
 //! so a read carries the same `xact_id < pg_snapshot_xmin(…)` visibility frontier
 //! `happenstance-postgres` documents, and that would hold over a direct
 //! connection too. ES-11 is about the transport; this is about the server.
-//! Declining it no longer skips the generated model family (#79): the family
-//! holds this store to the testkit's weaker trailing model, whose losses are
-//! listed on `happenstance_testkit::Fixture::READ_YOUR_OWN_WRITES`.
 //!
 //! **What a dropped `append` future does here is answered in
 //! [`event_store`]'s `# Cancellation` section**, which ES-23 obliges this

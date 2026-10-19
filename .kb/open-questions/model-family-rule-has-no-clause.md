@@ -42,7 +42,7 @@ last_reviewed: 2026-10-19
 
 ## What is true today
 
-`ops_agree_with_the_model` (`crates/happenstance-testkit/src/model.rs:762`) is the model family's
+`ops_agree_with_the_model` (`crates/happenstance-testkit/src/model.rs:775`) is the model family's
 single conformance rule. It replays a generated sequence of appends, conditional appends and reads
 against a model implementation and compares every answer the store under test gives against what
 the model gives. What it checks is therefore the **composition** of ES-8, ES-9, ES-11, ES-14,

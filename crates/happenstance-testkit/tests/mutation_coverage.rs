@@ -2852,7 +2852,7 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// what moved was the *generator* rather than any store. `ToBoundIgnoredStore`,
 /// `ToIsExclusiveStore` and `BackwardsToIsAnUpperBoundStore` were misses for one
 /// reason: [`Op`]`::Read` carried four of the five read options, `to` was the
-/// missing one, and `Model::select`'s two `to` branches were therefore dead
+/// missing one, and the model's `select`'s two `to` branches were therefore dead
 /// code. All three are rejected now, and a fourth store —
 /// `UnparenthesisedToPredicateStore` — was written to be caught by nothing else,
 /// which is what `Kind::ModelOnlyMutant` recorded until
@@ -2942,7 +2942,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("DefaultQueryHeadStore", ModelOutcome::Agreed),
     // The upper bound, and all three moved from `Agreed` to `Rejected` at phase
     // 12 without any of them changing. What changed is the generator: `Op::Read`
-    // now carries a `to`, so `Model::select`'s two `to` branches execute. They
+    // now carries a `to`, so the model's `select`'s two `to` branches execute. They
     // sat under the *head* comment above only because that is where the table
     // put them, and they were never about `head`.
     ("ToBoundIgnoredStore", ModelOutcome::Rejected),

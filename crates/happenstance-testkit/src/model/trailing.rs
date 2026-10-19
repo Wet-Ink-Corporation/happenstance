@@ -140,9 +140,11 @@ enum Placed {
     At(SequencePosition),
     /// Strictly between its nearest exactly-placed neighbours.
     Between {
-        /// The nearest exact position below it, if any.
+        /// The exact position of its nearest earlier neighbour, which it sits
+        /// above, or `None` when no earlier event is placed.
         above: Option<SequencePosition>,
-        /// The nearest exact position above it, if any.
+        /// The exact position of its nearest later neighbour, which it sits
+        /// below, or `None` when no later event is placed.
         below: Option<SequencePosition>,
     },
 }
@@ -203,9 +205,7 @@ impl TrailingModel {
             Prediction::Accepted
         }
     }
-}
 
-impl TrailingModel {
     /// "visible N, held M", for a failure message a human reads once.
     fn counts(&self) -> String {
         format!("visible {}, held {}", self.known.len(), self.expected.len())
