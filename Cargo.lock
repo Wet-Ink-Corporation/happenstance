@@ -952,6 +952,8 @@ dependencies = [
  "base64",
  "futures-core",
  "happenstance-core",
+ "happenstance-sync",
+ "happenstance-sync-testkit",
  "happenstance-testkit",
  "http-body-util",
  "hyper",
