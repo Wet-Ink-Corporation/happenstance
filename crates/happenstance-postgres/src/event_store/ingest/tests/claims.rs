@@ -14,9 +14,9 @@ use happenstance_core::{EventId, SequencePosition, StoreId};
 use happenstance_sync::{Classify, FailureClass, IngestError, IngestGroup, ReplicatedEvent};
 use sqlx::PgPool;
 
-use super::super::PostgresIngestStore;
 use super::{
-    append, carrying, event, holds, id, ingest, live_store, log, peer, rows, shipped, watermark,
+    append, carrying, event, holds, id, ingest, live_store, log, own, peer, rows, shipped,
+    watermark,
 };
 use crate::event_store::PostgresEventStore;
 
@@ -46,9 +46,9 @@ struct Claimed {
 }
 
 impl Claimed {
-    async fn on(store: &PostgresIngestStore, ahead: usize) -> Self {
+    async fn on(store: &PostgresEventStore, ahead: usize) -> Self {
         let held = append(store, &[event("Local", "a")]).await;
-        let claim = EventId::new(store.store_id, past(held, ahead));
+        let claim = EventId::new(own(store).await, past(held, ahead));
         let from = peer(0x4A);
         Self {
             claim,
@@ -96,7 +96,7 @@ async fn an_echo_of_an_own_event_is_a_skip() {
     let before = log(&store).await;
 
     let back_home = [shipped(
-        EventId::new(store.store_id, held),
+        EventId::new(own(&store).await, held),
         1,
         event("Local", "a"),
     )];
@@ -133,7 +133,7 @@ async fn an_unheld_own_identity_stops_the_ingest_and_writes_nothing() {
     assert_eq!(watermark(&store).await, marks);
     let after = append(&store, &[event("Local", "b")]).await;
     assert!(
-        holds(&store, EventId::new(store.store_id, after)).await,
+        holds(&store, EventId::new(own(&store).await, after)).await,
         "the store still writes"
     );
 }
@@ -190,13 +190,13 @@ async fn a_claim_the_calls_own_compensation_would_hide_is_refused() {
         .expect("the compensation is held");
     assert_eq!(
         compensated.id,
-        EventId::new(twin.store_id, past(twin_head, 2))
+        EventId::new(own(&twin).await, past(twin_head, 2))
     );
 
     let store = live_store().await;
     let head = append(&store, &[event("Local", "a")]).await;
     let before = log(&store).await;
-    let claim = EventId::new(store.store_id, past(head, 2));
+    let claim = EventId::new(own(&store).await, past(head, 2));
     let second = [
         shipped(id(from, 2), 2, event("Shipped", "f2")),
         shipped(claim, 3, event("Local", "forged")),
@@ -229,8 +229,10 @@ async fn a_claim_the_calls_own_compensation_would_hide_is_refused() {
 #[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container, or set HAPPENSTANCE_POSTGRES_URL)"]
 async fn a_claim_on_a_row_committed_during_the_call_is_refused() {
     let store = live_store().await;
-    let pool = store.store.pool();
-    let own = store.store_id;
+    let pool = store.pool();
+    // Read, and cached, before the gate, so the spawned ingest's clone of the
+    // handle answers it without a round trip.
+    let own = own(&store).await;
     // Installed first: `CREATE TRIGGER` waits on T's row lock otherwise.
     sqlx::raw_sql(
         "CREATE FUNCTION gate() RETURNS trigger LANGUAGE plpgsql AS \
@@ -379,17 +381,16 @@ async fn a_claim_lands_as_foreign_after_a_manual_remint() {
     let store = live_store().await;
     let claimed = Claimed::on(&store, 3).await;
     assert_refused(ingest(&store, &claimed.groups()).await, claimed.claim);
-    let old: StoreId = store.store_id;
+    let old: StoreId = own(&store).await;
 
-    let pool = store.store.pool().clone();
+    let pool = store.pool().clone();
     sqlx::query("UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id'")
         .execute(&pool)
         .await
         .expect("the identity row is replaced");
-    let reminted = PostgresIngestStore::open(PostgresEventStore::new(pool))
-        .await
-        .expect("a fresh handle reads the new identity");
-    assert_ne!(reminted.store_id, old);
+    // A new handle, not a clone: a clone shares `store`'s cached identity.
+    let reminted = PostgresEventStore::new(pool);
+    assert_ne!(own(&reminted).await, old);
 
     let landed = ingest(&reminted, &claimed.groups())
         .await

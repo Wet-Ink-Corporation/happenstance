@@ -1,6 +1,6 @@
 //! The ingest port's own tests, each naming the clause it exercises.
 //!
-//! The first six need no server. The rest are `#[ignore]`d, as every live test
+//! The first eight need no server. The rest are `#[ignore]`d, as every live test
 //! in this crate is, and run with `-- --ignored --test-threads=1` against the
 //! server `server` finds. None asserts a literal local position: every one
 //! compared was read back from `append` or the log. The literal positions are
@@ -18,7 +18,7 @@ use happenstance_sync::{
 };
 use sqlx::postgres::PgPoolOptions;
 
-use super::{CONFLICT_CLAUSE, OwnedGroup, PostgresIngestStore, foreign_statement};
+use super::{CONFLICT_CLAUSE, OwnedGroup, foreign_statement};
 use crate::error::PostgresEventStoreError;
 use crate::event_store::tests::server as sqlstate;
 use crate::event_store::{NewRow, Origin, PostgresEventStore, insert_statement};
@@ -94,46 +94,67 @@ fn carrying(log: &[SequencedEvent], id: EventId) -> &SequencedEvent {
 }
 
 /// Whether `store` holds `id`.
-async fn holds(store: &PostgresIngestStore, id: EventId) -> bool {
+async fn holds(store: &PostgresEventStore, id: EventId) -> bool {
     EventStore::contains_event_id(store, id)
         .await
         .expect("a membership probe of a reachable store answers")
 }
 
 /// One local append, answering the position the store assigned.
-async fn append(store: &PostgresIngestStore, events: &[Event]) -> SequencePosition {
+async fn append(store: &PostgresEventStore, events: &[Event]) -> SequencePosition {
     EventStore::append(store, events, None)
         .await
         .expect("an unconditional append to a reachable store lands")
 }
 
 /// Rows in the store's `event` table, read raw, frontier or not.
-async fn rows(store: &PostgresIngestStore) -> i64 {
+async fn rows(store: &PostgresEventStore) -> i64 {
     sqlx::query_scalar("SELECT count(*) FROM event")
-        .fetch_one(store.store.pool())
+        .fetch_one(store.pool())
         .await
         .expect("a count of a reachable schema answers")
 }
 
-/// A store on a fresh schema of the live server.
-async fn live_store() -> PostgresIngestStore {
-    PostgresIngestStore::open(PostgresEventStore::new(server::fresh_pool().await))
+/// `store`'s identity, asked through the port.
+///
+/// Named by its trait, because the store's inherent read has the same name
+/// and an inherent method wins a method call.
+async fn own(store: &PostgresEventStore) -> StoreId {
+    IngestStore::store_id(store)
         .await
-        .expect("a freshly migrated schema has an identity")
+        .expect("a reachable, migrated store has an identity")
 }
 
-/// A store whose pool points nowhere, built around a fixed identity, so a
-/// call that wrongly reaches the wire fails as `Driver` and not as the refusal
-/// under test.
-fn unreachable_store() -> PostgresIngestStore {
+/// A store on a fresh schema of the live server. Its identity is read, and
+/// cached, on first use.
+async fn live_store() -> PostgresEventStore {
+    PostgresEventStore::new(server::fresh_pool().await)
+}
+
+/// A store whose pool points nowhere and whose identity has not been read, so
+/// any call that reaches the wire fails as `Driver`.
+fn unidentified_store() -> PostgresEventStore {
     let pool = PgPoolOptions::new()
         .acquire_timeout(Duration::from_secs(1))
         .connect_lazy("postgres://happenstance@127.0.0.1:1/unreachable")
         .expect("a well-formed URL builds a lazy pool");
-    PostgresIngestStore {
-        store: PostgresEventStore::new(pool),
-        store_id: peer(0x01),
-    }
+    PostgresEventStore::new(pool)
+}
+
+/// [`unidentified_store`] with a fixed identity already in its cache, so a
+/// call that wrongly reaches the wire fails as `Driver` and not as the
+/// refusal under test.
+///
+/// The cache is the store's private `store_id` field, which this module, a
+/// descendant of `event_store`, can reach: so the seam needs no test-only
+/// constructor.
+fn unreachable_store() -> PostgresEventStore {
+    let store = unidentified_store();
+    store
+        .store_id
+        .set(peer(0x01))
+        .expect("a store built a line above has read no identity");
+    store
 }
 
 /// Constraint 4, one port over: generic code binds the bare flavours, and the
@@ -141,7 +162,65 @@ fn unreachable_store() -> PostgresIngestStore {
 #[test]
 fn ingest_store_satisfies_the_bare_bounds() {
     fn assert_bounds<S: EventStore + IngestStore + Send + Sync>() {}
-    assert_bounds::<PostgresIngestStore>();
+    assert_bounds::<PostgresEventStore>();
+}
+
+/// The port's `store_id` answers from the store's cache, and so never reaches
+/// the wire once the identity is held.
+///
+/// Rejects a port `store_id` that bypasses the cache: this store's pool points
+/// nowhere, so a read would fail as `Driver`.
+#[tokio::test]
+async fn store_id_through_the_port_answers_the_seeded_identity_without_the_wire() {
+    let store = unreachable_store();
+
+    let answered = IngestStore::store_id(&store)
+        .await
+        .expect("a held identity is answered without a read");
+    assert_eq!(answered, peer(0x01));
+}
+
+/// An ingest whose store cannot read its identity fails as the store's error,
+/// classed `Transient`, and only after every refusal that needs no identity.
+///
+/// Rejects an ingest that treats an unread identity as "no claims" and
+/// writes, and one that reads the identity before the ceilings: the same
+/// store still refuses a batch over the ceiling as that.
+#[tokio::test]
+async fn ingest_reports_an_unreadable_identity_as_a_store_error() {
+    let store = unidentified_store();
+    let from = peer(0x61);
+    let one = [shipped(id(from, 1), 1, event("Shipped", "a"))];
+
+    let refused = ingest(&store, &[IngestGroup::new(&one, &[])])
+        .await
+        .expect_err("an identity on a server that is not there cannot be read");
+    assert!(
+        matches!(
+            refused,
+            IngestError::Store(PostgresEventStoreError::Driver(_))
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(refused.class(), FailureClass::Transient);
+
+    let foreign: Vec<ReplicatedEvent> = (1..=257)
+        .map(|position| shipped(id(from, position), 1, event("Shipped", "a")))
+        .collect();
+    let refused = ingest(&store, &[IngestGroup::new(&foreign, &[])])
+        .await
+        .expect_err("257 events exceed a ceiling of 256");
+    assert!(
+        matches!(
+            refused,
+            IngestError::ExceedsStoreLimit {
+                limit: StoreLimit::EventsPerBatch,
+                len: 257,
+                ..
+            }
+        ),
+        "{refused:?}"
+    );
 }
 
 /// SY-11: an empty pull, and a group with nothing foreign in it, write

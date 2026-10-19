@@ -28,16 +28,22 @@
 //! No append condition is evaluated (SY-1), and the transaction runs at the
 //! pool's default `READ COMMITTED`, as an unconditional append does.
 //!
-//! # Why a wrapper rather than an impl on `PostgresEventStore`
+//! # The identity
 //!
-//! Because the tests build one without a server and around an identity of
-//! their choosing: `unreachable_store` pairs a pool that points nowhere with a
-//! fixed `StoreId`, so a refusal that must come before the wire is shown not
-//! to reach it. `PostgresEventStore` reads its identity lazily and fallibly
-//! from `store_meta`, so an impl on it would have to read the server first.
-//! Everywhere else [`PostgresIngestStore`] is built by an `async` constructor
-//! that reads the identity once, and the port's
-//! [`store_id`](SendIngestStore::store_id) answers `Ok` of that copy.
+//! The port is implemented on `PostgresEventStore` itself, with no wrapper,
+//! because the port's [`store_id`](SendIngestStore::store_id) is `async` and
+//! fallible: it is the store's own read of `store_meta`, made on a handle's
+//! first use and cached on it, the one `append` stamps from. An ingest asks
+//! for it after every refusal that needs none, so a call over a ceiling, or
+//! with an origin position past a `bigint`, still never reaches the wire; on a
+//! handle that has not read it yet, it is one round trip more, and a failed
+//! read is [`IngestError::Store`].
+//!
+//! The tests that need no server reach the cache directly: it is a private
+//! field, and they are descendants of `event_store`. `unreachable_store`
+//! seeds a fixed `StoreId` into a store whose pool points nowhere, so a
+//! refusal that must come before the wire is shown not to reach it, and
+//! nothing is added to `event_store.rs` for them.
 //!
 //! # Positions
 //!
@@ -71,8 +77,8 @@
 //!
 //! **Here**, as a child of `event_store`, because privacy is per module and a
 //! module's private items are visible to its descendants: this reaches the
-//! writer, the pool and `on_runtime` without any of them being widened.
-//! Coherence allows the impls: a foreign trait on a local type.
+//! writer, the pool, the cached identity and `on_runtime` without any of them
+//! being widened. Coherence allows the impl: a foreign trait on a local type.
 //!
 //! **`cfg(test)`** because `happenstance-sync` is `publish = false` and its name
 //! is unclaimed, so it can only be a path-only dev-dependency, which cargo
@@ -82,11 +88,7 @@
 
 use std::collections::HashSet;
 
-use futures_core::Stream;
-use happenstance_core::{
-    AppendCondition, AppendError, Event, EventId, Query, ReadOptions, RecordedAt, SendEventStore,
-    SequencePosition, SequencedEvent, StoreId,
-};
+use happenstance_core::{Event, EventId, RecordedAt, StoreId};
 use happenstance_sync::{
     Classify, FailureClass, IngestError, IngestGroup, Ingested, SendIngestStore, Watermark,
 };
@@ -142,32 +144,11 @@ const MAX_BIND_PARAMETERS: usize = 65_535;
 const _: () =
     assert!(PostgresEventStore::MAX_EVENTS_PER_BATCH * ROW_PARAMETERS <= MAX_BIND_PARAMETERS);
 
-/// A [`PostgresEventStore`] whose identity has been read, which is what the
-/// ingest port's [`store_id`](SendIngestStore::store_id) answers from.
-#[derive(Debug, Clone)]
-struct PostgresIngestStore {
-    /// The store this ingests into. Owned, because the wrapper keeps it; a
-    /// clone is a refcounted pool handle.
-    store: PostgresEventStore,
-    /// `store`'s identity, read once by [`open`](Self::open).
-    store_id: StoreId,
-}
-
-impl PostgresIngestStore {
-    /// Reads `store`'s identity once, so every ingest and `store_id` answer
-    /// from it.
-    ///
-    /// # Errors
-    ///
-    /// `MissingIdentity`, `MalformedIdentity` or `Driver`, as
-    /// `PostgresEventStore`'s own identity read reports them.
-    async fn open(store: PostgresEventStore) -> Result<Self, PostgresEventStoreError> {
-        let store_id = store.store_id().await?;
-        Ok(Self { store, store_id })
-    }
-
-    /// The ceilings, the origin check, then one transaction on the store's
-    /// runtime. Every refusal comes before the wire.
+impl PostgresEventStore {
+    /// The ceilings, the origin check, this store's identity, then one
+    /// transaction on the store's runtime. Every refusal comes before the
+    /// wire, and the identity is a round trip only on a handle that has not
+    /// read it yet.
     async fn ingest_groups(
         &self,
         groups: &[IngestGroup<'_>],
@@ -206,16 +187,14 @@ impl PostgresIngestStore {
             .map(OwnedGroup::try_from_group)
             .collect::<Result<Vec<_>, _>>()
             .map_err(IngestError::Store)?;
+        // The inherent read, cached per handle, which `append` stamps from.
+        // `Self::store_id` names it rather than the port's method of the same
+        // name, because an inherent associated function wins the lookup.
+        let own = Self::store_id(self).await.map_err(IngestError::Store)?;
         let recorded_at = now();
-        let pool = self.store.pool.clone();
+        let pool = self.pool.clone();
         let outcome = self
-            .store
-            .on_runtime(ingest_in_transaction(
-                pool,
-                self.store_id,
-                owned,
-                recorded_at,
-            ))
+            .on_runtime(ingest_in_transaction(pool, own, owned, recorded_at))
             .await
             .map_err(IngestError::Store)?;
         match outcome {
@@ -227,9 +206,8 @@ impl PostgresIngestStore {
     /// The highest origin position held from each origin store, this store's
     /// own included. One `GROUP BY` over the origin index, nothing cached.
     async fn origin_watermark(&self) -> Result<Watermark, PostgresEventStoreError> {
-        let pool = self.store.pool.clone();
+        let pool = self.pool.clone();
         let rows: Vec<(Vec<u8>, i64)> = self
-            .store
             .on_runtime(async move {
                 sqlx::query_as(WATERMARK_SQL)
                     .fetch_all(&pool)
@@ -245,45 +223,20 @@ impl PostgresIngestStore {
     }
 }
 
-// The `Send` flavours, as `PostgresEventStore` implements them, and only those
-// names in scope here (constraint 4): `trait_variant` derives the bare ones,
-// which the tests bind on.
-impl SendEventStore for PostgresIngestStore {
-    type Error = PostgresEventStoreError;
-
-    fn read(
-        &self,
-        query: &Query,
-        options: ReadOptions,
-    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> + Send {
-        SendEventStore::read(&self.store, query, options)
-    }
-
-    async fn append(
-        &self,
-        events: &[Event],
-        condition: Option<&AppendCondition>,
-    ) -> Result<SequencePosition, AppendError<Self::Error>> {
-        SendEventStore::append(&self.store, events, condition).await
-    }
-
-    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
-        SendEventStore::head(&self.store).await
-    }
-
-    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
-        SendEventStore::contains_event_id(&self.store, id).await
-    }
-}
-
-impl SendIngestStore for PostgresIngestStore {
+// The `Send` flavour, as `PostgresEventStore`'s `SendEventStore` is, and only
+// that name in scope here (constraint 4): `trait_variant` derives the bare
+// one, which the tests bind on.
+impl SendIngestStore for PostgresEventStore {
     // The bare adapter error, as `happenstance-sqlite`'s spike: the port's
     // `IngestError` carries capacity and the unheld identity in arms of its own.
     type Error = PostgresEventStoreError;
 
-    /// Never fails: [`open`](PostgresIngestStore::open) read the identity.
+    /// The identity `store_meta` holds, read on this handle's first use and
+    /// cached, by the same read `append` stamps from. A re-mint is seen by a
+    /// new handle; a clone shares the cache.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        Ok(self.store_id)
+        // The inherent method, not this one: inherent wins path resolution.
+        Self::store_id(self).await
     }
 
     async fn ingest(
