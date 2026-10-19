@@ -129,6 +129,19 @@ pub enum PostgresEventStoreError {
         "a row's `xact_id` could not be read as an xid8; the schema is not the one this adapter wrote"
     )]
     UnreadableTransactionId,
+
+    /// An ingested event's origin position is past the largest a `bigint`
+    /// holds, so it cannot be stored. Refused before the transaction opens.
+    ///
+    /// Test-only with the rest of the ingest port (#108): `cfg(test)` is never
+    /// set when this crate is built as a dependency, so no published build
+    /// carries the variant.
+    #[cfg(test)]
+    #[error("origin position {position} is past the largest a `bigint` holds")]
+    OriginPositionOutOfRange {
+        /// The origin position as the peer sent it.
+        position: happenstance_core::SequencePosition,
+    },
 }
 
 /// How [`PostgresProjectionStore`](crate::projection_store::PostgresProjectionStore)

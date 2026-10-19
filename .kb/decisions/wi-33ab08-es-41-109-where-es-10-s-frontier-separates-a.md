@@ -34,7 +34,7 @@ ES-41 (#109): where ES-10's frontier separates a committed row from a visible on
 
 ES-41 is frozen but leaves held-versus-visible open for frontier stores.
 
-Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-33ab08`. Anchor: `crates/happenstance-postgres/src/event_store.rs:641`.
+Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-33ab08`. Anchor: `crates/happenstance-postgres/src/event_store.rs:623`.
 
 ## Considered options
 

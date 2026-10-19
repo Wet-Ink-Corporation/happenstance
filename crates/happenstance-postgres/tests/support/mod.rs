@@ -79,6 +79,8 @@ use tokio::sync::OnceCell;
 /// build.
 const POSTGRES_IMAGE: &str = "postgres";
 const POSTGRES_TAG: &str = "17.10";
+// Twinned in `src/event_store/ingest/tests/server.rs`, as are `CONTAINER_NAME` and
+// `max_connections`: change both, or the ingest tests start a second server.
 
 /// The port Postgres listens on inside the container. The host port is mapped
 /// and is never this one — reading it back is what stops the suite colliding
