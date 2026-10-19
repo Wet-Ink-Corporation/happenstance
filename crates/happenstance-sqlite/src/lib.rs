@@ -116,9 +116,9 @@ mod query_sql;
 mod row;
 
 // VT-10's instrument: `happenstance-sync`'s ingest port over this adapter's own
-// row writer. Test-only because that crate is unpublished; phase 13 makes it a
-// feature.
-#[cfg(all(test, feature = "event-store"))]
+// row writer. Behind `sync` since #108 part E published that crate; `sync`
+// implies `event-store`, whose row writer it uses.
+#[cfg(feature = "sync")]
 mod ingest_spike;
 
 // No `///` doc on this declaration, and that is a constraint rather than a
@@ -303,3 +303,14 @@ mod reexported_paths {}
 /// [`Op::Read`]: happenstance_testkit::model::Op::Read
 #[cfg(doctest)]
 mod op_read_is_sealed_downstream {}
+
+/// Re-exported for the reason [`happenstance_core`] is: under the `sync`
+/// feature, `impl SendIngestStore for SqliteEventStore` puts the port's
+/// `IngestGroup`, `Ingested`, `IngestError` and `Watermark` in this crate's
+/// public signatures, so the port is reachable under its own name here and a
+/// caller needs no second dependency line that could resolve to another copy.
+///
+/// Declared last, so the lines above keep the numbers cited elsewhere.
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub use happenstance_sync;
