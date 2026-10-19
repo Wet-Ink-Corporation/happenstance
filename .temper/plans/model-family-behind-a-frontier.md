@@ -398,3 +398,34 @@ About 12 files and about 1,000 lines:
   claimed a skip, and adding lines would break an accepted decision's citation.
 - Tests 17–18: not run. Docker is unavailable on this machine
   (`/var/run/docker.sock` absent), and Neon runs only in CI. CI is the record.
+
+### Review round 1 (F1–F9)
+
+- F1: T1(b) is `TrailingModel::check_never_retreats`, called once from
+  `check_log`. "Assume only" is deleting that call and that function, plus
+  `RetreatingFrontierStore`'s row and the unit test that names it.
+- F6, F4 (unit half): tests moved to `src/model/trailing/tests.rs`. The new
+  ones (`accept`'s floor, `rejudge`'s contradicted acceptance and refusal, an
+  empty `range`, an unplaceable event) characterise code already written and
+  passed on first run; their red is not separately on record.
+- F2, red: `DrainingFrontierStore` and `GappedTrailingFrontierStore` first
+  failed to compile as dead code until enumerated. The first `Draining`
+  schedule (one batch per read) never built lag, because every op ends in a full
+  read: with `check_read` narrowed to the bracket's two endpoints, the whole
+  trailing table still passed. The schedule now stands still on a read that
+  follows a write and drains one batch per quiet read; with the same narrowing,
+  `the_trailing_model_rejects_exactly_what_it_claims` failed on
+  `DrainingFrontierStore` alone ("claims Agreed and the trailing model answered
+  Rejected"). Narrowing reverted. `pinned::a_draining_frontier_puts_a_read_strictly_inside_its_bracket`
+  and `pinned::a_refused_append_burns_a_gapped_position` hold the schedule and
+  the burn directly.
+- F4: `TRAILING_MODEL_COVERAGE` carries the substring each verdict must
+  contain, asserted in `the_trailing_model_rejects_exactly_what_it_claims`.
+- F8: not done. `spec_trace::RULE_FILES` lists files that define a rule (a
+  `pub async fn`), and `lints::true_rule_counts` bails on a member that parses
+  no rule, so adding `model/trailing.rs` fails `cargo xtask lints`. CF-6's
+  position-literal scan therefore does not cover it; a follow-up could give that
+  scan its own file list.
+- F3/F7/F9 done; rebased onto `origin/main` at `d2a01f95`. The rebase conflicted
+  only on the two `standards/rust` ci.yml citations, repointed to `:1890` and
+  `:1945`.
