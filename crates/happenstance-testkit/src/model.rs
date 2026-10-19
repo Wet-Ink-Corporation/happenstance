@@ -101,6 +101,10 @@ use proptest::prelude::{Just, Strategy, prop, prop_oneof};
 use crate::Fixture;
 use crate::fixtures::strategies::{any_event, any_query};
 
+mod trailing;
+
+use trailing::TrailingModel;
+
 // =====================================================================
 // The generated vocabulary
 // =====================================================================
@@ -634,6 +638,43 @@ const MAX_SHRINK_MOVES: usize = 1024;
 /// constraining neither types nor tags — so rejections are rare and local.
 const MAX_GENERATION_RETRIES: usize = 8;
 
+/// Which model a replay holds the store to.
+///
+/// A closed set of two, so an `enum` rather than a trait object: the choice is
+/// made once per replay from the fixture's capability, and both arms are
+/// known here.
+#[derive(Debug)]
+enum Checker {
+    /// The store reads its own writes: the whole log is checked exactly.
+    Strict(Model),
+    /// The store declines `READ_YOUR_OWN_WRITES`: reads may trail commits.
+    Trailing(TrailingModel),
+}
+
+impl Checker {
+    /// The model `F`'s capabilities call for.
+    fn for_fixture<F: Fixture>() -> Self {
+        if F::READ_YOUR_OWN_WRITES.is_supported() {
+            Self::Strict(Model::default())
+        } else {
+            Self::Trailing(TrailingModel::default())
+        }
+    }
+
+    /// Runs op number `index` against `store` under the chosen model.
+    async fn apply<S: EventStore>(
+        &mut self,
+        store: &S,
+        index: usize,
+        op: &Op,
+    ) -> Result<(), String> {
+        match self {
+            Self::Strict(model) => model.apply(store, op).await,
+            Self::Trailing(model) => model.apply(store, index, op).await,
+        }
+    }
+}
+
 /// Runs one operation sequence against a fresh fixture.
 ///
 /// Returns the first disagreement, or `None` if the store agreed throughout.
@@ -646,10 +687,10 @@ where
 {
     let fixture = open().await;
     let store = fixture.connect().await;
-    let mut model = Model::default();
+    let mut checker = Checker::for_fixture::<F>();
 
     for (index, op) in ops.iter().enumerate() {
-        if let Err(failure) = model.apply(&store, op).await {
+        if let Err(failure) = checker.apply(&store, index, op).await {
             return Some(format!("at op {index}, {op:?}: {failure}"));
         }
     }
