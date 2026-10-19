@@ -51,14 +51,21 @@ categories = ["database", "data-structures"]
 # so the permissive choice at this level would silently pull `memory` (and its
 # `std` requirement) into every adapter.
 #
-# The two requirement strings move with the version above, and this is the
+# The three requirement strings move with the version above, and this is the
 # highest-cost line in the file to get wrong: a version never released resolves
 # from the path here and fails only on the *second* `cargo publish`, after
 # `happenstance-core` is live. The testkit carries no version at all (ADR-0057):
-# every use of it is a dev-dependency, and a versionless one is stripped from the
-# packaged manifest. `cargo xtask package-check` keeps it that way.
+# every use of it here is a dev-dependency, and a versionless one is stripped
+# from the packaged manifest. `cargo xtask package-check` keeps it that way.
+# `happenstance-sync-testkit`'s one normal edge into it is spelled in that
+# crate's own manifest, against the testkit's own version (CF-32).
+#
+# `happenstance-sync` is the third since #108 part E: each adapter's optional
+# `sync` feature names it, so it publishes in the same `cargo publish` as the
+# adapters, ahead of them, at the same lockstep number.
 happenstance-core = { version = "0.4.3", path = "crates/happenstance-core", default-features = false }
 happenstance = { version = "0.4.3", path = "crates/happenstance", default-features = false }
+happenstance-sync = { version = "0.4.3", path = "crates/happenstance-sync", default-features = false }
 happenstance-testkit = { path = "crates/happenstance-testkit" }
 
 # --- external ---

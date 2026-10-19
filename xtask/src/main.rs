@@ -1090,6 +1090,11 @@ const OPTIONAL: &[Step] = &[
             "happenstance-postgres",
             "-p",
             "happenstance-neon",
+            // Published since #108 part E.
+            "-p",
+            "happenstance-sync",
+            "-p",
+            "happenstance-sync-testkit",
             "--all-features",
             "--no-deps",
         ],

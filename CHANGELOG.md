@@ -1,9 +1,9 @@
 # Changelog
 
 Notable changes to `happenstance`, `happenstance-core`, `happenstance-testkit`,
-`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
-`happenstance-neon` — every crate this
-workspace currently publishes.
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres`,
+`happenstance-neon`, `happenstance-sync` and `happenstance-sync-testkit` —
+every crate this workspace currently publishes.
 
 `cargo xtask lints` derives that set from `xtask/src/package.rs`'s
 `PUBLISHABLE` and fails this file if the two disagree, so the scope above
@@ -35,6 +35,21 @@ not the same as what a user needed to be told.
 ## [Unreleased]
 
 ### Added
+
+- **`happenstance-sync` and `happenstance-sync-testkit` are published, and
+  unfinished** (#108, part E; #199). Their first release replaces the `0.0.0`
+  placeholders on crates.io, at the workspace's version, which both now follow
+  in lockstep. `happenstance-sync` carries the ports, `SyncPeer` and
+  `IngestStore`, the wire messages, and behind `memory` the in-memory reference
+  peer and ingest store. `happenstance-sync-testkit` carries the peer, ingest
+  and model families; a new rule is a minor of its number, so pin it exactly.
+  Neither has a runner (#244) or a network peer yet, and each crate root lists
+  the `SY` clauses that are still provisional. A `[FROZEN]` `SY` clause is now
+  semver-binding on the published crate, as an `ES` clause is.
+  `happenstance-sync-testkit` depends on `happenstance-testkit` as a normal,
+  versioned dependency, so `happenstance_testkit::RuleOutcome` is part of its
+  public API. Every entry below that says "in a crate that is not published
+  yet" ships in this release.
 
 - **`happenstance-sync`: the replication message set, in a crate that is not
   published yet** (#114, ADR-0097). Four messages, each its own type

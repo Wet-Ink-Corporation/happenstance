@@ -1130,7 +1130,7 @@ fn no_rendered_surface_indexes_event_types() -> Result<()> {
 /// # What it does not verify
 ///
 /// Only a **cardinal qualifying `crate` or `crates`**, only in a paragraph that
-/// also mentions publication, only outside code fences, and only in the sixteen
+/// also mentions publication, only outside code fences, and only in the twenty
 /// documents above. It says nothing about which crates are named, nothing about
 /// counts of adapters or examples or dependencies, and nothing about whether the
 /// surrounding sentence is otherwise true. A README claiming a crate passes a
@@ -1422,7 +1422,7 @@ fn true_rule_counts(root: &Path) -> Result<Vec<(usize, String)>> {
 /// scope sentence is already held by [`changelog_scope_matches_publishable`],
 /// and its dated entries are historical records that must keep saying what was
 /// true when they were written.
-const CRATE_SET_BEARING_DOCS: [&str; 16] = [
+const CRATE_SET_BEARING_DOCS: [&str; 20] = [
     "README.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
@@ -1439,6 +1439,11 @@ const CRATE_SET_BEARING_DOCS: [&str; 16] = [
     "crates/happenstance-postgres/src/lib.rs",
     "crates/happenstance-postgres/README.md",
     "crates/happenstance-neon/src/lib.rs",
+    // #108 part E published both sync crates, so their two surfaces join.
+    "crates/happenstance-sync/src/lib.rs",
+    "crates/happenstance-sync/README.md",
+    "crates/happenstance-sync-testkit/src/lib.rs",
+    "crates/happenstance-sync-testkit/README.md",
 ];
 
 /// The words that make a paragraph one about the *release set*.

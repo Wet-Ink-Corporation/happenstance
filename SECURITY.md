@@ -21,7 +21,7 @@ was missed rather than ignored, and say so — on the same thread, or by email.
 
 ## What is in scope
 
-The seven crates this repository publishes, at their published versions:
+The nine crates this repository publishes, at their published versions:
 
 - `happenstance`
 - `happenstance-core`
@@ -30,6 +30,11 @@ The seven crates this repository publishes, at their published versions:
 - `happenstance-cloudflare`
 - `happenstance-postgres`
 - `happenstance-neon`
+- `happenstance-sync`
+- `happenstance-sync-testkit`
+
+The last two join this list at their first release after `0.4.3`; until then the
+only thing under either name on crates.io is a `0.0.0` placeholder.
 
 The last two joined this list at `0.2.0`. Before that the only thing under either
 name on crates.io was a `0.0.0` placeholder with no functionality and no

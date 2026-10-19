@@ -1,18 +1,18 @@
 //! Replication between happenstance instances.
 //!
-//! # Status: a phase-2 sketch, not the protocol
+//! # Status: published, and unfinished
 //!
-//! [`SyncPeer`] and [`IngestStore`] exist here to be *falsified by a type
-//! checker*, which is the only thing that can falsify a port before an adapter
-//! is written. The stand-in peers in `tests/` are `todo!()` on purpose: the
+//! [`SyncPeer`] and [`IngestStore`] began here as a phase-2 sketch, to be
+//! *falsified by a type checker* before an adapter was written. The stand-in
+//! peers in `tests/` are still `todo!()` on purpose (see [`peer`]), because the
 //! type checker is the instrument there, not the runtime.
 //!
-//! The question this sketch was built to answer is falsifiable and it is not
-//! "write a good trait". It is: **can a peer be stated without naming a
-//! transport?** The evidence is in this crate's `tests/`, where the two real
-//! peers are stood in for and both implement the trait — see [`peer`] for what
-//! that proved and [`ingest`] for what the coherence experiment proved
-//! separately.
+//! Published since #108 part E, so that a store adapter can implement
+//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: there is no
+//! runner (#244) and no network peer. A `[FROZEN]` `SY` clause binds this
+//! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-7, SY-10,
+//! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-38 are `[PROVISIONAL]`, binding
+//! until the falsifier each names, and SY-14, SY-18 and SY-32 `[DEFERRED]`.
 //!
 //! # This is a port, not a protocol
 //!
@@ -139,6 +139,7 @@
 
 #![doc(html_no_source)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(doctest, doc = include_str!("../README.md"))]
 // No `#![allow(clippy::todo)]`: the last `todo!()` in `src/` was the
 // `MemoryEventStore` ingest impl, which phase 17 deleted rather than finished
 // (see [`ingest`]). The two stand-in peers in `tests/` carry their own.
