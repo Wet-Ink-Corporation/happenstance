@@ -741,7 +741,7 @@ pub mod rules {
     /// consults it and this rule does not call it. An adapter running the suite
     /// gets no `.proptest-regressions` file appearing in its tree.
     ///
-    /// # Behind a frontier, it runs weaker rather than skipping
+    /// # Behind a frontier, it runs a weaker model
     ///
     /// A fixture that declines
     /// [`READ_YOUR_OWN_WRITES`](crate::Fixture::READ_YOUR_OWN_WRITES) is held
@@ -756,7 +756,7 @@ pub mod rules {
     /// outcome carries.
     ///
     /// Waiting for nothing has a price. Against a declining fixture the rule
-    /// **no longer catches**:
+    /// **does not catch**:
     ///
     /// - an accepted write that never becomes visible, which reads as lag;
     /// - part of a batch becoming visible before the rest;

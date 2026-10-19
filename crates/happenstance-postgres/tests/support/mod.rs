@@ -451,8 +451,8 @@ impl Fixture for PostgresFixture {
     /// *"the log holds 0 event(s); 3 were accepted"*. That is a flake, and
     /// `[FROZEN]` CF-33 names a flaky conformance rule as worse than none.
     ///
-    /// Declining no longer skips the rule (#79). The family holds this store to
-    /// its trailing model, under which that same read is lag rather than a
+    /// Declining does not skip the rule. The family holds this store to its
+    /// trailing model, under which that same read is lag rather than a
     /// failure: a prefix of what was accepted, never shrinking, with every
     /// condition verdict judged over what the store holds. So the rule runs
     /// against this fixture, and the CI job checks that it did.

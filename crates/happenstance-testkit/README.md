@@ -37,9 +37,9 @@ with programs you can run.
 >   live Neon endpoint over one-shot HTTP. From `0.4.0` it meets ES-11 and
 >   ES-12, which it failed intermittently before, and the one capability its
 >   event-store fixture declines, `READ_YOUR_OWN_WRITES`, carries its reason on
->   the crate's own front page. Declining it no longer skips the model family:
->   both it and `happenstance-postgres` run the family's trailing model, which
->   is weaker by exactly the losses that rule's rustdoc lists.
+>   the crate's own front page. Against a fixture that declines it, the model
+>   family runs its trailing model, which both it and `happenstance-postgres`
+>   meet; what that model gives up is listed in the rule's rustdoc.
 > - **`happenstance-ladybug`** — the projection family only, against the real
 >   LadybugDB driver, from phase 11 until it was **retired** at phase 17. It was
 >   never published — `lbug` does not render on docs.rs, this project's bar for a

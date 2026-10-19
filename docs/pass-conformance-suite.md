@@ -105,7 +105,7 @@ this capability (`Fixture::READ_YOUR_OWN_WRITES`, read by
 weaker check. Each full read must be a prefix of what you accepted that never
 shrinks, and each condition verdict is judged over what your store holds,
 deferred while the positions that decide it are unknown. The rule's rustdoc
-lists what that check no longer catches. It also assumes your store's
+lists what that check does not catch. It also assumes your store's
 visibility never moves backward, so a later read never shows less than an
 earlier one.
 

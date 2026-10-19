@@ -53,7 +53,7 @@
 //! the three checks are the strict model's, less one: an accepted write that
 //! has not appeared reads as lag rather than as a lost write.
 //!
-//! # What it no longer catches
+//! # What it does not catch
 //!
 //! Each of these the strict model catches and this one, by design, does not:
 //!

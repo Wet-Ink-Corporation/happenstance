@@ -290,12 +290,12 @@ pub trait Fixture {
     /// reject a conditional append. ES-25 judges a condition over what the
     /// store **holds**, ES-10 and ES-11 govern what a read **shows**, and a
     /// frontier store keeps the two apart, so a prediction made from a read
-    /// has no oracle. Through `0.4.3` that ended the argument and the family
-    /// skipped. It now runs a **trailing model** against a declining fixture:
-    /// it predicts over what is held, bounds a position it has not been shown,
-    /// and defers a verdict it cannot decide yet. It never waits, so it gives
-    /// some things up, which `ops_agree_with_the_model`'s documentation lists,
-    /// and it assumes, with no clause to cite, that visibility never moves
+    /// has no oracle. Against a declining fixture the family therefore runs
+    /// a **trailing model** instead of its exact one. It predicts over what
+    /// is held, bounds a position it has not been shown, and defers a verdict
+    /// it cannot decide yet. It never waits, so it gives some things up,
+    /// which `ops_agree_with_the_model`'s documentation lists. It also
+    /// assumes, with no clause to cite, that visibility never moves
     /// backward.
     const READ_YOUR_OWN_WRITES: Capability = Capability::SUPPORTED;
 

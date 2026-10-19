@@ -28,8 +28,8 @@ with programs you can run.
 >
 > **One of those gated tests runs a weaker check than the rest.** The fixture
 > declines `READ_YOUR_OWN_WRITES`, so the generated model family holds this store
-> to the testkit's trailing model instead of its exact one. Before #79 it
-> skipped. That family predicts whether a conditional append will be refused,
+> to the testkit's trailing model instead of its exact one. That family
+> predicts whether a conditional append will be refused,
 > and this store judges a condition over every committed row while a read shows
 > only the rows below its frontier — see *What this store costs a caller*. The
 > trailing model predicts over what is held and defers a verdict it cannot
