@@ -169,7 +169,7 @@ pub enum Op {
     ///
     /// **All five, since phase 12.** The doc line above said "every read option"
     /// while the variant carried four of them, and the missing one was `to` —
-    /// which made the two `to` branches of `Model::select` dead code under a
+    /// which made the two `to` branches of the model's `select` dead code under a
     /// comment explaining why a model that ignores an option is worthless. A
     /// wrong store this file could not disagree with, `WHERE a OR b AND position
     /// <= ?`, is registered as `UnparenthesisedToPredicateStore` and is what
@@ -322,83 +322,111 @@ struct Model {
     known: Vec<SequencedEvent>,
 }
 
+/// Turns an [`Anchor`] into a position, against what the store has shown.
+///
+/// Every branch is total, and none of them can produce a false failure: the
+/// resolved value is handed to the model and to the store, so a degenerate
+/// resolution — an empty log, an overflowing head — is merely a less
+/// interesting input rather than a disagreement.
+///
+/// A free function over the shown log rather than a method, because both
+/// models resolve anchors and they must resolve them identically: the strict
+/// one over the whole log, the trailing one over the visible prefix of it.
+fn resolve(known: &[SequencedEvent], anchor: Anchor) -> Option<SequencePosition> {
+    match anchor {
+        Anchor::Unset => None,
+        Anchor::First => known.first().map(|event| event.position),
+        Anchor::Middle => known.get(known.len() / 2).map(|event| event.position),
+        Anchor::Head => known.last().map(|event| event.position),
+        // On an empty store every position is unassigned, so `FIRST` is a
+        // truthful answer to "one the store has not handed out" — and it is
+        // the one that exercises a condition boundary against an empty log,
+        // which ES-28 cares about. `next()` saturating is unreachable short
+        // of a store that has assigned `u64::MAX`.
+        Anchor::BeyondHead => Some(
+            known
+                .last()
+                .and_then(|head| head.position.next())
+                .unwrap_or(SequencePosition::FIRST),
+        ),
+    }
+}
+
+/// The read options an [`Op::Read`] names, with its anchors resolved against
+/// `known`.
+///
+/// Resolution happens here, once, and the result is handed to the store and
+/// to [`select`] alike — the module documentation's rule.
+fn read_options(
+    known: &[SequencedEvent],
+    from: Anchor,
+    to: Anchor,
+    backwards: bool,
+    limit: Option<usize>,
+) -> ReadOptions {
+    let mut options = ReadOptions::new();
+    if let Some(from) = resolve(known, from) {
+        options = options.from(from);
+    }
+    if let Some(to) = resolve(known, to) {
+        options = options.to(to);
+    }
+    if backwards {
+        options = options.backwards();
+    }
+    if let Some(limit) = limit {
+        options = options.limit(limit);
+    }
+    options
+}
+
+/// What a read of `query` under `options` should return, over `known`.
+///
+/// The three steps are separate for the reason `correct.rs` separates them:
+/// `LIMIT` applied before the filter is a real adapter bug with no in-memory
+/// analogue unless the in-memory version is written in the same order.
+fn select(known: &[SequencedEvent], query: &Query, options: ReadOptions) -> Vec<SequencedEvent> {
+    let matched = known
+        .iter()
+        .filter(|event| query.matches(event.event_type(), event.tags()));
+
+    // `from` and `to` are both inclusive in both directions, and each bounds
+    // opposite ends depending on direction: forwards `from` is a floor and
+    // `to` a ceiling, backwards they swap. The model carries `to` because a
+    // model that ignores an option cannot disagree with a store that
+    // mishandles it — it would agree with every implementation, which is the
+    // one thing a reference model must not do.
+    //
+    // That sentence was an *aspiration* until phase 12. These two `to`
+    // branches were written here and were dead: `Op::Read` carried no `to`
+    // field, `any_op` generated none, and `apply` never called `.to(..)`, so
+    // `options.to` was `None` on every read this function ever saw. The
+    // three registered `to` mutants sat in `MODEL_COVERAGE` as `Agreed` and
+    // said so. Adding one field and one generator arm is what made the
+    // comment true, and `UnparenthesisedToPredicateStore` is the store that
+    // now has nowhere else to be caught.
+    let mut selected: Vec<SequencedEvent> = if options.backwards {
+        matched
+            .rev()
+            .filter(|event| options.from.is_none_or(|from| event.position <= from))
+            .filter(|event| options.to.is_none_or(|to| event.position >= to))
+            .cloned()
+            .collect()
+    } else {
+        matched
+            .filter(|event| options.from.is_none_or(|from| event.position >= from))
+            .filter(|event| options.to.is_none_or(|to| event.position <= to))
+            .cloned()
+            .collect()
+    };
+
+    if let Some(limit) = options.limit {
+        selected.truncate(limit);
+    }
+    selected
+}
+
 impl Model {
-    /// Turns an [`Anchor`] into a position, against what the store has assigned.
-    ///
-    /// Every branch is total, and none of them can produce a false failure: the
-    /// resolved value is handed to the model and to the store, so a degenerate
-    /// resolution — an empty log, an overflowing head — is merely a less
-    /// interesting input rather than a disagreement.
-    fn resolve(&self, anchor: Anchor) -> Option<SequencePosition> {
-        let positions: Vec<SequencePosition> =
-            self.known.iter().map(|event| event.position).collect();
-
-        match anchor {
-            Anchor::Unset => None,
-            Anchor::First => positions.first().copied(),
-            Anchor::Middle => positions.get(positions.len() / 2).copied(),
-            Anchor::Head => positions.last().copied(),
-            // On an empty store every position is unassigned, so `FIRST` is a
-            // truthful answer to "one the store has not handed out" — and it is
-            // the one that exercises a condition boundary against an empty log,
-            // which ES-28 cares about. `next()` saturating is unreachable short
-            // of a store that has assigned `u64::MAX`.
-            Anchor::BeyondHead => Some(
-                positions
-                    .last()
-                    .and_then(|head| head.next())
-                    .unwrap_or(SequencePosition::FIRST),
-            ),
-        }
-    }
-
-    /// What a read of `query` under `options` should return.
-    ///
-    /// The three steps are separate for the reason `correct.rs` separates them:
-    /// `LIMIT` applied before the filter is a real adapter bug with no in-memory
-    /// analogue unless the in-memory version is written in the same order.
-    fn select(&self, query: &Query, options: ReadOptions) -> Vec<SequencedEvent> {
-        let matched = self
-            .known
-            .iter()
-            .filter(|event| query.matches(event.event_type(), event.tags()));
-
-        // `from` and `to` are both inclusive in both directions, and each bounds
-        // opposite ends depending on direction: forwards `from` is a floor and
-        // `to` a ceiling, backwards they swap. The model carries `to` because a
-        // model that ignores an option cannot disagree with a store that
-        // mishandles it — it would agree with every implementation, which is the
-        // one thing a reference model must not do.
-        //
-        // That sentence was an *aspiration* until phase 12. These two `to`
-        // branches were written here and were dead: `Op::Read` carried no `to`
-        // field, `any_op` generated none, and `apply` never called `.to(..)`, so
-        // `options.to` was `None` on every read this function ever saw. The
-        // three registered `to` mutants sat in `MODEL_COVERAGE` as `Agreed` and
-        // said so. Adding one field and one generator arm is what made the
-        // comment true, and `UnparenthesisedToPredicateStore` is the store that
-        // now has nowhere else to be caught.
-        let mut selected: Vec<SequencedEvent> = if options.backwards {
-            matched
-                .rev()
-                .filter(|event| options.from.is_none_or(|from| event.position <= from))
-                .filter(|event| options.to.is_none_or(|to| event.position >= to))
-                .cloned()
-                .collect()
-        } else {
-            matched
-                .filter(|event| options.from.is_none_or(|from| event.position >= from))
-                .filter(|event| options.to.is_none_or(|to| event.position <= to))
-                .cloned()
-                .collect()
-        };
-
-        if let Some(limit) = options.limit {
-            selected.truncate(limit);
-        }
-        selected
-    }
-
     /// The position of the first stored event violating `condition`, if any.
     ///
     /// This is the prediction, and it is made **before** the store is called.
@@ -515,7 +543,7 @@ impl Model {
                 anchor,
             } => {
                 let condition = AppendCondition::new(query.clone())
-                    .after_every_guard_opt(self.resolve(*anchor));
+                    .after_every_guard_opt(resolve(&self.known, *anchor));
                 let predicted = self.violation(&condition);
 
                 let result = store.append(events, Some(&condition)).await;
@@ -552,25 +580,13 @@ impl Model {
                 backwards,
                 limit,
             } => {
-                let mut options = ReadOptions::new();
-                if let Some(from) = self.resolve(*from) {
-                    options = options.from(from);
-                }
-                if let Some(to) = self.resolve(*to) {
-                    options = options.to(to);
-                }
-                if *backwards {
-                    options = options.backwards();
-                }
-                if let Some(limit) = *limit {
-                    options = options.limit(limit);
-                }
+                let options = read_options(&self.known, *from, *to, *backwards, *limit);
 
                 let observed = match collect(store.read(query, options)).await {
                     Ok(events) => events,
                     Err(err) => return Err(format!("the read failed: {err:?}")),
                 };
-                let wanted = self.select(query, options);
+                let wanted = select(&self.known, query, options);
 
                 if observed == wanted {
                     Ok(())
