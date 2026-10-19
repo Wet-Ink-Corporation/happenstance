@@ -57,12 +57,12 @@
 //! enough to list — the deduplicating conflict clause, a per-row origin and
 //! recorded time, and the absence of any condition evaluation (SY-1).
 //!
-//! Three adapters run it. SQLite: append and ingest prepare one `INSERT` and
-//! differ only in the values bound. Postgres sends append's text with a
-//! conflict clause added, Neon its append's insert builder with that clause and
-//! a constant statement refusing an unheld claim, in one request; each lives in
-//! `crates/happenstance-{postgres,neon}/src/event_store/ingest.rs`. The Durable
-//! Object is argued from its schema above and has not been built.
+//! Four adapters run it. SQLite: one `INSERT`, differing only in values bound.
+//! Postgres sends append's text plus a conflict clause; Neon, its insert builder
+//! with that clause and a statement refusing an unheld claim, in one request.
+//! The Durable Object (`cfg(test)` for now) runs append's `INSERT`, stamps the
+//! origin by an ingest-only `UPDATE OR IGNORE`, in one `transactionSync` a call.
+//! See `crates/happenstance-{postgres,neon,cloudflare}/src/event_store/ingest.rs`.
 //!
 //! The instrument is `crates/happenstance-sqlite/src/ingest_spike.rs`: this
 //! trait implemented for `SqliteEventStore`, in the adapter's own crate, over

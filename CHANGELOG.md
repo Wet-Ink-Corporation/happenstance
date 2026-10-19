@@ -212,6 +212,29 @@ not the same as what a user needed to be told.
   verifies that half directly. No rule is added, so no defect sentence is
   owed. The same two path-only dev-dependencies as Postgres.
 
+- **`happenstance-cloudflare`: the ingest port runs on the Durable Object, in
+  test code only** (#108, part F). Nothing published moves.
+  `src/event_store/ingest.rs`, under `#[cfg(test)]`, implements
+  `happenstance-sync`'s ingest port over the row writer `append` uses: append's
+  `INSERT` is now built once by a shared function and issued per row by a
+  shared `insert_row`, and ingest issues that same text, then stamps the
+  foreign origin with an ingest-only `UPDATE OR IGNORE … RETURNING` whose
+  conflict is the dedupe. It is VT-10's fourth run. A Durable Object refuses
+  `BEGIN` and `SAVEPOINT` through `exec`, so each call runs inside one
+  `ctx.storage.transactionSync`, reached through `js_sys` with no new
+  dependency, and held by a wrapper that owns the storage object; a refused
+  call rolls back every row and the sequence counter. The ingest family is
+  mounted on it on wasm32 under the gate's Node shim, with a `BEFORE INSERT`
+  trigger arming SY-30's fault and all three ceilings mirrored from the ones
+  append declares. Every rule runs, SY-38's hidden-claim half included, which
+  makes this the second adapter after SQLite to report that half run rather
+  than skipped. Two `#[cfg(test)]` error variants carry the origin position and
+  recorded time a Durable Object cannot store. `happenstance-sync-testkit`
+  gains `emit_ingest_wasm!` and a `wasm32` twin of its reference ingest harness.
+  No rule is added, so no defect sentence is owed. The same two path-only
+  dev-dependencies as Postgres. The `workerd` harness gains a probe of the
+  `transactionSync` properties the design rests on.
+
 - **`happenstance-sync-testkit`: the replication suite's first two rules,
   in a crate that is not published yet** (#111). Recorded here because CF-29
   asks every conformance rule for an entry, not because anything ships: the
