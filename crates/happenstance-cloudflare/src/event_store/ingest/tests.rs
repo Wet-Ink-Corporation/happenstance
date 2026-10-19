@@ -274,6 +274,8 @@ fn ingest_store_satisfies_the_bare_bounds() {
 #[cfg(target_arch = "wasm32")]
 mod claims;
 #[cfg(target_arch = "wasm32")]
+mod family;
+#[cfg(target_arch = "wasm32")]
 mod reads;
 #[cfg(target_arch = "wasm32")]
 mod support;
