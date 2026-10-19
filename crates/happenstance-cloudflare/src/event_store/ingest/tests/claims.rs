@@ -174,7 +174,8 @@ async fn a_compensation_whose_group_carries_an_unheld_own_identity_is_not_writte
     );
 }
 
-/// The groups of C4's arrangement: a group the call's compensation answers,
+/// The groups of `a_claim_the_calls_own_compensation_would_hide_is_refused`'s
+/// arrangement: a group the call's compensation answers,
 /// and a group carrying `claimed`.
 fn hidden(
     claimed: EventId,

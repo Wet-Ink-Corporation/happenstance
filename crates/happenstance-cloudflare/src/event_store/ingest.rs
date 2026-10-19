@@ -53,7 +53,8 @@
 //! from (it holds only `SqlStorage`). An `Option` field on the published struct
 //! would make "an ingest store that cannot transact" representable; a wrapper
 //! built only by [`CloudflareIngestStore::open`] does not (API-02). How part E
-//! reaches that object in production is Decision D8, the owner's.
+//! reaches that object in production is not decided here: `worker` binds no
+//! `transactionSync`, and the choice changes a published constructor.
 //!
 //! # Cancellation, and `Busy`
 //!
@@ -71,10 +72,10 @@
 //! # What has run where
 //!
 //! On `wasm32-unknown-unknown` under the gate's Node shim, whose
-//! `transactionSync` is this module's `model` over `SAVEPOINT` (Decision D2),
-//! **not** under `workerd`: the harness links the crate's published surface,
-//! and a `cfg(test)` impl does not exist there. The primitive itself is probed
-//! under `workerd` by `harness/workerd`'s `/transaction-probe` (Decision D3).
+//! `transactionSync` is this module's `model` over `SAVEPOINT`, **not** under
+//! `workerd`: the harness links the crate's published surface, and a
+//! `cfg(test)` impl does not exist there. The primitive itself is probed under
+//! `workerd` by `harness/workerd`'s `/transaction-probe` routes.
 //! The 1,024-event ceiling is the declared policy, measured for `append`'s
 //! statement count and not re-measured for ingest's (about two statements and
 //! the tags per foreign row, inside a transaction).
@@ -113,7 +114,8 @@ use transaction::{Settled, Transactions};
 ///
 /// `OR IGNORE` is the dedupe: `UNIQUE (origin_store, origin_position)` refuses
 /// a held identity and SQLite skips the row, so `RETURNING` yields a row only
-/// for a stamp that landed (probed for the plan). The `IS NULL` guard makes it
+/// for a stamp that landed (`harness/workerd`'s `update-or-ignore-returning`
+/// probe measures it on the runtime). The `IS NULL` guard makes it
 /// impossible to restamp an event.
 fn stamp_foreign_sql(tables: &Tables) -> String {
     format!(
@@ -519,8 +521,8 @@ impl Classify for CloudflareEventStoreError {
                 SqlError::AlreadyBorrowed | SqlError::CursorInvalidated => FailureClass::Transient,
                 // An object's storage cap does not empty itself, and a thrown
                 // storage error fails the same way again. No message is parsed
-                // to tell a transient throw apart (Decision D7, until a workerd
-                // run shows which throws recur).
+                // to tell a transient throw apart, until a workerd run shows
+                // which throws recur.
                 SqlError::StorageLimitExceeded | SqlError::Thrown(_) => FailureClass::Stop,
             },
             // Past what a binding carries exactly, so it can never land here,
@@ -552,7 +554,7 @@ mod transaction;
 #[cfg(test)]
 mod tests;
 
-// The Node shim's `transactionSync` (Decision D2): test support, and only on
+// The Node shim's `transactionSync`: test support, and only on
 // the target with a JavaScript heap.
 #[cfg(all(test, target_arch = "wasm32"))]
 mod model;

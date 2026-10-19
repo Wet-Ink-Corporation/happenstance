@@ -1,15 +1,16 @@
-//! The Node shim's model of `ctx.storage.transactionSync` (Decision D2).
+//! The Node shim's model of `ctx.storage.transactionSync`.
 //!
 //! The shim in `crate::host` carries no `transactionSync`, and the published
 //! bytes of that module are not changed for a test-only port: this installs
 //! one on the shim's `storage` object, in test code. It is built over the
 //! object's own SQL, `SAVEPOINT` / `ROLLBACK TO` / `RELEASE`, which the shim's
 //! `exec` accepts and `workerd`'s refuses. That is the point of a model: the
-//! adapter never issues those statements itself (W16), and the real primitive
-//! is measured under `workerd` by `harness/workerd`'s transaction probe
-//! (Decision D3), which is what this model is held against.
+//! adapter never issues those statements itself
+//! (`one_call_is_one_transaction_and_issues_no_transaction_control`), and the
+//! real primitive is measured under `workerd` by `harness/workerd`'s
+//! `test/transaction.test.ts`, which is what this model is held against.
 //!
-//! Probed for the plan on SQLite 3.50.4: a rolled-back savepoint restores
+//! Measured on SQLite 3.50.4: a rolled-back savepoint restores
 //! `sqlite_sequence`, so a refused call leaves the next positions dense.
 //!
 //! Every function returns a `Result` rather than panicking, so the module
