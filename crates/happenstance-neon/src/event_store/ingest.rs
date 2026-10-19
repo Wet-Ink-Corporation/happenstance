@@ -59,18 +59,18 @@
 //! (constraint 4). The one place Neon departs from the other two ingest runs,
 //! which implement the `Send` flavours.
 //!
-//! # Why here, and why `cfg(test)`
+//! # Why here, and why behind `sync`
 //!
 //! **Here**, as a child of `event_store`, because a module's private items are
 //! visible to its descendants: this reaches the builder, the decoders and the
 //! ceilings without any of them being widened. Coherence allows the impls: a
 //! foreign trait on a local type.
 //!
-//! **`cfg(test)`** because `happenstance-sync` is `publish = false` and its name
-//! is unclaimed, so it can only be a path-only dev-dependency, which cargo
-//! strips on publish. Every test is therefore a unit test under this module,
-//! and nothing here compiles for `wasm32`, where the gate builds the library
-//! alone. Part E turns the gate into a feature.
+//! **Behind `sync`** because `happenstance-sync` is an optional dependency, so
+//! a consumer who never replicates compiles none of this. It was `cfg(test)`
+//! until #108 part E published that crate. The tests stay unit tests under
+//! this module, where they reach the builder; the gate checks the feature's
+//! `wasm32` build, so the impl is held to the target this crate claims.
 
 use happenstance_core::{EventId, StoreId};
 use happenstance_sync::{
@@ -183,6 +183,7 @@ impl<T: SqlTransport> NeonEventStore<T> {
 
 // The bare flavour, the only one `NeonEventStore` has, and only that name in
 // scope here (constraint 4).
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl<T: SqlTransport> IngestStore for NeonEventStore<T> {
     // The bare adapter error, as the other two runs: the port's `IngestError`
     // carries capacity, contention and the unheld identity in arms of its own.
@@ -228,6 +229,7 @@ impl<T: SqlTransport> IngestStore for NeonEventStore<T> {
 /// does not compile until somebody decides its class. Every decoding variant
 /// is a corrupt store, a missing schema, or this crate and the endpoint
 /// disagreeing, and fails the same way again.
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl<E> Classify for NeonError<E> {
     fn class(&self) -> FailureClass {
         match self {
@@ -384,8 +386,8 @@ fn stored_store_id<E>(stored: &str) -> Result<StoreId, NeonError<E>> {
     Ok(StoreId::from_bytes(identity))
 }
 
-// The whole file is `cfg(test)` already, through its declaration in
-// `event_store.rs`. Said again here so the module reads as test code where it
-// stands.
+// The whole file is behind `sync`, through its declaration in
+// `event_store.rs`, so these tests run in a build with the feature on, which
+// the gate's `--all-features` is.
 #[cfg(test)]
 mod tests;

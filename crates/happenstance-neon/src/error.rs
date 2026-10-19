@@ -190,10 +190,10 @@ pub enum NeonError<E> {
     /// Refused rather than saturated, because on the ingest path a position is
     /// half an [`EventId`](happenstance_core::EventId): two such events from one
     /// origin would collapse onto one stored identity and the second would be
-    /// counted as a re-delivery. `#[cfg(test)]` with the rest of the ingest
-    /// spike until phase 13 publishes the port it serves; the enum is
-    /// `#[non_exhaustive]`, so lifting the gate is additive.
-    #[cfg(test)]
+    /// counted as a re-delivery. Produced only by ingest, behind `sync`; the
+    /// enum is `#[non_exhaustive]`, so the feature adds it additively.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
     #[error("origin position {position} does not fit this store's bigint column")]
     OriginPositionOutOfRange {
         /// The position the origin assigned.
@@ -202,9 +202,10 @@ pub enum NeonError<E> {
 
     /// The store's meta table holds no identity row, so there is no identity
     /// to ingest under. Migration 1 inserts it; its absence is a schema that
-    /// was never migrated. `#[cfg(test)]` with the rest of the ingest port
-    /// (#108), and additive for the reason the variant above gives.
-    #[cfg(test)]
+    /// was never migrated. Produced only by ingest, behind `sync`, and
+    /// additive for the reason the variant above gives.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
     #[error("the store's meta table holds no store_id row; was migration 1 applied?")]
     MissingIdentity,
 }

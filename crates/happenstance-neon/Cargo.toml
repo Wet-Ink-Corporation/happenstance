@@ -46,6 +46,15 @@ futures-core.workspace = true
 serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
 thiserror.workspace = true
+# The ingest port (VT-10): `src/event_store/ingest.rs` implements
+# `happenstance-sync`'s bare `IngestStore` on `NeonEventStore` over the private
+# insert builder `append` uses, behind the `sync` feature below. Optional, so a
+# consumer who never replicates compiles none of it, nor
+# `happenstance-core/serde`, which `happenstance-sync` turns on. It was a
+# path-only dev-dependency until #108 part E published `happenstance-sync`.
+# `happenstance-sync` builds for `wasm32` with its default features off, which
+# is how the workspace entry names it, and the gate checks that build.
+happenstance-sync = { workspace = true, optional = true }
 
 [dev-dependencies]
 # `proptest` is what the model family is behind: `event_store_model_conformance!`
@@ -58,18 +67,15 @@ happenstance-testkit = { workspace = true, features = ["proptest"] }
 # queue. `test-util` is for paused time: the transport's timeout test fires its
 # bound on virtual time rather than a real millisecond (wi-51f0e9).
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time", "test-util"] }
-# The ingest port (#108, part C): `src/event_store/ingest.rs` implements
-# `happenstance-sync`'s bare `IngestStore` over the private insert builder
-# `append` uses, which only this crate can reach, and mounts the ingest family
-# on it. Path-only, with no version: `happenstance-sync` is `publish = false`
-# and its name is unclaimed, so a version could never resolve, and cargo strips
-# a versionless dev-dependency from the published manifest, so neither line
-# reaches a consumer. The same reasoning, and the same two lines,
-# `happenstance-sqlite` and `happenstance-postgres` carry. Under `cargo test`
-# they turn on `happenstance-core`'s `serde` and `memory`; nothing in `src/`
-# outside the ingest module names an item of either. Neither is built for
-# `wasm32`: the gate's checks there are lib-only or `--no-dev-deps`.
-happenstance-sync = { path = "../happenstance-sync" }
+# The ingest family (#108), mounted on the store from
+# `src/event_store/ingest/tests/family.rs`. Path-only, with no version, so
+# cargo strips it from the published manifest and this crate's release never
+# waits on that one: the reasoning `happenstance-sqlite` and
+# `happenstance-postgres` give for the same line. Under `cargo test` it turns
+# on `happenstance-core`'s `memory`. The mount is
+# `cfg(all(test, feature = "sync"))`, which the gate's `--all-features` builds.
+# It is not built for `wasm32`: the gate's checks there are lib-only or
+# `--no-dev-deps`.
 happenstance-sync-testkit = { path = "../happenstance-sync-testkit" }
 
 # --- the live transport, and why it is here and not behind a feature ---
@@ -156,6 +162,13 @@ projection-store = []
 # one of them. The impl and the probe table are gated on both, so that combination
 # compiles to nothing rather than failing to compile.
 conformance = ["happenstance-core/conformance"]
+# The ingest port (VT-10, #108 part E): `impl IngestStore for NeonEventStore`,
+# `impl Classify for NeonError`, the two variants only ingest produces, and a
+# `happenstance_sync` re-export. The bare flavour only, as this crate's
+# event store is: a `wasm32` transport need not be `Send`. Implies
+# `event-store`, whose insert builder it shares. Off by default, as the other
+# adapters' are.
+sync = ["event-store", "dep:happenstance-sync"]
 
 [lints]
 workspace = true
@@ -167,3 +180,10 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+# The ingest port from outside the crate, which a `cfg(test)` impl can never
+# satisfy. Named rather than gated inside the file, so that without the
+# feature the target is not built at all.
+[[test]]
+name = "ingest_port"
+required-features = ["sync"]
