@@ -981,3 +981,12 @@ impl ProjectionSubject for MemoryProjectionFixture {
         Self::new()
     }
 }
+
+// The trailing model's instruments: a conformant store whose reads trail its
+// commits, its four wrong twins, and the wrapper that measures the weakening.
+// Declared here, at the end, so that no line above moves, and from this module
+// for `mutants::metadata_ceilings`'s reason: a file loaded through `#[path]`
+// owns its directory, so this resolves to `mutation_coverage/trailing.rs`. Behind
+// `proptest` because the model family is, and nothing else drives them.
+#[cfg(feature = "proptest")]
+pub(crate) mod trailing;
