@@ -2,13 +2,18 @@
 //! `cargo test -p happenstance-cloudflare` runs it, and the `wasm32` runner runs
 //! it again on the target the store lives on.
 
-use happenstance_core::{
-    Event, EventId, EventType, RecordedAt, SequencePosition, StoreId, StoreLimit, Tag, Tags,
-};
-use happenstance_sync::{Classify, FailureClass, ReplicatedEvent};
+use core::marker::PhantomData;
 
-use super::StoredOrigin;
-use crate::event_store::{Ceilings, CloudflareEventStoreError};
+use happenstance_core::{
+    Event, EventId, EventStore, EventType, RecordedAt, SequencePosition, StoreId, StoreLimit, Tag,
+    Tags,
+};
+use happenstance_sync::{Classify, FailureClass, IngestStore, ReplicatedEvent};
+
+use super::{CloudflareIngestStore, StoredOrigin};
+use crate::event_store::{Ceilings, CloudflareEventStore, CloudflareEventStoreError};
+use crate::js::JsHandle;
+use crate::not_send_probe::{NotSend as _, Probe};
 use crate::sql_storage::SqlError;
 
 /// An event of `data_len` bytes, `tags` tags and, if given, `metadata_len`
@@ -229,3 +234,48 @@ fn cloudflare_errors_state_their_class() {
         assert_eq!(error.class(), class, "{error:?}");
     }
 }
+
+/// The ingest store binds the **bare** ports, the only ones a `!Send` store
+/// has, and is `!Send` itself. Named through its one constructor, which takes
+/// the store and the storage object `transactionSync` lives on and nothing
+/// else.
+///
+/// Rejects a `Send`-bound port or impl, which would not compile here, and a
+/// wrapper that restored `Send` by holding something thread-safe.
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+fn ingest_store_satisfies_the_bare_bounds() {
+    fn bare<S: EventStore + IngestStore>() {}
+    // The constructor's signature, pinned: an owned store (the wrapper keeps
+    // it) and the storage object, and no identity, which `store_id` reads
+    // every time.
+    fn built_by<F>(_: F)
+    where
+        F: Fn(
+            CloudflareEventStore,
+            JsHandle,
+        ) -> Result<CloudflareIngestStore, CloudflareEventStoreError>,
+    {
+    }
+
+    bare::<CloudflareIngestStore>();
+    built_by(CloudflareIngestStore::open);
+    assert!(
+        !Probe::<CloudflareIngestStore>(PhantomData).is_send(),
+        "a Durable Object's ingest store must be !Send"
+    );
+    assert!(
+        Probe::<fn(CloudflareEventStore, JsHandle)>(PhantomData).is_send(),
+        "the control: the probe answers Send where it holds"
+    );
+}
+
+// The tests that need a JavaScript heap, in their own files.
+#[cfg(target_arch = "wasm32")]
+mod claims;
+#[cfg(target_arch = "wasm32")]
+mod reads;
+#[cfg(target_arch = "wasm32")]
+mod support;
+#[cfg(target_arch = "wasm32")]
+mod writes;
