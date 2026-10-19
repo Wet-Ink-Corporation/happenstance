@@ -160,7 +160,7 @@ held**, which a rule can count.
 |---|---|
 | The unique `(origin_store, origin_position)` index VT-8 requires | `crates/happenstance-sqlite/src/event_store.rs:294`, `crates/happenstance-cloudflare/src/event_store.rs:210`, `crates/happenstance-postgres/migrations/0001_event_log.sql:92`, `crates/happenstance-neon/migrations/0001_neon_log.sql:117` |
 | Held rows skipped inside the write | `crates/happenstance-sqlite/src/ingest_spike.rs:12`, `ON CONFLICT (origin_store, origin_position) DO NOTHING` |
-| One call per pulled batch | `IngestStore::ingest`, `crates/happenstance-sync/src/ingest.rs:157` |
+| One call per pulled batch | `IngestStore::ingest`, `crates/happenstance-sync/src/ingest.rs:168` |
 | A conditional append in one round trip on one-shot HTTP | `happenstance-neon`, one `SERIALIZABLE` statement |
 
 So the deferral's second open question, *what an already-written adapter pays to add the unique
@@ -253,6 +253,6 @@ marker to the change that lands its rule.
 - The LiveStore prior-art audit, findings L-01, L-02, L-03, L-21 and L-22; filed for the tree by
   #247.
 - `crates/happenstance-core/src/identity.rs:43`, `:96` — `Ord` on `StoreId` and `EventId`.
-- `crates/happenstance-sync/src/ingest.rs:157`, `crates/happenstance-sqlite/src/ingest_spike.rs:12`
+- `crates/happenstance-sync/src/ingest.rs:168`, `crates/happenstance-sqlite/src/ingest_spike.rs:12`
   and the four origin indexes in §6.
 - `references/scenarios/README.md:436` — *first to the hub, not first to decide*.
