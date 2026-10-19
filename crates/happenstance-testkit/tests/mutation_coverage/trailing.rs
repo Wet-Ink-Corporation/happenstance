@@ -315,6 +315,28 @@ impl Trailing for TrailingAfterIsInclusive {
     }
 }
 
+/// The frontier never moves past what the first read saw.
+///
+/// Provenance: a transaction left open somewhere on the cluster holds
+/// `pg_snapshot_xmin` back for good, which ADR-0024 and ADR-0071 name as the
+/// frontier's cluster-wide coupling. This one is a **measured miss**, not a
+/// wrong store the model catches: every read is a legal prefix, every verdict
+/// is judged over what is held, and only waiting could tell a frontier that
+/// never moves from one that has not moved yet. CF-33 forbids the wait, so
+/// liveness is the trailing model's stated non-goal, and this row is what
+/// keeps that sentence true.
+#[derive(Debug)]
+pub(crate) struct StalledFrontier;
+
+impl Trailing for StalledFrontier {
+    const NAME: &'static str = "StalledFrontierStore";
+
+    fn shown(log: &TrailingLog, _call: usize) -> Vec<SequencedEvent> {
+        // THE DEFECT: the first read's frontier, forever.
+        log.as_of(0).to_vec()
+    }
+}
+
 // =====================================================================
 // The weakening, measured
 // =====================================================================

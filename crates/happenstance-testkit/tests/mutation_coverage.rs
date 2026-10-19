@@ -3078,6 +3078,7 @@ macro_rules! for_each_trailing_subject {
             crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::HoleyFrontier>,
             crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::RetreatingFrontier>,
             crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::TrailingAfterIsInclusive>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::StalledFrontier>,
         }
     };
 }
@@ -3176,6 +3177,17 @@ const TRAILING_MODEL_COVERAGE: &[(&str, ModelOutcome, &str)] = &[
         "AfterIsInclusiveStore behind a frontier: after is exclusive, from is inclusive, \
          and one comparison served both",
     ),
+    // The one row here that is a miss rather than a catch, kept because a
+    // stated non-goal nothing measures is a sentence that can quietly stop
+    // being true.
+    (
+        "StalledFrontierStore",
+        ModelOutcome::Agreed,
+        "a transaction left open on the cluster holds pg_snapshot_xmin back for good \
+         (ADR-0024, ADR-0071). Without waiting, which CF-33 forbids, a frontier that \
+         never moves cannot be told from one that has not moved yet: liveness is the \
+         trailing model's non-goal",
+    ),
 ];
 
 /// The stores the strict model rejects and the trailing model, run at zero
@@ -3184,6 +3196,14 @@ const TRAILING_MODEL_COVERAGE: &[(&str, ModelOutcome, &str)] = &[
 /// Measured, not guessed: `the_trailing_model_costs_exactly_what_it_states`
 /// derives the set from the two runs and compares it with this one, so a store
 /// moving from caught to missed changes this list, and the list is reviewed.
+///
+/// **Empty at this commit, and that is a measurement of the registry rather
+/// than a property of the weakening.** At zero lag the trailing model's only
+/// loss is an accepted write that never appears, which it must read as lag;
+/// no registered store loses a write without also contradicting a later read
+/// or a returned position. A store that did would land here. What lag itself
+/// costs is a different question, and `happenstance_testkit::model`'s
+/// documentation answers it.
 #[cfg(feature = "proptest")]
 const WEAKENING_COSTS: &[(&str, &str)] = &[];
 
