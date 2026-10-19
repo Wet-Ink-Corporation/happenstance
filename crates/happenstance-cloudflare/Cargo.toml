@@ -125,6 +125,21 @@ happenstance-testkit.workspace = true
 # a regular dependency of the library is not in its extern prelude.
 happenstance-core = { workspace = true, features = ["std"] }
 futures-core.workspace = true
+# The ingest port (#108, part F): `src/event_store/ingest.rs` implements
+# `happenstance-sync`'s bare `IngestStore` over the private row writer `append`
+# uses, which only this crate can reach, and mounts the ingest family on it.
+# Path-only, with no version: `happenstance-sync` is `publish = false` and its
+# name is unclaimed, so a version could never resolve, and cargo strips a
+# versionless dev-dependency from the published manifest, so neither line
+# reaches a consumer. The same reasoning, and the same two lines,
+# `happenstance-sqlite`, `happenstance-postgres` and `happenstance-neon` carry.
+# Under `cargo test` they turn on `happenstance-core`'s `serde` and, through the
+# sync testkit, `memory`; nothing in `src/` outside the ingest module names an item of
+# either. Not target-scoped, unlike `wasm-bindgen-test` below: the host build
+# compiles the impl, so clippy lints it, and runs its pure tests, while the
+# store itself is driven only on `wasm32`, the one target with a JS heap.
+happenstance-sync = { path = "../happenstance-sync" }
+happenstance-sync-testkit = { path = "../happenstance-sync-testkit" }
 
 # `wasm-bindgen-test` is target-scoped for the reason
 # `crates/happenstance-testkit/Cargo.toml`'s block gives: the runtime attribute
