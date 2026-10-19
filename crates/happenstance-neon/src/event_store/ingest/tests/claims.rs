@@ -171,7 +171,7 @@ async fn a_compensation_whose_group_carries_an_unheld_own_identity_is_not_writte
 /// Group 1 lands a foreign event and carries a compensation; group 2 carries
 /// a foreign event and the claim. The call draws its three foreign positions
 /// first and the compensation's after them, so the compensation would take
-/// the position three past the head. A twin store shows that allocation is
+/// the position four past the head. A twin store shows that allocation is
 /// real here: the same call with the claim replaced by a peer's event puts
 /// its compensation exactly there.
 ///
