@@ -42,16 +42,17 @@
 //!
 //! # Why a wrapper rather than an impl on `NeonEventStore`
 //!
-//! It was written when the port's [`store_id`](IngestStore::store_id) was
-//! synchronous and infallible, and `NeonEventStore` holds no identity in Rust
-//! at all: every `INSERT` reads it from the meta row (ADR-0086).
-//! [`NeonIngestStore`] is built only by an `async` constructor that reads it
-//! once. The cached copy can go stale only through a manual `UPDATE` of the
-//! meta row, and the refusal does not depend on it: the statement judges a
-//! claim against the meta row it reads. That finding, with Postgres's, made
-//! the port's `store_id` `async` and fallible (#108, part E0); the wrapper now
-//! answers it with `Ok` of its copy, and stays until the tests that build one
-//! over a scripted transport, with an identity of their choosing, move with it.
+//! Because the tests build one without an endpoint and around an identity of
+//! their choosing: `Scripted::store` pairs a scripted transport with a fixed
+//! `StoreId`, so the transport answers only the statements under test.
+//! `NeonEventStore` holds no identity in Rust at all: every `INSERT` reads it
+//! from the meta row (ADR-0086), so an impl on it would spend a round trip on
+//! the meta row first. Everywhere else [`NeonIngestStore`] is built by an
+//! `async` constructor that reads the identity once, and the port's
+//! [`store_id`](IngestStore::store_id) answers `Ok` of that copy. The copy can
+//! go stale only through a manual `UPDATE` of the meta row, and the refusal
+//! does not depend on it: the statement judges a claim against the meta row
+//! it reads.
 //!
 //! # The bare flavour
 //!

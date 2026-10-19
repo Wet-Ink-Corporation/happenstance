@@ -377,7 +377,8 @@ not the same as what a user needed to be told.
   `every_rule_reports_a_store_that_cannot_read_its_identity` runs the family
   against a store whose read fails. The Postgres and Neon ingest wrappers, both
   `#[cfg(test)]`, are kept for now and answer from the identity they read.
-  Neither crate is published, so no consumer is affected.
+  Neither `happenstance-sync` nor `happenstance-sync-testkit` is published, and
+  the Postgres/Neon wrappers are `#[cfg(test)]`, so no consumer is affected.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity

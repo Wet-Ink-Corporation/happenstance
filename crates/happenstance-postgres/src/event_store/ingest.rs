@@ -30,14 +30,14 @@
 //!
 //! # Why a wrapper rather than an impl on `PostgresEventStore`
 //!
-//! It was written when the port's [`store_id`](SendIngestStore::store_id) was
-//! synchronous and infallible. `PostgresEventStore` reads its identity lazily
-//! and fallibly from `store_meta`, because its constructor must stay
-//! synchronous and infallible, so [`PostgresIngestStore`] is built only by an
-//! `async` constructor that reads the identity once. That finding made the
-//! port's `store_id` `async` and fallible (#108, part E0), and the wrapper now
-//! answers it with `Ok` of the copy it read. It stays until the tests that
-//! build one without a server, with an identity of their choosing, move with it.
+//! Because the tests build one without a server and around an identity of
+//! their choosing: `unreachable_store` pairs a pool that points nowhere with a
+//! fixed `StoreId`, so a refusal that must come before the wire is shown not
+//! to reach it. `PostgresEventStore` reads its identity lazily and fallibly
+//! from `store_meta`, so an impl on it would have to read the server first.
+//! Everywhere else [`PostgresIngestStore`] is built by an `async` constructor
+//! that reads the identity once, and the port's
+//! [`store_id`](SendIngestStore::store_id) answers `Ok` of that copy.
 //!
 //! # Positions
 //!

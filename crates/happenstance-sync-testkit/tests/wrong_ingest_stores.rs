@@ -699,14 +699,22 @@ where
     F: IngestFixture,
     O: AsyncFn() -> F + Copy,
 {
+    outcomes(open)
+        .into_iter()
+        .map(|(name, outcome)| (name, outcome.map_err(|violation| violation.clause())))
+        .collect()
+}
+
+/// Every rule in the enumeration against one fixture, by name, each verdict
+/// whole, for a test that reads a violation's message as well as its clause.
+fn outcomes<F, O>(open: O) -> Vec<(&'static str, Result<RuleOutcome, Violation>)>
+where
+    F: IngestFixture,
+    O: AsyncFn() -> F + Copy,
+{
     macro_rules! run_each {
         ($($name:ident),* $(,)?) => {
-            vec![$(
-                (
-                    stringify!($name),
-                    block_on(ingest_rules::$name(open)).map_err(|violation| violation.clause()),
-                )
-            ),*]
+            vec![$((stringify!($name), block_on(ingest_rules::$name(open)))),*]
         };
     }
     happenstance_sync_testkit::for_each_ingest_store_rule!(run_each)
@@ -750,7 +758,7 @@ fn the_faithful_store_passes_every_rule() {
 /// own clause, and none passes on an identity it was never told.
 #[test]
 fn every_rule_reports_a_store_that_cannot_read_its_identity() {
-    let all = verdicts(async || WrongFixture::new(Mistake::CannotReadItsIdentity));
+    let all = outcomes(async || WrongFixture::new(Mistake::CannotReadItsIdentity));
     let clauses = [
         ("ingest_preserves_origin_identity", "VT-5"),
         ("ingested_events_land_above_the_local_head", "SY-5"),
@@ -765,7 +773,16 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
             .iter()
             .find(|(rule, _)| *rule == name)
             .expect("every rule in the enumeration is listed above");
-        assert_eq!(verdict, Err(*clause), "`{name}`");
+        let violation = verdict.expect_err("a rule must not pass on an unread identity");
+        assert_eq!(violation.clause(), *clause, "`{name}`");
+        // The failed read itself, not some later symptom of carrying on. The
+        // rule's own words, which the store's `Display` repeats only after it.
+        assert!(
+            violation
+                .message()
+                .starts_with("the store could not read its own identity: "),
+            "`{name}` reported something else: {violation}"
+        );
     }
 }
 

@@ -266,7 +266,10 @@ async fn a_foreign_identity_reaches_a_store_through_a_trait_this_crate_owns() {
     // The foreign identity and recorded time land unchanged; the compensation
     // carries this store's identity.
     let rows = store.rows();
-    let own = store.store_id().await.unwrap();
+    let own = store
+        .store_id()
+        .await
+        .expect("the stand-in holds its identity in memory");
     assert_eq!(rows.len(), 3);
     for (row, event) in rows.iter().zip(&events) {
         assert_eq!(row.id, event.id);

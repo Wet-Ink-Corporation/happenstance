@@ -476,13 +476,13 @@ pub mod ingest_rules {
     /// SY-38's second arrangement: the held echo.
     async fn a_held_echo_is_a_skip<F: IngestFixture>(fixture: &F) -> Result<(), Violation> {
         let store = fixture.connect().await;
+        let own = own_identity(&store, SY_38).await?;
         append(&store, &[opaque(LOCAL, b"sy38-c-local", SY_38)?], SY_38).await?;
         let before = observe(&store, SY_38).await?;
         let held = before
             .log
             .last()
             .ok_or_else(|| Violation::new(SY_38, "the store holds nothing after an append"))?;
-        let own = own_identity(&store, SY_38).await?;
         ensure(held.id.store() == own, SY_38, || {
             format!(
                 "a local append was minted as {}, not under the store's own identity {own}",
