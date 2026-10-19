@@ -1210,6 +1210,30 @@ pub enum CloudflareEventStoreError {
         /// act on, and this field stays out of the chain rather than hiding it.
         while_discarding: Box<CloudflareEventStoreError>,
     },
+
+    /// An ingested event's origin position is past 2^53 − 1, the largest
+    /// integer a Workers SQL binding carries exactly (a JS number), so it is
+    /// refused before any statement rather than stored as a neighbour.
+    ///
+    /// Test-only with the rest of ingest (#108): the variant does not exist in
+    /// a consumer's build.
+    #[cfg(test)]
+    #[error("origin position {position} is past the largest a Workers SQL binding carries exactly")]
+    OriginPositionOutOfRange {
+        /// The origin position the peer sent.
+        position: SequencePosition,
+    },
+
+    /// An ingested event's recorded time is outside ±(2^53 − 1) ms, which a
+    /// Workers SQL binding cannot carry exactly. Refused before any statement.
+    ///
+    /// Test-only with the rest of ingest (#108).
+    #[cfg(test)]
+    #[error("recorded time {recorded_at} is outside what a Workers SQL binding carries exactly")]
+    RecordedAtOutOfRange {
+        /// The recorded time the peer sent.
+        recorded_at: RecordedAt,
+    },
 }
 
 impl EventStore for CloudflareEventStore {
@@ -2500,6 +2524,9 @@ mod write_path_tests {
                 CloudflareEventStoreError::UnstampedEvent { .. } => "unstamped event",
                 CloudflareEventStoreError::StoredPosition { .. } => "stored position",
                 CloudflareEventStoreError::PartialBatch { .. } => "partial batch",
+                // Ingest's two refusals (#108), test-only like the port.
+                CloudflareEventStoreError::OriginPositionOutOfRange { .. } => "origin position",
+                CloudflareEventStoreError::RecordedAtOutOfRange { .. } => "recorded at",
             }
         }
 

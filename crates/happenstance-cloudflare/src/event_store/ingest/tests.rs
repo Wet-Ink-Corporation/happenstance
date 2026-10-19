@@ -2,9 +2,14 @@
 //! `cargo test -p happenstance-cloudflare` runs it, and the `wasm32` runner runs
 //! it again on the target the store lives on.
 
-use happenstance_core::{Event, StoreLimit, Tag, Tags};
+use happenstance_core::{
+    Event, EventId, EventType, RecordedAt, SequencePosition, StoreId, StoreLimit, Tag, Tags,
+};
+use happenstance_sync::{Classify, FailureClass, ReplicatedEvent};
 
-use crate::event_store::Ceilings;
+use super::StoredOrigin;
+use crate::event_store::{Ceilings, CloudflareEventStoreError};
+use crate::sql_storage::SqlError;
 
 /// An event of `data_len` bytes, `tags` tags and, if given, `metadata_len`
 /// bytes of metadata.
@@ -84,4 +89,143 @@ fn ceilings_name_the_first_exceeded_limit_in_order() {
         Some((StoreLimit::TagsPerEvent, 3)),
         "the third event is checked as closely as the first"
     );
+}
+
+/// 2^53 − 1, `Number.MAX_SAFE_INTEGER`, written out rather than read from the
+/// constant under test.
+const SAFE: u64 = 9_007_199_254_740_991;
+
+/// An event from a peer, claiming `position` at `recorded_at`.
+fn from_peer(position: u64, recorded_at: i64) -> ReplicatedEvent {
+    let position = SequencePosition::new(position).expect("a nonzero position");
+    ReplicatedEvent::new(
+        EventId::new(StoreId::from_bytes([0x5a; 16]), position),
+        RecordedAt::from_millis(recorded_at),
+        sized(1, 0, None),
+    )
+}
+
+/// An origin this runtime cannot bind exactly is refused by value, not
+/// narrowed. `worker` binds an integer as `i as f64`, so past 2^53 − 1 two
+/// origin positions, or two recorded times, would be stored as one.
+///
+/// Rejects `position_as_i64`'s saturation (which would store `u64::MAX` as
+/// `i64::MAX`, and then as a rounded JS number), a bound written as `<` where
+/// `<=` is meant, and a recorded time checked on one side only.
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+fn an_origin_past_the_safe_integer_is_refused_not_narrowed() {
+    let safe = StoredOrigin::try_from(&from_peer(SAFE, 0)).expect("2^53 - 1 binds exactly");
+    assert_eq!(
+        (safe.store, safe.position),
+        (StoreId::from_bytes([0x5a; 16]), 9_007_199_254_740_991_i64)
+    );
+
+    for past in [SAFE + 1, u64::MAX] {
+        let refused = StoredOrigin::try_from(&from_peer(past, 0));
+        assert!(
+            matches!(
+                refused,
+                Err(CloudflareEventStoreError::OriginPositionOutOfRange { position })
+                    if position.get() == past
+            ),
+            "origin position {past} must be refused by value: {refused:?}"
+        );
+    }
+
+    let edge = 9_007_199_254_740_991_i64;
+    for millis in [edge, -edge] {
+        assert!(
+            StoredOrigin::try_from(&from_peer(1, millis)).is_ok(),
+            "{millis} ms binds exactly"
+        );
+    }
+    for millis in [edge + 1, -edge - 1, i64::MIN] {
+        let refused = StoredOrigin::try_from(&from_peer(1, millis));
+        assert!(
+            matches!(
+                refused,
+                Err(CloudflareEventStoreError::RecordedAtOutOfRange { recorded_at })
+                    if recorded_at.as_millis() == millis
+            ),
+            "a recorded time of {millis} ms must be refused by value: {refused:?}"
+        );
+    }
+}
+
+/// Every way this adapter fails states a class (SY-36), row by row from the
+/// plan's table, `PartialBatch`'s delegation to its cause included.
+///
+/// Rejects a wildcard answering `Stop` for a re-entrant borrow, which the next
+/// attempt finds free, and a `PartialBatch` classified apart from the failure
+/// that stopped the append.
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+fn cloudflare_errors_state_their_class() {
+    let position = SequencePosition::new(3).expect("nonzero");
+    let partial = |cause: CloudflareEventStoreError| CloudflareEventStoreError::PartialBatch {
+        from: position,
+        cause: Box::new(cause),
+        while_discarding: Box::new(CloudflareEventStoreError::CorruptTags),
+    };
+    let rows = [
+        (SqlError::AlreadyBorrowed.into(), FailureClass::Transient),
+        (SqlError::CursorInvalidated.into(), FailureClass::Transient),
+        (SqlError::StorageLimitExceeded.into(), FailureClass::Stop),
+        (
+            SqlError::internal("a thrown storage error").into(),
+            FailureClass::Stop,
+        ),
+        (
+            CloudflareEventStoreError::OriginPositionOutOfRange { position },
+            FailureClass::Park,
+        ),
+        (
+            CloudflareEventStoreError::RecordedAtOutOfRange {
+                recorded_at: RecordedAt::from_millis(i64::MAX),
+            },
+            FailureClass::Park,
+        ),
+        (
+            partial(SqlError::AlreadyBorrowed.into()),
+            FailureClass::Transient,
+        ),
+        (
+            partial(CloudflareEventStoreError::CorruptTags),
+            FailureClass::Stop,
+        ),
+        (
+            CloudflareEventStoreError::RowShape {
+                expected: 1,
+                actual: 2,
+            },
+            FailureClass::Stop,
+        ),
+        (
+            CloudflareEventStoreError::ColumnType {
+                column: "event.data",
+            },
+            FailureClass::Stop,
+        ),
+        (
+            EventType::new("").expect_err("an empty event type").into(),
+            FailureClass::Stop,
+        ),
+        (
+            Tag::new("").expect_err("an empty tag").into(),
+            FailureClass::Stop,
+        ),
+        (CloudflareEventStoreError::CorruptTags, FailureClass::Stop),
+        (
+            CloudflareEventStoreError::UnstampedEvent { position },
+            FailureClass::Stop,
+        ),
+        (
+            CloudflareEventStoreError::StoredPosition { raw: 0 },
+            FailureClass::Stop,
+        ),
+    ];
+    for (error, class) in rows {
+        assert_eq!(error.class(), class, "{error:?}");
+    }
 }
