@@ -22,7 +22,7 @@ use happenstance_sync::{
     Watermark,
 };
 
-use super::{NeonIngestStore, UNHELD_GUC, UNHELD_SQLSTATE, refusal_statement};
+use super::{UNHELD_GUC, UNHELD_SQLSTATE, refusal_statement};
 use crate::config::NeonConfig;
 use crate::error::{NeonError, NeonSqlError};
 use crate::event_store::{NeonEventStore, decode_body};
@@ -124,16 +124,19 @@ where
         .expect("an unconditional append to a reachable store lands")
 }
 
-/// `store`'s identity, asked through the port.
-async fn own<T: SqlTransport>(store: &NeonIngestStore<T>) -> StoreId {
+/// `store`'s identity, asked through the port: one read of the meta row.
+async fn own<T: SqlTransport>(store: &NeonEventStore<T>) -> StoreId
+where
+    T::Error: core::fmt::Debug,
+{
     IngestStore::store_id(store)
         .await
-        .expect("the wrapper answers the identity `open` read")
+        .expect("a migrated schema's meta row holds an identity")
 }
 
 /// `statements` as one request at `READ COMMITTED`, and its answer.
 async fn send<T: SqlTransport>(
-    store: &NeonIngestStore<T>,
+    store: &NeonEventStore<T>,
     statements: Vec<SqlStatement>,
 ) -> HttpResponse
 where
@@ -144,7 +147,6 @@ where
         _ => SqlRequest::batch(statements, IsolationLevel::ReadCommitted),
     };
     store
-        .event_store()
         .transport()
         .round_trip(request)
         .await
@@ -152,7 +154,7 @@ where
 }
 
 /// The first result set of `sql`'s answer, which must succeed.
-async fn select<T: SqlTransport>(store: &NeonIngestStore<T>, sql: String) -> ResultSet
+async fn select<T: SqlTransport>(store: &NeonEventStore<T>, sql: String) -> ResultSet
 where
     T::Error: core::fmt::Debug,
 {
@@ -165,11 +167,11 @@ where
 }
 
 /// Rows in the store's event table, read raw, frontier or not.
-async fn rows<T: SqlTransport>(store: &NeonIngestStore<T>) -> u64
+async fn rows<T: SqlTransport>(store: &NeonEventStore<T>) -> u64
 where
     T::Error: core::fmt::Debug,
 {
-    let table = store.event_store().config().qualified_event();
+    let table = store.config().qualified_event();
     select(store, format!("SELECT count(*)::text AS n FROM {table}"))
         .await
         .text(0, "n")
@@ -177,7 +179,8 @@ where
         .expect("a count is a number")
 }
 
-/// The identity a scripted store is built around.
+/// The identity a scripted refusal's claim carries. The scripted store holds
+/// none: the endpoint, which a script stands in for, judges the claim.
 const OWN: StoreId = StoreId::from_bytes([9; 16]);
 
 /// A transport that answers each round trip with the next scripted response,
@@ -203,12 +206,21 @@ impl Scripted {
         scripted
     }
 
-    /// A store over this transport, around [`OWN`].
-    fn store(&self) -> NeonIngestStore<&Self> {
-        NeonIngestStore {
-            store: NeonEventStore::new(self, NeonConfig::default().with_schema("hs_1")),
-            store_id: OWN,
-        }
+    /// A store over this transport. Its identity is whatever the script
+    /// answers a meta-row read with.
+    fn store(&self) -> NeonEventStore<&Self> {
+        NeonEventStore::new(self, NeonConfig::default().with_schema("hs_1"))
+    }
+
+    /// A transport that answers each round trip with the next of `bodies`,
+    /// each with status 200.
+    fn answering_all<const N: usize>(bodies: [&'static [u8]; N]) -> Self {
+        let scripted = Self::default();
+        scripted
+            .answers
+            .borrow_mut()
+            .extend(bodies.map(|body| HttpResponse::new(200, body)));
+        scripted
     }
 }
 
@@ -235,11 +247,11 @@ impl SqlTransport for &Scripted {
 const LANDED: &[u8] = br#"{"results":[{"fields":[],"rows":[{"appended":"2","skipped":"1","compensated":"1","unheld":""}],"command":"SELECT","rowCount":1,"rowAsArray":false},{"fields":[],"rows":[],"command":"DO","rowCount":null,"rowAsArray":false}]}"#;
 
 /// Constraint 4, one port over: generic code binds the bare flavours, and the
-/// wrapper satisfies them at a concrete transport.
+/// store satisfies them at a concrete transport.
 #[test]
 fn ingest_store_satisfies_the_bare_bounds() {
     fn assert_bounds<S: EventStore + IngestStore>() {}
-    assert_bounds::<NeonIngestStore<NullTransport>>();
+    assert_bounds::<NeonEventStore<NullTransport>>();
 }
 
 /// SY-11: an empty pull, and a group with nothing foreign in it, write
@@ -538,35 +550,46 @@ async fn a_success_answer_decodes_its_three_counts() {
     );
 }
 
-/// The identity is read once, at `open`, from the meta row; an absent row and
-/// a malformed one are named.
+/// The port's `store_id` reads the meta row on every call, read-only, and
+/// answers what that read returned.
+///
+/// Rejects a cached copy, which a re-mint (#104) would leave stale: the
+/// second scripted answer carries a different identity.
 #[tokio::test]
-async fn the_identity_is_read_once_at_open() {
+async fn store_id_reads_the_meta_row_on_every_call() {
     /// Sixteen bytes `0x01..=0x10`, base64.
     const HELD: &[u8] = br#"{"fields":[],"command":"SELECT","rowCount":1,"rows":[{"v":"AQIDBAUGBwgJCgsMDQ4PEA=="}]}"#;
+    /// `[2; 16]`, base64: the identity after a re-mint.
+    const REMINTED: &[u8] = br#"{"fields":[],"command":"SELECT","rowCount":1,"rows":[{"v":"AgICAgICAgICAgICAgICAg=="}]}"#;
+    let transport = Scripted::answering_all([HELD, REMINTED]);
+    let store = transport.store();
+
+    let expected: [u8; 16] = core::array::from_fn(|n| u8::try_from(n + 1).expect("under 17"));
+    assert_eq!(own(&store).await, StoreId::from_bytes(expected));
+    assert_eq!(own(&store).await, peer(2));
+    assert_eq!(transport.round_trips.get(), 2, "read on every call");
+    assert!(transport.sent.borrow().iter().all(|sent| sent.read_only));
+}
+
+/// An absent meta row is `MissingIdentity`, classed `Stop`, and a malformed
+/// one is named with its length.
+#[tokio::test]
+async fn store_id_reports_an_absent_meta_row_as_missing_identity() {
     const ABSENT: &[u8] = br#"{"fields":[],"command":"SELECT","rowCount":0,"rows":[]}"#;
     /// Fifteen bytes.
     const SHORT: &[u8] =
         br#"{"fields":[],"command":"SELECT","rowCount":1,"rows":[{"v":"AQIDBAUGBwgJCgsMDQ4P"}]}"#;
-    let open =
-        |transport| NeonIngestStore::open(NeonEventStore::new(transport, NeonConfig::default()));
-
-    let transport = Scripted::answering(200, HELD);
-    let store = open(&transport).await.expect("a held identity reads");
-    let expected: [u8; 16] = core::array::from_fn(|n| u8::try_from(n + 1).expect("under 17"));
-    assert_eq!(own(&store).await, StoreId::from_bytes(expected));
-    assert_eq!(own(&store).await, StoreId::from_bytes(expected));
-    assert_eq!(transport.round_trips.get(), 1, "read once");
-    assert!(transport.sent.borrow()[0].read_only);
 
     let transport = Scripted::answering(200, ABSENT);
-    assert!(matches!(
-        open(&transport).await,
-        Err(NeonError::MissingIdentity)
-    ));
+    let absent = IngestStore::store_id(&transport.store())
+        .await
+        .expect_err("no meta row, no identity");
+    assert!(matches!(absent, NeonError::MissingIdentity), "{absent:?}");
+    assert_eq!(absent.class(), FailureClass::Stop);
+
     let transport = Scripted::answering(200, SHORT);
     assert!(matches!(
-        open(&transport).await,
+        IngestStore::store_id(&transport.store()).await,
         Err(NeonError::MalformedIdentity { len: 15 })
     ));
 }

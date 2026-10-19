@@ -425,6 +425,17 @@ not the same as what a user needed to be told.
   never reach the wire, and a failed read is `IngestError::Store`. Tests that
   need no server seed the private cache. All of it is still `#[cfg(test)]`, so
   nothing published moves.
+- **`happenstance-neon`: the ingest port is on `NeonEventStore<T>`, not a
+  wrapper** (#108, part E1). The test-only `NeonIngestStore<T>` and its
+  `async fn open` are gone. The port's `store_id` reads the meta row on every
+  call, in one read-only round trip, and caches nothing, as `append` caches
+  nothing (ADR-0086), so a re-mint is answered by the next call. `ingest` does
+  not ask for it: its statement judges a claim against the meta row it reads.
+  The scripted test that pinned one read at `open`,
+  `the_identity_is_read_once_at_open`, is replaced by
+  `store_id_reads_the_meta_row_on_every_call` and
+  `store_id_reports_an_absent_meta_row_as_missing_identity`. Still
+  `#[cfg(test)]`, so nothing published moves.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity

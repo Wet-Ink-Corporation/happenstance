@@ -17,7 +17,6 @@ use happenstance_sync_testkit::{IngestFixture, Violation};
 use happenstance_testkit::Capability;
 use tokio::sync::OnceCell;
 
-use super::super::NeonIngestStore;
 use super::endpoint::{LiveTransport, fresh_schema};
 use crate::config::{NeonConfig, quote_ident};
 use crate::event_store::NeonEventStore;
@@ -26,7 +25,7 @@ use crate::transport::{IsolationLevel, SqlRequest, SqlStatement, SqlTransport};
 /// One fresh schema per fixture, and a handle onto it per `connect`.
 ///
 /// The schema is minted and migrated on first `connect`, on the rule's own
-/// runtime. A handle is a new `NeonIngestStore` over a clone of the one
+/// runtime. A handle is a new `NeonEventStore` over a clone of the one
 /// transport, so every handle a rule holds sends to one schema.
 #[derive(Debug)]
 struct NeonIngestFixture {
@@ -47,7 +46,7 @@ impl NeonIngestFixture {
 }
 
 impl IngestFixture for NeonIngestFixture {
-    type Store = NeonIngestStore<LiveTransport>;
+    type Store = NeonEventStore<LiveTransport>;
 
     /// Supported, by an `AFTER INSERT` row trigger in this fixture's schema
     /// that counts the rows the armed transaction inserts and raises on the
@@ -70,9 +69,7 @@ impl IngestFixture for NeonIngestFixture {
         let (config, transport) = self.schema().await;
         // A cheap handle onto the one client and ledger, and a copy of a few
         // names, which the store keeps.
-        NeonIngestStore::open(NeonEventStore::new(transport.clone(), config.clone()))
-            .await
-            .expect("a broken test environment: a freshly migrated schema has an identity")
+        NeonEventStore::new(transport.clone(), config.clone())
     }
 
     /// Installs the trigger `MID_GROUP_FAULT` describes. The counter is a
