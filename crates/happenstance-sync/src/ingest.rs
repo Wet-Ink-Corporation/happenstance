@@ -57,12 +57,12 @@
 //! enough to list — the deduplicating conflict clause, a per-row origin and
 //! recorded time, and the absence of any condition evaluation (SY-1).
 //!
-//! Three adapters show it, and not to one standard. SQLite runs it: append and
-//! ingest prepare one `INSERT` and differ only in the values bound. Postgres
-//! runs it too: its ingest sends append's text with a conflict clause added,
-//! in `crates/happenstance-postgres/src/event_store/ingest.rs`. Neon only
-//! spells it, from its append's insert builder, and has never sent it. The
-//! Durable Object is argued from its schema above and has not been built.
+//! Three adapters run it. SQLite: append and ingest prepare one `INSERT` and
+//! differ only in the values bound. Postgres sends append's text with a
+//! conflict clause added, Neon its append's insert builder with that clause and
+//! a constant statement refusing an unheld claim, in one request; each lives in
+//! `crates/happenstance-{postgres,neon}/src/event_store/ingest.rs`. The Durable
+//! Object is argued from its schema above and has not been built.
 //!
 //! The instrument is `crates/happenstance-sqlite/src/ingest_spike.rs`: this
 //! trait implemented for `SqliteEventStore`, in the adapter's own crate, over
