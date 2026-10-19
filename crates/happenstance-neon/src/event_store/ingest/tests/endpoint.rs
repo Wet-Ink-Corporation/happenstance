@@ -301,6 +301,8 @@ pub(super) async fn execute(transport: &LiveTransport, request: SqlRequest, what
 /// `hsi_<seconds>_<pid>_<n>`, unique per process and per call.
 fn mint_schema() -> String {
     static NEXT: AtomicU64 = AtomicU64::new(1);
+    // Relaxed: the counter publishes no other memory. All it must give is a
+    // distinct value per call, which a read-modify-write gives at any ordering.
     let ordinal = NEXT.fetch_add(1, Ordering::Relaxed);
     format!(
         "{SCHEMA_PREFIX}_{}_{}_{ordinal}",
