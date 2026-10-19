@@ -492,6 +492,9 @@ impl happenstance_testkit::ProjectionFixture for NeonProjectionFixture {
 // Shared machinery
 // -------------------------------------------------------------------------
 
+// `mint_schema`, `sweep_once` and `arm_mid_batch_fault`'s trigger are restated for the ingest
+// tests, in `src/event_store/ingest/tests/endpoint.rs` and `family.rs`: change both.
+
 /// A schema name carrying the second it was minted in, the process and an
 /// ordinal.
 ///

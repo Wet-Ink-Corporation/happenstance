@@ -189,6 +189,29 @@ not the same as what a user needed to be told.
   dev-dependencies, `happenstance-sync` and `happenstance-sync-testkit`, which
   cargo strips on publish.
 
+- **`happenstance-neon`: the ingest port runs here too, in test code only**
+  (#108, part C). Nothing published moves. `src/event_store/ingest.rs`, under
+  `#[cfg(test)]`, implements `happenstance-sync`'s ingest port over the endpoint
+  with no interactive transaction. It is VT-10's third run. The ingest
+  statement Neon only spelled until now is sent, built from append's insert
+  builder with the conflict clause on the origin index, as the first of two
+  statements in one request at `REPEATABLE READ`. The write records the first
+  claim on this store's own identity that landed in a transaction-local
+  setting, and does not write the call's compensations when one did; the
+  second statement is a constant that raises SQLSTATE `HS038` naming it, which
+  rolls the whole request back, so an unheld claim refuses the call and writes
+  nothing (SY-38). A claim meeting a row another transaction committed during
+  the call fails serialisation instead, and is `Busy`. Compensation positions
+  are drawn after every foreign row of the call, so a claim on one is a claim
+  that landed. The ingest family is mounted on it and runs in CI's `live-neon`
+  job, with #242's items stated as the other SQL stores state them: an
+  `AFTER INSERT` trigger arms SY-30's fault, and the data and tag ceilings are
+  mirrored, with no metadata ceiling. SY-38's rule reports its hidden-claim
+  half as skipped here, as on Postgres, and
+  `a_claim_on_the_position_the_calls_own_compensation_would_take_is_refused`
+  verifies that half directly. No rule is added, so no defect sentence is
+  owed. The same two path-only dev-dependencies as Postgres.
+
 - **`happenstance-sync-testkit`: the replication suite's first two rules,
   in a crate that is not published yet** (#111). Recorded here because CF-29
   asks every conformance rule for an entry, not because anything ships: the

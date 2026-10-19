@@ -351,27 +351,32 @@ impl<T> NeonEventStore<T> {
     /// here, park it" from "the endpoint 413'd, retry", and flattening the two
     /// destroys the distinction. Truncation is forbidden outright.
     fn check_ceilings<E>(events: &[Event]) -> Result<(), AppendError<NeonError<E>>> {
-        if events.len() > Self::MAX_EVENTS_PER_BATCH {
-            return Err(AppendError::ExceedsStoreLimit {
-                limit: StoreLimit::EventsPerBatch,
-                len: events.len(),
-            });
+        Self::exceeded(events.len(), events).map_or(Ok(()), |(limit, len)| {
+            Err(AppendError::ExceedsStoreLimit { limit, len })
+        })
+    }
+
+    /// The first of this store's ceilings that a write of `len` events, or one
+    /// of `events`, exceeds, with the magnitude that exceeded it.
+    ///
+    /// One policy for both write paths, checked in one order: the batch's
+    /// length, then each event's data, then its tags.
+    fn exceeded<'e>(
+        len: usize,
+        events: impl IntoIterator<Item = &'e Event>,
+    ) -> Option<(StoreLimit, usize)> {
+        if len > Self::MAX_EVENTS_PER_BATCH {
+            return Some((StoreLimit::EventsPerBatch, len));
         }
-        for event in events {
+        events.into_iter().find_map(|event| {
             if event.data().len() > Self::MAX_EVENT_DATA_LEN {
-                return Err(AppendError::ExceedsStoreLimit {
-                    limit: StoreLimit::EventDataLen,
-                    len: event.data().len(),
-                });
+                Some((StoreLimit::EventDataLen, event.data().len()))
+            } else if event.tags().len() > Self::MAX_TAGS_PER_EVENT {
+                Some((StoreLimit::TagsPerEvent, event.tags().len()))
+            } else {
+                None
             }
-            if event.tags().len() > Self::MAX_TAGS_PER_EVENT {
-                return Err(AppendError::ExceedsStoreLimit {
-                    limit: StoreLimit::TagsPerEvent,
-                    len: event.tags().len(),
-                });
-            }
-        }
-        Ok(())
+        })
     }
 }
 
@@ -612,30 +617,28 @@ impl<T: SqlTransport> NeonEventStore<T> {
         )
     }
 
-    /// A whole replication ingest batch as **one statement**, built and never sent.
+    /// A whole replication ingest batch as **one statement**: the write half of
+    /// the one request [`ingest_request`](Self::ingest_request) sends.
     ///
-    /// # What this is evidence of, and what it is not
+    /// # What this is evidence of
     ///
-    /// Structural evidence only. Nothing here has run against a server — no
-    /// endpoint, no local Postgres — so it shows that an adapter-owned write path
-    /// can *spell* one ingest batch as one round trip on a store with no
-    /// connection, no interactive transaction and no cursor, and nothing more.
-    /// That is SY-14's non-foreclosure evidence for VT-10: a write path grown in
-    /// the contract crate would be one call per row or per group, and could not
-    /// have reached for a data-modifying CTE. SY-14 itself stays phase 13's, which
-    /// measures it live; the Postgres-specific facts this relies on — that the
-    /// `ON CONFLICT` inference predicate selects the partial index, and that the
-    /// compensation `nextval`s are drawn after the foreign ones — are for that run
-    /// to confirm rather than for this comment to assert.
+    /// Since #108's part C it is sent: `event_store/ingest.rs` implements
+    /// `happenstance-sync`'s ingest port over it, and the ingest family runs
+    /// against it in CI's `live-neon` job. It shows that an adapter-owned write
+    /// path can spell one ingest batch as one round trip on a store with no
+    /// connection, no interactive transaction and no cursor. That is SY-14's
+    /// non-foreclosure evidence for VT-10: a write path grown in the contract
+    /// crate would be one call per row or per group, and could not have reached
+    /// for a data-modifying CTE. SY-14's measurement stays phase 13's.
     ///
-    /// The test that holds it is an adapter unit test counting statements, not a
-    /// conformance rule. CF-33 forbids operation counts in the suite, where they
-    /// would bind every adapter to this one's transport; it says nothing about an
-    /// adapter checking its own request shape.
+    /// The test that holds the shape is an adapter unit test counting
+    /// statements, not a conformance rule. CF-33 forbids operation counts in the
+    /// suite, where they would bind every adapter to this one's transport; it
+    /// says nothing about an adapter checking its own request shape.
     ///
-    /// `#[cfg(test)]` because the trait it would serve lives in
-    /// `happenstance-sync`, which this crate cannot depend on until that crate is
-    /// published. Phase 13 lifts the gate; the builder is written to survive it.
+    /// `#[cfg(test)]` because the trait it serves lives in `happenstance-sync`,
+    /// which this crate can name only as a dev-dependency until that crate is
+    /// published. Part E lifts the gate; the builder is written to survive it.
     ///
     /// # The shape
     ///
@@ -646,8 +649,10 @@ impl<T: SqlTransport> NeonEventStore<T> {
     /// counts.
     ///
     /// `$1` is every foreign row, `$2` every compensation row, each tagged with
-    /// its group's index (see [`encode_ingest`]). Six CTEs and a `SELECT`:
+    /// its group's index (see [`encode_ingest`]). Eight CTEs and a `SELECT`:
     ///
+    /// - `own` is this store's identity, read from the meta row inside the
+    ///   statement that stamps the compensation with it.
     /// - `f`/`fp` unpack the foreign rows and draw their positions, paired by
     ///   `row_number` exactly as an append pairs them, because they are the same
     ///   two builders.
@@ -664,44 +669,76 @@ impl<T: SqlTransport> NeonEventStore<T> {
     ///   two groups gates only the group whose copy landed. It reads `fp` a
     ///   second time, and that re-reads the positions rather than drawing new
     ///   ones: a CTE holding a volatile function is always materialised.
+    /// - `claimed` is the foreign rows that **landed** claiming `own`, read from
+    ///   `ins`'s own `RETURNING` and nothing else (SY-38, ADR-0098 item 2: the
+    ///   write decides, never a lookup ahead of it). A claim this store did not
+    ///   hold lands; one it held is skipped. A claim on a row another
+    ///   transaction committed during the call is neither: at `REPEATABLE READ`
+    ///   the server refuses that conflict with `40001`.
     /// - `c` is the compensation of those groups only (SY-11), renumbered so its
-    ///   `ord` is dense again, and `comp` writes it in the same statement and so
-    ///   the same transaction as the losing event (SY-2), with
+    ///   `ord` is dense again, and empty when anything was claimed, because that
+    ///   call is about to be refused. `comp` writes it in the same statement and
+    ///   so the same transaction as the losing event (SY-2), with
     ///   [`local_origin`](Self::local_origin): an append's stamp, not a copy of
     ///   it. Its positions are drawn inside `comp`, to a count that reads `c`,
-    ///   which reads `won`, which reads `ins`.
+    ///   which reads `won`, a `DISTINCT` over all of `ins`. So every foreign row
+    ///   has met the origin index before the first compensation position is
+    ///   drawn, and a claim on a position a compensation would take lands rather
+    ///   than hiding behind it.
     ///
-    /// The final `SELECT` reports the three counts `Ingested` carries. Every row,
-    /// foreign or local, takes the one `xact_id` its transaction stamps, so ES-10's
-    /// frontier treats the batch as one write.
+    /// The final `SELECT` reports the three counts `Ingested` carries, and leaves
+    /// the first landed claim's 1-based index in `$1` (or nothing) in a
+    /// **transaction-local** setting the request's second statement reads. Every
+    /// row, foreign or local, takes the one `xact_id` its transaction stamps, so
+    /// ES-10's frontier treats the batch as one write.
     ///
-    /// No ceiling is checked: the batch ceiling bounds an append, and what bounds
-    /// an ingest is phase 13's to state alongside SY-14's measurement.
+    /// No ceiling is checked here, which is what lets the size test build 1,000
+    /// rows: the port checks the whole call before it builds this.
     ///
     /// # Errors
     ///
     /// [`NeonError::OriginPositionOutOfRange`] if a foreign row's origin position
     /// does not fit the `bigint` column; see [`encode_ingest`].
     #[cfg(test)]
-    fn ingest_statement<E>(&self, groups: &[IngestRows<'_>]) -> Result<SqlStatement, NeonError<E>> {
+    fn ingest_statement<E>(
+        &self,
+        groups: &[happenstance_sync::IngestGroup<'_>],
+    ) -> Result<SqlStatement, NeonError<E>> {
         let (foreign, compensation) = encode_ingest(groups)?;
         let params = vec![
             serde_json::Value::String(foreign),
             serde_json::Value::String(compensation),
         ];
 
+        // `own` aliases the meta table rather than repeating
+        // `local_origin`'s text: that subquery is the compensation's stamp, and
+        // `ingest_carries_foreign_origin_and_stamps_compensation_like_append`
+        // counts it to prove the foreign insert does not stamp. This is a read
+        // to compare against, under the same snapshot, so it is the same value.
+        //
+        // `c`'s gate is `(SELECT count(*) FROM claimed) = 0` rather than
+        // `NOT EXISTS`, which is how this adapter spells an append condition's
+        // guard: the shape test forbids that text in an ingest (SY-1), and a
+        // gate spelled the same way would be indistinguishable from a guard.
         let sql = format!(
-            "WITH f AS ({f}), \
+            "WITH own AS (SELECT m.v FROM {meta} AS m WHERE m.k = 'store_id'), \
+             f AS ({f}), \
              fp AS ({fp}), \
              ins AS ({ins}), \
              won AS (SELECT DISTINCT f.grp FROM ins JOIN fp USING (position) JOIN f USING (ord)), \
+             claimed AS (SELECT f.ord FROM ins JOIN fp USING (position) JOIN f USING (ord) \
+             WHERE f.origin_store = (SELECT v FROM own)), \
              c AS (SELECT row_number() OVER (ORDER BY u.ord) AS ord, \
              u.event_type, u.data, u.metadata, u.tags FROM ({u}) u \
-             WHERE u.grp IN (SELECT grp FROM won)), \
+             WHERE u.grp IN (SELECT grp FROM won) AND (SELECT count(*) FROM claimed) = 0), \
              comp AS ({comp}) \
              SELECT (SELECT count(*) FROM ins)::text AS appended, \
              (jsonb_array_length($1::jsonb) - (SELECT count(*) FROM ins))::text AS skipped, \
-             (SELECT count(*) FROM comp)::text AS compensated",
+             (SELECT count(*) FROM comp)::text AS compensated, \
+             set_config('{guc}', coalesce((SELECT min(ord) FROM claimed)::text, ''), true) \
+             AS unheld",
+            meta = self.config.qualified_meta(),
+            guc = ingest::UNHELD_GUC,
             f = unpacked(
                 "$1",
                 ", (e->>'k')::bigint AS grp, decode(e->>'s', 'base64') AS origin_store, \
@@ -727,16 +764,34 @@ impl<T: SqlTransport> NeonEventStore<T> {
         Ok(SqlStatement::with_params(sql, params))
     }
 
-    /// The ingest batch as the one request that carries it.
+    /// The ingest batch as the one request that carries it: **one round trip of
+    /// two statements**, [`ingest_statement`](Self::ingest_statement) and then
+    /// the constant refusal, at `REPEATABLE READ`.
     ///
-    /// The single form, so the endpoint runs it in the implicit transaction every
-    /// single statement gets and no isolation header is sent. None is needed: an
-    /// ingest evaluates no condition (SY-1), so there is no guard read for
-    /// `SERIALIZABLE` to protect, and the unique index is what arbitrates two
-    /// racing deliveries of one event.
+    /// Two statements because the write decides SY-38 and a single statement
+    /// cannot refuse after writing: only an error undoes what `ins` wrote, and
+    /// the second statement raises one, carrying the claim's index, when the
+    /// first left it. The endpoint runs both in one `BEGIN`/`COMMIT`, so the
+    /// raise takes the whole call with it.
+    ///
+    /// `REPEATABLE READ`, fixed, rather than the store's configured level. It is
+    /// the lowest at which `ON CONFLICT DO NOTHING` meeting a row committed by a
+    /// transaction this snapshot cannot see raises `40001` instead of skipping,
+    /// so a claim on a row committed during the call is never mistaken for a
+    /// held one. `SERIALIZABLE` would add predicate locks to a write that
+    /// evaluates no condition (SY-1), and a configured `READ COMMITTED` would
+    /// reopen the hole. The endpoint honours the level only on two or more
+    /// statements, which this is.
     #[cfg(test)]
-    fn ingest_request<E>(&self, groups: &[IngestRows<'_>]) -> Result<SqlRequest, NeonError<E>> {
-        self.ingest_statement(groups).map(SqlRequest::single)
+    fn ingest_request<E>(
+        &self,
+        groups: &[happenstance_sync::IngestGroup<'_>],
+    ) -> Result<SqlRequest, NeonError<E>> {
+        let write = self.ingest_statement(groups)?;
+        Ok(SqlRequest::batch(
+            vec![write, ingest::refusal_statement()],
+            crate::IsolationLevel::RepeatableRead,
+        ))
     }
 
     /// The unconditional `INSERT … RETURNING position`.
@@ -1024,29 +1079,6 @@ fn event_fields(event: &Event) -> serde_json::Map<String, serde_json::Value> {
     fields
 }
 
-/// One foreign row as [`NeonEventStore::ingest_statement`] takes it.
-///
-/// Field for field `happenstance_sync::ReplicatedEvent`, which this crate cannot
-/// name: `happenstance-sync` is unpublished, and a dependency on it — even an
-/// optional one — would fail `cargo publish` of this crate. Core's types are
-/// what that struct is built from, so nothing here is converted on the way in.
-#[cfg(test)]
-#[derive(Debug)]
-struct ForeignRow {
-    id: EventId,
-    recorded_at: RecordedAt,
-    event: Event,
-}
-
-/// One ingest group: `happenstance_sync::IngestGroup`, spelled locally for the
-/// reason [`ForeignRow`] gives.
-#[cfg(test)]
-#[derive(Debug, Clone, Copy)]
-struct IngestRows<'a> {
-    events: &'a [ForeignRow],
-    compensation: &'a [Event],
-}
-
 /// Encodes an ingest batch as the two `jsonb` documents its statement unpacks.
 ///
 /// Both carry `k`, the group's index in the slice, which is the only thing that
@@ -1065,7 +1097,9 @@ struct IngestRows<'a> {
 /// position is half an identity, so one the column cannot hold is refused
 /// before anything is sent.
 #[cfg(test)]
-fn encode_ingest<E>(groups: &[IngestRows<'_>]) -> Result<(String, String), NeonError<E>> {
+fn encode_ingest<E>(
+    groups: &[happenstance_sync::IngestGroup<'_>],
+) -> Result<(String, String), NeonError<E>> {
     let mut foreign = Vec::new();
     let mut compensation = Vec::new();
     for (group, rows) in groups.iter().enumerate() {
@@ -1609,9 +1643,10 @@ fn decode_probe_response<E>(
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use super::ingest::refusal_statement;
     use super::{
-        AppendOutcome, ForeignRow, IngestRows, NeonEventStore, ProbeThenWriteStore,
-        decode_append_response, decode_read_response,
+        AppendOutcome, NeonEventStore, ProbeThenWriteStore, decode_append_response,
+        decode_read_response,
     };
     use crate::config::NeonConfig;
     use crate::error::NeonError;
@@ -1621,6 +1656,7 @@ mod tests {
         AppendCondition, AppendError, Event, EventId, EventStore, Query, QueryItem, ReadOptions,
         RecordedAt, SequencePosition, SequencedEvent, StoreId, Tags,
     };
+    use happenstance_sync::{IngestGroup, ReplicatedEvent};
 
     fn store() -> NeonEventStore<NullTransport> {
         NeonEventStore::new(
@@ -1649,8 +1685,33 @@ mod tests {
     /// proxy discards `options=-c search_path=…` — so an unqualified name is an
     /// instance reading another instance's rows. It is worth a test rather than a
     /// review, because the failure is invisible until two fixtures run at once.
+    ///
+    /// One statement names no relation at all, and is exempt by its exact text:
+    /// the ingest's refusal, a `DO` block that reads one transaction-local
+    /// setting. The exemption is checked rather than assumed: that statement
+    /// must not grow a query against any table.
     #[test]
     fn no_statement_leaves_a_name_unqualified() {
+        // The refusal's exemption is an allowlist, not a blocklist: outside its
+        // quoted literals it may hold these words and nothing else, so no word
+        // that reaches a relation (`FROM`, `PERFORM`, `nextval`, ...) can be
+        // added to it unseen.
+        const REFUSAL_WORDS: [&str; 14] = [
+            "DO",
+            "$sy38$",
+            "BEGIN",
+            "IF",
+            "current_setting",
+            "true",
+            "THEN",
+            "RAISE",
+            "EXCEPTION",
+            "USING",
+            "ERRCODE",
+            "MESSAGE",
+            "DETAIL",
+            "END",
+        ];
         let store = store();
         let tags = Tags::from_pairs([("k", "v")]).unwrap();
         let condition =
@@ -1658,21 +1719,37 @@ mod tests {
                 .after_every_guard_opt(SequencePosition::new(3));
         let event = Event::new("T", b"x".to_vec()).unwrap().with_tags(tags);
         let foreign = foreign_rows(1);
+        let refusal = refusal_statement().query;
+        let unquoted: String = refusal.split('\'').step_by(2).collect::<Vec<_>>().join(" ");
+        for word in unquoted
+            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
+            .filter(|word| !word.is_empty())
+        {
+            assert!(
+                REFUSAL_WORDS.contains(&word),
+                "the refusal is exempt only while it names no relation, and `{word}` is not \
+                 one of its words: {refusal}"
+            );
+        }
 
         let requests = [
             store.read_request(&Query::all(), ReadOptions::new()),
             store.probe_request(&condition),
             store.insert_request(core::slice::from_ref(&event)),
             store
-                .ingest_request::<std::io::Error>(&[IngestRows {
-                    events: &foreign,
-                    compensation: core::slice::from_ref(&event),
-                }])
+                .ingest_request::<std::io::Error>(&[IngestGroup::new(
+                    &foreign,
+                    core::slice::from_ref(&event),
+                )])
                 .unwrap(),
             store.conditional_append_request(&[event], Some(&condition)),
         ];
         for request in &requests {
-            for statement in &request.statements {
+            for statement in request
+                .statements
+                .iter()
+                .filter(|statement| statement.query != refusal)
+            {
                 assert!(
                     statement.query.contains(r#""hs_1"."#),
                     "an unqualified name reaches the server: {}",
@@ -1805,30 +1882,33 @@ mod tests {
     /// Those positions are the *peer's*, carried as data. None is a position this
     /// store assigned, so the rule against asserting literal positions does not
     /// reach them: they are compared against what went in, not against a log.
-    fn foreign_rows(count: usize) -> Vec<ForeignRow> {
+    fn foreign_rows(count: usize) -> Vec<ReplicatedEvent> {
         (1..=count)
             .map(|n| {
                 let number = n.to_string();
-                ForeignRow {
-                    id: EventId::new(
+                ReplicatedEvent::new(
+                    EventId::new(
                         PEER,
                         SequencePosition::new(u64::try_from(n).unwrap()).unwrap(),
                     ),
                     // Negative on purpose. `RecordedAt` is `i64` and admits times
                     // before the epoch; VT-9's falsifier is an ingest that cannot
                     // carry one.
-                    recorded_at: RecordedAt::from_millis(-i64::try_from(n).unwrap()),
-                    event: Event::new("Replicated", number.clone().into_bytes())
+                    RecordedAt::from_millis(-i64::try_from(n).unwrap()),
+                    Event::new("Replicated", number.clone().into_bytes())
                         .unwrap()
                         .with_tags(Tags::from_pairs([("n", number.as_str())]).unwrap()),
-                }
+                )
             })
             .collect()
     }
 
     /// Splits `rows` into groups of 1, 3, 2 and 5 rows in rotation, the last
     /// one short, with `compensation` on every other group.
-    fn mixed_groups<'a>(rows: &'a [ForeignRow], compensation: &'a [Event]) -> Vec<IngestRows<'a>> {
+    fn mixed_groups<'a>(
+        rows: &'a [ReplicatedEvent],
+        compensation: &'a [Event],
+    ) -> Vec<IngestGroup<'a>> {
         let mut groups = Vec::new();
         let mut rest = rows;
         for size in [1, 3, 2, 5].into_iter().cycle() {
@@ -1841,10 +1921,7 @@ mod tests {
             } else {
                 &[]
             };
-            groups.push(IngestRows {
-                events,
-                compensation,
-            });
+            groups.push(IngestGroup::new(events, compensation));
             rest = tail;
         }
         groups
@@ -1887,14 +1964,19 @@ mod tests {
         keys
     }
 
-    /// An ingest batch is one statement in one request at every size, and its
-    /// text does not grow with the batch — only its two parameters do.
+    /// An ingest batch is one write statement in one request at every size, and
+    /// its text does not grow with the batch — only its two parameters do.
     ///
-    /// Structural evidence for SY-14, not a measurement of it: the statement is
-    /// built and never sent (see [`NeonEventStore::ingest_statement`]). An
-    /// adapter unit test counting its own statements, which CF-33's ban on
-    /// operation counts in the conformance suite does not reach. 1000 is past
-    /// the append ceiling on purpose; the builder applies none.
+    /// Structural evidence for SY-14, not a measurement of it. An adapter unit
+    /// test counting its own statements, which CF-33's ban on operation counts
+    /// in the conformance suite does not reach. 1000 is past the append ceiling
+    /// on purpose; the builder applies none.
+    ///
+    /// The request carries a second statement since #108's part C, the
+    /// constant refusal SY-38 needs, and so it is the batch form at
+    /// `REPEATABLE READ` (the owner's decision D5 on that part's plan). The
+    /// write is still one statement, and everything asserted of it is as it
+    /// was.
     #[test]
     fn ingest_batch_is_one_statement_regardless_of_size() {
         use base64::Engine as _;
@@ -1904,6 +1986,7 @@ mod tests {
         let target = format!("ON CONFLICT {columns} WHERE {predicate} DO NOTHING");
         let peer = super::BASE64.encode(PEER.to_bytes());
         let compensation = [Event::new("Compensated", b"c".to_vec()).unwrap()];
+        let refusal = refusal_statement();
 
         let mut texts = Vec::new();
         for size in [1, 2, 64, 1000] {
@@ -1912,10 +1995,22 @@ mod tests {
             assert!(size < 2 || groups.len() > 1, "{size} rows must span groups");
             let request = store.ingest_request::<std::io::Error>(&groups).unwrap();
 
-            assert_eq!(request.statements.len(), 1, "{size} rows, one statement");
+            assert_eq!(
+                request.statements.len(),
+                2,
+                "{size} rows: the write, then the refusal"
+            );
+            assert_eq!(
+                request.statements[1].query, refusal.query,
+                "the refusal is a constant, at every size"
+            );
+            assert!(request.statements[1].params.is_empty());
             assert!(
-                request.headers().is_empty(),
-                "the single form, which sends no batch headers"
+                request
+                    .headers()
+                    .contains(&("Neon-Batch-Isolation-Level", "RepeatableRead")),
+                "the batch form at REPEATABLE READ: {:?}",
+                request.headers()
             );
             let statement = &request.statements[0];
             assert!(
@@ -1990,10 +2085,10 @@ mod tests {
             .query
             .clone();
         let ingest = store
-            .ingest_request::<std::io::Error>(&[IngestRows {
-                events: &rows,
-                compensation: core::slice::from_ref(&event),
-            }])
+            .ingest_request::<std::io::Error>(&[IngestGroup::new(
+                &rows,
+                core::slice::from_ref(&event),
+            )])
             .unwrap()
             .statements[0]
             .query
@@ -2034,6 +2129,32 @@ mod tests {
             !ingest.contains("NOT EXISTS"),
             "an ingest evaluates no condition (SY-1), and dedupes in the write (VT-8)"
         );
+
+        // SY-38 is decided by the write: the claims are read from the insert's
+        // own `RETURNING`, and the event table is named only as the target of
+        // the two inserts, so nothing looks the claims up ahead of the write
+        // (ADR-0098 item 2).
+        assert!(
+            ingest.contains("claimed AS (SELECT f.ord FROM ins "),
+            "the claims are the rows that landed: {ingest}"
+        );
+        let event_table = store.config.qualified_event();
+        assert_eq!(
+            ingest.matches(&event_table).count(),
+            ingest
+                .matches(&format!("INSERT INTO {event_table}"))
+                .count(),
+            "the event table is read by nothing but the inserts: {ingest}"
+        );
+        // And a call that is about to be refused writes no compensation, or a
+        // compensation drawn onto a landed claim's position would raise a
+        // unique violation in place of the refusal.
+        assert!(
+            ingest.contains(
+                "WHERE u.grp IN (SELECT grp FROM won) AND (SELECT count(*) FROM claimed) = 0"
+            ),
+            "compensation is gated on nothing having been claimed (SY-38): {ingest}"
+        );
     }
 
     /// An origin position the `bigint` column cannot hold is refused, not
@@ -2046,19 +2167,18 @@ mod tests {
     #[test]
     fn an_origin_position_past_bigint_is_refused_not_saturated() {
         let store = store();
-        let rows: Vec<ForeignRow> = [u64::MAX, u64::MAX - 1]
+        let rows: Vec<ReplicatedEvent> = [u64::MAX, u64::MAX - 1]
             .into_iter()
-            .map(|position| ForeignRow {
-                id: EventId::new(PEER, SequencePosition::new(position).unwrap()),
-                recorded_at: RecordedAt::from_millis(0),
-                event: Event::new("Replicated", b"x".to_vec()).unwrap(),
+            .map(|position| {
+                ReplicatedEvent::new(
+                    EventId::new(PEER, SequencePosition::new(position).unwrap()),
+                    RecordedAt::from_millis(0),
+                    Event::new("Replicated", b"x".to_vec()).unwrap(),
+                )
             })
             .collect();
 
-        let refused = store.ingest_request::<std::io::Error>(&[IngestRows {
-            events: &rows,
-            compensation: &[],
-        }]);
+        let refused = store.ingest_request::<std::io::Error>(&[IngestGroup::new(&rows, &[])]);
         match refused {
             Err(NeonError::OriginPositionOutOfRange { position }) => {
                 assert_eq!(position, u64::MAX);
@@ -2263,3 +2383,11 @@ mod tests {
         }
     }
 }
+
+// `happenstance-sync`'s ingest port over this module's insert builder (#108,
+// part C). A child so it reaches the builder, the transport and the decoders
+// without widening any of them, and `cfg(test)` because the port is a
+// dev-dependency until part E. Declared last, so the lines above keep the
+// numbers the specification and the decision records cite.
+#[cfg(test)]
+mod ingest;

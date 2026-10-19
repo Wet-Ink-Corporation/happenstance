@@ -58,6 +58,19 @@ happenstance-testkit = { workspace = true, features = ["proptest"] }
 # queue. `test-util` is for paused time: the transport's timeout test fires its
 # bound on virtual time rather than a real millisecond (wi-51f0e9).
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time", "test-util"] }
+# The ingest port (#108, part C): `src/event_store/ingest.rs` implements
+# `happenstance-sync`'s bare `IngestStore` over the private insert builder
+# `append` uses, which only this crate can reach, and mounts the ingest family
+# on it. Path-only, with no version: `happenstance-sync` is `publish = false`
+# and its name is unclaimed, so a version could never resolve, and cargo strips
+# a versionless dev-dependency from the published manifest, so neither line
+# reaches a consumer. The same reasoning, and the same two lines,
+# `happenstance-sqlite` and `happenstance-postgres` carry. Under `cargo test`
+# they turn on `happenstance-core`'s `serde` and `memory`; nothing in `src/`
+# outside the ingest module names an item of either. Neither is built for
+# `wasm32`: the gate's checks there are lib-only or `--no-dev-deps`.
+happenstance-sync = { path = "../happenstance-sync" }
+happenstance-sync-testkit = { path = "../happenstance-sync-testkit" }
 
 # --- the live transport, and why it is here and not behind a feature ---
 #

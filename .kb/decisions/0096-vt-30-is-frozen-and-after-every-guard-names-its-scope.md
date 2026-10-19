@@ -109,7 +109,7 @@ stale and that no phase scheduled lifting it.
    - **Limb 1 does not fire.** `happenstance-neon` pushes a multi-guard condition into one
      statement with no self-join per guard. Its conditional insert carries
      `WHERE NOT EXISTS (SELECT 1 FROM event WHERE (g₁ AND position > p₁) OR (g₂ AND position > p₂) …)`
-     (`crates/happenstance-neon/src/event_store.rs:525-544`). Its conflict probe is one
+     (`crates/happenstance-neon/src/event_store.rs:530-549`). Its conflict probe is one
      `UNION ALL` statement over the guards (`:465-491`). Both run in the live conformance suite,
      which includes `condition_guards_carry_independent_boundaries`. `happenstance-postgres`,
      `happenstance-sqlite` and `happenstance-cloudflare` issue one `SELECT max(position)` per
