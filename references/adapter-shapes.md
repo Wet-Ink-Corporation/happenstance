@@ -103,7 +103,7 @@ which is the dependency decision **phase 6 owns**.
 
 #### A two-statement probe-then-write `append` on `happenstance-neon` — **accepted, and that is the result**
 
-`ProbeThenWriteStore` (`crates/happenstance-neon/src/event_store.rs:405`)
+`ProbeThenWriteStore` (`crates/happenstance-neon/src/event_store.rs:1549`)
 implements `EventStore` in full, with a compiling call site, and is **silently
 wrong**. Two statements are two round trips, each its own implicit transaction,
 with a network-latency-wide window between them and no snapshot spanning it. A

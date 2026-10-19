@@ -280,7 +280,7 @@ the reproduction.
 | 5 | ratified | the figures that lost; a record, not a verdict |
 | 6 | ratified | not fired: no deployment's dominant read is broad |
 | 7 | ratified | the migration-1 correction; `event_type` is a covering column (`event_store.rs:80-90`) |
-| 10 | ratified | §16 names no falsifier for §10; its own re-open trigger (`0022:452-455`) — Postgres or Neon independently needing the same per-item decomposition — has not fired. `happenstance-neon`'s probe unions per guard, not per query item (`crates/happenstance-neon/src/event_store.rs:427-457`). The merged read path (`b3c8d84`, `query_sql.rs:516-520`) keeps the decomposition adapter-private, which is §10's verdict applied to a second caller |
+| 10 | ratified | §16 names no falsifier for §10; its own re-open trigger (`0022:452-455`) — Postgres or Neon independently needing the same per-item decomposition — has not fired. `happenstance-neon`'s probe unions per guard, not per query item (`crates/happenstance-neon/src/event_store.rs:467-497`). The merged read path (`b3c8d84`, `query_sql.rs:516-520`) keeps the decomposition adapter-private, which is §10's verdict applied to a second caller |
 | 12 | ratified | it supplied a number and declined to apply it. `CONTENDERS` is 64 (`crates/happenstance-testkit/src/concurrency.rs:247`), set by the owner §12 named |
 | 13 | ratified as a non-verdict | ES-17 stays with `kb-open-question-es-17-two-adapter-measurement-001` |
 | 14 | ratified as a non-verdict | CF-40's clause home stays with `kb-open-question-cf-40-ownership-001` |

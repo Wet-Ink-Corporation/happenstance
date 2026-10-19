@@ -272,7 +272,7 @@ cannot be reset through `&self` (§7.1), so only dropping every clone empties it
   filled cell.
 
 **On Neon there is no cache.** `local_origin` stamps the identity with a scalar subquery inside
-each append's `INSERT … SELECT` (`crates/happenstance-neon/src/event_store.rs:570-575`), so the
+each append's `INSERT … SELECT` (`crates/happenstance-neon/src/event_store.rs:597-602`), so the
 first statement after the `UPDATE` commits reads the new row. Step 3 does not apply. Steps 1 and 2
 still do, because an append that reaches the copy before the `UPDATE` commits stamps the parent's
 id onto a rewound position.
@@ -325,7 +325,7 @@ repeats. Under `SERIALIZABLE` (conditional appends, `:907-912`), one read-write 
 
 ### 7.2 Neon: refuse on a missing row
 
-Turn `local_origin`'s scalar subquery (`src/event_store.rs:570-575`) into a join that yields zero
+Turn `local_origin`'s scalar subquery (`src/event_store.rs:597-602`) into a join that yields zero
 rows when the meta row is absent. Detect the short insert and refuse with a new
 `NeonError::MissingIdentity`. The re-mint itself is one statement against
 `config.qualified_meta()` (`src/config.rs:171-173`). Nothing on the stamping side changes, because
