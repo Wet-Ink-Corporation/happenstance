@@ -144,7 +144,7 @@ pub mod ingest_rules {
         const CLAUSE: &str = "VT-5";
         let fixture = open().await;
         let store = fixture.connect().await;
-        ensure_foreign(&store, &[IDENTITY_ORIGIN], CLAUSE)?;
+        ensure_foreign(&store, &[IDENTITY_ORIGIN], CLAUSE).await?;
         let sent = [
             shipped(IDENTITY_ORIGIN, 4, -86_400_000, b"vt5-before-1970", CLAUSE)?,
             shipped(IDENTITY_ORIGIN, 9, 1_700_000_000_000, b"vt5-after", CLAUSE)?,
@@ -226,7 +226,7 @@ pub mod ingest_rules {
         const CLAUSE: &str = "SY-5";
         let fixture = open().await;
         let store = fixture.connect().await;
-        ensure_foreign(&store, &[TAIL_ORIGIN], CLAUSE)?;
+        ensure_foreign(&store, &[TAIL_ORIGIN], CLAUSE).await?;
         let local = [
             opaque(LOCAL, b"sy5-local-1", CLAUSE)?,
             opaque(LOCAL, b"sy5-local-2", CLAUSE)?,
@@ -301,7 +301,7 @@ pub mod ingest_rules {
         const CLAUSE: &str = "SY-12";
         let fixture = open().await;
         let store = fixture.connect().await;
-        ensure_foreign(&store, &[DEDUPE_ORIGIN, TWIN_ORIGIN], CLAUSE)?;
+        ensure_foreign(&store, &[DEDUPE_ORIGIN, TWIN_ORIGIN], CLAUSE).await?;
         let first = undecodable(DEDUPE_ORIGIN, 1, b'1', CLAUSE)?;
         let second = undecodable(DEDUPE_ORIGIN, 2, b'2', CLAUSE)?;
         // The twin shares every byte with `first`, recorded time included:
@@ -429,9 +429,9 @@ pub mod ingest_rules {
     /// SY-38's first arrangement: the unheld claim.
     async fn an_unheld_claim_is_refused<F: IngestFixture>(fixture: &F) -> Result<(), Violation> {
         let store = fixture.connect().await;
-        ensure_foreign(&store, &[CLAIM_ORIGIN], SY_38)?;
+        let own = ensure_foreign(&store, &[CLAIM_ORIGIN], SY_38).await?;
         let head = append(&store, &[opaque(LOCAL, b"sy38-a-local", SY_38)?], SY_38).await?;
-        let claim = EventId::new(store.store_id(), positions_past(head, 3)?);
+        let claim = EventId::new(own, positions_past(head, 3)?);
         let first = [shipped(
             CLAIM_ORIGIN,
             1,
@@ -477,7 +477,7 @@ pub mod ingest_rules {
             .log
             .last()
             .ok_or_else(|| Violation::new(SY_38, "the store holds nothing after an append"))?;
-        let own = store.store_id();
+        let own = own_identity(&store, SY_38).await?;
         ensure(held.id.store() == own, SY_38, || {
             format!(
                 "a local append was minted as {}, not under the store's own identity {own}",
@@ -512,9 +512,9 @@ pub mod ingest_rules {
         fixture: &F,
     ) -> Result<RuleOutcome, Violation> {
         let store = fixture.connect().await;
-        ensure_foreign(&store, &[CLAIM_ORIGIN], SY_38)?;
+        let own = ensure_foreign(&store, &[CLAIM_ORIGIN], SY_38).await?;
         let head = append(&store, &[opaque(LOCAL, b"sy38-b-local", SY_38)?], SY_38).await?;
-        let claimed = EventId::new(store.store_id(), positions_past(head, 2)?);
+        let claimed = EventId::new(own, positions_past(head, 2)?);
         let first = [shipped(
             CLAIM_ORIGIN,
             11,
@@ -685,7 +685,7 @@ pub mod ingest_rules {
         after: usize,
     ) -> Result<(), Violation> {
         let store = fixture.connect().await;
-        ensure_foreign(&store, &[ATOMIC_ORIGIN], SY_30)?;
+        ensure_foreign(&store, &[ATOMIC_ORIGIN], SY_30).await?;
         append(&store, &[opaque(LOCAL, b"sy30-local", SY_30)?], SY_30).await?;
         // The control: the same shape, unarmed, lands whole.
         let control = [
@@ -860,7 +860,7 @@ pub mod ingest_rules {
             .checked_add(1)
             .ok_or_else(|| Violation::new(SY_18, "the declared ceiling has no size past it"))?;
         let store = fixture.connect().await;
-        ensure_foreign(&store, &[CEILING_ORIGIN], SY_18)?;
+        ensure_foreign(&store, &[CEILING_ORIGIN], SY_18).await?;
         append(&store, &[opaque(LOCAL, b"sy18-local", SY_18)?], SY_18).await?;
 
         // The control: the same shapes, each sized event exactly at the
@@ -1112,20 +1112,37 @@ pub mod ingest_rules {
         })
     }
 
+    /// The store's own identity, or a violation of `clause` when it cannot
+    /// read it: a rule must not arrange a claim, or call an origin foreign,
+    /// against an identity the store never stated.
+    async fn own_identity<S: IngestStore>(
+        store: &S,
+        clause: &'static str,
+    ) -> Result<StoreId, Violation> {
+        store.store_id().await.map_err(|error| {
+            Violation::new(
+                clause,
+                format!("the store could not read its own identity: {error}"),
+            )
+        })
+    }
+
     /// Every origin a rule uses is foreign to the store under test, or the
-    /// rule would be testing SY-38 by accident.
-    fn ensure_foreign<S: IngestStore>(
+    /// rule would be testing SY-38 by accident. Answers the store's own
+    /// identity, which the SY-38 arrangements claim.
+    async fn ensure_foreign<S: IngestStore>(
         store: &S,
         origins: &[StoreId],
         clause: &'static str,
-    ) -> Result<(), Violation> {
-        let own = store.store_id();
+    ) -> Result<StoreId, Violation> {
+        let own = own_identity(store, clause).await?;
         ensure(!origins.contains(&own), clause, || {
             format!(
                 "the fixture's store has the incarnation {own}, which this rule uses as a \
                  foreign origin; a fixture must give each store a fresh one"
             )
-        })
+        })?;
+        Ok(own)
     }
 
     /// A foreign event from `origin` at origin `position`, recorded at

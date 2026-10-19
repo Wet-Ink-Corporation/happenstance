@@ -8,12 +8,13 @@
 use happenstance_core::{
     AppendCondition, AppendError, Event, EventId, EventStore, Query, QueryItem, StoreLimit, Tags,
 };
-use happenstance_sync::{Classify, FailureClass, IngestError, IngestGroup, IngestStore, Watermark};
+use happenstance_sync::{Classify, FailureClass, IngestError, IngestGroup, Watermark};
 
 use super::super::{UNHELD_GUC, UNHELD_SQLSTATE, WATERMARK_SQL, refusal_statement};
 use super::endpoint::{LiveTransportError, live_store};
 use super::{
-    append, carrying, event, holds, id, ingest, log, peer, rows, select, send, shipped, watermark,
+    append, carrying, event, holds, id, ingest, log, own, peer, rows, select, send, shipped,
+    watermark,
 };
 use crate::config::quote_ident;
 use crate::error::NeonError;
@@ -235,7 +236,7 @@ async fn ingested_events_land_above_every_position_assigned_before_the_call() {
 #[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
 async fn compensation_is_atomic_with_the_losing_event_and_skipped_on_redelivery() {
     let store = live_store().await;
-    let own = IngestStore::store_id(&store);
+    let own = own(&store).await;
     let from = peer(0xD4);
     let losing = [shipped(id(from, 5), 50, event("Reserved", "seat-1"))];
     let compensation = [event("ReservationCompensated", "seat-1")];
@@ -373,7 +374,7 @@ async fn contains_event_id_answers_for_a_foreign_id() {
     assert!(holds(&store, sent).await);
     assert!(!holds(&store, id(peer(0x18), 42)).await);
     let landed = carrying(&log(&store).await, sent).position;
-    assert!(!holds(&store, EventId::new(IngestStore::store_id(&store), landed)).await);
+    assert!(!holds(&store, EventId::new(own(&store).await, landed)).await);
 }
 
 /// SY-1: an ingest evaluates no condition, including one every append would

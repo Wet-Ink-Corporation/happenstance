@@ -108,6 +108,11 @@ enum Mistake {
     /// SY-18's third: refuse an event exactly at a ceiling, so the
     /// declaration is one larger than what the store takes.
     RefusesAtTheLimit,
+    /// Not a mistake in the write: a store whose identity read fails, as a
+    /// SQL store's does when its meta row is gone or its server is not
+    /// reachable. Every rule that asks the store who it is must report the
+    /// failure rather than carry on with an identity it was never told.
+    CannotReadItsIdentity,
 }
 
 /// The ceilings every [`WrongIngestStore`] declares and enforces, far above
@@ -127,6 +132,8 @@ enum WrongError {
     Poisoned,
     /// The fault its fixture armed fired, inside the write.
     Faulted,
+    /// [`Mistake::CannotReadItsIdentity`]'s identity read failed.
+    IdentityUnreadable,
 }
 
 impl core::fmt::Display for WrongError {
@@ -134,6 +141,7 @@ impl core::fmt::Display for WrongError {
         f.write_str(match self {
             Self::Poisoned => "the wrong store's lock was poisoned",
             Self::Faulted => "the fault the fixture armed fired between two rows of the ingest",
+            Self::IdentityUnreadable => "the wrong store could not read its own identity",
         })
     }
 }
@@ -143,7 +151,9 @@ impl core::error::Error for WrongError {}
 impl Classify for WrongError {
     fn class(&self) -> FailureClass {
         match self {
-            Self::Poisoned => FailureClass::Stop,
+            // A store that cannot say who it is cannot judge SY-38's claim,
+            // and no retry tells it.
+            Self::Poisoned | Self::IdentityUnreadable => FailureClass::Stop,
             // An injected fault is the shape of a dropped connection: the same
             // call can land once it is gone.
             Self::Faulted => FailureClass::Transient,
@@ -539,8 +549,11 @@ impl SendEventStore for WrongIngestStore {
 impl SendIngestStore for WrongIngestStore {
     type Error = WrongError;
 
-    fn store_id(&self) -> StoreId {
-        self.own
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        if self.mistake == Mistake::CannotReadItsIdentity {
+            return Err(WrongError::IdentityUnreadable);
+        }
+        Ok(self.own)
     }
 
     async fn ingest(
@@ -659,8 +672,8 @@ impl SendEventStore for WrongHandle {
 impl SendIngestStore for WrongHandle {
     type Error = WrongError;
 
-    fn store_id(&self) -> StoreId {
-        self.0.own
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        SendIngestStore::store_id(&*self.0).await
     }
 
     async fn ingest(
@@ -729,6 +742,30 @@ fn the_faithful_store_passes_every_rule() {
     assert!(!all.is_empty(), "the enumeration ran no rules");
     for (name, verdict) in all {
         assert_eq!(verdict, Ok(RuleOutcome::Ran), "`{name}`");
+    }
+}
+
+/// Every rule asks the store who it is before it arranges anything, so a
+/// store whose identity read fails is reported by every rule, each under its
+/// own clause, and none passes on an identity it was never told.
+#[test]
+fn every_rule_reports_a_store_that_cannot_read_its_identity() {
+    let all = verdicts(async || WrongFixture::new(Mistake::CannotReadItsIdentity));
+    let clauses = [
+        ("ingest_preserves_origin_identity", "VT-5"),
+        ("ingested_events_land_above_the_local_head", "SY-5"),
+        ("dedupe_reaches_identity_without_decoding", "SY-12"),
+        ("an_unheld_own_identity_stops_the_ingest", "SY-38"),
+        ("ingest_group_is_atomic_under_a_mid_group_fault", "SY-30"),
+        ("ingest_validates_every_event_not_the_head", "SY-18"),
+    ];
+    assert_eq!(all.len(), clauses.len(), "a rule was added: {all:?}");
+    for (name, verdict) in all {
+        let (_, clause) = clauses
+            .iter()
+            .find(|(rule, _)| *rule == name)
+            .expect("every rule in the enumeration is listed above");
+        assert_eq!(verdict, Err(*clause), "`{name}`");
     }
 }
 

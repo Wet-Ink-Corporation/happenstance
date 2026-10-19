@@ -30,13 +30,14 @@
 //!
 //! # Why a wrapper rather than an impl on `PostgresEventStore`
 //!
-//! The port's [`store_id`](SendIngestStore::store_id) is synchronous and
-//! infallible. `PostgresEventStore` reads its identity lazily and fallibly from
-//! `store_meta`, because its constructor must stay synchronous and infallible,
-//! so before the first read it has nothing honest to answer. [`PostgresIngestStore`]
-//! is built only by an `async` constructor that reads the identity, which makes
-//! "an ingest store whose identity is unknown" unrepresentable. That is a
-//! finding about the port's shape, recorded for #108's part E.
+//! It was written when the port's [`store_id`](SendIngestStore::store_id) was
+//! synchronous and infallible. `PostgresEventStore` reads its identity lazily
+//! and fallibly from `store_meta`, because its constructor must stay
+//! synchronous and infallible, so [`PostgresIngestStore`] is built only by an
+//! `async` constructor that reads the identity once. That finding made the
+//! port's `store_id` `async` and fallible (#108, part E0), and the wrapper now
+//! answers it with `Ok` of the copy it read. It stays until the tests that
+//! build one without a server, with an identity of their choosing, move with it.
 //!
 //! # Positions
 //!
@@ -142,8 +143,7 @@ const _: () =
     assert!(PostgresEventStore::MAX_EVENTS_PER_BATCH * ROW_PARAMETERS <= MAX_BIND_PARAMETERS);
 
 /// A [`PostgresEventStore`] whose identity has been read, which is what the
-/// ingest port's synchronous [`store_id`](SendIngestStore::store_id) answers
-/// from.
+/// ingest port's [`store_id`](SendIngestStore::store_id) answers from.
 #[derive(Debug, Clone)]
 struct PostgresIngestStore {
     /// The store this ingests into. Owned, because the wrapper keeps it; a
@@ -281,8 +281,9 @@ impl SendIngestStore for PostgresIngestStore {
     // `IngestError` carries capacity and the unheld identity in arms of its own.
     type Error = PostgresEventStoreError;
 
-    fn store_id(&self) -> StoreId {
-        self.store_id
+    /// Never fails: [`open`](PostgresIngestStore::open) read the identity.
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        Ok(self.store_id)
     }
 
     async fn ingest(

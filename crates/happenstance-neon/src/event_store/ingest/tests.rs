@@ -124,6 +124,13 @@ where
         .expect("an unconditional append to a reachable store lands")
 }
 
+/// `store`'s identity, asked through the port.
+async fn own<T: SqlTransport>(store: &NeonIngestStore<T>) -> StoreId {
+    IngestStore::store_id(store)
+        .await
+        .expect("the wrapper answers the identity `open` read")
+}
+
 /// `statements` as one request at `READ COMMITTED`, and its answer.
 async fn send<T: SqlTransport>(
     store: &NeonIngestStore<T>,
@@ -547,8 +554,8 @@ async fn the_identity_is_read_once_at_open() {
     let transport = Scripted::answering(200, HELD);
     let store = open(&transport).await.expect("a held identity reads");
     let expected: [u8; 16] = core::array::from_fn(|n| u8::try_from(n + 1).expect("under 17"));
-    assert_eq!(IngestStore::store_id(&store), StoreId::from_bytes(expected));
-    assert_eq!(IngestStore::store_id(&store), StoreId::from_bytes(expected));
+    assert_eq!(own(&store).await, StoreId::from_bytes(expected));
+    assert_eq!(own(&store).await, StoreId::from_bytes(expected));
     assert_eq!(transport.round_trips.get(), 1, "read once");
     assert!(transport.sent.borrow()[0].read_only);
 

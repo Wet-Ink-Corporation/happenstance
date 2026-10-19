@@ -42,15 +42,16 @@
 //!
 //! # Why a wrapper rather than an impl on `NeonEventStore`
 //!
-//! The port's [`store_id`](IngestStore::store_id) is synchronous and
-//! infallible, and `NeonEventStore` holds no identity in Rust at all: every
-//! `INSERT` reads it from the meta row (ADR-0086). [`NeonIngestStore`] is
-//! built only by an `async` constructor that reads it once, which makes "an
-//! ingest store whose identity is unknown" unrepresentable. The cached copy
-//! can go stale only through a manual `UPDATE` of the meta row, and the
-//! refusal does not depend on it: the statement judges a claim against the
-//! meta row it reads. That is a finding about the port's shape, recorded for
-//! #108's part E, as Postgres's is.
+//! It was written when the port's [`store_id`](IngestStore::store_id) was
+//! synchronous and infallible, and `NeonEventStore` holds no identity in Rust
+//! at all: every `INSERT` reads it from the meta row (ADR-0086).
+//! [`NeonIngestStore`] is built only by an `async` constructor that reads it
+//! once. The cached copy can go stale only through a manual `UPDATE` of the
+//! meta row, and the refusal does not depend on it: the statement judges a
+//! claim against the meta row it reads. That finding, with Postgres's, made
+//! the port's `store_id` `async` and fallible (#108, part E0); the wrapper now
+//! answers it with `Ok` of its copy, and stays until the tests that build one
+//! over a scripted transport, with an identity of their choosing, move with it.
 //!
 //! # The bare flavour
 //!
@@ -130,8 +131,7 @@ pub(super) fn refusal_statement() -> SqlStatement {
 }
 
 /// A [`NeonEventStore`] whose identity has been read, which is what the
-/// ingest port's synchronous [`store_id`](IngestStore::store_id) answers
-/// from.
+/// ingest port's [`store_id`](IngestStore::store_id) answers from.
 #[derive(Debug, Clone)]
 struct NeonIngestStore<T> {
     /// The store this ingests into. Owned, because the wrapper keeps it.
@@ -262,8 +262,9 @@ impl<T: SqlTransport> IngestStore for NeonIngestStore<T> {
     // carries capacity, contention and the unheld identity in arms of its own.
     type Error = NeonError<T::Error>;
 
-    fn store_id(&self) -> StoreId {
-        self.store_id
+    /// Never fails: [`open`](NeonIngestStore::open) read the identity.
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        Ok(self.store_id)
     }
 
     async fn ingest(

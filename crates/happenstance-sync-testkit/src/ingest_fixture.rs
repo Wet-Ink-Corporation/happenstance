@@ -251,8 +251,8 @@ impl SendEventStore for MemoryIngestHandle {
 impl SendIngestStore for MemoryIngestHandle {
     type Error = MemoryStoreError;
 
-    fn store_id(&self) -> StoreId {
-        self.store.store_id()
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        SendIngestStore::store_id(&*self.store).await
     }
 
     async fn ingest(
