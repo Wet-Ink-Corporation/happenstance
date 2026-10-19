@@ -287,7 +287,7 @@ pub trait Fixture {
     ///
     /// **A prefix-only weakening does not reach far enough; a larger one does.**
     /// The [model family](crate::model) *predicts* whether the store will
-    /// reject a conditional append. ES-25 judges a condition over what the
+    /// reject a conditional append. ES-25 evaluates a condition over what the
     /// store **holds**, ES-10 and ES-11 govern what a read **shows**, and a
     /// frontier store keeps the two apart, so a prediction made from a read
     /// has no oracle. Against a declining fixture the family therefore runs

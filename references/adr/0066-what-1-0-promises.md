@@ -304,8 +304,8 @@ third and a fourth adapter arm real in-store faults as well.**
   (`crates/happenstance-sqlite/tests/append.rs:848-886`).
 - **Postgres, phase 10.** The fixture declares the capability supported and arms
   an `AFTER INSERT` trigger that raises on the `after + 1`-th row
-  (`crates/happenstance-postgres/tests/support/mod.rs:459-473`, the raise at
-  `:536`). The `sqlx` pool did not absorb it. The conformance test asserts that
+  (`crates/happenstance-postgres/tests/support/mod.rs:465-479`, the raise at
+  `:542`). The `sqlx` pool did not absorb it. The conformance test asserts that
   the capability is supported **and** is not the trait's silent default
   (`crates/happenstance-postgres/tests/postgres_conformance.rs:417-431`). The rule
   runs in CI's `live-postgres` job (`.github/workflows/ci.yml:412`), which makes

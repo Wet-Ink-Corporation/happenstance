@@ -19,13 +19,13 @@ Both frontier adapters meet it by construction, because `pg_snapshot_xmin` of a
 fresh snapshot on one primary does not decrease, and the strict model implies
 it.
 
-This was recorded as decision D1 in `.temper/plans/model-family-behind-a-frontier.md`,
-taken as option **A** (a stated testkit assumption) by the delegating agent as a
-two-way default. It is not a human decision.
+This was recorded as decision D1 on #79, taken as option **A** (a stated
+testkit assumption) by the delegating agent as a two-way default. It is not a
+human decision.
 
 ## What is proposed
 
-Option **C** from that plan: make it normative. Either
+Option **C** from that decision: make it normative. Either
 
 1. amend ES-10, which is `[FROZEN]`, so this is one-way and needs its own ADR; or
 2. mint a new provisional clause beside it, which raises the clause census by

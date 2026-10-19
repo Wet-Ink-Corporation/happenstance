@@ -456,8 +456,7 @@ not the same as what a user needed to be told.
   `happenstance-neon` decline the capability, so their live CI jobs now run the
   rule and check that it did. The rustdoc argument that no weakening could
   supply an oracle for the verdict is rewritten, because it held only for a
-  prefix-only weakening; the plan is
-  `.temper/plans/model-family-behind-a-frontier.md`.
+  prefix-only weakening. The design and its decisions are recorded on #79.
 - **`happenstance-sync`: `Ack`'s `appended` and `skipped` are `u64`, not
   `usize`** (#114, ADR-0097). They cross the wire, so their width is
   fixed. The crate is not published, so no consumer is affected.

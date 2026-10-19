@@ -267,13 +267,12 @@ impl TrailingModel {
 
     /// T1(b): a full read is no shorter than the one before it.
     ///
-    /// **The one check that rests on a proposition no clause states**, kept
-    /// as one function with one call site so that it can be removed whole.
-    /// Decision D1 in `.temper/plans/model-family-behind-a-frontier.md` asserts
-    /// it for now and awaits the owner. If the owner chooses "assume only",
-    /// this function and its call in `check_log` go, and the read bracket (T2)
-    /// keeps assuming it without checking it: a store whose frontier retreats
-    /// then fails T2 with a less specific message, or not at all.
+    /// **The one check that rests on a proposition no clause states.** The
+    /// trailing model asserts T1(b), that visibility never moves backward;
+    /// see #79. It is one function with one call site, in `check_log`. The
+    /// read bracket (T2) assumes the same proposition without checking it, so
+    /// without this check a store whose frontier retreats would fail T2 with
+    /// a less specific message, or not at all.
     fn check_never_retreats(&self, observed: &[SequencedEvent]) -> Result<(), String> {
         if observed.len() < self.known.len() {
             return Err(format!(
