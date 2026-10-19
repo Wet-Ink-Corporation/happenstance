@@ -150,8 +150,8 @@ pub trait IngestStore {
     /// re-minted (VT-6). The ingest then writes nothing and fails with
     /// [`IngestError::UnheldOwnIdentity`], whose remedy is the re-mint (SY-38).
     ///
-    /// `async` and fallible because a SQL store keeps its identity in a row it
-    /// must read, and a type that answered from memory would need a wrapper.
+    /// `async` and fallible because a SQL store keeps its identity in a row,
+    /// and reading it is I/O that can fail; a store holding it answers `Ok`.
     ///
     /// # Errors
     ///

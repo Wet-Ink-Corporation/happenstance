@@ -68,6 +68,11 @@ pub const MAX_PROVOKED_TAGS: usize = 4_096;
 /// **Locate an event by identity, except VT-5's.** The other rules find what
 /// they wrote by its distinct opaque bytes, so a store that re-mints on ingest
 /// fails VT-5's rule and only that one.
+///
+/// **Assume an identity the store did not state.** Each rule awaits the
+/// store's [`store_id`](happenstance_sync::IngestStore::store_id) before it
+/// arranges anything, and a failed read is a violation of the rule's own
+/// clause rather than a reason to carry on.
 pub mod ingest_rules {
     use alloc::format;
     use alloc::string::String;
