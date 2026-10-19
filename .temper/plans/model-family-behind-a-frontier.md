@@ -273,43 +273,43 @@ clause. That makes it **one-way** and needs a new ADR, so it is **not** proposed
 
 ## Test list (drive in this order)
 
-- [ ] 1. Refactor `resolve` and `select` to free functions. `memory_model_conformance`
+- [x] 1. Refactor `resolve` and `select` to free functions. `memory_model_conformance`
       and `MODEL_COVERAGE` stay green and unchanged (strict mode, no behaviour change).
-- [ ] 2. `predict` returns `Rejected` when a visible event violates the condition
+- [x] 2. `predict` returns `Rejected` when a visible event violates the condition
       (unit, `#[cfg(test)]` in `trailing.rs`).
-- [ ] 3. `predict` returns `Rejected` when an invisible held event matches and the
+- [x] 3. `predict` returns `Rejected` when an invisible held event matches and the
       anchor is at or below the visible head.
-- [ ] 4. `predict` returns `Undecided` when the only candidate is invisible with an
+- [x] 4. `predict` returns `Undecided` when the only candidate is invisible with an
       unknown position and the anchor is `BeyondHead`.
-- [ ] 5. `predict` returns `Accepted` when no held event matches the query.
-- [ ] 6. `predict` decides case 4 once the candidate is a batch-last with a returned
+- [x] 5. `predict` returns `Accepted` when no held event matches the query.
+- [x] 6. `predict` decides case 4 once the candidate is a batch-last with a returned
       position.
-- [ ] 7. `reconcile`:
+- [x] 7. `reconcile`:
   - accepts a strict prefix;
   - rejects a non-prefix;
   - rejects shrinkage (D1 = A);
   - rejects a position that moved;
   - rejects a visible batch-last whose position is not `Ok(P)`;
   - rejects a visible position at or above a still-invisible returned position.
-- [ ] 8. The read bracket accepts a result explained by an intermediate `k` and
+- [x] 8. The read bracket accepts a result explained by an intermediate `k` and
       rejects one explained by no `k`.
-- [ ] 9. A `Deferred` verdict is re-judged when positions arrive, and a mismatch
+- [x] 9. A `Deferred` verdict is re-judged when positions arrive, and a mismatch
       names the original op.
-- [ ] 10. The rule on a declining fixture returns `Ran`, not `Skipped`, against
+- [x] 10. The rule on a declining fixture returns `Ran`, not `Skipped`, against
       `TrailingFrontierStore<Settling>` (the false-failure guard, `Agreed`).
-- [ ] 11. `FrontierFilteredConditionStore` is `Rejected`.
-- [ ] 12. `HoleyFrontierStore` is `Rejected`.
-- [ ] 13. `RetreatingFrontierStore` is `Rejected` (D1 = A only).
-- [ ] 14. `TrailingAfterIsInclusiveStore` is `Rejected`.
-- [ ] 15. `Declined<S>` sweep: soundness (weak is a subset of strict), and pin
+- [x] 11. `FrontierFilteredConditionStore` is `Rejected`.
+- [x] 12. `HoleyFrontierStore` is `Rejected`.
+- [x] 13. `RetreatingFrontierStore` is `Rejected` (D1 = A only).
+- [x] 14. `TrailingAfterIsInclusiveStore` is `Rejected`.
+- [x] 15. `Declined<S>` sweep: soundness (weak is a subset of strict), and pin
       `WEAKENING_COSTS`.
-- [ ] 16. `frontier_fixture_declension`, `capability_skips_are_reported` and the
+- [x] 16. `frontier_fixture_declension`, `capability_skips_are_reported` and the
       `MODEL_COVERAGE` heading counts are still green.
 - [ ] 17. Live run against Postgres (local where Docker is up, plus CI `live-postgres`).
       The model rule is `ok` with no SKIP line. Record the case count and wall time.
 - [ ] 18. Live run against Neon in CI `live-neon`, with the same check. Record the wall
       time.
-- [ ] 19. Run `cargo xtask spec-trace`, `lint-kb` and the full gate.
+- [x] 19. Run `cargo xtask spec-trace`, `lint-kb` and the full gate.
 
 ## Decisions (H-16)
 
@@ -359,3 +359,42 @@ About 12 files and about 1,000 lines:
 ## Progress
 
 - 2026-10-19: plan written (architect). Nothing implemented.
+- 2026-10-19: decisions D1–D5 recorded as the delegating agent's two-way
+  defaults (A, A, A, A, rewrite in this PR). Not human approvals.
+- Test 1 (refactor): `memory_model_conformance` 2/2 and `mutation_coverage -- model`
+  4/4 green before and after; no expectation touched.
+- Tests 2–6, red: `cargo test -p happenstance-testkit --lib trailing` failed with
+  `error[E0599]: no method named predict found for struct TrailingModel` (6×).
+  Green after `predict` and `range`.
+- Test 7, red: `error[E0599]: no method named check_log` (9×). Green after
+  `check_log`/`check_returned`.
+- Tests 8–9 were written in the same edit as `check_read`/`rejudge`; their red
+  was the compile error for the missing methods, not separately run. 16/16 unit
+  tests green.
+- Test 10, red: `the_trailing_model_rejects_exactly_what_it_claims` panicked with
+  "ran `TrailingFrontierStore` into something that is not its own assertion.
+  Saw: skipped (`READ_YOUR_OWN_WRITES` declined: ...)"; test 15 the same for
+  `GappedPositionStore`. Green after deleting the skip in the rule.
+- Tests 11–14: each wrong store rejected by the model's own assertion. Shrunk
+  failures: FrontierFiltered — "accepted at 4, but a held event violates" (4 ops);
+  Holey — "3 is visible while the batch `append` returned 3 for is not" (T1(f),
+  2 ops; the plan predicted T1(a)); Retreating — "the frontier went backward"
+  (3 ops); TrailingAfterIsInclusive — "rejected ... but no held event can violate"
+  (2 ops).
+- Added beyond the plan: `StalledFrontierStore`, a measured `Agreed` row pinning
+  the liveness non-goal.
+- Test 15: `WEAKENING_COSTS` measured **empty**: at zero lag the trailing model
+  rejects every store the strict one rejects, and nothing the strict one agrees
+  with. `the_model_rule_rejects_exactly_what_it_claims` alone took 3.1 s before;
+  the three new trailing tests together take about 3 s more, and the whole
+  `mutation_coverage` binary runs in about 6 s.
+- Placement deviation: the instruments live in `tests/mutation_coverage/trailing.rs`,
+  declared from `variants.rs` behind `proptest` (the `metadata_ceilings` precedent),
+  not split across `variants.rs`/`mutants.rs`. A new `#[path]` is refused by the
+  hook, and items driven only under `proptest` are dead code without it.
+- Docs: the no-longer-caught list lives on `ops_agree_with_the_model`, not on
+  `Fixture::READ_YOUR_OWN_WRITES`, so `contract.rs` keeps its line count
+  (standards/rust cites it by line). Neon `lib.rs:26` left as it was: it never
+  claimed a skip, and adding lines would break an accepted decision's citation.
+- Tests 17–18: not run. Docker is unavailable on this machine
+  (`/var/run/docker.sock` absent), and Neon runs only in CI. CI is the record.
