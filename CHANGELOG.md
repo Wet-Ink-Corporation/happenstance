@@ -366,6 +366,19 @@ not the same as what a user needed to be told.
   reference peer. `Ack::confirmed` still reports the high-water mark per origin,
   which can now claim a position whose predecessor the peer does not hold. No
   signature changed, and the crate is not published.
+- **`happenstance-sync`: `IngestStore::store_id` is `async` and fallible**
+  (#108, part E0). It is now `async fn store_id(&self) -> Result<StoreId,
+  Self::Error>`, by the owner's decision, so a store that keeps its identity
+  in a row it must read, as Postgres and Neon do, can implement the port
+  without a wrapper that reads it first. An `Err` means the store could not
+  read its identity, so ingest cannot proceed, and the adapter error's
+  `Classify` states the class. `happenstance-sync-testkit`'s ingest rules await
+  it, and each reports a failed read as a violation of its own clause;
+  `every_rule_reports_a_store_that_cannot_read_its_identity` runs the family
+  against a store whose read fails. The Postgres and Neon ingest wrappers, both
+  `#[cfg(test)]`, are kept for now and answer from the identity they read.
+  Neither `happenstance-sync` nor `happenstance-sync-testkit` is published, and
+  the Postgres/Neon wrappers are `#[cfg(test)]`, so no consumer is affected.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity

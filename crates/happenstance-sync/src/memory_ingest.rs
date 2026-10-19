@@ -377,8 +377,9 @@ impl SendEventStore for MemoryIngestStore {
 impl SendIngestStore for MemoryIngestStore {
     type Error = MemoryStoreError;
 
-    fn store_id(&self) -> StoreId {
-        self.store_id
+    /// Never fails: the identity is held in memory.
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        Ok(self.store_id)
     }
 
     async fn ingest(

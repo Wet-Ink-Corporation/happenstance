@@ -149,7 +149,18 @@ pub trait IngestStore {
     /// the store was restored or rewound under an identity it should have
     /// re-minted (VT-6). The ingest then writes nothing and fails with
     /// [`IngestError::UnheldOwnIdentity`], whose remedy is the re-mint (SY-38).
-    fn store_id(&self) -> StoreId;
+    ///
+    /// `async` and fallible because a SQL store keeps its identity in a row,
+    /// and reading it is I/O that can fail; a store holding it answers `Ok`.
+    ///
+    /// # Errors
+    ///
+    /// The adapter's error: the store could not read its identity, so no
+    /// claim on it can be judged and ingest cannot proceed. Its [`Classify`]
+    /// impl states the class.
+    ///
+    /// [`Classify`]: crate::Classify
+    async fn store_id(&self) -> Result<StoreId, Self::Error>;
 
     /// Records events other stores minted, preserving their identity, together
     /// with any compensation this side writes for them.

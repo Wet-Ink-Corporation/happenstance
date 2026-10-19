@@ -64,9 +64,10 @@ impl happenstance_sync::SendIngestStore for SqliteEventStore {
     // so a runner tells them apart without knowing this adapter.
     type Error = SqliteEventStoreError;
 
-    fn store_id(&self) -> StoreId {
+    /// Never fails: the identity was read when the store was opened.
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
         // The inherent method, which path resolution prefers over this one.
-        Self::store_id(self)
+        Ok(Self::store_id(self))
     }
 
     async fn ingest(

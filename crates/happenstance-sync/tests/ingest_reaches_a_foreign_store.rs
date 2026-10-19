@@ -194,8 +194,8 @@ fn write_groups(
 impl IngestStore for HypotheticalAdapterStore {
     type Error = AdapterError;
 
-    fn store_id(&self) -> StoreId {
-        self.identity
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        Ok(self.identity)
     }
 
     async fn ingest(
@@ -266,12 +266,16 @@ async fn a_foreign_identity_reaches_a_store_through_a_trait_this_crate_owns() {
     // The foreign identity and recorded time land unchanged; the compensation
     // carries this store's identity.
     let rows = store.rows();
+    let own = store
+        .store_id()
+        .await
+        .expect("the stand-in holds its identity in memory");
     assert_eq!(rows.len(), 3);
     for (row, event) in rows.iter().zip(&events) {
         assert_eq!(row.id, event.id);
         assert_eq!(row.recorded_at, event.recorded_at);
     }
-    assert_eq!(rows[2].id.store(), store.store_id());
+    assert_eq!(rows[2].id.store(), own);
 
     // Arrival order here is unrelated to authorship order there, and the
     // compensation lands after the events it answers.
@@ -280,6 +284,6 @@ async fn a_foreign_identity_reaches_a_store_through_a_trait_this_crate_owns() {
 
     let watermark = store.watermark().await.unwrap();
     assert_eq!(watermark.get(origin), Some(events[1].id.position()));
-    assert_eq!(watermark.get(store.store_id()), Some(rows[2].id.position()));
-    assert_ne!(store.store_id(), origin);
+    assert_eq!(watermark.get(own), Some(rows[2].id.position()));
+    assert_ne!(own, origin);
 }

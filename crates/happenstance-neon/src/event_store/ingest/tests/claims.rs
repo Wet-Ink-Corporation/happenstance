@@ -13,13 +13,13 @@
 
 use happenstance_core::{EventId, SequencePosition, StoreId};
 use happenstance_sync::{
-    Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested, ReplicatedEvent,
+    Classify, FailureClass, IngestError, IngestGroup, Ingested, ReplicatedEvent,
 };
 
 use super::super::NeonIngestStore;
 use super::endpoint::{LiveTransport, live_store};
 use super::{
-    append, carrying, event, holds, id, ingest, log, peer, rows, send, shipped, watermark,
+    append, carrying, event, holds, id, ingest, log, own, peer, rows, send, shipped, watermark,
 };
 use crate::event_store::NeonEventStore;
 use crate::transport::SqlStatement;
@@ -52,7 +52,7 @@ struct Claimed {
 impl Claimed {
     async fn on(store: &NeonIngestStore<LiveTransport>, ahead: usize) -> Self {
         let held = append(store, &[event("Local", "a")]).await;
-        let claim = EventId::new(IngestStore::store_id(store), past(held, ahead));
+        let claim = EventId::new(own(store).await, past(held, ahead));
         let from = peer(0x4A);
         Self {
             claim,
@@ -100,7 +100,7 @@ async fn an_echo_of_an_own_event_is_a_skip() {
     let before = log(&store).await;
 
     let back_home = [shipped(
-        EventId::new(IngestStore::store_id(&store), held),
+        EventId::new(own(&store).await, held),
         1,
         event("Local", "a"),
     )];
@@ -137,7 +137,7 @@ async fn an_unheld_own_identity_stops_the_ingest_and_writes_nothing() {
     assert_eq!(watermark(&store).await, marks);
     let after = append(&store, &[event("Local", "b")]).await;
     assert!(
-        holds(&store, EventId::new(IngestStore::store_id(&store), after)).await,
+        holds(&store, EventId::new(own(&store).await, after)).await,
         "the store still writes"
     );
 }
@@ -208,14 +208,14 @@ async fn a_claim_on_the_position_the_calls_own_compensation_would_take_is_refuse
         .expect("the compensation is held");
     assert_eq!(
         compensated.id,
-        EventId::new(IngestStore::store_id(&twin), past(twin_head, 4)),
+        EventId::new(own(&twin).await, past(twin_head, 4)),
         "the compensation is drawn after all three foreign positions"
     );
 
     let store = live_store().await;
     let head = append(&store, &[event("Local", "a")]).await;
     let before = log(&store).await;
-    let claim = EventId::new(IngestStore::store_id(&store), past(head, 4));
+    let claim = EventId::new(own(&store).await, past(head, 4));
     let second = [
         shipped(id(from, 2), 2, event("Shipped", "f2")),
         shipped(claim, 3, event("Local", "forged")),
@@ -274,7 +274,7 @@ async fn a_claim_lands_as_foreign_after_a_manual_remint() {
     let store = live_store().await;
     let claimed = Claimed::on(&store, 3).await;
     assert_refused(ingest(&store, &claimed.groups()).await, claimed.claim);
-    let old: StoreId = IngestStore::store_id(&store);
+    let old: StoreId = own(&store).await;
 
     let meta = store.event_store().config().qualified_meta();
     let reminted = send(
@@ -292,7 +292,7 @@ async fn a_claim_lands_as_foreign_after_a_manual_remint() {
     ))
     .await
     .expect("a fresh handle reads the new identity");
-    assert_ne!(IngestStore::store_id(&reminted), old);
+    assert_ne!(own(&reminted).await, old);
 
     let landed = ingest(&reminted, &claimed.groups())
         .await

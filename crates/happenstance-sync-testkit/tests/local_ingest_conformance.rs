@@ -91,8 +91,8 @@ impl EventStore for LocalStore {
 impl IngestStore for LocalStore {
     type Error = MemoryStoreError;
 
-    fn store_id(&self) -> StoreId {
-        self.inner.store_id()
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        Ok(self.inner.store_id())
     }
 
     async fn ingest(

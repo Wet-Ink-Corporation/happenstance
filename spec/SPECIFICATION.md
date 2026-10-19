@@ -7003,7 +7003,7 @@ The losing event and its compensation are one batch:
 reads it: under VT-10 `append` re-mints, so the batch that carries the losing
 event's foreign identity is one `IngestGroup` — the losing event plus its
 compensation — committed atomically by `IngestStore::ingest`
-(`crates/happenstance-sync/src/ingest.rs:219`). A reader MUST NOT be able to
+(`crates/happenstance-sync/src/ingest.rs:230`). A reader MUST NOT be able to
 observe a state in which the log holds the losing event with nothing resolving
 it.
 
@@ -7434,7 +7434,7 @@ already-written adapter pays to add it is nothing. The SQLite ingest spike skips
 a held row inside the write, under `ON CONFLICT (origin_store, origin_position)
 DO NOTHING` (`crates/happenstance-sqlite/src/ingest_spike.rs:12`). And
 `IngestStore::ingest` is one call per pulled batch
-(`crates/happenstance-sync/src/ingest.rs:157`). What is left is the measurement,
+(`crates/happenstance-sync/src/ingest.rs:168`). What is left is the measurement,
 and the marker stays `[DEFERRED]` until it passes: Rotor's 1,840 events through
 the Neon peer's one-shot HTTP, inside the 34-minute window.
 

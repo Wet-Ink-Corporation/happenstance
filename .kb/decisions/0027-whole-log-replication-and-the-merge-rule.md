@@ -92,7 +92,7 @@ ingest (SY-14) and the deterministic order (SY-23).
    `(origin_store, origin_position)` index in all four adapters, the SQLite spike's
    `ON CONFLICT … DO NOTHING` (`crates/happenstance-sqlite/src/ingest_spike.rs:12`), and
    `IngestStore::ingest` as one call per pulled batch
-   (`crates/happenstance-sync/src/ingest.rs:157`). The marker stays `[DEFERRED]` until the Neon
+   (`crates/happenstance-sync/src/ingest.rs:168`). The marker stays `[DEFERRED]` until the Neon
    measurement passes: Kestrel Rotor's 1,840 events over one-shot HTTP in 34 minutes.
 7. **SY-23 is ratified with a caveat.** `EventId` order is deterministic but neither fair nor
    temporal: the lower-sorting store's events always come first. It must never decide who wins

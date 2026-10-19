@@ -188,8 +188,8 @@ impl Classify for LocalStoreError {
 impl IngestStore for LocalStore {
     type Error = LocalStoreError;
 
-    fn store_id(&self) -> StoreId {
-        self.local.store_id()
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        Ok(self.local.store_id())
     }
 
     async fn ingest(
