@@ -249,6 +249,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use xtask::fence::{self, Opener};
 
 use crate::spec_trace::{clause_ids, workspace_root};
 
@@ -626,10 +627,8 @@ type Found = (usize, String);
 /// flagged for what it quotes.
 #[derive(Debug)]
 struct Open {
-    /// `` ` `` or `~`. A tilde fence is not closed by backticks.
-    delimiter: char,
-    /// How many of them the opener carried. A closer needs at least as many.
-    length: usize,
+    /// The opener's delimiter and length, which the closer must match.
+    opener: Opener,
     /// 0-based line of the opener.
     start: usize,
     /// The opener's info string, trimmed.
@@ -650,36 +649,6 @@ impl Open {
     }
 }
 
-/// The fence delimiter a line carries: its character, its length, and the rest.
-///
-/// `CommonMark` allows a fence to be indented by up to three spaces and to be
-/// written with `~` instead of a backtick, and rustdoc compiles both — measured,
-/// not assumed. A parser keyed on `line.starts_with("```")` sees neither, which
-/// makes indentation and a tilde two ways past every rule below.
-fn fence_marker(line: &str) -> Option<(char, usize, &str)> {
-    let mut rest = line;
-    for _ in 0..3 {
-        let Some(shorter) = rest.strip_prefix(' ') else {
-            break;
-        };
-        rest = shorter;
-    }
-
-    let delimiter = rest
-        .chars()
-        .next()
-        .filter(|character| *character == '`' || *character == '~')?;
-    // Both delimiters are one byte, so the count is also the byte offset.
-    let length = rest
-        .chars()
-        .take_while(|character| *character == delimiter)
-        .count();
-    if length < 3 {
-        return None;
-    }
-    Some((delimiter, length, rest[length..].trim()))
-}
-
 /// Every fenced block on a page, in source order.
 ///
 /// A closing fence carries the same delimiter as its opener, is at least as
@@ -694,12 +663,10 @@ fn fences(text: &str) -> Vec<Fence> {
     let mut open: Option<Open> = None;
 
     for (index, line) in text.lines().enumerate() {
-        let marker = fence_marker(line);
+        let marker = fence::delimiter(line);
         match open.take() {
             Some(mut current) => {
-                let closes = marker.is_some_and(|(delimiter, length, rest)| {
-                    delimiter == current.delimiter && length >= current.length && rest.is_empty()
-                });
+                let closes = marker.is_some_and(|found| found.closes(current.opener));
                 if closes {
                     out.push(current.into_fence(true));
                 } else {
@@ -708,12 +675,11 @@ fn fences(text: &str) -> Vec<Fence> {
                 }
             }
             None => {
-                if let Some((delimiter, length, info)) = marker {
+                if let Some(found) = marker {
                     open = Some(Open {
-                        delimiter,
-                        length,
+                        opener: found.opener(),
                         start: index,
-                        info: info.to_owned(),
+                        info: found.info.to_owned(),
                         body: Vec::new(),
                     });
                 }
@@ -924,11 +890,11 @@ fn check_fences(
 ///
 /// The info string is where the claim is *made*, so counting it as the prose
 /// that supports it makes the rule vacuous — it would be satisfied by the very
-/// line it is checking. [`fence_marker`] rather than a `starts_with`, so a
+/// line it is checking. [`fence::delimiter`] rather than a `starts_with`, so a
 /// tilde-delimited or indented opener is excluded on the same terms.
 fn names_outside_a_fence_marker(text: &str, code: &str) -> bool {
     text.lines()
-        .filter(|line| fence_marker(line).is_none())
+        .filter(|line| fence::delimiter(line).is_none())
         .any(|line| line.contains(code))
 }
 
@@ -2511,7 +2477,7 @@ mod tests {
 
     // ---- AC-005: the mount, on all four invocation paths --------------------
 
-    /// `probe: Some(..)` means *skip when absent* (`xtask/src/main.rs:131-144`),
+    /// `probe: Some(..)` means *skip when absent* (`xtask/src/main.rs:132-145`),
     /// and a documentation step that can skip is `RUNBOOK.md:918-925` again.
     #[test]
     fn the_checker_step_is_required_and_unprobed() {
@@ -3207,6 +3173,25 @@ mod tests {
 
         assert_eq!(found.len(), 1, "got: {found:?}");
         assert!(found[0].contains("IGNORE_ALLOWANCES"), "got: {}", found[0]);
+    }
+
+    /// A prose line that opens with an inline code span is not a fence:
+    /// `CommonMark` refuses a backtick info string that carries a backtick
+    /// (#294). Read as an opener, it pairs with the next fence's opener as its
+    /// closer, so the real fence's body becomes prose and its closer opens a
+    /// fence that never closes.
+    #[test]
+    fn a_prose_line_opening_with_a_code_span_opens_no_fence() {
+        let text = "```x``` opens the paragraph.\n\n```\nfn main() {}\n```\n";
+        let found = walk(&[page_with("append-conditions.md", text)], &[]);
+
+        assert_eq!(found.len(), 1, "got: {found:?}");
+        assert!(
+            found[0].starts_with("docs/append-conditions.md:3 — ")
+                && found[0].contains("an untagged fence"),
+            "the fence on line 3 is what to report, got: {}",
+            found[0]
+        );
     }
 
     #[test]

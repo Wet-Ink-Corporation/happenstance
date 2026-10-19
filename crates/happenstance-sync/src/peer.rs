@@ -80,7 +80,7 @@ use crate::identity::{ReplicatedEvent, Watermark};
 /// the port would force it to answer a question that has two answers.
 #[trait_variant::make(SendSyncPeer: Send)]
 pub trait SyncPeer {
-    /// How this peer's transport fails.
+    /// How this peer's transport fails; each failure states its [class](crate::Classify).
     ///
     /// Carries no `Send` bound. That is what admits the Durable Object peer,
     /// whose errors wrap a `JsValue`-derived string behind an `Rc` and are
@@ -88,7 +88,7 @@ pub trait SyncPeer {
     /// `Send + Sync` here was attempted; the Durable Object stand-in in
     /// `tests/real_peer_shapes.rs` fails it with two `error[E0277]`s — ``Rc<str>``
     /// cannot be sent between threads safely, and the same again for `Sync`.
-    type Error: core::error::Error + 'static;
+    type Error: core::error::Error + crate::Classify + 'static;
 
     /// Where to resume from: opaque to the caller, owned by the caller.
     ///
@@ -160,24 +160,24 @@ pub trait SyncPeer {
 
 /// What one [`pull`](SyncPeer::pull) returned.
 ///
-/// A named struct rather than `(PushBatch, R)` because both fields are worth
-/// naming at the call site and a two-tuple of a batch and a token invites
+/// A named struct rather than `(PushBatch, R, Waiting)` because each field is
+/// worth naming at the call site, and a tuple of a batch and a token invites
 /// exactly the transposition it cannot catch.
-#[derive(Debug, Clone)]
+///
+/// [`new`](Self::new) says [`Waiting::Unknown`], which costs a runner one more
+/// pull and is never a lie. A peer that can tell, inside the same round trip,
+/// whether anything lies past its token says so with
+/// [`with_waiting`](Self::with_waiting).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct Pulled<R> {
     /// The events, in the far side's forwarding order.
     pub batch: PushBatch,
     /// Where to resume the next `pull` from.
     pub resume: R,
-}
-
-impl<R> Pulled<R> {
-    /// Pairs a batch with the token that follows it.
-    #[must_use]
-    pub const fn new(batch: PushBatch, resume: R) -> Self {
-        Self { batch, resume }
-    }
+    /// What the far side still holds past `resume` (SY-37). Declared last:
+    /// postcard is positional, and the two fields above keep their places.
+    pub waiting: Waiting,
 }
 
 /// A batch of events crossing the boundary, decomposed into the groups that
@@ -188,7 +188,7 @@ impl<R> Pulled<R> {
 /// together under one guard; a receiver that flattened the batch and appended
 /// event-by-event would publish a state the origin never had, and no amount of
 /// ordering fixes that.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct PushBatch {
     /// The groups, in forwarding order.
@@ -233,7 +233,7 @@ impl PushBatch {
 /// the origin never saw and re-checking would reject a fact that is already
 /// durable elsewhere. SY-6 settles what it is for: an adjudicator may read it,
 /// and a guard carrying `after` is refused at ingest. Phase 13 builds the refusal.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct EventGroup {
     /// What the origin checked before appending. Evidence only.
@@ -251,17 +251,17 @@ impl EventGroup {
 }
 
 /// What the far side did with a [`push`](SyncPeer::push).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct Ack {
     /// How many events the far side appended, excluding ones it already held.
-    pub appended: usize,
+    pub appended: u64,
     /// How many events the far side already held and skipped.
     ///
     /// Re-delivery is a no-op, not an error: a peer *will* see the same event
     /// more than once, and the count is here so a runner can tell a healthy
     /// overlap from a resume token that is not advancing.
-    pub skipped: usize,
+    pub skipped: u64,
     /// What the far side has now durably seen, per origin store.
     ///
     /// A confirmation, deliberately **not** an event. Writing "peer X has seen
@@ -418,4 +418,174 @@ pub enum SyncError {
         /// identity the port knows about.
         name: Box<str>,
     },
+}
+
+// Declared here, at the end, so the lines above keep the numbers cited
+// elsewhere. What a pull says about the rest of the far side's log (SY-37).
+
+/// What the far side still holds past the token a [`pull`](SyncPeer::pull)
+/// returned, as [`Pulled::waiting`] reports it.
+///
+/// Three cases, because a runner faces three: it knows there is nothing more,
+/// it knows how much more there is, or it was not told. Spelled as an enum
+/// rather than an `Option<u64>`, which cannot say "not told" without a
+/// sentinel, and rather than a flag beside an optional count, which can say
+/// "nothing more, and here are three".
+///
+/// The count is a [`NonZeroU64`](core::num::NonZeroU64), so "nothing" has one
+/// spelling: `Events(0)` cannot be written, and a runner matching on
+/// [`Nothing`](Self::Nothing) misses no second form of it. Its decoder refuses
+/// a zero from the wire for the same reason. Not `#[non_exhaustive]`: the three
+/// cases are the whole space, and a runner should get the compiler's
+/// exhaustiveness check when it matches.
+///
+/// # On the wire
+///
+/// Externally tagged, in snake case: `"nothing"`, `"unknown"`, or
+/// `{"events":3}`. In postcard the variant index is the declaration order —
+/// `Nothing` 0, `Unknown` 1, `Events` 2 — so the variants are never reordered.
+///
+/// # Examples
+///
+/// A runner that believes [`Nothing`](Self::Nothing) stops after the pull that
+/// says it, rather than spending one more round trip on a pull that comes back
+/// empty — the round trip SY-15 says is the expensive one:
+///
+/// ```
+/// # #[cfg(not(feature = "memory"))]
+/// # fn main() {}
+/// # #[cfg(feature = "memory")]
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn core::error::Error>> {
+/// use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+/// use happenstance_sync::{
+///     EventGroup, MemorySyncPeer, ReplicatedEvent, SyncPeer, Waiting,
+/// };
+///
+/// let tablet = StoreId::from_bytes([1; 16]);
+/// let hub = MemorySyncPeer::new(StoreId::from_bytes([2; 16]));
+/// hub.seed(EventGroup::new(None, vec![ReplicatedEvent::new(
+///     EventId::new(tablet, SequencePosition::FIRST),
+///     RecordedAt::from_millis(1_700_000_000_000),
+///     Event::new("ReadingTaken", &b"{\"celsius\":4}"[..])?,
+/// )]))?;
+///
+/// let mut from = None;
+/// let mut pulls = 0;
+/// loop {
+///     let pulled = hub.pull(from.as_ref()).await?;
+///     pulls += 1;
+///     // ... ingest `pulled.batch` here, then keep the token ...
+///     let caught_up = pulled.waiting == Waiting::Nothing || pulled.batch.groups.is_empty();
+///     from = Some(pulled.resume);
+///     if caught_up {
+///         break;
+///     }
+/// }
+/// assert_eq!(pulls, 1, "told nothing is waiting, the runner skips the empty pull");
+/// # Ok(())
+/// # }
+/// ```
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Waiting {
+    /// Nothing: no group lies past this answer's token, so the next pull from
+    /// it returns an empty batch unless the far side takes a write in between
+    /// (SY-37). A peer stalled behind a group it cannot carry says
+    /// [`Events`](Self::Events), never this.
+    Nothing,
+    /// The peer did not say. The caller pulls again to find out, which is what
+    /// every pull cost before this field existed.
+    #[default]
+    Unknown,
+    /// This many events lay past the token when the far side answered.
+    ///
+    /// Advisory: more may have arrived since, and a group too large for the
+    /// next pull's budget can hold that pull empty while this is non-zero.
+    Events(core::num::NonZeroU64),
+}
+
+impl Waiting {
+    /// [`Nothing`](Self::Nothing) for zero, [`Events`](Self::Events)
+    /// otherwise: the count an adapter's `count(*)`, or its limit-plus-one
+    /// probe, produced.
+    #[must_use]
+    pub const fn counted(remaining: u64) -> Self {
+        match core::num::NonZeroU64::new(remaining) {
+            Some(count) => Self::Events(count),
+            None => Self::Nothing,
+        }
+    }
+}
+
+// `Pulled`'s constructors, declared here rather than beside the struct for the
+// same reason as `Waiting`: the struct gained a field, and the lines below it
+// keep their numbers.
+impl<R> Pulled<R> {
+    /// Pairs a batch with the token that follows it, saying
+    /// [`Waiting::Unknown`].
+    #[must_use]
+    pub const fn new(batch: PushBatch, resume: R) -> Self {
+        Self {
+            batch,
+            resume,
+            waiting: Waiting::Unknown,
+        }
+    }
+
+    /// Says what the far side still holds past [`resume`](Self::resume).
+    ///
+    /// A builder step rather than a third argument to [`new`](Self::new), so a
+    /// peer that cannot tell keeps calling `new` and says
+    /// [`Waiting::Unknown`], which is never a lie.
+    #[must_use]
+    pub const fn with_waiting(mut self, waiting: Waiting) -> Self {
+        self.waiting = waiting;
+        self
+    }
+}
+
+#[cfg(test)]
+mod waiting_tests {
+    use core::num::NonZeroU64;
+
+    use super::{Pulled, PushBatch, Waiting};
+
+    #[test]
+    fn counted_zero_is_nothing() {
+        assert_eq!(Waiting::counted(0), Waiting::Nothing);
+    }
+
+    #[test]
+    fn counted_n_is_events_n() {
+        let three = NonZeroU64::new(3).expect("three is not zero");
+
+        assert_eq!(Waiting::counted(3), Waiting::Events(three));
+    }
+
+    /// The default a stand-in peer gets for free costs a round trip and is
+    /// never a lie; `Nothing` would be cheaper and, from a peer that did not
+    /// look, false.
+    #[test]
+    fn pulled_new_says_unknown() {
+        let pulled = Pulled::new(PushBatch::empty(), 7_u8);
+
+        assert_eq!(pulled.waiting, Waiting::Unknown);
+    }
+
+    #[test]
+    fn with_waiting_replaces_only_waiting() {
+        let pulled = Pulled::new(PushBatch::empty(), 7_u8).with_waiting(Waiting::Nothing);
+
+        assert_eq!(
+            pulled,
+            Pulled {
+                batch: PushBatch::empty(),
+                resume: 7_u8,
+                waiting: Waiting::Nothing,
+            }
+        );
+    }
 }

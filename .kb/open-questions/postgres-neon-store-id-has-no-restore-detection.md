@@ -84,14 +84,14 @@ earns it:
 (`crates/happenstance-postgres/src/event_store.rs:175-183`, read at `:386-420`). A handle that was
 open across a re-mint would keep stamping the retired identity. That is the stale-handle bug
 `happenstance-sqlite` closed in `f719b2a` by re-reading the identity inside the append
-(`crates/happenstance-sqlite/src/event_store.rs:699-746`). `NeonEventStore` has no cache. Its
+(`crates/happenstance-sqlite/src/event_store.rs:700-747`). `NeonEventStore` has no cache. Its
 append reads `store_id` inside the same `INSERT … SELECT` statement
-(`crates/happenstance-neon/src/event_store.rs:549`), so a re-mint would be seen by the next append.
+(`crates/happenstance-neon/src/event_store.rs:554`), so a re-mint would be seen by the next append.
 
 ## Why a clone is not an edge case here
 
 On a file-backed store, a copy is something an operator does deliberately, and
-`references/adapter-shapes.md:395-401` tells them what to do afterwards. On these two platforms a
+`references/adapter-shapes.md:397-403` tells them what to do afterwards. On these two platforms a
 copy is routine:
 
 - **`pg_dump` / `pg_restore`.** A logical dump carries `store_meta`'s row, and it carries the

@@ -450,27 +450,9 @@ impl PostgresEventStore {
     /// from "the disk is full, retry", and flattening the two into a driver
     /// error destroys the distinction. Truncation is forbidden outright.
     fn check_ceilings(events: &[Event]) -> Result<(), AppendError<PostgresEventStoreError>> {
-        if events.len() > Self::MAX_EVENTS_PER_BATCH {
-            return Err(AppendError::ExceedsStoreLimit {
-                limit: StoreLimit::EventsPerBatch,
-                len: events.len(),
-            });
-        }
-        for event in events {
-            if event.data().len() > Self::MAX_EVENT_DATA_LEN {
-                return Err(AppendError::ExceedsStoreLimit {
-                    limit: StoreLimit::EventDataLen,
-                    len: event.data().len(),
-                });
-            }
-            if event.tags().len() > Self::MAX_TAGS_PER_EVENT {
-                return Err(AppendError::ExceedsStoreLimit {
-                    limit: StoreLimit::TagsPerEvent,
-                    len: event.tags().len(),
-                });
-            }
-        }
-        Ok(())
+        exceeded(events.len(), events).map_or(Ok(()), |(limit, len)| {
+            Err(AppendError::ExceedsStoreLimit { limit, len })
+        })
     }
 
     /// The pool this store reads and writes through.
@@ -1027,21 +1009,121 @@ async fn insert_batch(
     recorded_at: RecordedAt,
     store_id: StoreId,
 ) -> Result<SequencePosition, PostgresEventStoreError> {
-    let count = i64::try_from(events.len()).unwrap_or(i64::MAX);
+    let positions = allocate_positions(transaction, events.len()).await?;
+    let rows = events.iter().map(|event| NewRow {
+        event,
+        origin: Origin::Local,
+        recorded_at,
+    });
+    insert_statement(store_id, rows, &positions)
+        .build()
+        .execute(&mut **transaction)
+        .await?;
+
+    let last = *positions
+        .last()
+        .expect("the empty batch was refused before this point");
+    position_from_row(last)
+}
+
+/// One row the writer inserts: an event, whose identity it carries, and when
+/// it was recorded.
+struct NewRow<'a> {
+    event: &'a Event,
+    origin: Origin,
+    recorded_at: RecordedAt,
+}
+
+/// Whose identity a row carries.
+#[derive(Debug, Clone, Copy)]
+enum Origin {
+    /// Minted here: this store's identity, at the position the row is given.
+    Local,
+    /// Minted elsewhere and bound as sent. Test-only with the rest of ingest
+    /// (#108): see `event_store/ingest.rs`.
+    #[cfg(test)]
+    Foreign(StoredOrigin),
+}
+
+/// An origin identity in the shape the schema stores, checked once.
+///
+/// The only way to build one is [`TryFrom<EventId>`], which refuses a
+/// position past `i64::MAX`, so the writer never re-checks it and never
+/// saturates it. [`as_i64`] saturates, and saturating here would write two
+/// origins at `i64::MAX` and report the second as a re-delivery.
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StoredOrigin {
+    store: StoreId,
+    position: i64,
+}
+
+#[cfg(test)]
+impl TryFrom<EventId> for StoredOrigin {
+    type Error = PostgresEventStoreError;
+
+    fn try_from(id: EventId) -> Result<Self, Self::Error> {
+        let position = i64::try_from(id.position().get()).map_err(|_| {
+            PostgresEventStoreError::OriginPositionOutOfRange {
+                position: id.position(),
+            }
+        })?;
+        Ok(Self {
+            store: id.store(),
+            position,
+        })
+    }
+}
+
+/// Takes `count` positions from the sequence, in order, inside `transaction`.
+///
+/// # Why positions are allocated in their own statement
+///
+/// See [`insert_batch`]: the allocation site is visible at the one statement
+/// that performs it, and each row's position is known before it is bound, so a
+/// local row's origin half is bound directly rather than stamped afterwards.
+async fn allocate_positions(
+    transaction: &mut Transaction<'static, Postgres>,
+    count: usize,
+) -> Result<Vec<i64>, PostgresEventStoreError> {
+    let count = i64::try_from(count).unwrap_or(i64::MAX);
     let positions: Vec<i64> =
         sqlx::query_scalar("SELECT nextval('event_position_seq') FROM generate_series(1, $1)")
             .bind(count)
             .fetch_all(&mut **transaction)
             .await?;
+    Ok(positions)
+}
 
-    let store = store_id.to_bytes().to_vec();
+/// The one multi-row `INSERT INTO event` that append and ingest both send.
+///
+/// Eight binds per row. A [`Origin::Local`] row binds `store_id` and its own
+/// position as its origin; a foreign row binds the origin it carries. Rows are
+/// paired with `positions` in order. No I/O, so the text is testable without a
+/// server. The builder owns its binds (ADR-0080 (b)), which is why it is
+/// `'static`.
+fn insert_statement<'r>(
+    store_id: StoreId,
+    rows: impl IntoIterator<Item = NewRow<'r>>,
+    positions: &[i64],
+) -> sqlx::QueryBuilder<'static, Postgres> {
     let mut builder = sqlx::QueryBuilder::<Postgres>::new(
         "INSERT INTO event \
          (position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at) ",
     );
     builder.push_values(
-        events.iter().zip(&positions),
-        |mut row, (event, position)| {
+        rows.into_iter().zip(positions),
+        |mut row, (new, position)| {
+            let NewRow {
+                event,
+                origin,
+                recorded_at,
+            } = new;
+            let (origin_store, origin_position) = match origin {
+                Origin::Local => (store_id, *position),
+                #[cfg(test)]
+                Origin::Foreign(foreign) => (foreign.store, foreign.position),
+            };
             let tags: Vec<String> = event
                 .tags()
                 .iter()
@@ -1052,17 +1134,35 @@ async fn insert_batch(
                 .push_bind(event.data().to_vec())
                 .push_bind(event.metadata().map(|bytes| bytes.to_vec()))
                 .push_bind(tags)
-                .push_bind(store.clone())
-                .push_bind(*position)
+                .push_bind(origin_store.to_bytes().to_vec())
+                .push_bind(origin_position)
                 .push_bind(recorded_at.as_millis());
         },
     );
-    builder.build().execute(&mut **transaction).await?;
+    builder
+}
 
-    let last = *positions
-        .last()
-        .expect("the empty batch was refused before this point");
-    position_from_row(last)
+/// The first of this store's ceilings that a write of `len` events, or one of
+/// `events`, exceeds, with the magnitude that exceeded it.
+///
+/// One policy for both write paths, checked in one order: the batch's length,
+/// then each event's data, then its tags.
+fn exceeded<'e>(
+    len: usize,
+    events: impl IntoIterator<Item = &'e Event>,
+) -> Option<(StoreLimit, usize)> {
+    if len > PostgresEventStore::MAX_EVENTS_PER_BATCH {
+        return Some((StoreLimit::EventsPerBatch, len));
+    }
+    events.into_iter().find_map(|event| {
+        if event.data().len() > PostgresEventStore::MAX_EVENT_DATA_LEN {
+            Some((StoreLimit::EventDataLen, event.data().len()))
+        } else if event.tags().len() > PostgresEventStore::MAX_TAGS_PER_EVENT {
+            Some((StoreLimit::TagsPerEvent, event.tags().len()))
+        } else {
+            None
+        }
+    })
 }
 
 /// Decodes a stored `bigint` into a [`SequencePosition`].
@@ -1161,7 +1261,9 @@ mod tests {
         }
     }
 
-    fn server(code: &'static str) -> PostgresEventStoreError {
+    /// A driver error carrying `code` as its `SQLSTATE`. Shared with the
+    /// ingest module's tests, which classify one per code.
+    pub(super) fn server(code: &'static str) -> PostgresEventStoreError {
         PostgresEventStoreError::Driver(sqlx::Error::Database(Box::new(Sqlstate(code))))
     }
 
@@ -1223,3 +1325,9 @@ mod tests {
         assert!(matches!(outcome, Err(ref error) if !is_serialisation_failure(error)));
     }
 }
+
+// `happenstance-sync`'s ingest port over the writer above (#108). A child
+// module so it reaches this module's private writer without widening it, and
+// `cfg(test)` because the port's crate is unpublished: see its module docs.
+#[cfg(test)]
+mod ingest;

@@ -235,7 +235,7 @@ impl SendSyncPeer for OneShotHttpPeer {
 /// requirement and therefore accepts both peers. If this function had needed to
 /// know which peer it held — a socket to close, a transaction to commit, a
 /// cursor to advance — the port would have failed its exam here.
-async fn exchange<P: SyncPeer>(peer: &P, outbound: &PushBatch) -> Result<(usize, usize), P::Error> {
+async fn exchange<P: SyncPeer>(peer: &P, outbound: &PushBatch) -> Result<(u64, usize), P::Error> {
     let limits = peer.limits();
     if !limits.admits(outbound) {
         // A capability check the runner can make *before* the round trip, which
@@ -420,4 +420,90 @@ async fn memory_peer_round_trips_and_dedupes() {
         .await
         .unwrap();
     assert_eq!(spawned, 0, "a fresh peer has nothing to hand back");
+}
+
+// ---------------------------------------------------------------------------
+// SY-36: each stand-in states its class. Appended, and fully qualified, so the
+// lines above keep the numbers ADR-0026 and the specification cite.
+// ---------------------------------------------------------------------------
+
+/// ADR-0026 §2.3's table for the Durable Object.
+///
+/// `JsError` is a stringified `JsValue`: only the real adapter, at the point it
+/// stringifies, knows which class it is. The stand-in says `Stop`, the class
+/// that halts an edge rather than hammering it.
+impl happenstance_sync::Classify for DurableObjectError {
+    fn class(&self) -> happenstance_sync::FailureClass {
+        match self {
+            Self::SocketClosed => happenstance_sync::FailureClass::Transient,
+            Self::SqlStorage { message, .. } if message.starts_with("SQLITE_TOOBIG") => {
+                happenstance_sync::FailureClass::Park
+            }
+            Self::SqlStorage { .. } | Self::JsError(_) => happenstance_sync::FailureClass::Stop,
+        }
+    }
+}
+
+/// ADR-0026 §2.3's table for the one-shot HTTP peer. A status the table does
+/// not name is `Transient`: a 5xx is the common case, and a 4xx the table
+/// misses is a gap in the table rather than a reason to halt.
+impl happenstance_sync::Classify for OneShotHttpError {
+    fn class(&self) -> happenstance_sync::FailureClass {
+        match self {
+            Self::Status {
+                code: 401 | 403, ..
+            }
+            | Self::Malformed(_) => happenstance_sync::FailureClass::Stop,
+            Self::Status { code: 413, .. } | Self::ResponseTooLarge { .. } => {
+                happenstance_sync::FailureClass::Split
+            }
+            Self::Status { .. } | Self::Transport(_) => happenstance_sync::FailureClass::Transient,
+        }
+    }
+}
+
+/// The evidence ADR-0026 rests on: one error type spans classes, so a
+/// runner-side table from type to class cannot be written, and the adapter
+/// has to say.
+#[test]
+fn one_error_type_spans_classes() {
+    use happenstance_sync::{Classify, FailureClass};
+
+    let status = |code| OneShotHttpError::Status {
+        code,
+        body: Box::from(""),
+    };
+    assert_eq!(status(401).class(), FailureClass::Stop);
+    assert_eq!(status(413).class(), FailureClass::Split);
+    assert_eq!(status(503).class(), FailureClass::Transient);
+    assert_eq!(
+        OneShotHttpError::Transport(Box::from("reset")).class(),
+        FailureClass::Transient
+    );
+    assert_eq!(
+        OneShotHttpError::ResponseTooLarge { bytes: 1 }.class(),
+        FailureClass::Split
+    );
+    assert_eq!(
+        OneShotHttpError::Malformed(Box::from("")).class(),
+        FailureClass::Stop
+    );
+
+    let refused = |message: &str| DurableObjectError::SqlStorage {
+        sql: Rc::from("INSERT"),
+        message: Rc::from(message),
+    };
+    assert_eq!(
+        refused("SQLITE_TOOBIG: string or blob too big").class(),
+        FailureClass::Park
+    );
+    assert_eq!(refused("SQLITE_AUTH").class(), FailureClass::Stop);
+    assert_eq!(
+        DurableObjectError::SocketClosed.class(),
+        FailureClass::Transient
+    );
+    assert_eq!(
+        DurableObjectError::JsError(Rc::from("TypeError")).class(),
+        FailureClass::Stop
+    );
 }

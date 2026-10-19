@@ -99,7 +99,7 @@ had no expiry, so a rule scheduled forever printed identically to one scheduled 
 prose guard was retired: check 4 now guards on `!has_suite(&c.id)` alone
 (`xtask/src/spec_trace.rs:822`), `schedules_new` is gone with it, and its own doc comment records
 why the switch could not be repaired in place — the sentence explaining that a rule was unwritten
-*was* the switch that stopped the checker looking (`xtask/src/spec_trace.rs:795-813`). A clause's
+*was* the switch that stopped the checker looking (`xtask/src/spec_trace.rs:798-816`). A clause's
 rule name is now either resolvable or declared in `UNRESOLVABLE_RULE_NAMES`
 (`xtask/src/spec_trace.rs:1006`) with the reason nothing can find it. ES-6 has an entry, and it is
 one of the fifteen `Scheduled` ones whose owner is not a phase:
@@ -238,7 +238,7 @@ Whether the dagger convention survives at all, now that the guard it switched is
 ## Phase 16 — 2026-09-29
 
 **Sub-question 4 is answered by `kb-decision-0066`.** Driver error payloads re-exported under
-ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1565`,
+ADR-0044, such as `Sqlite(#[from] rusqlite::Error)` at `crates/happenstance-sqlite/src/event_store.rs:1726`,
 are **inside** the 1.0 promise, with a named limit: an adapter's major follows the breaking
 version of the driver it re-exports. That rules out the sealing option `kb-decision-0044` left
 open. Writing the answer into ES-6's prose is phase 17's

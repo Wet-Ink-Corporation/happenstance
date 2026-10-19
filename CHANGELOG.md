@@ -36,6 +36,367 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-sync`: the replication message set, in a crate that is not
+  published yet** (#114, ADR-0097). Four messages, each its own type
+  in `wire::Envelope<T>`: `PushBatch`, `Ack`, the new `wire::PullRequest`, and
+  `Pulled<wire::ResumeToken>`. `PushBatch`, `EventGroup`, `ReplicatedEvent`,
+  `Ack` and `Pulled` derive `serde`'s traits, and `Watermark` has a hand-written
+  pair. The format version stays on every message, and version 1 now names this
+  set. Each new wire test names a defect: `a_real_message_is_refused_before_it_decodes`
+  detects an envelope that decodes the message before the version;
+  `payload_bytes_render_through_the_core_codec` detects a payload carried
+  outside `Event`, which renders in JSON as an array of integers;
+  `push_batch_preserves_group_boundaries_on_the_wire` detects a push flattened
+  to its events; and `a_watermark_decodes_canonical` detects a derived
+  `Watermark` that keeps a peer's unsorted marks, which its binary search then
+  misses. `a_watermark_decodes_as_advance_folds_it` detects a decoder that
+  keeps the first of two marks for one store, across every ordering of five
+  marks, and `a_descending_watermark_decodes_canonical` covers strictly
+  descending input. `wire::PullRequest` refuses unknown fields, so a JSON push
+  routed to the pull decoder is an error rather than a pull from the start of
+  the log; `a_json_push_is_refused_as_a_pull_request` detects the derive without
+  that attribute. Postcard has no equivalent: an empty push and a first pull
+  are the same bytes, which `a_misrouted_postcard_buffer_decodes_as_another_message`
+  pins.
+
+- **`happenstance-sync`: ingest has an error of its own, and an unheld own
+  identity stops it, in a crate that is not published yet** (#108, part A;
+  ADR-0098; SY-38). `IngestStore::ingest` returns
+  `IngestError<Self::Error>`, with four arms: `ExceedsStoreLimit`,
+  `UnheldOwnIdentity`, `Busy` and `Store`. Every arm means nothing in the call
+  was written, and `IngestStore::Error` is now bound on `Classify`, so each
+  failure states its SY-36 class. An event claiming the store's own `StoreId`
+  at a position the store does not hold now refuses the whole call as
+  `UnheldOwnIdentity`, class `Stop`, including a claim on a position the same
+  call's own compensation took. This is an exception to the frozen SY-1 and
+  SY-33, accepted by the owner in ADR-0098. Before, it was ingested, and the local
+  append that later reached its position failed on every retry. The remedy is
+  VT-6's re-mint, after which the same batch lands. In `happenstance-sqlite`
+  this is all `#[cfg(test)]`, so nothing published moves: the spike detects
+  the claim with the insert that would have written it, states a class for
+  every `SqliteEventStoreError` variant, reports a write lock held elsewhere
+  as `IngestError::Busy`, and holds the watermark's statement to the origin
+  index with an `EXPLAIN QUERY PLAN` test. Each new test names a defect:
+  `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` detects a store
+  that writes the claim, or the groups before it; `a_claim_the_calls_own_compensation_would_hide_is_refused`
+  detects a store that counts a claim meeting its own fresh compensation as a
+  re-delivery, committing two events under one identity; `local_appends_are_not_wedged_after_a_refused_claim`
+  detects the old wedge; `a_claim_lands_as_foreign_after_the_store_is_reminted`
+  detects a policy the remedy cannot clear; `ingest_while_another_connection_holds_the_write_lock_is_busy`
+  detects a failed `BEGIN IMMEDIATE` reported as `Store`; and
+  `watermark_reads_the_origin_index_without_a_sort` detects a `GROUP BY` the
+  index cannot serve, such as `origin_store || ''`.
+
+- **`happenstance-sync`: an in-memory ingest oracle, and `happenstance-sync-testkit`'s
+  ingest family, in crates that are not published yet** (#108, part B).
+  Recorded here because CF-29 asks every conformance rule for an entry, not
+  because anything ships. `MemoryIngestStore`, behind `happenstance-sync`'s
+  `memory` feature, is both an `EventStore` and an `IngestStore`, built from
+  `happenstance-core`'s public API alone; it passes the whole event-store suite,
+  and a differential test holds its `read` to `MemoryEventStore`'s. A store
+  adapter mounts the family with `ingest_store_conformance!` over an
+  `IngestFixture`, and `MemoryIngestFixture` is the reference. Each wrong store
+  is in the crate's `tests/wrong_ingest_stores.rs`, where a test runs the whole
+  family against it and asserts it fails exactly its rule.
+
+  **`ingest_preserves_origin_identity`** (VT-5, with VT-9's recorded time). The
+  defect it detects is a store that re-mints an ingested event under its own
+  identity, keeping the origin's only for its own dedupe and watermark so every
+  count still adds up, or one that restamps the event with its arrival time.
+  Either makes the same fact two different events on two peers.
+
+  **`ingested_events_land_above_the_local_head`** (SY-5). The defect it detects
+  is an order-preserving merge: a store that inserts an ingested event where its
+  origin numbered it, below its own head, and renumbers what follows, so a
+  projection whose checkpoint had already passed that position never sees it.
+
+  **`dedupe_reaches_identity_without_decoding`** (SY-12, with SY-11's store
+  half). The defect it detects is content-keyed dedupe, which drops a second
+  origin's byte-identical fact as though it were the first one again, and a
+  store that writes a group's compensation again when the whole group was a
+  re-delivery. Every payload in it is bytes no codec parses, so it also detects
+  a store that decodes a payload to reach its dedupe key and skips what it
+  cannot parse.
+
+  **`an_unheld_own_identity_stops_the_ingest`** (SY-38). The defect it detects
+  is any store that lets an unheld claim on its own identity through: one that
+  drops the claim as a re-delivery and writes the rest, one that checks only a
+  batch's first event, one that commits group by group and keeps the groups
+  before the claim, and one that skips a claim meeting the call's own
+  compensation, committing two events under one identity. It also rejects the
+  over-refusal of a held echo, which is an ordinary re-delivery. A store that
+  leaves a gap before its compensation is reported as skipped for the hidden
+  claim, not passed. SY-33's rule, which must exempt this refusal (ADR-0098),
+  is not written yet, and the exemption is carried forward to it.
+
+  `happenstance-sqlite` gains only test code, which mounts the family on its
+  ingest spike, and a path-only dev-dependency that cargo strips on publish.
+
+- **`happenstance-sync-testkit`: three rules from the LiveStore audit, in a
+  crate that is not published yet** (#242). Recorded here because CF-29 asks
+  every conformance rule for an entry. `IngestFixture` gains defaulted items, so
+  every fixture written before them still compiles: `MID_GROUP_FAULT` and
+  `arm_mid_group_fault`, and three per-event ceilings. `ingest_store_conformance!`
+  now also emits `every_declined_capability_is_stated_by_this_fixture`, CF-18's
+  check that a declined capability carries the fixture's own reason. The
+  in-memory oracle declines the fault and declares no ceiling, so it reports
+  the first two rules as skipped, with reasons; the faithful wrong store and the
+  SQLite ingest spike run them.
+
+  **`ingest_group_is_atomic_under_a_mid_group_fault`** (SY-30). The defect it
+  detects is a store that, with a fault armed between two rows of one ingest
+  group, keeps part of the group: one that writes a decided call in separately
+  committed chunks, and one that commits a group's foreign rows and its
+  compensation as two writes, which leaves a losing event with nothing
+  answering it. It also detects a store that rolls the group back and answers
+  `Ok`, and a fixture whose armed fault never fires.
+
+  **`ingest_validates_every_event_not_the_head`** (SY-18). The defect it detects
+  is a store that holds only the first event of each group to the per-event
+  ceilings it declares, so an event over one behind the head is written; one
+  that never checks the compensation it writes itself; and a ceiling off by
+  one, which refuses an event exactly at the declared limit.
+
+  **`ack_never_confirms_a_non_durable_event`** (SY-31). The defect it detects
+  is a peer that acknowledges a push on admission and commits it later, so a
+  handle dropped in between has confirmed events the peer never held. A
+  spoke's confirmation watermark then passes the lost write, and SY-24's
+  forwarding never offers it again. A peer that confirms nothing is reported
+  as skipped, not passed.
+
+  `happenstance-sqlite` gains only test code: its ingest fixture arms the fault
+  with an `AFTER INSERT` trigger and mirrors its data and tag ceilings.
+
+- **`happenstance-postgres`: the ingest port runs here too, in test code only**
+  (#108, part D). Nothing published moves. `src/event_store/ingest.rs`, under
+  `#[cfg(test)]`, implements `happenstance-sync`'s ingest port over the row
+  writer `append` uses: append's private `insert_batch` now builds its `INSERT`
+  through a shared writer, and ingest sends that same text with an
+  `ON CONFLICT` clause on the origin index added. It is VT-10's second run, and
+  the first against a store whose writers do not serialise. An unheld claim on
+  the store's own identity is judged against the snapshot the transaction takes
+  first, so a claim meeting a row this call wrote, or one another transaction
+  committed during it, is refused. The ingest family is mounted on it and runs
+  in CI's `live-postgres` job, with #242's items stated as SQLite's fixture
+  states them: the fixture arms SY-30's fault with an `AFTER INSERT` row
+  trigger that counts the rows one transaction inserts, and mirrors the data
+  and tag ceilings append enforces, declaring no metadata ceiling because the
+  store imposes none. SY-30 and SY-18 run; SY-38's rule reports its hidden-claim half as
+  skipped here, because a refused call has already consumed sequence values,
+  and `a_claim_the_calls_own_compensation_would_hide_is_refused` and
+  `a_claim_on_a_row_committed_during_the_call_is_refused` verify that half
+  directly. No rule is added, so no defect sentence is owed. Two path-only
+  dev-dependencies, `happenstance-sync` and `happenstance-sync-testkit`, which
+  cargo strips on publish.
+
+- **`happenstance-neon`: the ingest port runs here too, in test code only**
+  (#108, part C). Nothing published moves. `src/event_store/ingest.rs`, under
+  `#[cfg(test)]`, implements `happenstance-sync`'s ingest port over the endpoint
+  with no interactive transaction. It is VT-10's third run. The ingest
+  statement Neon only spelled until now is sent, built from append's insert
+  builder with the conflict clause on the origin index, as the first of two
+  statements in one request at `REPEATABLE READ`. The write records the first
+  claim on this store's own identity that landed in a transaction-local
+  setting, and does not write the call's compensations when one did; the
+  second statement is a constant that raises SQLSTATE `HS038` naming it, which
+  rolls the whole request back, so an unheld claim refuses the call and writes
+  nothing (SY-38). A claim meeting a row another transaction committed during
+  the call fails serialisation instead, and is `Busy`. Compensation positions
+  are drawn after every foreign row of the call, so a claim on one is a claim
+  that landed. The ingest family is mounted on it and runs in CI's `live-neon`
+  job, with #242's items stated as the other SQL stores state them: an
+  `AFTER INSERT` trigger arms SY-30's fault, and the data and tag ceilings are
+  mirrored, with no metadata ceiling. SY-38's rule reports its hidden-claim
+  half as skipped here, as on Postgres, and
+  `a_claim_on_the_position_the_calls_own_compensation_would_take_is_refused`
+  verifies that half directly. No rule is added, so no defect sentence is
+  owed. The same two path-only dev-dependencies as Postgres.
+
+- **`happenstance-sync-testkit`: the replication suite's first two rules,
+  in a crate that is not published yet** (#111). Recorded here because CF-29
+  asks every conformance rule for an entry, not because anything ships: the
+  crate is `publish = false` until phase 13 decides its release, as
+  `happenstance-sync` is. A peer adapter mounts it with
+  `sync_peer_conformance!`, and `MemorySyncPeer` is the reference peer.
+
+  **`ingest_never_rejects`** (SY-1). The defect it detects is a peer that
+  re-evaluates the append condition travelling with a group against what it
+  already holds, and drops or refuses the second of two conflicting facts. Each
+  fact was valid where it was decided, and refusing one guarantees the two logs
+  never converge.
+
+  **`compensation_is_atomic_with_the_losing_event`** (SY-2, the transport's
+  half). The defect it detects is a peer that splits a losing event from the
+  compensation that rode with it — by storing what it is pushed one event per
+  group, or by paging pulls by event count and ending one inside a group — so a
+  reader commits the loser with nothing resolving it. It does **not** reject
+  compensate-after-commit, the authoring-side defect SY-2 itself names: that
+  happens before anything reaches a peer, and the rule for it is tracked by
+  #320.
+
+  The wrong implementations are in the crate's `tests/wrong_peers.rs`, and a
+  test there runs the whole enumeration against each and asserts it fails
+  exactly its rule. The suite also executes on `wasm32-unknown-unknown`, under
+  the gate's `wasm32 run of the conformance rules`.
+
+- **`happenstance-sync`: a peer's error states its failure class** (#243), as
+  ADR-0026 decided. `SyncPeer::Error` is now bounded on `Classify`, whose one
+  method returns a `#[non_exhaustive]` `FailureClass`: `Transient`, `Split`,
+  `Park` or `Stop`. `SyncError` and `MemoryPeerError` implement it. Neither crate
+  is published, so the new bound breaks no consumer.
+
+  **`every_refusal_states_its_class`** (SY-36), in `happenstance-sync-testkit`.
+  The defect it detects is a peer that reports every failure as one class, so a
+  runner retries a batch that can only ever be split, or halts an edge that one
+  retry would have recovered. The fixture drives its peer into each refusal it
+  can produce and declares that refusal's class, through the new required
+  `SyncFixture::refusals`; the rule compares. A peer that honours its own
+  limits can declare its oversized-push refusal with `oversized_push_refusal`;
+  a peer declaring `max_batch_bytes` above 64 MiB must provoke its own, because
+  the helper will not allocate a batch that size. SY-36 stays `[PROVISIONAL]`:
+  its falsification test needs the real peers, which do not exist yet.
+
+- **`happenstance-sync`: a pull says whether more is waiting** (#245). `Pulled`
+  gains a `waiting` field, a `Waiting` of `Nothing`, `Unknown` or
+  `Events(NonZeroU64)`, so a runner told `Nothing` stops without spending one
+  more round trip on an empty pull. `Pulled::new` says `Unknown`, which is never
+  a lie; a peer that can tell says more with `Pulled::with_waiting`, and
+  `Waiting::counted` turns a count into the right case. `MemorySyncPeer` counts
+  what lies past the token it returns. The field is a shape change on the
+  wire, so `wire::FORMAT_VERSION` is now 2, as ADR-0097 §3 requires; neither
+  crate is published, so no consumer is affected.
+
+  **`nothing_waiting_means_the_next_pull_is_empty`** (SY-37, minted
+  `[PROVISIONAL]`), in `happenstance-sync-testkit`. The defect it detects is a
+  peer that says nothing is waiting because its page ran out rather than its
+  log, so a runner that believes it stops short and leaves the rest of the log
+  for the next wake. The rule writes two logs — 257 small events for a page the
+  event count ends, and one sized from the declared limits for a page the byte
+  budget ends, so a peer that reads any short page as the end is caught —
+  follows the tokens, and pulls once more after the first `Nothing`: that pull
+  must be empty. A peer that never says `Nothing` passes, and a wrong `Events`
+  count is not checked, because it is advisory. A peer that shows no page
+  boundary on either log is reported as a skip, because the rule could not
+  have failed it, and the skip names its cause (#326): `NO_SECOND_PAGE` when
+  one pull carried each log, and `LOG_REFUSED` when the peer refused a push its
+  own declaration admits, with `COUNT_LOG_REFUSED_REASON` or
+  `BYTE_LOG_REFUSED_REASON` saying which log. The two need opposite fixes. The
+  byte-cut log goes one event to a push, each sized from `max_event_bytes`, so
+  refusing it is SY-18's to judge, and a peer that overstates only
+  `max_batch_bytes` takes it and pages. A refused count-cut log is a lie about
+  the batch limits, which no rule judges, so the skip is the only place it can
+  be reported, and only when the byte-cut log did not page.
+
+- **`peer_declares_its_own_limits`** (SY-18), in `happenstance-sync-testkit`
+  (#121). The defect it detects is a peer whose declared `PeerLimits` admit an
+  event its ingest then refuses, so the failure is found at ingest, after the
+  origin has committed, rather than prevented by a runner that read the limits
+  first; and a peer that declares `max_event_bytes` below VT-21's 65,536-byte
+  floor. The rule reads `limits()` before it pushes anything, pushes
+  Turnstile's 340,000-byte seat map only if the declaration admits it, and then
+  pushes two events at the declared boundary, one carrying its bytes in data
+  and one in metadata, each with a 255-byte type and 64 tags of 255 bytes.
+  Each must land, acknowledged as appended, and come back whole. Its wrong
+  implementations are in `tests/wrong_limits.rs`, one per check: KV peers that
+  declare no value cap, the raw value cap, a byte below the floor, a
+  declaration that changes between reads, or room for no event at all; and KV
+  peers that cap metadata at 1,024 bytes without declaring it, truncate large
+  data, or acknowledge a large event as skipped. It does not check
+  `max_batch_bytes` or `max_batch_events` on their own: those are not limits on
+  an event.
+
+  **`KvCappedFixture`**, the peer SY-18's marker names: a 128 KiB cap on each
+  value, which reserves the envelope at the contract's floors and declares
+  114,465 bytes per event. It refuses a value over the cap whole, as
+  `KvPeerError::ValueTooLarge`, class `Park`. Across the peer set the floor
+  reads 65,536 = `MemorySyncPeer` < 114,465 for this fixture < 131,072 for the
+  Neon store < 1 MiB for the other stores. SY-18 stays `[DEFERRED]` and VT-21
+  `[PROVISIONAL]`: moving either marker is the owner's decision.
+
+- **`happenstance-sync-testkit`: the model family, seeded peer topologies
+  behind a new `proptest` feature** (#246). Not published, and recorded because
+  CF-29 asks every conformance rule for an entry. `sync_model_conformance!`
+  opens one fixture per node of a generated topology of three to six peers,
+  drives push and pull from one seed through writes, partitions, lost acks,
+  duplicated pushes and delayed pages, and judges every peer at quiescence
+  against a model of its own. A failure prints its seed in hex and the smallest
+  scenario it shrank to. Three scenarios pinned by value run before any
+  generated case. The wrong peers are in `tests/wrong_topologies.rs`, which pins
+  every rule's verdict against each.
+
+  **`transitive_convergence_over_a_partial_mesh`** (SY-24, SY-4). The defect it
+  detects is a peer that quarantines what it accepted: it acknowledges a guarded
+  group as appended and holds it back for review, so the event is never handed
+  back and a peer two hops away never sees it. It also detects a peer that
+  dedupes by the highest position seen per origin, which drops an event that
+  arrives after a later one from the same origin, under SY-1. And it detects a
+  peer whose caught-up resume token points one group past the end of its log:
+  the next group it takes in is never forwarded along a lane that had caught
+  up, under SY-24.
+
+  **`redelivery_of_an_accepted_group_is_a_no_op`** (SY-11). The defect it
+  detects is a peer that dedupes per batch rather than per event: a page half of
+  which it already holds (SF-03) is applied whole, the half it held is appended
+  a second time, and the acknowledgement counts it as new.
+
+  **`forwarding_order_is_arrival_order`** (SY-25). The defect it detects is a
+  peer that re-sorts what it forwards by `EventId`. The order looks tidy, and a
+  downstream scalar cursor skips an old event that arrived late, for ever.
+
+- **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
+  after a point-in-time restore** (#262). Restoring a Durable Object to a
+  bookmark rolls back its `StoreId` row and its position counter together, so a
+  restored object re-issues `EventId`s it already gave to other events, and a
+  replication peer drops the new events as duplicates. Call it on every log in
+  the object before the restored object accepts its first append. The crate
+  README's *After a point-in-time restore* section has the procedure. It mirrors
+  `SqliteEventStore::remint_identity`. The platform gives an object no way to
+  detect a restore, so the call is the deployment's to make.
+
+### Changed
+
+- **`happenstance-sync`: `Ack`'s `appended` and `skipped` are `u64`, not
+  `usize`** (#114, ADR-0097). They cross the wire, so their width is
+  fixed. The crate is not published, so no consumer is affected.
+- **`happenstance-sync`: `MemorySyncPeer` dedupes by exact `EventId`** (#246).
+  It used to treat any position at or below the highest it had seen from an
+  origin as already held. So when a delayed page made an origin's lower position
+  arrive after its higher one, it acknowledged the event as skipped, dropped it,
+  and no downstream peer ever saw it. The model family found this in the
+  reference peer. `Ack::confirmed` still reports the high-water mark per origin,
+  which can now claim a position whose predecessor the peer does not hold. No
+  signature changed, and the crate is not published.
+- **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
+  rather than once per handle. Each append issues one more single-row `SELECT`.
+  A handle that was built or cloned before a re-mint now stamps the new identity
+  instead of the retired one. An append through a handle whose `store_meta` row
+  is gone now refuses with `CloudflareEventStoreError::Sql` instead of stamping a
+  cached id. No signature changed.
+- **`happenstance-cloudflare` is now run across a real restart of its Durable
+  Object** (#262). Documentation only; no behaviour or signature changed. The
+  `workerd` CI job runs five rules whose halves sit on either side of an eviction
+  and of a hibernation through `workerd`'s own inactivity timer: acknowledged
+  writes are read back under the `EventId`s they had, `head()` survives, the next
+  append lands above every earlier position with the log intact, and an append
+  condition captured before the restart still binds. Three wrong stores are shown
+  failing them across an eviction: one keeping its log in the object instance,
+  one caching its high-water position there, and one minting its store identity
+  per instance. The README no longer says eviction and hibernation are not
+  exercised. The same job shows an idle object holding the store, with and
+  without a partly read stream, evicted by that timer, beside a control holding
+  a pending timer that is not.
+- **`CloudflareEventStore::remint_identity` is now run across a real bookmark
+  restore** (#298). Test harness only; no behaviour or signature changed. The
+  deployed leg of the `workerd` CI job restores a Durable Object to a bookmark,
+  re-mints, and shows that no `EventId` is reissued for a different event, beside
+  a control that skips the re-mint and does reissue one. It is asserted when the
+  restore runs and recorded when it cannot, and it runs on the deployed object
+  only, because local `workerd` does not implement a restore.
+
+## [0.4.3] — 2026-10-14
+
+### Added
+
 - **`happenstance-cloudflare`: `CloudflareEventStore::remint_identity`, for
   after a point-in-time restore** (#262). Restoring a Durable Object to a
   bookmark rolls back its `StoreId` row and its position counter together, so a
@@ -67,7 +428,6 @@ not the same as what a user needed to be told.
   exercised. The same job shows an idle object holding the store, with and
   without a partly read stream, evicted by that timer, beside a control holding
   a pending timer that is not.
-
 ## [0.4.2] — 2026-10-13
 
 ### Added

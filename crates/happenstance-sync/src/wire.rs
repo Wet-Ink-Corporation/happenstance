@@ -1,19 +1,19 @@
 //! The versioned envelope every replication message travels in.
 //!
-//! # What is here, and what is deliberately not
+//! # What is here
 //!
-//! Exactly four things, per [ADR-0016](../../../../.kb/decisions/0016-the-wire-format.md)
-//! §11: [`FORMAT_VERSION`], [`Envelope`], its hand-written [`Deserialize`] impl,
-//! and [`WireError`].
+//! The envelope, per [ADR-0016](../../../../.kb/decisions/0016-the-wire-format.md)
+//! §11 — [`FORMAT_VERSION`], [`Envelope`], its hand-written [`Deserialize`] impl
+//! and [`WireError`] — and, since #114, the message set at the end of the file.
 //!
-//! [`Envelope`] is generic in `T` and is **not** an enum of message kinds. An
-//! `enum Message { Push(..), Pull(..) }` would put the message set beside the
-//! version check, and the message set is exactly what phase 13 has not designed.
-//! The same reasoning keeps [`PushBatch`](crate::PushBatch),
-//! [`EventGroup`](crate::peer::EventGroup) and
-//! [`ReplicatedEvent`](crate::ReplicatedEvent) free of derives: this module
-//! lands the envelope and nothing else — no message set, no negotiation, and no
-//! extension of [`SyncError`](crate::SyncError).
+//! [`Envelope`] is generic in `T` and is **not** an enum of message kinds, and
+//! the message set did not make it one. Each message is its own type, wrapped as
+//! `Envelope<PushBatch>`, `Envelope<Ack>`, `Envelope<PullRequest>` or
+//! `Envelope<Pulled<ResumeToken>>`: an enum of kinds inside the versioned type
+//! would make adding a kind a shape change, and so a version bump every peer not
+//! yet redeployed refuses. Which message a buffer holds is the transport's to say
+//! — the route, or the request it answers (ADR-0097). [`SyncError`](crate::SyncError)
+//! is still not extended.
 //!
 //! # The obligation, and why it is discharged differently in each format
 //!
@@ -47,12 +47,12 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 ///
 /// # What bumping it means
 ///
-/// It is bumped whenever the **shape** of any wire type changes: a field added,
-/// removed, retyped or moved between types. Shape is the right granularity
-/// because per-type versioning cannot express a change to the *relationship*
-/// between two types — VT-30's move of `after` into `Guard` changed no single
-/// type's shape in isolation — and it costs bytes on every event in the log to
-/// boot.
+/// Carried on every message, never negotiated per connection, and version 2 is
+/// this envelope and the message set below it (ADR-0097). It is bumped whenever
+/// the **shape** of any wire type changes: a field added, removed, retyped or
+/// moved between types — per-type versioning cannot say VT-30's move of `after`
+/// into `Guard`, which changed no single type. The set this version names
+/// includes [`Pulled::waiting`](crate::Pulled::waiting) on the pulled message.
 ///
 /// # What must never bump it
 ///
@@ -63,7 +63,7 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 /// them raises a limit — the raiser bumps the version, and every peer that has
 /// not been redeployed refuses every message from it, including the ones well
 /// inside the old bound.
-pub const FORMAT_VERSION: u16 = 1;
+pub const FORMAT_VERSION: u16 = 2;
 
 /// The field names `Envelope`'s `Deserialize` announces to the format, in
 /// declaration order.
@@ -82,7 +82,7 @@ const FIELDS: &[&str] = &["format_version", "message"];
 /// assert_eq!(envelope.format_version(), FORMAT_VERSION);
 ///
 /// let json = serde_json::to_string(&envelope)?;
-/// assert_eq!(json, r#"{"format_version":1,"message":"hello"}"#);
+/// assert_eq!(json, r#"{"format_version":2,"message":"hello"}"#);
 ///
 /// let decoded: Envelope<String> = serde_json::from_str(&json)?;
 /// assert_eq!(decoded.message(), "hello");
@@ -355,5 +355,124 @@ impl Visitor<'_> for FieldVisitor {
             1 => Field::Message,
             _ => Field::Unknown,
         })
+    }
+}
+
+// ===========================================================================
+// The message set (#114, ADR-0097)
+//
+// Below the envelope rather than beside it at the top of the file, so the
+// lines the specification cites above keep their numbers.
+// ===========================================================================
+
+/// Where the far side should resume a pull from, as the far side minted it.
+///
+/// Opaque: the caller stores it and hands it back, and never reads it (SY-15).
+/// Text rather than bytes, because a token is what an HTTP peer puts in a query
+/// string or a Durable Object in a cursor column, and because bytes would render
+/// in JSON as an array of integers that no operator can read. It is the wire
+/// form of a peer's [`SyncPeer::Resume`](crate::SyncPeer::Resume); turning one
+/// into the other is the peer adapter's, and nothing here assumes how.
+///
+/// # Examples
+///
+/// ```
+/// use happenstance_sync::wire::ResumeToken;
+///
+/// let token = ResumeToken::new("group:42");
+/// assert_eq!(token.as_str(), "group:42");
+/// assert_eq!(serde_json::to_string(&token)?, r#""group:42""#);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct ResumeToken(Box<str>);
+
+impl ResumeToken {
+    /// Wraps the text a peer minted.
+    #[must_use]
+    pub fn new(token: impl Into<Box<str>>) -> Self {
+        Self(token.into())
+    }
+
+    /// The text, to hand back to the peer that minted it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Asks the far side for one round trip's worth of what it holds.
+///
+/// `from` is `None` on a first pull and the last [`Pulled`](crate::Pulled)'s
+/// token after that. Always present on the wire, `None` included (WF-2).
+///
+/// # The whole message set
+///
+/// One type per message, each travelling as `Envelope<T>`; this is the only
+/// one of the four that exists for the wire alone.
+///
+/// | Message | Type | Answers |
+/// |---|---|---|
+/// | push | [`PushBatch`](crate::PushBatch) | — |
+/// | ack | [`Ack`](crate::Ack) | a push |
+/// | pull | [`PullRequest`] | — |
+/// | pulled | [`Pulled<ResumeToken>`](crate::Pulled) | a pull |
+///
+/// Four messages for the two exchanges [`SyncPeer`](crate::SyncPeer) has. A
+/// peer's [`limits`](crate::SyncPeer::limits) is not one of them: how a remote
+/// peer's limits reach the caller is the transport's (#117), and a fifth
+/// message is additive because no enum holds the four.
+///
+/// Pulled carries [`waiting`](crate::Pulled::waiting) after its token, always
+/// present (SY-37, WF-2): what the far side still holds, so a
+/// runner told [`Nothing`](crate::Waiting::Nothing) skips the empty pull.
+///
+/// # A mis-routed buffer
+///
+/// A buffer does not say which message it holds, so a transport that routes one
+/// to the wrong decoder gets whatever that decoder makes of it. In JSON this
+/// type refuses unknown fields, so a push handed to it is an error rather than
+/// `PullRequest { from: None }`, which its one optional field would otherwise
+/// default to. Postcard has no equivalent: it carries no field names, and an
+/// empty push and a first pull are both the version and then `00`
+/// (ADR-0097 §1).
+///
+/// # Examples
+///
+/// A first pull, and the one after it:
+///
+/// ```
+/// use happenstance_sync::wire::{Envelope, PullRequest, ResumeToken};
+///
+/// let first = Envelope::new(PullRequest::from_start());
+/// assert_eq!(
+///     serde_json::to_string(&first)?,
+///     r#"{"format_version":2,"message":{"from":null}}"#
+/// );
+///
+/// let next = PullRequest::after(ResumeToken::new("group:42"));
+/// assert_eq!(next.from.as_ref().map(ResumeToken::as_str), Some("group:42"));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct PullRequest {
+    /// Where to resume from; `None` for the start of the far side's log.
+    pub from: Option<ResumeToken>,
+}
+
+impl PullRequest {
+    /// A pull from the start of the far side's log.
+    #[must_use]
+    pub const fn from_start() -> Self {
+        Self { from: None }
+    }
+
+    /// A pull that resumes where `token` says.
+    #[must_use]
+    pub const fn after(token: ResumeToken) -> Self {
+        Self { from: Some(token) }
     }
 }

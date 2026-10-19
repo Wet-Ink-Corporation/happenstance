@@ -199,4 +199,12 @@ pub enum NeonError<E> {
         /// The position the origin assigned.
         position: u64,
     },
+
+    /// The store's meta table holds no identity row, so there is no identity
+    /// to ingest under. Migration 1 inserts it; its absence is a schema that
+    /// was never migrated. `#[cfg(test)]` with the rest of the ingest port
+    /// (#108), and additive for the reason the variant above gives.
+    #[cfg(test)]
+    #[error("the store's meta table holds no store_id row; was migration 1 applied?")]
+    MissingIdentity,
 }

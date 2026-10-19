@@ -15,6 +15,8 @@ use std::borrow::Cow;
 
 use anyhow::{Context, Result, bail};
 
+use xtask::fence::{self, Opener};
+
 use crate::lint_narrative::TREE;
 use crate::lint_pages::declarations;
 
@@ -48,18 +50,8 @@ const RUSTDOC_ATTRIBUTES: &[&str] = &[
 
 /// A fenced block the scanner is inside, with the marker that closes it.
 struct Open {
-    marker: char,
-    len: usize,
+    opener: Opener,
     rust: bool,
-}
-
-/// A fence marker line: its character, its length and the info string after it.
-fn marker(line: &str) -> Option<(char, usize, &str)> {
-    let trimmed = line.trim_start();
-    let ch = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
-    let after = trimmed.trim_start_matches(ch);
-    let len = trimmed.len() - after.len();
-    (len >= 3).then(|| (ch, len, after.trim()))
 }
 
 /// Whether an opening fence's info string makes it a Rust block to rustdoc.
@@ -82,8 +74,7 @@ enum Line<'a> {
     /// must match; its info string; and whether rustdoc reads it as Rust.
     Opens {
         line: &'a str,
-        marker: char,
-        len: usize,
+        opener: Opener,
         info: &'a str,
         rust: bool,
     },
@@ -98,26 +89,20 @@ fn classify(text: &str) -> Vec<(usize, Line<'_>)> {
     let mut open: Option<Open> = None;
     let mut out = Vec::new();
     for (index, line) in text.lines().enumerate() {
-        let classified = match (&open, marker(line)) {
-            (None, Some((ch, len, info))) => {
-                let rust = is_rust(info);
-                open = Some(Open {
-                    marker: ch,
-                    len,
-                    rust,
-                });
+        let classified = match (&open, fence::delimiter(line)) {
+            (None, Some(found)) => {
+                let rust = is_rust(found.info);
+                let opener = found.opener();
+                open = Some(Open { opener, rust });
                 Line::Opens {
                     line,
-                    marker: ch,
-                    len,
-                    info,
+                    opener,
+                    info: found.info,
                     rust,
                 }
             }
             (None, None) => Line::Prose(line),
-            (Some(fence), Some((ch, len, info)))
-                if ch == fence.marker && len >= fence.len && info.is_empty() =>
-            {
+            (Some(fence), Some(found)) if found.closes(fence.opener) => {
                 open = None;
                 Line::Closes(line)
             }
@@ -207,13 +192,12 @@ pub(crate) fn guide_page(
             Line::Opens {
                 rust: true,
                 line,
-                marker,
-                len,
+                opener,
                 ..
             } => Cow::Owned(format!(
                 "{}{}rust",
                 split_indent(line).0,
-                marker.to_string().repeat(*len)
+                opener.mark.to_string().repeat(opener.run)
             )),
             Line::Inside { rust: true, line } => match strip_hidden(line) {
                 Some(kept) => kept,
@@ -732,6 +716,30 @@ mod tests {
         }
         let prose = body("t.md", &format!("{HEAD}```toml\n# kept\n```\n"))?;
         assert!(prose.contains("```toml\n# kept\n```"), "{prose}");
+        Ok(())
+    }
+
+    /// Four spaces of indentation is an indented code block, which quotes a
+    /// fence rather than opening one. The renderer's own copy of the rule
+    /// used `trim_start` and read it as a Rust fence (#294).
+    #[test]
+    fn a_fence_indented_four_spaces_is_code_and_left_as_written() -> Result<()> {
+        let quoted = "    ```ignore\n    # kept\n    ```\n";
+        let out = body("t.md", &format!("{HEAD}{quoted}"))?;
+        assert!(out.contains(quoted), "{out}");
+        Ok(())
+    }
+
+    /// A prose line that opens with an inline code span opens no fence, so the
+    /// Rust fence after it is still read as Rust (#294).
+    #[test]
+    fn a_prose_line_opening_with_a_code_span_opens_no_fence() -> Result<()> {
+        let out = body(
+            "t.md",
+            &format!("{HEAD}```x``` opens the paragraph.\n\n```ignore\n# hidden\nshown\n```\n"),
+        )?;
+        assert!(!out.contains("# hidden"), "{out}");
+        assert!(out.contains("```rust\nshown\n```"), "{out}");
         Ok(())
     }
 

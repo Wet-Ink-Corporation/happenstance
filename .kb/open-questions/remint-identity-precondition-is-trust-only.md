@@ -102,7 +102,7 @@ the same store.
 `8900697` wrote the failing test first:
 `an_append_through_a_handle_the_file_has_outgrown_is_refused`
 (`crates/happenstance-sqlite/tests/migration.rs:501`). Commit `f719b2a` made it pass. `append_locked`
-(`crates/happenstance-sqlite/src/event_store.rs:681-744`) re-reads the file's persisted identity
+(`crates/happenstance-sqlite/src/event_store.rs:682-745`) re-reads the file's persisted identity
 inside the append's own `BEGIN IMMEDIATE`, before any guard is probed. When the handle's identity
 differs, it refuses with `SqliteEventStoreError::IdentityMoved` and names both incarnations. The
 check is one indexed read on a four-row table, under a lock the writer already holds. Both commits
@@ -126,7 +126,7 @@ nothing: its positions carry on from where they were. What a peer does see is on
 name mid-stream. That is a replication cost and belongs to phase 13; it is not a
 VT-6 violation. The case VT-6 actually fears is the *missing* re-mint after a restore or a copy,
 and no in-process check can see that. VT-6's `Rejects:` paragraph accepts that case explicitly, and
-`references/adapter-shapes.md:395-401` states the operator's procedure.
+`references/adapter-shapes.md:397-403` states the operator's procedure.
 
 **Not answered here:** whether VT-6's documented-procedure branch *obliges* every adapter that
 takes it to carry an equivalent check. That is the clause-level form of this question, which

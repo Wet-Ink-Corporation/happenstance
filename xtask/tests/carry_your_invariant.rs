@@ -40,10 +40,7 @@ fn read(rel: &str) -> String {
         .replace("\r\n", "\n")
 }
 
-mod support {
-    pub(crate) mod fence;
-}
-use support::fence::{closes, doc_fence_delimiter};
+use xtask::fence::{self, Opener};
 
 /// One fenced block: its info string, its 1-based opening and closing lines,
 /// and its body.
@@ -55,16 +52,15 @@ struct Fence {
 }
 
 /// Every fenced block on a page, in source order, read by `CommonMark`'s rule
-/// in `tests/support/fence.rs`: backticks or tildes, indented up to three
+/// in `xtask::fence`: backticks or tildes, indented up to three
 /// spaces. A body line keeps its indentation, so an indented fence's lines
 /// are measured a little wider than they render, never narrower.
 fn fences(text: &str) -> Vec<Fence> {
     let mut out: Vec<Fence> = Vec::new();
-    let mut open: Option<((char, usize), Fence)> = None;
+    let mut open: Option<(Opener, Fence)> = None;
     for (index, line) in text.lines().enumerate() {
-        let delimiter = doc_fence_delimiter(line);
-        open = match (open.take(), delimiter) {
-            (Some((opener, mut fence)), Some(found)) if closes(opener, found) => {
+        open = match (open.take(), fence::delimiter(line)) {
+            (Some((opener, mut fence)), Some(found)) if found.closes(opener) => {
                 fence.end = index + 1;
                 out.push(fence);
                 None
@@ -73,10 +69,10 @@ fn fences(text: &str) -> Vec<Fence> {
                 fence.body.push(line.to_owned());
                 Some((opener, fence))
             }
-            (None, Some((mark, run, info))) => Some((
-                (mark, run),
+            (None, Some(found)) => Some((
+                found.opener(),
                 Fence {
-                    info: info.to_owned(),
+                    info: found.info.to_owned(),
                     line: index + 1,
                     end: index + 1,
                     body: Vec::new(),
@@ -435,6 +431,19 @@ fn only_a_matching_delimiter_closes_a_fence() {
     };
     assert_eq!(fence.body, ["```", "~~~"]);
     assert!(fences("    ```rust\n").is_empty());
+}
+
+/// A prose line that opens with an inline code span is not a fence (#294).
+/// Read as an opener, it would pair with the real fence's opener as its
+/// closer, and the real fence's body would be measured as prose.
+#[test]
+fn a_prose_line_opening_with_a_code_span_opens_no_fence() {
+    let found = fences("```x``` opens the paragraph.\n\n```rust\nlet a = 1;\n```\n");
+    let [fence] = found.as_slice() else {
+        panic!("{} fences seen, not one", found.len());
+    };
+    assert_eq!((fence.info.as_str(), fence.line), ("rust", 3));
+    assert_eq!(fence.body, ["let a = 1;"]);
 }
 
 /// The defect #279 names, whole: a correct page with a trailing tilde fence

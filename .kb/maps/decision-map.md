@@ -876,6 +876,30 @@ It supersedes nothing.
 | — | [`kb-decision-wi-53c544`](../decisions/wi-53c544-adr-0027-106-is-replication-whole-log-or-scoped.md) | Replication is whole-log at 1.0; a confidentiality slice is its own store (SY-27 – SY-29) | accepted | — | — |
 | — | [`kb-decision-wi-0fbcac`](../decisions/wi-0fbcac-adr-0027-106-ratify-sy-7-one-adjudicator-per.md) | SY-7, SY-10, SY-14 and SY-23 ratified with three edits | accepted | — | — |
 
+## 2026-10-14: the sync message set (#114), accepted 2026-10-15
+
+ADR-0097 is written straight here with no intake step. It was proposed on 2026-10-14 and the
+owner accepted it as proposed on 2026-10-15. It names the four messages, each its own type in `Envelope<T>`, keeps the
+format version on every message, and says that version 1 is this set. It answers
+`kb-open-question-sync-message-set-undesigned-001`, which is superseded by it. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0097 | [`kb-decision-0097`](../decisions/0097-the-sync-message-set-and-a-version-on-every-message.md) | The sync message set is four types in the envelope, and the format version stays on every message | accepted | 13 | — |
+
+## 2026-10-15: an unheld own identity stops ingest (#108), accepted 2026-10-17
+
+ADR-0098 is written straight here with no intake step. It was **proposed** on 2026-10-15 and the
+owner accepted it as proposed on 2026-10-17. It decides the policy ADR-0073 left to phase 13, for a replicated event that claims this
+store's own `StoreId` at a position the store does not hold. The whole ingest is refused as
+`IngestError::UnheldOwnIdentity`, class `Stop`, with nothing written, and the remedy is VT-6's
+re-mint. It mints SY-38 `[PROVISIONAL]` as a narrow identity-integrity exception that **amends
+the frozen SY-1 and SY-33**; acceptance added a pointer to SY-38 in each of their texts. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0098 | [`kb-decision-0098`](../decisions/0098-an-unheld-own-identity-stops-ingest.md) | An event claiming this store's own identity that it does not hold stops the ingest, and nothing is written | accepted | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

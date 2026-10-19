@@ -12,6 +12,7 @@
 //! exports the class to JavaScript whatever its Rust visibility.
 
 mod idling;
+mod reminting;
 mod restarts;
 
 use core::cell::{OnceCell, RefCell};
@@ -142,6 +143,14 @@ impl DurableObject for ConformanceObject {
                     slot: &self.idle,
                 };
                 idle.run(route, &req).await
+            }
+            (Some("remint"), Some(route)) => {
+                let remint = reminting::Remint {
+                    state: &self.state,
+                    incarnation: self.incarnation,
+                    witness: self.witness(),
+                };
+                remint.run(route, req).await
             }
             (Some("probe"), None) => {
                 let sql = happenstance_cloudflare::SqlStorage::from_state(&self.state);

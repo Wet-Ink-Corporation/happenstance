@@ -459,10 +459,17 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   reconfirmed. WF-11 itself stays `[PROVISIONAL]`, unmoved. A residual on
   the runtime property this exposed is homed to
   `kb-open-question-workerd-runner-absent-001`.
-- **Open** — [`sync-message-set-and-format-version.md`](../open-questions/sync-message-set-and-format-version.md)
+- **Superseded** — [`sync-message-set-and-format-version.md`](../open-questions/sync-message-set-and-format-version.md)
   (`kb-open-question-sync-message-set-undesigned-001`) — `FORMAT_VERSION = 1`
   is fully tested and names no message set yet; the vocabulary is phase 13's
-  design.
+  design. **Answered 2026-10-14 by ADR-0097** (`kb-decision-0097`), accepted
+  2026-10-15: four message types in `Envelope<T>`, the version on every
+  message.
+- **Open** — [`sy-8-rule-line-versus-multi-peer-rules.md`](../open-questions/sy-8-rule-line-versus-multi-peer-rules.md)
+  (`kb-open-question-sy-8-rule-line-multi-peer-001`) — SY-8's frozen `Rule:`
+  line says every sync testkit rule takes one peer handle; the model family
+  (#246) holds one per node, as SY-24's own rule line already implied. Added
+  2026-10-15; the text was left alone and the crate docs narrowed.
 - **Superseded** — [`ps-32-adr-0007-context-correction-is-owed.md`](../open-questions/ps-32-adr-0007-context-correction-is-owed.md)
   (`kb-open-question-ps-32-adr-0007-correction-owed-001`) — PS-32 is `[FROZEN]`
   and states ADR-0007's Context must be corrected: a callback-driven pump

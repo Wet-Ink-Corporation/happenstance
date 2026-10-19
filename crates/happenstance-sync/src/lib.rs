@@ -75,7 +75,7 @@
 //! this crate depends on `happenstance-core/serde` explicitly: the envelope is
 //! serialised, the payload is passed through.
 //!
-//! **What is serialisable here is the envelope, and only the envelope.**
+//! **Nothing here travels except inside the envelope.**
 //! [`wire::Envelope`] carries a `Serialize` derive and a **hand-written**
 //! `Deserialize` that reads the format version and refuses before the message is
 //! touched — ADR-0016 §11, WF-8. The derive is not an option for the decoding
@@ -83,12 +83,12 @@
 //! the partial decode WF-8's MUST NOT forbids. [`wire`] says so at the impl,
 //! because that is where someone will try to simplify it.
 //!
-//! [`PushBatch`], [`EventGroup`] and [`ReplicatedEvent`] still
-//! carry **no** derives. They did briefly, the derives were withdrawn, and phase
-//! 5 has not restored them: a `#[derive]` on a public message type *is* a wire
-//! format, and **what travels is phase 13's** — the message set, version
-//! negotiation, and how the guard SY-6 describes is carried. This ADR lands
-//! the envelope and nothing else. In particular [`SyncError`] is not extended
+//! [`PushBatch`], [`EventGroup`], [`ReplicatedEvent`], [`Ack`] and [`Pulled`]
+//! carry `serde` derives again, and [`Watermark`] a hand-written pair. Phase 5
+//! withdrew them because a derive on a public message type *is* a wire format,
+//! and **what travels was phase 13's**. #114 decided it: the message set is
+//! [`wire`]'s four messages, each a type *in* an envelope and never a kind in an
+//! enum around one, and ADR-0097 records why. [`SyncError`] is still not extended
 //! (SY-30 is untouched): a version refusal is a decoding failure with its own
 //! error, [`wire::WireError`], and folding it into the runner's enum would take a
 //! phase-13 design decision inside an encoding change.
@@ -111,8 +111,8 @@
 //!   records why they had to.
 //! * **Idempotent ingest.** In the port's contract
 //!   ([`IngestStore::ingest`]), and the write path is the adapter's — see
-//!   [`ingest`]. Not yet checked by a suite, because
-//!   `happenstance-sync-testkit` does not exist.
+//!   [`ingest`]. `happenstance-sync-testkit`'s ingest family checks it against
+//!   `MemoryIngestStore`, this crate's oracle, and against the SQLite spike.
 //! * **Append conditions across a boundary.** Settled by SY-1 – SY-7: ingest
 //!   never refuses, and a conflict is compensated by an ordinary append. The
 //!   origin's condition travels as [`EventGroup::guard`](peer::EventGroup::guard),
@@ -130,8 +130,15 @@
 //!   token rather than a stream. **The type checker did not force that choice**,
 //!   and the transcript showing it did not is the most useful thing this sketch
 //!   produced.
+//!
+//! # Features
+//!
+//! * **`memory`**, off by default: `MemorySyncPeer` and `MemoryIngestStore`, the
+//!   in-memory reference peer and ingest oracle, for doctests and for testing
+//!   sync wiring before a real peer exists. Turns on `happenstance-core/memory`.
 
 #![doc(html_no_source)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 // No `#![allow(clippy::todo)]`: the last `todo!()` in `src/` was the
 // `MemoryEventStore` ingest impl, which phase 17 deleted rather than finished
 // (see [`ingest`]). The two stand-in peers in `tests/` carry their own.
@@ -140,6 +147,8 @@ extern crate alloc;
 
 pub mod identity;
 pub mod ingest;
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub mod memory;
 pub mod peer;
 pub mod wire;
@@ -147,14 +156,30 @@ pub mod wire;
 // `EventId`, `StoreId` and `RecordedAt` are `happenstance_core`'s and are not
 // re-exported: one import path per type, and it is the contract crate's.
 pub use identity::{ReplicatedEvent, Watermark};
-pub use ingest::{IngestGroup, IngestStore, Ingested, SendIngestStore};
+pub use ingest::{IngestError, IngestGroup, IngestStore, Ingested, SendIngestStore};
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory::{MemoryPeerError, MemoryResume, MemorySyncPeer};
 pub use peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, SyncError,
-    SyncPeer,
+    SyncPeer, Waiting,
 };
 
 // `wire`'s items are deliberately left module-qualified. `wire::FORMAT_VERSION`
 // says at the call site *which* version it is, and phase 13 will plausibly add a
 // negotiated protocol version that is not this one; a bare `FORMAT_VERSION` at
 // the crate root would make the two indistinguishable in an import list.
+
+// SY-36's failure class. Declared after the rest rather than in alphabetical
+// order, so the lines above keep the numbers the specification cites.
+pub mod classify;
+pub use classify::{Classify, FailureClass};
+
+// The in-memory ingest oracle (#108). After `classify`, for the reason that one
+// sits after the rest: the lines above keep the numbers the specification cites.
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+pub mod memory_ingest;
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+pub use memory_ingest::MemoryIngestStore;

@@ -10,6 +10,24 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-14 — `0.4.3`, `remint_identity` for Cloudflare
+
+*Committed on `claude/project-thread-xp895l-release-043`, on `ab1066c`.* `[Unreleased]`
+becomes `[0.4.3] — 2026-10-14`, and all seven crates move to `0.4.3`, with the workspace
+requirement on `happenstance-core` and `happenstance` raised to match. It exists so
+Letterpress gets `CloudflareEventStore::remint_identity` (#262 item 3, PR #297), with
+the per-append `StoreId` read that came with it and the `workerd` evidence across a
+real restart and an idle eviction (#262 items 1 and 2, PRs #303 and #304). The status
+table gains the `0.4.3` row; the owner merges the PR and tags its merge commit.
+
+**Verified.** `cargo semver-checks` (0.51.0) against `0.4.2`, with `--release-type
+minor` because 0.51 maps a `0.y.z` bump to its minor level, finds nothing in any of the
+seven crates. `cargo update --workspace` moved only the workspace members in
+`Cargo.lock`. The README rule counts (121, and 96 in the event-store family) still
+match the testkit, which did not change since `0.4.2`.
+
+---
+
 ## 2026-10-14 — ADR-0027, whole-log replication and the merge rule (#106)
 
 *Committed on `claude/project-thread-95afyv-106`.* Phase 13's second ADR, on the owner's

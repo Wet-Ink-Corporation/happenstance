@@ -811,6 +811,49 @@ jobs:
             exit 1
           fi
 
+      # The ingest port's live tests and the ingest family's mount (#108, part
+      # D). They are unit tests in the LIBRARY target, not a `--test` target,
+      # because the impl is `cfg(test)` and a `cfg(test)` impl is invisible to
+      # `tests/`. Every other run in this job filters to a named `--test`
+      # target, and the default gate skips `#[ignore]`, so without this trio
+      # nothing executes them. Its own list/run/assert, STRICT, for the
+      # runtime-seam trio's reasons, and `--test-threads=1` because every rule
+      # reads right after it ingests and the frontier needs a quiet server.
+      - name: Every gated library test is present in the binary
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --lib -- --ignored --list | tee gated-lib.txt
+
+      - name: The live tests in the library target against a live Postgres
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-postgres --all-features \
+            --lib -- --ignored --show-output --test-threads=1 \
+            | tee lib-run.txt
+
+      - name: The library run executed and passed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' lib-run.txt; then
+            echo "::error::no test result line; the library's live tests did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-lib.txt)
+          result=$(grep -E '^test result:' lib-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
       # The suite must be green, and the failure list is empty on purpose.
       #
       # An earlier draft of this step asserted that two rules
@@ -1159,6 +1202,49 @@ jobs:
             fi
           done
 
+      # The ingest port's live tests and the ingest family's mount (#108, part
+      # C). They are unit tests in the LIBRARY target, not a `--test` target,
+      # because the impl is `cfg(test)` and a `cfg(test)` impl is invisible to
+      # `tests/`. Both runs above filter to a named `--test` target, and the
+      # default gate skips `#[ignore]`, so without this trio nothing executes
+      # them. Its own list/run/assert, STRICT, as `live-postgres`'s library trio
+      # is, and `--test-threads=1` for the frontier's reason above: every rule
+      # reads right after it ingests.
+      - name: Every gated library test is present in the binary
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          cargo test -p happenstance-neon --all-features \
+            --lib -- --ignored --list | tee gated-lib.txt
+
+      - name: The live tests in the library target against a live Neon endpoint
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-neon --all-features \
+            --lib -- --ignored --show-output --test-threads=1 \
+            | tee lib-run.txt
+
+      - name: The library run executed and passed every gated test
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          if ! grep -qE '^test result:' lib-run.txt; then
+            echo "::error::no test result line; the library's live tests did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-lib.txt)
+          result=$(grep -E '^test result:' lib-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
       # The suites must be green, and the failure list is empty on purpose.
       #
       # KEPT STRICT, and there is one rule that makes that a real cost.
@@ -1449,6 +1535,29 @@ jobs:
             exit 1
           fi
 
+      # The re-mint leg's local half (#298, harness/workerd/src/remint.rs).
+      # The leg itself restores a SQLite bookmark, and the pinned workerd does
+      # not implement a restore, so it runs on the deployed object below. Here:
+      # the pin that this workerd refuses the restore (it fails on the bump
+      # that lifts it, which is when the leg moves here), and the two refusals
+      # an after-half owes the deployed run, across no restart and across an
+      # eviction that rolled nothing back. Strict.
+      - name: The re-mint refusals, and the restore local workerd lacks
+        if: always()
+        run: |
+          npx vitest run test/remint.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-remint.json
+          test -f vitest-remint.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq -e '.numTotalTests | numbers' vitest-remint.json) || { echo "::error::the report has no test count"; exit 1; }
+          passed=$(jq -e '.numPassedTests | numbers' vitest-remint.json) || { echo "::error::the report has no pass count"; exit 1; }
+          pending=$(jq -e '.numPendingTests + .numTodoTests | numbers' vitest-remint.json) || { echo "::error::the report has no skip count"; exit 1; }
+          echo "re-mint cells: collected $total, passed $passed, not run $pending"
+          # the missing restore, no restart, no restore for each mode, a bad mode.
+          if [ "$total" -lt 5 ] || [ "$pending" -ne 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "::error::the re-mint run did not execute and pass every cell"
+            exit 1
+          fi
+
       - name: The SQLite walls of local workerd
         if: always()
         run: npx vitest run test/limits.test.ts --reporter=verbose
@@ -1571,6 +1680,23 @@ jobs:
         run: |
           node deployed-restart.mjs "${{ steps.deploy.outputs.url }}" \
             "restart-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      # `remint_identity` across a real bookmark restore (#298): on a deployed
+      # object, take a bookmark, write past it, restore it (the object
+      # restarts), then re-mint and write again; the re-mint cell must reissue
+      # no `EventId`, and the control that skips the re-mint must reissue one.
+      # Deployed only, because local workerd does not implement a restore (the
+      # local step above pins that). Asserted when the restore runs, recorded
+      # when it cannot: a cell that observed the restore and failed the judge
+      # (422) fails the step, while a cell that could not run, or whose restore
+      # or restart never landed, only warns, for deployed-restart.mjs's reason
+      # (nothing pinned here documents how a restore lands on Cloudflare).
+      # Covered by the delete step's `if:`.
+      - name: Re-mint across a bookmark restore on a deployed Durable Object
+        if: always() && steps.deploy.outputs.url != ''
+        run: |
+          node deployed-remint.mjs "${{ steps.deploy.outputs.url }}" \
+            "remint-${{ github.run_id }}-${{ github.run_attempt }}"
 
       # Nothing is left listening: the Worker and every object's storage go.
       # Keyed on the deploy having *run* rather than on its URL: with a name per

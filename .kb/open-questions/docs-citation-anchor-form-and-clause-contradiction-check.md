@@ -89,7 +89,7 @@ brief's own repair — while fixing the page — found two more citations gone
 stale from a single unrelated section insertion, in a brief sitting inside
 `.kb/_intake/`, which the citation scan deliberately excludes as transient
 staging that `/redkiln:kb-ingest` clears
-(`CITATION_SCAN_EXCLUDE`, `xtask/src/lints.rs:2488`).
+(`CITATION_SCAN_EXCLUDE`, `xtask/src/lints.rs:2564`).
 
 ### The exclusion's cost has now been paid once
 

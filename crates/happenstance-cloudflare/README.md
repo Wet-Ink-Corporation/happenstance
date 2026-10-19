@@ -19,7 +19,7 @@ one writer, the object's own turn is the transaction, and the consistency
 boundary a DCB query describes fits inside an object rather than across a
 cluster.
 
-> **Status: released since `0.2.0`, in the `0.4.2` release set, and the release
+> **Status: released since `0.2.0`, in the `0.4.3` release set, and the release
 > with the thinnest evidence of the seven.** Every
 > [`EventStore`](https://docs.rs/happenstance-core) body is real — `migrate`,
 > `append`, `head`, `contains_event_id` and `read` all execute SQL against the
@@ -255,8 +255,12 @@ fn after_restore(state: &worker::State) -> Result<(), CloudflareEventStoreError>
 }
 ```
 
-This is tested against a simulated restore in the crate's Node host, not against
-a real bookmark restore.
+This is tested against a simulated restore in the crate's Node host, and run
+against a real bookmark restore on a deployed Durable Object by the `workerd` CI
+job: after the restore and the re-mint, no `EventId` is reissued for a different
+event, while a control that skips the re-mint reissues one. That run is asserted
+when the restore runs and recorded when it cannot, and local `workerd` cannot
+make it, because it does not implement a restore.
 
 ## Where it runs
 

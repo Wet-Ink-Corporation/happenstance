@@ -637,6 +637,23 @@ static PROJECTION_FAMILY: RuleFamily = RuleFamily {
     emitter: "emit_projection_wasm",
 };
 
+/// The replication suite: `happenstance-sync-testkit`'s enumeration, the third
+/// family and the first outside `happenstance-testkit`.
+///
+/// Registered when the suite had two rules, because #111's bar is that the
+/// macro runs under every registry flavour and the `wasm32` one is the only one
+/// a host `cargo test` cannot reach. Before this row the harness was compiled by
+/// the `wasm32 build of the sync crate` step and executed by nothing — the
+/// shape [`WASM_TARGETS`] was built to make impossible, one crate over from
+/// where [`HARNESS_DIRS`] used to look.
+static SYNC_FAMILY: RuleFamily = RuleFamily {
+    enumeration: "for_each_sync_peer_rule!",
+    source: "crates/happenstance-sync-testkit/src/sync_suite.rs",
+    head: "macro_rules! for_each_sync_peer_rule {",
+    suite: "sync_peer_conformance!",
+    emitter: "emit_sync_wasm",
+};
+
 /// The rules a wasm32-only subset would reach for first.
 ///
 /// Transcribed rather than derived, and the two lists in this row do different
@@ -776,6 +793,32 @@ const CLOUDFLARE_WASM_RULES: &[&str] = &[
     "a_live_read_stream_does_not_block_an_append",
 ];
 
+/// The sync rules named for the replication row.
+///
+/// Every sync rule runs on wasm32: [`wasm_run`] holds this row's listing to the
+/// whole `for_each_sync_peer_rule!` enumeration and fails on any test that
+/// fails. What naming a rule here adds is the transcript check that it was not
+/// silently skipped, and the list names a rule for one of two reasons:
+///
+/// * its pass depends on a group surviving the transport whole, since a
+///   single-threaded runtime is where a peer that pages by row is most likely
+///   to be written — SY-1's and SY-2's;
+/// * its clause is about what the `!Send` peer that lives on wasm32 reports —
+///   SY-36's, because that peer states its failure classes through its own
+///   error type, and a class it states only on the host is a class nobody on
+///   the platform can act on.
+///
+/// SY-18's `peer_declares_its_own_limits` and SY-37's
+/// `nothing_waiting_means_the_next_pull_is_empty` meet neither: one checks a
+/// declaration against single events, the other what a pull says about the
+/// rest of the log, and neither pass depends on a group crossing whole or on
+/// how the peer reports a failure.
+const SYNC_WASM_RULES: &[&str] = &[
+    "ingest_never_rejects",
+    "compensation_is_atomic_with_the_losing_event",
+    "every_refusal_states_its_class",
+];
+
 /// Every conformance target the gate executes on `wasm32-unknown-unknown`.
 ///
 /// Three rows, and the shape is the deliverable. `every-rule-under-workerd`
@@ -831,6 +874,17 @@ pub(crate) const WASM_TARGETS: &[WasmTarget] = &[
         source: "crates/happenstance-cloudflare/tests/durable_object_conformance.rs",
         family: &EVENT_STORE_FAMILY,
         rules: CLOUDFLARE_WASM_RULES,
+    },
+    WasmTarget {
+        // The fifth row, and the first of a third family. The replication
+        // suite's `wasm32` harness, out of `happenstance-testkit` as the
+        // Cloudflare row is, and joining the same way: a row, no second step.
+        package: "happenstance-sync-testkit",
+        target: "memory_sync_conformance_wasm",
+        module: "sync_conformance_wasm",
+        source: "crates/happenstance-sync-testkit/tests/memory_sync_conformance_wasm.rs",
+        family: &SYNC_FAMILY,
+        rules: SYNC_WASM_RULES,
     },
 ];
 
@@ -1220,9 +1274,19 @@ fn code_only(source: &str) -> String {
 
 /// Where the `wasm32`-capable conformance harnesses live.
 ///
-/// A directory rather than a list, and that is the point of it. See
-/// [`unregistered_wasm_harnesses`].
-const HARNESS_DIR: &str = "crates/happenstance-testkit/tests";
+/// Directories rather than a list of targets, and that is the point of them.
+/// See [`unregistered_wasm_harnesses`].
+///
+/// One per suite crate. It was one directory, `happenstance-testkit`'s, until
+/// `happenstance-sync-testkit` shipped a `wasm32` harness the scan could not
+/// see, and that harness was compiled and executed by nothing for exactly as
+/// long as this read one entry. A suite crate is where a harness is expected to
+/// appear without anyone thinking of the gate; an adapter's harness is
+/// registered by the change that writes it, as the Cloudflare row was.
+const HARNESS_DIRS: &[&str] = &[
+    "crates/happenstance-testkit/tests",
+    "crates/happenstance-sync-testkit/tests",
+];
 
 /// The last path segment of every `emit = <path>` argument in `code`, when that
 /// segment is spelled like an emitter (`emit_…` or the hidden `__emit_…`).
@@ -1272,17 +1336,36 @@ fn emitter_arguments(code: &str) -> impl Iterator<Item = String> + '_ {
 ///
 /// # Errors
 ///
-/// Returns an error if the directory cannot be read, if a source in it cannot be
-/// read, or if it holds fewer capable harnesses than there are registered rows —
-/// which means this scan is reading somewhere the rows are not.
+/// Returns an error if any of [`HARNESS_DIRS`] fails
+/// [`wasm_capable_harnesses`].
 fn unregistered_wasm_harnesses() -> Result<Vec<String>> {
-    let dir = workspace_root()?.join(HARNESS_DIR);
-    let entries = fs::read_dir(&dir).with_context(|| format!("reading {HARNESS_DIR}"))?;
+    let mut unregistered = Vec::new();
+    for dir in HARNESS_DIRS {
+        unregistered.extend(
+            wasm_capable_harnesses(dir)?
+                .into_iter()
+                .filter(|target| !WASM_TARGETS.iter().any(|wasm| wasm.target == *target))
+                .map(|target| format!("{dir}/{target}.rs")),
+        );
+    }
+    Ok(unregistered)
+}
+
+/// The test targets in `dir` that hand a suite a `wasm32` emitter, by stem.
+///
+/// # Errors
+///
+/// Returns an error if the directory cannot be read, if a source in it cannot be
+/// read, or if it holds fewer capable harnesses than there are rows claiming to
+/// live there — which means this scan is reading somewhere the rows are not.
+fn wasm_capable_harnesses(dir: &str) -> Result<Vec<String>> {
+    let entries =
+        fs::read_dir(workspace_root()?.join(dir)).with_context(|| format!("reading {dir}"))?;
 
     let mut capable = Vec::new();
     for entry in entries {
         let path = entry
-            .with_context(|| format!("reading an entry of {HARNESS_DIR}"))?
+            .with_context(|| format!("reading an entry of {dir}"))?
             .path();
         if path.extension().is_none_or(|ext| ext != "rs") {
             continue;
@@ -1307,30 +1390,27 @@ fn unregistered_wasm_harnesses() -> Result<Vec<String>> {
     // Compared against the rows that live in *this* directory, not against every
     // row in the registry. The distinction did not exist while every row was the
     // testkit's own and it became load-bearing the moment an adapter registered
-    // one: this scan reads a single directory by design (`HARNESS_DIR`), so a
-    // Cloudflare row counted here would make the guard fire on a registry that
-    // is exactly right, with a message accusing the scan of reading nowhere.
+    // one: each scan reads one of `HARNESS_DIRS`, so a Cloudflare row counted
+    // here would make the guard fire on a registry that is exactly right, with a
+    // message accusing the scan of reading nowhere.
     //
     // The property being guarded is unchanged and is still the important one:
     // every harness the scan *can* see must be registered, and the scan must be
     // able to see at least as many as claim to be there.
     let rows_here = WASM_TARGETS
         .iter()
-        .filter(|wasm| wasm.source.starts_with(HARNESS_DIR))
+        .filter(|wasm| wasm.source.starts_with(dir))
         .count();
     if capable.len() < rows_here {
         bail!(
-            "{HARNESS_DIR} holds {} wasm32-capable harness(es) — {capable:?} — and \
+            "{dir} holds {} wasm32-capable harness(es) — {capable:?} — and \
              {rows_here} row(s) claim to live there. This scan is reading somewhere \
              the rows are not, so its silence would mean nothing.",
             capable.len()
         );
     }
 
-    Ok(capable
-        .into_iter()
-        .filter(|target| !WASM_TARGETS.iter().any(|wasm| wasm.target == *target))
-        .collect())
+    Ok(capable)
 }
 
 /// Where a crate says "these tests exist only on `wasm32`".
@@ -2108,7 +2188,7 @@ pub(crate) fn wasm_enumeration() -> Result<()> {
     let unregistered = unregistered_wasm_harnesses()?;
     if !unregistered.is_empty() {
         bail!(
-            "{HARNESS_DIR} holds {} wasm32 conformance harness(es) with no row in \
+            "{} wasm32 conformance harness(es) in {HARNESS_DIRS:?} have no row in \
              WASM_TARGETS: {unregistered:?}\n\n\
              Each drives a suite through a wasm32 emitter, so each compiles for \
              that target — and nothing executes it. The retired `wasm-conformance` \
@@ -3002,8 +3082,8 @@ mod tests {
     /// The same question one directory wider, and the miss the test above could
     /// not see.
     ///
-    /// [`unregistered_wasm_harnesses`] reads exactly one directory —
-    /// `crates/happenstance-testkit/tests` — so a `wasm32`-only test module
+    /// [`unregistered_wasm_harnesses`] reads only the suite crates' `tests`
+    /// directories — [`HARNESS_DIRS`] — so a `wasm32`-only test module
     /// anywhere else in the workspace executed nowhere and no check said so.
     /// That is not hypothetical: it is what happened to
     /// `happenstance-cloudflare`'s adapter tests, which the gate compiled from

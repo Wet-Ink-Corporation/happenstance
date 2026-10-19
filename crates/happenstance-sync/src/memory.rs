@@ -1,14 +1,34 @@
-//! An in-memory [`SyncPeer`](crate::SyncPeer), for tests and for the
-//! conformance suite that does not exist yet.
+//! An in-memory [`SyncPeer`](crate::SyncPeer), behind the `memory` feature.
 //!
 //! It is a *peer*, not a store: it holds whatever was pushed to it and hands it
 //! back on pull. Two of them wired to each other is the smallest thing that
 //! exercises a runner.
 //!
-//! Unlike the two stand-ins in this crate's `tests/`, the bodies here are real.
-//! A fixture whose methods are `todo!()` cannot be the thing a conformance suite
-//! is pointed at, and the suite is the reason this type exists.
+//! # Why it exists: three jobs, one type
+//!
+//! The same three `happenstance-core` gives for `MemoryEventStore`, one port
+//! over, and the same cold start the projection port had without one:
+//!
+//! 1. **The oracle.** `happenstance-sync-testkit`'s suite is pointed at this
+//!    peer first (its `memory_sync_conformance` test): the reference peer every
+//!    conformance rule must pass against before it may fail a real adapter. A
+//!    rule red here is a wrong rule, not a wrong peer. So the bodies are real — a fixture
+//!    whose methods are `todo!()` cannot be the thing a suite is pointed at —
+//!    and that is the difference between this type and the two stand-ins in
+//!    this crate's `tests/`.
+//! 2. **The doctest target.** Every example in this crate that needs a peer
+//!    uses this one, so the examples run rather than merely compile.
+//! 3. **Something to test against.** An application author can write and test
+//!    their sync wiring before a real peer exists, as [`MemorySyncPeer`]'s
+//!    example shows.
+//!
+//! # Behind a feature, and not a default
+//!
+//! A deployment never replicates to a peer that lives in its own memory, so the
+//! type is off unless asked for: `features = ["memory"]`, normally in
+//! `[dev-dependencies]`.
 
+use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
 use std::sync::Mutex;
@@ -16,7 +36,9 @@ use std::sync::Mutex;
 use happenstance_core::{EventId, StoreId};
 
 use crate::identity::{ReplicatedEvent, Watermark};
-use crate::peer::{Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer};
+use crate::peer::{
+    Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, Waiting,
+};
 
 /// Where a [`MemorySyncPeer`] pull left off.
 ///
@@ -85,6 +107,48 @@ pub enum MemoryPeerError {
 /// stated rather than hidden: every method can now fail with
 /// [`MemoryPeerError::Poisoned`], a failure mode a single-threaded peer does not
 /// have.
+///
+/// # Examples
+///
+/// A device pushes what it holds to a hub, and a second device pulls it — the
+/// hub-and-spoke shape, with the hub played by this type:
+///
+/// ```
+/// use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+/// use happenstance_sync::{
+///     EventGroup, MemorySyncPeer, PushBatch, ReplicatedEvent, SyncPeer,
+/// };
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), Box<dyn core::error::Error>> {
+/// let tablet = StoreId::from_bytes([1; 16]);
+/// let hub = MemorySyncPeer::new(StoreId::from_bytes([2; 16]));
+///
+/// // An event the tablet already made durable, carrying the identity it minted.
+/// let recorded = ReplicatedEvent::new(
+///     EventId::new(tablet, SequencePosition::FIRST),
+///     RecordedAt::from_millis(1_700_000_000_000),
+///     Event::new("ReadingTaken", &b"{\"celsius\":4}"[..])?,
+/// );
+/// let batch = PushBatch::new(vec![EventGroup::new(None, vec![recorded])]);
+///
+/// // The hub takes it once; offering it again is a skip, never a second copy.
+/// let first = hub.push(&batch).await?;
+/// assert_eq!((first.appended, first.skipped), (1, 0));
+/// let again = hub.push(&batch).await?;
+/// assert_eq!((again.appended, again.skipped), (0, 1));
+/// assert_eq!(again.confirmed.get(tablet), Some(SequencePosition::FIRST));
+///
+/// // Another device pulls from the start and gets it, with an owned token
+/// // that survives this handle being dropped.
+/// let pulled = hub.pull(None).await?;
+/// assert_eq!(pulled.batch.events().count(), 1);
+/// let caught_up = hub.pull(Some(&pulled.resume)).await?;
+/// assert_eq!(caught_up.batch.events().count(), 0, "empty means caught up");
+/// assert_eq!(caught_up.waiting, happenstance_sync::Waiting::Nothing);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct MemorySyncPeer {
     store: StoreId,
@@ -95,7 +159,17 @@ pub struct MemorySyncPeer {
 #[derive(Debug, Default)]
 struct PeerState {
     groups: Vec<EventGroup>,
+    /// What [`Ack::confirmed`] reports: the highest position held per origin.
+    /// A high-water mark, so it is **not** what dedupe consults — see `held`.
     seen: Watermark,
+    /// Every identity this peer holds, which is what dedupe consults (SY-11).
+    ///
+    /// Exact membership, not the watermark above. A page held in flight can
+    /// land after a later one, so an origin's lower position can arrive after
+    /// its higher one; a peer that dedupes by "at or below the highest position
+    /// seen" calls that event held and drops it, and nothing downstream ever
+    /// sees it. The sync testkit's model family found this in this peer.
+    held: BTreeSet<EventId>,
 }
 
 impl MemorySyncPeer {
@@ -138,6 +212,7 @@ impl MemorySyncPeer {
         let mut state = self.state.lock().map_err(|_| MemoryPeerError::Poisoned)?;
         for event in &group.events {
             state.seen.advance(event.id.store(), event.id.position());
+            state.held.insert(event.id);
         }
         state.groups.push(group);
         Ok(())
@@ -151,13 +226,6 @@ impl MemorySyncPeer {
     pub fn group_count(&self) -> Result<usize, MemoryPeerError> {
         let state = self.state.lock().map_err(|_| MemoryPeerError::Poisoned)?;
         Ok(state.groups.len())
-    }
-
-    fn holds(state: &PeerState, id: EventId) -> bool {
-        state
-            .seen
-            .get(id.store())
-            .is_some_and(|high| high >= id.position())
     }
 }
 
@@ -183,12 +251,37 @@ impl SendSyncPeer for MemorySyncPeer {
             next += 1;
         }
 
-        Ok(Pulled::new(
-            PushBatch::new(groups),
-            MemoryResume { next_group: next },
-        ))
+        // Counted under the guard the fill loop held, so the count describes
+        // exactly what lies past the token returned (SY-37). One event at a
+        // time, as `push` counts, because a `usize` length has no infallible
+        // conversion to `u64`. O(remaining) on every pull: fine for a reference
+        // peer, and not how a real adapter should count.
+        let remaining = state
+            .groups
+            .iter()
+            .skip(next)
+            .flat_map(|group| group.events.iter())
+            .fold(0_u64, |count, _| count.saturating_add(1));
+
+        Ok(
+            Pulled::new(PushBatch::new(groups), MemoryResume { next_group: next })
+                .with_waiting(Waiting::counted(remaining)),
+        )
     }
 
+    /// Appends each event this peer has never held, skips each it has, and
+    /// acknowledges with what it now holds.
+    ///
+    /// [`Ack::confirmed`] is a per-origin **high-water mark**, not a contiguous
+    /// prefix: dedupe is by exact identity, so after a delayed page this peer
+    /// can confirm an origin's position 2 while it still lacks position 1.
+    /// Read it as "the highest position held", never as "everything up to".
+    ///
+    /// # Errors
+    ///
+    /// [`MemoryPeerError::BatchTooLarge`] for a batch over the declared
+    /// `max_batch_bytes`, and [`MemoryPeerError::Poisoned`] if the log lock
+    /// was poisoned.
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
         let offered = batch.payload_len();
         if offered > self.limits.max_batch_bytes {
@@ -202,19 +295,24 @@ impl SendSyncPeer for MemorySyncPeer {
         let mut ack = Ack::default();
 
         for group in &batch.groups {
-            let fresh: Vec<ReplicatedEvent> = group
-                .events
-                .iter()
-                .filter(|event| !Self::holds(&state, event.id))
-                .cloned()
-                .collect();
-
-            ack.skipped += group.events.len() - fresh.len();
+            // Counted one event at a time rather than from `len()`, because the
+            // counts are `u64` on the wire and a `usize` length has no
+            // infallible conversion to it.
+            let mut fresh: Vec<ReplicatedEvent> = Vec::with_capacity(group.events.len());
+            for event in &group.events {
+                // One lookup that both answers and records, so an identity
+                // offered twice inside one batch is appended once.
+                if state.held.insert(event.id) {
+                    ack.appended += 1;
+                    fresh.push(event.clone());
+                } else {
+                    ack.skipped += 1;
+                }
+            }
             if fresh.is_empty() {
                 continue;
             }
 
-            ack.appended += fresh.len();
             for event in &fresh {
                 state.seen.advance(event.id.store(), event.id.position());
             }
@@ -229,5 +327,189 @@ impl SendSyncPeer for MemorySyncPeer {
 
     fn limits(&self) -> PeerLimits {
         self.limits.clone()
+    }
+}
+
+// Declared here, at the end, so the lines above keep the numbers cited
+// elsewhere. Each class follows from the variant alone (SY-36).
+impl crate::Classify for MemoryPeerError {
+    fn class(&self) -> crate::FailureClass {
+        match self {
+            // A torn log does not mend on retry.
+            Self::Poisoned => crate::FailureClass::Stop,
+            Self::BatchTooLarge { .. } => crate::FailureClass::Split,
+        }
+    }
+}
+
+#[cfg(test)]
+mod classify_tests {
+    use super::MemoryPeerError;
+    use crate::{Classify, FailureClass};
+
+    /// `Poisoned` is the one class the conformance fixture cannot provoke, so
+    /// it is pinned here rather than by SY-36's rule.
+    #[test]
+    fn a_poisoned_lock_is_stop() {
+        assert_eq!(MemoryPeerError::Poisoned.class(), FailureClass::Stop);
+    }
+
+    #[test]
+    fn a_batch_too_large_is_split() {
+        let error = MemoryPeerError::BatchTooLarge {
+            actual: 65_537,
+            limit: 65_536,
+        };
+        assert_eq!(error.class(), FailureClass::Split);
+    }
+}
+
+#[cfg(test)]
+mod dedupe_tests {
+    use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+
+    use super::MemorySyncPeer;
+    use crate::{EventGroup, PushBatch, ReplicatedEvent, SyncPeer};
+
+    const ORIGIN: StoreId = StoreId::from_bytes([0x40; 16]);
+
+    fn one(position: SequencePosition) -> PushBatch {
+        let event = Event::new("Written", position.to_string().into_bytes())
+            .expect("a static event type is valid");
+        PushBatch::new(vec![EventGroup::new(
+            None,
+            vec![ReplicatedEvent::new(
+                EventId::new(ORIGIN, position),
+                RecordedAt::from_millis(1_800_000_000_000),
+                event,
+            )],
+        )])
+    }
+
+    /// A page held in flight lands after a later one, so the origin's first
+    /// event arrives after its second. Dedupe is by exact identity (SY-11): a
+    /// peer that dedupes by the highest position seen calls the first event
+    /// held and drops it, and a downstream peer never sees it (SY-1, SY-24).
+    #[tokio::test]
+    async fn a_lower_position_arriving_after_a_higher_one_is_appended() {
+        let first = SequencePosition::FIRST;
+        let second = first.next().expect("the second position exists");
+        let peer = MemorySyncPeer::new(StoreId::from_bytes([0x41; 16]));
+
+        let later = peer.push(&one(second)).await.expect("the push fits");
+        assert_eq!((later.appended, later.skipped), (1, 0));
+        let earlier = peer.push(&one(first)).await.expect("the push fits");
+        assert_eq!(
+            (earlier.appended, earlier.skipped),
+            (1, 0),
+            "the peer has never held the origin's first event, so it must append it"
+        );
+        let again = peer.push(&one(first)).await.expect("the push fits");
+        assert_eq!((again.appended, again.skipped), (0, 1), "and only once");
+        assert_eq!(peer.group_count().expect("the lock is not poisoned"), 2);
+    }
+
+    /// What `push`'s rustdoc says of `Ack::confirmed`: a high-water mark,
+    /// which names position 2 while position 1 is still missing.
+    #[tokio::test]
+    async fn confirmed_is_a_high_water_mark_not_a_prefix() {
+        let second = SequencePosition::FIRST
+            .next()
+            .expect("the second position exists");
+        let peer = MemorySyncPeer::new(StoreId::from_bytes([0x41; 16]));
+
+        let ack = peer.push(&one(second)).await.expect("the push fits");
+        assert_eq!(ack.confirmed.get(ORIGIN), Some(second));
+        assert_eq!(peer.group_count().expect("the lock is not poisoned"), 1);
+    }
+}
+
+#[cfg(test)]
+mod waiting_tests {
+    use alloc::vec;
+    use alloc::vec::Vec;
+
+    use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+
+    use super::MemorySyncPeer;
+    use crate::{EventGroup, PeerLimits, ReplicatedEvent, SendSyncPeer, Waiting};
+
+    const ORIGIN: StoreId = StoreId::from_bytes([0x0C; 16]);
+
+    /// A peer holding `count` single-event groups of `payload` bytes each,
+    /// seeded rather than pushed, so the limits do not cut the seed.
+    fn seeded(limits: PeerLimits, count: usize, payload: usize) -> MemorySyncPeer {
+        let peer = MemorySyncPeer::with_limits(StoreId::from_bytes([0x0D; 16]), limits);
+        let mut position = SequencePosition::FIRST;
+        for _ in 0..count {
+            let event = Event::new("Seeded", vec![0_u8; payload]).expect("a valid event");
+            let replicated = ReplicatedEvent::new(
+                EventId::new(ORIGIN, position),
+                RecordedAt::from_millis(1_800_000_000_000),
+                event,
+            );
+            peer.seed(EventGroup::new(None, vec![replicated]))
+                .expect("an unpoisoned lock");
+            position = position.next().expect("positions left");
+        }
+        peer
+    }
+
+    fn events(count: usize) -> u64 {
+        u64::try_from(count).expect("a test-sized count")
+    }
+
+    #[tokio::test]
+    async fn an_empty_log_answers_nothing() {
+        let peer = seeded(PeerLimits::minimum(), 0, 1);
+
+        let pulled = peer.pull(None).await.expect("a pull");
+
+        assert_eq!(pulled.waiting, Waiting::Nothing);
+    }
+
+    #[tokio::test]
+    async fn a_log_that_fits_one_pull_answers_nothing() {
+        let peer = seeded(PeerLimits::minimum(), 3, 1);
+
+        let pulled = peer.pull(None).await.expect("a pull");
+
+        assert_eq!(pulled.batch.events().count(), 3);
+        assert_eq!(pulled.waiting, Waiting::Nothing);
+    }
+
+    #[tokio::test]
+    async fn a_pull_stopped_at_the_limit_counts_the_events_left() {
+        let limits = PeerLimits::minimum();
+        let seeded_count = limits.max_batch_events + 1;
+        let peer = seeded(limits, seeded_count, 1);
+
+        let first = peer.pull(None).await.expect("a first pull");
+        let left = seeded_count - first.batch.events().count();
+        let second = peer.pull(Some(&first.resume)).await.expect("a second pull");
+
+        assert_eq!(first.waiting, Waiting::counted(events(left)));
+        assert_ne!(
+            first.waiting,
+            Waiting::Nothing,
+            "the first pull stopped short"
+        );
+        assert_eq!(second.batch.events().count(), left);
+        assert_eq!(second.waiting, Waiting::Nothing);
+    }
+
+    /// An empty batch with events still waiting is the truthful answer to a
+    /// pull stalled behind a group the budget can never admit.
+    #[tokio::test]
+    async fn a_stall_behind_an_oversized_group_counts_it() {
+        let limits = PeerLimits::minimum();
+        let oversized = limits.max_event_bytes + 1;
+        let peer = seeded(limits, 1, oversized);
+
+        let pulled = peer.pull(None).await.expect("a pull");
+
+        let stalled: Vec<_> = pulled.batch.events().collect();
+        assert_eq!(stalled, Vec::<&ReplicatedEvent>::new());
+        assert_eq!(pulled.waiting, Waiting::counted(events(1)));
     }
 }

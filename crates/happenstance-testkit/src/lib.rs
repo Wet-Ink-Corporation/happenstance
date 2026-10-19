@@ -244,7 +244,7 @@
 //! conformance = ["happenstance-core/conformance"]
 //!
 //! [dev-dependencies]
-//! happenstance-testkit = "=0.4.2"
+//! happenstance-testkit = "=0.4.3"
 //! tokio = { version = "1", features = ["macros", "rt"] }
 //! ```
 //!

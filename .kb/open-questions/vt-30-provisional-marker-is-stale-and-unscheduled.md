@@ -134,7 +134,7 @@ on the owner's call `wi-378078`, freezes VT-30 and answers the sub-questions.
 3. **The Postgres append path.** It issues one statement per guard, as `happenstance-sqlite`
    does. Limb 1 is answered by `happenstance-neon` instead, which pushes every guard into one
    conditional insert with no self-join per guard
-   (`crates/happenstance-neon/src/event_store.rs:525-544`).
+   (`crates/happenstance-neon/src/event_store.rs:530-549`).
 
 `after_every_guard` and `after_every_guard_opt` have landed, and `after` and `after_opt` carry
 `#[deprecated]` and are kept through 1.x.
