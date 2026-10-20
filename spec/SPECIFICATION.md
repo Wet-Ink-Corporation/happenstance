@@ -197,8 +197,8 @@ the difference is deliberate rather than an inconsistency:
   the *runner*, for a reason of its own — `Projection::apply` is synchronous,
   and ADR-0074 decided at phase 17 that it becomes `async`, which phase 18
   builds — and that is not this port's.
-- `SyncPeer` is not published at all — `happenstance-sync` is `publish = false`
-  and unfinished — so `SY` clauses bind only the design.
+- `happenstance-sync` publishes unfinished (#108 part E) and with no semver
+  exemption, so a `[FROZEN]` `SY` clause is semver-binding as an `ES` one is.
 
 The gate is always a clause, never a convention: PS-2 for `ProjectionStore`, CF-25
 for every port. A port whose gating clause is unsatisfied is not frozen no matter
@@ -1034,8 +1034,8 @@ store adapter cannot implement `IngestStore` without duplicating `append`'s writ
 path, in which case the operation belongs on `EventStore` after all; the SQLite
 adapter is the instrument* — was run on that instrument and did not fire.
 `impl SendIngestStore for SqliteEventStore`
-(`crates/happenstance-sqlite/src/ingest_spike.rs`, `#[cfg(test)]` until
-`happenstance-sync` publishes) goes through the same private `write_batch` that
+(`crates/happenstance-sqlite/src/ingest_spike.rs`, behind `happenstance-sqlite`'s
+`sync` feature since #108 part E) goes through the same private `write_batch` that
 `append` calls — one `INSERT` statement for a local row and a foreign one — and
 what is ingest-only is a transaction frame, a watermark query and the values a
 foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1462`). Neon,

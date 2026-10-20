@@ -57,11 +57,11 @@
 //! enough to list — the deduplicating conflict clause, a per-row origin and
 //! recorded time, and the absence of any condition evaluation (SY-1).
 //!
-//! Four adapters run it. SQLite: one `INSERT`, differing only in values bound.
-//! Postgres sends append's text plus a conflict clause; Neon, its insert builder
-//! with that clause and a statement refusing an unheld claim, in one request.
-//! The Durable Object (`cfg(test)` for now) runs append's `INSERT`, stamps the
-//! origin by an ingest-only `UPDATE OR IGNORE`, in one `transactionSync` a call.
+//! Four adapters run it, each behind its `sync` feature. SQLite: one `INSERT`,
+//! differing only in values bound. Postgres sends append's text plus a conflict
+//! clause; Neon, its insert builder with that clause and a statement refusing an
+//! unheld claim, in one request. The Durable Object runs append's `INSERT`, and
+//! stamps the origin by an `UPDATE OR IGNORE`, in one `transactionSync` a call.
 //! See `crates/happenstance-{postgres,neon,cloudflare}/src/event_store/ingest.rs`.
 //!
 //! The instrument is `crates/happenstance-sqlite/src/ingest_spike.rs`: this
@@ -193,10 +193,10 @@ pub trait IngestStore {
     ///
     /// An [`IngestError`], and nothing in the call was written: a capacity
     /// refusal, an unheld own identity (see [`store_id`](Self::store_id)), a
-    /// busy store, or the adapter's own failure. None is a judgement on the
-    /// events. An event this store already holds is a skip and not an error,
-    /// and disagreeing with an event's content is not an option: it is durable
-    /// elsewhere, and refusing it only guarantees the logs never converge.
+    /// busy store, or the adapter's own failure. Save a `Store` error after the
+    /// commit was sent (its reply lost): the outcome is unknown, and re-delivery
+    /// converges, as a held event is a skip. None judges the events: content is
+    /// durable elsewhere, so refusing it only guarantees the logs never converge.
     async fn ingest(
         &self,
         groups: &[IngestGroup<'_>],
