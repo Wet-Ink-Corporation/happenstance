@@ -47,7 +47,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 45
     steps:
-      - uses: useblacksmith/checkout@v1 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       # `rustup` rather than a second toolchain action, for the reason `ci.yml`
       # gives: that action makes what it installs the default, and xtask itself
