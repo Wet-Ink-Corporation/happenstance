@@ -28,7 +28,7 @@ concurrency:
 jobs:
   publish:
     name: publish to crates.io
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # The environment that the crates.io trusted publishers name. Adding
     # required reviewers to it in the repository settings turns every publish
     # into a manual approval, without editing this file.
@@ -37,7 +37,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@v1 # v4.4.0
         with:
           # Full history, so the step below can prove the tag is on `main`.
           fetch-depth: 0
