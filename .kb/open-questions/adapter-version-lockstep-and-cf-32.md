@@ -155,7 +155,7 @@ The sub-questions:
 driver under ADR-0044 takes a major whenever that driver breaks, whatever the core did.
 `happenstance-core`'s own public dependency `futures-core 0.3` is still `0.x`, and the charter
 carries that as an accepted risk. **Owed and not done here:** ADR-0057 dropped the testkit's version
-key from the root manifest, but `Cargo.toml:62` still carried `version = "0.3.2"` on the testkit's
+key from the root manifest, but `Cargo.toml:69` still carried `version = "0.3.2"` on the testkit's
 workspace dependency. Phase 17 executed it in its first breaking change (2026-09-30): the key is
 gone, and `cargo xtask package-check` refuses a publishable crate whose testkit line has one. Closed by hand in phase 16. No accepted decision was
 edited.

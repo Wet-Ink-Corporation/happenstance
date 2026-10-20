@@ -315,7 +315,7 @@ discriminate again, and restating PS-4's Rust-level limb — which is now
 **Clause dispositions — neither marker is frozen now.** ES-7 is `freeze-by-17` and VT-9
 `freeze-by-13` (`runbook/ledgers.md`, *The 1.0 dispositions*; `kb-decision-0066`). Both were freeze-now candidates, and the 2026-09-29
 adversarial verification refuted both. **ES-7:** the blanket impl it rests on is emitted by
-`trait_variant`, still a caret (`Cargo.toml:151`), and its instrument, `LocalMemoryEventStore`,
+`trait_variant`, still a caret (`Cargo.toml:158`), and its instrument, `LocalMemoryEventStore`,
 compiles only against the workspace's locked expansion — it cannot see a consumer's unlocked
 resolve. **VT-9:** the marker's own instrument never ran; Cloudflare's conformance runs on a
 `node:sqlite` host, not `workerd`, so a Durable Object's frozen clock was never exercised.

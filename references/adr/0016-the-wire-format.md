@@ -1329,7 +1329,7 @@ once the E2E case below is written. §7.6 (`:8629`) moves from *"All 57 cases"* 
   Deserialize<'de> for Envelope<T>` refusing an unknown version before calling
   `T::deserialize`, and its own error enum. **`peer.rs:391-421`'s `SyncError` is not
   touched.** The module doc at `lib.rs:78-86` is rewritten, and the manifest comment at
-  `crates/happenstance-sync/Cargo.toml:15-18` records that phase 5 settled the
+  `crates/happenstance-sync/Cargo.toml:28-31` records that phase 5 settled the
   versionless-format question.
 - **`crates/happenstance-core/tests/wire.rs`** and
   **`crates/happenstance-sync/tests/wire.rs`** — new, `#[cfg(feature = "serde")]`, each with
