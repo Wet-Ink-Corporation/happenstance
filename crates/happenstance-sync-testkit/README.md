@@ -14,12 +14,8 @@ with programs you can run.
 > **Status: published, and unfinished.** Phase 13 adds rules, and a new rule is
 > a minor of this crate's number, which is exactly the bump `cargo update`
 > takes without being asked and the one that can turn a passing adapter red.
-> **Pin it exactly**, as you pin `happenstance-testkit`:
->
-> ```toml
-> [dev-dependencies]
-> happenstance-sync-testkit = "=0.4.3"
-> ```
+> **Pin it exactly**, as you pin `happenstance-testkit`: an `=` requirement on
+> the version you test against, in `[dev-dependencies]`.
 >
 > The version moves in lockstep with the rest of the workspace until 1.0. Each
 > rule names the clause of the

@@ -36,11 +36,12 @@ The nine crates this repository publishes, at their published versions:
 The last two join this list at their first release after `0.4.3`; until then the
 only thing under either name on crates.io is a `0.0.0` placeholder.
 
-The last two joined this list at `0.2.0`. Before that the only thing under either
-name on crates.io was a `0.0.0` placeholder with no functionality and no
-dependencies — it never linked a driver and never put anything in front of a
-consumer. **A report against a `0.0.0` placeholder is a report against nothing**;
-if you are looking at one, you are looking at a version that predates the crate.
+`happenstance-postgres` and `happenstance-neon` joined this list at `0.2.0`.
+Before that the only thing under either name on crates.io was a `0.0.0`
+placeholder with no functionality and no dependencies — it never linked a driver
+and never put anything in front of a consumer. **A report against a `0.0.0`
+placeholder is a report against nothing**; if you are looking at one, you are
+looking at a version that predates the crate.
 
 Two notes on `happenstance-cloudflare`, because it is the member of that list
 whose evidence is thinnest and you should know that before you weigh a finding
