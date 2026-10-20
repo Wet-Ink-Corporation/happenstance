@@ -180,6 +180,26 @@ handle electing one winner, and a live read stream that does not block an append
 The model family is behind the testkit's off-by-default `proptest` feature and is
 absent on this target by construction, so there is nothing here to opt into.
 
+## Replication: the `sync` feature
+
+Turned on with `features = ["sync"]` on the dependency line. `sync` is off by
+default and is the store's half of replication: it adds
+`CloudflareIngestStore`, which implements `happenstance-sync`'s `IngestStore` and
+this crate's `EventStore`, and re-exports the port as
+`happenstance_cloudflare::happenstance_sync`. The bare flavour only, as the event
+store is. Each ingest call runs inside the object's own
+`storage.transactionSync`, which `worker` does not bind, so the ingest store is
+built from the object's raw `DurableObjectState` rather than from `SqlStorage`:
+`CloudflareIngestStore::from_object_state(&raw)`, where `raw` is what
+`State::_inner` hands back (convert it back with `State::from`), or
+`namespaced_from_object_state` for a namespaced log. Migrate the log through
+`CloudflareEventStore` first, as before the first append. The identity an ingest
+checks claims against is read from `store_meta` on every call. It turns on
+`happenstance-core`'s `serde` feature through `happenstance-sync`. The ingest
+family runs on `wasm32` under the gate's Node host, not yet under `workerd`.
+There is no runner (issue #244) and no network peer yet, so this is the port,
+not replication.
+
 ## The limits this store declares
 
 The adapter refuses an oversized batch **before it issues any SQL**, which is what

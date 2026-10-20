@@ -1215,9 +1215,9 @@ pub enum CloudflareEventStoreError {
     /// integer a Workers SQL binding carries exactly (a JS number), so it is
     /// refused before any statement rather than stored as a neighbour.
     ///
-    /// Test-only with the rest of ingest (#108): the variant does not exist in
-    /// a consumer's build.
-    #[cfg(test)]
+    /// Produced only by ingest, behind the `sync` feature (#108).
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
     #[error("origin position {position} is past the largest a Workers SQL binding carries exactly")]
     OriginPositionOutOfRange {
         /// The origin position the peer sent.
@@ -1225,10 +1225,10 @@ pub enum CloudflareEventStoreError {
     },
 
     /// An ingested event's recorded time is outside ±(2^53 − 1) ms, which a
-    /// Workers SQL binding cannot carry exactly. Refused before any statement.
-    ///
-    /// Test-only with the rest of ingest (#108).
-    #[cfg(test)]
+    /// Workers SQL binding cannot carry exactly. Refused before any statement;
+    /// produced only by ingest, behind the `sync` feature (#108).
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
     #[error("recorded time {recorded_at} is outside what a Workers SQL binding carries exactly")]
     RecordedAtOutOfRange {
         /// The recorded time the peer sent.
@@ -2524,8 +2524,10 @@ mod write_path_tests {
                 CloudflareEventStoreError::UnstampedEvent { .. } => "unstamped event",
                 CloudflareEventStoreError::StoredPosition { .. } => "stored position",
                 CloudflareEventStoreError::PartialBatch { .. } => "partial batch",
-                // Ingest's two refusals (#108), test-only like the port.
+                // Ingest's two refusals (#108), behind `sync` like the port.
+                #[cfg(feature = "sync")]
                 CloudflareEventStoreError::OriginPositionOutOfRange { .. } => "origin position",
+                #[cfg(feature = "sync")]
                 CloudflareEventStoreError::RecordedAtOutOfRange { .. } => "recorded at",
             }
         }
@@ -5078,8 +5080,12 @@ mod wrapper_tests {
 
 // `happenstance-sync`'s ingest port over this module's row writer (#108, part
 // F). A child so it reaches the writer, the identity read and the decoders
-// without widening any of them, and `cfg(test)` because the port is a
-// dev-dependency until part E. Declared last, so the lines above keep the
+// without widening any of them, behind the `sync` feature since part E, which
+// published the port. Declared last, so the lines above keep the
 // numbers the specification and the decision records cite.
-#[cfg(test)]
+#[cfg(feature = "sync")]
 mod ingest;
+
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub use ingest::CloudflareIngestStore;

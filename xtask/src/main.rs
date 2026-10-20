@@ -8,14 +8,14 @@
 //! # What the gate proves
 //!
 //! Mandatory, in order: formatting; clippy over every target and feature with
-//! `-D warnings`; the test suite; six `wasm32-unknown-unknown` builds, of which
+//! `-D warnings`; the test suite; eight `wasm32-unknown-unknown` builds, of which
 //! `happenstance-core`'s is what keeps [ADR-0001]'s `!Send` port flavour honest
 //! and the typed layer's is what compiles the crate a Workers application
 //! actually installs — and none of which says anything about *which* flavour the
 //! code bound, because `Send` is available on that target and only a `Send`
 //! store is not (`crates/happenstance/tests/flavours.rs` and
 //! `crates/happenstance-sync/tests/flavours.rs` are that instrument);
-//! two further `wasm32` rows that are a different claim from those six, because
+//! two further `wasm32` rows that are a different claim from those eight, as
 //! they **execute** rather than compile — the conformance targets are held to
 //! their own rule enumerations by a step nothing can skip, and then the rules are
 //! run on the target under `wasm-bindgen-test-runner`, which is where CF-23
@@ -148,6 +148,13 @@ struct Step {
 /// The `wasm32` check of `happenstance-sync`, spelled once: the step table
 /// names it, and [`wasm_steps`] selects it by this name.
 const SYNC_WASM: &str = "wasm32 build of the sync crate";
+
+/// The `wasm32` row for the Cloudflare adapter's `sync` feature (#108 part E),
+/// spelled once for the step table, `wasm_steps` and the tests.
+const CLOUDFLARE_SYNC_WASM: &str = "wasm32 build of the Cloudflare adapter with sync";
+
+/// The `wasm32` row for the Neon adapter's `sync` feature (#108 part E).
+const NEON_SYNC_WASM: &str = "wasm32 build of the Neon adapter with sync";
 
 const REQUIRED: &[Step] = &[
     Step {
@@ -420,6 +427,51 @@ const REQUIRED: &[Step] = &[
             "--target",
             "wasm32-unknown-unknown",
             "--tests",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
+        // The `sync` feature (#108 part E) on the workspace's only `!Send`
+        // store. The plain Cloudflare row above builds the crate without it, as
+        // a consumer gets it by default; this one builds the ingest store, its
+        // public constructors and the ingest tests, the half of the crate that
+        // exists only behind the feature. `--tests` for the reason the plain
+        // row carries it: the `wasm32` tests compile here or nowhere mandatory,
+        // because the run below is probed.
+        name: CLOUDFLARE_SYNC_WASM,
+        program: "cargo",
+        args: &[
+            "check",
+            "--locked",
+            "-p",
+            "happenstance-cloudflare",
+            "--features",
+            "sync",
+            "--tests",
+            "--target",
+            "wasm32-unknown-unknown",
+        ],
+        env: &[],
+        probe: None,
+    },
+    Step {
+        // The `sync` feature (#108 part E) on the adapter that builds for both
+        // targets. Its ingest module was test code on the host until part E, so
+        // nothing had compiled it for `wasm32`; the plain Neon row above builds
+        // the crate without the feature. Lib only, as that row is: Neon's tests
+        // drive a tokio runtime with no `wasm32` story.
+        name: NEON_SYNC_WASM,
+        program: "cargo",
+        args: &[
+            "check",
+            "--locked",
+            "-p",
+            "happenstance-neon",
+            "--features",
+            "sync",
+            "--target",
+            "wasm32-unknown-unknown",
         ],
         env: &[],
         probe: None,
@@ -1002,11 +1054,13 @@ const OPTIONAL: &[Step] = &[
             "check",
             "-p",
             "happenstance-core",
-            // `happenstance-neon` is the only *adapter* with features that must
-            // hold on this target; the Cloudflare crate has none, so the
-            // mandatory plain check above is already its powerset.
+            // The two adapters with features that must hold on this target.
+            // The Cloudflare crate had none until `sync` (#108 part E), when the
+            // mandatory plain check stopped being its powerset.
             "-p",
             "happenstance-neon",
+            "-p",
+            "happenstance-cloudflare",
             // Added with the fixture contract, and it is a real check rather
             // than symmetry: the testkit gained a `proptest` feature, and a
             // **feature is not target-scoped**. `--all-features` therefore sets
@@ -1286,10 +1340,11 @@ Tasks:
          argue that one. Then fmt, clippy and tests for the packages this diff
          could have broken and everything depending on them. Base defaults to
          `main`, and it errs toward more packages — the module docs say why.
-  wasm   The whole wasm32-unknown-unknown family. Six builds — happenstance-core,
+  wasm   The whole wasm32-unknown-unknown family. Eight builds — happenstance-core,
          the conformance harnesses, the two wasm32 adapters (cloudflare, neon),
          the typed layer (happenstance, the crate a Workers application
-         installs) and the sync crate (happenstance-sync) — none of which
+         installs), the sync crate (happenstance-sync), and the two adapters
+         again with their sync feature — none of which
          says which port flavour the code bound, because Send exists on
          that target. Then two rows that are a
          different claim: every wasm32-capable conformance target is held
@@ -1380,6 +1435,8 @@ fn wasm_steps() -> Vec<&'static Step> {
         "wasm32 build of the Neon adapter",
         "wasm32 build of the typed layer",
         SYNC_WASM,
+        CLOUDFLARE_SYNC_WASM,
+        NEON_SYNC_WASM,
         "wasm32 conformance targets are non-vacuous",
         "wasm32 run of the conformance rules",
     ])
@@ -1524,7 +1581,9 @@ mod tests {
     use std::fs;
 
     use crate::spec_trace::workspace_root;
-    use crate::{OPTIONAL, REQUIRED, SYNC_WASM, Step, wasm_steps};
+    use crate::{
+        CLOUDFLARE_SYNC_WASM, NEON_SYNC_WASM, OPTIONAL, REQUIRED, SYNC_WASM, Step, wasm_steps,
+    };
 
     /// The feature that gated the projection module and its re-exports from
     /// phase 6 until ADR-0063 lifted it. The contract crate carried it on,
@@ -1624,6 +1683,8 @@ mod tests {
         "wasm32 build of the Neon adapter",
         TYPED_LAYER_WASM,
         SYNC_WASM,
+        CLOUDFLARE_SYNC_WASM,
+        NEON_SYNC_WASM,
         WASM_CONFORMANCE_SHAPE,
         WASM_CONFORMANCE_RUN,
     ];
@@ -2015,7 +2076,33 @@ mod tests {
         );
         assert_eq!(
             steps[5].name, SYNC_WASM,
-            "the sync crate's check is not the last compile row"
+            "the sync crate's check is not the appended sixth"
+        );
+        // The two adapters' `sync` rows (#108 part E) follow it, and are the
+        // last compile rows: each names its adapter and the feature.
+        for (at, name, package) in [
+            (6, CLOUDFLARE_SYNC_WASM, "happenstance-cloudflare"),
+            (7, NEON_SYNC_WASM, "happenstance-neon"),
+        ] {
+            assert_eq!(steps[at].name, name, "`{name}` is not row {at}");
+            assert!(
+                steps[at]
+                    .args
+                    .windows(2)
+                    .any(|pair| pair == ["-p", package])
+                    && steps[at]
+                        .args
+                        .windows(2)
+                        .any(|pair| pair == ["--features", "sync"]),
+                "`{name}` does not build {package} with sync: {:?}",
+                steps[at].args
+            );
+        }
+        assert!(
+            steps[8..]
+                .iter()
+                .all(|step| step.args.first() != Some(&"check")),
+            "a compile row was appended after the two sync rows"
         );
 
         // And the four originals keep their argument lists byte-for-byte

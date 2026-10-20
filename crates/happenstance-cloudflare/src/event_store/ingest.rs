@@ -52,9 +52,9 @@
 //! object `transactionSync` lives on, which `CloudflareEventStore` is not built
 //! from (it holds only `SqlStorage`). An `Option` field on the published struct
 //! would make "an ingest store that cannot transact" representable; a wrapper
-//! built only by [`CloudflareIngestStore::open`] does not (API-02). How part E
-//! reaches that object in production is not decided here: `worker` binds no
-//! `transactionSync`, and the choice changes a published constructor.
+//! whose only constructors take the object's `DurableObjectState` does not
+//! (API-02). `worker` binds no `transactionSync`, so the constructors read it
+//! off the state's `storage` (the owner's D5 **B**, #108 part E).
 //!
 //! # Cancellation, and `Busy`
 //!
@@ -72,22 +72,22 @@
 //! # What has run where
 //!
 //! On `wasm32-unknown-unknown` under the gate's Node shim, whose
-//! `transactionSync` is this module's `model` over `SAVEPOINT`, **not** under
-//! `workerd`: the harness links the crate's published surface, and a
-//! `cfg(test)` impl does not exist there. The primitive itself is probed under
-//! `workerd` by `harness/workerd`'s `/transaction-probe` routes.
+//! `transactionSync` is this module's `model` over `SAVEPOINT`, **not** yet
+//! under `workerd`: the harness drives the published surface, and running the
+//! ingest family there through the constructors below is part E3's. The
+//! primitive itself is probed under `workerd` by `/transaction-probe` routes.
 //! The 1,024-event ceiling is the declared policy, measured for `append`'s
 //! statement count and not re-measured for ingest's (about two statements and
 //! the tags per foreign row, inside a transaction).
 //!
-//! # Why here, and why `cfg(test)`
+//! # Why here, and why behind `sync`
 //!
 //! **Here**, as a child of `event_store`, because a module's private items are
 //! visible to its descendants: this reaches the writer, the identity read, the
-//! decoders and the ceilings without any of them being widened. **`cfg(test)`**
-//! because `happenstance-sync` is `publish = false`, so it can only be a
-//! path-only dev-dependency, which cargo strips on publish. Part E turns the
-//! gate into a feature.
+//! decoders and the ceilings without any of them being widened. **`sync`**
+//! because the port is an optional dependency: a consumer who never replicates
+//! compiles none of this. It was `cfg(test)` until part E published
+//! `happenstance-sync`.
 
 use core::slice;
 
@@ -105,9 +105,12 @@ use super::{
     CloudflareEventStore, CloudflareEventStoreError, MAX_SAFE_POSITION, decode_position,
     insert_statement, max_position, now, position_as_i64,
 };
-use crate::js::JsHandle;
-use crate::namespace::Tables;
-use crate::sql_storage::{SqlError, SqlValue};
+use worker::wasm_bindgen::JsValue;
+use worker::worker_sys::DurableObjectState;
+
+use crate::js::{JsHandle, JsThrow};
+use crate::namespace::{TableNamespace, Tables};
+use crate::sql_storage::{SqlError, SqlStorage, SqlValue, storage_from_durable_object_state};
 use transaction::{Settled, Transactions};
 
 /// The ingest-only stamp.
@@ -151,9 +154,36 @@ fn watermark_sql(tables: &Tables) -> String {
 /// A Durable Object event store that can also ingest: the store, and the
 /// object's storage, whose `transactionSync` makes one call one transaction.
 ///
+/// It implements [`EventStore`] by delegating to the store it wraps, and
+/// [`IngestStore`], `happenstance-sync`'s port, in the bare flavour only, as the
+/// store does. Built only from the object's [`DurableObjectState`], because
+/// that is where `transactionSync` lives; there is no ingest store that cannot
+/// transact. The schema is the store's: run
+/// [`CloudflareEventStore::migrate`] over the same object before the first
+/// ingest, as before the first append.
+///
 /// `Clone` aliases the same object, as the store's own does.
+///
+/// # Examples
+///
+/// A `#[durable_object]` class receives a [`worker::State`]. `State::_inner`
+/// hands back the raw state, and `State::from` restores it.
+///
+/// ```no_run
+/// use happenstance_cloudflare::worker::State;
+/// use happenstance_cloudflare::{CloudflareEventStore, CloudflareIngestStore, SqlStorage};
+///
+/// # fn build(state: State) -> Result<(State, CloudflareIngestStore), Box<dyn std::error::Error>> {
+/// CloudflareEventStore::new(SqlStorage::from_state(&state)).migrate()?;
+/// let raw = state._inner();
+/// let store = CloudflareIngestStore::from_object_state(&raw)?;
+/// let state = State::from(raw);
+/// # Ok((state, store))
+/// # }
+/// ```
 #[derive(Debug, Clone)]
-struct CloudflareIngestStore {
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub struct CloudflareIngestStore {
     /// The store this ingests into. Owned, because the wrapper keeps it.
     store: CloudflareEventStore,
     /// The object's synchronous transaction.
@@ -161,6 +191,57 @@ struct CloudflareIngestStore {
 }
 
 impl CloudflareIngestStore {
+    /// An ingest store over the object `state` belongs to, keeping its log in
+    /// the unprefixed tables [`CloudflareEventStore::new`] uses.
+    ///
+    /// Borrows `state`: it keeps a handle onto the object's storage, and binds
+    /// its SQL storage as [`SqlStorage::from_state`] does.
+    ///
+    /// # Errors
+    ///
+    /// [`CloudflareEventStoreError::Sql`] if reading `state.storage` or
+    /// `storage.transactionSync` throws, or if `transactionSync` is absent or
+    /// not a function.
+    pub fn from_object_state(
+        state: &DurableObjectState,
+    ) -> Result<Self, CloudflareEventStoreError> {
+        Self::over_object_state(state, CloudflareEventStore::new)
+    }
+
+    /// [`from_object_state`](Self::from_object_state), keeping this log in
+    /// `namespace`'s own tables, as [`CloudflareEventStore::namespaced`] does.
+    ///
+    /// # Errors
+    ///
+    /// [`from_object_state`](Self::from_object_state)'s.
+    pub fn namespaced_from_object_state(
+        state: &DurableObjectState,
+        namespace: &TableNamespace,
+    ) -> Result<Self, CloudflareEventStoreError> {
+        Self::over_object_state(state, |sql| {
+            CloudflareEventStore::namespaced(sql, namespace)
+        })
+    }
+
+    /// The one path both public constructors take: the storage object first,
+    /// read through the throwing getter so a throw is an error, and only then
+    /// the SQL binding over it. That binding reads the same getter again
+    /// through `worker::State::storage`, which unwraps; it is reached only
+    /// after the first read has answered.
+    fn over_object_state(
+        state: &DurableObjectState,
+        store: impl FnOnce(SqlStorage) -> CloudflareEventStore,
+    ) -> Result<Self, CloudflareEventStoreError> {
+        let storage = state
+            .storage()
+            .map_err(|thrown| SqlError::Thrown(JsThrow::new(&JsHandle::new(thrown))))?;
+        // `worker::State::from` consumes, so it gets a clone of the value: a
+        // second reference to the same JavaScript object, not a copy (H-08).
+        // The path `SqlStorage::from_state` takes, so both bind one object.
+        let sql = storage_from_durable_object_state(AsRef::<JsValue>::as_ref(state).clone());
+        Self::open(store(sql), JsHandle::new(storage.into()))
+    }
+
     /// An ingest store over `store`, transacting through `storage`'s
     /// `transactionSync`.
     ///
@@ -511,6 +592,7 @@ impl From<CloudflareEventStoreError> for Refusal {
 /// does not compile until somebody decides its class. `SqlError` is
 /// `#[non_exhaustive]`, but it is this crate's, so an in-crate match needs no
 /// wildcard either. Coherence allows the impl: a foreign trait on a local type.
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl Classify for CloudflareEventStoreError {
     fn class(&self) -> FailureClass {
         match self {
@@ -548,9 +630,6 @@ impl Classify for CloudflareEventStoreError {
 
 mod transaction;
 
-// The whole file is `cfg(test)` already, through its declaration in
-// `event_store.rs`. Said again here so the module reads as test code where it
-// stands.
 #[cfg(test)]
 mod tests;
 
