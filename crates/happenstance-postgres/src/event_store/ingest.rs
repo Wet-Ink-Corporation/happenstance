@@ -58,8 +58,8 @@
 //! # Failure
 //!
 //! One transaction per call, so every arm of [`IngestError`] means nothing in
-//! the call was written, with one exception the port's wording does not yet
-//! allow for: a `COMMIT` whose reply is lost surfaces as a transient driver
+//! the call was written, with the one exception the port names on its
+//! `Store` arm: a `COMMIT` whose reply is lost surfaces as a transient driver
 //! error and may have committed. Re-delivery is a skip, so a runner's retry
 //! converges (SY-11). [`IngestError::Busy`] is never produced: ingest takes no
 //! write lock and has no serialisation retry to exhaust.

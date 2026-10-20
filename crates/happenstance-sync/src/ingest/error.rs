@@ -133,9 +133,9 @@ pub enum IngestError<E> {
 
     /// The adapter failed, and its own [`Classify`] impl states the class.
     ///
-    /// The one arm whose outcome can be unknown: raised after the commit was
-    /// sent and its reply lost, the call either landed whole or not at all, and
-    /// re-delivery converges.
+    /// The one arm whose outcome can be unknown. When it is raised after the
+    /// commit was sent and the reply lost, the call either landed whole or not
+    /// at all, and re-delivery converges.
     #[error(transparent)]
     Store(E),
 }

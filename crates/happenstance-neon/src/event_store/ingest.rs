@@ -32,7 +32,7 @@
 //! the runner owns backoff, and a re-pull sees the row as held.
 //!
 //! So every arm of [`IngestError`] means nothing in the call was written, with
-//! one exception the port's wording does not yet allow for: a round trip that
+//! the one exception the port names on its `Store` arm: a round trip that
 //! got no answer is [`NeonError::Transport`], and may have committed.
 //! Re-delivery is a skip, so a runner's retry converges (SY-11).
 //!
