@@ -115,7 +115,7 @@ not the same as what a user needed to be told.
   ADR-0098; SY-38). `IngestStore::ingest` returns
   `IngestError<Self::Error>`, with four arms: `ExceedsStoreLimit`,
   `UnheldOwnIdentity`, `Busy` and `Store`. Every arm means nothing in the call
-  was written, and `IngestStore::Error` is now bound on `Classify`, so each
+  was written, save a lost commit reply (see *Changed* below), and `IngestStore::Error` is now bound on `Classify`, so each
   failure states its SY-36 class. An event claiming the store's own `StoreId`
   at a position the store does not hold now refuses the whole call as
   `UnheldOwnIdentity`, class `Stop`, including a claim on a position the same
