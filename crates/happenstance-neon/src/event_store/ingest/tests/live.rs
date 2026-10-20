@@ -32,7 +32,6 @@ async fn the_endpoint_honours_repeatable_read_on_a_two_statement_batch() {
     let store = live_store().await;
     let level = || SqlStatement::new("SELECT current_setting('transaction_isolation') AS l");
     let response = store
-        .event_store()
         .transport()
         .round_trip(SqlRequest::batch(
             vec![level(), level()],
@@ -58,7 +57,6 @@ async fn the_endpoint_honours_repeatable_read_on_a_two_statement_batch() {
 async fn the_endpoint_returns_the_refusals_sqlstate_and_detail() {
     let store = live_store().await;
     let response = store
-        .event_store()
         .transport()
         .round_trip(SqlRequest::batch(
             vec![
@@ -79,7 +77,6 @@ async fn the_endpoint_returns_the_refusals_sqlstate_and_detail() {
 
     // And a setting left empty raises nothing.
     let response = store
-        .event_store()
         .transport()
         .round_trip(SqlRequest::batch(
             vec![
@@ -302,7 +299,7 @@ async fn compensation_is_atomic_with_the_losing_event_and_skipped_on_redelivery(
 #[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
 async fn a_compensation_that_fails_in_the_transaction_takes_the_losing_event_with_it() {
     let store = live_store().await;
-    let config = store.event_store().config();
+    let config = store.config();
     let schema = quote_ident(&config.schema);
     let installed = send(
         &store,
@@ -484,8 +481,7 @@ async fn watermark_reads_the_origin_index_without_a_sort() {
         .await
         .expect("two new foreign events land");
 
-    let watermark_sql =
-        WATERMARK_SQL.replace("{event}", &store.event_store().config().qualified_event());
+    let watermark_sql = WATERMARK_SQL.replace("{event}", &store.config().qualified_event());
     let mut statements: Vec<SqlStatement> = [
         "enable_seqscan",
         "enable_bitmapscan",
@@ -529,7 +525,7 @@ async fn an_ingested_row_stores_the_origin_it_was_sent() {
     )
     .await
     .expect("a new foreign event lands");
-    let table = store.event_store().config().qualified_event();
+    let table = store.config().qualified_event();
     let stored = select(
         &store,
         format!(

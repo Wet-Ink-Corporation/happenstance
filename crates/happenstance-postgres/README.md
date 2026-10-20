@@ -51,6 +51,7 @@ with programs you can run.
 ```toml
 happenstance-postgres = "0.4"                              # the event store
 happenstance-postgres = { version = "0.4", features = ["projection-store"] }
+happenstance-postgres = { version = "0.4", features = ["sync"] }   # + the ingest port
 
 sqlx = "0.8"                                               # only for queries of your own
 ```
@@ -67,6 +68,15 @@ transaction as its batch and is the instrument that stood at the far end of
 PS-2's batch-shape axis, which is what let ADR-0063 freeze the port. The flag
 forwarded `happenstance-core`'s `unstable-projection` gate until that decision;
 it forwards nothing now, because the port needs no feature.
+
+`sync` is off by default and is the store's half of replication: it
+implements `happenstance-sync`'s `SendIngestStore` for `PostgresEventStore`,
+so generic code bound on `IngestStore` accepts it, and re-exports the port as
+`happenstance_postgres::happenstance_sync`. The identity an ingest checks
+claims against is the one `append` stamps from, read from `store_meta` on a
+handle's first use. It turns on `event-store`, and `happenstance-core`'s
+`serde` feature through `happenstance-sync`. There is no runner (issue #244)
+and no network peer yet, so this is the port, not replication.
 
 ## The problem this crate is here to solve
 

@@ -236,9 +236,9 @@ fn cloudflare_errors_state_their_class() {
 }
 
 /// The ingest store binds the **bare** ports, the only ones a `!Send` store
-/// has, and is `!Send` itself. Named through its one constructor, which takes
-/// the store and the storage object `transactionSync` lives on and nothing
-/// else.
+/// has, and is `!Send` itself. Named through the private constructor both
+/// public ones end in, which takes the store and the storage object
+/// `transactionSync` lives on and nothing else.
 ///
 /// Rejects a `Send`-bound port or impl, which would not compile here, and a
 /// wrapper that restored `Send` by holding something thread-safe.
@@ -273,6 +273,8 @@ fn ingest_store_satisfies_the_bare_bounds() {
 // The tests that need a JavaScript heap, in their own files.
 #[cfg(target_arch = "wasm32")]
 mod claims;
+#[cfg(target_arch = "wasm32")]
+mod construction;
 #[cfg(target_arch = "wasm32")]
 mod family;
 #[cfg(target_arch = "wasm32")]

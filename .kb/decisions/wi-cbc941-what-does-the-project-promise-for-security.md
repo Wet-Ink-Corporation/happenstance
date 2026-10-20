@@ -35,7 +35,7 @@ What does the project promise for security fixes after 1.0?
 
 It is part of what 1.0 promises, and ADR-0066 records it.
 
-Raised by an agent (manual) as a question and captured by Weigh-In as `wi-cbc941`. Anchor: `SECURITY.md:77`.
+Raised by an agent (manual) as a question and captured by Weigh-In as `wi-cbc941`. Anchor: `SECURITY.md:83`.
 
 ## Considered options
 
@@ -55,7 +55,7 @@ No backports
 
 ## Evidence
 
-- `SECURITY.md:77`: the item this decision settles
+- `SECURITY.md:83`: the item this decision settles
 
 ## Decision outcome
 

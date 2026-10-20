@@ -25,9 +25,9 @@ broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
 > real file on disk, across the event-store, projection, concurrency and model
 > families; a Cloudflare Durable Object on `wasm32`; a live PostgreSQL 17.10,
 > including the concurrency family at 64 contenders; a live Neon endpoint over
-> one-shot HTTP; and, until its adapter was retired at phase 17, LadybugDB for the projection role alone. **Seven crates are
-> in the `0.4.3` release set**, which is the set the manifests and
-> `xtask/src/package.rs`'s `PUBLISHABLE` agree on.
+> one-shot HTTP; and, until its adapter was retired at phase 17, LadybugDB for the projection role alone. **The release set
+> is what the manifests and `xtask/src/package.rs`'s `PUBLISHABLE` agree on**: the
+> `0.4.3` crates, and from the next release `happenstance-sync` and `happenstance-sync-testkit`.
 >
 > What `0.4.x` promises, as `0.3.0` did: every clause marked `[FROZEN]` in
 > [the specification](spec/SPECIFICATION.md) — the `EventStore` ones since
@@ -158,16 +158,19 @@ is retired and outside the workspace, for the reason its row gives.
 | [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.4.3` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
 | [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.4.3` release set; passes its suites against a live endpoint, with one open clause question its README names |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ⛔ **retired** at phase 17 ([ADR-0078](.kb/decisions/0078-happenstance-ladybug-is-retired.md)) and excluded from the workspace, kept as a frozen record. It passed the projection suite against the real driver at phase 11 and was never published — `lbug` does not render on docs.rs |
-| [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, and a runner that fans out across them | 🔲 stub, open questions written down |
+| [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, the ingest port every adapter implements behind its `sync` feature, and the wire messages | 🚧 published from the next release, and unfinished: no runner and no network peer yet |
+| [`happenstance-sync-testkit`](crates/happenstance-sync-testkit) | Conformance suites for sync peers and ingest stores | 🚧 published from the next release, and growing rule by rule — pin it exactly |
 
 Read the ✅ rows narrowly. **"Passes the suite" is the only claim being made** —
 that the adapter has run `happenstance-testkit` and cleared it, which is what
 this project means by an adapter existing at all. It is not a claim of production
 mileage: nothing here has run anywhere but a test.
 
-The one 🔲 row is not a placeholder in the empty sense: it carries the design
-constraints and open decisions for its pass, so the next session starts from the
-real questions rather than rediscovering them.
+The two 🚧 rows are published so that an adapter can implement the ingest port
+behind an optional feature, and so that an adapter outside this repository can
+be measured by the same suite. They are not finished: replication between two
+running stores needs a runner (issue #244) and a network peer, and neither
+exists yet.
 
 **`happenstance-postgres` is the row that changed and the one most easily
 misread.** It is no longer a stub: the event store clears 101 of 101 conformance

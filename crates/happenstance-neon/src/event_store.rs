@@ -636,9 +636,9 @@ impl<T: SqlTransport> NeonEventStore<T> {
     /// suite, where they would bind every adapter to this one's transport; it
     /// says nothing about an adapter checking its own request shape.
     ///
-    /// `#[cfg(test)]` because the trait it serves lives in `happenstance-sync`,
-    /// which this crate can name only as a dev-dependency until that crate is
-    /// published. Part E lifts the gate; the builder is written to survive it.
+    /// Behind the `sync` feature, because the trait it serves lives in
+    /// `happenstance-sync`, which this crate depends on only under it. Until
+    /// #108 part E published that crate, the gate was `cfg(test)`.
     ///
     /// # The shape
     ///
@@ -699,7 +699,7 @@ impl<T: SqlTransport> NeonEventStore<T> {
     ///
     /// [`NeonError::OriginPositionOutOfRange`] if a foreign row's origin position
     /// does not fit the `bigint` column; see [`encode_ingest`].
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     fn ingest_statement<E>(
         &self,
         groups: &[happenstance_sync::IngestGroup<'_>],
@@ -782,7 +782,7 @@ impl<T: SqlTransport> NeonEventStore<T> {
     /// evaluates no condition (SY-1), and a configured `READ COMMITTED` would
     /// reopen the hole. The endpoint honours the level only on two or more
     /// statements, which this is.
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     fn ingest_request<E>(
         &self,
         groups: &[happenstance_sync::IngestGroup<'_>],
@@ -1096,7 +1096,7 @@ fn event_fields(event: &Event) -> serde_json::Map<String, serde_json::Value> {
 /// drop the conflict clause's target exists to rule out. On this path a
 /// position is half an identity, so one the column cannot hold is refused
 /// before anything is sent.
-#[cfg(test)]
+#[cfg(feature = "sync")]
 fn encode_ingest<E>(
     groups: &[happenstance_sync::IngestGroup<'_>],
 ) -> Result<(String, String), NeonError<E>> {
@@ -1643,20 +1643,26 @@ fn decode_probe_response<E>(
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::ingest::refusal_statement;
     use super::{
         AppendOutcome, NeonEventStore, ProbeThenWriteStore, decode_append_response,
         decode_read_response,
     };
     use crate::config::NeonConfig;
     use crate::error::NeonError;
-    use crate::migration::MIGRATION_1;
     use crate::transport::{HttpResponse, NullTransport, SqlTransport};
     use happenstance_core::{
-        AppendCondition, AppendError, Event, EventId, EventStore, Query, QueryItem, ReadOptions,
-        RecordedAt, SequencePosition, SequencedEvent, StoreId, Tags,
+        AppendCondition, AppendError, Event, EventStore, Query, QueryItem, ReadOptions,
+        SequencePosition, SequencedEvent, Tags,
     };
-    use happenstance_sync::{IngestGroup, ReplicatedEvent};
+    // What only the tests of the ingest builder name, below, which are
+    // compiled with the builder: behind `sync`.
+    #[cfg(feature = "sync")]
+    use {
+        super::ingest::refusal_statement,
+        crate::migration::MIGRATION_1,
+        happenstance_core::{EventId, RecordedAt, StoreId},
+        happenstance_sync::{IngestGroup, ReplicatedEvent},
+    };
 
     fn store() -> NeonEventStore<NullTransport> {
         NeonEventStore::new(
@@ -1691,6 +1697,7 @@ mod tests {
     /// setting. The exemption is checked rather than assumed: that statement
     /// must not grow a query against any table.
     #[test]
+    #[cfg(feature = "sync")]
     fn no_statement_leaves_a_name_unqualified() {
         // The refusal's exemption is an allowlist, not a blocklist: outside its
         // quoted literals it may hold these words and nothing else, so no word
@@ -1875,6 +1882,7 @@ mod tests {
     }
 
     /// A peer's store: an identity this store did not mint.
+    #[cfg(feature = "sync")]
     const PEER: StoreId = StoreId::from_bytes([7; 16]);
 
     /// `count` rows from [`PEER`], at the peer's positions `1..=count`.
@@ -1882,6 +1890,7 @@ mod tests {
     /// Those positions are the *peer's*, carried as data. None is a position this
     /// store assigned, so the rule against asserting literal positions does not
     /// reach them: they are compared against what went in, not against a log.
+    #[cfg(feature = "sync")]
     fn foreign_rows(count: usize) -> Vec<ReplicatedEvent> {
         (1..=count)
             .map(|n| {
@@ -1905,6 +1914,7 @@ mod tests {
 
     /// Splits `rows` into groups of 1, 3, 2 and 5 rows in rotation, the last
     /// one short, with `compensation` on every other group.
+    #[cfg(feature = "sync")]
     fn mixed_groups<'a>(
         rows: &'a [ReplicatedEvent],
         compensation: &'a [Event],
@@ -1929,12 +1939,14 @@ mod tests {
 
     /// Whitespace collapsed to single spaces, so SQL laid out for reading and SQL
     /// laid out for `format!` compare as the same text.
+    #[cfg(feature = "sync")]
     fn squeeze(sql: &str) -> String {
         sql.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
     /// The partial unique index's column list and predicate, read out of the
     /// migration file rather than out of the builder, so the two can disagree.
+    #[cfg(feature = "sync")]
     fn origin_index_from_migration() -> (String, String) {
         let start = MIGRATION_1
             .find("CREATE UNIQUE INDEX IF NOT EXISTS @origin_idx@")
@@ -1947,12 +1959,14 @@ mod tests {
     }
 
     /// A `jsonb` parameter, parsed back into its elements.
+    #[cfg(feature = "sync")]
     fn elements(param: &serde_json::Value) -> Vec<serde_json::Value> {
         serde_json::from_str(param.as_str().unwrap()).unwrap()
     }
 
     /// An element's keys, sorted: `serde_json`'s `preserve_order` is a feature
     /// any crate in the build can switch on.
+    #[cfg(feature = "sync")]
     fn keys(element: &serde_json::Value) -> Vec<&str> {
         let mut keys: Vec<&str> = element
             .as_object()
@@ -1978,6 +1992,7 @@ mod tests {
     /// write is still one statement, and everything asserted of it is as it
     /// was.
     #[test]
+    #[cfg(feature = "sync")]
     fn ingest_batch_is_one_statement_regardless_of_size() {
         use base64::Engine as _;
 
@@ -2075,6 +2090,7 @@ mod tests {
     /// Foreign rows keep the origin they arrived with; compensation is stamped
     /// exactly as an append stamps its rows, and only for a group that landed.
     #[test]
+    #[cfg(feature = "sync")]
     fn ingest_carries_foreign_origin_and_stamps_compensation_like_append() {
         let store = store();
         let event = Event::new("T", b"x".to_vec()).unwrap();
@@ -2165,6 +2181,7 @@ mod tests {
     /// `i64::MAX`, the second would meet the first under the unique index, and
     /// the ingest would count it as a re-delivery with no error anywhere.
     #[test]
+    #[cfg(feature = "sync")]
     fn an_origin_position_past_bigint_is_refused_not_saturated() {
         let store = store();
         let rows: Vec<ReplicatedEvent> = [u64::MAX, u64::MAX - 1]
@@ -2386,8 +2403,8 @@ mod tests {
 
 // `happenstance-sync`'s ingest port over this module's insert builder (#108,
 // part C). A child so it reaches the builder, the transport and the decoders
-// without widening any of them, and `cfg(test)` because the port is a
-// dev-dependency until part E. Declared last, so the lines above keep the
-// numbers the specification and the decision records cite.
-#[cfg(test)]
+// without widening any of them, and behind `sync` because that is the only
+// build in which `happenstance-sync` is a dependency. Declared last, so the
+// lines above keep the numbers the specification and the decisions cite.
+#[cfg(feature = "sync")]
 mod ingest;

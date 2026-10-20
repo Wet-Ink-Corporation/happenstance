@@ -100,6 +100,15 @@ thiserror.workspace = true
 # properties were modelling. An instrument that models the runtime cannot be
 # falsified by the runtime.
 worker.workspace = true
+# The ingest port (VT-10): `src/event_store/ingest.rs` implements
+# `happenstance-sync`'s bare `IngestStore` for `CloudflareIngestStore`, over the
+# private row writer `append` uses, behind the `sync` feature below. Optional,
+# so a consumer who never replicates compiles none of it, nor
+# `happenstance-core/serde`, which `happenstance-sync` turns on. It was a
+# path-only dev-dependency until #108 part E published `happenstance-sync`.
+# `happenstance-sync` builds for `wasm32` with its default features off, which
+# is how the workspace entry names it, and the gate checks that build.
+happenstance-sync = { workspace = true, optional = true }
 
 # The conformance suite this adapter is measured by, and it is deliberately
 # **not** target-scoped while `wasm-bindgen-test` below is.
@@ -125,20 +134,16 @@ happenstance-testkit.workspace = true
 # a regular dependency of the library is not in its extern prelude.
 happenstance-core = { workspace = true, features = ["std"] }
 futures-core.workspace = true
-# The ingest port (#108, part F): `src/event_store/ingest.rs` implements
-# `happenstance-sync`'s bare `IngestStore` over the private row writer `append`
-# uses, which only this crate can reach, and mounts the ingest family on it.
-# Path-only, with no version: `happenstance-sync` is `publish = false` and its
-# name is unclaimed, so a version could never resolve, and cargo strips a
-# versionless dev-dependency from the published manifest, so neither line
-# reaches a consumer. The same reasoning, and the same two lines,
-# `happenstance-sqlite`, `happenstance-postgres` and `happenstance-neon` carry.
-# Under `cargo test` they turn on `happenstance-core`'s `serde` and, through the
-# sync testkit, `memory`; nothing in `src/` outside the ingest module names an item of
-# either. Not target-scoped, unlike `wasm-bindgen-test` below: the host build
-# compiles the impl, so clippy lints it, and runs its pure tests, while the
-# store itself is driven only on `wasm32`, the one target with a JS heap.
-happenstance-sync = { path = "../happenstance-sync" }
+# The ingest family (#108), mounted on the store from
+# `src/event_store/ingest/tests/family.rs`. Path-only, with no version, so
+# cargo strips it from the published manifest and this crate's release never
+# waits on that one: the reasoning `happenstance-sqlite`, `happenstance-postgres`
+# and `happenstance-neon` give for the same line. Under `cargo test` it turns on
+# `happenstance-core`'s `memory`. The mount is `cfg(all(test, feature = "sync",
+# target_arch = "wasm32"))`; the gate's `--all-features` builds the host half,
+# and the `wasm32` runner passes `--features sync` to run the rest. Not
+# target-scoped, unlike `wasm-bindgen-test` below: the host build compiles the
+# impl, so clippy lints it, and runs its pure tests.
 happenstance-sync-testkit = { path = "../happenstance-sync-testkit" }
 
 # `wasm-bindgen-test` is target-scoped for the reason
@@ -189,14 +194,30 @@ postcard.workspace = true
 # renders an error where its front page should be, on a version that can be
 # yanked but never removed.
 #
-# `all-features` costs nothing today — this crate has no Cargo features — and is
-# carried anyway so that the first one added is documented rather than silently
-# absent, which is the shape the other three manifests already use.
+# `all-features` was carried before this crate had a feature, so that the first
+# one added would be documented rather than silently absent. The first is
+# `sync` (#108 part E), and its items render with a `doc(cfg)` badge.
 [package.metadata.docs.rs]
 all-features = true
 default-target = "wasm32-unknown-unknown"
 targets = []
 rustdoc-args = ["--cfg", "docsrs"]
 
+# This crate's first Cargo feature.
+[features]
+# The ingest port (VT-10, #108 part E): `CloudflareIngestStore`, built from the
+# object's `DurableObjectState`, with `impl IngestStore` and `impl EventStore`;
+# `impl Classify for CloudflareEventStoreError`; the two variants only ingest
+# produces; and a `happenstance_sync` re-export. The bare flavour only, as the
+# event store is. Off by default, as the other adapters' are.
+sync = ["dep:happenstance-sync"]
+
 [lints]
 workspace = true
+
+# The ingest port from outside the crate, which a `cfg(test)` impl can never
+# satisfy. Named rather than gated inside the file, so that without the
+# feature the target is not built at all.
+[[test]]
+name = "ingest_port"
+required-features = ["sync"]

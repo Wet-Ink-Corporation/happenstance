@@ -30,20 +30,15 @@ pub(super) fn open() -> Opened {
     let sql = host.storage();
     let event_store = CloudflareEventStore::new(sql.clone());
     event_store.migrate().expect("the schema applies");
-    let store = connect(&host, event_store);
+    let store = connect(&host);
     Opened { host, sql, store }
 }
 
-/// An ingest store over `store`, transacting through `host`'s storage.
-pub(super) fn connect(
-    host: &DurableObjectHost,
-    store: CloudflareEventStore,
-) -> CloudflareIngestStore {
-    CloudflareIngestStore::open(
-        store,
-        model::storage(host).expect("the shim's state carries a storage"),
-    )
-    .expect("the model's transactionSync is installed")
+/// A second ingest store onto `host`'s object, built as a consumer builds one:
+/// from the object's state.
+pub(super) fn connect(host: &DurableObjectHost) -> CloudflareIngestStore {
+    CloudflareIngestStore::from_object_state(&host.object_state())
+        .expect("the model's transactionSync is installed")
 }
 
 /// A local event of type `event_type` carrying `data`, and `tags`.

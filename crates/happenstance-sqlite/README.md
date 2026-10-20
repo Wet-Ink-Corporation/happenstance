@@ -37,6 +37,7 @@ with programs you can run.
 ```toml
 happenstance-sqlite = "0.4"                                # the event store
 happenstance-sqlite = { version = "0.4", features = ["projection-store"] }
+happenstance-sqlite = { version = "0.4", features = ["sync"] }   # + the ingest port
 
 rusqlite = "0.40"                                          # only for tables of your own
 ```
@@ -85,6 +86,15 @@ not compile the other role.
 That is worth choosing rather than inheriting. Nothing about the event store
 changes either way, and a projection built on this today is built on a frozen
 port: the next edit it needs will come with a decision record and a major.
+
+**`sync` is off by default, and it is the store's half of replication.** It
+implements `happenstance-sync`'s `SendIngestStore` for `SqliteEventStore`, so
+generic code bound on `IngestStore` accepts it, and re-exports the port as
+`happenstance_sqlite::happenstance_sync`. It turns on `event-store`, and
+`happenstance-core`'s `serde` feature through `happenstance-sync`. What it does
+not give you yet is replication: there is no runner (issue #244) and no network
+peer, and several of the `SY` clauses the port carries are still
+`[PROVISIONAL]`.
 
 ## The shape it represents
 

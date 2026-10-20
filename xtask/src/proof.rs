@@ -955,7 +955,10 @@ pub(crate) const WASM_TARGETS: &[WasmTarget] = &[
 pub(crate) const WASM_UNIT_TARGETS: &[WasmUnitTarget] = &[
     WasmUnitTarget {
         package: "happenstance-cloudflare",
-        selector: &["--lib"],
+        // `--features sync` since #108 part E: the ingest tests and the ingest
+        // family mount are behind it, and `CLOUDFLARE_UNIT_TESTS` names them, so
+        // a selector without it fails on their absence rather than passing.
+        selector: &["--lib", "--features", "sync"],
         source_dir: "crates/happenstance-cloudflare/src",
         gate: WASM32_TEST_GATE,
         host: CLOUDFLARE_HOST,
@@ -1199,12 +1202,13 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 ///   handle. Mint-once is permitted here only because the re-mint exists, so a
 ///   module that stopped compiling would leave that permission resting on
 ///   nothing;
-/// * the ingest store behind `cfg(test)` (#108, part F): the six ingest rules
-///   and the fixture's capability check, mounted in a `--lib` module because
-///   the store is not yet public and so has no `WASM_TARGETS` row to be held
-///   to the enumeration by; and the unit cases the store's atomicity rests on
-///   — the settle table, the throw that takes the counter, one transaction per
-///   call, and the two claims refused before a row is written.
+/// * the ingest store (#108, part F; behind `sync` since part E, which is why
+///   this row's selector passes `--features sync`): the six ingest rules and
+///   the fixture's capability check, mounted in a `--lib` module, so it has no
+///   `WASM_TARGETS` row to be held to the enumeration by; the unit cases the
+///   store's atomicity rests on — the settle table, the throw that takes the
+///   counter, one transaction per call, and the two claims refused before a
+///   row is written; and the public constructors from the object's state.
 ///
 /// # Why the stamp needs four names rather than two
 ///
@@ -1265,6 +1269,9 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::writes::one_call_is_one_transaction_and_issues_no_transaction_control",
     "event_store::ingest::tests::claims::an_unheld_own_identity_stops_the_ingest_and_writes_nothing",
     "event_store::ingest::tests::claims::a_claim_the_calls_own_compensation_would_hide_is_refused",
+    "event_store::ingest::tests::construction::a_store_from_object_state_ingests",
+    "event_store::ingest::tests::construction::a_namespaced_store_from_object_state_ingests_into_its_namespace",
+    "event_store::ingest::tests::construction::from_object_state_refuses_a_storage_without_transaction_sync",
 ];
 
 /// The runner that executes a `wasm-bindgen-test` harness.

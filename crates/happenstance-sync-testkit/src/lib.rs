@@ -3,17 +3,17 @@
 //!
 //! # Status: two peer families and an ingest family, and the shape every later rule plugs into
 //!
-//! `publish = false` because the suite is **unfinished**, not because it is
-//! held back: phase 13 grows it rule by rule, and whether it publishes is
-//! decided with `happenstance-sync`'s own release. Until then it is the bar a
-//! peer adapter in this workspace must clear before it is considered to exist,
-//! exactly as `happenstance-testkit` is for a store.
+//! Published since #108 part E, with `happenstance-sync`, and **unfinished**:
+//! phase 13 grows it rule by rule. It is the bar a peer or ingest adapter must
+//! clear before it is considered to exist, exactly as `happenstance-testkit` is
+//! for a store, and an adapter outside this workspace mounts it the same way.
+//! **Pin it exactly**: a new rule is a minor of this crate's number.
 //!
-//! Two things are decided before it publishes and deliberately not here: its
-//! `version` key — the workspace's today, where CF-32 gives
-//! `happenstance-testkit` its own, and ADR-0066 §4 makes a new rule in this
-//! crate a minor of *its* number — and whether `happenstance-testkit`'s
-//! `RuleOutcome` stays exposed through every rule's signature.
+//! Publishing settled the two questions this paragraph used to defer. Its
+//! `version` is the workspace's, in lockstep until 1.0 — ADR-0066 §4 makes a
+//! new rule a minor of *its* number, and lockstep keeps that true while the
+//! workspace is `0.y`. And `happenstance-testkit`'s `RuleOutcome` is part of
+//! this crate's public API, through every rule's signature.
 //!
 //! # Mounting it
 //!
@@ -153,8 +153,14 @@
 //! `Result<(), Violation>`, so a breach reaches the test runner as an error
 //! naming its clause. [`Violation`] says why this family does not panic as the
 //! other two do.
+//!
+//! # Features
+//!
+//! * **`proptest`**, off by default: the model family above. Absent on wasm32
+//!   whatever the feature says, because `proptest` does not build there.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(doctest, doc = include_str!("../README.md"))]
 
 extern crate alloc;
 

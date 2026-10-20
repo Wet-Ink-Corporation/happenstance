@@ -16,7 +16,6 @@ use happenstance_sync::{
     Classify, FailureClass, IngestError, IngestGroup, Ingested, ReplicatedEvent,
 };
 
-use super::super::NeonIngestStore;
 use super::endpoint::{LiveTransport, live_store};
 use super::{
     append, carrying, event, holds, id, ingest, log, own, peer, rows, send, shipped, watermark,
@@ -50,7 +49,7 @@ struct Claimed {
 }
 
 impl Claimed {
-    async fn on(store: &NeonIngestStore<LiveTransport>, ahead: usize) -> Self {
+    async fn on(store: &NeonEventStore<LiveTransport>, ahead: usize) -> Self {
         let held = append(store, &[event("Local", "a")]).await;
         let claim = EventId::new(own(store).await, past(held, ahead));
         let from = peer(0x4A);
@@ -276,7 +275,7 @@ async fn a_claim_lands_as_foreign_after_a_manual_remint() {
     assert_refused(ingest(&store, &claimed.groups()).await, claimed.claim);
     let old: StoreId = own(&store).await;
 
-    let meta = store.event_store().config().qualified_meta();
+    let meta = store.config().qualified_meta();
     let reminted = send(
         &store,
         vec![SqlStatement::new(format!(
@@ -285,13 +284,11 @@ async fn a_claim_lands_as_foreign_after_a_manual_remint() {
     )
     .await;
     assert!(reminted.is_success(), "the identity row is replaced");
-    let reminted = NeonIngestStore::open(NeonEventStore::new(
+    let reminted = NeonEventStore::new(
         // A cheap handle onto the same client, which the new store keeps.
-        store.event_store().transport().clone(),
-        store.event_store().config().clone(),
-    ))
-    .await
-    .expect("a fresh handle reads the new identity");
+        store.transport().clone(),
+        store.config().clone(),
+    );
     assert_ne!(own(&reminted).await, old);
 
     let landed = ingest(&reminted, &claimed.groups())

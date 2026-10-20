@@ -63,6 +63,13 @@ sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
 # acquire timeout, so a runtime with no timer could never have supplied a
 # connection in the first place.
 tokio = { workspace = true, features = ["rt", "time"] }
+# The ingest port (VT-10): `src/event_store/ingest.rs` implements
+# `happenstance-sync`'s `SendIngestStore` on `PostgresEventStore` over the
+# private row writer `append` uses, behind the `sync` feature below. Optional,
+# so a consumer who never replicates compiles none of it, nor
+# `happenstance-core/serde`, which `happenstance-sync` turns on. It was a
+# path-only dev-dependency until #108 part E published `happenstance-sync`.
+happenstance-sync = { workspace = true, optional = true }
 
 [dev-dependencies]
 # `proptest` is what the model family is behind: `event_store_model_conformance!`
@@ -78,17 +85,13 @@ tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync
 # the workspace table for the pin, the licence verdict and why this is not
 # `testcontainers-modules`.
 testcontainers.workspace = true
-# The ingest port (#108, part D): `src/event_store/ingest.rs` implements
-# `happenstance-sync`'s `SendIngestStore` over the private row writer `append`
-# uses, which only this crate can reach, and mounts the ingest family on it.
-# Path-only, with no version: `happenstance-sync` is `publish = false` and its
-# name is unclaimed, so a version could never resolve, and cargo strips a
-# versionless dev-dependency from the published manifest, so neither line
-# reaches a consumer. The same reasoning, and the same two lines,
-# `happenstance-sqlite` carries. Under `cargo test` they turn on
-# `happenstance-core`'s `serde` and `memory`; nothing in `src/` outside the
-# ingest module names an item of either.
-happenstance-sync = { path = "../happenstance-sync" }
+# The ingest family (#108), mounted on the store from
+# `src/event_store/ingest/tests/family.rs`. Path-only, with no version, so
+# cargo strips it from the published manifest and this crate's release never
+# waits on that one: the testkit's reasoning above. Under `cargo test` it turns
+# on `happenstance-core`'s `memory`. The mount is
+# `cfg(all(test, feature = "sync"))`, which the gate's `--all-features` and the
+# live job's `--all-features --lib` both build.
 happenstance-sync-testkit = { path = "../happenstance-sync-testkit" }
 
 [features]
@@ -123,6 +126,12 @@ projection-store = []
 # one of them. The impl and the probe table are gated on both, so that
 # combination compiles to nothing rather than failing to compile.
 conformance = ["happenstance-core/conformance"]
+# The ingest port (VT-10, #108 part E): `impl SendIngestStore for
+# PostgresEventStore`, its `Classify` impl, the `OriginPositionOutOfRange`
+# variant, and a `happenstance_sync` re-export. The bare `IngestStore` follows
+# from `trait_variant`'s blanket impl. Implies `event-store`, whose writer it
+# shares. Off by default, as `happenstance-sqlite`'s is.
+sync = ["event-store", "dep:happenstance-sync"]
 # There is no `naive-arm` feature any more. The negative control it gated —
 # `PostgresEventStore::new_naive`, the naive `nextval()` store ES-10 names in its
 # `Rejects:` — moved behind a rustc cfg in `0.4.0`, set with
@@ -140,3 +149,10 @@ workspace = true
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+# The ingest port from outside the crate, which a `cfg(test)` impl can never
+# satisfy. Named rather than gated inside the file, so that without the
+# feature the target is not built at all.
+[[test]]
+name = "ingest_port"
+required-features = ["sync"]

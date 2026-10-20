@@ -330,10 +330,11 @@ else, so its examples compile and its citations resolve.
 Keep the reasoning in the commit message. A diff shows what changed; the message
 should say what constraint made that the right change.
 
-Pull requests run `cargo-semver-checks` twice over all seven publishable crates —
+Pull requests run `cargo-semver-checks` twice over all nine publishable crates —
 `happenstance-core`, `happenstance`, `happenstance-testkit`, `happenstance-sqlite`,
-`happenstance-cloudflare`, `happenstance-postgres` and `happenstance-neon`. A
-breaking change is fine; an accidental one is not.
+`happenstance-cloudflare`, `happenstance-postgres`, `happenstance-neon`,
+`happenstance-sync` and `happenstance-sync-testkit`. A breaking change is fine; an
+accidental one is not.
 
 The crates are named rather than counted, because the count has been wrong here
 **twice**. This paragraph said *three* from the release that had three, through

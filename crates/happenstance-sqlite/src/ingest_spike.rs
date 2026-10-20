@@ -32,7 +32,7 @@
 //! states the adapter error's class for each variant (SY-36), so a runner
 //! never infers one.
 //!
-//! # Why here, and why `cfg(test)`
+//! # Why here, and why behind `sync`
 //!
 //! **Here** because the impl has to reach `write_batch`, `check_identity` and
 //! `check_ceilings`, which are private to this crate, and coherence allows it:
@@ -40,13 +40,13 @@
 //! without the writer being made public, which is the core-grows-a-write-path
 //! option VT-10 rejects.
 //!
-//! **`cfg(test)`** because `happenstance-sync` is `publish = false` and its name
-//! is unclaimed, so it can only be a path-only dev-dependency — which cargo
-//! strips on publish — and an optional feature carrying a real dependency on it
-//! would make `cargo publish` of this crate fail. It follows that every test of
-//! the spike is a unit test in this file: a `cfg(test)` impl is invisible to
-//! `tests/`. Phase 13 publishes the port and turns the gate into a feature,
-//! which is additive.
+//! **Behind `sync`**, off by default, so a consumer who never replicates
+//! compiles none of it. It was `cfg(test)` while `happenstance-sync` was
+//! `publish = false`, because an optional feature on an unpublished crate makes
+//! `cargo publish` of this one fail. #108 part E published the port and turned
+//! the gate into this feature, which is additive. The unit tests stay here;
+//! `tests/ingest_port.rs` holds the published impl to the port from outside,
+//! which a `cfg(test)` impl could never satisfy.
 
 use happenstance_core::StoreId;
 use happenstance_sync::{Classify, FailureClass, IngestError, IngestGroup, Ingested, Watermark};
@@ -58,6 +58,7 @@ use crate::event_store::{SqliteEventStore, SqliteEventStoreError};
 // `EventStore` in — a `Mutex<Connection>` makes every future here `Send` — and
 // `trait_variant`'s blanket impl hands generic code bound on `IngestStore` the
 // other one for free, which the tests below rely on.
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl happenstance_sync::SendIngestStore for SqliteEventStore {
     // The bare adapter error. The port's `IngestError` carries the capacity
     // refusal, the busy store and the unheld own identity in arms of its own,
@@ -91,6 +92,7 @@ impl happenstance_sync::SendIngestStore for SqliteEventStore {
 /// failed read or write and an exhausted allocator, which an operator or time
 /// can fix while the batch waits. Every other driver failure is `Stop`: a
 /// constraint, a corrupt file or a misused statement fails the same way again.
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl Classify for SqliteEventStoreError {
     fn class(&self) -> FailureClass {
         match self {
@@ -127,8 +129,9 @@ fn transient_driver_failure(error: &rusqlite::Error) -> bool {
         )
 }
 
-// The whole file is `cfg(test)` already, through its declaration in `lib.rs`.
-// Said again here so the module reads as test code where it stands.
+// The whole file is behind `sync`, through its declaration in `lib.rs`, so
+// these are `cfg(all(test, feature = "sync"))`: the gate's `--all-features`
+// runs them, and a bare `cargo test -p happenstance-sqlite` does not.
 #[cfg(test)]
 mod tests {
     //! Each test names the clause it exercises. None asserts a literal local
@@ -943,10 +946,10 @@ mod tests {
 
     /// `happenstance-sync-testkit`'s ingest family, against this adapter.
     ///
-    /// Mounted here rather than in `tests/` for the reason the module docs
-    /// give: the impl is `cfg(test)`, and a `cfg(test)` impl is invisible to an
-    /// integration test. The unit tests above pin the spike's own behaviour;
-    /// this is the bar every adapter that implements the port clears.
+    /// Mounted here rather than in `tests/`, beside the unit tests whose
+    /// `TempFile` it shares, and where it ran while the impl was `cfg(test)`.
+    /// `tests/ingest_port.rs` is the outside view. The unit tests pin the spike's
+    /// own behaviour; this is the bar every adapter that implements the port clears.
     mod ingest_family {
         use happenstance_sync_testkit::{IngestFixture, Violation};
         use happenstance_testkit::Capability;

@@ -197,8 +197,8 @@ the difference is deliberate rather than an inconsistency:
   the *runner*, for a reason of its own — `Projection::apply` is synchronous,
   and ADR-0074 decided at phase 17 that it becomes `async`, which phase 18
   builds — and that is not this port's.
-- `SyncPeer` is not published at all — `happenstance-sync` is `publish = false`
-  and unfinished — so `SY` clauses bind only the design.
+- `happenstance-sync` publishes unfinished (#108 part E) and with no semver
+  exemption, so a `[FROZEN]` `SY` clause is semver-binding as an `ES` one is.
 
 The gate is always a clause, never a convention: PS-2 for `ProjectionStore`, CF-25
 for every port. A port whose gating clause is unsatisfied is not frozen no matter
@@ -365,7 +365,7 @@ everything else; ADR-0006 gave it the bare name, not the root of the graph.
 One deliberate exception, and it is a port relationship rather than a dependency
 between adapters. `happenstance-sync` is itself a port crate: peer adapters depend
 on it the way store adapters depend on `happenstance-core`
-(`crates/happenstance-sync/Cargo.toml:14-19`), and its conformance suite will live
+(`crates/happenstance-sync/Cargo.toml:27-32`), and its conformance suite will live
 in `happenstance-sync-testkit`. It stays out of the contract crate so that
 publishing `happenstance-core` never waits on replication.
 
@@ -390,7 +390,7 @@ build enable different feature sets of a shared dependency, Cargo unifies them a
 every consumer gets the union. That is why ADR-0003's guarantee — `serde` is never
 in `happenstance-core`'s default features — is only enforceable while nothing in
 the graph turns it on for someone who did not ask. `happenstance-sync` turns it on
-non-optionally and deliberately (`crates/happenstance-sync/Cargo.toml:15-17`:
+non-optionally and deliberately (`crates/happenstance-sync/Cargo.toml:28-30`:
 *"`serde` is non-optional here: replication is the reason `happenstance-core`'s
 serde feature exists"*), which is sound because sync is a leaf that an
 application opts into. An adapter-to-adapter dependency would make that opt-in
@@ -1034,8 +1034,8 @@ store adapter cannot implement `IngestStore` without duplicating `append`'s writ
 path, in which case the operation belongs on `EventStore` after all; the SQLite
 adapter is the instrument* — was run on that instrument and did not fire.
 `impl SendIngestStore for SqliteEventStore`
-(`crates/happenstance-sqlite/src/ingest_spike.rs`, `#[cfg(test)]` until
-`happenstance-sync` publishes) goes through the same private `write_batch` that
+(`crates/happenstance-sqlite/src/ingest_spike.rs`, behind `happenstance-sqlite`'s
+`sync` feature since #108 part E) goes through the same private `write_batch` that
 `append` calls — one `INSERT` statement for a local row and a foreign one — and
 what is ingest-only is a transaction frame, a watermark query and the values a
 foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1462`). Neon,
@@ -1085,7 +1085,7 @@ impossible for an adapter to supply a better one, because coherence forbids the
 overlap.
 
 The feature gate matters for a mundane reason: `happenstance-sync` depends on
-`happenstance-core/serde` non-optionally (`crates/happenstance-sync/Cargo.toml:15-17`),
+`happenstance-core/serde` non-optionally (`crates/happenstance-sync/Cargo.toml:28-30`),
 so an adapter that implements `IngestStore` unconditionally drags `serde` into
 every build of that adapter. `sqlite/sync` and its siblings keep the default
 build free of it.
@@ -9270,7 +9270,7 @@ semantics of a race without ever running one.
 
 **CF-20.** The fixture trait MUST be defined without a `Send` bound and MUST NOT
 be `trait_variant`-derived. `[FROZEN]`
-Rule: the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:183-264`), extended
+Rule: the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:190-271`), extended
 to build the testkit for `wasm32-unknown-unknown`.
 Cases: E2E-52, E2E-30.
 Rejects: a fixture trait carrying `Self: Send`, which would make the suite
@@ -10394,7 +10394,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-17 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-07 |
 | CF-18 | FROZEN | `mutation_coverage::capability_skips_are_reported` — a meta-test in `crates/ha… | E2E-07, E2E-08 |
 | CF-19 | FROZEN | `two_handles_observe_each_others_appends` | E2E-08 |
-| CF-20 | FROZEN | the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:183-264`), extended to… | E2E-52, E2E-30 |
+| CF-20 | FROZEN | the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:190-271`), extended to… | E2E-52, E2E-30 |
 | CF-21 | FROZEN | a doctest in `fixtures` constructing a strategy, which fails to compile if the… | E2E-32 |
 | CF-22 | FROZEN | `registry::no_orphan_rules`, at the foot of `crates/happenstance-testkit/src/r… | E2E-52, E2E-30, E2E-09 |
 | CF-23 | FROZEN | the wasm32 steps of `cargo xtask ci`, which compile a `wasm-bindgen-test` harn… | E2E-52, E2E-30 |

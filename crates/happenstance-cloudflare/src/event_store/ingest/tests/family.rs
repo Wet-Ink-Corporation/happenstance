@@ -56,10 +56,10 @@ impl IngestFixture for CloudflareIngestFixture {
     /// Mirrored from the ceilings the store declares.
     const MAX_METADATA_LEN: Option<usize> = Some(Ceilings::DECLARED.metadata_len);
 
+    /// Through the public constructor, as a consumer builds one.
     fn connect(&self) -> impl Future<Output = Self::Store> {
-        let storage = model::storage(&self.host).expect("the shim's state carries a storage");
         core::future::ready(
-            CloudflareIngestStore::open(CloudflareEventStore::new(self.sql.clone()), storage)
+            CloudflareIngestStore::from_object_state(&self.host.object_state())
                 .expect("a broken test environment: the model's transactionSync is installed"),
         )
     }

@@ -20,10 +20,16 @@ use crate::classify::{Classify, FailureClass};
 
 /// Why an [`ingest`](crate::IngestStore::ingest) did not land.
 ///
-/// Every arm means **nothing in the call was written**: a store refuses before
-/// its transaction opens or rolls the whole call back. A runner therefore
-/// retries, splits, parks or stops on the [`class`](Classify::class) alone, and
-/// never has to ask the store what part of a batch survived.
+/// Every arm, save the one case below, means **nothing in the call was
+/// written**: a store refuses before its transaction opens or rolls the whole
+/// call back. A runner therefore retries, splits, parks or stops on the
+/// [`class`](Classify::class) alone, and never has to ask the store what part
+/// of a batch survived.
+///
+/// One case leaves the outcome unknown instead: a [`Store`](Self::Store) error
+/// raised after the commit was sent and its reply lost. The whole call either
+/// landed or did not, never part of it, and re-delivering it converges, because
+/// an event the store already holds is a skip.
 ///
 /// No arm refuses an event for its content. The event is already durable at
 /// its origin, so refusing it only guarantees the two logs never converge
@@ -126,6 +132,10 @@ pub enum IngestError<E> {
     Busy(#[source] E),
 
     /// The adapter failed, and its own [`Classify`] impl states the class.
+    ///
+    /// The one arm whose outcome can be unknown. When it is raised after the
+    /// commit was sent and the reply lost, the call either landed whole or not
+    /// at all, and re-delivery converges.
     #[error(transparent)]
     Store(E),
 }

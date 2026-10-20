@@ -102,6 +102,10 @@ way breaks nothing published. But `kb-decision-0066`'s nine-crate set puts `happ
 `happenstance-sync-testkit` inside 1.0. The wire format becomes a promise there, and removing a
 per-message field after that is a format break.
 
+Since #108 part E (2026-10-20) the crate is publishable; the `:12` cited above is the manifest
+as phase 16 read it. From the crate's first release after `0.4.3` the wire format is published
+ahead of 1.0, so the "additive today" half of this classification ends with that release.
+
 **Owner now: phase 13**, as this atom already said. The work item that puts the format version
 first on the envelope (`runbook/phases/13-sync.md:108-109`) is where sub-question 2 is answered, and
 it has to be answered before phase 13 first publishes the crate.

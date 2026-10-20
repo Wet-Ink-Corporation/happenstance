@@ -32,7 +32,7 @@
 //! the runner owns backoff, and a re-pull sees the row as held.
 //!
 //! So every arm of [`IngestError`] means nothing in the call was written, with
-//! one exception the port's wording does not yet allow for: a round trip that
+//! the one exception the port names on its `Store` arm: a round trip that
 //! got no answer is [`NeonError::Transport`], and may have committed.
 //! Re-delivery is a skip, so a runner's retry converges (SY-11).
 //!
@@ -40,46 +40,39 @@
 //! `event_store`'s `# Cancellation` gives for `append` (ES-23). Reissuing the
 //! identical batch is safe for the same reason.
 //!
-//! # Why a wrapper rather than an impl on `NeonEventStore`
+//! # The identity
 //!
-//! Because the tests build one without an endpoint and around an identity of
-//! their choosing: `Scripted::store` pairs a scripted transport with a fixed
-//! `StoreId`, so the transport answers only the statements under test.
+//! The port is implemented on `NeonEventStore` itself, with no wrapper.
 //! `NeonEventStore` holds no identity in Rust at all: every `INSERT` reads it
-//! from the meta row (ADR-0086), so an impl on it would spend a round trip on
-//! the meta row first. Everywhere else [`NeonIngestStore`] is built by an
-//! `async` constructor that reads the identity once, and the port's
-//! [`store_id`](IngestStore::store_id) answers `Ok` of that copy. The copy can
-//! go stale only through a manual `UPDATE` of the meta row, and the refusal
-//! does not depend on it: the statement judges a claim against the meta row
-//! it reads.
+//! from the meta row (ADR-0086), and so does the port's
+//! [`store_id`](IngestStore::store_id), in one read-only round trip on every
+//! call, so it can never answer a copy a re-mint has made stale. `ingest`
+//! never asks for it: the statement judges a claim against the meta row it
+//! reads, so an ingest is still one round trip, and the scripted tests answer
+//! only the statements under test.
 //!
 //! # The bare flavour
 //!
 //! `NeonEventStore` implements the bare `EventStore` and cannot satisfy
 //! `SendEventStore` (`event_store`'s `# Why the bare flavour`), so this
-//! implements the bare `EventStore` and `IngestStore`, and only those names
-//! are in scope (constraint 4). The one place Neon departs from the other two
-//! ingest runs, which implement the `Send` flavours.
+//! implements the bare `IngestStore`, and only that name is in scope
+//! (constraint 4). The one place Neon departs from the other two ingest runs,
+//! which implement the `Send` flavours.
 //!
-//! # Why here, and why `cfg(test)`
+//! # Why here, and why behind `sync`
 //!
 //! **Here**, as a child of `event_store`, because a module's private items are
 //! visible to its descendants: this reaches the builder, the decoders and the
 //! ceilings without any of them being widened. Coherence allows the impls: a
 //! foreign trait on a local type.
 //!
-//! **`cfg(test)`** because `happenstance-sync` is `publish = false` and its name
-//! is unclaimed, so it can only be a path-only dev-dependency, which cargo
-//! strips on publish. Every test is therefore a unit test under this module,
-//! and nothing here compiles for `wasm32`, where the gate builds the library
-//! alone. Part E turns the gate into a feature.
+//! **Behind `sync`** because `happenstance-sync` is an optional dependency, so
+//! a consumer who never replicates compiles none of this. It was `cfg(test)`
+//! until #108 part E published that crate. The tests stay unit tests under
+//! this module, where they reach the builder; the gate checks the feature's
+//! `wasm32` build, so the impl is held to the target this crate claims.
 
-use futures_core::Stream;
-use happenstance_core::{
-    AppendCondition, AppendError, Event, EventId, EventStore, Query, ReadOptions, SequencePosition,
-    SequencedEvent, StoreId,
-};
+use happenstance_core::{EventId, StoreId};
 use happenstance_sync::{
     Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested, Watermark,
 };
@@ -131,44 +124,7 @@ pub(super) fn refusal_statement() -> SqlStatement {
     ))
 }
 
-/// A [`NeonEventStore`] whose identity has been read, which is what the
-/// ingest port's [`store_id`](IngestStore::store_id) answers from.
-#[derive(Debug, Clone)]
-struct NeonIngestStore<T> {
-    /// The store this ingests into. Owned, because the wrapper keeps it.
-    store: NeonEventStore<T>,
-    /// `store`'s identity, read once by [`open`](Self::open).
-    store_id: StoreId,
-}
-
-impl<T: SqlTransport> NeonIngestStore<T> {
-    /// Reads `store`'s identity once, in one read-only round trip, so every
-    /// ingest and `store_id` answer from it.
-    ///
-    /// # Errors
-    ///
-    /// `Transport`, `Http` or `Sql` as any read reports them;
-    /// `MissingIdentity` when the meta row is absent; `MalformedIdentity` when
-    /// it is not sixteen bytes; `MalformedPayload` when it is not base64.
-    async fn open(store: NeonEventStore<T>) -> Result<Self, NeonError<T::Error>> {
-        let sql = format!(
-            "SELECT encode(v, 'base64') AS v FROM {} WHERE k = 'store_id'",
-            store.config().qualified_meta()
-        );
-        let response = store
-            .transport()
-            .round_trip(SqlRequest::single(SqlStatement::new(sql)).read_only())
-            .await
-            .map_err(NeonError::Transport)?;
-        let store_id = decode_identity(&response, store.config().max_response_bytes)?;
-        Ok(Self { store, store_id })
-    }
-
-    /// The store this wraps, for tests that send raw SQL beside an ingest.
-    const fn event_store(&self) -> &NeonEventStore<T> {
-        &self.store
-    }
-
+impl<T: SqlTransport> NeonEventStore<T> {
     /// Every refusal before the wire, then one round trip.
     async fn ingest_groups(
         &self,
@@ -195,77 +151,64 @@ impl<T: SqlTransport> NeonIngestStore<T> {
                 .map(|replicated| &replicated.event)
                 .chain(group.compensation)
         });
-        if let Some((limit, len)) = NeonEventStore::<T>::exceeded(len, events) {
+        if let Some((limit, len)) = Self::exceeded(len, events) {
             return Err(IngestError::exceeds_store_limit(limit, len));
         }
 
         let request = self
-            .store
             .ingest_request::<T::Error>(groups)
             .map_err(IngestError::Store)?;
         // ES-11, as `append` waits: an ingest is a write.
-        self.store.transport().reads_settled().await;
+        self.transport().reads_settled().await;
         let response = self
-            .store
             .transport()
             .round_trip(request)
             .await
             .map_err(|error| IngestError::Store(NeonError::Transport(error)))?;
-        decode_ingest_answer(&response, self.store.config().max_response_bytes, groups)
+        decode_ingest_answer(&response, self.config().max_response_bytes, groups)
     }
 
     /// The highest origin position held from each origin store, this store's
     /// own included. One `GROUP BY` over the origin index, nothing cached.
     async fn origin_watermark(&self) -> Result<Watermark, NeonError<T::Error>> {
-        let sql = WATERMARK_SQL.replace("{event}", &self.store.config().qualified_event());
+        let sql = WATERMARK_SQL.replace("{event}", &self.config().qualified_event());
         let response = self
-            .store
             .transport()
             .round_trip(SqlRequest::single(SqlStatement::new(sql)).read_only())
             .await
             .map_err(NeonError::Transport)?;
-        decode_watermark(&response, self.store.config().max_response_bytes)
+        decode_watermark(&response, self.config().max_response_bytes)
     }
 }
 
-// The bare flavours, the only ones `NeonEventStore` has, and only those names
-// in scope here (constraint 4).
-impl<T: SqlTransport> EventStore for NeonIngestStore<T> {
-    type Error = NeonError<T::Error>;
-
-    fn read(
-        &self,
-        query: &Query,
-        options: ReadOptions,
-    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
-        self.store.read(query, options)
-    }
-
-    async fn append(
-        &self,
-        events: &[Event],
-        condition: Option<&AppendCondition>,
-    ) -> Result<SequencePosition, AppendError<Self::Error>> {
-        self.store.append(events, condition).await
-    }
-
-    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
-        self.store.head().await
-    }
-
-    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
-        self.store.contains_event_id(id).await
-    }
-}
-
-impl<T: SqlTransport> IngestStore for NeonIngestStore<T> {
+// The bare flavour, the only one `NeonEventStore` has, and only that name in
+// scope here (constraint 4).
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+impl<T: SqlTransport> IngestStore for NeonEventStore<T> {
     // The bare adapter error, as the other two runs: the port's `IngestError`
     // carries capacity, contention and the unheld identity in arms of its own.
     type Error = NeonError<T::Error>;
 
-    /// Never fails: [`open`](NeonIngestStore::open) read the identity.
+    /// The identity the meta row holds, read on every call in one read-only
+    /// round trip. Nothing is cached, as nothing is for `append` (ADR-0086),
+    /// so a re-mint is answered by the next call on any handle.
+    ///
+    /// # Errors
+    ///
+    /// `Transport`, `Http` or `Sql` as any read reports them;
+    /// `MissingIdentity` when the meta row is absent; `MalformedIdentity` when
+    /// it is not sixteen bytes; `MalformedPayload` when it is not base64.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        Ok(self.store_id)
+        let sql = format!(
+            "SELECT encode(v, 'base64') AS v FROM {} WHERE k = 'store_id'",
+            self.config().qualified_meta()
+        );
+        let response = self
+            .transport()
+            .round_trip(SqlRequest::single(SqlStatement::new(sql)).read_only())
+            .await
+            .map_err(NeonError::Transport)?;
+        decode_identity(&response, self.config().max_response_bytes)
     }
 
     async fn ingest(
@@ -286,6 +229,7 @@ impl<T: SqlTransport> IngestStore for NeonIngestStore<T> {
 /// does not compile until somebody decides its class. Every decoding variant
 /// is a corrupt store, a missing schema, or this crate and the endpoint
 /// disagreeing, and fails the same way again.
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl<E> Classify for NeonError<E> {
     fn class(&self) -> FailureClass {
         match self {
@@ -368,7 +312,7 @@ fn decode_ingest_answer<E>(
 /// The port's error for an answer the endpoint gave as a SQL error.
 ///
 /// The refusal names the event the peer **sent** at the index the server
-/// reported, never one rebuilt from the cached identity. A refusal whose index
+/// reported, never one rebuilt from the store's identity. A refusal whose index
 /// is missing or names no event stays the SQL error it is: still `Stop`, and
 /// never a guess. A serialisation failure or a deadlock is `Busy`: the
 /// endpoint answered, so it ran the batch and aborted it whole.
@@ -394,7 +338,7 @@ fn claimed(detail: Option<&str>, groups: &[IngestGroup<'_>]) -> Option<EventId> 
         .map(|replicated| replicated.id)
 }
 
-/// The identity [`NeonIngestStore::open`]'s read answered.
+/// The identity the port's [`store_id`](IngestStore::store_id) read answered.
 fn decode_identity<E>(
     response: &HttpResponse,
     max_response_bytes: usize,
@@ -406,7 +350,7 @@ fn decode_identity<E>(
     stored_store_id(stored)
 }
 
-/// The watermark [`NeonIngestStore::origin_watermark`]'s read answered.
+/// The watermark [`NeonEventStore::origin_watermark`]'s read answered.
 fn decode_watermark<E>(
     response: &HttpResponse,
     max_response_bytes: usize,
@@ -442,8 +386,8 @@ fn stored_store_id<E>(stored: &str) -> Result<StoreId, NeonError<E>> {
     Ok(StoreId::from_bytes(identity))
 }
 
-// The whole file is `cfg(test)` already, through its declaration in
-// `event_store.rs`. Said again here so the module reads as test code where it
-// stands.
+// The whole file is behind `sync`, through its declaration in
+// `event_store.rs`, so these tests run in a build with the feature on, which
+// the gate's `--all-features` is.
 #[cfg(test)]
 mod tests;

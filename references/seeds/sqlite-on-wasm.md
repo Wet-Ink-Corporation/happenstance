@@ -10,7 +10,7 @@ happenstance has two SQLite event stores, and neither runs where a local-first
 application's on-device store most often lives.
 
 `happenstance-sqlite` is a host-only adapter. It drives `rusqlite` with the
-`bundled` feature (`Cargo.toml:93`), and because `rusqlite` is synchronous every
+`bundled` feature (`Cargo.toml:100`), and because `rusqlite` is synchronous every
 read and every projection commit hops onto `tokio::task::spawn_blocking`
 (`crates/happenstance-sqlite/src/event_store.rs:14-35`, `:2014`;
 `src/projection_store.rs:108`, `:324`). `tokio` is not an implementation detail

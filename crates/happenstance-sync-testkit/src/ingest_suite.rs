@@ -655,8 +655,8 @@ pub mod ingest_rules {
     /// # Does not reject
     ///
     /// A store that commits group by group, each group whole. That is SY-38's
-    /// mistake and its rule's to catch (every arm of `IngestError` means
-    /// nothing in the call was written), and this rule faults one group only.
+    /// mistake and its rule's to catch (`UnheldOwnIdentity` means nothing in
+    /// the call was written), and this rule faults one group only.
     ///
     /// # Errors
     ///
