@@ -202,6 +202,12 @@ impl CloudflareIngestStore {
     /// [`CloudflareEventStoreError::Sql`] if reading `state.storage` or
     /// `storage.transactionSync` throws, or if `transactionSync` is absent or
     /// not a function.
+    ///
+    /// # Panics
+    ///
+    /// A known limitation (#108): a `storage` getter that succeeds once and then
+    /// throws reaches an `unwrap` inside `worker` 0.8.5's `State::storage`, which
+    /// has no fallible public path.
     pub fn from_object_state(
         state: &DurableObjectState,
     ) -> Result<Self, CloudflareEventStoreError> {
@@ -212,6 +218,10 @@ impl CloudflareIngestStore {
     /// `namespace`'s own tables, as [`CloudflareEventStore::namespaced`] does.
     ///
     /// # Errors
+    ///
+    /// [`from_object_state`](Self::from_object_state)'s.
+    ///
+    /// # Panics
     ///
     /// [`from_object_state`](Self::from_object_state)'s.
     pub fn namespaced_from_object_state(

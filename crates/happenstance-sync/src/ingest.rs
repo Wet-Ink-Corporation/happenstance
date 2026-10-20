@@ -193,8 +193,8 @@ pub trait IngestStore {
     ///
     /// An [`IngestError`], and nothing in the call was written: a capacity
     /// refusal, an unheld own identity (see [`store_id`](Self::store_id)), a
-    /// busy store, or the adapter's own failure. Save a `Store` error after the
-    /// commit was sent (its reply lost): the outcome is unknown, and re-delivery
+    /// busy store, or the adapter's own failure. Except a `Store` error raised after
+    /// the commit was sent and its reply lost: the outcome is unknown, and re-delivery
     /// converges, as a held event is a skip. None judges the events: content is
     /// durable elsewhere, so refusing it only guarantees the logs never converge.
     async fn ingest(

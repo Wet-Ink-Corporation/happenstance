@@ -11,12 +11,18 @@
 use happenstance_postgres::event_store::PostgresEventStore;
 // Through the adapter's own re-export, so a consumer needs no second
 // dependency line to name the port the store implements.
-use happenstance_postgres::happenstance_sync::IngestStore;
+use happenstance_postgres::happenstance_sync::{self, IngestStore};
 
 /// Generic code binds the bare flavour, and the store crosses threads.
 fn port<S: IngestStore + Send + Sync>() {}
 
+/// The `Send` flavour, whose `ingest` future is `Send` too. Spelled as a path
+/// rather than imported, so this module has one of the two names in scope
+/// (CLAUDE.md rule 4).
+fn send_port<S: happenstance_sync::SendIngestStore>() {}
+
 #[test]
 fn the_published_store_is_an_ingest_store() {
     port::<PostgresEventStore>();
+    send_port::<PostgresEventStore>();
 }

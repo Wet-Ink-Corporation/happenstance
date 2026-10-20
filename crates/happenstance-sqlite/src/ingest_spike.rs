@@ -948,8 +948,8 @@ mod tests {
     ///
     /// Mounted here rather than in `tests/`, beside the unit tests whose
     /// `TempFile` it shares, and where it ran while the impl was `cfg(test)`.
-    /// `tests/ingest_port.rs` is the outside view. The unit tests pin the spike's own behaviour;
-    /// this is the bar every adapter that implements the port clears.
+    /// `tests/ingest_port.rs` is the outside view. The unit tests pin the spike's
+    /// own behaviour; this is the bar every adapter that implements the port clears.
     mod ingest_family {
         use happenstance_sync_testkit::{IngestFixture, Violation};
         use happenstance_testkit::Capability;
