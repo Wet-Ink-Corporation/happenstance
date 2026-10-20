@@ -88,7 +88,7 @@ jobs:
   # constitution's doctests make the same claim on every runner.
   changes:
     name: what the diff can affect
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     outputs:
       code: ${{ steps.decide.outputs.code }}
@@ -97,7 +97,7 @@ jobs:
       # onto the base, whose first parent is the base tip, so `HEAD^1..HEAD` is
       # exactly the pull request's change as it would land. `--no-renames`,
       # so a file moved out of `crates/` into `docs/` lists both ends.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
         with:
           fetch-depth: 2
       - name: Decide
@@ -137,17 +137,17 @@ jobs:
       # macOS and Windows report green having run nothing but the line below
       # that says so. They are the slowest two rows of every run, the gate's
       # prose checks are not OS-dependent, and the merge queue runs all three.
-      FULL_GATE: ${{ matrix.os == 'ubuntu-latest' || needs.changes.outputs.code != 'false' }}
+      FULL_GATE: ${{ matrix.os == 'blacksmith-4vcpu-ubuntu-2404' || needs.changes.outputs.code != 'false' }}
     strategy:
       fail-fast: false
       matrix:
         # Windows is first-class: the local-first application this library was
         # written for ships there.
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [blacksmith-4vcpu-ubuntu-2404, blacksmith-4vcpu-windows-2025, blacksmith-6vcpu-macos-15]
     steps:
       - name: Whether this runner runs the gate
         if: env.FULL_GATE != 'true'
-        run: echo "::notice::prose-only pull request; the gate runs on ubuntu-latest here, and on every runner in the merge queue"
+        run: echo "::notice::prose-only pull request; the gate runs on the Linux runner here, and on every runner in the merge queue"
 
       # Full history, for one gate step: `no accepted decision's body has changed`
       # (`xtask/src/lint_kb.rs`) reads `.kb/decisions/` at the base commit, and the
@@ -304,7 +304,7 @@ jobs:
   # Every one of those merges green today.
   backlog:
     name: backlog and knowledge base
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # ══ DISABLED, 2026-09-04, and disabled LOUDLY rather than deleted ══
     #
     # This repository has moved off the redkiln version this job pins, and the
@@ -371,7 +371,7 @@ jobs:
     # broken. A missing secret on a same-repository push still turns the job RED.
     if: false
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
 
       # redkiln is a Claude Code plugin in this organisation's private redkiln
       # repository — it is not on npm, and a workflow's built-in `GITHUB_TOKEN`
@@ -394,7 +394,7 @@ jobs:
       # under the assertion below whenever redkiln released. Raise this in the
       # same commit that upgrades the local plugin, never separately.
       - name: Check out the redkiln CLI
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
         with:
           repository: Wet-Ink-Corporation/redkiln
           ref: v0.18.0
@@ -528,13 +528,13 @@ jobs:
   # is how a secret ends up gating a container.
   live-postgres:
     name: conformance against a live Postgres
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     # Fail open: `changes` names why.
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -971,7 +971,7 @@ jobs:
   # than 0.1 ms, which is why this job is minutes rather than seconds.
   live-neon:
     name: conformance against a live Neon endpoint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     # Fail open: `changes` names why.
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
@@ -1001,7 +1001,7 @@ jobs:
     env:
       NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -1331,7 +1331,7 @@ jobs:
   # (`experiments/durable-object-limits`). Not a required status check.
   workerd:
     name: conformance under workerd, local and deployed
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     # Fail open: `changes` names why.
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
@@ -1349,7 +1349,7 @@ jobs:
       run:
         working-directory: harness/workerd
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       # rust-toolchain.toml pins the channel and the wasm32 target.
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -1735,13 +1735,13 @@ jobs:
 
   msrv:
     name: minimum supported Rust version
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     # Fail open: `changes` names why.
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       # `master` rather than `stable` because this job names its own toolchain
       # below, and on that branch `action.yml` marks the input required rather
       # than defaulting it — which is the branch to be on when the number is the
@@ -1786,7 +1786,7 @@ jobs:
   # `pull_request.base.sha` or `merge_group.base_sha` below non-empty.
   semver:
     name: semver compatibility
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     # A pull request and its queue entry; there is no base to compare a push
     # against. Fails open on `changes` for the reason that job gives.
@@ -1802,7 +1802,7 @@ jobs:
       # cargo-semver-checks cannot resolve a rev it does not have. `0` takes the
       # full history, which is the only depth that is right regardless of how far
       # the branch has diverged.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
@@ -1893,14 +1893,14 @@ jobs:
   # a weekly job people learn to ignore.
   advisories:
     name: security advisories
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     # `schedule` is what normally fires this. `workflow_dispatch` is here so the
     # job can be proved to work without waiting for the next Tuesday — an
     # unproven scheduled job is indistinguishable from one that never runs.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - name: Install cargo-deny
         uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
@@ -1942,13 +1942,13 @@ jobs:
   # a measurement, so no number is produced and none can drift into a threshold.
   benchmarks:
     name: the benchmark crate still compiles
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     # Fail open: `changes` names why.
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -1999,7 +1999,7 @@ jobs:
   # where nothing reads a check that is not required and runners are scarcest.
   minimal-versions:
     name: minimal dependency versions
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     # Fail open: `changes` names why.
     if: >-
@@ -2008,7 +2008,7 @@ jobs:
       && needs.changes.outputs.code != 'false' }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       # rust-toolchain.toml pins the channel and the wasm32 target.
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -2091,11 +2091,11 @@ jobs:
   # it: the job writes to the runner's throwaway checkout and nowhere else.
   floating-deps:
     name: floating dependencies (unlocked resolve)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 60
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1.8.1
       # rust-toolchain.toml pins the channel and the wasm32 target.
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
