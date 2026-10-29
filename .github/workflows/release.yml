@@ -65,6 +65,7 @@ jobs:
             happenstance-core happenstance happenstance-testkit
             happenstance-sqlite happenstance-cloudflare
             happenstance-postgres happenstance-neon
+            happenstance-sync happenstance-sync-testkit
         run: |
           want="${GITHUB_REF_NAME#v}"
           meta="$(cargo metadata --format-version 1 --no-deps --locked)"
@@ -91,3 +92,4 @@ jobs:
           -p happenstance-core -p happenstance -p happenstance-testkit
           -p happenstance-sqlite -p happenstance-cloudflare
           -p happenstance-postgres -p happenstance-neon
+          -p happenstance-sync -p happenstance-sync-testkit
