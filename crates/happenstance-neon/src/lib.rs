@@ -188,3 +188,11 @@ pub use event_store::{NeonEventStore, NeonReadStream};
 #[cfg(feature = "projection-store")]
 #[cfg_attr(docsrs, doc(cfg(feature = "projection-store")))]
 pub use projection_store::{NeonProjectionStore, NeonWriteBatch};
+
+/// Re-exported for the reason [`happenstance_core`] is, under the `sync`
+/// feature: `impl IngestStore for NeonEventStore` puts the port's
+/// `IngestGroup`, `Ingested`, `IngestError` and `Watermark` in this crate's
+/// public signatures.
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub use happenstance_sync;

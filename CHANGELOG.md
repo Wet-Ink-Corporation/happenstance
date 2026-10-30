@@ -1,9 +1,9 @@
 # Changelog
 
 Notable changes to `happenstance`, `happenstance-core`, `happenstance-testkit`,
-`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
-`happenstance-neon` — every crate this
-workspace currently publishes.
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres`,
+`happenstance-neon`, `happenstance-sync` and `happenstance-sync-testkit` —
+every crate this workspace currently publishes.
 
 `cargo xtask lints` derives that set from `xtask/src/package.rs`'s
 `PUBLISHABLE` and fails this file if the two disagree, so the scope above
@@ -36,6 +36,57 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- **`happenstance-sync` and `happenstance-sync-testkit` are published, and
+  unfinished** (#108, part E; #199). Their first release replaces the `0.0.0`
+  placeholders on crates.io, at the workspace's version, which both now follow
+  in lockstep. `happenstance-sync` carries the ports, `SyncPeer` and
+  `IngestStore`, the wire messages, and behind `memory` the in-memory reference
+  peer and ingest store. `happenstance-sync-testkit` carries the peer, ingest
+  and model families; a new rule is a minor of its number, so pin it exactly.
+  Neither has a runner (#244) or a network peer yet, and each crate root lists
+  the `SY` clauses that are still provisional. A `[FROZEN]` `SY` clause is now
+  semver-binding on the published crate, as an `ES` clause is.
+  `happenstance-sync-testkit` depends on `happenstance-testkit` as a normal,
+  versioned dependency, so `happenstance_testkit::RuleOutcome` is part of its
+  public API. Every entry below that says "in a crate that is not published
+  yet" ships in this release.
+
+- **A `sync` feature on all four adapters: the ingest port ships** (#108,
+  part E). Off by default; with it off, nothing in an adapter's graph or
+  public surface changes. With it on, the adapter depends on
+  `happenstance-sync`, which turns on `happenstance-core`'s `serde`, and
+  re-exports it as `<adapter>::happenstance_sync`. Each adapter's test-only
+  ingest code, listed under parts C, D and F below, is what ships:
+  - `happenstance-sqlite`: `impl SendIngestStore for SqliteEventStore` (the
+    bare `IngestStore` follows), `impl Classify for SqliteEventStoreError`,
+    and the variant `OriginPositionOutOfRange`. `sync` turns on `event-store`.
+  - `happenstance-postgres`: `impl SendIngestStore for PostgresEventStore`,
+    `impl Classify for PostgresEventStoreError`, and the variant
+    `OriginPositionOutOfRange`. `sync` turns on `event-store`.
+  - `happenstance-neon`: `impl IngestStore for NeonEventStore<T>`, bare only,
+    `impl Classify for NeonError`, and the variants `OriginPositionOutOfRange`
+    and `MissingIdentity`. `sync` turns on `event-store`, and builds for
+    `wasm32`.
+  - `happenstance-cloudflare`: `CloudflareIngestStore`, which implements
+    `EventStore` and `IngestStore`, bare only; `impl Classify for
+    CloudflareEventStoreError`; and the variants `OriginPositionOutOfRange` and
+    `RecordedAtOutOfRange`. It is built by
+    `CloudflareIngestStore::from_object_state(&DurableObjectState)` or
+    `namespaced_from_object_state`, because each call runs inside the object's
+    `storage.transactionSync`, which `worker` does not bind: a
+    `#[durable_object]` class gets the raw state from `State::_inner` and
+    converts it back with `State::from`. A storage with no `transactionSync` is
+    refused at construction, so no ingest store exists that cannot transact.
+    This is the crate's first Cargo feature.
+
+  Each new variant is last in a `#[non_exhaustive]` enum. VT-10's normative
+  sentence, an `IngestStore` "implemented by a store adapter behind an optional
+  feature", is now true of the published crates and not only of test code.
+  The gate checks both `wasm32` adapters with the feature, runs the Durable
+  Object's ingest tests with it, and adds the Cloudflare crate to the `wasm32`
+  feature powerset. Each adapter gains `tests/ingest_port.rs`, which names the
+  store as an `IngestStore` from outside the crate.
+
 - **`happenstance-sync`: the replication message set, in a crate that is not
   published yet** (#114, ADR-0097). Four messages, each its own type
   in `wire::Envelope<T>`: `PushBatch`, `Ack`, the new `wire::PullRequest`, and
@@ -64,7 +115,7 @@ not the same as what a user needed to be told.
   ADR-0098; SY-38). `IngestStore::ingest` returns
   `IngestError<Self::Error>`, with four arms: `ExceedsStoreLimit`,
   `UnheldOwnIdentity`, `Busy` and `Store`. Every arm means nothing in the call
-  was written, and `IngestStore::Error` is now bound on `Classify`, so each
+  was written, save a lost commit reply (see *Changed* below), and `IngestStore::Error` is now bound on `Classify`, so each
   failure states its SY-36 class. An event claiming the store's own `StoreId`
   at a position the store does not hold now refuses the whole call as
   `UnheldOwnIdentity`, class `Stop`, including a claim on a position the same
@@ -378,6 +429,14 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **`happenstance-sync`: `IngestStore::ingest`'s `# Errors` names its one
+  exception** (#108, part E). It said every error means nothing in the call
+  was written. Parts C, D and F each found the case that sentence cannot
+  promise: a `Store` error raised after the commit was sent, whose reply was
+  lost, may follow a commit. The documentation now says so, and that
+  re-delivering the call converges, because an event the store already holds
+  is a skip (SY-11). No signature changes; publication is what turned the
+  sentence into a promise.
 - **`happenstance-sync`: `Ack`'s `appended` and `skipped` are `u64`, not
   `usize`** (#114, ADR-0097). They cross the wire, so their width is
   fixed. The crate is not published, so no consumer is affected.
@@ -410,6 +469,17 @@ not the same as what a user needed to be told.
   never reach the wire, and a failed read is `IngestError::Store`. Tests that
   need no server seed the private cache. All of it is still `#[cfg(test)]`, so
   nothing published moves.
+- **`happenstance-neon`: the ingest port is on `NeonEventStore<T>`, not a
+  wrapper** (#108, part E1). The test-only `NeonIngestStore<T>` and its
+  `async fn open` are gone. The port's `store_id` reads the meta row on every
+  call, in one read-only round trip, and caches nothing, as `append` caches
+  nothing (ADR-0086), so a re-mint is answered by the next call. `ingest` does
+  not ask for it: its statement judges a claim against the meta row it reads.
+  The scripted test that pinned one read at `open`,
+  `the_identity_is_read_once_at_open`, is replaced by
+  `store_id_reads_the_meta_row_on_every_call` and
+  `store_id_reports_an_absent_meta_row_as_missing_identity`. Still
+  `#[cfg(test)]`, so nothing published moves.
 - **`happenstance-cloudflare` reads its `StoreId` on every append** (#262),
   rather than once per handle. Each append issues one more single-row `SELECT`.
   A handle that was built or cloned before a re-mint now stamps the new identity

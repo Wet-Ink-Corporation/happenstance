@@ -807,10 +807,10 @@ impl SqliteEventStore {
     /// an own-identity skip above it is refused too: only this call can have
     /// written a row there.
     ///
-    /// `#[cfg(test)]` because the trait it serves is `happenstance-sync`'s,
-    /// which is not published; see `src/ingest_spike.rs`. Phase 13 turns the
-    /// gate into a feature.
-    #[cfg(test)]
+    /// Behind `sync`, because the trait it serves is `happenstance-sync`'s;
+    /// see `src/ingest_spike.rs`. A gate, not test code, since #108 part E
+    /// published that crate.
+    #[cfg(feature = "sync")]
     fn ingest_locked(
         connection: &mut Connection,
         store_id: StoreId,
@@ -900,7 +900,7 @@ impl SqliteEventStore {
     /// `UnheldOwnIdentity` for an event claiming this store's identity that it
     /// does not hold, `Busy` when the write lock went elsewhere, and `Store`
     /// for everything else. Nothing is written in any of them.
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     pub(crate) fn ingest_groups(
         &self,
         groups: &[happenstance_sync::IngestGroup<'_>],
@@ -942,7 +942,7 @@ impl SqliteEventStore {
     ///
     /// The connection was poisoned, the driver failed, or a stored origin is not
     /// one the contract can represent.
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     pub(crate) fn origin_watermark(
         &self,
     ) -> Result<happenstance_sync::Watermark, SqliteEventStoreError> {
@@ -1033,7 +1033,7 @@ const TAG_ROW_PARAMETERS: usize = 3;
 /// `GROUP BY` names the index's leading column bare. Any expression over it,
 /// `origin_store || ''` for one, hides the column from the planner and costs a
 /// temporary B-tree sort of every foreign row on every watermark.
-#[cfg(test)]
+#[cfg(feature = "sync")]
 const WATERMARK_SQL: &str = "SELECT origin_store, max(origin_position) FROM event \
      WHERE origin_store IS NOT NULL GROUP BY origin_store";
 
@@ -1150,7 +1150,7 @@ fn begin_error(error: rusqlite::Error) -> AppendError<SqliteEventStoreError> {
 
 /// Whether `id` names a position above `head`, a stored position. A position
 /// past `i64::MAX` is above every stored one.
-#[cfg(test)]
+#[cfg(feature = "sync")]
 fn claimed_after(id: EventId, head: i64) -> bool {
     i64::try_from(id.position().get()).map_or(true, |position| position > head)
 }
@@ -1158,7 +1158,7 @@ fn claimed_after(id: EventId, head: i64) -> bool {
 /// [`begin_error`] for an ingest: `IngestError::Busy` when the write lock was
 /// not acquired, `IngestError::Store` for anything else, by the same reasoning
 /// and at the same one call site.
-#[cfg(test)]
+#[cfg(feature = "sync")]
 fn ingest_begin_error(
     error: rusqlite::Error,
 ) -> happenstance_sync::IngestError<SqliteEventStoreError> {
@@ -1352,7 +1352,7 @@ impl From<CeilingExceeded> for AppendError<SqliteEventStoreError> {
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "sync")]
 impl From<CeilingExceeded> for happenstance_sync::IngestError<SqliteEventStoreError> {
     fn from(CeilingExceeded { limit, len }: CeilingExceeded) -> Self {
         Self::exceeds_store_limit(limit, len)
@@ -1381,9 +1381,9 @@ enum Origin {
     /// Minted by another store, and carried here unchanged: the identity and
     /// recorded time its origin gave it, written with the row, never restamped.
     ///
-    /// `#[cfg(test)]` with everything else ingest-only, until phase 13 publishes
-    /// the trait it serves; see `src/ingest_spike.rs`.
-    #[cfg(test)]
+    /// Behind `sync` with everything else ingest-only, the gate the trait it
+    /// serves needs; see `src/ingest_spike.rs`.
+    #[cfg(feature = "sync")]
     Foreign {
         /// The origin's identity for this event.
         id: EventId,
@@ -1395,13 +1395,13 @@ enum Origin {
 /// What one [`write_batch`] did.
 ///
 /// A struct rather than a tuple because an ingest needs a third fact the
-/// writer alone can see, and the two fields only an ingest reads are
-/// `#[cfg(test)]` with the rest of the ingest path.
+/// writer alone can see, and the fields only an ingest reads are behind
+/// `sync` with the rest of the ingest path.
 struct Written {
     /// The position of the last row that went in, if any did.
     last: Option<SequencePosition>,
     /// How many rows went in. A skipped re-delivery is not counted.
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     inserted: usize,
     /// The first foreign row that **went in** while carrying this store's own
     /// identity.
@@ -1414,7 +1414,7 @@ struct Written {
     /// would make `IngestError::Store(UnheldOwnIdentity)` representable beside
     /// the port's own `IngestError::UnheldOwnIdentity`, two spellings of one
     /// fact that the ingest would have to keep apart at runtime.
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     unheld_own: Option<EventId>,
     /// The highest-positioned foreign row carrying this store's own identity
     /// that was **skipped** as already held.
@@ -1424,7 +1424,7 @@ struct Written {
     /// under `UNIQUE` exactly as a held row does. The writer cannot tell the
     /// two apart, so it reports the highest, and the caller compares it with
     /// the head the store had when its transaction began.
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     highest_own_echo: Option<EventId>,
 }
 
@@ -1466,9 +1466,9 @@ fn write_batch(
 ) -> Result<Written, SqliteEventStoreError> {
     let mut written: Vec<(&Event, i64)> = Vec::with_capacity(rows.len());
     let mut first_local: Option<i64> = None;
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     let mut unheld_own: Option<EventId> = None;
-    #[cfg(test)]
+    #[cfg(feature = "sync")]
     let mut highest_own_echo: Option<EventId> = None;
     {
         // One statement for every row, local or foreign. A local row binds its
@@ -1497,7 +1497,7 @@ fn write_batch(
                 // be written at `i64::MAX`, and the second would be counted as a
                 // re-delivery — the silent drop the conflict target exists to
                 // rule out. Refusing here rolls the whole ingest back.
-                #[cfg(test)]
+                #[cfg(feature = "sync")]
                 Origin::Foreign { id, recorded_at } => (
                     Some(id.store().to_bytes()),
                     Some(i64::try_from(id.position().get()).map_err(|_| {
@@ -1523,7 +1523,7 @@ fn write_batch(
                 // An own identity skipped as held: the caller decides whether
                 // it was held before this call or only by this call's own
                 // compensation, which the insert alone cannot tell apart.
-                #[cfg(test)]
+                #[cfg(feature = "sync")]
                 if let Origin::Foreign { id, .. } = row.origin
                     && id.store() == store_id
                     && highest_own_echo.is_none_or(|seen: EventId| seen.position() < id.position())
@@ -1534,7 +1534,7 @@ fn write_batch(
             }
             // Went in, so not held, and yet minted here: the VT-6 breach. The
             // caller refuses the ingest and rolls the transaction back.
-            #[cfg(test)]
+            #[cfg(feature = "sync")]
             if let Origin::Foreign { id, .. } = row.origin
                 && id.store() == store_id
             {
@@ -1601,11 +1601,11 @@ fn write_batch(
         .transpose()?;
     Ok(Written {
         last,
-        #[cfg(test)]
+        #[cfg(feature = "sync")]
         inserted: written.len(),
-        #[cfg(test)]
+        #[cfg(feature = "sync")]
         unheld_own,
-        #[cfg(test)]
+        #[cfg(feature = "sync")]
         highest_own_echo,
     })
 }
@@ -1851,10 +1851,10 @@ pub enum SqliteEventStoreError {
     /// Refused rather than saturated, because on the ingest path a position is
     /// half an [`EventId`]: two such events from one origin would collapse onto
     /// one stored identity and the second would be counted as a re-delivery.
-    /// `#[cfg(test)]` with the rest of the ingest spike until phase 13 publishes
-    /// the port it serves; the enum is `#[non_exhaustive]`, so lifting the gate
-    /// is additive.
-    #[cfg(test)]
+    /// Produced only by ingest, behind `sync`. The enum is `#[non_exhaustive]`,
+    /// so a variant that appears under a feature breaks no exhaustive match.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
     #[error("origin position {position} does not fit SQLite's INTEGER column")]
     OriginPositionOutOfRange {
         /// The position the origin assigned.
@@ -2858,6 +2858,7 @@ mod tests {
     /// today — an ingest writes foreign rows and compensation in separate calls
     /// — which is why every test through the port passes with the marker
     /// deleted, and why this one calls the writer directly.
+    #[cfg(feature = "sync")]
     #[test]
     fn a_mixed_batch_does_not_restamp_its_foreign_rows() {
         let mut connection = Connection::open_in_memory().unwrap();
@@ -3004,6 +3005,7 @@ mod tests {
     /// Rejects an ingest that wraps a failed `BEGIN IMMEDIATE` as `Store`, the
     /// mistake the append path shipped until `0.4.0`: a runner would then stop
     /// an edge that one retry would have cleared.
+    #[cfg(feature = "sync")]
     #[tokio::test]
     async fn ingest_while_another_connection_holds_the_write_lock_is_busy() {
         use happenstance_sync::{
@@ -3544,6 +3546,7 @@ mod plan_tests {
     /// expression hides the leading column from the planner, which then plans
     /// `USE TEMP B-TREE FOR GROUP BY`, a sort of every foreign row on every
     /// watermark, and this test fails on its second assertion.
+    #[cfg(feature = "sync")]
     #[test]
     fn watermark_reads_the_origin_index_without_a_sort() {
         let connection = seeded();

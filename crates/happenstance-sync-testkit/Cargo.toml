@@ -1,30 +1,45 @@
 [package]
 name = "happenstance-sync-testkit"
-description = "The conformance suite for happenstance sync peers: the bar a peer adapter must clear to exist."
+# The placeholder's words, held to them by `xtask/src/reserve.rs`'s
+# `a_crate_with_a_readme_carries_what_the_placeholder_carries`.
+description = "Conformance suite for happenstance replication peers."
+# The workspace's number, in lockstep, until 1.0 (#108 part E, D3). CF-32 gives
+# `happenstance-testkit` its own number so a new rule can be a minor of it;
+# ADR-0066 §4 says the same of this crate, and lockstep keeps that true while
+# the whole workspace is `0.y`: a new rule here is a minor of the one number.
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/happenstance-sync-testkit"
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
-# Unfinished, not held back: the suite has its first rules and phase 13
-# builds the rest. Whether and when it publishes is phase 13's release
-# decision, made with `happenstance-sync`'s, which is `publish = false` for the
-# same reason. The crate root says which of the two meanings this key carries.
-publish = false
+readme = "README.md"
+# Published since #108 part E, and still growing: phase 13 adds rules, each a
+# minor of this crate. Pin it exactly, as `happenstance-testkit`'s README says
+# of that crate.
 
 [dependencies]
 happenstance-core = { workspace = true, features = ["std"] }
 # `memory`, because `MemorySyncFixture` is a published item of this crate, not a
 # test helper: it is the reference implementation of `SyncFixture`, and the peer
 # every rule is proven against before it is allowed to fail an adapter.
-happenstance-sync = { path = "../happenstance-sync", features = ["memory"] }
+happenstance-sync = { workspace = true, features = ["memory"] }
 # `RuleOutcome` and `block_on`, so that a skip is reported in exactly the words
 # the event-store and projection families use, and one blocking driver serves
 # every family. Phase 1's registry, inherited rather than copied.
-happenstance-testkit.workspace = true
+#
+# A normal dependency, so it carries a version: a published crate's normal
+# edge resolves from the registry. The version is the testkit's own key
+# (`crates/happenstance-testkit/Cargo.toml`, CF-32), not the workspace's, and
+# moves with it. The root entry stays versionless for the dev-dependencies
+# ADR-0057 is about, so this line spells its own path rather than inheriting.
+# `RuleOutcome` is part of this crate's public API through every rule's
+# signature, which is the decision publishing it took (#108 part E, D4).
+happenstance-testkit = { version = "0.4.3", path = "../happenstance-testkit" }
 
 [features]
 # The model family (`sync_model`): seeded peer topologies driven through push
@@ -53,6 +68,10 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

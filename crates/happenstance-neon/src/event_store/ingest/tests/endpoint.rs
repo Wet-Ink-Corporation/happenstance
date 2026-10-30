@@ -38,7 +38,6 @@ use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
 use tokio::sync::OnceCell;
 
-use super::super::NeonIngestStore;
 use crate::config::{NeonConfig, quote_ident};
 use crate::event_store::NeonEventStore;
 use crate::migration;
@@ -270,12 +269,10 @@ pub(super) async fn fresh_schema() -> (NeonConfig, LiveTransport) {
     (config, transport)
 }
 
-/// An ingest store on a fresh schema of the live endpoint.
-pub(super) async fn live_store() -> NeonIngestStore<LiveTransport> {
+/// A store on a fresh schema of the live endpoint.
+pub(super) async fn live_store() -> NeonEventStore<LiveTransport> {
     let (config, transport) = fresh_schema().await;
-    NeonIngestStore::open(NeonEventStore::new(transport, config))
-        .await
-        .expect("a broken test environment: a freshly migrated schema has an identity")
+    NeonEventStore::new(transport, config)
 }
 
 /// Sends `request` and requires a 2xx answer.

@@ -118,6 +118,10 @@ provides the atomicity and the identity that makes it idempotent.
       frozen SY-1 and SY-33 once accepted. If the owner declines it, the fallback is P1: restore
       the pin test and keep only the error type. The oracle,
       the ingest rules, the real peers and the `sync` feature are PRs B to F.
+      **Part E** publishes both sync crates (nine in the release set, #199) and
+      ships each adapter's ingest behind an off-by-default `sync` feature; the
+      Durable Object's is `CloudflareIngestStore`, built from the object's
+      `DurableObjectState`. SY-38's freeze is its own PR.
 - [x] #109 · **ES-41's held-versus-visible reading.** ADR-0028 froze ES-41 at phase 17
       and left one reading open: where ES-10's frontier separates a committed row
       from a visible one, does `contains_event_id` mean held or visible?
@@ -284,3 +288,13 @@ of E2E-07 (ES-24).
   1.0, #122 leaves the 1.0 path, and SY-7, SY-10, SY-14 and SY-23 are ratified with
   three edits and keep their markers until their rules land. Verified:
   `cargo xtask spec-trace`, `lint-kb`, `lints` and `lint-constitution`.
+- **2026-10-20** — #108 part E: `happenstance-sync` and `happenstance-sync-testkit`
+  are publishable, lockstep with the workspace, and the four adapters ship ingest
+  behind `sync`: SQLite and Postgres the `Send` flavour, Neon and Cloudflare the
+  bare one. The owner chose nine crates and, for the Durable Object, a public
+  `CloudflareIngestStore` built from `DurableObjectState` (D5 B), and approved
+  the Neon fold (`store_id` reads the meta row on every call). VT-10's normative
+  sentence is now true of the published crates; no marker moved. The ingest
+  port's `# Errors` names the lost-commit exception. Owed by the owner before the
+  first tag: the release.yml diff, the CLAUDE.md counts, and trusted publishers
+  for both sync crates.

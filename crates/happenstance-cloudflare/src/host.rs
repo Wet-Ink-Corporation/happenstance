@@ -566,11 +566,19 @@ pub fn statements(sql: &SqlStorage) -> Vec<String> {
 }
 
 // Appended last, so no cited line above moves.
-#[cfg(all(test, target_arch = "wasm32"))]
+#[cfg(all(test, feature = "sync", target_arch = "wasm32"))]
 impl DurableObjectHost {
     /// The object's `state`, for the ingest tests (#108), which reach
     /// `state.storage` to install and call `transactionSync`.
     pub(crate) const fn state(&self) -> &JsHandle {
         &self.state
+    }
+
+    /// The object's `state` as the raw `DurableObjectState` a
+    /// `#[durable_object]` class's `State::_inner` hands back, for the ingest
+    /// store's public constructors (#108 part E). A second reference to the
+    /// same JavaScript object.
+    pub(crate) fn object_state(&self) -> worker::worker_sys::DurableObjectState {
+        self.state.as_js().clone().unchecked_into()
     }
 }

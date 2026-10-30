@@ -105,7 +105,7 @@ handover is rewritten whole each time, so a stale one is visibly stale — its
 | 17 | [The breaking window — `0.4.0`](phases/17-breaking-window.md) | 16 | done | `0.4.0` released, every semver break traced to a decision | #61 |
 | 17b | [After the window — the additive half](phases/17b-after-the-window.md) | 17 | done | VT-14, VT-30, ES-7 and PS-39 frozen; the minimal-versions and floating-dependency jobs watched failing once | #62 |
 | 18 | [The typed runner leaves its gate](phases/18-typed-runner.md) | 17 | not started | the rebuild example compiled with no unstable feature in its graph | #63 |
-| 13 | [`happenstance-sync` and its testkit](phases/13-sync.md) | 5, 8, 9, 10a, 10b, 12, 17, 18 | not started | one suite green against three peers, two of them unlike, and a byte-identical round trip | #64 |
+| 13 | [`happenstance-sync` and its testkit](phases/13-sync.md) | 5, 8, 9, 10a, 10b, 12, 17, 18 | in progress | one suite green against three peers, two of them unlike, and a byte-identical round trip | #64 |
 | 14 | [Retention and completeness](phases/14-retention.md) | 13, 17 | not started | a completeness instrument over an arbitrary retained set, the suite's pass list against it recorded, and the reader experiment's outcome | #65 |
 | 19a | [SQLite on `wasm32` — skeleton](phases/19-sqlite-on-wasm.md) | 15 | not started | a skeleton building for `wasm32` in the gate, with a verdict on driver, storage and CI | #69 |
 | 19b | [SQLite on `wasm32` — the adapter](phases/19-sqlite-on-wasm.md) | 17, 19a | not started | both conformance suites green on `wasm32`, in the gate | #70 |

@@ -127,6 +127,22 @@ again that it already committed. No conformance rule can detect this, because
 the suite runs against one endpoint, so the obligation is documented rather
 than tested.
 
+## Replication: the `sync` feature
+
+```toml
+happenstance-neon = { version = "0.4", features = ["sync"] }
+```
+
+`sync` is off by default and is the store's half of replication: it
+implements `happenstance-sync`'s `IngestStore` for `NeonEventStore`, and
+re-exports the port as `happenstance_neon::happenstance_sync`. The bare
+flavour only, as the event store is, so it builds for `wasm32`. The identity
+an ingest checks claims against is read from the schema's meta row on every
+call, never cached on the handle. It turns on `event-store`, and
+`happenstance-core`'s `serde` feature through `happenstance-sync`. There is
+no runner (issue #244) and no network peer yet, so this is the port, not
+replication.
+
 ## Limits this store enforces
 
 | | |

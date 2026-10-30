@@ -39,11 +39,11 @@ the right response is to go back and record it there.
       break that is not traced to a decision — phase 17's, ADR-0070's `Chunk`, or
       phase 18's removal of `happenstance`'s `unstable-projection` (recorded in
       its session log).
-- [ ] #199 · **The promise meets `PUBLISHABLE`** (ADR-0066 §1). Promised and publishable
+- [x] #199 · **The promise meets `PUBLISHABLE`** (ADR-0066 §1). Promised and publishable
       are different facts, reconciled here: `xtask/src/package.rs`'s
       `PUBLISHABLE` and the semver job's package list both name
       `happenstance-sync` and `happenstance-sync-testkit`, and `reconcile` passes
-      with nine.
+      with nine. **Met by #108 part E**, which made both crates publishable.
 - [ ] #201 · **The MSRV statement** in each crate's documentation matches ADR-0067: the
       floor is 1.97.1; after 1.0 it rises only in a minor, only to a stable
       release at least six months old when that minor ships, and always with a

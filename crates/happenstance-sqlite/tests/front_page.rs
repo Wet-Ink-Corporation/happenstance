@@ -507,16 +507,17 @@ fn the_publication_pin_rejects_a_paraphrase_and_states_what_it_cannot_see() {
 
 /// The workspace crates this manifest dev-depends on that must stay path-only.
 ///
-/// `happenstance-testkit` for CF-32's release order, and `happenstance-sync`
-/// because it is `publish = false` and unclaimed: a version requirement on it
-/// could never resolve at publish time. `happenstance-sync-testkit` for the
-/// second reason, which it shares. The reasons are in `Cargo.toml` beside the
-/// lines.
-const PATH_ONLY_DEV_DEPENDENCIES: [&str; 3] = [
-    "happenstance-testkit",
-    "happenstance-sync",
-    "happenstance-sync-testkit",
-];
+/// `happenstance-testkit` for CF-32's release order, and
+/// `happenstance-sync-testkit` for the same reason: a versioned dev-dependency
+/// would make this crate's release wait on that one. The reasons are in
+/// `Cargo.toml` beside the lines.
+///
+/// `happenstance-sync` was the third until #108 part E. It was here because it
+/// was `publish = false` and unclaimed; it is published now, and this crate
+/// reaches it through an optional **normal** dependency behind `sync`, which
+/// has to carry a version and is held by
+/// [`the_sync_dependency_is_optional_and_inherits_the_workspace_entry`].
+const PATH_ONLY_DEV_DEPENDENCIES: [&str; 2] = ["happenstance-testkit", "happenstance-sync-testkit"];
 
 /// The `name` dependency lines this manifest declares, with their line numbers.
 ///
@@ -540,8 +541,7 @@ fn dependency_lines<'m>(manifest: &'m str, name: &str) -> Vec<(usize, &'m str)> 
 
 /// What is wrong with how this manifest spells its `name` dev-dependency, if
 /// anything. Written for the testkit, and the reasoning below is the testkit's;
-/// `happenstance-sync` is held to the same three checks for a harder reason — it
-/// is not on the registry at all.
+/// `happenstance-sync-testkit` is held to the same three checks.
 ///
 /// **A dev-dependency that carries a version requirement has to resolve from the
 /// registry at publish time.** `happenstance-testkit` versions independently by
@@ -565,9 +565,9 @@ fn dependency_lines<'m>(manifest: &'m str, name: &str) -> Vec<(usize, &'m str)> 
 /// `testkit_dev_dependencies_are_versionless` holds every publishable crate to
 /// that — inherited or explicit — so inheriting is no longer the defect it was.
 /// This check stays stricter than the gate on purpose: it is a check on *this*
-/// manifest, it covers `happenstance-sync` too, which the gate does not read,
-/// and a path-only line here does not depend on anyone keeping the root entry
-/// the way it is.
+/// manifest, it covers `happenstance-sync-testkit` too, which the gate does not
+/// read, and a path-only line here does not depend on anyone keeping the root
+/// entry the way it is.
 fn publish_order_problems(manifest: &str, name: &str) -> Vec<String> {
     let lines = dependency_lines(manifest, name);
 
@@ -641,6 +641,97 @@ fn the_publish_order_check_rejects_every_spelling_that_carries_a_version() {
         publish_order_problems(right, "happenstance-testkit").is_empty(),
         "the path-only spelling `crates/happenstance/Cargo.toml` already uses was rejected"
     );
+}
+
+/// The section header line `number` (1-based) of `manifest` sits under.
+fn section_of(manifest: &str, number: usize) -> Option<&str> {
+    manifest
+        .lines()
+        .take(number)
+        .map(str::trim)
+        .filter(|line| line.starts_with('['))
+        .last()
+}
+
+/// What is wrong with how this manifest reaches `happenstance-sync`, if
+/// anything.
+///
+/// One line, under `[dependencies]`, `optional = true` so a consumer who never
+/// replicates compiles none of it (and none of `happenstance-core/serde`), and
+/// `workspace = true` so it carries the root entry's version requirement, which
+/// a published crate's normal dependency must. And the `sync` feature names it
+/// with `dep:`, so no implicit feature of the same name appears.
+fn sync_dependency_problems(manifest: &str) -> Vec<String> {
+    let name = "happenstance-sync";
+    let lines = dependency_lines(manifest, name);
+    let [(number, line)] = lines.as_slice() else {
+        return vec![format!(
+            "expected exactly one `{name}` dependency line in Cargo.toml, found {}",
+            lines.len()
+        )];
+    };
+
+    let mut problems = Vec::new();
+    if section_of(manifest, *number) != Some("[dependencies]") {
+        problems.push(format!(
+            "Cargo.toml:{number} is not under `[dependencies]`, so the feature cannot reach it: \
+             {line:?}"
+        ));
+    }
+    if !line.contains("optional = true") {
+        problems.push(format!(
+            "Cargo.toml:{number} is not optional, so every consumer compiles the port and \
+             `happenstance-core/serde`: {line:?}"
+        ));
+    }
+    if !line.contains("workspace = true") {
+        problems.push(format!(
+            "Cargo.toml:{number} does not inherit the root entry, so it carries no version \
+             requirement and `cargo publish` refuses it: {line:?}"
+        ));
+    }
+    let feature = manifest
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with("sync = ["));
+    if !feature.is_some_and(|line| line.contains("\"dep:happenstance-sync\"")) {
+        problems.push(format!(
+            "the `sync` feature does not name `dep:{name}`: {feature:?}"
+        ));
+    }
+    problems
+}
+
+/// The port arrives through one optional, versioned, normal dependency that
+/// only `sync` turns on (#108 part E).
+#[test]
+fn the_sync_dependency_is_optional_and_inherits_the_workspace_entry() {
+    let problems = sync_dependency_problems(MANIFEST);
+    assert!(problems.is_empty(), "- {}", problems.join("\n- "));
+}
+
+/// The check above rejects the spellings that are each a real defect: a
+/// non-optional edge (every consumer pays for serde), the path-only spelling
+/// this manifest used while the port was unpublished (publish refuses it), a
+/// dev-dependency (the feature reaches nothing), and a feature without `dep:`.
+#[test]
+fn the_sync_dependency_check_rejects_each_wrong_spelling() {
+    let feature = "[features]\nsync = [\"event-store\", \"dep:happenstance-sync\"]\n";
+    for wrong in [
+        format!("[dependencies]\nhappenstance-sync.workspace = true\n{feature}"),
+        format!("[dependencies]\nhappenstance-sync = {{ path = \"../happenstance-sync\", optional = true }}\n{feature}"),
+        format!("[dev-dependencies]\nhappenstance-sync = {{ workspace = true, optional = true }}\n{feature}"),
+        "[dependencies]\nhappenstance-sync = { workspace = true, optional = true }\n[features]\nsync = [\"happenstance-sync\"]\n".to_owned(),
+    ] {
+        assert!(
+            !sync_dependency_problems(&wrong).is_empty(),
+            "accepted: {wrong:?}"
+        );
+    }
+    let right = format!(
+        "[dependencies]\nhappenstance-sync = {{ workspace = true, optional = true }}\n{feature}"
+    );
+    assert_eq!(sync_dependency_problems(&right), Vec::<String>::new());
 }
 
 /// Removing the markers does not remove what sat behind them.

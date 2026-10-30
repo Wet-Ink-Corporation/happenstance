@@ -13,8 +13,8 @@ use happenstance_sync::{
 use wasm_bindgen_test::wasm_bindgen_test;
 
 use super::support::{Opened, connect, local, log, minted, open, raw};
+use crate::event_store::CloudflareEventStoreError;
 use crate::event_store::ingest::CloudflareIngestStore;
-use crate::event_store::{CloudflareEventStore, CloudflareEventStoreError};
 
 /// The peer whose events sit around each claim.
 const PEER: StoreId = StoreId::from_bytes([0x65; 16]);
@@ -328,7 +328,7 @@ async fn the_claim_is_judged_by_the_identity_current_when_the_call_runs() {
     let opened = open();
     let old = opened.store.store_id().await.expect("the identity reads");
     let head = append_one(&opened.store, b"local").await;
-    let other = connect(&opened.host, CloudflareEventStore::new(opened.sql.clone()));
+    let other = connect(&opened.host);
     let new = other.store.remint_identity().expect("the re-mint lands");
 
     let on_old = opened

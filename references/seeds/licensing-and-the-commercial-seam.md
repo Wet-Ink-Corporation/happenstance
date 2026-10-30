@@ -19,7 +19,7 @@ files and a README are inside every publishable `.crate` — added because
 `cargo publish --dry-run` does not warn about a missing licence and a crates.io
 release cannot be edited afterwards.
 
-There is **no CLA**. `CONTRIBUTING.md:364-373` states inbound-equals-outbound and
+There is **no CLA**. `CONTRIBUTING.md:365-374` states inbound-equals-outbound and
 leaves contributors their own copyright.
 
 Nothing is published. `RUNBOOK.md` phase 12 puts `happenstance-core`,

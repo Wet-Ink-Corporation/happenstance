@@ -152,6 +152,18 @@ const PUBLISHABLE: &[&str] = &[
     // comment discovered by being written with two of them.
     "happenstance-postgres",
     "happenstance-neon",
+    // #108 part E, and the owner's decision to publish both: the replication
+    // port, and the suite an outside peer or ingest adapter is measured by.
+    // Both are unfinished (no runner, no network peer), which their crate roots
+    // say; they are published because each adapter's optional sync feature
+    // names the port, and a published crate cannot name an unpublished one.
+    //
+    // They emptied the last kind of publish = false inside the workspace, the
+    // unfinished kind the ladybug note above names. The release workflow is
+    // held to this list by [`release_workflow_names_the_publishable_set`],
+    // because a tag that publishes an adapter before the port fails halfway.
+    "happenstance-sync",
+    "happenstance-sync-testkit",
 ];
 
 /// The files every published artifact must contain.
@@ -229,7 +241,7 @@ pub(crate) fn run() -> Result<()> {
         );
     }
 
-    Ok(())
+    release_workflow_names_the_publishable_set()
 }
 
 /// Fails when [`PUBLISHABLE`] and the manifests disagree, naming the direction.
@@ -287,6 +299,191 @@ fn reconcile(derived: &BTreeSet<String>) -> Result<()> {
         PUBLISHABLE.join(", ")
     );
     Ok(())
+}
+
+/// The workflow that publishes on a tag, relative to the workspace root.
+///
+/// Read, never written: it is a protected file, applied by the owner.
+const RELEASE_WORKFLOW: &str = ".github/workflows/release.yml";
+
+/// The release workflow names exactly [`PUBLISHABLE`], in both of its lists.
+///
+/// # Why a half-updated workflow is worse than a stale one
+///
+/// The workflow publishes every crate in one `cargo publish -p … -p …`, which
+/// orders packages by their non-dev edges, optional ones included, and waits
+/// for each to reach the index. An adapter whose optional `sync` feature names
+/// `happenstance-sync` cannot publish until `happenstance-sync` is in the
+/// index. A tag cut with a workflow that does not list it publishes the
+/// crates ahead of the first adapter, then fails on that adapter: a
+/// half-published release, which can be yanked but not undone. `reconcile`
+/// holds the list to the manifests; nothing held the workflow to the list
+/// until this.
+///
+/// Called last in [`run`], so the other packaging checks still report while
+/// this one is red.
+///
+/// # Errors
+///
+/// Returns an error if the workflow cannot be read, if standard output cannot
+/// be written, or if [`release_workflow_problems`] reports anything. The
+/// message names the lines to add.
+fn release_workflow_names_the_publishable_set() -> Result<()> {
+    use std::io::Write as _;
+
+    let root = crate::spec_trace::workspace_root()?;
+    let workflow = std::fs::read_to_string(root.join(RELEASE_WORKFLOW))
+        .with_context(|| format!("reading {RELEASE_WORKFLOW}"))?;
+
+    let mut out = std::io::stdout().lock();
+    let problems = release_workflow_problems(&workflow, PUBLISHABLE);
+    if !problems.is_empty() {
+        for problem in &problems {
+            writeln!(out, "  {problem}")?;
+        }
+        bail!(
+            "{RELEASE_WORKFLOW} does not publish what PUBLISHABLE names. It is a protected \
+             file, so the owner applies the lines above; until then, a tag would publish part \
+             of the release and fail on the first crate whose dependency it left out."
+        );
+    }
+
+    writeln!(
+        out,
+        "{RELEASE_WORKFLOW} names the publishable set in both of its lists"
+    )?;
+    Ok(())
+}
+
+/// Everything wrong with how `workflow` names `publishable`: the `CRATES:`
+/// folded block the version check reads, and the `-p` flags of the
+/// `cargo publish` run.
+///
+/// # The subset of YAML this models
+///
+/// The `CRATES: >-` key, followed by the lines indented deeper than it, each a
+/// run of whitespace-separated names. The line that starts `cargo publish`,
+/// followed by the lines that start `-p` or `--`, each name the word after a
+/// `-p`. Anything else in the file is not read. A block this cannot find is a
+/// problem, never an empty list that agrees with nothing.
+fn release_workflow_problems(workflow: &str, publishable: &[&str]) -> Vec<String> {
+    let lines: Vec<&str> = workflow.lines().collect();
+    let mut problems = Vec::new();
+
+    match crates_block(&lines) {
+        Some((names, indent)) => problems.extend(list_problems(
+            "the `CRATES:` list of the version check",
+            &names,
+            publishable,
+            |missing| format!("{indent}{}", missing.join(" ")),
+        )),
+        None => problems.push(format!(
+            "{RELEASE_WORKFLOW} has no `CRATES: >-` block, so the tag's version check reads no \
+             crate."
+        )),
+    }
+
+    match publish_block(&lines) {
+        Some((names, indent)) => problems.extend(list_problems(
+            "the `cargo publish` run",
+            &names,
+            publishable,
+            |missing| {
+                let flags: Vec<String> = missing.iter().map(|name| format!("-p {name}")).collect();
+                format!("{indent}{}", flags.join(" "))
+            },
+        )),
+        None => problems.push(format!(
+            "{RELEASE_WORKFLOW} has no `cargo publish` line, so a tag publishes no crate."
+        )),
+    }
+
+    problems
+}
+
+/// The names under `CRATES: >-`, and the indentation of its last line.
+fn crates_block(lines: &[&str]) -> Option<(Vec<String>, String)> {
+    let at = lines.iter().position(|l| l.trim() == "CRATES: >-")?;
+    let key_indent = indentation(lines.get(at)?).len();
+    let mut names = Vec::new();
+    let mut indent = String::new();
+    for line in lines.iter().skip(at + 1) {
+        if line.trim().is_empty() || indentation(line).len() <= key_indent {
+            break;
+        }
+        indentation(line).clone_into(&mut indent);
+        names.extend(line.split_whitespace().map(str::to_owned));
+    }
+    Some((names, indent))
+}
+
+/// The names after each `-p` of the `cargo publish` run, and the indentation
+/// of its last line.
+fn publish_block(lines: &[&str]) -> Option<(Vec<String>, String)> {
+    let at = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with("cargo publish"))?;
+    let mut names = Vec::new();
+    let mut indent = String::new();
+    for (offset, line) in lines.iter().skip(at).enumerate() {
+        let trimmed = line.trim_start();
+        if offset > 0 && !(trimmed.starts_with("-p") || trimmed.starts_with("--")) {
+            break;
+        }
+        indentation(line).clone_into(&mut indent);
+        let mut words = trimmed.split_whitespace();
+        while let Some(word) = words.next() {
+            if word == "-p"
+                && let Some(name) = words.next()
+            {
+                names.push(name.to_owned());
+            }
+        }
+    }
+    Some((names, indent))
+}
+
+/// The leading whitespace of `line`. `trim_start` returns a suffix of `line`,
+/// so the strip always succeeds and the default is never taken.
+fn indentation(line: &str) -> &str {
+    line.strip_suffix(line.trim_start()).unwrap_or_default()
+}
+
+/// The disagreement between one list of the workflow and `publishable`: what
+/// to add, as the line `render` spells, and what to remove.
+fn list_problems(
+    which: &str,
+    found: &[String],
+    publishable: &[&str],
+    render: impl Fn(&[&str]) -> String,
+) -> Vec<String> {
+    let missing: Vec<&str> = publishable
+        .iter()
+        .copied()
+        .filter(|name| !found.iter().any(|f| f == name))
+        .collect();
+    let extra: Vec<&str> = found
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !publishable.contains(name))
+        .collect();
+
+    let mut problems = Vec::new();
+    if !missing.is_empty() {
+        problems.push(format!(
+            "{RELEASE_WORKFLOW}: {which} leaves out {}. Add this line at the end of it:\n{}",
+            missing.join(", "),
+            render(&missing)
+        ));
+    }
+    if !extra.is_empty() {
+        problems.push(format!(
+            "{RELEASE_WORKFLOW}: {which} names {}, which PUBLISHABLE does not. Remove it, or add \
+             it to PUBLISHABLE with its licences and README.",
+            extra.join(", ")
+        ));
+    }
+    problems
 }
 
 /// The crate whose dev-dependency lines [`testkit_dev_dependencies_are_versionless`]
@@ -366,11 +563,17 @@ fn testkit_dev_dependencies_are_versionless() -> Result<()> {
 ///   `"happenstance-testkit" = …`, is read like the bare one.
 /// * **A `#` inside a string value.** No dependency line in this workspace
 ///   carries one; one that did would be cut short at it.
-/// * **Which section the line is in.** Every section is read, so a non-dev
-///   dependency on the testkit is held to the same rule — which it would fail
-///   `cargo package` on anyway, being unversioned.
+/// * **A non-dev dependency on the testkit.** Only `[dev-dependencies]` and
+///   `[target.<cfg>.dev-dependencies]` are read ([`dev_sections_only`]), which
+///   is ADR-0057's scope: it frees the release order from a dependency no
+///   consumer sees. A normal dependency is one every consumer sees, so it has to
+///   carry a version and resolve from the registry, and that is
+///   `happenstance-sync-testkit`'s edge (`RuleOutcome`, `block_on`). Every
+///   section was read until that crate was published, and the line it needs
+///   was refused. A table header naming the testkit is still reported from any
+///   section, so the unmodelled spelling cannot hide in a normal one.
 fn testkit_line_problems(rel: &str, manifest: &str, workspace: &str) -> Vec<String> {
-    let entry = match dependency_entry(manifest, TESTKIT) {
+    let entry = match dependency_entry(&dev_sections_only(manifest), TESTKIT) {
         Ok(Some(entry)) => entry,
         Ok(None) => return Vec::new(),
         Err(problem) => return vec![format!("{rel} — {problem} (ADR-0057).")],
@@ -452,6 +655,44 @@ impl DependencyEntry {
     fn carries_version(&self) -> bool {
         self.names_key("version") || self.body.trim_start().starts_with('"')
     }
+}
+
+/// `manifest` with every line outside a dev-dependency section blanked, so the
+/// line numbers [`dependency_entry`] reports still name the real line.
+///
+/// Section headers are kept whatever they name: the table spelling of the
+/// testkit is reported as unmodelled from any section rather than passed.
+fn dev_sections_only(manifest: &str) -> String {
+    let mut in_dev = false;
+    let mut kept: Vec<&str> = Vec::new();
+    for line in manifest.lines() {
+        let code = uncommented(line).trim();
+        if code.starts_with('[') {
+            in_dev = is_dev_dependency_section(code);
+            kept.push(line);
+        } else {
+            kept.push(if in_dev { line } else { "" });
+        }
+    }
+    kept.join("\n")
+}
+
+/// Whether `header` opens `[dev-dependencies]`, a target-scoped
+/// `[target.<cfg>.dev-dependencies]`, or a table inside either. An array
+/// table (`[[test]]`) is never one.
+fn is_dev_dependency_section(header: &str) -> bool {
+    if header.starts_with("[[") {
+        return false;
+    }
+    let name = header
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim()
+        .replace("dev_dependencies", "dev-dependencies");
+    name == "dev-dependencies"
+        || name.starts_with("dev-dependencies.")
+        || (name.starts_with("target.")
+            && (name.ends_with(".dev-dependencies") || name.contains(".dev-dependencies.")))
 }
 
 /// `text` with its `#` comment removed.
@@ -888,6 +1129,146 @@ testkit = { path = \"../happenstance-testkit\",
             found.iter().any(|p| p.contains("Cargo.toml:5")),
             "{found:?}"
         );
+    }
+
+    /// `happenstance-sync-testkit` is a published crate whose *normal* edge into
+    /// the testkit carries a version, because a published crate's normal
+    /// dependency has to. ADR-0057 is about dev-dependencies, so that line is
+    /// not this check's to refuse; the every-section reader refused it.
+    #[test]
+    fn a_versioned_normal_testkit_dependency_is_not_a_dev_dependency_problem() {
+        let manifest = "[dependencies]\n\
+            happenstance-testkit = { version = \"0.4.3\", path = \"../happenstance-testkit\" }\n\
+            \n\
+            [target.'cfg(not(target_arch = \"wasm32\"))'.dev-dependencies]\n\
+            tokio = { workspace = true }\n";
+        assert_eq!(problems(manifest, ROOT_PATH_ONLY), Vec::<String>::new());
+    }
+
+    /// Narrowing to dev sections must keep the target-scoped spelling, which
+    /// is how a wasm32-only dev-dependency is written in this workspace. A
+    /// reader that knew only `[dev-dependencies]` would pass this.
+    #[test]
+    fn a_versioned_target_dev_dependency_on_the_testkit_is_still_refused() {
+        let manifest = "[dependencies]\n\
+            bytes.workspace = true\n\
+            \n\
+            [target.'cfg(target_arch = \"wasm32\")'.dev-dependencies]\n\
+            happenstance-testkit = { version = \"0.4\", path = \"../happenstance-testkit\" }\n";
+        let found = problems(manifest, ROOT_PATH_ONLY);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found.iter().any(|p| p.contains("Cargo.toml:5")),
+            "{found:?}"
+        );
+    }
+
+    /// The nine crates, as the release workflow's fixtures below are checked
+    /// against. Spelled here rather than read from [`PUBLISHABLE`], so these
+    /// tests pin the parser rather than today's set.
+    const NINE: [&str; 9] = [
+        "happenstance-core",
+        "happenstance",
+        "happenstance-testkit",
+        "happenstance-sqlite",
+        "happenstance-cloudflare",
+        "happenstance-postgres",
+        "happenstance-neon",
+        "happenstance-sync",
+        "happenstance-sync-testkit",
+    ];
+
+    /// The two blocks of `.github/workflows/release.yml` this check reads, as
+    /// they stood before the two sync crates were published.
+    const RELEASE_SEVEN: &str = "\
+      - name: The tag names the version every published crate carries
+        env:
+          CRATES: >-
+            happenstance-core happenstance happenstance-testkit
+            happenstance-sqlite happenstance-cloudflare
+            happenstance-postgres happenstance-neon
+        run: |
+          want=\"${GITHUB_REF_NAME#v}\"
+
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: >-
+          cargo publish --locked
+          -p happenstance-core -p happenstance -p happenstance-testkit
+          -p happenstance-sqlite -p happenstance-cloudflare
+          -p happenstance-postgres -p happenstance-neon
+";
+
+    /// The base workflow is missing both new names from both lists, and the
+    /// failure names each list, each name, and the line to add.
+    #[test]
+    fn the_seven_crate_workflow_is_refused_naming_both_lists() {
+        let found = release_workflow_problems(RELEASE_SEVEN, &NINE);
+        assert_eq!(found.len(), 2, "{found:?}");
+        let crates = found
+            .iter()
+            .find(|p| p.contains("CRATES"))
+            .expect("the CRATES list is reported");
+        assert!(
+            crates.contains("            happenstance-sync happenstance-sync-testkit"),
+            "{crates}"
+        );
+        let publish = found
+            .iter()
+            .find(|p| p.contains("cargo publish"))
+            .expect("the publish list is reported");
+        assert!(
+            publish.contains("          -p happenstance-sync -p happenstance-sync-testkit"),
+            "{publish}"
+        );
+    }
+
+    /// The workflow with both lines added passes.
+    #[test]
+    fn the_nine_crate_workflow_passes() {
+        let nine = RELEASE_SEVEN
+            .replace(
+                "            happenstance-postgres happenstance-neon\n",
+                "            happenstance-postgres happenstance-neon\n            happenstance-sync happenstance-sync-testkit\n",
+            )
+            .replace(
+                "          -p happenstance-postgres -p happenstance-neon\n",
+                "          -p happenstance-postgres -p happenstance-neon\n          -p happenstance-sync -p happenstance-sync-testkit\n",
+            );
+        assert_eq!(
+            release_workflow_problems(&nine, &NINE),
+            Vec::<String>::new()
+        );
+    }
+
+    /// Updating the version check and forgetting the publish command is the
+    /// half-published release this check exists for, so it names the `-p` list
+    /// alone. A name the workflow publishes and `PUBLISHABLE` does not is
+    /// reported too.
+    #[test]
+    fn a_workflow_updated_in_one_list_only_names_the_other() {
+        let half = RELEASE_SEVEN.replace(
+            "            happenstance-postgres happenstance-neon\n",
+            "            happenstance-postgres happenstance-neon\n            happenstance-sync happenstance-sync-testkit\n",
+        );
+        let found = release_workflow_problems(&half, &NINE);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].contains("cargo publish"), "{found:?}");
+
+        let extra = release_workflow_problems(RELEASE_SEVEN, &NINE[..6]);
+        assert!(
+            extra.iter().any(|p| p.contains("happenstance-neon")),
+            "{extra:?}"
+        );
+    }
+
+    /// A workflow this check cannot find either block in is a failure, never
+    /// an empty list that matches nothing.
+    #[test]
+    fn a_workflow_without_either_block_is_refused() {
+        let found = release_workflow_problems("name: Release\n", &NINE);
+        assert_eq!(found.len(), 2, "{found:?}");
     }
 
     /// A schema change must stop the gate rather than be guessed at.

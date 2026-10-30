@@ -6,7 +6,6 @@ use happenstance_sync::{IngestGroup, IngestStore, Watermark};
 use wasm_bindgen_test::wasm_bindgen_test;
 
 use super::support::{Opened, connect, local, log, minted, open};
-use crate::event_store::CloudflareEventStore;
 use crate::event_store::ingest::watermark_sql;
 use crate::namespace::Tables;
 use crate::sql_storage::SqlValue;
@@ -122,9 +121,9 @@ fn watermark_reads_the_origin_index_without_a_sort() {
 /// Rejects an identity cached at construction.
 #[wasm_bindgen_test]
 async fn store_id_answers_the_meta_row_on_every_call() {
-    let Opened { host, sql, store } = open();
+    let Opened { host, store, .. } = open();
     let before = store.store_id().await.expect("the identity reads");
-    let other = connect(&host, CloudflareEventStore::new(sql));
+    let other = connect(&host);
 
     let reminted = other.store.remint_identity().expect("the re-mint lands");
 

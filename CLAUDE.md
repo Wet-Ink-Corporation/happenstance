@@ -267,7 +267,7 @@ code around it.
    text here said *"nothing is published, so no downstream consumer is pinned to
    anything"*, and that was ADR-0004's whole reason for carrying a **provisional**
    marker. `0.2.0` is what the marker named as its own end, and it shipped on
-   2026-09-10. Measured against the registry on 2026-09-29: all seven crates are
+   2026-09-10. Measured against the registry on 2026-09-29: the release set as it then stood is
    published at `0.2.0`, `0.3.0`, `0.3.1` and `0.3.2`; the three `0.2.0-alpha.1`
    releases are yanked; each `0.0.0` reservation still stands; and
    `max_stable_version` reads `0.3.2` everywhere. So **a consumer can be pinned to
@@ -377,10 +377,10 @@ build of `happenstance-core` (three configurations in all with the workspace
 item is broken at neither end of that range and only in the middle, which is
 where a consumer stands), a default-features doc build of `happenstance` for
 the same reason, a layer up (#91: a link into an `unstable-projection` item),
-and a `cargo package --list` assertion that each of the **seven** publishable
+and a `cargo package --list` assertion that each of the **nine** publishable
 crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
-`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres` and
-`happenstance-neon` — carries both licence files
+`happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres`,
+`happenstance-neon`, `happenstance-sync` and `happenstance-sync-testkit` — carries both licence files
 and a README. The number is spelled with its members now because it had already
 drifted once: this sentence read *"three"* through phase 9's promotion of
 `happenstance-cloudflare` and did not move, so a count on its own turned out to

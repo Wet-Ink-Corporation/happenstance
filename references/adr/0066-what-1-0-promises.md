@@ -122,7 +122,7 @@ dispositions"*.** It does not live in this record, because a decision atom is
 immutable (`cargo xtask lint-kb`). A table that phases 13, 14, 17 and 18 each
 update as they freeze their rows would be edited long after the atom was
 accepted. `cargo xtask lints`, through `runbook_clause_ledgers_match_the_specification`
-(`xtask/src/lints.rs:3442`), already holds the provisional and deferred ledgers
+(`xtask/src/lints.rs:3447`), already holds the provisional and deferred ledgers
 against §7.2's generated table in both directions. It is to hold this section
 the same way. Every non-`[FROZEN]` clause needs a row, every row needs one of
 the three shapes above, and a `freeze-by-N` needs an N from the closure. A
@@ -394,7 +394,7 @@ not repeated in the marker; the clause's own last sentence is what carries it.
   exactly stays good advice, because a dev-dependency pin does not propagate.
 - **CF-32 is unchanged.** The testkit keeps its own `version` key. Independent
   versions satisfy CF-32 without amending it, and ADR-0057's dropped root key
-  (still at `Cargo.toml:62`) is executed at phase 17.
+  (still at `Cargo.toml:69`) is executed at phase 17.
 - **The public-dependency limit (ADR-0044) is a named limit on the promise.** An
   adapter re-exports its driver, so **an adapter's major follows its
   re-exported driver's breaking version**: rusqlite 0.40, sqlx 0.8 and worker
@@ -683,7 +683,7 @@ obligation.
 - `crates/happenstance-core/src/memory.rs:264-274`,
   `crates/happenstance-core/src/lib.rs:169,176`, `crates/happenstance-core/Cargo.toml:72`,
   `crates/happenstance-postgres/Cargo.toml:125`, `crates/happenstance-ladybug/src/lib.rs:139-150`,
-  `Cargo.toml:60-62`, `xtask/src/package.rs:86`, `xtask/src/lints.rs:3442`.
+  `Cargo.toml:66-69`, `xtask/src/package.rs:86`, `xtask/src/lints.rs:3447`.
 - `.github/workflows/ci.yml:412` (`live-postgres`), `:625` (`ladybug`), `:805`
   (`live-neon`) and `:1081` (the semver package list).
 - `runbook/README.md:90` and `:108`; `runbook/ledgers.md:164` and `:199`;

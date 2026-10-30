@@ -54,6 +54,13 @@ thiserror.workspace = true
 # into `poll_next`, so `tokio::task::{JoinError, JoinHandle}` appear in the
 # adapter's own error enum and stream state. `rt` is the whole of what is needed.
 tokio = { workspace = true, features = ["rt"] }
+# The ingest port (VT-10): `impl SendIngestStore for SqliteEventStore`, in
+# `src/ingest_spike.rs`, behind the `sync` feature below. Optional, so a
+# consumer who never replicates compiles none of it. It turns on
+# `happenstance-core/serde`, which `happenstance-sync` enables; nothing in this
+# crate names a serde item. It was a path-only dev-dependency until #108 part E
+# published `happenstance-sync`.
+happenstance-sync = { workspace = true, optional = true }
 
 [dev-dependencies]
 # `proptest` is the testkit's own off-by-default feature, and it is enabled
@@ -95,33 +102,19 @@ tokio = { workspace = true, features = ["rt"] }
 # spelling that reintroduced the coupling was one word shorter; the root entry is
 # versionless now, and `package-check` refuses a versioned line either way.
 happenstance-testkit = { path = "../happenstance-testkit", features = ["proptest"] }
-# The VT-10 spike: `src/ingest_spike.rs` implements `happenstance-sync`'s
-# `SendIngestStore` for `SqliteEventStore` over the same private row writer
-# `append` uses, which only this crate can reach. Path-only for the testkit's
-# reason above and a harder one: `happenstance-sync` is `publish = false` and its
-# name is unclaimed, so a version requirement could never resolve at publish
-# time, and an optional `sync` feature with a real dependency would make
-# `cargo publish` of this crate fail outright. Cargo strips a versionless
-# dev-dependency from the published manifest, so this one reaches nobody. Phase
-# 13 publishes `happenstance-sync` and turns the spike's `cfg(test)` into a
-# feature.
+# The ingest family (#108), mounted from `src/ingest_spike.rs` rather than from
+# `tests/`, so that the spike's unit tests and the family share one module.
+# Path-only for the testkit's reason above: cargo strips a versionless
+# dev-dependency from the published manifest, so publishing this crate never
+# waits on that one. A testkit, not an adapter, so no adapter depends on
+# another. Under `cargo test` it also turns on `happenstance-sync/memory`, and
+# so `happenstance-core/memory`; the build a consumer gets sees neither.
 #
-# What it costs under `cargo test` and not under `cargo build`: it turns on
-# `happenstance-core`'s `serde` feature, which `happenstance-sync` enables
-# unconditionally. Nothing in `src/` names a serde item, so the two builds see
-# the same contract.
+# The mount is `cfg(all(test, feature = "sync"))`: a bare `cargo test -p
+# happenstance-sqlite` skips the ingest tests, and the gate's
+# `--all-features` runs them.
 #
 # `tests/front_page.rs` asserts the spelling, as it does the testkit's.
-happenstance-sync = { path = "../happenstance-sync" }
-# The ingest family (#108), mounted from `src/ingest_spike.rs` rather than from
-# `tests/`, because a `cfg(test)` impl is invisible to an integration test.
-# Path-only for `happenstance-sync`'s reason: unpublished and unclaimed, so a
-# version could never resolve, and cargo strips it from the published manifest.
-# A testkit, not an adapter, so no adapter depends on another. Under `cargo
-# test` it also turns on `happenstance-sync/memory`, and so
-# `happenstance-core/memory`; the build a consumer gets sees neither.
-#
-# `tests/front_page.rs` asserts the spelling, as it does the other two.
 happenstance-sync-testkit = { path = "../happenstance-sync-testkit" }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
@@ -168,6 +161,14 @@ projection-store = []
 # module configured out — is one of them; the impl and the probe table are gated
 # on both, so that combination compiles to nothing rather than failing to compile.
 conformance = ["happenstance-core/conformance"]
+# The ingest port (VT-10, #108 part E): `impl SendIngestStore for
+# SqliteEventStore`, its `Classify` impl, the `OriginPositionOutOfRange`
+# variant, and a `happenstance_sync` re-export. The bare `IngestStore` follows
+# from `trait_variant`'s blanket impl. Implies `event-store`, because the port
+# writes through that store's row writer. Off by default: a consumer who never
+# replicates should not compile it, nor `happenstance-core/serde`, which
+# `happenstance-sync` turns on.
+sync = ["event-store", "dep:happenstance-sync"]
 
 # The third of the three things a fourth publishable crate owed, and the only
 # one that was still outstanding — the two licence files and the README landed
@@ -187,6 +188,13 @@ conformance = ["happenstance-core/conformance"]
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+# The ingest port from outside the crate, which a `cfg(test)` impl can never
+# satisfy. Named rather than gated inside the file, so that without the
+# feature the target is not built at all.
+[[test]]
+name = "ingest_port"
+required-features = ["sync"]
 
 [lints]
 workspace = true

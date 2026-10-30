@@ -69,7 +69,7 @@ relocate to happenstance-testkit's mutants
 ## Evidence
 
 - `crates/happenstance-neon/src/lib.rs:186`: pub use event_store::{NeonEventStore, NeonReadStream, ProbeThenWriteStore};
-- `crates/happenstance-neon/src/event_store.rs:1672-1680`: only callers are two in-crate compile-shape unit tests
+- `crates/happenstance-neon/src/event_store.rs:1678-1686`: only callers are two in-crate compile-shape unit tests
 
 ## Decision outcome
 

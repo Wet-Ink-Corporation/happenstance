@@ -228,3 +228,10 @@ pub use sqlx;
 /// naming types it does not otherwise depend on. The dependency is
 /// unconditional, so this needs no `cfg`.
 pub use happenstance_core;
+
+/// Re-exported for the same reason, under the `sync` feature: `impl
+/// SendIngestStore for PostgresEventStore` puts the port's `IngestGroup`,
+/// `Ingested`, `IngestError` and `Watermark` in this crate's public signatures.
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub use happenstance_sync;

@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 // The README's code blocks are compiled as doctests. `cfg(doctest)` keeps the
 // prose out of the rendered documentation — it would otherwise appear twice, once
 // here and once in the module docs below — while still type-checking every
@@ -10,12 +11,11 @@
 // is exactly the failure `cargo package --list` exists to catch, and the list is
 // where this include was checked.
 //
-// The example inside it is marked `no_run` rather than left to execute, and the
-// reason is the crate's own: every `worker` binding resolves to a `wasm-bindgen`
-// stub that panics off-target, so an example that *ran* on the host would be
-// exercising the stub rather than a Durable Object. `no_run` is the narrowest
-// attribute that is honest here — the block is compiled and type-checked on every
-// `cargo test -p happenstance-cloudflare --doc`, which is what the claim needs.
+// The example inside it is `no_run` for the crate's own reason: every `worker`
+// binding resolves to a `wasm-bindgen` stub that panics off-target, so an example
+// that *ran* on the host would exercise the stub, not a Durable Object. `no_run`
+// is the narrowest honest attribute: the block is still compiled and type-checked
+// on every `cargo test -p happenstance-cloudflare --doc`, which the claim needs.
 #![cfg_attr(doctest, doc = include_str!("../README.md"))]
 //! Cloudflare Durable Object adapter for happenstance — the workspace's `!Send`
 //! instrument.
@@ -1148,3 +1148,19 @@ mod es6_reconstruction {
 /// ```
 #[cfg(doctest)]
 mod reexported_paths {}
+
+// Appended last, so no cited line above moves.
+
+/// The ingest store, built from the object's `DurableObjectState`, behind the
+/// `sync` feature (#108 part E).
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub use event_store::CloudflareIngestStore;
+
+/// Re-exported for the reason [`happenstance_core`] is, under the `sync`
+/// feature: `impl IngestStore for CloudflareIngestStore` puts the port's
+/// `IngestGroup`, `Ingested`, `IngestError` and `Watermark` in this crate's
+/// public signatures.
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub use happenstance_sync;

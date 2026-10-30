@@ -210,7 +210,8 @@ impl IngestStore for HypotheticalAdapterStore {
             .lock()
             .map_err(|_| IngestError::Store(AdapterError::Poisoned))?;
         // Where the transaction began. Every error rolls the whole call back to
-        // it, because every `IngestError` arm promises nothing was written.
+        // it: a lock-held stand-in never loses a commit reply, so every error
+        // here means nothing was written.
         let committed = log.len();
         let written = write_groups(&mut log, committed, self.identity, groups);
         if written.is_err() {
