@@ -191,9 +191,8 @@ where
     );
     let strategy = any_scenario();
     for case in 0..cases {
-        // Drawn through a strategy rather than `RngCore::next_u64`: proptest
-        // 1.12 moved to rand 0.10, where that trait is deprecated and the
-        // method lives on a trait 1.11 does not export.
+        // A strategy draw, not a method on the RNG: it builds against both
+        // proptest 1.11 and 1.12, whose RNG traits differ.
         let seed = proptest::num::u64::ANY
             .new_tree(&mut master)
             .map_err(|reason| {
