@@ -57,7 +57,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use proptest::prelude::{RngCore, Strategy};
+use proptest::prelude::Strategy;
 use proptest::strategy::ValueTree;
 use proptest::test_runner::{Config, RngAlgorithm, TestRng, TestRunner};
 
@@ -191,7 +191,18 @@ where
     );
     let strategy = any_scenario();
     for case in 0..cases {
-        let seed = master.rng().next_u64();
+        // Drawn through a strategy rather than `RngCore::next_u64`: proptest
+        // 1.12 moved to rand 0.10, where that trait is deprecated and the
+        // method lives on a trait 1.11 does not export.
+        let seed = proptest::num::u64::ANY
+            .new_tree(&mut master)
+            .map_err(|reason| {
+                Violation::new(
+                    check.clause(),
+                    format!("the seed generator rejected case {case}: {reason}"),
+                )
+            })?
+            .current();
         let mut runner = TestRunner::new_with_rng(
             config.clone(),
             TestRng::from_seed(RngAlgorithm::ChaCha, &seed_bytes(seed)),
