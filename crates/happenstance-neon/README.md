@@ -178,9 +178,15 @@ this paragraph said three. The mechanism is the durable part and it is unchanged
 the numbers were not re-measured after the fixes, so they are not restated.
 
 The same frontier is why the conformance fixture declines
-`READ_YOUR_OWN_WRITES`, which makes the generated model family report a stated
-skip rather than run. That is a property of the *server*, and distinct from
+`READ_YOUR_OWN_WRITES`. That is a property of the *server*, and distinct from
 ES-11 above, which is a property of the *transport* and which the fence meets.
+The declension makes the generated model family run a weaker, trailing model
+against this store in place of its exact one. It holds each
+read to a prefix of what was accepted that never shrinks, and judges each
+condition verdict over what the store holds, deferring a verdict it cannot
+decide yet. What it gives up is listed on `ops_agree_with_the_model` in
+`happenstance-testkit`: chiefly, a write that never becomes visible reads as lag
+rather than as a lost write.
 
 ## Minimum supported Rust version
 

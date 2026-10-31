@@ -31,16 +31,18 @@ source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/op-read-non-exhaustive.md
   - .kb/_intake/remediation-2026-09-04-briefs/model-family-case-floor.md
   - crates/happenstance-testkit/src/model.rs
+  - crates/happenstance-testkit/src/model/trailing.rs
+  - .kb/_intake/monotone-visibility-is-unstated.md
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
-last_reviewed: 2026-09-07
+last_reviewed: 2026-10-19
 ---
 
 # The model family's rule checks a composition of clauses and belongs to none
 
 ## What is true today
 
-`ops_agree_with_the_model` (`crates/happenstance-testkit/src/model.rs:598`) is the model family's
+`ops_agree_with_the_model` (`crates/happenstance-testkit/src/model.rs:775`) is the model family's
 single conformance rule. It replays a generated sequence of appends, conditional appends and reads
 against a model implementation and compares every answer the store under test gives against what
 the model gives. What it checks is therefore the **composition** of ES-8, ES-9, ES-11, ES-14,
@@ -79,6 +81,20 @@ too. It is the second of the **three** entries now held in `UNCLAIMED_PENDING_AD
 (`xtask/src/spec_trace.rs`), which prints each of them on every green `cargo xtask spec-trace`
 run; the third, `kb-open-question-read-fault-rule-no-clause-001`, is a third distinct shape again
 — one narrow proposition about a single method's `Err` arm.
+
+**Behind a frontier the composed set is larger, and it carries one proposition no clause
+states (#79, 2026-10-19).** Until #79 the rule skipped on a fixture declining
+`READ_YOUR_OWN_WRITES`. It now runs a trailing model there
+(`crates/happenstance-testkit/src/model/trailing.rs`), which composes **ES-10** (position order is
+visibility order, so the visible set is a prefix) and **ES-19** (the batch's last position is the
+one `append` returned) on top of the set above, because it has to place held events it has not yet
+seen. And it **assumes**, as a stated testkit assumption, that visibility never moves backward: a
+later full read never shows fewer events. No clause says so. `RetreatingFrontierStore` is the wrong
+store that breaks it. So this rule now sits on both shapes this atom distinguishes: several
+propositions belonging to no single clause, and, on the trailing path, one proposition no clause
+states. `.kb/_intake/monotone-visibility-is-unstated.md` proposes making it normative in an ADR
+pass, and a clause minted for this rule would have to decide whether it covers both models or only
+the strict one.
 
 ## What is not decided
 

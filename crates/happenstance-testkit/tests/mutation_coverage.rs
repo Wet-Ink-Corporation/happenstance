@@ -2763,10 +2763,11 @@ enum ModelOutcome {
 fn model_outcome(verdict: &Verdict) -> ModelOutcome {
     match verdict {
         Verdict::Passed => ModelOutcome::Agreed,
-        // No model rule is capability-gated, so a skip would mean the family
-        // grew a `require!` nobody accounted for. Classed as `FellOver` rather
-        // than silently as agreement, because it is the one outcome that means
-        // *nothing ran*.
+        // No model rule skips. A fixture that declines READ_YOUR_OWN_WRITES
+        // gets the trailing model rather than a skip, so a skip would mean the
+        // family grew a `require!` nobody accounted for. Classed as `FellOver`
+        // rather than silently as agreement, because it is the one outcome that
+        // means *nothing ran*.
         Verdict::Skipped { .. } => ModelOutcome::FellOver,
         Verdict::Panicked { message, origin } => {
             let from_the_model = origin.as_ref().is_some_and(Origin::is_a_model_rule_body)
@@ -2851,7 +2852,7 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// what moved was the *generator* rather than any store. `ToBoundIgnoredStore`,
 /// `ToIsExclusiveStore` and `BackwardsToIsAnUpperBoundStore` were misses for one
 /// reason: [`Op`]`::Read` carried four of the five read options, `to` was the
-/// missing one, and `Model::select`'s two `to` branches were therefore dead
+/// missing one, and the model's `select`'s two `to` branches were therefore dead
 /// code. All three are rejected now, and a fourth store —
 /// `UnparenthesisedToPredicateStore` — was written to be caught by nothing else,
 /// which is what `Kind::ModelOnlyMutant` recorded until
@@ -2941,7 +2942,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("DefaultQueryHeadStore", ModelOutcome::Agreed),
     // The upper bound, and all three moved from `Agreed` to `Rejected` at phase
     // 12 without any of them changing. What changed is the generator: `Op::Read`
-    // now carries a `to`, so `Model::select`'s two `to` branches execute. They
+    // now carries a `to`, so the model's `select`'s two `to` branches execute. They
     // sat under the *head* comment above only because that is where the table
     // put them, and they were never about `head`.
     ("ToBoundIgnoredStore", ModelOutcome::Rejected),
@@ -3056,6 +3057,182 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("SwallowedReadFaultStore", ModelOutcome::Agreed),
     ("AwaitAcrossBorrowStore", ModelOutcome::Agreed),
 ];
+
+// =====================================================================
+// The trailing model's own subjects, and what it gives up
+// =====================================================================
+
+/// Hands every store the trailing model is measured against to `$callback`.
+///
+/// A second enumeration beside [`for_each_mutant!`] rather than more rows in
+/// it, because these stores trail their own writes on purpose: the named rules
+/// that read back an append would fail them, and that is not the defect any of
+/// them is about. [`TRAILING_MODEL_COVERAGE`] is the table this list must
+/// agree with.
+#[cfg(feature = "proptest")]
+macro_rules! for_each_trailing_subject {
+    ($($callback:tt)+) => {
+        $($callback)+! {
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::Settling>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::GappedSettling>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::Draining>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::FrontierFilteredCondition>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::HoleyFrontier>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::RetreatingFrontier>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::TrailingAfterIsInclusive>,
+            crate::variants::trailing::TrailingFrontierFixture<crate::variants::trailing::StalledFrontier>,
+        }
+    };
+}
+
+/// Drives one model-family subject list, by name, outcome and description.
+#[cfg(feature = "proptest")]
+macro_rules! model_run_each {
+    ($($subject:ty),* $(,)?) => {
+        ::std::vec![ $(
+            crate::harness::model_probes::<$subject>()
+                .into_iter()
+                .map(|probe| {
+                    let verdict = crate::harness::run_probe(probe);
+                    (
+                        <$subject as crate::harness::Subject>::NAME,
+                        model_outcome(&verdict),
+                        verdict.describe(),
+                    )
+                })
+                .collect::<::std::vec::Vec<_>>()
+        ),* ]
+    };
+}
+
+/// The trailing model against its own subjects.
+#[cfg(feature = "proptest")]
+fn trailing_reports() -> Vec<(&'static str, ModelOutcome, String)> {
+    let per_subject: Vec<Vec<_>> = for_each_trailing_subject!(model_run_each);
+    per_subject.into_iter().flatten().collect()
+}
+
+/// The trailing model against every registered store, each wrapped in
+/// [`crate::variants::trailing::Declined`] so the rule takes the trailing path at zero
+/// lag.
+#[cfg(feature = "proptest")]
+fn declined_reports() -> Vec<(&'static str, ModelOutcome, String)> {
+    macro_rules! declined {
+        ($($subject:ty),* $(,)?) => {
+            model_run_each!($( crate::variants::trailing::Declined<$subject> ),*)
+        };
+    }
+
+    let per_subject: Vec<Vec<_>> = for_each_mutant!(declined);
+    per_subject.into_iter().flatten().collect()
+}
+
+/// The name of every store [`for_each_trailing_subject!`] enumerates.
+#[cfg(feature = "proptest")]
+fn trailing_subject_names() -> Vec<&'static str> {
+    macro_rules! names {
+        ($($subject:ty),* $(,)?) => {
+            ::std::vec![ $( <$subject as crate::harness::Subject>::NAME ),* ]
+        };
+    }
+
+    for_each_trailing_subject!(names)
+}
+
+/// What the trailing model does to each store built to test it, what the
+/// verdict must say, and why that store is plausible.
+///
+/// `MODEL_COVERAGE`'s twin for the trailing path of the same rule. Every row
+/// carries its provenance, as a `REGISTRY` row does, because these stores are
+/// not in `REGISTRY` and nothing else would hold them to CF-4. The middle
+/// column is a substring of the verdict's description: a `Rejected` row names
+/// the assertion that caught the store, so a store rejected for a reason other
+/// than its own defect fails the row rather than passing it.
+#[cfg(feature = "proptest")]
+const TRAILING_MODEL_COVERAGE: &[(&str, ModelOutcome, &str, &str)] = &[
+    (
+        "TrailingFrontierStore",
+        ModelOutcome::Agreed,
+        "passed",
+        "the conformant control: a monotone prefix that lags by zero, one or two reads, \
+         and a condition judged over every held row, which is the shape of \
+         happenstance-postgres and happenstance-neon behind pg_snapshot_xmin",
+    ),
+    (
+        "GappedTrailingFrontierStore",
+        ModelOutcome::Agreed,
+        "passed",
+        "the conformant control over a Postgres sequence's positions: from 4096 in \
+         steps of seven, and a position burned by each refused conditional append, as \
+         nextval() burns one in a transaction that rolls back",
+    ),
+    (
+        "DrainingFrontierStore",
+        ModelOutcome::Agreed,
+        "passed",
+        "the conformant control with a frontier that drains one batch per read, so a \
+         read lands strictly between the full reads either side of it, as a Postgres \
+         read does while concurrent writers commit one by one",
+    ),
+    (
+        "FrontierFilteredConditionStore",
+        ModelOutcome::Rejected,
+        "but a held event violates",
+        "the condition SQL reuses the read path's xact_id < pg_snapshot_xmin(...) \
+         predicate, the defect happenstance-postgres's evaluate warns of with \"No \
+         frontier predicate here\"",
+    ),
+    (
+        "HoleyFrontierStore",
+        ModelOutcome::Rejected,
+        "position order is visibility order",
+        "happenstance-postgres's naive arm: nextval() outside the transaction, so a \
+         later writer commits first and a read shows its row above a hole",
+    ),
+    (
+        "RetreatingFrontierStore",
+        ModelOutcome::Rejected,
+        "the frontier went backward",
+        "a frontier read off a replica, or through a pooler that hops between servers, \
+         so consecutive snapshots disagree on what has committed",
+    ),
+    (
+        "TrailingAfterIsInclusiveStore",
+        ModelOutcome::Rejected,
+        "but no held event can violate",
+        "AfterIsInclusiveStore behind a frontier: after is exclusive, from is inclusive, \
+         and one comparison served both",
+    ),
+    // The one row here that is a miss rather than a catch, kept because a
+    // stated non-goal nothing measures is a sentence that can quietly stop
+    // being true.
+    (
+        "StalledFrontierStore",
+        ModelOutcome::Agreed,
+        "passed",
+        "a transaction left open on the cluster holds pg_snapshot_xmin back for good \
+         (ADR-0024, ADR-0071). Without waiting, which CF-33 forbids, a frontier that \
+         never moves cannot be told from one that has not moved yet: liveness is the \
+         trailing model's non-goal",
+    ),
+];
+
+/// The stores the strict model rejects and the trailing model, run at zero
+/// lag, does not. One line of reason each.
+///
+/// Measured, not guessed: `the_trailing_model_costs_exactly_what_it_states`
+/// derives the set from the two runs and compares it with this one, so a store
+/// moving from caught to missed changes this list, and the list is reviewed.
+///
+/// **Empty at this commit, and that is a measurement of the registry rather
+/// than a property of the weakening.** At zero lag the trailing model's only
+/// loss is an accepted write that never appears, which it must read as lag;
+/// no registered store loses a write without also contradicting a later read
+/// or a returned position. A store that did would land here. What lag itself
+/// costs is a different question, and `happenstance_testkit::model`'s
+/// documentation answers it.
+#[cfg(feature = "proptest")]
+const WEAKENING_COSTS: &[(&str, &str)] = &[];
 
 // =====================================================================
 // The racing registry
@@ -3184,7 +3361,7 @@ const RACERS: &[Racer] = &[
     // `mutant_registry_is_exhaustive` rejects a `Declared` whose `fails` list is
     // empty, and a probe-then-insert store fails *no* sequential rule — that is
     // the entire content of the defect. A concurrency rule's wrong store belongs
-    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:235-238` says
+    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:237-240` says
     // so in prose where the harness says it in code
     // (`mutant_registry_is_exhaustive`, below). Recorded on the row rather than
     // in a commit message because "add a `BEGIN DEFERRED` row to `REGISTRY`" is
@@ -3416,7 +3593,10 @@ mod mutation_coverage {
         registered_second_handle, reports,
     };
     #[cfg(feature = "proptest")]
-    use super::{MODEL_COVERAGE, ModelOutcome, model_reports};
+    use super::{
+        MODEL_COVERAGE, ModelOutcome, TRAILING_MODEL_COVERAGE, WEAKENING_COSTS, declined_reports,
+        model_reports, trailing_reports, trailing_subject_names,
+    };
     use happenstance_testkit::fixtures::MemoryProjectionFixture;
 
     use crate::harness::{run_projection_subject, run_subject};
@@ -5131,6 +5311,140 @@ mod mutation_coverage {
             "the model rule rejected nothing in this binary, so it certifies \
              nothing — which is precisely what ADR-0010 calls a decorative rule"
         );
+    }
+
+    /// The trailing model's subjects and its table name the same stores, once
+    /// each, and every row says why its store is plausible (CF-4).
+    #[test]
+    #[cfg(feature = "proptest")]
+    fn the_trailing_table_agrees_with_its_enumeration() {
+        let names = trailing_subject_names();
+
+        for name in &names {
+            let rows = TRAILING_MODEL_COVERAGE
+                .iter()
+                .filter(|(row, _, _, _)| row == name)
+                .count();
+            assert_eq!(
+                rows, 1,
+                "`{name}` is enumerated by `for_each_trailing_subject!` and has \
+                 {rows} row(s) in `TRAILING_MODEL_COVERAGE`; it needs exactly one"
+            );
+        }
+        for (row, _, saw, provenance) in TRAILING_MODEL_COVERAGE {
+            assert!(
+                !saw.trim().is_empty(),
+                "`{row}` states no verdict substring, so any reason would satisfy it"
+            );
+            assert!(
+                names.contains(row),
+                "`TRAILING_MODEL_COVERAGE` has a row for `{row}`, which \
+                 `for_each_trailing_subject!` does not enumerate"
+            );
+            assert!(
+                !provenance.trim().is_empty(),
+                "`{row}` states no provenance, so nothing says it is a defect \
+                 somebody would ship"
+            );
+        }
+    }
+
+    /// CF-1's argument, applied to the trailing path of the model rule.
+    ///
+    /// The conformant control must be agreed with at every lag the schedule
+    /// produces, which is the guard against a trailing model that false-fails a
+    /// Postgres or a Neon. Each wrong store must be rejected by the model's own
+    /// assertion, not by falling over. A declining fixture that came back
+    /// `Skipped` would read as `FellOver` here, so this is also the test that
+    /// the rule runs rather than skips.
+    #[test]
+    #[cfg(feature = "proptest")]
+    fn the_trailing_model_rejects_exactly_what_it_claims() {
+        let observed = trailing_reports();
+
+        assert_eq!(
+            observed.len(),
+            TRAILING_MODEL_COVERAGE.len(),
+            "every trailing subject must be driven exactly once"
+        );
+        for (name, outcome, description) in &observed {
+            let Some((_, claimed, saw, _)) = TRAILING_MODEL_COVERAGE
+                .iter()
+                .find(|(row, _, _, _)| row == name)
+            else {
+                panic!("`{name}` was driven and has no `TRAILING_MODEL_COVERAGE` row");
+            };
+            assert_ne!(
+                *outcome,
+                ModelOutcome::FellOver,
+                "the trailing model ran `{name}` into something that is not its own \
+                 assertion. Saw: {description}"
+            );
+            assert_eq!(
+                outcome, claimed,
+                "`{name}`: `TRAILING_MODEL_COVERAGE` claims {claimed:?} and the \
+                 trailing model answered {outcome:?}. Saw: {description}"
+            );
+            assert!(
+                description.contains(saw),
+                "`{name}` was {outcome:?} as claimed, but not by the assertion its row \
+                 names: expected `{saw}`. Saw: {description}"
+            );
+        }
+    }
+
+    /// What running the trailing model at zero lag gives up, measured.
+    ///
+    /// Every registered store is wrapped so the rule takes the trailing path.
+    /// Soundness: the strict model checks everything the trailing one does, so
+    /// nothing may be rejected here that `MODEL_COVERAGE` says the strict model
+    /// agrees with. Cost: what the strict model rejects and this run does not
+    /// must be exactly `WEAKENING_COSTS`. `MODEL_COVERAGE` stands in for the
+    /// strict run because `the_model_rule_rejects_exactly_what_it_claims` holds
+    /// it to one.
+    #[test]
+    #[cfg(feature = "proptest")]
+    fn the_trailing_model_costs_exactly_what_it_states() {
+        let observed = declined_reports();
+        let strict = |name: &str| {
+            MODEL_COVERAGE
+                .iter()
+                .find(|(row, _)| *row == name)
+                .map(|(_, outcome)| *outcome)
+        };
+
+        let mut missed = Vec::new();
+        for (name, outcome, description) in &observed {
+            assert_ne!(
+                *outcome,
+                ModelOutcome::FellOver,
+                "the trailing model ran `{name}` into something that is not its own \
+                 assertion. Saw: {description}"
+            );
+            match (strict(name), outcome) {
+                (Some(ModelOutcome::Rejected), ModelOutcome::Agreed) => missed.push(*name),
+                (Some(ModelOutcome::Agreed), ModelOutcome::Rejected) => panic!(
+                    "`{name}` is rejected by the trailing model and agreed with by the \
+                     strict one, so the trailing model asserts something the strict \
+                     model does not. Saw: {description}"
+                ),
+                (None, _) => panic!("`{name}` was driven and has no `MODEL_COVERAGE` row"),
+                _ => {}
+            }
+        }
+
+        let stated: Vec<&str> = WEAKENING_COSTS.iter().map(|(name, _)| *name).collect();
+        assert_eq!(
+            missed, stated,
+            "the stores the strict model rejects and the trailing model misses at \
+             zero lag are not the ones `WEAKENING_COSTS` states"
+        );
+        for (name, reason) in WEAKENING_COSTS {
+            assert!(
+                !reason.trim().is_empty(),
+                "`{name}` is a stated cost with no reason"
+            );
+        }
     }
 
     /// The static half of `the_concurrency_rules_reject_exactly_what_they_claim`:

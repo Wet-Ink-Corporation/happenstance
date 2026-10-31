@@ -285,18 +285,18 @@ pub trait Fixture {
     /// there is the right one — a flaky suite teaches adapter authors to re-run
     /// until green, and that habit is what lets a real failure through.
     ///
-    /// **Relaxing the equality to a prefix does not reach far enough.** The
-    /// [model family](crate::model) does not merely compare a read against what
-    /// it appended; it *predicts* whether the store will reject a conditional
-    /// append, from what a read showed it. ES-25 evaluates a condition over what
-    /// the store **holds**, while ES-10 and ES-11 govern what a read **shows** —
-    /// and a frontier store deliberately keeps those two sets apart, because
-    /// filtering a committed row out of a condition would admit an append the
-    /// consistency boundary forbids. So on such a store the model has no oracle
-    /// for the prediction, and no weakening of the comparison supplies one.
-    ///
-    /// The honest move is therefore to say the family does not apply, in the
-    /// fixture's own words, rather than to run it and hope the server is quiet.
+    /// **A prefix-only weakening does not reach far enough; a larger one does.**
+    /// The [model family](crate::model) *predicts* whether the store will
+    /// reject a conditional append. ES-25 evaluates a condition over what the
+    /// store **holds**, ES-10 and ES-11 govern what a read **shows**, and a
+    /// frontier store keeps the two apart, so a prediction made from a read
+    /// has no oracle. Against a declining fixture the family therefore runs
+    /// a **trailing model** instead of its exact one. It predicts over what
+    /// is held, bounds a position it has not been shown, and defers a verdict
+    /// it cannot decide yet. It never waits, so it gives some things up,
+    /// which `ops_agree_with_the_model`'s documentation lists. It also
+    /// assumes, with no clause to cite, that visibility never moves
+    /// backward.
     const READ_YOUR_OWN_WRITES: Capability = Capability::SUPPORTED;
 
     /// Whether this fixture can make its store **fail part way through writing

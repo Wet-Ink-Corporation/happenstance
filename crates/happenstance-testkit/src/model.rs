@@ -101,6 +101,10 @@ use proptest::prelude::{Just, Strategy, prop, prop_oneof};
 use crate::Fixture;
 use crate::fixtures::strategies::{any_event, any_query};
 
+mod trailing;
+
+use trailing::TrailingModel;
+
 // =====================================================================
 // The generated vocabulary
 // =====================================================================
@@ -169,7 +173,7 @@ pub enum Op {
     ///
     /// **All five, since phase 12.** The doc line above said "every read option"
     /// while the variant carried four of them, and the missing one was `to` —
-    /// which made the two `to` branches of `Model::select` dead code under a
+    /// which made the two `to` branches of the model's `select` dead code under a
     /// comment explaining why a model that ignores an option is worthless. A
     /// wrong store this file could not disagree with, `WHERE a OR b AND position
     /// <= ?`, is registered as `UnparenthesisedToPredicateStore` and is what
@@ -322,83 +326,111 @@ struct Model {
     known: Vec<SequencedEvent>,
 }
 
+/// Turns an [`Anchor`] into a position, against what the store has shown.
+///
+/// Every branch is total, and none of them can produce a false failure: the
+/// resolved value is handed to the model and to the store, so a degenerate
+/// resolution — an empty log, an overflowing head — is merely a less
+/// interesting input rather than a disagreement.
+///
+/// A free function over the shown log rather than a method, because both
+/// models resolve anchors and they must resolve them identically: the strict
+/// one over the whole log, the trailing one over the visible prefix of it.
+fn resolve(known: &[SequencedEvent], anchor: Anchor) -> Option<SequencePosition> {
+    match anchor {
+        Anchor::Unset => None,
+        Anchor::First => known.first().map(|event| event.position),
+        Anchor::Middle => known.get(known.len() / 2).map(|event| event.position),
+        Anchor::Head => known.last().map(|event| event.position),
+        // On an empty store every position is unassigned, so `FIRST` is a
+        // truthful answer to "one the store has not handed out" — and it is
+        // the one that exercises a condition boundary against an empty log,
+        // which ES-28 cares about. `next()` saturating is unreachable short
+        // of a store that has assigned `u64::MAX`.
+        Anchor::BeyondHead => Some(
+            known
+                .last()
+                .and_then(|head| head.position.next())
+                .unwrap_or(SequencePosition::FIRST),
+        ),
+    }
+}
+
+/// The read options an [`Op::Read`] names, with its anchors resolved against
+/// `known`.
+///
+/// Resolution happens here, once, and the result is handed to the store and
+/// to [`select`] alike — the module documentation's rule.
+fn read_options(
+    known: &[SequencedEvent],
+    from: Anchor,
+    to: Anchor,
+    backwards: bool,
+    limit: Option<usize>,
+) -> ReadOptions {
+    let mut options = ReadOptions::new();
+    if let Some(from) = resolve(known, from) {
+        options = options.from(from);
+    }
+    if let Some(to) = resolve(known, to) {
+        options = options.to(to);
+    }
+    if backwards {
+        options = options.backwards();
+    }
+    if let Some(limit) = limit {
+        options = options.limit(limit);
+    }
+    options
+}
+
+/// What a read of `query` under `options` should return, over `known`.
+///
+/// The three steps are separate for the reason `correct.rs` separates them:
+/// `LIMIT` applied before the filter is a real adapter bug with no in-memory
+/// analogue unless the in-memory version is written in the same order.
+fn select(known: &[SequencedEvent], query: &Query, options: ReadOptions) -> Vec<SequencedEvent> {
+    let matched = known
+        .iter()
+        .filter(|event| query.matches(event.event_type(), event.tags()));
+
+    // `from` and `to` are both inclusive in both directions, and each bounds
+    // opposite ends depending on direction: forwards `from` is a floor and
+    // `to` a ceiling, backwards they swap. The model carries `to` because a
+    // model that ignores an option cannot disagree with a store that
+    // mishandles it — it would agree with every implementation, which is the
+    // one thing a reference model must not do.
+    //
+    // That sentence was an *aspiration* until phase 12. These two `to`
+    // branches were written here and were dead: `Op::Read` carried no `to`
+    // field, `any_op` generated none, and `apply` never called `.to(..)`, so
+    // `options.to` was `None` on every read this function ever saw. The
+    // three registered `to` mutants sat in `MODEL_COVERAGE` as `Agreed` and
+    // said so. Adding one field and one generator arm is what made the
+    // comment true, and `UnparenthesisedToPredicateStore` is the store that
+    // now has nowhere else to be caught.
+    let mut selected: Vec<SequencedEvent> = if options.backwards {
+        matched
+            .rev()
+            .filter(|event| options.from.is_none_or(|from| event.position <= from))
+            .filter(|event| options.to.is_none_or(|to| event.position >= to))
+            .cloned()
+            .collect()
+    } else {
+        matched
+            .filter(|event| options.from.is_none_or(|from| event.position >= from))
+            .filter(|event| options.to.is_none_or(|to| event.position <= to))
+            .cloned()
+            .collect()
+    };
+
+    if let Some(limit) = options.limit {
+        selected.truncate(limit);
+    }
+    selected
+}
+
 impl Model {
-    /// Turns an [`Anchor`] into a position, against what the store has assigned.
-    ///
-    /// Every branch is total, and none of them can produce a false failure: the
-    /// resolved value is handed to the model and to the store, so a degenerate
-    /// resolution — an empty log, an overflowing head — is merely a less
-    /// interesting input rather than a disagreement.
-    fn resolve(&self, anchor: Anchor) -> Option<SequencePosition> {
-        let positions: Vec<SequencePosition> =
-            self.known.iter().map(|event| event.position).collect();
-
-        match anchor {
-            Anchor::Unset => None,
-            Anchor::First => positions.first().copied(),
-            Anchor::Middle => positions.get(positions.len() / 2).copied(),
-            Anchor::Head => positions.last().copied(),
-            // On an empty store every position is unassigned, so `FIRST` is a
-            // truthful answer to "one the store has not handed out" — and it is
-            // the one that exercises a condition boundary against an empty log,
-            // which ES-28 cares about. `next()` saturating is unreachable short
-            // of a store that has assigned `u64::MAX`.
-            Anchor::BeyondHead => Some(
-                positions
-                    .last()
-                    .and_then(|head| head.next())
-                    .unwrap_or(SequencePosition::FIRST),
-            ),
-        }
-    }
-
-    /// What a read of `query` under `options` should return.
-    ///
-    /// The three steps are separate for the reason `correct.rs` separates them:
-    /// `LIMIT` applied before the filter is a real adapter bug with no in-memory
-    /// analogue unless the in-memory version is written in the same order.
-    fn select(&self, query: &Query, options: ReadOptions) -> Vec<SequencedEvent> {
-        let matched = self
-            .known
-            .iter()
-            .filter(|event| query.matches(event.event_type(), event.tags()));
-
-        // `from` and `to` are both inclusive in both directions, and each bounds
-        // opposite ends depending on direction: forwards `from` is a floor and
-        // `to` a ceiling, backwards they swap. The model carries `to` because a
-        // model that ignores an option cannot disagree with a store that
-        // mishandles it — it would agree with every implementation, which is the
-        // one thing a reference model must not do.
-        //
-        // That sentence was an *aspiration* until phase 12. These two `to`
-        // branches were written here and were dead: `Op::Read` carried no `to`
-        // field, `any_op` generated none, and `apply` never called `.to(..)`, so
-        // `options.to` was `None` on every read this function ever saw. The
-        // three registered `to` mutants sat in `MODEL_COVERAGE` as `Agreed` and
-        // said so. Adding one field and one generator arm is what made the
-        // comment true, and `UnparenthesisedToPredicateStore` is the store that
-        // now has nowhere else to be caught.
-        let mut selected: Vec<SequencedEvent> = if options.backwards {
-            matched
-                .rev()
-                .filter(|event| options.from.is_none_or(|from| event.position <= from))
-                .filter(|event| options.to.is_none_or(|to| event.position >= to))
-                .cloned()
-                .collect()
-        } else {
-            matched
-                .filter(|event| options.from.is_none_or(|from| event.position >= from))
-                .filter(|event| options.to.is_none_or(|to| event.position <= to))
-                .cloned()
-                .collect()
-        };
-
-        if let Some(limit) = options.limit {
-            selected.truncate(limit);
-        }
-        selected
-    }
-
     /// The position of the first stored event violating `condition`, if any.
     ///
     /// This is the prediction, and it is made **before** the store is called.
@@ -515,7 +547,7 @@ impl Model {
                 anchor,
             } => {
                 let condition = AppendCondition::new(query.clone())
-                    .after_every_guard_opt(self.resolve(*anchor));
+                    .after_every_guard_opt(resolve(&self.known, *anchor));
                 let predicted = self.violation(&condition);
 
                 let result = store.append(events, Some(&condition)).await;
@@ -552,25 +584,13 @@ impl Model {
                 backwards,
                 limit,
             } => {
-                let mut options = ReadOptions::new();
-                if let Some(from) = self.resolve(*from) {
-                    options = options.from(from);
-                }
-                if let Some(to) = self.resolve(*to) {
-                    options = options.to(to);
-                }
-                if *backwards {
-                    options = options.backwards();
-                }
-                if let Some(limit) = *limit {
-                    options = options.limit(limit);
-                }
+                let options = read_options(&self.known, *from, *to, *backwards, *limit);
 
                 let observed = match collect(store.read(query, options)).await {
                     Ok(events) => events,
                     Err(err) => return Err(format!("the read failed: {err:?}")),
                 };
-                let wanted = self.select(query, options);
+                let wanted = select(&self.known, query, options);
 
                 if observed == wanted {
                     Ok(())
@@ -618,6 +638,43 @@ const MAX_SHRINK_MOVES: usize = 1024;
 /// constraining neither types nor tags — so rejections are rare and local.
 const MAX_GENERATION_RETRIES: usize = 8;
 
+/// Which model a replay holds the store to.
+///
+/// A closed set of two, so an `enum` rather than a trait object: the choice is
+/// made once per replay from the fixture's capability, and both arms are
+/// known here.
+#[derive(Debug)]
+enum Checker {
+    /// The store reads its own writes: the whole log is checked exactly.
+    Strict(Model),
+    /// The store declines `READ_YOUR_OWN_WRITES`: reads may trail commits.
+    Trailing(TrailingModel),
+}
+
+impl Checker {
+    /// The model `F`'s capabilities call for.
+    fn for_fixture<F: Fixture>() -> Self {
+        if F::READ_YOUR_OWN_WRITES.is_supported() {
+            Self::Strict(Model::default())
+        } else {
+            Self::Trailing(TrailingModel::default())
+        }
+    }
+
+    /// Runs op number `index` against `store` under the chosen model.
+    async fn apply<S: EventStore>(
+        &mut self,
+        store: &S,
+        index: usize,
+        op: &Op,
+    ) -> Result<(), String> {
+        match self {
+            Self::Strict(model) => model.apply(store, op).await,
+            Self::Trailing(model) => model.apply(store, index, op).await,
+        }
+    }
+}
+
 /// Runs one operation sequence against a fresh fixture.
 ///
 /// Returns the first disagreement, or `None` if the store agreed throughout.
@@ -630,10 +687,10 @@ where
 {
     let fixture = open().await;
     let store = fixture.connect().await;
-    let mut model = Model::default();
+    let mut checker = Checker::for_fixture::<F>();
 
     for (index, op) in ops.iter().enumerate() {
-        if let Err(failure) = model.apply(&store, op).await {
+        if let Err(failure) = checker.apply(&store, index, op).await {
             return Some(format!("at op {index}, {op:?}: {failure}"));
         }
     }
@@ -683,20 +740,39 @@ pub mod rules {
     /// Failure persistence is never engaged, because `TestRunner::run` is what
     /// consults it and this rule does not call it. An adapter running the suite
     /// gets no `.proptest-regressions` file appearing in its tree.
+    ///
+    /// # Behind a frontier, it runs a weaker model
+    ///
+    /// A fixture that declines
+    /// [`READ_YOUR_OWN_WRITES`](crate::Fixture::READ_YOUR_OWN_WRITES) is held
+    /// to a **trailing** model instead of the exact one. Each full read must
+    /// be a prefix of what was accepted that never shrinks, each read must be
+    /// explained by some frontier between the full reads around it, and each
+    /// condition verdict is predicted from what the store holds, with an
+    /// unknown position bounded by its neighbours' and the verdict deferred
+    /// when those bounds do not decide it. It reads no clock and never waits
+    /// (CF-33). The rule still reports [`RuleOutcome::Ran`]; which model ran
+    /// is a fact about the fixture's declared capability, not something the
+    /// outcome carries.
+    ///
+    /// Waiting for nothing has a price. Against a declining fixture the rule
+    /// **does not catch**:
+    ///
+    /// - an accepted write that never becomes visible, which reads as lag;
+    /// - part of a batch becoming visible before the rest;
+    /// - a read that drops its newest matching events, when the frontier moved
+    ///   during that read and a lower frontier explains the result;
+    /// - a condition verdict whose deciding event is never shown and is not
+    ///   the last of its batch, or that is still open when the sequence ends.
+    ///
+    /// Run at zero lag against every wrong store in the testkit's own
+    /// registry, it misses none the exact model catches.
+    ///
+    /// It assumes one thing no clause states yet: visibility never moves
+    /// backward, so a later full read never shows less than an earlier one.
+    /// Both frontier adapters in this workspace meet that by construction. A
+    /// store whose frontier retreats fails with a message that says so.
     pub async fn ops_agree_with_the_model<F: Fixture>(open: impl AsyncFn() -> F) -> RuleOutcome {
-        // `require!`'s expansion, written out. That macro is declared in
-        // `suite.rs`, and `mod model` precedes `mod suite` in `lib.rs`, so under
-        // textual macro scoping it is not in scope here. The shape, the skip and
-        // the reported reason are identical — see `Fixture::READ_YOUR_OWN_WRITES`
-        // for why a store may decline, and why CF-33 forbids the obvious
-        // alternative of waiting for the frontier to catch up.
-        if let Some(reason) = F::READ_YOUR_OWN_WRITES.reason() {
-            return RuleOutcome::Skipped {
-                capability: "READ_YOUR_OWN_WRITES",
-                reason,
-            };
-        }
-
         let strategy = proptest::collection::vec(any_op(), 1..=MAX_OPS);
         let config = Config::default();
         let cases = config.cases;

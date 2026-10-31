@@ -99,9 +99,15 @@ you were told succeeded shows up in your next read through the same handle.
 
 A store whose reads can briefly lag an acknowledged append should decline it,
 with its own reason. The PostgreSQL and Neon fixtures do, because a read there
-only shows rows below a server-wide snapshot point. Only the model family needs
-this capability, and it reports a skip without it
-(`Fixture::READ_YOUR_OWN_WRITES`, read by `ops_agree_with_the_model`).
+only shows rows below a server-wide snapshot point. Only the model family reads
+this capability (`Fixture::READ_YOUR_OWN_WRITES`, read by
+`ops_agree_with_the_model`). Without it the family does not skip: it runs a
+weaker check. Each full read must be a prefix of what you accepted that never
+shrinks, and each condition verdict is judged over what your store holds,
+deferred while the positions that decide it are unknown. The rule's rustdoc
+lists what that check does not catch. It also assumes your store's
+visibility never moves backward, so a later read never shows less than an
+earlier one.
 
 ### Rows held above a visibility frontier
 
@@ -429,8 +435,9 @@ macro. Add the ones that fit your store.
   there is no timeout to fail it.
 - **Model.** `event_store_model_conformance!` generates random sequences of
   operations and checks your store against a simple model of the log. It needs
-  the testkit's `proptest` feature on your dev-dependency, and it skips on a
-  fixture that declines `READ_YOUR_OWN_WRITES`. The SQLite adapter runs it beside
+  the testkit's `proptest` feature on your dev-dependency. On a fixture that
+  declines `READ_YOUR_OWN_WRITES` it runs a weaker check rather than skipping
+  (see *Read-your-own-writes* above). The SQLite adapter runs it beside
   the event-store family in
   [its conformance target](../crates/happenstance-sqlite/tests/conformance.rs).
 - **Projections.** If your crate also implements `ProjectionStore`, the store
