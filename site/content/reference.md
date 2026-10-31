@@ -30,6 +30,8 @@ and where this page and a clause disagree, the clause wins.
 | [`happenstance-postgres`](../api/happenstance_postgres/index.html) | PostgreSQL event and projection stores — the adapter whose writers are not serialised. |
 | [`happenstance-neon`](../api/happenstance_neon/index.html) | Neon serverless PostgreSQL over one-shot HTTP: no connection, no interactive transaction, no cursor. Host and `wasm32`. |
 | [`happenstance-cloudflare`](https://docs.rs/happenstance-cloudflare) | A Cloudflare Durable Object event store: the workspace's `!Send` store, on `wasm32`. |
+| [`happenstance-sync`](../api/happenstance_sync/index.html) | The replication port: `SyncPeer`, the `IngestStore` port each adapter implements behind its `sync` feature, and the wire messages. Published from `0.4.4`, and unfinished: no runner or network peer yet. |
+| [`happenstance-sync-testkit`](../api/happenstance_sync_testkit/index.html) | The conformance suites for sync peers and ingest stores. Pin it exactly: a new rule can turn a passing adapter red. |
 
 ## Further reading
 

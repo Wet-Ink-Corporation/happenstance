@@ -24,8 +24,10 @@ CHANGELOG gains the `[0.4.3]` and `[0.4.4]` compare links. The status table gain
 `0.4.4` row; the owner sets up trusted publishing for the two sync crates, merges the
 PR and tags its merge commit.
 
-**Verified.** See the release PR for the `cargo semver-checks` run against `0.4.3` and
-the gate.
+**Verified.** The release PR's `semver compatibility` job (against `0.4.3`) and the
+gate were green on all three platforms. The owner set up trusted publishing for the
+two sync crates and pushed `v0.4.4` at `5487546`; `release.yml` published all nine, and
+docs.rs built every one.
 
 ---
 

@@ -47,11 +47,13 @@ crates/happenstance-neon/        Postgres over one-shot HTTP: no connection, no 
                                  against a live endpoint — and the adapter that falsified
                                  ES-11. host + wasm32. published from `0.2.0`.
 crates/happenstance-sync/        the replication port, its wire messages (ADR-0097) and
-                                 MemorySyncPeer behind `memory`. publish = false: unfinished.
+                                 MemorySyncPeer behind `memory`. published from `0.4.4`, and
+                                 unfinished: no runner (#244) and no network peer yet.
                                  no todo!() left in src/; the stand-in peers in tests/ keep theirs.
 crates/happenstance-sync-testkit/
                                  the sync conformance suite. `sync_peer_conformance!`, the
-                                 bar a peer adapter must clear. publish = false: unfinished.
+                                 bar a peer adapter must clear. published from `0.4.4`, and
+                                 growing rule by rule: a consumer pins it exactly.
 examples/course-subscriptions/   the canonical DCB worked example. in memory.
 examples/transfers-on-sqlite/    the same library on a real database — the typed layer's
                                  command loop and projection runner against
@@ -79,9 +81,10 @@ examples/tickets-over-http/      two processes over one file. an HTTP API and a 
                                  answered by 202 until the view catches up. one image, three
                                  roles, and the only lib target under examples/.
 harness/workerd/                 🔬 the runtime instrument. a real Durable Object that runs
-                                 every event-store rule under workerd — locally, and on an
-                                 object deployed to Cloudflare — and measures the platform's
-                                 SQLite walls. the `workerd` CI job, a sibling of gate.
+                                 every event-store rule and the ingest family under workerd —
+                                 locally, and on an object deployed to Cloudflare — and
+                                 measures the platform's SQLite walls and the ingest ceiling.
+                                 the `workerd` CI job, a sibling of gate.
                                  an npm lockfile lives here. never published. phase 17.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
 spec/                            SPECIFICATION.md — every clause that is true now.
@@ -150,8 +153,10 @@ line it is on — a count in a file that loads on every task is a count nobody
 re-reads, which this file already says one section down and has now been wrong
 about three times.
 
-**Two kinds of `publish = false` were in this workspace, and one is left.**
-`happenstance-sync` and `happenstance-sync-testkit` are unfinished. `happenstance-ladybug` was finished and **could
+**Two kinds of `publish = false` were in this workspace, and none is left in it.**
+`happenstance-sync` and `happenstance-sync-testkit` carried the *unfinished* kind
+until `0.4.4`, which published them unfinished: they say so in their own crate
+roots now, not in a manifest key. `happenstance-ladybug` was finished and **could
 not** be published — `lbug` does not render on docs.rs, phase 12's bar for a
 published crate — and is now **retired** (ADR-0078, phase 17): excluded from the
 workspace, its directory kept as a frozen record because the specification, the
@@ -162,8 +167,8 @@ There was a **third** kind until `e597c34` — finished, and held out of this re
 — and it had two members, `happenstance-postgres` and `happenstance-neon`. That
 category is now empty, and it is recorded here rather than deleted because the two
 crate roots argued from it for a while after it stopped being true. `grep -n
-'^publish' crates/*/Cargo.toml` is the answer that cannot go stale: it returns three
-lines, and one of them is the retired crate outside the workspace.
+'^publish' crates/*/Cargo.toml` is the answer that cannot go stale: it returns one
+line, and it is the retired crate outside the workspace.
 
 Dependency rule: **everything depends on `happenstance-core`; `happenstance-core`
 depends on nothing in this workspace.** No adapter may depend on another adapter.
