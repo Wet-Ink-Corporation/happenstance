@@ -627,6 +627,24 @@ jobs:
             exit 1
           fi
 
+      # The model family RAN rather than skipped (#79). The fixture declines
+      # `READ_YOUR_OWN_WRITES`, which used to make `ops_agree_with_the_model`
+      # report a skip; it now runs the testkit's trailing model instead. A skip
+      # is a pass to libtest, so the guard above would wave a reverted skip
+      # through, and the "1 model" in the count comment above would read the
+      # same either way. This step is what tells the two apart.
+      - name: The model family ran against the server rather than skipped
+        if: always()
+        run: |
+          if ! grep -qE '^test dcb_model_conformance::ops_agree_with_the_model \.\.\. ok$' run.txt; then
+            echo "::error::ops_agree_with_the_model did not pass in run.txt"
+            exit 1
+          fi
+          if grep -q '^SKIP ops_agree_with_the_model' run.txt; then
+            echo "::error::ops_agree_with_the_model reported a skip rather than running"
+            exit 1
+          fi
+
       # THE PROJECTION SUITE, AND WHY IT IS A SECOND PAIR OF STEPS.
       #
       # The run above filters to `--test postgres_conformance`, which is the
@@ -1201,6 +1219,24 @@ jobs:
               exit 1
             fi
           done
+
+      # The model family RAN rather than skipped (#79). The fixture declines
+      # `READ_YOUR_OWN_WRITES`, which used to make `ops_agree_with_the_model`
+      # report a skip; it now runs the testkit's trailing model instead. A skip
+      # is a pass to libtest, so the steps above would wave a reverted skip
+      # through, and the "1 model" in the count comment above would read the
+      # same either way. This step is what tells the two apart.
+      - name: The model family ran against the endpoint rather than skipped
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          if ! grep -qE '^test dcb_model_conformance::ops_agree_with_the_model \.\.\. ok$' run-events.txt; then
+            echo "::error::ops_agree_with_the_model did not pass in run-events.txt"
+            exit 1
+          fi
+          if grep -q '^SKIP ops_agree_with_the_model' run-events.txt; then
+            echo "::error::ops_agree_with_the_model reported a skip rather than running"
+            exit 1
+          fi
 
       # The ingest port's live tests and the ingest family's mount (#108, part
       # C). They are unit tests in the LIBRARY target, not a `--test` target,

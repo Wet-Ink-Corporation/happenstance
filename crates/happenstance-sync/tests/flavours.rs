@@ -21,11 +21,17 @@
 //! [`not_send`] asserts that at compile time, beside two positive controls that
 //! show the assertion is not vacuous.
 //!
+//! The other direction is checked here too. [`spawns_from_generic`] drives every
+//! `SendIngestStore` method inside `tokio::spawn` from a function bound only on
+//! that flavour, so the `Send` the flavour promises is checked against the
+//! trait's declaration, not against a concrete store's future (#341).
+//!
 //! One flavour name is imported per trait, the bare one, and the `Send` flavour
 //! is reached by full path where a delegation needs it (CLAUDE.md rule 4).
 
 use core::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use futures_core::Stream;
 use happenstance_core::{
@@ -34,8 +40,8 @@ use happenstance_core::{
 };
 use happenstance_sync::{
     Classify, EventGroup, FailureClass, IngestError, IngestGroup, IngestStore, Ingested,
-    MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled, PushBatch, ReplicatedEvent,
-    SyncPeer, Watermark,
+    MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
+    PushBatch, ReplicatedEvent, SyncPeer, Watermark,
 };
 
 /// The failure [`exchange`] reports: any of the three ports' own errors.
@@ -394,5 +400,113 @@ async fn the_runner_step_runs_over_a_not_send_store_and_peer() {
         caught_up.ingested,
         Ingested::default(),
         "nothing is left to pull"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The `Send` flavour crosses threads from generic code
+// ---------------------------------------------------------------------------
+
+/// What [`spawns_from_generic`] saw, one answer per `SendIngestStore` method.
+///
+/// Each error is rendered to a `String` before the next await. That is
+/// deliberate, and it is why `happenstance-core`'s `spawns_from_generic`
+/// collapses its errors too: `S::Error` carries no `Send` bound (ADR-0009), so a
+/// `Result<_, S::Error>` held across the next await would make the task
+/// `!Send`. The rendering keeps the failure's message for the test to show.
+#[derive(Debug)]
+struct Spawned {
+    own: Result<StoreId, String>,
+    ingested: Result<Ingested, String>,
+    watermark: Result<Watermark, String>,
+}
+
+/// Every [`SendIngestStore`](happenstance_sync::SendIngestStore) method, called
+/// inside `tokio::spawn` from a function that knows `S` only by that flavour.
+///
+/// The bound is written at the definition, so the compiler checks the body
+/// against what the trait promises and nothing else. Spawning a concrete
+/// [`MemoryIngestStore`] directly would not: its `async fn` futures leak `Send`
+/// from their hidden types whatever the trait says.
+///
+/// **The wrong implementation this rejects** is a `SendIngestStore` whose
+/// methods do not promise a `Send` future: `trait_variant` replaced by a
+/// hand-written `pub trait SendIngestStore: Send` whose methods return
+/// `impl Future<Output = ..>` without `+ Send`. That was written and run. The
+/// crate still compiled, [`MemoryIngestStore`] still implemented it, and the
+/// one thing that refused it was this function, once per method:
+/// `future cannot be sent between threads safely`, at each `await`. (The same
+/// twin spelt with `async fn` is caught earlier, by the workspace's
+/// `async_fn_in_trait` lint.)
+///
+/// The three methods are awaited in turn against one `&S`, so the borrow
+/// crosses three suspension points, and the [`IngestGroup`]s borrowing the
+/// task's own events are held across the last of them. The bounds are copied
+/// from `happenstance-core`'s `spawns_from_generic`, whose comment records each
+/// one removed in turn: `Sync` because `Arc<S>: Send` and `&S: Send` both need
+/// it, `'static` because the task outlives this frame, and `Send` restated at
+/// the signature although the supertrait already supplies it.
+fn spawns_from_generic<S>(
+    store: Arc<S>,
+    events: Vec<ReplicatedEvent>,
+    answer: Vec<Event>,
+) -> tokio::task::JoinHandle<Spawned>
+where
+    S: happenstance_sync::SendIngestStore + Send + Sync + 'static,
+{
+    tokio::spawn(async move {
+        let own = happenstance_sync::SendIngestStore::store_id(&*store)
+            .await
+            .map_err(|error| error.to_string());
+        let groups = [IngestGroup::new(&events, &answer)];
+        let ingested = happenstance_sync::SendIngestStore::ingest(&*store, &groups)
+            .await
+            .map_err(|error| error.to_string());
+        let watermark = happenstance_sync::SendIngestStore::watermark(&*store)
+            .await
+            .map_err(|error| error.to_string());
+        Spawned {
+            own,
+            ingested,
+            watermark,
+        }
+    })
+}
+
+#[tokio::test]
+async fn the_send_flavour_spawns_from_generic_code() {
+    let origin = StoreId::from_bytes([7; 16]);
+    let own = StoreId::from_bytes([9; 16]);
+    let store = Arc::new(MemoryIngestStore::with_store_id(own));
+    let answer = Event::new("SubscriptionReversed", "{}").expect("a valid event type");
+
+    let spawned = spawns_from_generic(
+        Arc::clone(&store),
+        vec![replicated(origin, 1), replicated(origin, 2)],
+        vec![answer],
+    )
+    .await
+    .expect("the spawned task does not panic");
+
+    assert_eq!(spawned.own, Ok(own), "store_id answered from the task");
+    let ingested = spawned.ingested.expect("an in-memory ingest does not fail");
+    assert_eq!(ingested.appended, 2, "both foreign events landed");
+    assert_eq!(ingested.skipped, 0);
+    assert_eq!(ingested.compensated, 1, "the group was answered once");
+    let watermark = spawned
+        .watermark
+        .expect("an in-memory watermark does not fail");
+    assert_eq!(
+        watermark.get(origin),
+        Some(replicated(origin, 2).id.position()),
+        "the watermark read in the task saw the ingest before it"
+    );
+
+    // And what the task wrote is in the store this frame still holds.
+    assert!(
+        EventStore::contains_event_id(&*store, replicated(origin, 1).id)
+            .await
+            .expect("an in-memory probe does not fail"),
+        "the spawned ingest did not reach the shared store"
     );
 }
