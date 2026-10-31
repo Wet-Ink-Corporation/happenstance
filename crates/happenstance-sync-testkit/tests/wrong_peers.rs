@@ -915,3 +915,20 @@ fn nothing_waiting_means_the_next_pull_is_empty_runs_against_a_peer_overstating_
          must not lay it there"
     );
 }
+
+/// A peer that refuses more than [`TAKES_EVENTS`] events to a push, while it
+/// declares 1,000: the count corner, 1,000 empty events, is refused.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_takes_fewer_events_than_it_declares()
+ {
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(
+                Mistake::TakesFewerEventsThanItDeclares,
+                both_logs_written(),
+            )
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}

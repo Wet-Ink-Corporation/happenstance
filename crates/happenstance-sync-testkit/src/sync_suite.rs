@@ -122,13 +122,13 @@ pub mod rules {
         SequencePosition, StoreId, Tag, Tags,
     };
     use happenstance_sync::{
-        Classify, EventGroup, PeerLimits, PushBatch, ReplicatedEvent, SyncPeer, Waiting,
+        Ack, Classify, EventGroup, PeerLimits, PushBatch, ReplicatedEvent, SyncPeer, Waiting,
     };
     use happenstance_testkit::RuleOutcome;
 
     use crate::kv_capped::turnstile_seat_map;
     use crate::violation::{Violation, ensure};
-    use crate::{MAX_PROVOKED_BATCH_BYTES, SyncFixture};
+    use crate::{MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, SyncFixture};
 
     /// The most pulls a rule makes before it decides the peer will never say
     /// it has caught up. Far above what two or three tiny groups need under the
@@ -159,6 +159,13 @@ pub mod rules {
     /// SY-31's two origins, whose events the rule pushes in one batch.
     const DURABLE_ORIGIN: StoreId = StoreId::from_bytes([0x81; 16]);
     const DURABLE_TWIN: StoreId = StoreId::from_bytes([0x82; 16]);
+
+    /// The type of every event SY-18's batch rule pushes.
+    const BATCH_FILLED: EventType = EventType::from_static("BatchFilled");
+
+    /// SY-18's batch rule's two origins: the push at the declared event count
+    /// with empty payloads, and the push at that count and the declared bytes.
+    const COUNT_CORNER_ORIGIN: StoreId = StoreId::from_bytes([0x91; 16]);
 
     /// SY-1: a peer appends every replicated event it does not already hold,
     /// and never evaluates an append condition — the origin's or its own — as a
@@ -749,8 +756,19 @@ pub mod rules {
     pub async fn peer_takes_a_batch_at_its_declared_limits<F: SyncFixture>(
         open: impl AsyncFn() -> F,
     ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-18";
         let fixture = open().await;
-        let _peer = fixture.connect().await;
+        let peer = fixture.connect().await;
+
+        let limits = peer.limits();
+        let events = limits.max_batch_events.min(MAX_PROVOKED_BATCH_EVENTS);
+        if events == 0 {
+            // A declaration that admits no event: `peer_declares_its_own_limits`
+            // fails it, and there is no corner here to push into.
+            return Ok(RuleOutcome::Ran);
+        }
+
+        push_the_corner(&peer, &limits, COUNT_CORNER_ORIGIN, events, 0, CLAUSE).await?;
         Ok(RuleOutcome::Ran)
     }
 
@@ -972,16 +990,14 @@ pub mod rules {
         what: &str,
         clause: &'static str,
     ) -> Result<(), Violation> {
-        let ack = peer.push(batch).await.map_err(|error| {
-            Violation::new(
-                clause,
-                format!(
-                    "the declared limits admit {what} and the push refused it ({error}, class \
-                     {:?}): the failure was relocated to ingest, not prevented",
-                    error.class()
-                ),
-            )
-        })?;
+        let ack = push_or_report(
+            peer,
+            batch,
+            what,
+            "the failure was relocated to ingest, not prevented",
+            clause,
+        )
+        .await?;
         ensure(ack.appended == 1 && ack.skipped == 0, clause, || {
             format!(
                 "the peer acknowledged {what} as {} appended and {} skipped; it held nothing \
@@ -989,6 +1005,112 @@ pub mod rules {
                 ack.appended, ack.skipped
             )
         })
+    }
+
+    /// Pushes `batch`, which the peer's declaration admits, and reports a
+    /// refusal as `what` refused, followed by `meaning`: what the refusal says
+    /// about the peer.
+    async fn push_or_report<P: SyncPeer>(
+        peer: &P,
+        batch: &PushBatch,
+        what: &str,
+        meaning: &str,
+        clause: &'static str,
+    ) -> Result<Ack, Violation> {
+        peer.push(batch).await.map_err(|error| {
+            Violation::new(
+                clause,
+                format!(
+                    "the declared limits admit {what} and the push refused it ({error}, class \
+                     {:?}): {meaning}",
+                    error.class()
+                ),
+            )
+        })
+    }
+
+    /// Builds the batch at a corner of `limits` — `events` single-event
+    /// groups carrying `bytes` payload bytes between them — checks that the
+    /// declaration admits it, and pushes it: it must land whole, every event
+    /// acknowledged as appended. Answers the batch, for the pull-back.
+    async fn push_the_corner<P: SyncPeer>(
+        peer: &P,
+        limits: &PeerLimits,
+        origin: StoreId,
+        events: usize,
+        bytes: usize,
+        clause: &'static str,
+    ) -> Result<PushBatch, Violation> {
+        let batch = batch_at_the_corner(origin, events, bytes, clause)?;
+        let what = format!("a push of {events} events and {bytes} payload bytes");
+        ensure(limits.admits(&batch), clause, || {
+            format!(
+                "the declaration {limits:?} admits no {what}, the batch its own limits \
+                 state it accepts"
+            )
+        })?;
+        let ack = push_or_report(
+            peer,
+            &batch,
+            &what,
+            "a declared batch limit this peer does not impose",
+            clause,
+        )
+        .await?;
+        let expected = u64::try_from(events).map_err(|error| {
+            Violation::new(clause, format!("the rule's own event count is too large: {error}"))
+        })?;
+        ensure(ack.appended == expected && ack.skipped == 0, clause, || {
+            format!(
+                "the peer acknowledged {what} as {} appended and {} skipped; it held none of \
+                 those identities, so it must append all {expected}",
+                ack.appended, ack.skipped
+            )
+        })?;
+        Ok(batch)
+    }
+
+    /// `events` single-event groups from `origin`, at its positions from the
+    /// first, whose payloads total exactly `bytes`: each `bytes / events`
+    /// long, and the first `bytes % events` one byte longer. The bytes are
+    /// zeros and are never parsed (SY-35).
+    ///
+    /// Single-event groups with no guard, no tags and no metadata, so a peer
+    /// has nothing to cut, evaluate or cap but the batch itself.
+    fn batch_at_the_corner(
+        origin: StoreId,
+        events: usize,
+        bytes: usize,
+        clause: &'static str,
+    ) -> Result<PushBatch, Violation> {
+        let no_events = || Violation::new(clause, "the rule built a corner of no events");
+        let base = bytes.checked_div(events).ok_or_else(no_events)?;
+        let longer = bytes.checked_rem(events).ok_or_else(no_events)?;
+
+        let mut position = SequencePosition::FIRST;
+        let mut groups = Vec::with_capacity(events);
+        for index in 0..events {
+            let size = if index < longer {
+                base.saturating_add(1)
+            } else {
+                base
+            };
+            let event = Event::new(BATCH_FILLED, vec![0_u8; size]).map_err(|error| {
+                Violation::new(clause, format!("the rule's own event is invalid: {error}"))
+            })?;
+            groups.push(EventGroup::new(
+                None,
+                vec![ReplicatedEvent::new(
+                    EventId::new(origin, position),
+                    RecordedAt::from_millis(1_800_000_000_000),
+                    event,
+                )],
+            ));
+            position = position
+                .next()
+                .ok_or_else(|| Violation::new(clause, "the rule's corner ran out of positions"))?;
+        }
+        Ok(PushBatch::new(groups))
     }
 
     /// Which of an event's two opaque fields carries a boundary event's bytes.

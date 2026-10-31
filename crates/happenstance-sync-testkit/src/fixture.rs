@@ -97,6 +97,16 @@ pub struct Refusal<E> {
 /// limit and well inside what a test process can hold.
 pub const MAX_PROVOKED_BATCH_BYTES: usize = 64 * 1024 * 1024;
 
+/// The most events one push a rule builds will carry: 4,096.
+///
+/// A ceiling for the reason [`MAX_PROVOKED_BATCH_BYTES`] is one: SY-18's batch
+/// rule sizes its pushes from the peer's declared `max_batch_events`, a value
+/// the suite does not control, and builds each push whole (H-13). 4,096 is
+/// thirty-two times the minimum conformant limit, and above the 257 events the
+/// largest push of SY-37's count-cut log carries, so a peer that refuses that
+/// push is one the batch rule refuses too.
+pub const MAX_PROVOKED_BATCH_EVENTS: usize = 4_096;
+
 /// The oversized-push refusal, provoked on `peer` and declared
 /// [`FailureClass::Split`].
 ///
