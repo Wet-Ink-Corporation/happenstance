@@ -216,5 +216,6 @@ fn answer(outcome: Dispatched) -> Result<Response> {
         Dispatched::Skipped(line) => Response::ok(format!("skipped\n{line}")),
         Dispatched::Unknown => Response::error("no such rule", 404),
         Dispatched::HarnessFault(faults) => Response::error(faults.join("\n"), 500),
+        Dispatched::Violated(violation) => Response::error(format!("violated\n{violation}"), 422),
     }
 }

@@ -1041,6 +1041,7 @@ dependencies = [
  "futures-core",
  "happenstance-cloudflare",
  "happenstance-core",
+ "happenstance-sync-testkit",
  "happenstance-testkit",
  "worker",
 ]

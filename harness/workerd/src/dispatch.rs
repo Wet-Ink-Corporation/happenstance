@@ -46,8 +46,9 @@ pub fn rule_names() -> Vec<&'static str> {
     names
 }
 
-/// The namespaces a rule's fixture instances keep their logs under.
-fn namespace_pool() -> Result<Vec<TableNamespace>, InvalidTableNamespace> {
+/// The namespaces a rule's fixture instances keep their logs under, the ingest
+/// family's ([`crate::ingest::dispatch`]) included.
+pub(crate) fn namespace_pool() -> Result<Vec<TableNamespace>, InvalidTableNamespace> {
     (0..INSTANCES)
         .map(|n| TableNamespace::new(&format!("f{n}")))
         .collect()
@@ -123,6 +124,10 @@ pub enum Dispatched {
     /// The rule returned, but the harness failed underneath it, so its result
     /// says nothing about the adapter.
     HarnessFault(Vec<String>),
+    /// The rule answered a violation as a value: the ingest family's rules
+    /// return one rather than panicking. The text is the violation's own,
+    /// `<clause> violated: …`. The event-store family never constructs it.
+    Violated(String),
 }
 
 /// Runs the rule called `rule` inside the object whose state is `state`.

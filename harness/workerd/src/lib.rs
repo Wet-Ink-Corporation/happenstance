@@ -65,6 +65,7 @@ pub mod dispatch;
 pub mod fixture;
 pub mod idle;
 pub mod incarnation;
+pub mod ingest;
 mod object;
 pub mod probe;
 pub mod remint;
