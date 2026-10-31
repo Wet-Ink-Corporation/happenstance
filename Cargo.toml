@@ -21,7 +21,7 @@ exclude = ["crates/happenstance-ladybug"] # retired, ADR-0078; a frozen record, 
 # it shipped behind an off-by-default `unstable-projection` feature with a
 # written exemption — and is from the next release, ADR-0063 having lifted the
 # gate once adapters at both ends of the batch-shape axis had passed its suite.
-version = "0.4.4"
+version = "0.4.5"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
@@ -63,9 +63,9 @@ categories = ["database", "data-structures"]
 # `happenstance-sync` is the third since #108 part E: each adapter's optional
 # `sync` feature names it, so it publishes in the same `cargo publish` as the
 # adapters, ahead of them, at the same lockstep number.
-happenstance-core = { version = "0.4.4", path = "crates/happenstance-core", default-features = false }
-happenstance = { version = "0.4.4", path = "crates/happenstance", default-features = false }
-happenstance-sync = { version = "0.4.4", path = "crates/happenstance-sync", default-features = false }
+happenstance-core = { version = "0.4.5", path = "crates/happenstance-core", default-features = false }
+happenstance = { version = "0.4.5", path = "crates/happenstance", default-features = false }
+happenstance-sync = { version = "0.4.5", path = "crates/happenstance-sync", default-features = false }
 happenstance-testkit = { path = "crates/happenstance-testkit" }
 
 # --- external ---

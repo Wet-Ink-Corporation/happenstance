@@ -10,6 +10,22 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-31 — `0.4.5`, a caller-configured SQLite store
+
+*Committed on `claude/project-thread-iqwt3o`.* `[Unreleased]` becomes
+`[0.4.5] — 2026-10-31`, and all nine crates move to `0.4.5`, with the workspace
+requirements, `happenstance-sync-testkit`'s on `happenstance-testkit`, the testkit's
+recipe pin and the six examples raised to match. It ships #359 (PR #361), the one
+gap left in Redkiln Core's ingest brief after `0.4.4`: `SqliteEventStore::open_on`
+and `remint_identity_on` on a connection the caller configured, with no pragma set,
+and an all-skip ingest that rolls back rather than advancing `AUTOINCREMENT`. The
+status table gains the `0.4.5` row; the owner merges the PR and tags its merge commit.
+
+**Verified.** `cargo xtask lints` and the temper gate locally; the release PR's
+`semver compatibility` job runs `cargo semver-checks` against the published `0.4.4`.
+
+---
+
 ## 2026-10-31 — `0.4.4`, the sync crates' first release
 
 *Committed on `claude/project-thread-uikw3l-release-0.4.4`.* `[Unreleased]` becomes
