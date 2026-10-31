@@ -51,7 +51,7 @@ multi-row insert benchmark" as the measurement that would lift the marker
 (`spec/SPECIFICATION.md:3499-3500`). But ADR-0012 item 4 already says only a store that
 *moves the payload into an owned row it keeps* can benefit from owning the batch — a SQL
 adapter that binds parameters from a borrow, which is exactly what
-`crates/happenstance-sqlite/src/event_store.rs:995-1016`'s `write_batch` does, cannot. The
+`crates/happenstance-sqlite/src/event_store.rs:998-1019`'s `write_batch` does, cannot. The
 falsifier as written names the one shape guaranteed to produce a null result. The restated
 falsifier must name the adapter shape measured, the tag regime the fixtures run in (the
 built harness already exercises the expensive `Cow::Owned` regime via `Tags::from_pairs`),

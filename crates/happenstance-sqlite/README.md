@@ -141,6 +141,12 @@ trust:
 | `synchronous` | `NORMAL` (`1`) | durable across a process crash; on power loss it can lose the tail since the last checkpoint. `OFF` is not on the menu — the specification names it as the wrong implementation the reopen rule exists to reject |
 | `busy_timeout` | `15,000` ms | finite *and* generous, and both halves are load-bearing. Raised from `5,000` on measurement: at the old value the concurrency target went red on a `SQLITE_BUSY` in 7 launches of 8 under maximum contention, and at the new one in 0 of 16. It costs nothing when nothing is contended — the handler returns as soon as the lock is acquired — so the cap bounds only the tail. It stays **finite** because an unbounded handler would turn a livelock into a hung job naming no rule. An append whose `BEGIN IMMEDIATE` outlasts it is refused as `AppendError::Busy`: nothing was written, and deciding again is safe |
 
+A caller that must keep its own settings, for example a file kept in
+`journal_mode = TRUNCATE` where WAL's shared-memory file cannot live, opens the
+connection itself and hands it to `SqliteEventStore::open_on`, and re-mints with
+`SqliteEventStore::remint_identity_on`. Neither sets a pragma, so this table then
+describes nothing: the durability and contention trade-offs are the caller's.
+
 ## Limits this store enforces
 
 `append` refuses anything above these as `AppendError::ExceedsStoreLimit` — never

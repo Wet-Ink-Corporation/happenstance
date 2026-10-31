@@ -566,6 +566,9 @@ impl SqliteEventStore {
     ///
     /// # Errors
     ///
+    /// The connection is consumed, as [`new`](Self::new) consumes it, and is
+    /// closed on any of these; a caller that retries opens it again.
+    ///
     /// * [`SqliteEventStoreError::Sqlite`] if the schema cannot be applied.
     ///   Nothing partially migrated is left behind: every statement runs inside
     ///   one transaction.
@@ -856,9 +859,9 @@ impl SqliteEventStore {
     /// recorded time, deduplicated inside the insert against the origin pair's
     /// `UNIQUE` constraint (VT-8); then the group's compensation, as ordinary
     /// local rows, **only if** at least one foreign row of that group went in
-    /// (SY-11); then commit, or roll back when nothing landed. The whole call is one transaction, which is
-    /// stronger than the per-group atomicity the port asks for and costs nothing
-    /// here, because this adapter serialises its writers anyway.
+    /// (SY-11); then commit, or roll back if nothing landed. One transaction,
+    /// stronger than the per-group atomicity the port asks for and free here,
+    /// because this adapter serialises its writers anyway.
     ///
     /// What is absent is the point: **no condition is evaluated** (SY-1). An
     /// ingest records a decision another store already took.

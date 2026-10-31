@@ -31,6 +31,8 @@ struct TempDb(PathBuf);
 impl TempDb {
     fn new(label: &str) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
+        // Relaxed: only the uniqueness of the value matters, and no other
+        // memory is published through it.
         let ordinal = NEXT.fetch_add(1, Ordering::Relaxed);
         let mut path = std::env::temp_dir();
         path.push(format!(

@@ -75,7 +75,7 @@ Letterpress owns re-mint; adapter records the gap
 - `crates/happenstance-cloudflare/src/event_store.rs:63`: store_meta carries this object's own StoreId, minted once at the first migrate
 - `spec/SPECIFICATION.md:894`: An adapter that can do neither MUST mint a fresh incarnation on every open
 - `spec/SPECIFICATION.md:856`: PROVISIONAL, falsified by ... a Cloudflare Durable Object, whose isolate is evicted and revived as a matter of routine
-- `crates/happenstance-sqlite/src/event_store.rs:667`: pub fn remint_identity(path) -> Result<StoreId, _>
+- `crates/happenstance-sqlite/src/event_store.rs:670`: pub fn remint_identity(path) -> Result<StoreId, _>
 
 ## Decision outcome
 
