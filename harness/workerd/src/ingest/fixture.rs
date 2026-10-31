@@ -1,7 +1,7 @@
 //! The ingest fixture over one Durable Object's storage.
 //!
 //! One fixture instance is one isolated log under its own [`TableNamespace`],
-//! as [`WorkerdFixture`](crate::fixture::WorkerdFixture)'s is, and the store a
+//! as [`WorkerdFixture`]'s is, and the store a
 //! rule ingests into is built by the **published** constructor,
 //! [`CloudflareIngestStore::namespaced_from_object_state`], over the object's
 //! own `DurableObjectState`. No `cfg(test)` item of the adapter is reachable
