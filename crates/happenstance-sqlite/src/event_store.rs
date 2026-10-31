@@ -484,7 +484,9 @@ impl SqliteEventStore {
     ///
     /// The connection is used as it is given. It is **not** reconfigured, so a
     /// caller reaching this constructor directly should have opened it through
-    /// [`crate::connection::open_configured`].
+    /// [`crate::connection::open_configured`], or configured it deliberately.
+    /// A caller that keeps its own configuration and may meet a file with no
+    /// store yet wants [`open_on`](Self::open_on).
     ///
     /// # Errors
     ///
@@ -539,6 +541,43 @@ impl SqliteEventStore {
     ///   [`EventId`]s under a new origin for events that already exist.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteEventStoreError> {
         let mut connection = crate::connection::open_configured(path)?;
+        let store_id = Self::migrate(&mut connection)?;
+        Ok(Self::with_store_id(connection, store_id))
+    }
+
+    /// Applies the schema on a connection the caller opened, configured and
+    /// keeps, and wraps it.
+    ///
+    /// [`open`](Self::open) without its configuration step. **No pragma is
+    /// set**: the journal mode, `synchronous`, the busy timeout and
+    /// `user_version` are left as the caller set them, so a file kept in
+    /// `journal_mode = TRUNCATE` — where WAL's shared-memory file cannot live —
+    /// stays there. This crate's schema version is a row in its own
+    /// `store_meta` table, never `user_version`, which stays the caller's.
+    ///
+    /// Use it in place of [`new`](Self::new) when the file may not hold a
+    /// store yet: `new` reads an existing schema and refuses a file without
+    /// one. On a file that already holds a store it changes nothing and reads
+    /// the identity back, exactly as `open` does.
+    ///
+    /// What [`open`](Self::open) configures becomes the caller's to choose. In
+    /// particular, with no busy timeout set, a write that meets a lock held by
+    /// another connection is refused at once rather than waited for.
+    ///
+    /// # Errors
+    ///
+    /// The connection is consumed, as [`new`](Self::new) consumes it, and is
+    /// closed on any of these; a caller that retries opens it again.
+    ///
+    /// * [`SqliteEventStoreError::Sqlite`] if the schema cannot be applied.
+    ///   Nothing partially migrated is left behind: every statement runs inside
+    ///   one transaction.
+    /// * [`SqliteEventStoreError::UnsupportedSchemaVersion`] if the file was
+    ///   written by a newer build.
+    /// * [`SqliteEventStoreError::MissingIdentity`] or
+    ///   [`SqliteEventStoreError::MalformedIdentity`] if the schema is present
+    ///   and its incarnation row is not readable.
+    pub fn open_on(mut connection: Connection) -> Result<Self, SqliteEventStoreError> {
         let store_id = Self::migrate(&mut connection)?;
         Ok(Self::with_store_id(connection, store_id))
     }
@@ -630,9 +669,45 @@ impl SqliteEventStore {
     ///   cannot be read back, in which case nothing is committed.
     pub fn remint_identity(path: impl AsRef<Path>) -> Result<StoreId, SqliteEventStoreError> {
         let mut connection = crate::connection::open_configured(path)?;
+        Self::remint_identity_on(&mut connection)
+    }
+
+    /// [`remint_identity`](Self::remint_identity) on a connection the caller
+    /// opened, configured and keeps.
+    ///
+    /// The same re-mint, under the same procedure — nothing else holding the
+    /// database open, and before the copy accepts its first append — for a
+    /// caller that cannot let the path form reconfigure its file. **No pragma is
+    /// set**: the journal mode, `synchronous`, the busy timeout and
+    /// `user_version` are left as the caller set them, so a file kept in
+    /// `journal_mode = TRUNCATE` stays there. The path form switches it to WAL.
+    ///
+    /// The connection is borrowed rather than consumed because the natural next
+    /// step is [`new`](Self::new) on it, which reads the fresh identity back.
+    /// A store already wrapping another connection onto this file goes on
+    /// holding the retired identity, and refuses its next append with
+    /// [`IdentityMoved`](SqliteEventStoreError::IdentityMoved).
+    ///
+    /// The schema is applied first if the file has none, as
+    /// [`open_on`](Self::open_on) applies it.
+    ///
+    /// # Errors
+    ///
+    /// * [`SqliteEventStoreError::Sqlite`] if the schema cannot be applied or
+    ///   the write lock cannot be taken. With no busy timeout set on the
+    ///   connection, a lock held elsewhere is refused at once rather than
+    ///   waited for.
+    /// * [`SqliteEventStoreError::UnsupportedSchemaVersion`] if the file was
+    ///   written by a newer build.
+    /// * [`SqliteEventStoreError::MissingIdentity`] or
+    ///   [`SqliteEventStoreError::MalformedIdentity`] if the freshly written row
+    ///   cannot be read back, in which case nothing is committed.
+    pub fn remint_identity_on(
+        connection: &mut Connection,
+    ) -> Result<StoreId, SqliteEventStoreError> {
         // Migrating first is what makes this operation total rather than
         // conditional on the caller having opened the store already.
-        Self::migrate(&mut connection)?;
+        Self::migrate(connection)?;
 
         let transaction =
             connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
@@ -784,9 +859,9 @@ impl SqliteEventStore {
     /// recorded time, deduplicated inside the insert against the origin pair's
     /// `UNIQUE` constraint (VT-8); then the group's compensation, as ordinary
     /// local rows, **only if** at least one foreign row of that group went in
-    /// (SY-11); then commit. The whole call is one transaction, which is
-    /// stronger than the per-group atomicity the port asks for and costs nothing
-    /// here, because this adapter serialises its writers anyway.
+    /// (SY-11); then commit, or roll back if nothing landed. One transaction,
+    /// stronger than the per-group atomicity the port asks for and free here,
+    /// because this adapter serialises its writers anyway.
     ///
     /// What is absent is the point: **no condition is evaluated** (SY-1). An
     /// ingest records a decision another store already took.
@@ -875,6 +950,28 @@ impl SqliteEventStore {
                     .collect();
                 ingested.compensated += write(&compensation)?.inserted;
             }
+        }
+
+        // Nothing landed: every event was held. Rolled back rather than
+        // committed, because a skip is not free under `AUTOINCREMENT` — the
+        // `ON CONFLICT ... DO NOTHING` insert still advances `sqlite_sequence`,
+        // so a commit here would burn one position per skipped event and
+        // rewrite pages of a file whose log did not change. Rolling back leaves
+        // a re-import that appended nothing byte-identical (#359). A call that
+        // lands some events and skips others still burns positions for its
+        // skips: gaps the specification permits.
+        //
+        // `compensated` is checked as a defence: compensation is only written
+        // after a foreign row landed, so `appended == 0` implies it today.
+        //
+        // An explicit rollback, not a drop: this is a success path, and a
+        // failed ROLLBACK swallowed by `Drop` would leave the connection inside
+        // a transaction that refuses every later write.
+        if ingested.appended == 0 && ingested.compensated == 0 {
+            transaction
+                .rollback()
+                .map_err(|error| IngestError::Store(error.into()))?;
+            return Ok(ingested);
         }
 
         transaction

@@ -34,6 +34,24 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- `happenstance-sqlite`: `SqliteEventStore::open_on` applies the schema on a
+  connection the caller opened and wraps it, and
+  `SqliteEventStore::remint_identity_on` re-mints the store's identity on one.
+  Neither sets a pragma, so a file the caller keeps in
+  `journal_mode = TRUNCATE` stays there, and `PRAGMA user_version` stays the
+  caller's. `open` and `remint_identity` still configure the connection and
+  switch the file to WAL (#359).
+
+### Changed
+
+- `happenstance-sqlite`: an ingest in which every event was already held now
+  rolls its transaction back instead of committing it. The log is unchanged
+  either way. Before, the commit advanced `AUTOINCREMENT`'s sequence by one
+  position per skipped event and rewrote the file, so re-importing a journal
+  left gaps and changed the file's bytes (#359).
+
 ## [0.4.4] — 2026-10-31
 
 ### Added

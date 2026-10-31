@@ -808,7 +808,7 @@ status: accepted
 authority_tier: note
 summary: >-
   happenstance-sqlite's query planner chunks on two independent axes and applies its parameter
-  budget to one of them. crates/happenstance-sqlite/src/event_store.rs:577 declares
+  budget to one of them. crates/happenstance-sqlite/src/event_store.rs:616 declares
   PARAMETER_BUDGET = 30_000 and carries the arithmetic that derives a statement's row capacity
   from it; :760 is its only caller, sizing the tag-row insert. The other axis is UNION arm width,
   chunked through query_sql::chunks at a width of 400 on both the read path and the wide-guard
