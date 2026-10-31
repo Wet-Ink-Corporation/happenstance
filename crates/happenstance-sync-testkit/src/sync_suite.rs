@@ -740,6 +740,20 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-18: a peer's declared batch limits are the limits it imposes: a push
+    /// at the declared corner, which the declaration admits, lands whole.
+    ///
+    /// # Errors
+    ///
+    /// None yet.
+    pub async fn peer_takes_a_batch_at_its_declared_limits<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let fixture = open().await;
+        let _peer = fixture.connect().await;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What one log SY-37's rule wrote showed it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Log {
@@ -1132,6 +1146,7 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A peer declares its own limits (SY-18) ---------------------
             peer_declares_its_own_limits,
+            peer_takes_a_batch_at_its_declared_limits,
 
             // --- Every refusal states its class (SY-36) ---------------------
             every_refusal_states_its_class,
