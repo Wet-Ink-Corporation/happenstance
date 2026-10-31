@@ -1529,7 +1529,7 @@ jobs:
       # What the ingest ceiling's bisection decides (ingest-ceiling.mjs), pinned
       # without a runtime, and that a 422 is never a platform miss: as "What the
       # deployed leg retries" pins platform-miss.mjs.
-      - name: What the ingest ceiling's bisection decides
+      - name: What the bisection of the ingest ceiling decides
         if: always()
         run: npx vitest run test/ingest-ceiling-bisect.test.ts --reporter=verbose
 
