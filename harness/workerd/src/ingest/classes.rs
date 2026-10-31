@@ -21,8 +21,7 @@ use happenstance_cloudflare::happenstance_sync::{
 use happenstance_cloudflare::worker::State;
 use happenstance_cloudflare::worker::worker_sys::DurableObjectState;
 use happenstance_cloudflare::{
-    CloudflareEventStoreError, CloudflareIngestStore, SqlError, SqlStorage, SqlValue,
-    TableNamespace,
+    CloudflareEventStoreError, CloudflareIngestStore, SqlError, SqlStorage, TableNamespace,
 };
 use happenstance_sync_testkit::IngestFixture as _;
 
@@ -36,6 +35,9 @@ const NAMESPACE: &str = "census";
 /// How many maximal events the storage case sends: 8 MiB of data against an
 /// object capped one page above what it already holds.
 const STORAGE_FULL_EVENTS: usize = 8;
+
+/// SQLite's default page size, in bytes.
+const DEFAULT_PAGE_SIZE: u64 = 4096;
 
 /// One reachable ingest failure, staged on its own object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -286,30 +288,25 @@ async fn stage(
     }
 }
 
-/// `PRAGMA max_page_count` set one page above `PRAGMA page_count`, so the
-/// next page the database needs is refused. Either PRAGMA's refusal is the
-/// answer, verbatim: the object's authoriser decides which PRAGMAs run.
+/// `PRAGMA max_page_count` set one page above what the database holds, so the
+/// next page it needs is refused. Its refusal is the answer, verbatim: the
+/// object's authoriser decides which PRAGMAs run.
+///
+/// The page count is derived from the size the binding reports, at SQLite's
+/// default page size, because local `workerd` 1.20260815.1 refuses
+/// `PRAGMA page_count` itself (`not authorized: SQLITE_AUTH`, measured).
 fn cap_pages(sql: &SqlStorage) -> Result<(), String> {
-    let refused = |statement: &str, error: &dyn fmt::Display| format!("{statement}: {error}");
-    let mut cursor = sql
-        .exec("PRAGMA page_count", &[])
-        .map_err(|error| refused("PRAGMA page_count", &error))?;
-    let pages = match cursor.next_row() {
-        Some(Ok(row)) => match row.values() {
-            [SqlValue::Integer(pages)] => *pages,
-            other => return Err(format!("PRAGMA page_count answered {other:?}")),
-        },
-        Some(Err(error)) => return Err(refused("PRAGMA page_count", &error)),
-        None => return Err("PRAGMA page_count answered no row".to_owned()),
-    };
-    let cap = pages.saturating_add(1);
+    let cap = sql
+        .database_size()
+        .div_ceil(DEFAULT_PAGE_SIZE)
+        .saturating_add(1);
     let statement = format!("PRAGMA max_page_count = {cap}");
     let mut cursor = sql
         .exec(&statement, &[])
-        .map_err(|error| refused(&statement, &error))?;
+        .map_err(|error| format!("{statement}: {error}"))?;
     // Drained, so a refusal at step time is seen too.
     while let Some(row) = cursor.next_row() {
-        row.map_err(|error| refused(&statement, &error))?;
+        row.map_err(|error| format!("{statement}: {error}"))?;
     }
     Ok(())
 }

@@ -7,5 +7,6 @@
 # The deployed leg's reports; CI uploads them, nothing commits them.
 /deployed-walls.txt
 /deployed-failures.json
+/deployed-ingest.txt
 /vitest-*.json
 /vitest-*.log

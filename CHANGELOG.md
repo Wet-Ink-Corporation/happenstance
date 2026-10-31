@@ -87,6 +87,21 @@ not the same as what a user needed to be told.
   feature powerset. Each adapter gains `tests/ingest_port.rs`, which names the
   store as an `IngestStore` from outside the crate.
 
+- **The ingest family runs under `workerd`, through the published
+  constructor** (#108, part E3). Nothing published moves. `harness/workerd`'s
+  Durable Object runs every ingest rule and CF-18's ingest declension check
+  against `CloudflareIngestStore::namespaced_from_object_state` over its real
+  `DurableObjectState`, so each call is one real `transactionSync`: strictly on
+  local `workerd`, warm and cold-started, and strictly on a deployed object. A
+  census provokes each reachable ingest failure and retries the identical call
+  on the same object; part F's classes for `SqlError::Thrown` hold, and a full
+  object cannot be staged (the object's authoriser refuses
+  `PRAGMA max_page_count`). A runner-driven bisection measures the largest
+  ingest call the runtime commits per event shape, recorded under
+  `experiments/durable-object-limits/results/`. `happenstance-cloudflare`'s
+  documentation of where its ingest store has run, and of why its classes are
+  what they are, says so; its `Classify` impl is unchanged.
+
 - **`happenstance-sync`: the replication message set, in a crate that is not
   published yet** (#114, ADR-0097). Four messages, each its own type
   in `wire::Envelope<T>`: `PushBatch`, `Ack`, the new `wire::PullRequest`, and

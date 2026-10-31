@@ -1,7 +1,8 @@
 # happenstance-workerd-harness
 
-Runs every event-store conformance rule against `happenstance-cloudflare` inside
-`workerd`, through a real Durable Object. The gate runs the same rules against a
+Runs every event-store conformance rule, and every rule of `happenstance-sync`'s
+ingest family, against `happenstance-cloudflare` inside `workerd`, through a real
+Durable Object. The gate runs the same rules against a
 `node:sqlite` shim, which takes `workerd`'s four statement limits but none of the
 platform's other properties, so this harness checks conformance on the real
 runtime. It also measures where that
@@ -31,6 +32,10 @@ $ npx vitest run test/restart.test.ts --reporter=verbose  # across a restart (~1
 $ npx vitest run test/idle.test.ts --reporter=verbose     # idle eviction (~15 s)
 $ npx vitest run test/remint.test.ts --reporter=verbose   # the re-mint leg's local half
 $ npx vitest run test/transaction.test.ts --reporter=verbose  # transactionSync's properties
+$ npx vitest run test/ingest.test.ts test/ingest-cold.test.ts --reporter=verbose  # the ingest family, warm and cold
+$ npx vitest run test/ingest-classes.test.ts --reporter=verbose    # F's D7 classes, by an identical retry
+$ npx vitest run test/ingest-ceiling-bisect.test.ts               # the bisection, without a runtime
+$ npx vitest run test/ingest-ceiling.test.ts --reporter=verbose    # the ingest ceiling (~2 min)
 ```
 
 To drive the deployed path without deploying, run `wrangler dev` and point
@@ -41,6 +46,7 @@ $ printf 'HARNESS_TOKEN=local\n' > .dev.vars
 $ npx wrangler dev --port 8799 &
 $ HARNESS_TOKEN=local node deployed.mjs http://127.0.0.1:8799 local-1
 $ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://127.0.0.1:8799 local-1
+$ HARNESS_TOKEN=local node deployed-ingest.mjs http://127.0.0.1:8799 local-1
 ```
 
 ## How it fits together
@@ -57,6 +63,11 @@ $ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://1
 | `src/idle.rs` | `IdleHold`: a store, and optionally a read stream opened and advanced by one event, parked inside one future the object owns and polls by hand. No task, no timer, no promise. |
 | `src/object/idling.rs` | The `/idle/arm?stream=none\|held` and `/idle/release` routes. |
 | `src/remint.rs` | The re-mint leg's ledger, carried across a bookmark restore, and its verdict. |
+| `src/ingest.rs`, `src/ingest/fixture.rs` | The ingest family's fixture: one log per `TableNamespace`, the store built once per instance by the published `CloudflareIngestStore::namespaced_from_object_state` over the object's own `DurableObjectState`, and SY-30's mid-group fault armed by a `BEFORE INSERT` trigger on the namespace's event table. |
+| `src/ingest/dispatch.rs` | The ingest emitter: `for_each_ingest_store_rule!` into a `match`, the names from the same enumeration. A rule's `Violation` is a value, answered `422 violated`; a fixture that could not be opened is a harness fault, never a verdict. |
+| `src/ingest/classes.rs` | The census of F's D7 failure classes: each reachable ingest failure provoked, the identical call retried on the same object, and the class judged by the retry. |
+| `src/ingest/ceiling.rs` | One attempt of the ingest ceiling: `n` foreign events of one shape in one call. |
+| `src/object/ingesting.rs` | The `/ingest-rule/<name>`, `/ingest-ceiling/<shape>?events=<n>` and `/ingest-class/<case>` routes; `/ingest-rules` lists the family. Apart from `/rules`, because both families name their declension check alike. |
 | `src/object/reminting.rs` | The `/remint/seed`, `/remint/lose` and `/remint/after?mode=remint\|control` routes. |
 | `worker.mjs` | The entry point, in JavaScript on purpose. See below. It also answers `/bookmark/current` and `/bookmark/restore`, the bookmark calls the `worker` crate does not bind, and `/transaction-probe/<case>`, which drives `ctx.storage.transactionSync`, which it does not bind either. |
 | `test/conformance.test.ts` | One `it()` per rule, each against its own object. |
@@ -65,8 +76,13 @@ $ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://1
 | `test/remint.test.ts` | The re-mint leg's refusals, and the pin that local `workerd` implements no restore. |
 | `test/transaction.test.ts` | The `transactionSync` properties the `cfg(test)` ingest store's `node:sqlite` model assumes: a throw rolls back rows and `sqlite_sequence` and is rethrown, a return commits, `UPDATE OR IGNORE … RETURNING` answers no row on a conflict, and `exec` refuses `SAVEPOINT` and `BEGIN`. The routes are `/transaction-probe/<case>` in `worker.mjs`. |
 | `test/idle.test.ts` | Idle objects holding the adapter, left alone for 12 s and for 8 s, and the timer control (`/idle-control/` in `worker.mjs`). |
+| `test/ingest.test.ts`, `test/ingest-cold.test.ts` | One `it()` per ingest rule, each on its own object, warm and on a primed and evicted object. Every rule must answer `ran`. |
+| `test/ingest-classes.test.ts` | The D7 census, strict: `trigger-abort` and `missing-schema` must hold, `storage-full` must hold or be unreachable. |
+| `test/ingest-ceiling.test.ts`, `test/ingest-ceiling-bisect.test.ts` | The ingest ceiling, strict on the `minimal` axis only, and the bisection pinned without a runtime. |
 | `test/limits.test.ts`, `test/platform-miss.test.ts` | The probe, and what the deployed leg retries. |
-| `deployed.mjs` | The deployed leg's runner. |
+| `deployed.mjs` | The deployed leg's runner: both families, each strict. |
+| `ingest-ceiling.mjs` | The ingest ceiling's bisection, shared by the local test and the deployed script. One object per attempt, because a call near the top can trap the object. |
+| `deployed-ingest.mjs` | The deployed leg's ingest ceiling and D7 census. Record-only. |
 | `deployed-restart.mjs` | The deployed leg's hibernation cells, over `wss://`, and its idle cells. Record-only. |
 | `deployed-remint.mjs` | The deployed leg's bookmark-restore cells for `remint_identity`. Asserted when the restore runs, recorded when it cannot. |
 

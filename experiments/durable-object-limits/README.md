@@ -199,3 +199,66 @@ item is the length of one JSON parameter, `SQLITE_LIMIT_LENGTH`: 8,527 tags of
 On a deployed object, whose row wall puts its length limit at 8,388,637 B, the
 same arithmetic predicted about 32,500; the deployed leg measured **32,514**
 (CI run 37419423991, [`results/run-workerd-deployed-2026-10-06.txt`](results/run-workerd-deployed-2026-10-06.txt)).
+
+## Phase A for ingest (#108 part E3)
+
+`CloudflareIngestStore` runs each `ingest` call inside one
+`ctx.storage.transactionSync`, and its 1,024-event ceiling per call was the
+declared policy, measured for `append`'s statement count and not for ingest's
+(about two statements and the tags per foreign row, inside one transaction).
+The adapter refuses a call over 1,024 events before any SQL, so an attempt
+through it can only rediscover that declaration at the top; what was open is
+below it. `harness/workerd` now measures it through the published constructor,
+`namespaced_from_object_state`, over a real object's state: the runner
+(`ingest-ceiling.mjs`) bisects one shape at a time, one object per attempt,
+because a call near the top can trap or reset the object instead of answering.
+Local transcript:
+[`results/run-workerd-local-2026-10-31-ingest.txt`](results/run-workerd-local-2026-10-31-ingest.txt).
+The deployed leg's (`deployed-ingest.mjs`, record-only) is copied from the
+`workerd` CI job's log by hand, as the wall files above were, under
+`results/run-workerd-deployed-<date>-ingest.txt`.
+
+| Shape (per event) | Searched to | `workerd` 1.20260815.1 | Round trip at the boundary | Deployed Durable Object |
+| --- | --- | --- | --- | --- |
+| minimal: 8 B, 1 tag | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 69 ms | from CI |
+| max-tags: 8 B, 1,024 tags | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 11,536 ms | from CI |
+| max-data: 1 MiB, 1 tag | 256 | no wall to **256** (256 MiB in one call) | 1,069 ms | from CI |
+
+**The finding.** On local `workerd` the runtime commits every call the adapter
+accepts at the two count-bound shapes, up to the declared 1,024 events, and the
+call above is the adapter's own refusal. The plan expected `max-data` to stop
+well below 1,024 events; locally it does not stop below the 256 searched, so
+the product of the per-event ceilings (1,024 × 1 MiB = 1 GiB) is not refuted
+here, only unbounded by this search. What the local leg cannot see is the
+deployed isolate's 128 MiB memory limit and its CPU limit: the `max-tags` call
+at 1,024 events (1,048,576 tag rows) took 11.5 s locally. The deployed leg is
+where either wall would show; a measured wall below 1,024 is recorded and
+raised as a follow-up (a per-call byte ceiling is a published-API question,
+SY-18), never answered by lowering `Ceilings::DECLARED` (D-E3-4).
+
+### F's D7 classes, by an identical retry
+
+`impl Classify for CloudflareEventStoreError` assigns `SqlError::Thrown(_)` and
+`SqlError::StorageLimitExceeded` the class `Stop` without parsing any message,
+"until a workerd run shows which throws recur". A class answers one question,
+**does the identical call fail again?**, so the census provokes each reachable
+failure through the production store, retries the identical call on the same
+object, and judges by the retry (`src/ingest/classes.rs`).
+
+| Case | How it is staged | D7 arm | Local `workerd` 1.20260815.1 |
+| --- | --- | --- | --- |
+| `trigger-abort` | a `RAISE(ABORT)` trigger on the namespace's event table, armed on the first row | `Thrown → Stop` | **Holds**: `SQLITE_CONSTRAINT_TRIGGER`, and the retry fails identically (the countdown rolls back with the call) |
+| `missing-schema` | a store over a namespace never migrated | `Thrown → Stop` | **Holds**: `no such table: census_store_meta`, on both calls |
+| `storage-full` | `PRAGMA max_page_count` one page above the database's size | `StorageLimitExceeded → Stop`, and `STORAGE_LIMIT_MARKERS` | **Unreachable**: `PRAGMA max_page_count = 8: not authorized: SQLITE_AUTH` (and `PRAGMA page_count` is refused too) |
+
+**What this settles.** D7 stands. `Thrown → Stop` holds on the measurement for
+both throws the runtime can be made to raise inside `transactionSync`; no
+`Falsifies` verdict, so no message-marked `Transient` arm is called for.
+`StorageLimitExceeded → Stop` stands on the argument (a full object does not
+empty itself), because the object's authoriser refuses the PRAGMA that would
+stage a full object, and the markers stay unmeasured. What would change D7, if
+a later run shows it: a `Thrown` whose identical retry lands on the same object
+(a message-marked `Transient` arm), a full object reported as `Thrown` (a
+marker for its text), or a reset or timeout text on the deployed leg whose
+retry lands. Each is a published-behaviour change in `happenstance-cloudflare`
+and a change of its own (D-E3-1), not this experiment's.

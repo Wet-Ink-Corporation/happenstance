@@ -1,0 +1,53 @@
+Phase A for ingest on workerd (#108 part E3), through harness/workerd's
+/ingest-ceiling/<shape>?events=<n> and /ingest-class/<case> routes
+(src/ingest/ceiling.rs, src/ingest/classes.rs). Every attempt goes through
+CloudflareIngestStore::namespaced_from_object_state over the object's real
+DurableObjectState, so each call is one real ctx.storage.transactionSync.
+Taken 2026-10-31 on Linux (Node v22.23.4), on
+claude/project-thread-uikw3l-108e3's working tree (parent cd99a195).
+
+The ceiling is bisected by the runner (ingest-ceiling.mjs), one object per
+attempt, one group of foreign events per call, no compensation. "accepted N"
+is the largest call the runtime committed; the refusal one step above it is
+quoted verbatim, with its HTTP status. The round trip is the runner's, at N.
+Shapes: minimal = 8 B of data and 1 tag per event; max-tags = 8 B and 1,024
+distinct tags (the declared MAX_TAGS_PER_EVENT); max-data = 1 MiB of data
+(the declared MAX_EVENT_DATA_LEN) and 1 tag. minimal and max-tags are searched
+to 1,025, one past the declared 1,024 events per call; max-data to 256.
+
+== workerd 1.20260815.1 (@cloudflare/vitest-pool-workers 0.22.0, wrangler 4.146.0) ==
+--- workerd ingest ceiling ---
+ingest minimal: accepted 1024; refused above it: [422] refused class=Split ingest exceeds the store's events per batch limit: 1025 (round trip at 1024: 69 ms)
+ingest max-tags: accepted 1024; refused above it: [422] refused class=Split ingest exceeds the store's events per batch limit: 1025 (round trip at 1024: 11536 ms)
+ingest max-data: accepted 256; no wall up to 256 (round trip at 256: 1069 ms)
+
+--- ingest classes (F's D7, by an identical retry on the same object) ---
+trigger-abort:
+verdict=Holds
+case=trigger-abort
+first=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: happenstance conformance fault: the ingest row is refused inside the group: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+retry=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: happenstance conformance fault: the ingest row is refused inside the group: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+missing-schema:
+verdict=Holds
+case=missing-schema
+first=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: no such table: census_store_meta: SQLITE_ERROR
+retry=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: no such table: census_store_meta: SQLITE_ERROR
+storage-full:
+verdict=Unreachable PRAGMA max_page_count = 8: JavaScript threw: Error: not authorized: SQLITE_AUTH
+case=storage-full
+
+== The ingest family on the same runtime ==
+test/ingest.test.ts: 7 of 7 rules ran (6 rules + CF-18's declension check),
+none skipped, plus the enumeration and unknown-rule cells: 9 of 9 passed.
+test/ingest-cold.test.ts: 7 of 7 ran on a primed and evicted object, each in a
+new instance: 8 of 8 passed. PRAGMA page_count is refused too
+(`not authorized: SQLITE_AUTH`), which is why the storage case derives its
+page count from the binding's databaseSize.
+
+== The deployed leg's scripts, against `wrangler dev` (local workerd, not a deployment) ==
+deployed.mjs: event store executed 97 of 97, ingest executed 7 of 7, 0 failed.
+deployed-ingest.mjs printed the same three walls (round trips 298 ms,
+14,877 ms and 1,524 ms at the boundary) and the same three verdicts
+(storage-full's cap read 9 pages there). This shows the scripts run; the
+deployed object's numbers are the CI job's, copied into
+run-workerd-deployed-<date>-ingest.txt from its log.

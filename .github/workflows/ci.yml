@@ -1327,6 +1327,15 @@ jobs:
   # control that is not. The deployed leg repeats the hibernation cells and
   # the idle cells, record-only (`deployed-restart.mjs`).
   #
+  # Both legs also run `happenstance-sync`'s ingest family (#108 part E3)
+  # against `CloudflareIngestStore`, built by the published
+  # `namespaced_from_object_state` over the object's real state, so each call
+  # is one real `transactionSync`: strictly, warm and cold-started, on local
+  # workerd, and strictly on the deployed object (`deployed.mjs`). Beside it, a
+  # census of F's D7 failure classes and a bisection of the largest ingest call
+  # the runtime commits: strict locally where the result is the adapter's own
+  # declaration, record-only on the deployed object (`deployed-ingest.mjs`).
+  #
   # Both legs end with the wall probe's report in the log
   # (`experiments/durable-object-limits`). Not a required status check.
   workerd:
@@ -1444,6 +1453,95 @@ jobs:
             echo "::error::the transaction run did not execute and pass every cell"
             exit 1
           fi
+
+      # The ingest family (#108 part E3; harness/workerd/src/ingest/): every
+      # rule of `for_each_ingest_store_rule!` plus CF-18's ingest declension
+      # check, each on its own object, against `CloudflareIngestStore` built by
+      # the published `namespaced_from_object_state` over the object's real
+      # state, so the mid-group fault fires inside the real `transactionSync`.
+      # The names come from `/ingest-rules`, the testkit's own enumeration.
+      # Strict: every rule must answer `ran` (no skip is expected and none is
+      # tolerated), with the transaction step's vacuity guard; a floor rather
+      # than an equality, for live-neon's reason.
+      - name: The ingest family under local workerd
+        if: always()
+        run: |
+          npx vitest run test/ingest.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-ingest.json
+          test -f vitest-ingest.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq -e '.numTotalTests | numbers' vitest-ingest.json) || { echo "::error::the report has no test count"; exit 1; }
+          passed=$(jq -e '.numPassedTests | numbers' vitest-ingest.json) || { echo "::error::the report has no pass count"; exit 1; }
+          pending=$(jq -e '.numPendingTests + .numTodoTests | numbers' vitest-ingest.json) || { echo "::error::the report has no skip count"; exit 1; }
+          echo "ingest: collected $total, passed $passed, not run $pending"
+          # 6 rules + the declension check + the enumeration check + the unknown rule.
+          if [ "$total" -lt 9 ] || [ "$pending" -ne 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "::error::the ingest run did not execute and pass every cell"
+            jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .fullName' vitest-ingest.json
+            exit 1
+          fi
+
+      # The same family on an object that was primed (every log a rule may open
+      # migrated, each identity minted) and then evicted, so `store_id` is read
+      # from a `store_meta` row a previous instance wrote and the fault trigger
+      # is armed over existing tables. Each rule must run in a new instance.
+      - name: The ingest family on a cold-started object under local workerd
+        if: always()
+        run: |
+          npx vitest run test/ingest-cold.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-ingest-cold.json
+          test -f vitest-ingest-cold.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq -e '.numTotalTests | numbers' vitest-ingest-cold.json) || { echo "::error::the report has no test count"; exit 1; }
+          passed=$(jq -e '.numPassedTests | numbers' vitest-ingest-cold.json) || { echo "::error::the report has no pass count"; exit 1; }
+          pending=$(jq -e '.numPendingTests + .numTodoTests | numbers' vitest-ingest-cold.json) || { echo "::error::the report has no skip count"; exit 1; }
+          echo "cold ingest: collected $total, passed $passed, not run $pending"
+          # 6 rules + the declension check + the enumeration check.
+          if [ "$total" -lt 8 ] || [ "$pending" -ne 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "::error::the cold ingest run did not execute and pass every cell"
+            jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .fullName' vitest-ingest-cold.json
+            exit 1
+          fi
+
+      # F's D7 classes, revisited (harness/workerd/src/ingest/classes.rs): each
+      # reachable ingest failure provoked through the production store, the
+      # identical call retried on the same object, and the class judged by the
+      # retry. Strict: `trigger-abort` and `missing-schema` must hold;
+      # `storage-full` must hold or be unreachable (the object's authoriser
+      # decides whether its PRAGMA runs), never falsify a class or miss a
+      # marker. A red here is recorded and the adapter is changed, if at all, in
+      # a change of its own (D-E3-1).
+      - name: The ingest failure classes under local workerd
+        if: always()
+        run: |
+          npx vitest run test/ingest-classes.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-ingest-classes.json
+          test -f vitest-ingest-classes.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq -e '.numTotalTests | numbers' vitest-ingest-classes.json) || { echo "::error::the report has no test count"; exit 1; }
+          passed=$(jq -e '.numPassedTests | numbers' vitest-ingest-classes.json) || { echo "::error::the report has no pass count"; exit 1; }
+          pending=$(jq -e '.numPendingTests + .numTodoTests | numbers' vitest-ingest-classes.json) || { echo "::error::the report has no skip count"; exit 1; }
+          echo "ingest class: collected $total, passed $passed, not run $pending"
+          # three cases + the unknown case.
+          if [ "$total" -lt 4 ] || [ "$pending" -ne 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "::error::the ingest class run did not execute and pass every cell"
+            jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .fullName' vitest-ingest-classes.json
+            exit 1
+          fi
+
+      # What the ingest ceiling's bisection decides (ingest-ceiling.mjs), pinned
+      # without a runtime, and that a 422 is never a platform miss: as "What the
+      # deployed leg retries" pins platform-miss.mjs.
+      - name: What the ingest ceiling's bisection decides
+        if: always()
+        run: npx vitest run test/ingest-ceiling-bisect.test.ts --reporter=verbose
+
+      # The largest single ingest call local workerd commits, per event shape,
+      # bisected by the runner one object per attempt. Strict on the `minimal`
+      # axis only: the runtime must commit the adapter's declared 1,024 events,
+      # and the attempt at 1,025 must be the adapter's own refusal
+      # (`class=Split`). The other two axes are printed for
+      # experiments/durable-object-limits/results/.
+      - name: The ingest ceiling of local workerd
+        if: always()
+        run: npx vitest run test/ingest-ceiling.test.ts --reporter=verbose
 
       # The cross-restart rules (harness/workerd/src/restart.rs, #262): each
       # rule writes, the object restarts, and the rule asserts. Evicted from the
@@ -1662,6 +1760,10 @@ jobs:
           test -n "$url" || { echo "::error::wrangler printed no workers.dev URL"; exit 1; }
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      # `deployed.mjs` runs both families, the event-store rules and the
+      # ingest rules (#108 part E3), each listed by the harness and each
+      # strict: every listed rule executed, none failed. An ingest rule's
+      # violation answers 422, a failure and never a platform miss.
       - name: The conformance rules on a deployed Durable Object
         if: always() && steps.deploy.outputs.url != ''
         run: |
@@ -1721,6 +1823,18 @@ jobs:
         run: |
           node deployed-remint.mjs "${{ steps.deploy.outputs.url }}" \
             "remint-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      # The ingest ceiling and the D7 census again, on the deployed object
+      # (#108 part E3). RECORD-ONLY: the platform's memory and CPU walls are
+      # pinned by nothing here, which is the hibernation cells' reason. The
+      # script prints both, for experiments/durable-object-limits/results/, and
+      # fails only if a route answers `no route`, which means the deployed
+      # Worker is not this commit's. Covered by the delete step's `if:`.
+      - name: The ingest ceiling and failure classes on a deployed Durable Object (record-only)
+        if: always() && steps.deploy.outputs.url != ''
+        run: |
+          node deployed-ingest.mjs "${{ steps.deploy.outputs.url }}" \
+            "ingest-${{ github.run_id }}-${{ github.run_attempt }}"
 
       # Nothing is left listening: the Worker and every object's storage go.
       # Keyed on the deploy having *run* rather than on its URL: with a name per
