@@ -215,14 +215,15 @@ because a call near the top can trap or reset the object instead of answering.
 Local transcript:
 [`results/run-workerd-local-2026-10-31-ingest.txt`](results/run-workerd-local-2026-10-31-ingest.txt).
 The deployed leg's (`deployed-ingest.mjs`, record-only) is copied from the
-`workerd` CI job's log by hand, as the wall files above were, under
-`results/run-workerd-deployed-<date>-ingest.txt`.
+`workerd` CI job's log by hand, as the wall files above were:
+[`results/run-workerd-deployed-2026-10-31-ingest.txt`](results/run-workerd-deployed-2026-10-31-ingest.txt)
+(CI run 41173513607, commit `f0b426fd`, PR #354).
 
 | Shape (per event) | Searched to | `workerd` 1.20260815.1 | Round trip at the boundary | Deployed Durable Object |
 | --- | --- | --- | --- | --- |
-| minimal: 8 B, 1 tag | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 69 ms | from CI |
-| max-tags: 8 B, 1,024 tags | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 11,536 ms | from CI |
-| max-data: 1 MiB, 1 tag | 256 | no wall to **256** (256 MiB in one call) | 1,069 ms | from CI |
+| minimal: 8 B, 1 tag | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 69 ms | **1,024**; 1,025 refused by the adapter, `class=Split`; 251 ms |
+| max-tags: 8 B, 1,024 tags | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 11,536 ms | **1,016**; above it `[500] Durable Object storage operation exceeded timeout which caused object to be reset`; 26,022 ms at 1,016 (#356) |
+| max-data: 1 MiB, 1 tag | 256 | no wall to **256** (256 MiB in one call) | 1,069 ms | no wall to **256**; 1,881 ms |
 
 **The finding.** On local `workerd` the runtime commits every call the adapter
 accepts at the two count-bound shapes, up to the declared 1,024 events, and the
@@ -235,6 +236,16 @@ at 1,024 events (1,048,576 tag rows) took 11.5 s locally. The deployed leg is
 where either wall would show; a measured wall below 1,024 is recorded and
 raised as a follow-up (a per-call byte ceiling is a published-API question,
 SY-18), never answered by lowering `Ceilings::DECLARED` (D-E3-4).
+
+**The deployed leg shows one.** `minimal` and `max-data` match the local leg.
+`max-tags` does not: a call of 1,024 events of 1,024 tags each runs past the
+object's storage-operation timeout and the object is reset; 1,016 is the
+largest call it commits, at about 26 s. That is a time wall, not a memory one,
+and it sits eight events below the declared ceiling. It is recorded here and
+filed as #356 for the owner, and `Ceilings::DECLARED` is unchanged. Because a
+reset is not an answer from the adapter, the call fails with no class at all;
+whether the store should refuse such a call before it starts is #356's
+question.
 
 **Not all of an attempt's cost is the runtime's.** The harness builds the
 batch inside the same isolate before it calls `ingest`: at 1,024 events the
@@ -258,6 +269,9 @@ object, and judges by the retry (`src/ingest/classes.rs`).
 | `trigger-abort` | a `RAISE(ABORT)` trigger on the namespace's event table, armed on the first row | `Thrown → Stop` | **Holds**: `SQLITE_CONSTRAINT_TRIGGER`, and the retry fails identically (the countdown rolls back with the call) |
 | `missing-schema` | a store over a namespace never migrated | `Thrown → Stop` | **Holds**: `no such table: census_store_meta`, on both calls |
 | `storage-full` | `PRAGMA max_page_count` one page above the database's size | `StorageLimitExceeded → Stop`, and `STORAGE_LIMIT_MARKERS` | **Unreachable**: `PRAGMA max_page_count = 8: not authorized: SQLITE_AUTH` (and `PRAGMA page_count` is refused too) |
+
+The deployed leg (the results file above) returns the same three verdicts,
+with the same texts; its `storage-full` refusal reads `max_page_count = 9`.
 
 **What this settles.** D7 stands. `Thrown → Stop` holds on the measurement for
 both throws the runtime can be made to raise inside `transactionSync`; no

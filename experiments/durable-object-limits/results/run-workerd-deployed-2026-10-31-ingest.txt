@@ -1,0 +1,40 @@
+Phase A for ingest on a deployed Durable Object (#108 part E3), through
+harness/workerd's /ingest-ceiling/<shape>?events=<n> and /ingest-class/<case>
+routes, driven by deployed-ingest.mjs. Taken by the workerd CI job's deployed
+leg on 2026-10-31 (run 41173513607, commit f0b426fd, PR #354). The Worker was
+deployed by wrangler 4.146.0 to the account behind CLOUDFLARE_API_TOKEN and
+deleted at the end of the run. Every attempt goes through
+CloudflareIngestStore::namespaced_from_object_state over the object's real
+DurableObjectState. The ceiling is bisected one object per attempt; "accepted
+N" is the largest call the platform committed, and the refusal one step above
+it is quoted verbatim with its HTTP status. Shapes and search bounds are those
+of run-workerd-local-2026-10-31-ingest.txt.
+
+== deployed Durable Object ==
+--- deployed ingest ceiling ---
+ingest minimal: accepted 1024; refused above it: [422] refused class=Split ingest exceeds the store's events per batch limit: 1025 (round trip at 1024: 251 ms)
+ingest max-tags: accepted 1016; refused above it: [500] Durable Object storage operation exceeded timeout which caused object to be reset. (round trip at 1016: 26022 ms)
+ingest max-data: accepted 256; no wall up to 256 (round trip at 256: 1881 ms)
+
+--- deployed ingest classes (F's D7, by an identical retry on the same object) ---
+trigger-abort:
+verdict=Holds
+case=trigger-abort
+first=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: happenstance conformance fault: the ingest row is refused inside the group: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+retry=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: happenstance conformance fault: the ingest row is refused inside the group: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+missing-schema:
+verdict=Holds
+case=missing-schema
+first=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: no such table: census_store_meta: SQLITE_ERROR
+retry=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: no such table: census_store_meta: SQLITE_ERROR
+storage-full:
+verdict=Unreachable PRAGMA max_page_count = 9: JavaScript threw: Error: not authorized: SQLITE_AUTH
+case=storage-full
+
+== What it decides ==
+minimal and max-data match the local leg. max-tags does not: at 1,024 events
+of 1,024 distinct tags the deployed object exceeds its storage-operation
+timeout (~26 s round trip at 1,016) and is reset, below the declared 1,024
+events per call. Under wi-0d226f the wall is recorded and filed as #356
+rather than lowering Ceilings::DECLARED; the fix is the owner's call. No D7
+class was falsified, so Classify and STORAGE_LIMIT_MARKERS stand.
