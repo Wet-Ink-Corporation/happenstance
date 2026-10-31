@@ -23,12 +23,17 @@ describe("the ingest failure classes under local workerd", () => {
     const { status, body } = await census("trigger-abort");
     expect(status, body).toBe(200);
     expect(body.split("\n")[0], body).toBe("verdict=Holds");
+    // The failure must be the throw the case is about, on both calls.
+    expect(body, body).toContain("\nfirst=class=Stop variant=Sql(Thrown) ");
+    expect(body, body).toContain("\nretry=class=Stop variant=Sql(Thrown) ");
   });
 
   it("missing-schema: no such table is Stop, and recurs", async () => {
     const { status, body } = await census("missing-schema");
     expect(status, body).toBe(200);
     expect(body.split("\n")[0], body).toBe("verdict=Holds");
+    expect(body, body).toContain("\nfirst=class=Stop variant=Sql(Thrown) ");
+    expect(body, body).toContain("\nretry=class=Stop variant=Sql(Thrown) ");
   });
 
   it("storage-full: a full object is StorageLimitExceeded and Stop, or cannot be staged", async () => {

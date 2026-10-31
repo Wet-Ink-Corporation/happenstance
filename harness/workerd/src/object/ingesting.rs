@@ -4,8 +4,9 @@
 //! Status codes: 200 a rule ran or skipped, an attempt was accepted or a case
 //! was judged; 400 a bad shape or count; 404 an unknown rule, case or route;
 //! 422 a rule's violation, or an attempt the store refused; 500 a harness
-//! fault. Every answer but an unknown route clears the object's storage first,
-//! as `/rule/<name>` does, and carries the instance in `x-incarnation`.
+//! fault. Every answer but an unknown route clears the object's storage before
+//! answering, as `/rule/<name>` does, and carries the instance in
+//! `x-incarnation`.
 
 use happenstance_cloudflare::TableNamespace;
 use happenstance_cloudflare::worker::worker_sys::DurableObjectState;

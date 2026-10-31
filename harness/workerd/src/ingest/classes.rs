@@ -67,7 +67,22 @@ impl Case {
             Self::StorageFull => "storage-full",
         }
     }
+
+    /// The arm, by [`Observed::variant`]'s name, the case exists to provoke.
+    /// A recurring failure of any other arm says nothing about the D7 arm
+    /// under test, so [`judge`] calls it unreachable rather than holding.
+    #[must_use]
+    pub const fn expected_variant(self) -> &'static str {
+        match self {
+            Self::TriggerAbort | Self::MissingSchema => THROWN,
+            Self::StorageFull => "Sql(StorageLimitExceeded)",
+        }
+    }
 }
+
+/// [`Observed::variant`]'s name for `SqlError::Thrown`, the arm two cases
+/// provoke and the one a missed storage marker arrives as.
+const THROWN: &str = "Sql(Thrown)";
 
 impl FromStr for Case {
     type Err = UnknownCase;
@@ -131,7 +146,7 @@ fn variant(error: &IngestError<CloudflareEventStoreError>) -> &'static str {
         IngestError::UnheldOwnIdentity { .. } => "UnheldOwnIdentity",
         IngestError::Busy(_) => "Busy",
         IngestError::Store(CloudflareEventStoreError::Sql(sql)) => match sql {
-            SqlError::Thrown(_) => "Sql(Thrown)",
+            SqlError::Thrown(_) => THROWN,
             SqlError::StorageLimitExceeded => "Sql(StorageLimitExceeded)",
             SqlError::AlreadyBorrowed => "Sql(AlreadyBorrowed)",
             SqlError::CursorInvalidated => "Sql(CursorInvalidated)",
@@ -172,10 +187,13 @@ impl Verdict {
 
 /// Judges `case` from its two identical calls' outcomes, `first` and `retry`.
 ///
-/// A class is a claim about the retry, so the retry decides: a `Transient`
-/// holds only if its retry lands, and every other class only if its retry
-/// fails too. A storage case whose failure arrived as `Thrown` is a missed
-/// marker, whatever the retry did, once the class itself has held.
+/// First, the failure must be the one the case exists to provoke
+/// ([`Case::expected_variant`]); a storage case may also see `Thrown`, which
+/// is the missed marker. Any other arm is [`Verdict::Unreachable`]: the case
+/// did not reach the D7 arm it tests. Then a class is a claim about the retry,
+/// so the retry decides: a `Transient` holds only if its retry lands, and every
+/// other class only if its retry fails too. A storage case whose failure
+/// arrived as `Thrown` is a missed marker once the class itself has held.
 #[must_use]
 pub fn judge(
     case: Case,
@@ -185,6 +203,11 @@ pub fn judge(
     let Err(observed) = first else {
         return Verdict::Unreachable("the case provoked no failure".to_owned());
     };
+    let expected = case.expected_variant();
+    let marker_missed = case == Case::StorageFull && observed.variant == THROWN;
+    if observed.variant != expected && !marker_missed {
+        return Verdict::Unreachable(format!("provoked {}, not {expected}", observed.variant));
+    }
     let retry_landed = retry.is_ok();
     let class_holds = if observed.class == FailureClass::Transient {
         retry_landed
@@ -197,7 +220,7 @@ pub fn judge(
             observed.class, observed.variant, observed.error
         ));
     }
-    if case == Case::StorageFull && observed.variant == "Sql(Thrown)" {
+    if marker_missed {
         // The verdict owns its quote; `first` stays the caller's (H-08).
         return Verdict::MarkerMissed(observed.error.clone());
     }

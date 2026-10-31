@@ -236,6 +236,14 @@ where either wall would show; a measured wall below 1,024 is recorded and
 raised as a follow-up (a per-call byte ceiling is a published-API question,
 SY-18), never answered by lowering `Ceilings::DECLARED` (D-E3-4).
 
+**Not all of an attempt's cost is the runtime's.** The harness builds the
+batch inside the same isolate before it calls `ingest`: at 1,024 events the
+`max-tags` shape is about a million owned `Tag` strings (1,024 per event, each
+event owning its own), roughly 40 MB on the harness side, where the `max-data`
+shape shares one 1 MiB buffer across every event. So a deployed `max-tags`
+wall, in memory or in CPU, cannot be attributed wholly to the runtime or to
+the adapter; part of it is this instrument's own allocation.
+
 ### F's D7 classes, by an identical retry
 
 `impl Classify for CloudflareEventStoreError` assigns `SqlError::Thrown(_)` and

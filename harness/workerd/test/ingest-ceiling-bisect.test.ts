@@ -107,6 +107,17 @@ describe("readAttempt", () => {
     });
     expect(readAttempt(404, "no route /ingest-ceiling/minimal").accepted).toBe(false);
   });
+
+  it("refuses a 200 whose store appended fewer events than were sent", () => {
+    // A store that skipped or dropped rows committed a smaller call than the
+    // one asked for, so the size is not what the runtime took.
+    expect(readAttempt(200, "accepted events=1024 appended=1000")).toEqual({
+      accepted: false,
+      text: "[200] accepted events=1024 appended=1000",
+    });
+    expect(readAttempt(200, "accepted").accepted).toBe(false);
+    expect(readAttempt(200, "accepted events=7 appended=7 extra").accepted).toBe(false);
+  });
 });
 
 describe("the searched shapes", () => {

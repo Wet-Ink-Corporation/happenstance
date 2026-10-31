@@ -91,10 +91,13 @@ export function ceilingLine(shape, wall) {
 }
 
 // How `/ingest-ceiling/<shape>?events=<n>` reads as an attempt: accepted only
-// on a 200 that says so; anything else is a refusal, its status kept and its
-// body flattened onto one line, verbatim otherwise.
+// on a 200 whose body is exactly `accepted events=<n> appended=<n>`, every
+// event sent having landed; anything else is a refusal, its status kept and
+// its body flattened onto one line, verbatim otherwise. A call that committed
+// fewer rows than it carried is not a call of that size.
 export function readAttempt(status, body) {
-  const accepted = status === 200 && body.startsWith("accepted ");
+  const counts = /^accepted events=(\d+) appended=(\d+)$/.exec(body.trim());
+  const accepted = status === 200 && counts !== null && counts[1] === counts[2];
   return {
     accepted,
     text: accepted ? body : `[${status}] ${body.trim().replace(/\s*\n\s*/g, " ")}`,

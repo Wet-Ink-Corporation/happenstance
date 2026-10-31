@@ -61,11 +61,61 @@ fn a_case_that_provokes_nothing_is_unreachable_not_holds() {
     );
 }
 
+/// The lazy judge answers `Holds` for any failure that recurs, so a case that
+/// staged the wrong failure (here a claim refused before any SQL ran) would
+/// pass as evidence for `Thrown → Stop` without ever reaching a throw.
+#[test]
+fn a_failure_of_another_variant_is_unreachable_not_holds() {
+    let unheld = Err(Observed {
+        class: FailureClass::Stop,
+        variant: "UnheldOwnIdentity",
+        error: "event … claims this store's identity".to_owned(),
+    });
+    let refused = Err(Observed {
+        class: FailureClass::Split,
+        variant: "ExceedsStoreLimit",
+        error: "ingest exceeds the store's events per batch limit: 1025".to_owned(),
+    });
+
+    assert_eq!(
+        judge(Case::TriggerAbort, &unheld, &unheld.clone()),
+        Verdict::Unreachable("provoked UnheldOwnIdentity, not Sql(Thrown)".to_owned())
+    );
+    assert_eq!(
+        judge(Case::MissingSchema, &refused, &refused.clone()),
+        Verdict::Unreachable("provoked ExceedsStoreLimit, not Sql(Thrown)".to_owned())
+    );
+    assert_eq!(
+        judge(Case::StorageFull, &unheld, &unheld.clone()),
+        Verdict::Unreachable(
+            "provoked UnheldOwnIdentity, not Sql(StorageLimitExceeded)".to_owned()
+        )
+    );
+}
+
+#[test]
+fn a_full_object_reported_as_the_limit_holds() {
+    let full = Err(Observed {
+        class: FailureClass::Stop,
+        variant: "Sql(StorageLimitExceeded)",
+        error: "the Durable Object's SQL storage limit was exceeded".to_owned(),
+    });
+
+    assert_eq!(
+        judge(Case::StorageFull, &full, &full.clone()),
+        Verdict::Holds
+    );
+}
+
+/// No case provokes a `Transient` today, because the adapter classes every
+/// `Thrown` as `Stop`. A message-marked `Transient` arm for some `Thrown` text
+/// (D-E3-1's remedy) would make one, and the judge must then read the retry the
+/// other way round.
 #[test]
 fn a_transient_holds_only_if_its_retry_lands() {
     let busy = Err(Observed {
         class: FailureClass::Transient,
-        variant: "Sql(AlreadyBorrowed)",
+        variant: "Sql(Thrown)",
         error: "borrowed".to_owned(),
     });
 
@@ -75,7 +125,7 @@ fn a_transient_holds_only_if_its_retry_lands() {
     );
     assert_eq!(
         judge(Case::TriggerAbort, &busy, &busy.clone()),
-        Verdict::Falsifies("Transient (Sql(AlreadyBorrowed)): borrowed".to_owned())
+        Verdict::Falsifies("Transient (Sql(Thrown)): borrowed".to_owned())
     );
 }
 
