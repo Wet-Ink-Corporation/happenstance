@@ -179,8 +179,8 @@ mod violation;
 pub mod sync_model;
 
 pub use fixture::{
-    MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, MemorySyncFixture, MemorySyncHandle, Refusal, RefusalsOf,
-    SyncFixture, batch_over_the_limit, oversized_push_refusal,
+    MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, MemorySyncFixture, MemorySyncHandle,
+    Refusal, RefusalsOf, SyncFixture, batch_over_the_limit, oversized_push_refusal,
 };
 pub use kv_capped::{KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError};
 pub use sync_suite::{

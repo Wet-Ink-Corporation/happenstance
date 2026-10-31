@@ -100,6 +100,25 @@ enum Mistake {
     /// Safe, because a spoke re-pushes, and SY-31's rule cannot hold an empty
     /// confirmation to anything, so it must say so rather than pass.
     ConfirmsNothing,
+    /// SY-18's batch rule, an off-by-one on the count: refuse a push of
+    /// `max_batch_events` or more, as an adapter does that compares with `>=`.
+    /// The declaration is honest by one event and the corner is refused. Run
+    /// under [`both_logs_written`], whose 1,000-event declaration is far above
+    /// the 257 events SY-37's count-cut log puts in a push; under the minimum
+    /// declaration that log's 128-event pushes would be refused too.
+    RefusesAtTheDeclaredBatchEvents,
+    /// SY-18's batch rule, an off-by-one on the bytes: refuse a push carrying
+    /// `max_batch_bytes` or more. Run under [`both_logs_written`]'s 128 KiB,
+    /// because the limits are load-bearing: under the minimum declaration,
+    /// `peer_declares_its_own_limits`'s 64 KiB boundary event equals
+    /// `max_batch_bytes`, and that rule would fail the peer too.
+    RefusesAtTheDeclaredBatchBytes,
+    /// SY-18's batch rule, a peer that acknowledges more than it keeps: a push
+    /// of more than [`HEAD_EVENTS`] events has only its first `HEAD_EVENTS`
+    /// groups stored, and is acknowledged as every event appended. Only the
+    /// rule's pull-back can see it, so it is the mutant that isolates that
+    /// check.
+    KeepsOnlyTheHeadOfALargePush,
 }
 
 /// How many events a push to [`Mistake::TakesFewerEventsThanItDeclares`] may
@@ -107,13 +126,21 @@ enum Mistake {
 /// count-cut log puts in one push when the declaration admits them.
 const TAKES_EVENTS: usize = 128;
 
+/// How many groups of a large push [`Mistake::KeepsOnlyTheHeadOfALargePush`]
+/// stores: 257, the whole of SY-37's count-cut log (its `FILL_CAP` plus one),
+/// so that log, pushed in one push under a large declaration, is stored whole
+/// and SY-37's rule sees the reference peer. If `FILL_CAP` moves, this moves
+/// with it, or the mutant fails two rules.
+const HEAD_EVENTS: usize = 257;
+
 /// What a [`WrongError`] is about.
 #[derive(Debug)]
 enum Cause {
     /// The reference peer's own refusal.
     Peer(MemoryPeerError),
-    /// A push carrying more events than [`TAKES_EVENTS`]. Its own case rather
-    /// than a [`MemoryPeerError::BatchTooLarge`], whose message says bytes.
+    /// A push carrying more events than the wrong peer takes. Its own case
+    /// rather than a [`MemoryPeerError::BatchTooLarge`], whose message says
+    /// bytes.
     TooManyEvents { actual: usize, limit: usize },
 }
 
@@ -184,7 +211,10 @@ impl Classify for WrongError {
             | Mistake::TakesLessOfBothThanItDeclares
             | Mistake::DeclaresMoreBatchBytesThanItTakes
             | Mistake::AcksOnAdmission
-            | Mistake::ConfirmsNothing => self.cause.class(),
+            | Mistake::ConfirmsNothing
+            | Mistake::RefusesAtTheDeclaredBatchEvents
+            | Mistake::RefusesAtTheDeclaredBatchBytes
+            | Mistake::KeepsOnlyTheHeadOfALargePush => self.cause.class(),
         }
     }
 }
@@ -252,6 +282,42 @@ impl WrongPeer {
             actual: largest,
             limit,
         }))
+    }
+
+    /// Why a peer that refuses at its own declared batch limit refuses
+    /// `batch`, if it does: `>=` where the declaration means `>`.
+    fn refuses_at_the_limit(&self, batch: &PushBatch) -> Option<Cause> {
+        let limits = self.inner.limits();
+        let events = batch.events().count();
+        let bytes = batch.payload_len();
+        match self.mistake {
+            Mistake::RefusesAtTheDeclaredBatchEvents if events >= limits.max_batch_events => {
+                Some(Cause::TooManyEvents {
+                    actual: events,
+                    limit: limits.max_batch_events,
+                })
+            }
+            Mistake::RefusesAtTheDeclaredBatchBytes if bytes >= limits.max_batch_bytes => {
+                Some(Cause::Peer(MemoryPeerError::BatchTooLarge {
+                    actual: bytes,
+                    limit: limits.max_batch_bytes,
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    /// [`Mistake::KeepsOnlyTheHeadOfALargePush`]'s push: store the first
+    /// [`HEAD_EVENTS`] groups, and acknowledge every event as appended.
+    async fn keep_the_head(&self, batch: &PushBatch) -> Result<Ack, MemoryPeerError> {
+        if batch.groups.len() <= HEAD_EVENTS {
+            return self.inner.push(batch).await;
+        }
+        let head = batch.groups.iter().take(HEAD_EVENTS).cloned().collect();
+        let mut ack = self.inner.push(&PushBatch::new(head)).await?;
+        ack.appended = u64::try_from(batch.events().count()).unwrap_or(u64::MAX);
+        ack.skipped = 0;
+        Ok(ack)
     }
 
     /// Whether `group`'s travelling guard is violated by what the inner peer
@@ -413,6 +479,19 @@ impl SendSyncPeer for WrongPeer {
                 ack.confirmed = Watermark::new();
                 Ok(ack)
             }
+            Mistake::RefusesAtTheDeclaredBatchEvents | Mistake::RefusesAtTheDeclaredBatchBytes => {
+                if let Some(cause) = self.refuses_at_the_limit(batch) {
+                    return Err(self.refuse(cause));
+                }
+                self.inner
+                    .push(batch)
+                    .await
+                    .map_err(|error| self.wrap(error))
+            }
+            Mistake::KeepsOnlyTheHeadOfALargePush => self
+                .keep_the_head(batch)
+                .await
+                .map_err(|error| self.wrap(error)),
             Mistake::TakesFewerEventsThanItDeclares
             | Mistake::TakesSmallerEventsThanItDeclares
             | Mistake::TakesLessOfBothThanItDeclares => {
@@ -920,13 +999,10 @@ fn nothing_waiting_means_the_next_pull_is_empty_runs_against_a_peer_overstating_
 /// declares 1,000: the count corner, 1,000 empty events, is refused.
 #[test]
 fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_takes_fewer_events_than_it_declares()
- {
+{
     fails_exactly(
         &verdicts(async || {
-            WrongFixture::with_limits(
-                Mistake::TakesFewerEventsThanItDeclares,
-                both_logs_written(),
-            )
+            WrongFixture::with_limits(Mistake::TakesFewerEventsThanItDeclares, both_logs_written())
         }),
         "peer_takes_a_batch_at_its_declared_limits",
         "SY-18",
@@ -945,6 +1021,51 @@ fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_declares_more_bat
     fails_exactly(
         &verdicts(async || {
             WrongFixture::with_limits(Mistake::DeclaresMoreBatchBytesThanItTakes, limits.clone())
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}
+
+/// The mutant that shows the count corner must be the declared count exactly:
+/// a corner of one event fewer lands.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_refuses_at_its_declared_event_limit()
+{
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(
+                Mistake::RefusesAtTheDeclaredBatchEvents,
+                both_logs_written(),
+            )
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}
+
+/// The mutant that shows the full corner must total the declared bytes
+/// exactly: a corner of one byte fewer lands.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_refuses_at_its_declared_byte_limit()
+{
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(Mistake::RefusesAtTheDeclaredBatchBytes, both_logs_written())
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}
+
+/// The mutant only the pull-back can see: its acknowledgement is the one a
+/// faithful peer sends.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_acks_a_large_push_and_keeps_its_head()
+ {
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(Mistake::KeepsOnlyTheHeadOfALargePush, both_logs_written())
         }),
         "peer_takes_a_batch_at_its_declared_limits",
         "SY-18",

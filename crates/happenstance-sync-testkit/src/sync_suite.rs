@@ -111,6 +111,7 @@ pub const NO_CONFIRMATION_REASON: &str = "this peer acknowledged the rule's push
 /// one of them itself: it is the side that pushes and pulls, and the fixture's
 /// peer is the far side.
 pub mod rules {
+    use alloc::collections::BTreeMap;
     use alloc::format;
     use alloc::string::String;
     use alloc::vec;
@@ -775,9 +776,36 @@ pub mod rules {
             .min(MAX_PROVOKED_BATCH_BYTES)
             .min(events.saturating_mul(limits.max_event_bytes));
 
-        push_the_corner(&peer, &limits, COUNT_CORNER_ORIGIN, events, 0, CLAUSE).await?;
+        let mut landed =
+            vec![push_the_corner(&peer, &limits, COUNT_CORNER_ORIGIN, events, 0, CLAUSE).await?];
         if bytes > 0 {
-            push_the_corner(&peer, &limits, BYTE_CORNER_ORIGIN, events, bytes, CLAUSE).await?;
+            landed.push(
+                push_the_corner(&peer, &limits, BYTE_CORNER_ORIGIN, events, bytes, CLAUSE).await?,
+            );
+        }
+
+        // One pull per event pushed, and the empty one that ends the log: a
+        // peer that pages one event at a time still fits (H-13).
+        let pushed = landed
+            .iter()
+            .map(|batch| batch.events().count())
+            .sum::<usize>();
+        let held: BTreeMap<EventId, ReplicatedEvent> =
+            pull_up_to(&peer, pushed.saturating_add(1), CLAUSE)
+                .await?
+                .into_iter()
+                .flat_map(|group| group.events)
+                .map(|event| (event.id, event))
+                .collect();
+        for expected in landed.iter().flat_map(PushBatch::events) {
+            ensure(held.get(&expected.id) == Some(expected), CLAUSE, || {
+                format!(
+                    "event {} of {} bytes, in a push at the declared batch limits, was \
+                     acknowledged and is not in the peer's log, byte for byte",
+                    expected.id,
+                    expected.payload_len()
+                )
+            })?;
         }
         Ok(RuleOutcome::Ran)
     }
@@ -968,9 +996,19 @@ pub mod rules {
         peer: &P,
         clause: &'static str,
     ) -> Result<Vec<EventGroup>, Violation> {
+        pull_up_to(peer, MAX_PULLS, clause).await
+    }
+
+    /// [`pull_everything`], giving up after `max_pulls` pulls rather than
+    /// [`MAX_PULLS`]: for a rule whose log is too long for that bound.
+    async fn pull_up_to<P: SyncPeer>(
+        peer: &P,
+        max_pulls: usize,
+        clause: &'static str,
+    ) -> Result<Vec<EventGroup>, Violation> {
         let mut groups = Vec::new();
         let mut resume: Option<P::Resume> = None;
-        for _ in 0..MAX_PULLS {
+        for _ in 0..max_pulls {
             let pulled = peer.pull(resume.as_ref()).await.map_err(|error| {
                 Violation::new(clause, format!("the peer refused a pull: {error}"))
             })?;
@@ -982,7 +1020,7 @@ pub mod rules {
         }
         Err(Violation::new(
             clause,
-            format!("the peer was still handing back groups after {MAX_PULLS} pulls"),
+            format!("the peer was still handing back groups after {max_pulls} pulls"),
         ))
     }
 
@@ -1068,7 +1106,10 @@ pub mod rules {
         )
         .await?;
         let expected = u64::try_from(events).map_err(|error| {
-            Violation::new(clause, format!("the rule's own event count is too large: {error}"))
+            Violation::new(
+                clause,
+                format!("the rule's own event count is too large: {error}"),
+            )
         })?;
         ensure(ack.appended == expected && ack.skipped == 0, clause, || {
             format!(
