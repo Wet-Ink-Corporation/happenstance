@@ -880,6 +880,22 @@ fn sy18_batch_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutco
     .map_err(|violation| violation.clause())
 }
 
+/// A faithful peer whose `max_batch_bytes` is more than its event count can
+/// carry: 128 events of at most 64 KiB is 8 MiB, under the 16 MiB declared.
+/// The full corner is sized by what the events can carry, not by the batch
+/// bytes, or no event of it would fit `max_event_bytes` and the declaration
+/// would admit no corner at all.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_runs_when_the_event_bytes_bind_the_corner() {
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_bytes = 16 * 1024 * 1024;
+
+    assert_eq!(
+        sy18_batch_against(Mistake::Faithful, &limits),
+        Ok(RuleOutcome::Ran)
+    );
+}
+
 /// SY-37's verdict alone against `mistake` behind a peer declaring `limits`.
 fn sy37_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'static str> {
     block_on(rules::nothing_waiting_means_the_next_pull_is_empty(

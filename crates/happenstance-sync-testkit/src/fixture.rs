@@ -103,8 +103,8 @@ pub const MAX_PROVOKED_BATCH_BYTES: usize = 64 * 1024 * 1024;
 /// rule sizes its pushes from the peer's declared `max_batch_events`, a value
 /// the suite does not control, and builds each push whole (H-13). 4,096 is
 /// thirty-two times the minimum conformant limit, and above the 257 events the
-/// largest push of SY-37's count-cut log carries, so a peer that refuses that
-/// push is one the batch rule refuses too.
+/// largest push of SY-37's count-cut log carries, so a peer whose limits
+/// refuse that push refuses the batch rule's corner too.
 pub const MAX_PROVOKED_BATCH_EVENTS: usize = 4_096;
 
 /// The oversized-push refusal, provoked on `peer` and declared
