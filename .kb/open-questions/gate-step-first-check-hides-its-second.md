@@ -31,7 +31,7 @@ last_reviewed: 2026-09-07
 
 ## What is true today
 
-`lints::stated_rule_counts` (`xtask/src/lints.rs:1084`) is the body behind the
+`lints::stated_rule_counts` (`xtask/src/lints.rs:1090`) is the body behind the
 `REQUIRED` gate step named "every stated rule count matches the suite," and it
 runs three unrelated checks in sequence, each guarded by `?`:
 `runbook_status_matches_the_registry()?`, then `citation_ranges_resolve()?`

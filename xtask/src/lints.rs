@@ -36,8 +36,8 @@
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use std::fs;
 use std::path::Path;
+use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 
@@ -254,9 +254,10 @@ const CLOCK_CONSTRUCTS: [&str; 4] = ["std::time", "Instant", "elapsed", "sleep"]
 ///
 /// # Errors
 ///
-/// Returns an error if the testkit's sources cannot be read, or if any of
-/// [`CLOCK_CONSTRUCTS`] appears in code under [`TESTKIT_SRC`].
-pub(crate) fn no_clock() -> Result<()> {
+/// Returns an error if the testkit's sources cannot be read, if any of
+/// [`CLOCK_CONSTRUCTS`] appears in code under [`TESTKIT_SRC`], or if `out`
+/// cannot be written.
+pub(crate) fn no_clock(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let dir = root.join(TESTKIT_SRC);
     let files = rust_files(&dir)?;
@@ -292,9 +293,7 @@ pub(crate) fn no_clock() -> Result<()> {
     }
 
     if !problems.is_empty() {
-        for p in &problems {
-            println!("  {p}");
-        }
+        list(out, &problems)?;
         bail!(
             "{} use(s) of a clock in {TESTKIT_SRC}. A timing assertion passes on the author's \
              machine and fails on a loaded runner, which teaches adapter authors to re-run until \
@@ -304,8 +303,11 @@ pub(crate) fn no_clock() -> Result<()> {
         );
     }
 
-    println!("CF-33: {scanned} file(s) in {TESTKIT_SRC} read no clock");
-    Ok(())
+    writeln!(
+        out,
+        "CF-33: {scanned} file(s) in {TESTKIT_SRC} read no clock"
+    )
+    .context(REPORTING)
 }
 
 /// CF-32: `happenstance-testkit` carries its own `version` key.
@@ -313,8 +315,9 @@ pub(crate) fn no_clock() -> Result<()> {
 /// # Errors
 ///
 /// Returns an error if the manifest cannot be read, if `[package]` declares no
-/// `version`, or if the one it declares is inherited from the workspace.
-pub(crate) fn testkit_version() -> Result<()> {
+/// `version`, if the one it declares is inherited from the workspace, or if
+/// `out` cannot be written.
+pub(crate) fn testkit_version(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let manifest = fs::read_to_string(root.join(TESTKIT_MANIFEST))
         .with_context(|| format!("reading {TESTKIT_MANIFEST}"))?;
@@ -365,10 +368,11 @@ pub(crate) fn testkit_version() -> Result<()> {
              independently in either direction: a new rule republishes an unchanged contract, and \
              a patch of the contract forces every adapter to re-run a bar that did not change."
         ),
-        Some(value) => {
-            println!("CF-32: {TESTKIT_MANIFEST} carries its own `version{value}`");
-            Ok(())
-        }
+        Some(value) => writeln!(
+            out,
+            "CF-32: {TESTKIT_MANIFEST} carries its own `version{value}`"
+        )
+        .context(REPORTING),
     }
 }
 
@@ -378,9 +382,9 @@ pub(crate) fn testkit_version() -> Result<()> {
 /// # Errors
 ///
 /// Returns an error if the manifest cannot be read, if `[features]` declares
-/// no `serde` line, or if the line it declares omits either `serde/alloc` or
-/// `base64/alloc`.
-pub(crate) fn core_alloc_features() -> Result<()> {
+/// no `serde` line, if the line it declares omits either `serde/alloc` or
+/// `base64/alloc`, or if `out` cannot be written.
+pub(crate) fn core_alloc_features(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let manifest = fs::read_to_string(root.join(CORE_MANIFEST))
         .with_context(|| format!("reading {CORE_MANIFEST}"))?;
@@ -436,10 +440,11 @@ pub(crate) fn core_alloc_features() -> Result<()> {
                 (true, true) => unreachable!("outer guard requires at least one to be missing"),
             }
         ),
-        Some(line) => {
-            println!("D12: {CORE_MANIFEST}'s `{line}` names both `serde/alloc` and `base64/alloc`");
-            Ok(())
-        }
+        Some(line) => writeln!(
+            out,
+            "D12: {CORE_MANIFEST}'s `{line}` names both `serde/alloc` and `base64/alloc`"
+        )
+        .context(REPORTING),
     }
 }
 
@@ -548,12 +553,13 @@ fn names_rule(text: &str, rule: &str) -> bool {
 ///
 /// # Errors
 ///
-/// Returns an error if either file cannot be read, or if any rule in
-/// [`RULE_FILES`] has no changelog entry naming a defect.
-pub(crate) fn changelog_names_every_rule() -> Result<()> {
+/// Returns an error if either file cannot be read, if any rule in
+/// [`RULE_FILES`] has no changelog entry naming a defect, or if `out` cannot be
+/// written.
+pub(crate) fn changelog_names_every_rule(out: &mut impl io::Write) -> Result<()> {
     // Bundled here, not wired as its own step: `lint-changelog` is `cargo xtask
     // lints`'s one hook into this file for prose about the document as a whole.
-    changelog_scope_matches_publishable()?;
+    changelog_scope_matches_publishable(out)?;
 
     let root = workspace_root()?;
     let changelog =
@@ -612,21 +618,20 @@ pub(crate) fn changelog_names_every_rule() -> Result<()> {
     }
 
     if !problems.is_empty() {
-        for p in &problems {
-            println!("  {p}");
-        }
+        list(out, &problems)?;
         bail!(
             "{} conformance rule(s) without a changelog entry naming a defect (CF-29).",
             problems.len()
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "CF-29: all {} rules in {} file(s) have a changelog entry",
         rules.len(),
         RULE_FILES.len()
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// CF-6: no rule asserts on a literal sequence-position value.
@@ -655,9 +660,9 @@ pub(crate) fn changelog_names_every_rule() -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error if the suite cannot be read or cannot be scanned, or if a
-/// position-shaped literal is found in its code.
-pub(crate) fn no_position_literals() -> Result<()> {
+/// Returns an error if the suite cannot be read or cannot be scanned, if a
+/// position-shaped literal is found in its code, or if `out` cannot be written.
+pub(crate) fn no_position_literals(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let mut problems = Vec::new();
     for file in RULE_FILES {
@@ -667,9 +672,7 @@ pub(crate) fn no_position_literals() -> Result<()> {
     }
 
     if !problems.is_empty() {
-        for p in &problems {
-            println!("  {p}");
-        }
+        list(out, &problems)?;
         bail!(
             "{} literal position value(s) in the rule files (CF-6). The specification permits \
              gaps, so a rule that assumes density passes against the reference store and fails a \
@@ -678,11 +681,12 @@ pub(crate) fn no_position_literals() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "CF-6: no position-shaped literals in {} rule file(s)",
         RULE_FILES.len()
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// Whether a bracketed run is a list of integer literals.
@@ -955,9 +959,9 @@ fn prose_of(path: &str, body: &str) -> String {
 ///
 /// # Errors
 ///
-/// Returns an error if either file cannot be read, or if the registry baseline is
-/// enabled while the exemption survives.
-fn no_accepted_semver_break_outlives_its_reason() -> Result<()> {
+/// Returns an error if either file cannot be read, if the registry baseline is
+/// enabled while the exemption survives, or if `out` cannot be written.
+fn no_accepted_semver_break_outlives_its_reason(out: &mut impl io::Write) -> Result<()> {
     const MANIFEST: &str = "crates/happenstance-core/Cargo.toml";
     const WORKFLOW: &str = ".github/workflows/ci.yml";
     const EXEMPTION: &str = "derive_trait_impl_removed = \"allow\"";
@@ -973,12 +977,14 @@ fn no_accepted_semver_break_outlives_its_reason() -> Result<()> {
     let registry_baseline_off = workflow.contains(DISABLED);
 
     if !exempted {
-        println!("  the `0.2.0` semver exemption is gone");
-        return Ok(());
+        return writeln!(out, "  the `0.2.0` semver exemption is gone").context(REPORTING);
     }
     if registry_baseline_off {
-        println!("  the `0.2.0` semver exemption stands, and its trigger has not fired");
-        return Ok(());
+        return writeln!(
+            out,
+            "  the `0.2.0` semver exemption stands, and its trigger has not fired"
+        )
+        .context(REPORTING);
     }
 
     bail!(
@@ -1032,9 +1038,9 @@ fn no_accepted_semver_break_outlives_its_reason() -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error if a source file cannot be read, or if any rendered surface
-/// still subscripts `EVENT_TYPES`.
-fn no_rendered_surface_indexes_event_types() -> Result<()> {
+/// Returns an error if a source file cannot be read, if any rendered surface
+/// still subscripts `EVENT_TYPES`, or if `out` cannot be written.
+fn no_rendered_surface_indexes_event_types(out: &mut impl io::Write) -> Result<()> {
     /// A subscript with a **literal** index, which is the defect.
     ///
     /// `EVENT_TYPES[i]` with a variable is not: that spelling appears in prose
@@ -1096,12 +1102,10 @@ fn no_rendered_surface_indexes_event_types() -> Result<()> {
         bail!("scanned no sources for the `EVENT_TYPES[` pattern; the walk is broken");
     }
     if problems.is_empty() {
-        println!("  {scanned} rendered source(s) name their event types");
-        return Ok(());
+        return writeln!(out, "  {scanned} rendered source(s) name their event types")
+            .context(REPORTING);
     }
-    for problem in &problems {
-        println!("  {problem}");
-    }
+    list(out, &problems)?;
     bail!(
         "{} rendered surface(s) subscript `EVENT_TYPES` (ADR-0059). Declare each \
          name once as a `const EventType` and return it by name: a match arm bound \
@@ -1154,8 +1158,8 @@ fn no_rendered_surface_indexes_event_types() -> Result<()> {
 ///
 /// Returns an error if a document cannot be read, if `PUBLISHABLE` cannot be
 /// parsed, or if any document states a published-crate count this workspace does
-/// not have.
-fn stated_crate_counts() -> Result<()> {
+/// not have, or if `out` cannot be written.
+fn stated_crate_counts(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let published = publishable_from_package_rs(&root)?.len();
 
@@ -1173,12 +1177,10 @@ fn stated_crate_counts() -> Result<()> {
     }
 
     if problems.is_empty() {
-        println!("  every stated published-crate count is {published}");
-        return Ok(());
+        return writeln!(out, "  every stated published-crate count is {published}")
+            .context(REPORTING);
     }
-    for problem in &problems {
-        println!("  {problem}");
-    }
+    list(out, &problems)?;
     bail!(
         "{} stale published-crate count(s). The release set is derived from \
          `PUBLISHABLE`, which `reconcile` holds against the manifests, so the code \
@@ -1549,9 +1551,10 @@ const COUNT_BEARING_DOCS: [&str; 4] = [
 ///
 /// Returns an error if a document or a rule file cannot be read, if a rule file
 /// parses to nothing, if a document states a rule count this workspace does not
-/// have, or if **no** document states one at all — a check whose subject can
-/// vanish is one that retires without anybody deciding to.
-pub(crate) fn stated_rule_counts() -> Result<()> {
+/// have, if **no** document states one at all — a check whose subject can
+/// vanish is one that retires without anybody deciding to — or if `out` cannot
+/// be written.
+pub(crate) fn stated_rule_counts(out: &mut impl io::Write) -> Result<()> {
     // Bundled here rather than wired as its own step, the way
     // `changelog_scope_matches_publishable` is bundled into
     // `changelog_names_every_rule`: the same direction — a document held to the
@@ -1566,7 +1569,7 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // `lints.rs:627` and `:693` by line and `lint-constitution` checks those
     // citations resolve; inserting above them moves the anchors out from under a
     // file this change may not correct.
-    tracker::runbook_status_and_tracking()?;
+    tracker::runbook_status_and_tracking(out)?;
 
     // V-6 (`references/evaluation/review-pre-publication-2026-09-03.md`): a
     // second, unrelated document-held-to-the-tree check, bundled for exactly
@@ -1577,7 +1580,7 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // same way `runbook_status_matches_the_registry` is exempted from above —
     // neither file is this fix's to edit. `xtask/src/lints.rs` is; this is
     // its one door into `cargo xtask lints`.
-    citation_ranges_resolve()?;
+    citation_ranges_resolve(out)?;
 
     // The third, bundled for the same two reasons the two above are: it is a
     // document held to the tree, and neither `main.rs`'s `REQUIRED` array nor
@@ -1585,7 +1588,7 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // criteria audit `RUNBOOK.md`'s provisional and deferred ledgers against
     // `spec-trace` rather than against prose, and this is the thing that makes
     // "against `spec-trace`" mean something on every run rather than once.
-    runbook_clause_ledgers_match_the_specification()?;
+    runbook_clause_ledgers_match_the_specification(out)?;
 
     // The fourth, bundled here for the same two reasons: a document held to the
     // tree, and neither `main.rs`'s `REQUIRED` array nor `affected.rs`'s export
@@ -1593,14 +1596,14 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     // lines down — see `stated_crate_counts` for why one array could not serve
     // both, and for the nine documents that went stale while `reconcile` stayed
     // green. `msrv::front_pages_state_the_policy` rides the same line (#201).
-    stated_crate_counts().and_then(|()| msrv::front_pages_state_the_policy())?;
+    stated_crate_counts(out).and_then(|()| msrv::front_pages_state_the_policy())?;
 
     // ADR-0059's third action, bundled here for the same reason as the three
     // above: a document (and an example) held to the tree.
-    no_rendered_surface_indexes_event_types()?;
+    no_rendered_surface_indexes_event_types(out)?;
 
     // The `0.2.0` semver exemption, and the trigger that retires it.
-    no_accepted_semver_break_outlives_its_reason()?;
+    no_accepted_semver_break_outlives_its_reason(out)?;
 
     let root = workspace_root()?;
     let counts = true_rule_counts(&root)?;
@@ -1635,9 +1638,7 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
     }
 
     if !problems.is_empty() {
-        for p in &problems {
-            println!("  {p}");
-        }
+        list(out, &problems)?;
         bail!(
             "{} stale rule count(s) in the documents a consumer reads. `cargo package --list` \
              asserts the README is in the artifact; only this step asserts it is true.",
@@ -1645,8 +1646,11 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
         );
     }
 
-    println!("{checked} stated rule count(s) checked against {legend}");
-    Ok(())
+    writeln!(
+        out,
+        "{checked} stated rule count(s) checked against {legend}"
+    )
+    .context(REPORTING)
 }
 
 /// The testkit's own rustdoc — the second rendered surface C2-07 names,
@@ -1656,14 +1660,14 @@ pub(crate) fn stated_rule_counts() -> Result<()> {
 /// [`stale_publication_claims`]: the *check* itself — the
 /// `Result<()>`-returning entry point — lives in `xtask/src/lint_pages.rs`
 /// rather than here, deliberately. `exported_lints`
-/// (`xtask/src/affected.rs:1425-1433`) scans this file for exactly the shape
-/// `pub(crate) fn NAME() -> Result<()> {` and requires `affected::run`'s
+/// (`xtask/src/affected.rs:1471-1481`) scans this file for exactly the shape
+/// `pub(crate) fn NAME(out: &mut impl io::Write) -> Result<()> {` and requires `affected::run`'s
 /// unconditional block to call each one it finds by name — the invariant
 /// that catches a lint wired into `REQUIRED` and forgotten in the story
 /// grain. A seventh entry point of that shape here would trip the same check
 /// for the wrong reason: it already runs in the story grain, transitively,
 /// because `affected::run` calls `lint_pages::run` unconditionally
-/// (`xtask/src/affected.rs:189`) and `lint_pages::run` calls this check.
+/// (`xtask/src/affected.rs:193`) and `lint_pages::run` calls this check.
 /// `xtask/src/affected.rs` is not a path this change owns, so the fix is to
 /// keep the checked shape out of this file rather than teach a name-matching
 /// scanner about an indirection it cannot see through.
@@ -1890,8 +1894,8 @@ fn changelog_scope_crates(changelog: &str) -> Result<Vec<String>> {
 /// Returns an error if either file cannot be read or parsed (see the two
 /// functions above), or if the two crate sets disagree — the message names
 /// which crates are on which side, because "missing from the scope line" and
-/// "no longer publishable" are different bugs.
-fn changelog_scope_matches_publishable() -> Result<()> {
+/// "no longer publishable" are different bugs — or if `out` cannot be written.
+fn changelog_scope_matches_publishable(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let changelog =
         fs::read_to_string(root.join(CHANGELOG)).with_context(|| format!("reading {CHANGELOG}"))?;
@@ -1924,12 +1928,13 @@ fn changelog_scope_matches_publishable() -> Result<()> {
         bail!(msg);
     }
 
-    println!(
+    writeln!(
+        out,
         "changelog_scope_matches_publishable: {CHANGELOG}'s scope sentence names exactly \
          {PACKAGE_RS}'s {} publishable crate(s)",
         publishable.len()
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// The plan of record's index, whose `## Status` table routes the next
@@ -2209,8 +2214,8 @@ fn prerequisites(rows: &[PhaseRow], start: &[String]) -> Vec<String> {
 /// a state outside [`PHASE_STATES`], if no released version matches a milestone
 /// row or no row names a publishable crate — either of which would leave an axis
 /// with nothing to hold — or if the table disagrees with the changelog or the
-/// registry on any row.
-fn runbook_status_matches_the_registry() -> Result<()> {
+/// registry on any row, or if `out` cannot be written.
+fn runbook_status_matches_the_registry(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let runbook =
         fs::read_to_string(root.join(RUNBOOK)).with_context(|| format!("reading {RUNBOOK}"))?;
@@ -2301,9 +2306,7 @@ fn runbook_status_matches_the_registry() -> Result<()> {
     }
 
     if !problems.is_empty() {
-        for p in &problems {
-            println!("  {p}");
-        }
+        list(out, &problems)?;
         bail!(
             "runbook_status_matches_the_registry: {} row(s) of {RUNBOOK}'s status table disagree \
              with {CHANGELOG} or {PACKAGE_RS} about what has shipped. This repository routes its \
@@ -2312,12 +2315,13 @@ fn runbook_status_matches_the_registry() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "runbook_status_matches_the_registry: {} status row(s) agree with {vouched} released \
          version(s) and {named} publishable-crate mention(s)",
         rows.len()
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 // ---------------------------------------------------------------------------
@@ -2428,9 +2432,10 @@ const ENUMERATED_BEYOND_THE_RULE_FILES: [&str; 1] = ["crates/happenstance-testki
 ///
 /// # Errors
 ///
-/// Returns an error if a file cannot be read, if a macro cannot be located, or
-/// if either direction of the comparison finds anything.
-pub(crate) fn rules_are_enumerated() -> Result<()> {
+/// Returns an error if a file cannot be read, if a macro cannot be located, if
+/// either direction of the comparison finds anything, or if `out` cannot be
+/// written.
+pub(crate) fn rules_are_enumerated(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let mut problems: Vec<String> = Vec::new();
     let mut checked = 0usize;
@@ -2482,19 +2487,18 @@ pub(crate) fn rules_are_enumerated() -> Result<()> {
     }
 
     if !problems.is_empty() {
-        for p in &problems {
-            println!("  {p}");
-        }
+        list(out, &problems)?;
         bail!(
             "{} rule(s) out of step with their family's enumeration (CF-24)",
             problems.len()
         );
     }
-    println!(
+    writeln!(
+        out,
         "CF-24: {checked} rule(s) across {} enumeration(s) appear in the macro that drives them",
         ENUMERATIONS.len()
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// The names a `for_each_*!` macro lists.
@@ -2803,9 +2807,9 @@ fn citation_source_files(
 ///
 /// # Errors
 ///
-/// Returns an error if a scanned or cited file cannot be read, or if any
-/// citation's range fails [`citation_resolves`].
-fn citation_ranges_resolve() -> Result<()> {
+/// Returns an error if a scanned or cited file cannot be read, if any
+/// citation's range fails [`citation_resolves`], or if `out` cannot be written.
+fn citation_ranges_resolve(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let mut files = Vec::new();
     for dir in CITATION_SCAN_DIRS {
@@ -2842,9 +2846,7 @@ fn citation_ranges_resolve() -> Result<()> {
     }
 
     if !problems.is_empty() {
-        for p in &problems {
-            println!("  {p}");
-        }
+        list(out, &problems)?;
         bail!(
             "{} citation(s) under {} whose cited range does not resolve cleanly (V-6). A citation \
              is the guard against drift only for as long as it points at what it claims to.",
@@ -2853,12 +2855,13 @@ fn citation_ranges_resolve() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "V-6: {checked} path:line citation(s) across {} file(s) in {} resolve cleanly",
         files.len(),
         CITATION_SCAN_DIRS.join(", ")
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// `spec/SPECIFICATION.md`, held against `RUNBOOK.md`'s two clause ledgers.
@@ -3466,7 +3469,7 @@ fn membership(
 /// status table; whether the named phase will actually build the instrument is
 /// a judgement, and a lint that pretended otherwise would be the decorative
 /// kind.
-fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
+fn runbook_clause_ledgers_match_the_specification(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let spec = at(&root, SPECIFICATION)?;
     let ledgers = at(&root, RUNBOOK_LEDGERS)?;
@@ -3480,18 +3483,17 @@ fn runbook_clause_ledgers_match_the_specification() -> Result<()> {
             .filter(|(_, m)| m == "PROVISIONAL")
             .count();
         let deferred = maturities.iter().filter(|(_, m)| m == "DEFERRED").count();
-        println!(
+        return writeln!(
+            out,
             "runbook_clause_ledgers_match_the_specification: {provisional} provisional and \
              {deferred} deferred clause(s) in §7.2, each named by exactly one ledger row, every \
              row of both owned, and each with exactly one 1.0 disposition that parses and can \
              still be kept"
-        );
-        return Ok(());
+        )
+        .context(REPORTING);
     }
 
-    for problem in &problems {
-        println!("  {problem}");
-    }
+    list(out, &problems)?;
     bail!(
         "{} clause ledger problem(s). Phase 12's exit criteria audit these tables against \
          `spec-trace` rather than against prose, and phase 21's audit reads the 1.0 \
@@ -3889,6 +3891,61 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+    use crate::tests::ClosesAfter;
+
+    /// A failing lint's problem lines, as the reader of `cargo xtask lints`
+    /// sees them: indented two spaces, one per line, in the order found.
+    #[test]
+    fn a_lints_problems_are_listed_one_indented_line_each() {
+        let mut out = Vec::new();
+        list(&mut out, &["first".to_owned(), "second".to_owned()])
+            .expect("a Vec accepts every write");
+        assert_eq!(out, b"  first\n  second\n");
+    }
+
+    /// A passing lint's one line, through the writer it was handed — the real
+    /// tree's testkit manifest, so the line is the one CI prints.
+    #[test]
+    fn a_passing_lint_writes_its_verdict_into_the_writer() {
+        let mut out = Vec::new();
+        testkit_version(&mut out).expect("the testkit carries its own version");
+        let line = String::from_utf8(out).expect("the verdict is UTF-8");
+        assert!(
+            line.starts_with(&format!(
+                "CF-32: {TESTKIT_MANIFEST} carries its own `version"
+            )) && line.ends_with("`\n")
+                && line.matches('\n').count() == 1,
+            "{line:?}"
+        );
+    }
+
+    /// The defect #352 names, one module in: a closed stdout under a lint is an
+    /// error naming the write, not a panic in `println!` — both on the verdict
+    /// of a passing lint and on the problem list of a failing one.
+    ///
+    /// The wrong implementation it rejects drops a write's result: the lint
+    /// then says `Ok` over a report nobody received, or writes on past the
+    /// refusal.
+    #[test]
+    fn a_lint_reports_a_closed_stdout_rather_than_panicking() {
+        let closed = || ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let mut verdict = closed();
+        let passing = testkit_version(&mut verdict).expect_err("stdout was closed, yet Ok");
+        let mut problems = closed();
+        let failing = list(&mut problems, &["a".to_owned(), "b".to_owned()])
+            .expect_err("stdout was closed, yet Ok");
+
+        for (err, pipe) in [(passing, verdict), (failing, problems)] {
+            let refused = err
+                .downcast_ref::<io::Error>()
+                .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+            assert_eq!(refused.kind(), io::ErrorKind::BrokenPipe);
+            assert_eq!(pipe.refused, 1, "writing went on after a refused write");
+        }
+    }
 
     /// The counts this workspace had when these tests were written are not the
     /// point — the shapes are — so the fixtures state their own.
@@ -4632,3 +4689,23 @@ macro_rules! for_each_fake_rule {
 mod tracker;
 
 mod msrv;
+
+// Last for the same reason: every lint above reports through these two.
+
+/// The context a lint's failed report write carries.
+const REPORTING: &str = "writing a lint's report";
+
+/// A lint's problems into `out`, one indented line each, before it bails.
+///
+/// Through a writer rather than `println!`, which panicked when stdout was a
+/// closed pipe: `cargo xtask lints | head -2` aborted a step mid-report (#352).
+///
+/// # Errors
+///
+/// When `out` cannot be written.
+fn list(out: &mut impl io::Write, problems: &[String]) -> Result<()> {
+    for p in problems {
+        writeln!(out, "  {p}").context(REPORTING)?;
+    }
+    Ok(())
+}

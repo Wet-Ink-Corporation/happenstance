@@ -125,7 +125,7 @@ anywhere that changed.
 
 **Evidence.** `crates/happenstance-core/Cargo.toml:52 (stated rather than inherited)` ·
 `xtask/src/main.rs:795 (names serde/alloc and base64/alloc)` ·
-`xtask/src/lints.rs:383 (fn core_alloc_features)` ·
+`xtask/src/lints.rs:387 (fn core_alloc_features)` ·
 [ADR-0016](../../.kb/decisions/0016-the-wire-format.md)
 
 ## RS-51-4. `extern crate alloc;` is the only way onto the ladder, and `core::error::Error` is the only bound worth writing.

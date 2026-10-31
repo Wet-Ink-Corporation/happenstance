@@ -42,7 +42,7 @@ Each PR follows the session protocol in `runbook/README.md`. The phase file's bo
    - Never edit an accepted decision's body.
 5. **Open questions whose own deadline has passed** ("at `0.2.0`", "at phase 12", "at the `ProjectionStore` freeze") each get a new owner in phase 16 or 17. Record each owner in that phase's file, and in `runbook/ledgers.md`'s *Open decisions* table where it belongs there.
 6. **`[Unreleased]`.** Tick phase 15's item, citing `wi-052920`. Add a line to `runbook/phases/17-breaking-window.md` saying those entries ship in `0.4.0`. Nothing else.
-7. **Found in passing.** Correct the doc comment on `no_accepted_semver_break_outlives_its_reason` (`xtask/src/lints.rs:943`), which still says the registry-baseline step "is `if: false`". Add a work item to `runbook/phases/13-sync.md` to delete `happenstance-sync`'s placeholder `EventId`, `StoreId` and `RecordedAt` from `identity.rs`. The real ones are in `happenstance-core`.
+7. **Found in passing.** Correct the doc comment on `no_accepted_semver_break_outlives_its_reason` (`xtask/src/lints.rs:947`), which still says the registry-baseline step "is `if: false`". Add a work item to `runbook/phases/13-sync.md` to delete `happenstance-sync`'s placeholder `EventId`, `StoreId` and `RecordedAt` from `identity.rs`. The real ones are in `happenstance-core`.
 8. **Exit.**
    - Run `cargo xtask ci`. The tests step uses a lot of memory, so if the whole gate cannot finish, run it in slices with `cargo run -p xtask -- <step>` and name each slice you ran.
    - Tick every exit criterion that is actually true. If all are ticked, set phase 15 to `done` in the status table. If any is not, leave it `in progress` and say which criteria are open.

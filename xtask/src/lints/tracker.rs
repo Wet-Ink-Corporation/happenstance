@@ -33,10 +33,11 @@ const RUNBOOK_PHASES: &str = "runbook/phases";
 ///
 /// # Errors
 ///
-/// Returns the first failing check's error: the registry axes, then the
-/// status table's Tracker column, then the phase files' work items.
-pub(super) fn runbook_status_and_tracking() -> Result<()> {
-    runbook_status_matches_the_registry()?;
+/// Returns the first failing check's error: the registry axes (whose report
+/// goes to `out`), then the status table's Tracker column, then the phase
+/// files' work items.
+pub(super) fn runbook_status_and_tracking(out: &mut impl io::Write) -> Result<()> {
+    runbook_status_matches_the_registry(out)?;
     let root = workspace_root()?;
     let runbook =
         fs::read_to_string(root.join(RUNBOOK)).with_context(|| format!("reading {RUNBOOK}"))?;

@@ -138,7 +138,7 @@ discount buys, and it is the case `kb-decision-0045` and
 ## Phase 16 — 2026-09-29
 
 **Classification: additive** — specification text and `xtask`; no signature. `CF36_UNDISCHARGED`
-(`xtask/src/spec_trace.rs:1513`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
+(`xtask/src/spec_trace.rs:1518`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
 clauses. Each group now has an owner, per `runbook/ledgers.md`, *The 1.0 dispositions* and `kb-decision-0066`:
 
 - **The nine SY clauses → phase 13**, which builds `happenstance-sync-testkit`

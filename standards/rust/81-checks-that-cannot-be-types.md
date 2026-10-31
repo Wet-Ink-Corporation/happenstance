@@ -85,8 +85,8 @@ duplicate of a lint that already runs. The suite stays green and the lint stays
 green, and the first adapter whose store does not start at 1 fails a rule nobody
 can account for, in the field rather than in the testkit.
 
-**Evidence.** `xtask/src/lints.rs:636 (positions from 4,096 in steps of seven)` ·
-`xtask/src/lints.rs:702 (fn is_integer_list)` ·
+**Evidence.** `xtask/src/lints.rs:641 (positions from 4,096 in steps of seven)` ·
+`xtask/src/lints.rs:706 (fn is_integer_list)` ·
 [SPECIFICATION CF-6](../../spec/SPECIFICATION.md) ·
 [SPECIFICATION CF-33](../../spec/SPECIFICATION.md)
 
@@ -255,7 +255,7 @@ changelog entry while the step reported it satisfied by the longer rule's entry,
 so an adapter author taking the minor bump had no sentence anywhere telling them
 which defect had just started failing their build.
 
-**Evidence.** `xtask/src/lints.rs:520 (fn names_rule)` ·
+**Evidence.** `xtask/src/lints.rs:525 (fn names_rule)` ·
 `xtask/src/lints.rs:55 (const TESTKIT_SRC)` · `xtask/src/lints.rs:251 (const CLOCK_CONSTRUCTS)` ·
 [SPECIFICATION CF-29](../../spec/SPECIFICATION.md)
 
