@@ -124,7 +124,7 @@ takes that choice (`runbook/phases/17-breaking-window.md:128-136`).
    so for Neon steps 1, 2 and 4 suffice.
 3. **The additive remedies go to phase 13, or 17b if one is taken earlier.**
    - `remint_identity` on both stores, matching SQLite's name
-     (`crates/happenstance-sqlite/src/event_store.rs:631`).
+     (`crates/happenstance-sqlite/src/event_store.rs:667`).
    - Postgres stamps the identity inside the append transaction and drops the cache. Removing a
      private field from a `#[non_exhaustive]` struct is invisible to dependents.
    - Neon refuses an append when the meta row is absent, instead of committing a row with a NULL

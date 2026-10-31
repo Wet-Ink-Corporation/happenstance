@@ -88,7 +88,7 @@ crates/happenstance-core/src/tag.rs                             ✓ exists — T
 crates/happenstance-testkit/src/registry.rs:339-343              ✓ block_on parks on Poll::Pending with no notified flag
 crates/happenstance-sqlite/tests/concurrency.rs:45-47            ✓ "If a rule hangs, that is evidence about ADR-0022's busy-timeout paragraph"
 crates/happenstance-core/src/limits.rs                          ✓ four MIN_SUPPORTED_* constants, three StoreLimit variants — Q1 confirmed
-crates/happenstance-sqlite/src/event_store.rs:577,760            ✓ PARAMETER_BUDGET declared once, called once — Q5 confirmed
+crates/happenstance-sqlite/src/event_store.rs:613,760            ✓ PARAMETER_BUDGET declared once, called once — Q5 confirmed
 crates/happenstance-sqlite/src/event_store.rs:266-290,622-664    ✓ the second chunking axis: UNION arms, width 400, via query_sql::chunks
 crates/happenstance-sqlite/src/event_store.rs:448                ✓ remint_identity exists — Q4 confirmed
 spec/SPECIFICATION.md:813-830 (VT-6), :4302-4322 (CF-33 hang)    ✓ both verbatim as cited
