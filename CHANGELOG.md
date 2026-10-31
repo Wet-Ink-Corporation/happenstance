@@ -358,8 +358,27 @@ not the same as what a user needed to be told.
   byte-cut log goes one event to a push, each sized from `max_event_bytes`, so
   refusing it is SY-18's to judge, and a peer that overstates only
   `max_batch_bytes` takes it and pages. A refused count-cut log is a lie about
-  the batch limits, which no rule judges, so the skip is the only place it can
-  be reported, and only when the byte-cut log did not page.
+  the batch limits, which `peer_takes_a_batch_at_its_declared_limits` judges
+  (#337); the skip names it only when the byte-cut log did not page.
+
+- **`peer_takes_a_batch_at_its_declared_limits`** (SY-18), in
+  `happenstance-sync-testkit` (#337). The defect it detects is a peer whose
+  declared `max_batch_events` or `max_batch_bytes` are larger than what it
+  takes: a push at the declared corner is refused, so a runner that honoured
+  the declaration is refused anyway and learns the real limit at ingest. The
+  rule reads `limits()` once and pushes two batches of single-event groups:
+  `max_batch_events` events with empty payloads, then as many again carrying
+  `max_batch_bytes` between them, none over `max_event_bytes`. Each must be
+  admitted by the declaration, land with every event acknowledged as
+  appended, and come back byte for byte. The pushes are capped at
+  `MAX_PROVOKED_BATCH_EVENTS`, a new constant of 4,096 events, and at
+  `MAX_PROVOKED_BATCH_BYTES`. Its wrong implementations are in
+  `tests/wrong_peers.rs`: a peer that takes fewer events than it declares, one
+  that declares twice the batch bytes it enforces, two that refuse *at* the
+  declared count or bytes, and one that stores only the head of a large push
+  and acknowledges all of it. It does not judge a peer that accepts more than
+  it declares, a pull over the declaration, or the refusal one byte over,
+  which stays SY-36's `Split`. `COUNT_LOG_REFUSED_REASON` now names this rule.
 
 - **`peer_declares_its_own_limits`** (SY-18), in `happenstance-sync-testkit`
   (#121). The defect it detects is a peer whose declared `PeerLimits` admit an

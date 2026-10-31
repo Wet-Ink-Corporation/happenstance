@@ -75,20 +75,21 @@ enum Mistake {
     SaysNothingOnAShortPage,
     /// A peer that declares more events to a push than it takes: it refuses
     /// any push of more than [`TAKES_EVENTS`], whatever its declaration says.
-    /// SY-37's rule must report the refused count-cut log as refused, because
-    /// no other rule judges a lie about the batch limits.
+    /// SY-37's rule must report the refused count-cut log as refused, a lie
+    /// about the batch limits, which SY-18's batch rule judges.
     TakesFewerEventsThanItDeclares,
     /// A peer that declares larger events than it takes: it refuses any event
     /// over half its declared `max_event_bytes`. SY-37's rule must report the
     /// refused byte-cut log as refused, and as SY-18's subject.
     TakesSmallerEventsThanItDeclares,
     /// Both of the two above at once, so SY-37's rule sees both logs refused
-    /// and must name the count-cut one, which nothing else reports.
+    /// and must name the count-cut one, the batch-limit lie.
     TakesLessOfBothThanItDeclares,
-    /// A peer that declares twice the `max_batch_bytes` it enforces. SY-18's
-    /// rule does not judge a batch-limit lie alone, so SY-37's must not blame
-    /// SY-18 for it: its byte-cut log goes one event to a push, takes it, and
-    /// pages at the limit the peer really imposes.
+    /// A peer that declares twice the `max_batch_bytes` it enforces.
+    /// `peer_declares_its_own_limits` judges per-event limits only, so SY-37's
+    /// rule must not blame it: its byte-cut log goes one event to a push,
+    /// takes it, and pages at the limit the peer really imposes. SY-18's
+    /// batch rule is the one that fails it.
     DeclaresMoreBatchBytesThanItTakes,
     /// SY-31's wrong implementation: a write-behind cache. It acknowledges a
     /// push on admission, with the ack the reference peer would have sent,
@@ -100,6 +101,25 @@ enum Mistake {
     /// Safe, because a spoke re-pushes, and SY-31's rule cannot hold an empty
     /// confirmation to anything, so it must say so rather than pass.
     ConfirmsNothing,
+    /// SY-18's batch rule, an off-by-one on the count: refuse a push of
+    /// `max_batch_events` or more, as an adapter does that compares with `>=`.
+    /// The declaration is honest by one event and the corner is refused. Run
+    /// under [`both_logs_written`], whose 1,000-event declaration is far above
+    /// the 257 events SY-37's count-cut log puts in a push; under the minimum
+    /// declaration that log's 128-event pushes would be refused too.
+    RefusesAtTheDeclaredBatchEvents,
+    /// SY-18's batch rule, an off-by-one on the bytes: refuse a push carrying
+    /// `max_batch_bytes` or more. Run under [`both_logs_written`]'s 128 KiB,
+    /// because the limits are load-bearing: under the minimum declaration,
+    /// `peer_declares_its_own_limits`'s 64 KiB boundary event equals
+    /// `max_batch_bytes`, and that rule would fail the peer too.
+    RefusesAtTheDeclaredBatchBytes,
+    /// SY-18's batch rule, a peer that acknowledges more than it keeps: a push
+    /// of more than [`HEAD_EVENTS`] events has only its first `HEAD_EVENTS`
+    /// groups stored, and is acknowledged as every event appended. Only the
+    /// rule's pull-back can see it, so it is the mutant that isolates that
+    /// check.
+    KeepsOnlyTheHeadOfALargePush,
 }
 
 /// How many events a push to [`Mistake::TakesFewerEventsThanItDeclares`] may
@@ -107,13 +127,21 @@ enum Mistake {
 /// count-cut log puts in one push when the declaration admits them.
 const TAKES_EVENTS: usize = 128;
 
+/// How many groups of a large push [`Mistake::KeepsOnlyTheHeadOfALargePush`]
+/// stores: 257, the whole of SY-37's count-cut log (its `FILL_CAP` plus one),
+/// so that log, pushed in one push under a large declaration, is stored whole
+/// and SY-37's rule sees the reference peer. If `FILL_CAP` moves, this moves
+/// with it, or the mutant fails two rules.
+const HEAD_EVENTS: usize = 257;
+
 /// What a [`WrongError`] is about.
 #[derive(Debug)]
 enum Cause {
     /// The reference peer's own refusal.
     Peer(MemoryPeerError),
-    /// A push carrying more events than [`TAKES_EVENTS`]. Its own case rather
-    /// than a [`MemoryPeerError::BatchTooLarge`], whose message says bytes.
+    /// A push carrying more events than the wrong peer takes. Its own case
+    /// rather than a [`MemoryPeerError::BatchTooLarge`], whose message says
+    /// bytes.
     TooManyEvents { actual: usize, limit: usize },
 }
 
@@ -184,7 +212,10 @@ impl Classify for WrongError {
             | Mistake::TakesLessOfBothThanItDeclares
             | Mistake::DeclaresMoreBatchBytesThanItTakes
             | Mistake::AcksOnAdmission
-            | Mistake::ConfirmsNothing => self.cause.class(),
+            | Mistake::ConfirmsNothing
+            | Mistake::RefusesAtTheDeclaredBatchEvents
+            | Mistake::RefusesAtTheDeclaredBatchBytes
+            | Mistake::KeepsOnlyTheHeadOfALargePush => self.cause.class(),
         }
     }
 }
@@ -252,6 +283,42 @@ impl WrongPeer {
             actual: largest,
             limit,
         }))
+    }
+
+    /// Why a peer that refuses at its own declared batch limit refuses
+    /// `batch`, if it does: `>=` where the declaration means `>`.
+    fn refuses_at_the_limit(&self, batch: &PushBatch) -> Option<Cause> {
+        let limits = self.inner.limits();
+        let events = batch.events().count();
+        let bytes = batch.payload_len();
+        match self.mistake {
+            Mistake::RefusesAtTheDeclaredBatchEvents if events >= limits.max_batch_events => {
+                Some(Cause::TooManyEvents {
+                    actual: events,
+                    limit: limits.max_batch_events,
+                })
+            }
+            Mistake::RefusesAtTheDeclaredBatchBytes if bytes >= limits.max_batch_bytes => {
+                Some(Cause::Peer(MemoryPeerError::BatchTooLarge {
+                    actual: bytes,
+                    limit: limits.max_batch_bytes,
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    /// [`Mistake::KeepsOnlyTheHeadOfALargePush`]'s push: store the first
+    /// [`HEAD_EVENTS`] groups, and acknowledge every event as appended.
+    async fn keep_the_head(&self, batch: &PushBatch) -> Result<Ack, MemoryPeerError> {
+        if batch.groups.len() <= HEAD_EVENTS {
+            return self.inner.push(batch).await;
+        }
+        let head = batch.groups.iter().take(HEAD_EVENTS).cloned().collect();
+        let mut ack = self.inner.push(&PushBatch::new(head)).await?;
+        ack.appended = u64::try_from(batch.events().count()).unwrap_or(u64::MAX);
+        ack.skipped = 0;
+        Ok(ack)
     }
 
     /// Whether `group`'s travelling guard is violated by what the inner peer
@@ -413,6 +480,19 @@ impl SendSyncPeer for WrongPeer {
                 ack.confirmed = Watermark::new();
                 Ok(ack)
             }
+            Mistake::RefusesAtTheDeclaredBatchEvents | Mistake::RefusesAtTheDeclaredBatchBytes => {
+                if let Some(cause) = self.refuses_at_the_limit(batch) {
+                    return Err(self.refuse(cause));
+                }
+                self.inner
+                    .push(batch)
+                    .await
+                    .map_err(|error| self.wrap(error))
+            }
+            Mistake::KeepsOnlyTheHeadOfALargePush => self
+                .keep_the_head(batch)
+                .await
+                .map_err(|error| self.wrap(error)),
             Mistake::TakesFewerEventsThanItDeclares
             | Mistake::TakesSmallerEventsThanItDeclares
             | Mistake::TakesLessOfBothThanItDeclares => {
@@ -790,6 +870,32 @@ fn sy18_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'
     .map_err(|violation| violation.clause())
 }
 
+/// SY-18's batch rule's verdict alone against `mistake` behind a peer
+/// declaring `limits`: whether the attribution SY-37's count-cut skip makes is
+/// true.
+fn sy18_batch_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'static str> {
+    block_on(rules::peer_takes_a_batch_at_its_declared_limits(
+        async || WrongFixture::with_limits(mistake, limits.clone()),
+    ))
+    .map_err(|violation| violation.clause())
+}
+
+/// A faithful peer whose `max_batch_bytes` is more than its event count can
+/// carry: 128 events of at most 64 KiB is 8 MiB, under the 16 MiB declared.
+/// The full corner is sized by what the events can carry, not by the batch
+/// bytes, or no event of it would fit `max_event_bytes` and the declaration
+/// would admit no corner at all.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_runs_when_the_event_bytes_bind_the_corner() {
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_bytes = 16 * 1024 * 1024;
+
+    assert_eq!(
+        sy18_batch_against(Mistake::Faithful, &limits),
+        Ok(RuleOutcome::Ran)
+    );
+}
+
 /// SY-37's verdict alone against `mistake` behind a peer declaring `limits`.
 fn sy37_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'static str> {
     block_on(rules::nothing_waiting_means_the_next_pull_is_empty(
@@ -799,8 +905,8 @@ fn sy37_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'
 }
 
 /// A peer that refuses the count-cut log has lied about its batch limits,
-/// which no rule judges. The skip says so, and not that its limits are too
-/// large to page: the fix is the opposite one.
+/// which SY-18's batch rule judges. The skip says so, and not that its limits
+/// are too large to page: the fix is the opposite one.
 #[test]
 fn nothing_waiting_means_the_next_pull_is_empty_reports_a_refused_count_cut_log() {
     // 1,000 events to a push and 64 MiB: the count-cut log goes in one push of
@@ -823,6 +929,11 @@ fn nothing_waiting_means_the_next_pull_is_empty_reports_a_refused_count_cut_log(
             capability: LOG_REFUSED,
             reason: COUNT_LOG_REFUSED_REASON,
         })
+    );
+    assert_eq!(
+        sy18_batch_against(Mistake::TakesFewerEventsThanItDeclares, &limits),
+        Err("SY-18"),
+        "the skip says SY-18's batch rule judges this peer, so it must"
     );
 }
 
@@ -867,7 +978,8 @@ fn both_logs_written() -> PeerLimits {
 }
 
 /// Both logs refused: the count-cut refusal is the one named, because
-/// SY-18's rule already reports the byte-cut one and nothing reports this.
+/// `peer_declares_its_own_limits` already reports the byte-cut one, and the
+/// count-cut one is the batch-limit lie.
 #[test]
 fn nothing_waiting_means_the_next_pull_is_empty_names_the_count_cut_log_when_both_are_refused() {
     assert_eq!(
@@ -892,10 +1004,11 @@ fn nothing_waiting_means_the_next_pull_is_empty_runs_when_only_the_count_cut_log
     );
 }
 
-/// A peer that overstates only `max_batch_bytes` is a lie SY-18's rule does
-/// not judge, so SY-37's must not report it as SY-18's. Its byte-cut log goes
-/// one event to a push, which the peer takes, and its pulls page at the limit
-/// it really imposes: the rule runs.
+/// A peer that overstates only `max_batch_bytes` tells a lie
+/// `peer_declares_its_own_limits` does not judge, so SY-37's rule must not
+/// report it as that rule's. Its byte-cut log goes one event to a push, which
+/// the peer takes, and its pulls page at the limit it really imposes: the rule
+/// runs. SY-18's batch rule is the one that fails it.
 #[test]
 fn nothing_waiting_means_the_next_pull_is_empty_runs_against_a_peer_overstating_its_batch_bytes() {
     // The inner peer enforces 64 KiB a push and declares 128 KiB: the
@@ -911,7 +1024,89 @@ fn nothing_waiting_means_the_next_pull_is_empty_runs_against_a_peer_overstating_
     assert_eq!(
         sy18_against(Mistake::DeclaresMoreBatchBytesThanItTakes, &limits),
         Ok(RuleOutcome::Ran),
-        "SY-18's rule does not judge a batch-limit lie alone, which is why SY-37's \
-         must not lay it there"
+        "`peer_declares_its_own_limits` judges per-event limits only; the batch lie \
+         is its sibling's, which is why SY-37's must not lay it on either"
+    );
+    assert_eq!(
+        sy18_batch_against(Mistake::DeclaresMoreBatchBytesThanItTakes, &limits),
+        Err("SY-18"),
+        "SY-18's batch rule judges a batch-limit lie, so it must fail this peer"
+    );
+}
+
+/// A peer that refuses more than [`TAKES_EVENTS`] events to a push, while it
+/// declares 1,000: the count corner, 1,000 empty events, is refused.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_takes_fewer_events_than_it_declares()
+{
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(Mistake::TakesFewerEventsThanItDeclares, both_logs_written())
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}
+
+/// A peer that declares 128 KiB to a push and enforces 64 KiB: the count
+/// corner carries no bytes and lands, and the full corner, 1,000 events
+/// carrying 128 KiB between them, is refused.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_declares_more_batch_bytes_than_it_takes()
+ {
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_events = 1_000;
+
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(Mistake::DeclaresMoreBatchBytesThanItTakes, limits.clone())
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}
+
+/// The mutant that shows the count corner must be the declared count exactly:
+/// a corner of one event fewer lands.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_refuses_at_its_declared_event_limit()
+{
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(
+                Mistake::RefusesAtTheDeclaredBatchEvents,
+                both_logs_written(),
+            )
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}
+
+/// The mutant that shows the full corner must total the declared bytes
+/// exactly: a corner of one byte fewer lands.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_refuses_at_its_declared_byte_limit()
+{
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(Mistake::RefusesAtTheDeclaredBatchBytes, both_logs_written())
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}
+
+/// The mutant only the pull-back can see: its acknowledgement is the one a
+/// faithful peer sends.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_acks_a_large_push_and_keeps_its_head()
+ {
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(Mistake::KeepsOnlyTheHeadOfALargePush, both_logs_written())
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
     );
 }

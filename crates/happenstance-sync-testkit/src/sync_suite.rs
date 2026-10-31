@@ -40,22 +40,26 @@ pub const LOG_REFUSED: &str = "SyncPeer::push, within the peer's own PeerLimits"
 ///
 /// That log pushes at most [`PeerLimits::max_batch_events`] events of at most
 /// three payload bytes to a push, so a refusal is the peer stating batch
-/// limits it does not impose. **No rule in this suite judges that:** SY-18's
-/// rule reads the batch limits only to size its boundary event, and says in
-/// its own `# Does not reject` that a batch over them is SY-36's `Split`. So
-/// this skip is the only place the lie can be reported, and it is reported
-/// only when the byte-cut log did not page: a byte-cut log that paged makes
-/// the rule [`RuleOutcome::Ran`] and the refusal goes unreported. When both
-/// logs are refused this is the reason given, because a refused byte-cut log
-/// fails SY-18's rule as well.
+/// limits it does not impose. **SY-18's batch rule judges that:**
+/// [`peer_takes_a_batch_at_its_declared_limits`] pushes `max_batch_events`
+/// events at once, at least as many as any push of this log carries, since
+/// [`MAX_PROVOKED_BATCH_EVENTS`] is above the log's 257, and fails a peer that
+/// refuses them. This skip names the refusal for SY-37's own sake, and only
+/// when the byte-cut log did not page: a byte-cut log that paged makes the
+/// rule [`RuleOutcome::Ran`]. When both logs are refused this is the reason
+/// given, because a refused byte-cut log fails `peer_declares_its_own_limits`
+/// as well.
 ///
 /// [`RuleOutcome::Ran`]: happenstance_testkit::RuleOutcome::Ran
+/// [`peer_takes_a_batch_at_its_declared_limits`]: rules::peer_takes_a_batch_at_its_declared_limits
+/// [`MAX_PROVOKED_BATCH_EVENTS`]: crate::MAX_PROVOKED_BATCH_EVENTS
 ///
 /// [`PeerLimits::max_batch_events`]: happenstance_sync::PeerLimits::max_batch_events
 pub const COUNT_LOG_REFUSED_REASON: &str = "this peer refused a push of the count-cut log, whose pushes carry at \
      most `max_batch_events` events of at most three bytes each: its declared \
-     batch limits are not the limits it imposes, which no rule in this suite \
-     judges, and the log showed no page; SY-37 is unverified for this peer";
+     batch limits are not the limits it imposes, which SY-18's \
+     `peer_takes_a_batch_at_its_declared_limits` judges, and the log showed no \
+     page; SY-37 is unverified for this peer";
 
 /// The reason SY-37's rule reports when the peer refused its byte-cut log, and
 /// the count-cut log showed no page.
@@ -111,6 +115,7 @@ pub const NO_CONFIRMATION_REASON: &str = "this peer acknowledged the rule's push
 /// one of them itself: it is the side that pushes and pulls, and the fixture's
 /// peer is the far side.
 pub mod rules {
+    use alloc::collections::BTreeMap;
     use alloc::format;
     use alloc::string::String;
     use alloc::vec;
@@ -122,13 +127,13 @@ pub mod rules {
         SequencePosition, StoreId, Tag, Tags,
     };
     use happenstance_sync::{
-        Classify, EventGroup, PeerLimits, PushBatch, ReplicatedEvent, SyncPeer, Waiting,
+        Ack, Classify, EventGroup, PeerLimits, PushBatch, ReplicatedEvent, SyncPeer, Waiting,
     };
     use happenstance_testkit::RuleOutcome;
 
     use crate::kv_capped::turnstile_seat_map;
     use crate::violation::{Violation, ensure};
-    use crate::{MAX_PROVOKED_BATCH_BYTES, SyncFixture};
+    use crate::{MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, SyncFixture};
 
     /// The most pulls a rule makes before it decides the peer will never say
     /// it has caught up. Far above what two or three tiny groups need under the
@@ -159,6 +164,14 @@ pub mod rules {
     /// SY-31's two origins, whose events the rule pushes in one batch.
     const DURABLE_ORIGIN: StoreId = StoreId::from_bytes([0x81; 16]);
     const DURABLE_TWIN: StoreId = StoreId::from_bytes([0x82; 16]);
+
+    /// The type of every event SY-18's batch rule pushes.
+    const BATCH_FILLED: EventType = EventType::from_static("BatchFilled");
+
+    /// SY-18's batch rule's two origins: the push at the declared event count
+    /// with empty payloads, and the push at that count and the declared bytes.
+    const COUNT_CORNER_ORIGIN: StoreId = StoreId::from_bytes([0x91; 16]);
+    const BYTE_CORNER_ORIGIN: StoreId = StoreId::from_bytes([0x92; 16]);
 
     /// SY-1: a peer appends every replicated event it does not already hold,
     /// and never evaluates an append condition — the origin's or its own — as a
@@ -363,10 +376,11 @@ pub mod rules {
     /// and what keeps that survivable is the `Park` and `Split` classes SY-36
     /// checks.
     ///
-    /// Nor a lie about `max_batch_bytes` or `max_batch_events` alone. SY-18
-    /// is about the limits a peer imposes on *an event*; the batch limits are
-    /// read here only to size the boundary event, and a batch over them is
-    /// SY-36's `Split`, not a fact that can never land.
+    /// Nor a lie about `max_batch_bytes` or `max_batch_events` alone. This rule
+    /// holds the limits a peer imposes on *an event*, and reads the batch
+    /// limits only to size the boundary event. A batch at them that is refused
+    /// is [`peer_takes_a_batch_at_its_declared_limits`]'s to judge, and a
+    /// batch over them is SY-36's `Split`, not a fact that can never land.
     ///
     /// [`PeerLimits::admits`]: happenstance_sync::PeerLimits::admits
     ///
@@ -541,8 +555,8 @@ pub mod rules {
     /// and `peer_declares_its_own_limits` judges it; a peer that overstates
     /// only `max_batch_bytes` takes it. The count-cut log is tiny events, at
     /// most `max_batch_events` to a push, so refusing it is a lie about the
-    /// batch limits, which that rule says it does not judge and no other rule
-    /// does either: this rule's skip is the only place it can be reported.
+    /// batch limits, which that rule says it does not judge and
+    /// [`peer_takes_a_batch_at_its_declared_limits`] judges.
     ///
     /// If neither log showed a second non-empty page, the rule could not have
     /// failed the peer, and it reports a skip rather than a pass: naming
@@ -611,8 +625,9 @@ pub mod rules {
 
         Ok(match (by_count, by_bytes) {
             (Log::Paged, _) | (_, Log::Paged) => RuleOutcome::Ran,
-            // The count-cut refusal first: nothing else can report it, while
-            // SY-18's rule reports the byte-cut one.
+            // The count-cut refusal first: it is the batch-limit lie, which
+            // SY-18's batch rule judges, while its per-event rule reports the
+            // byte-cut one.
             (Log::Refused, _) => RuleOutcome::Skipped {
                 capability: crate::LOG_REFUSED,
                 reason: crate::COUNT_LOG_REFUSED_REASON,
@@ -740,6 +755,126 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-18: a peer's declared batch limits are the limits it imposes: a push
+    /// at the declared corner, which the declaration admits, lands whole.
+    ///
+    /// [`peer_declares_its_own_limits`] holds the declaration to one event at a
+    /// time. This rule holds its other half, [`PeerLimits::max_batch_events`]
+    /// and [`PeerLimits::max_batch_bytes`], to a push as large as they say. A
+    /// runner that honours them and is refused anyway has been told a limit
+    /// that is not the one imposed, and learns the real one at ingest. The
+    /// rule plays that runner. It reads [`SyncPeer::limits`] once, and then:
+    ///
+    /// 1. takes the corner's event count, `max_batch_events` capped by
+    ///    [`MAX_PROVOKED_BATCH_EVENTS`], and its bytes, `max_batch_bytes`
+    ///    capped by [`MAX_PROVOKED_BATCH_BYTES`] and by what that many events
+    ///    can carry with none over `max_event_bytes`;
+    /// 2. pushes the **count corner**: that many single-event groups with
+    ///    empty payloads. The declaration must admit it, and it must land,
+    ///    every event acknowledged as appended;
+    /// 3. pushes the **full corner**, when it has any bytes: as many
+    ///    single-event groups again, from a second origin, whose payloads
+    ///    total exactly the corner's bytes and differ by at most one byte. The
+    ///    same must hold;
+    /// 4. pulls the whole log back: every event of both pushes is held, byte
+    ///    for byte, which rejects a peer that acknowledges what it dropped.
+    ///
+    /// Two pushes rather than one, so a refusal names the limit that was not
+    /// imposed: the count corner carries no bytes. And the events are as small
+    /// as the corner allows, with no guard, tags or metadata, so a lie about a
+    /// per-event limit, which is [`peer_declares_its_own_limits`]'s to judge,
+    /// cannot fail this rule as well.
+    ///
+    /// [`PeerLimits::max_batch_events`]: happenstance_sync::PeerLimits::max_batch_events
+    /// [`PeerLimits::max_batch_bytes`]: happenstance_sync::PeerLimits::max_batch_bytes
+    /// [`MAX_PROVOKED_BATCH_EVENTS`]: crate::MAX_PROVOKED_BATCH_EVENTS
+    /// [`MAX_PROVOKED_BATCH_BYTES`]: crate::MAX_PROVOKED_BATCH_BYTES
+    ///
+    /// # Rejects
+    ///
+    /// `tests/wrong_peers.rs` carries five, each over the reference peer:
+    /// a peer that takes fewer events to a push than it declares, and one that
+    /// declares twice the `max_batch_bytes` it enforces, which SY-37's rule
+    /// also uses to attribute its skips; two that refuse *at* the declared
+    /// limit, `>=` where the declaration means `>`, one on the event count and
+    /// one on the bytes, which pin each corner to the declaration exactly; and
+    /// a peer that stores only the head of a large push and acknowledges all
+    /// of it, which only the pull-back sees.
+    ///
+    /// # Does not reject
+    ///
+    /// A peer that *accepts* more than it declares: a runner that reads the
+    /// declaration never sends more, so nothing is lost. Nor the refusal of a
+    /// push one byte over the declaration, which is SY-36's `Split` and
+    /// [`every_refusal_states_its_class`]'s to judge. Nor a pull larger than
+    /// the declaration: the batch limits bind a push. Nor a declaration of
+    /// `max_batch_events` of zero, which [`peer_declares_its_own_limits`]
+    /// fails and this rule has no corner to push into, so it pushes nothing
+    /// and runs. Nor a peer whose limits are true up to the caps and false
+    /// above them, because the corner is built at the caps.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-18 if the declaration does not admit one of the
+    /// corners, if the peer refuses either push or acknowledges it as anything
+    /// but every event appended, or if an event of either is not handed back
+    /// whole; or if the peer refuses a pull or keeps handing back groups past
+    /// one pull per event pushed.
+    pub async fn peer_takes_a_batch_at_its_declared_limits<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-18";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+
+        let limits = peer.limits();
+        let events = limits.max_batch_events.min(MAX_PROVOKED_BATCH_EVENTS);
+        if events == 0 {
+            // A declaration that admits no event: `peer_declares_its_own_limits`
+            // fails it, and there is no corner here to push into.
+            return Ok(RuleOutcome::Ran);
+        }
+
+        // The most bytes `events` events carry with none over `max_event_bytes`.
+        let bytes = limits
+            .max_batch_bytes
+            .min(MAX_PROVOKED_BATCH_BYTES)
+            .min(events.saturating_mul(limits.max_event_bytes));
+
+        let mut landed =
+            vec![push_the_corner(&peer, &limits, COUNT_CORNER_ORIGIN, events, 0, CLAUSE).await?];
+        if bytes > 0 {
+            landed.push(
+                push_the_corner(&peer, &limits, BYTE_CORNER_ORIGIN, events, bytes, CLAUSE).await?,
+            );
+        }
+
+        // One pull per event pushed, and the empty one that ends the log: a
+        // peer that pages one event at a time still fits (H-13).
+        let pushed = landed
+            .iter()
+            .map(|batch| batch.events().count())
+            .sum::<usize>();
+        let held: BTreeMap<EventId, ReplicatedEvent> =
+            pull_up_to(&peer, pushed.saturating_add(1), CLAUSE)
+                .await?
+                .into_iter()
+                .flat_map(|group| group.events)
+                .map(|event| (event.id, event))
+                .collect();
+        for expected in landed.iter().flat_map(PushBatch::events) {
+            ensure(held.get(&expected.id) == Some(expected), CLAUSE, || {
+                format!(
+                    "event {} of {} bytes, in a push at the declared batch limits, was \
+                     acknowledged and is not in the peer's log, byte for byte",
+                    expected.id,
+                    expected.payload_len()
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What one log SY-37's rule wrote showed it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Log {
@@ -801,7 +936,8 @@ pub mod rules {
         /// draw, and a push of one event no larger than SY-18's boundary event
         /// can be refused only for a per-event limit, which SY-18's rule
         /// judges. A push of a full page would also be refused by a peer that
-        /// overstates `max_batch_bytes` alone, which no rule judges.
+        /// overstates `max_batch_bytes` alone, which is SY-18's batch rule's
+        /// to judge, not this log's.
         fn cut_by_bytes(limits: &PeerLimits) -> Option<Self> {
             let payload = limits.max_event_bytes.min(limits.max_batch_bytes);
             let per_page = limits.max_batch_bytes.checked_div(payload)?;
@@ -905,10 +1041,11 @@ pub mod rules {
                 // A refusal here is the peer disagreeing with its own
                 // declaration. Whose failure that is depends on the log: for
                 // the byte-cut log, one event sized from `max_event_bytes` to a
-                // push, it is SY-18's to judge; for the count-cut log, tiny
-                // events at most `max_batch_events` to a push, it is a lie
-                // about batch limits that no rule judges. The caller reports
-                // which, as a skip, unless the other log paged.
+                // push, it is SY-18's per-event rule's to judge; for the
+                // count-cut log, tiny events at most `max_batch_events` to a
+                // push, it is a lie about batch limits, SY-18's batch rule's
+                // to judge. The caller reports which, as a skip, unless the
+                // other log paged.
                 if peer.push(&batch).await.is_err() {
                     return Ok(Pushed::Refused);
                 }
@@ -926,9 +1063,19 @@ pub mod rules {
         peer: &P,
         clause: &'static str,
     ) -> Result<Vec<EventGroup>, Violation> {
+        pull_up_to(peer, MAX_PULLS, clause).await
+    }
+
+    /// [`pull_everything`], giving up after `max_pulls` pulls rather than
+    /// [`MAX_PULLS`]: for a rule whose log is too long for that bound.
+    async fn pull_up_to<P: SyncPeer>(
+        peer: &P,
+        max_pulls: usize,
+        clause: &'static str,
+    ) -> Result<Vec<EventGroup>, Violation> {
         let mut groups = Vec::new();
         let mut resume: Option<P::Resume> = None;
-        for _ in 0..MAX_PULLS {
+        for _ in 0..max_pulls {
             let pulled = peer.pull(resume.as_ref()).await.map_err(|error| {
                 Violation::new(clause, format!("the peer refused a pull: {error}"))
             })?;
@@ -940,7 +1087,7 @@ pub mod rules {
         }
         Err(Violation::new(
             clause,
-            format!("the peer was still handing back groups after {MAX_PULLS} pulls"),
+            format!("the peer was still handing back groups after {max_pulls} pulls"),
         ))
     }
 
@@ -958,16 +1105,14 @@ pub mod rules {
         what: &str,
         clause: &'static str,
     ) -> Result<(), Violation> {
-        let ack = peer.push(batch).await.map_err(|error| {
-            Violation::new(
-                clause,
-                format!(
-                    "the declared limits admit {what} and the push refused it ({error}, class \
-                     {:?}): the failure was relocated to ingest, not prevented",
-                    error.class()
-                ),
-            )
-        })?;
+        let ack = push_or_report(
+            peer,
+            batch,
+            what,
+            "the failure was relocated to ingest, not prevented",
+            clause,
+        )
+        .await?;
         ensure(ack.appended == 1 && ack.skipped == 0, clause, || {
             format!(
                 "the peer acknowledged {what} as {} appended and {} skipped; it held nothing \
@@ -975,6 +1120,115 @@ pub mod rules {
                 ack.appended, ack.skipped
             )
         })
+    }
+
+    /// Pushes `batch`, which the peer's declaration admits, and reports a
+    /// refusal as `what` refused, followed by `meaning`: what the refusal says
+    /// about the peer.
+    async fn push_or_report<P: SyncPeer>(
+        peer: &P,
+        batch: &PushBatch,
+        what: &str,
+        meaning: &str,
+        clause: &'static str,
+    ) -> Result<Ack, Violation> {
+        peer.push(batch).await.map_err(|error| {
+            Violation::new(
+                clause,
+                format!(
+                    "the declared limits admit {what} and the push refused it ({error}, class \
+                     {:?}): {meaning}",
+                    error.class()
+                ),
+            )
+        })
+    }
+
+    /// Builds the batch at a corner of `limits` — `events` single-event
+    /// groups carrying `bytes` payload bytes between them — checks that the
+    /// declaration admits it, and pushes it: it must land whole, every event
+    /// acknowledged as appended. Answers the batch, for the pull-back.
+    async fn push_the_corner<P: SyncPeer>(
+        peer: &P,
+        limits: &PeerLimits,
+        origin: StoreId,
+        events: usize,
+        bytes: usize,
+        clause: &'static str,
+    ) -> Result<PushBatch, Violation> {
+        let batch = batch_at_the_corner(origin, events, bytes, clause)?;
+        let what = format!("a push of {events} events and {bytes} payload bytes");
+        ensure(limits.admits(&batch), clause, || {
+            format!(
+                "the declaration {limits:?} does not admit {what}, a batch at the limits \
+                 it states"
+            )
+        })?;
+        let ack = push_or_report(
+            peer,
+            &batch,
+            &what,
+            "a declared batch limit this peer does not impose",
+            clause,
+        )
+        .await?;
+        let expected = u64::try_from(events).map_err(|error| {
+            Violation::new(
+                clause,
+                format!("the rule's own event count is too large: {error}"),
+            )
+        })?;
+        ensure(ack.appended == expected && ack.skipped == 0, clause, || {
+            format!(
+                "the peer acknowledged {what} as {} appended and {} skipped; it held none of \
+                 those identities, so it must append all {expected}",
+                ack.appended, ack.skipped
+            )
+        })?;
+        Ok(batch)
+    }
+
+    /// `events` single-event groups from `origin`, at its positions from the
+    /// first, whose payloads total exactly `bytes`: each `bytes / events`
+    /// long, and the first `bytes % events` one byte longer. The bytes are
+    /// zeros and are never parsed (SY-35).
+    ///
+    /// Single-event groups with no guard, no tags and no metadata, so a peer
+    /// has nothing to cut, evaluate or cap but the batch itself.
+    fn batch_at_the_corner(
+        origin: StoreId,
+        events: usize,
+        bytes: usize,
+        clause: &'static str,
+    ) -> Result<PushBatch, Violation> {
+        let no_events = || Violation::new(clause, "the rule built a corner of no events");
+        let base = bytes.checked_div(events).ok_or_else(no_events)?;
+        let longer = bytes.checked_rem(events).ok_or_else(no_events)?;
+
+        let mut position = SequencePosition::FIRST;
+        let mut groups = Vec::with_capacity(events);
+        for index in 0..events {
+            let size = if index < longer {
+                base.saturating_add(1)
+            } else {
+                base
+            };
+            let event = Event::new(BATCH_FILLED, vec![0_u8; size]).map_err(|error| {
+                Violation::new(clause, format!("the rule's own event is invalid: {error}"))
+            })?;
+            groups.push(EventGroup::new(
+                None,
+                vec![ReplicatedEvent::new(
+                    EventId::new(origin, position),
+                    RecordedAt::from_millis(1_800_000_000_000),
+                    event,
+                )],
+            ));
+            position = position
+                .next()
+                .ok_or_else(|| Violation::new(clause, "the rule's corner ran out of positions"))?;
+        }
+        Ok(PushBatch::new(groups))
     }
 
     /// Which of an event's two opaque fields carries a boundary event's bytes.
@@ -1099,6 +1353,75 @@ pub mod rules {
             event,
         ))
     }
+
+    #[cfg(test)]
+    mod tests {
+        use alloc::collections::BTreeSet;
+
+        use happenstance_sync::ReplicatedEvent;
+
+        use super::{BYTE_CORNER_ORIGIN, batch_at_the_corner};
+
+        /// The corner's arithmetic at its edges: no bytes, an exact multiple,
+        /// a remainder of one, fewer bytes than events, and a large corner.
+        #[test]
+        fn a_corner_carries_exactly_its_events_and_bytes_spread_evenly() {
+            let cases: [(usize, usize); 6] = [
+                (1, 0),
+                (128, 0),
+                (128, 65_536),
+                (128, 65_537),
+                (3, 2),
+                (10, 1_048_576),
+            ];
+            for (events, bytes) in cases {
+                let batch = batch_at_the_corner(BYTE_CORNER_ORIGIN, events, bytes, "SY-18")
+                    .expect("a corner of at least one event builds");
+                let sizes: Vec<usize> = batch.events().map(ReplicatedEvent::payload_len).collect();
+                let ids: BTreeSet<_> = batch.events().map(|event| event.id).collect();
+                let case = format!("{events} events, {bytes} bytes");
+
+                assert_eq!(sizes.len(), events, "{case}: the event count");
+                assert_eq!(batch.payload_len(), bytes, "{case}: the payload total");
+                let spread = sizes.iter().max().zip(sizes.iter().min());
+                assert!(
+                    spread.is_some_and(|(max, min)| max - min <= 1),
+                    "{case}: sizes {sizes:?} differ by more than one byte"
+                );
+                assert_eq!(ids.len(), events, "{case}: every identity is distinct");
+                assert!(
+                    batch.groups.iter().all(|group| group.events.len() == 1),
+                    "{case}: every group carries one event"
+                );
+            }
+        }
+
+        /// The remainder goes to the first events, one byte each.
+        #[test]
+        fn a_corner_with_a_remainder_lengthens_its_first_events() {
+            let batch = batch_at_the_corner(BYTE_CORNER_ORIGIN, 128, 65_537, "SY-18")
+                .expect("a corner of 128 events builds");
+            let sizes: Vec<usize> = batch.events().map(ReplicatedEvent::payload_len).collect();
+            assert_eq!(sizes.first(), Some(&513));
+            assert!(sizes.iter().skip(1).all(|size| *size == 512), "{sizes:?}");
+        }
+
+        /// A corner of no events is the rule's own mistake, reported as a
+        /// violation rather than a division by zero.
+        #[test]
+        fn a_corner_of_no_events_is_a_violation_not_a_panic() {
+            for bytes in [0, 1, 65_536] {
+                let built = batch_at_the_corner(BYTE_CORNER_ORIGIN, 0, bytes, "SY-18");
+                assert_eq!(
+                    built
+                        .map(|batch| batch.payload_len())
+                        .map_err(|v| v.clause()),
+                    Err("SY-18"),
+                    "0 events, {bytes} bytes"
+                );
+            }
+        }
+    }
 }
 
 /// Hands the complete sync rule set to `$callback`.
@@ -1132,6 +1455,7 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A peer declares its own limits (SY-18) ---------------------
             peer_declares_its_own_limits,
+            peer_takes_a_batch_at_its_declared_limits,
 
             // --- Every refusal states its class (SY-36) ---------------------
             every_refusal_states_its_class,

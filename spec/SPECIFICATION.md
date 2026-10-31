@@ -7601,7 +7601,7 @@ with a 128 KiB value cap, against an origin store that has already durably
 committed a 340 KB payload. The experiment is whether a capability declaration
 prevents the failure or merely relocates it. Owning phase: the phase that builds
 the two peer adapters.]`
-Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group.
+Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte, the count capped at `MAX_PROVOKED_BATCH_EVENTS` and the bytes at `MAX_PROVOKED_BATCH_BYTES` and at what that many events can carry under `max_event_bytes`.
 Cases: E2E-35.
 
 *Rejects:* the asynchronous form of the declaration, which is the shape a peer
@@ -7620,7 +7620,7 @@ fields no engine struggles with, `MAX_EVENT_TYPE_LEN` and `MAX_TAG_LEN`, both
 event that is durable at its origin can be structurally unrepresentable at a
 peer, and the incompatibility is discovered at ingest — after the write has
 already committed somewhere else, which is the one moment at which nothing
-useful can be done about it.
+useful can be done about it. It rejects, too, a declaration whose batch limits are not the limits the peer imposes — a push at `max_batch_events` events or `max_batch_bytes` bytes, admitted by the declaration and refused by the peer — which is SY-18's and not SY-36's: the refusal's class may well be the right one, and the fault is in what was declared.
 
 Section 2 supplies two of the three things this clause needs and stops short of
 the third. VT-21 gives every store a **floor** it must accept
@@ -7666,8 +7666,8 @@ one event to a push, for a page the byte budget ends; it follows the tokens, and
 on the first `Nothing` pulls once more from that token and asserts an empty batch.
 A peer that shows no page boundary on either log is reported as a skip naming its
 cause: `LOG_REFUSED` if it refused a log inside its own declaration (the byte-cut
-log is SY-18's subject; the count-cut log is a lie about batch limits no rule
-judges, reported only here), else `NO_SECOND_PAGE`. Its mutants always say `Nothing`, and say it on
+log is SY-18's per-event subject; the count-cut log is a lie about batch limits,
+which SY-18's batch rule judges), else `NO_SECOND_PAGE`. Its mutants always say `Nothing`, and say it on
 any page that carried fewer events than the declared event limit. The rule does not check the second MUST: a conformant push
 cannot place a group too large for any pull on the far side.
 Cases: E2E-36.
@@ -10349,7 +10349,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
 | SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` † | E2E-35, E2E-36, E2E-44 |
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
-| SY-18 | DEFERRED | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head` | E2E-35 |
+| SY-18 | DEFERRED | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head`, `… | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
 | SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-22 |
 | SY-21 | PROVISIONAL | `convergent_projection_cannot_observe_local_position` † | E2E-41 |
