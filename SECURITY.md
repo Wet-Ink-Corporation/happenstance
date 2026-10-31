@@ -33,8 +33,8 @@ The nine crates this repository publishes, at their published versions:
 - `happenstance-sync`
 - `happenstance-sync-testkit`
 
-The last two join this list at their first release after `0.4.3`; until then the
-only thing under either name on crates.io is a `0.0.0` placeholder.
+The last two joined this list at `0.4.4`, their first release. Before that the
+only thing under either name on crates.io was a `0.0.0` placeholder.
 
 `happenstance-postgres` and `happenstance-neon` joined this list at `0.2.0`.
 Before that the only thing under either name on crates.io was a `0.0.0`
@@ -85,7 +85,7 @@ backporting: a fix lands in the next release, and the release before it is not
 patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
 upgrade.
 
-`0.2.0` was the first stable release and `0.4.3` is current; what each promises
+`0.2.0` was the first stable release and `0.4.4` is current; what each promises
 is worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
 `0.2.0`. `ProjectionStore` was **not** at `0.2.0` — it shipped behind an
@@ -98,7 +98,8 @@ violation of this table.
 
 | Version | Supported |
 |---|---|
-| `0.4.3` | ✅ current |
+| `0.4.4` | ✅ current |
+| `0.4.3` | ❌ superseded by `0.4.4`, an additive release: the first of `happenstance-sync` and `happenstance-sync-testkit`, and a `sync` feature on every adapter |
 | `0.4.2` | ❌ superseded by `0.4.3`, an additive release adding `CloudflareEventStore::remint_identity`; `happenstance-cloudflare` now reads its `StoreId` on every append |
 | `0.4.1` | ❌ superseded by `0.4.2`, an additive release; it deprecates `AppendCondition::after` and `after_opt`, which are kept through 1.x, and `happenstance-cloudflare` now refuses metadata over 512 KiB |
 | `0.4.0` | ❌ superseded by `0.4.1`, a patch release with no API change |

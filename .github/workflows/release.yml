@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes the seven crates when a `v*` tag is pushed. Nothing else triggers
+# Publishes the nine crates when a `v*` tag is pushed. Nothing else triggers
 # it: a tag is the release decision, and it is cut from the release PR's merge
 # commit on `main`, never from a branch.
 #

@@ -10,6 +10,25 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-10-31 — `0.4.4`, the sync crates' first release
+
+*Committed on `claude/project-thread-uikw3l-release-0.4.4`.* `[Unreleased]` becomes
+`[0.4.4] — 2026-10-31`, and all nine crates move to `0.4.4`, with the workspace
+requirements on `happenstance-core`, `happenstance` and `happenstance-sync`, and
+`happenstance-sync-testkit`'s on `happenstance-testkit`, raised to match. It is the
+first release of `happenstance-sync` and `happenstance-sync-testkit` (#108 part E), so
+the ingest port ships behind each adapter's `sync` feature. Three entries that had
+come back into `[Unreleased]` from `[0.4.3]` (`remint_identity`, the per-append
+`StoreId` read, and the restart evidence) are dropped from the new section, and the
+CHANGELOG gains the `[0.4.3]` and `[0.4.4]` compare links. The status table gains the
+`0.4.4` row; the owner sets up trusted publishing for the two sync crates, merges the
+PR and tags its merge commit.
+
+**Verified.** See the release PR for the `cargo semver-checks` run against `0.4.3` and
+the gate.
+
+---
+
 ## 2026-10-14 — `0.4.3`, `remint_identity` for Cloudflare
 
 *Committed on `claude/project-thread-xp895l-release-043`, on `ab1066c`.* `[Unreleased]`

@@ -429,7 +429,7 @@ test wrapper, `emit_wasm` among them.
 ## What has not been proven yet
 
 The crate's README is candid that this store has the thinnest evidence of the
-seven published crates. Before you rely on it, know these gaps:
+four published adapters. Before you rely on it, know these gaps:
 
 - **Eviction and hibernation have never been tested.** The `workerd` harness runs
   each test inside a single request, and its "reopen" is a fresh storage handle.

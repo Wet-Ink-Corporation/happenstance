@@ -11,7 +11,7 @@ with programs you can run.
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: `0.4.3`.** The contract and its 96-rule event-store conformance suite
+> **Status: `0.4.4`.** The contract and its 96-rule event-store conformance suite
 > are real and tested, and **four adapters have cleared a suite against storage
 > this workspace does not fully control** — a file on disk, a Durable Object on
 > `wasm32`, a pooled PostgreSQL server, and a one-shot HTTP proxy with no
