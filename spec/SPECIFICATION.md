@@ -7601,7 +7601,7 @@ with a 128 KiB value cap, against an origin store that has already durably
 committed a 340 KB payload. The experiment is whether a capability declaration
 prevents the failure or merely relocates it. Owning phase: the phase that builds
 the two peer adapters.]`
-Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte.
+Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte, the count capped at `MAX_PROVOKED_BATCH_EVENTS` and the bytes at `MAX_PROVOKED_BATCH_BYTES` and at what that many events can carry under `max_event_bytes`.
 Cases: E2E-35.
 
 *Rejects:* the asynchronous form of the declaration, which is the shape a peer
