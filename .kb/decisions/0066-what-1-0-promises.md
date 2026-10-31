@@ -204,7 +204,7 @@ and neither driver absorbed the fault:
   rows (`crates/happenstance-sqlite/tests/append.rs:848-886`). The fixture
   declines by scope and names that test.
 - **Postgres.** An `AFTER INSERT` trigger fires behind the `sqlx` pool
-  (`tests/support/mod.rs:465-479`). It is asserted as supported and not left at
+  (`tests/support/mod.rs:467-481`). It is asserted as supported and not left at
   the default (`postgres_conformance.rs:417-431`), and it runs in CI's
   `live-postgres` job.
 
