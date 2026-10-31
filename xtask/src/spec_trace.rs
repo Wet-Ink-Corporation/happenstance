@@ -1831,9 +1831,9 @@ struct Findings<'a> {
 
 /// The run's summary and verdict, into `out`.
 ///
-/// Through a writer rather than `println!`, which panicked when stdout was a
-/// closed pipe — `cargo xtask lints | head -2` aborted this step mid-report
-/// (#352).
+/// Writes only to `out`, and stops at the first write `out` refuses: a closed
+/// pipe is the error this returns, never a panic, and nothing is written
+/// after it.
 ///
 /// # Errors
 ///
@@ -2149,7 +2149,7 @@ fn clause_number(id: &str, prefix: &str) -> u32 {
 /// between §7.1 and §7.3 and losing that silently is the one failure mode a
 /// generator has that a hand-written table does not.
 fn sync_region(
-    w: &mut impl io::Write,
+    out: &mut impl io::Write,
     root: &Path,
     spec: &str,
     generated: &str,
@@ -2170,15 +2170,15 @@ fn sync_region(
         return Ok(Some(difference));
     }
 
-    let mut out: Vec<&str> = lines[..span.start].to_vec();
-    out.extend_from_slice(&computed);
-    out.extend_from_slice(&lines[span.end..]);
-    let mut body = out.join("\n");
+    let mut rewritten: Vec<&str> = lines[..span.start].to_vec();
+    rewritten.extend_from_slice(&computed);
+    rewritten.extend_from_slice(&lines[span.end..]);
+    let mut body = rewritten.join("\n");
     body.push('\n');
     fs::write(root.join(SPEC), body).with_context(|| format!("rewriting {SPEC}"))?;
 
     writeln!(
-        w,
+        out,
         "{difference}\n\nrewrote {SPEC} §7.1–§7.2 ({} lines)",
         computed.len()
     )

@@ -1188,17 +1188,15 @@ const OPTIONAL: &[Step] = &[
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
-    // Locked once and handed to every task, which writes through it rather than
-    // `println!`: that panics on a closed pipe, and `cargo xtask lints | head -2`
-    // closed one under a child step's report (#352). The lock is reentrant, so
-    // `usage`'s own `print_help` still takes it from this thread.
+    // The one stdout lock. Every task writes through it and nothing else locks
+    // stdout, so a closed pipe is an error a task returns, never a panic.
     let mut out = std::io::stdout().lock();
 
     let result = match task.as_deref() {
         Some("ci") => match std::env::args().nth(2).as_deref() {
             None => run_ci(&mut out),
             Some("--fast") => run_fast(&mut out),
-            Some(flag) => usage(format_args!("unknown flag for ci: {flag}")),
+            Some(flag) => usage(&mut out, format_args!("unknown flag for ci: {flag}")),
         },
         Some("wasm") => run_steps(&mut out, wasm_steps()),
         Some("affected") => match (
@@ -1207,14 +1205,17 @@ fn main() -> ExitCode {
         ) {
             (None, _) => affected::run(&mut out, None),
             (Some("--base"), Some(base)) => affected::run(&mut out, Some(base)),
-            (Some("--base"), None) => usage(format_args!("--base needs a ref")),
-            (Some(flag), _) => usage(format_args!("unknown flag for affected: {flag}")),
+            (Some("--base"), None) => usage(&mut out, format_args!("--base needs a ref")),
+            (Some(flag), _) => usage(&mut out, format_args!("unknown flag for affected: {flag}")),
         },
         Some("reserve") => reserve::run(std::env::args().nth(2).as_deref()),
         Some("spec-trace") => match std::env::args().nth(2).as_deref() {
             None => spec_trace::run(&mut out, spec_trace::Mode::Check),
             Some("--write") => spec_trace::run(&mut out, spec_trace::Mode::Write),
-            Some(flag) => usage(format_args!("unknown flag for spec-trace: {flag}")),
+            Some(flag) => usage(
+                &mut out,
+                format_args!("unknown flag for spec-trace: {flag}"),
+            ),
         },
         Some("package-check") => package::run(),
         Some("proof-artefact") => proof::run(),
@@ -1240,14 +1241,20 @@ fn main() -> ExitCode {
         Some("lint-pages") => match std::env::args().nth(2).as_deref() {
             None => lint_pages::run(lint_pages::Mode::Check),
             Some("--write") => lint_pages::run(lint_pages::Mode::Write),
-            Some(flag) => usage(format_args!("unknown flag for lint-pages: {flag}")),
+            Some(flag) => usage(
+                &mut out,
+                format_args!("unknown flag for lint-pages: {flag}"),
+            ),
         },
         Some("lint-constitution") => match std::env::args().nth(2).as_deref() {
             None => lint_constitution::run(lint_constitution::Mode::Check),
             Some("--write") => lint_constitution::run(lint_constitution::Mode::Write),
-            Some(flag) => usage(format_args!("unknown flag for lint-constitution: {flag}")),
+            Some(flag) => usage(
+                &mut out,
+                format_args!("unknown flag for lint-constitution: {flag}"),
+            ),
         },
-        Some(other) => usage(format_args!("unknown task: {other}")),
+        Some(other) => usage(&mut out, format_args!("unknown task: {other}")),
         None => write_help(&mut out).context("writing the help text"),
     };
 
@@ -1302,28 +1309,17 @@ impl std::error::Error for Usage {}
 ///
 /// Always — [`Usage`] once both are written, or the write that failed, which
 /// `main` reports like any other failure.
-fn usage(complaint: std::fmt::Arguments<'_>) -> Result<()> {
+fn usage(out: &mut impl std::io::Write, complaint: std::fmt::Arguments<'_>) -> Result<()> {
     use std::io::Write as _;
 
     writeln!(std::io::stderr().lock(), "{complaint}").context("writing to stderr")?;
-    print_help().context("writing the help text")?;
+    write_help(out).context("writing the help text")?;
     Err(Usage.into())
 }
 
-/// `cargo xtask` with no task, or with one it cannot parse, on stdout.
-///
-/// Through one locked handle rather than `println!`, which panics when stdout
-/// is a closed pipe — `cargo xtask | head -3` would otherwise abort mid-text.
-///
-/// # Errors
-///
-/// When stdout cannot be written.
-fn print_help() -> std::io::Result<()> {
-    write_help(&mut std::io::stdout().lock())
-}
-
-/// The help text, into any writer — stdout for [`print_help`], a buffer for
-/// the tests, which read what a reader sees rather than the source that says it.
+/// The help text, into any writer — `main`'s stdout, with no task or with one
+/// it cannot parse, and a buffer for the tests, which read what a reader sees
+/// rather than the source that says it.
 ///
 /// # Errors
 ///
@@ -1469,7 +1465,7 @@ fn wasm_steps() -> Vec<&'static Step> {
 
 /// Every `REQUIRED` step that reads a document rather than compiling a package,
 /// selected by name. It carried a count until the count went wrong — it said
-/// *five* while naming nine of the eleven — so [`print_help`] prints the
+/// *five* while naming nine of the eleven — so [`write_help`] prints the
 /// selection, and `affected.rs` holds the selection to the step table.
 fn lint_steps() -> Vec<&'static Step> {
     steps_named(&[

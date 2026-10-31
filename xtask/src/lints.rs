@@ -1596,7 +1596,7 @@ pub(crate) fn stated_rule_counts(out: &mut impl io::Write) -> Result<()> {
     // lines down — see `stated_crate_counts` for why one array could not serve
     // both, and for the nine documents that went stale while `reconcile` stayed
     // green. `msrv::front_pages_state_the_policy` rides the same line (#201).
-    stated_crate_counts(out).and_then(|()| msrv::front_pages_state_the_policy())?;
+    stated_crate_counts(out).and_then(|()| msrv::front_pages_state_the_policy(out))?;
 
     // ADR-0059's third action, bundled here for the same reason as the three
     // above: a document (and an example) held to the tree.
@@ -1660,8 +1660,8 @@ pub(crate) fn stated_rule_counts(out: &mut impl io::Write) -> Result<()> {
 /// [`stale_publication_claims`]: the *check* itself — the
 /// `Result<()>`-returning entry point — lives in `xtask/src/lint_pages.rs`
 /// rather than here, deliberately. `exported_lints`
-/// (`xtask/src/affected.rs:1471-1481`) scans this file for exactly the shape
-/// `pub(crate) fn NAME(out: &mut impl io::Write) -> Result<()> {` and requires `affected::run`'s
+/// (`xtask/src/affected.rs:1471-1481`) scans this file for the shape
+/// `pub(crate) fn NAME(…) -> Result<()> {`, any parameters, and requires `affected::run`'s
 /// unconditional block to call each one it finds by name — the invariant
 /// that catches a lint wired into `REQUIRED` and forgotten in the story
 /// grain. A seventh entry point of that shape here would trip the same check
@@ -4697,8 +4697,8 @@ const REPORTING: &str = "writing a lint's report";
 
 /// A lint's problems into `out`, one indented line each, before it bails.
 ///
-/// Through a writer rather than `println!`, which panicked when stdout was a
-/// closed pipe: `cargo xtask lints | head -2` aborted a step mid-report (#352).
+/// Writes only to `out`, and a write `out` refuses — a closed pipe — is the
+/// error returned, never a panic.
 ///
 /// # Errors
 ///

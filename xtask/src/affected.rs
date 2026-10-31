@@ -1468,16 +1468,33 @@ mod tests {
         block
     }
 
-    /// The `pub(crate) fn <name>(out: &mut impl io::Write) -> Result<()>` items
-    /// of a module, by name — a lint's whole signature since its report went
-    /// through a writer (#352).
+    /// The `pub(crate) fn <name>(…) -> Result<()>` items of a module, by name,
+    /// whatever their parameter list.
     fn exported_lints(source: &str) -> Vec<String> {
         source
             .lines()
             .filter_map(|line| line.strip_prefix("pub(crate) fn "))
-            .filter_map(|rest| rest.split_once("(out: &mut impl io::Write) -> Result<()> {"))
+            .filter(|rest| rest.ends_with(") -> Result<()> {"))
+            .filter_map(|rest| rest.split_once('('))
             .map(|(name, _)| name.to_owned())
             .collect()
+    }
+
+    /// The scan sees an entry point whatever its parameters are. A lint that
+    /// takes no writer is exactly the one a contributor adds by copying an old
+    /// shape, and the story grain must still be held to calling it.
+    ///
+    /// The wrong implementation it rejects matches one parameter list
+    /// literally: the zero-argument lint below then vanishes from the scan.
+    #[test]
+    fn the_export_scan_sees_a_lint_whatever_its_parameters() {
+        let source = "\
+pub(crate) fn takes_a_writer(out: &mut impl io::Write) -> Result<()> {
+pub(crate) fn takes_nothing() -> Result<()> {
+pub(crate) fn is_not_a_lint(text: &str) -> Vec<String> {
+fn is_private() -> Result<()> {
+";
+        assert_eq!(exported_lints(source), ["takes_a_writer", "takes_nothing"]);
     }
 
     /// The check whose subject is the documents a story *edits*, on the gate
@@ -1526,7 +1543,9 @@ mod tests {
         let block = unconditional_block();
         let missing = exported
             .iter()
-            .filter(|name| !block.contains(&format!("crate::lints::{name}(out)?;")))
+            // The call, whatever it passes: an export the scan sees with any
+            // parameter list must be matched by its call with any arguments.
+            .filter(|name| !block.contains(&format!("crate::lints::{name}(")))
             .collect::<Vec<_>>();
 
         assert!(
@@ -1706,7 +1725,7 @@ mod tests {
 
             // Derived. A module that never builds a `Command` starts no
             // process, so its whole input is files — which is exactly what
-            // `print_help` calls "reads a document rather than compiling a
+            // `write_help` calls "reads a document rather than compiling a
             // package". `lints`, `spec_trace`, `lint_narrative`, `lint_pages`
             // and `lint_constitution` hold to that; `proof`, `package` and
             // `narrative_doctests` do not.
@@ -1896,7 +1915,7 @@ mod tests {
 
     /// `cargo xtask lints`, held to the same family.
     ///
-    /// [`print_help`] calls that command *"every step that reads a document
+    /// [`write_help`] calls that command *"every step that reads a document
     /// rather than compiling a package"* and prints its rows from this
     /// selection, so the sentence is true only if the selection is the family.
     /// It named nine of eleven: `spec-trace` and `lint-core-alloc-features`

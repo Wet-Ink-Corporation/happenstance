@@ -29,7 +29,7 @@
 //! document held to the release set.
 
 use std::fs;
-use std::io::{self, Write as _};
+use std::io;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -126,9 +126,9 @@ fn statement_problems(name: &str, floor: &str, readme: &str) -> Vec<String> {
 ///
 /// Returns an error if a manifest or README cannot be read, if the workspace
 /// manifest declares no literal `rust-version`, if a publishable crate's
-/// manifest declares none, or listing every problem [`statement_problems`]
-/// finds.
-pub(super) fn front_pages_state_the_policy() -> Result<()> {
+/// manifest declares none, listing every problem [`statement_problems`] finds,
+/// or if `out` cannot be written.
+pub(super) fn front_pages_state_the_policy(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let workspace = read(&root, WORKSPACE_MANIFEST)?;
     let Some(RustVersion::Literal(floor)) = rust_version(&workspace) else {
@@ -160,7 +160,7 @@ pub(super) fn front_pages_state_the_policy() -> Result<()> {
         );
     }
     writeln!(
-        io::stdout().lock(),
+        out,
         "front_pages_state_the_policy: {} publishable README(s) state their floor and {POLICY}",
         names.len()
     )?;

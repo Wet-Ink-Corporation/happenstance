@@ -73,7 +73,7 @@ can hide another and a reader sees every failure a single run turned up.
 `lint_steps()` entry — correctly extending `affected.rs`'s export scan to
 cover all three, the same mechanism this remediation pass already exercised
 without difficulty for an unrelated new step — with the benefit that
-`cargo xtask lints`' printed rows, which `print_help` uses to tell a reader
+`cargo xtask lints`' printed rows, which `write_help` uses to tell a reader
 what the gate checks, gain three named rows instead of one mislabelled one.
 The two are not mutually exclusive: if split is chosen, each of the three new
 steps should still collect rather than `?` on its own first problem, since
