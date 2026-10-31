@@ -39,8 +39,9 @@ broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
 > names.
 >
 > What it is not is production mileage — see the note under [status](#status),
-> which is narrower than the ticks suggest. Replication comes next (Ladybug was retired at phase 17), and
-> the ambition is the whole list rather than the nine that ship here.
+> which is narrower than the ticks suggest. Replication has begun: its port and
+> conformance suites ship from `0.4.4`, and its runner and network peer come next
+> (Ladybug was retired at phase 17). The ambition is the whole list rather than the nine that ship here.
 
 ---
 

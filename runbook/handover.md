@@ -21,16 +21,16 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.4.4` is prepared, not yet tagged.** Its release PR moves `[Unreleased]` to
-`[0.4.4] — 2026-10-31` and all nine crates to `0.4.4`. It is the first release of
+**`0.4.4` is released** (2026-10-31; tag `v0.4.4` at `5487546`, published by
+`release.yml`; all nine crates on crates.io and docs.rs). Its release PR (#358) moved `[Unreleased]` to
+`[0.4.4] — 2026-10-31` and all nine crates to `0.4.4`. It was the first release of
 `happenstance-sync` and `happenstance-sync-testkit`, replacing their `0.0.0`
-placeholders, and it ships the ingest port behind a `sync` feature on all four
+placeholders, and it shipped the ingest port behind a `sync` feature on all four
 adapters (#108 parts B–F), the `workerd` ingest evidence (#354, #357), and the
-trailing model for fixtures that decline `READ_YOUR_OWN_WRITES` (#79). `0.4.3` is on
-crates.io (tag `v0.4.3` at `8d41e9a`).
+trailing model for fixtures that decline `READ_YOUR_OWN_WRITES` (#79).
 
 **Phase 13's owner calls are answered** (2026-10-14). `happenstance-sync` and
-`happenstance-sync-testkit` are claimed on crates.io at `0.0.0` (#102).
+`happenstance-sync-testkit` were claimed on crates.io at `0.0.0` (#102) and are published from `0.4.4`.
 `SyncPeer::Error` is classified (`wi-cbaec7`, for ADR-0026), replication is
 whole-log at 1.0 (`wi-53c544`, for ADR-0027), and SY-7, SY-10, SY-14 and SY-23 are
 ratified with three edits (`wi-0fbcac`). Phases 0–12 and 15–17b are done. What
@@ -42,16 +42,13 @@ sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-- **The `0.4.4` release PR.** `door:one-way`: the owner merges it and tags the merge
-  commit. The minimal-versions job's published-release leg may stay red until the tag
-  publishes.
+Nothing release-shaped. Batch 8's PRs are merged; #338 waits on the owner.
 
 ## Next action
 
-1. Land and tag `0.4.4`.
-2. Phase 18 (#63), the typed runner. Its breaking chains open as `door:one-way` PRs,
+1. Phase 18 (#63), the typed runner. Its breaking chains open as `door:one-way` PRs,
    and it needs the owner present.
-3. #338 (settle-to-frontier for the rules that read their own writes) waits on the
+2. #338 (settle-to-frontier for the rules that read their own writes) waits on the
    owner's call; #352's remaining xtask print sites are two-way.
 
 ```
@@ -60,12 +57,6 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- **Trusted publishing for the two sync crates** on crates.io (repository
-  `Wet-Ink-Corporation/happenstance`, workflow `release.yml`, environment
-  `crates-io`), **before the `0.4.4` tag**: `release.yml` already publishes them,
-  and this is their first real release.
-- **Merge the `0.4.4` release PR, then tag its merge commit** (`git tag -a v0.4.4
-  <merge-sha> -m "0.4.4"` and push the tag); `release.yml` publishes from the tag.
 - **Phase 18** needs the owner present. **#118** gates phase 18's checkpoint-id chain.
 - Defaults in force (the owner's, from the previous handover): `trait-variant`
   keeps its caret (ADR-0092); PS-25's digest is a hand-written FNV-1a; new CI jobs
