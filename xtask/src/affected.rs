@@ -78,13 +78,16 @@
 //! `verify.e2e` runs the whole thing, which is where they are paid for.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 
 use crate::spec_trace::workspace_root;
+
+/// The context a failed write of [`run`]'s own lines carries.
+const REPORTING: &str = "writing the affected gate's report";
 
 /// The glob-free member roots, matching the workspace manifest's
 /// `members = ["crates/*", "examples/*", "harness/workerd", "xtask"]`.
@@ -143,23 +146,24 @@ pub(crate) struct Member {
 /// When the workspace root cannot be resolved, when git cannot answer what
 /// changed (including a `base` that does not resolve to a commit — a gate that
 /// cannot tell what changed must not report green), when a member manifest
-/// declares no package name, or when any check it runs fails.
-pub(crate) fn run(base: Option<&str>) -> Result<()> {
+/// declares no package name, when any check it runs fails, or when `out` cannot
+/// be written.
+pub(crate) fn run(out: &mut impl io::Write, base: Option<&str>) -> Result<()> {
     let base = base.unwrap_or("main");
     let root = workspace_root()?;
 
     // First, and unconditionally. See the module documentation: the packages
     // these read are not the packages the diff touched.
-    println!("\n=== the file-reading checks ===");
-    crate::spec_trace::retired_rules()?;
-    crate::lints::no_clock()?;
+    writeln!(out, "\n=== the file-reading checks ===").context(REPORTING)?;
+    crate::spec_trace::retired_rules(out)?;
+    crate::lints::no_clock(out)?;
     // CF-24, and it belongs on the story grain for the same reason
     // `stated_rule_counts` does: the story that lands a conformance rule is
     // exactly the one that can leave it out of the macro that drives it, and no
     // package-shaped step reads a `macro_rules!` body.
-    crate::lints::rules_are_enumerated()?;
-    crate::lints::no_position_literals()?;
-    crate::lints::changelog_names_every_rule()?;
+    crate::lints::rules_are_enumerated(out)?;
+    crate::lints::no_position_literals(out)?;
+    crate::lints::changelog_names_every_rule(out)?;
     // The one check here that runs the other way — four *documents* held to the
     // code, rather than the code held to a document — and the one this list had
     // dropped. It belongs on the story grain more than any of its neighbours: a
@@ -169,10 +173,10 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     // `.redkiln/config.yaml` wires this command as that story's gate. The
     // person who breaks is the crates.io reader, and it had already happened
     // three times.
-    crate::lints::stated_rule_counts()?;
-    crate::lints::testkit_version()?;
-    crate::lints::core_alloc_features()?;
-    crate::spec_trace::run(crate::spec_trace::Mode::Check)?;
+    crate::lints::stated_rule_counts(out)?;
+    crate::lints::testkit_version(out)?;
+    crate::lints::core_alloc_features(out)?;
+    crate::spec_trace::run(out, crate::spec_trace::Mode::Check)?;
     // The narrative tree, on this list and not `lint-constitution`. The
     // divergence is deliberate and is argued in `lint_narrative`'s own docs: a
     // story whose whole deliverable is a page under `docs/` is exactly the case
@@ -204,8 +208,12 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
     let members = members(&root)?;
     let changed = changed_files(&root, base)?;
 
-    println!("\n=== affected packages ===");
-    println!("{} file(s) changed against `{base}`", changed.len());
+    writeln!(
+        out,
+        "\n=== affected packages ===\n{} file(s) changed against `{base}`",
+        changed.len()
+    )
+    .context(REPORTING)?;
 
     let affected = affected_packages(&changed, &members);
 
@@ -216,19 +224,22 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
         // look". The emptiness this reports no longer covers `docs/`: the
         // narrative tree is source for `xtask`, so a page-only change reaches
         // this branch only if the arm above stopped firing.
-        println!("no package affected — nothing to compile");
-        println!("\naffected gate passed");
+        writeln!(
+            out,
+            "no package affected — nothing to compile\n\naffected gate passed"
+        )
+        .context(REPORTING)?;
         return Ok(());
     }
 
     for name in &affected {
-        println!("  {name}");
+        writeln!(out, "  {name}").context(REPORTING)?;
     }
 
     // Whole-workspace, and not per package. `cargo fmt` resolves no dependencies
     // and reads no build graph, so splitting it would buy nothing and could only
     // let an unaffected package drift out of format between releases.
-    run_step("formatting", "cargo", &["fmt", "--all", "--check"])?;
+    run_step(out, "formatting", "cargo", &["fmt", "--all", "--check"])?;
 
     let selection: Vec<String> = affected
         .iter()
@@ -242,7 +253,7 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
             .iter()
             .map(|arg| (*arg).to_owned()),
     );
-    run_step("clippy (affected packages)", "cargo", &borrow(&clippy))?;
+    run_step(out, "clippy (affected packages)", "cargo", &borrow(&clippy))?;
 
     let mut test = vec!["test".to_owned(), "--locked".to_owned()];
     test.extend(selection.iter().cloned());
@@ -254,9 +265,9 @@ pub(crate) fn run(base: Option<&str>) -> Result<()> {
             .iter()
             .map(|arg| (*arg).to_owned()),
     );
-    run_step("tests (affected packages)", "cargo", &borrow(&test))?;
+    run_step(out, "tests (affected packages)", "cargo", &borrow(&test))?;
 
-    println!("\naffected gate passed");
+    writeln!(out, "\naffected gate passed").context(REPORTING)?;
     Ok(())
 }
 
@@ -871,9 +882,10 @@ fn borrow(args: &[String]) -> Vec<&str> {
 ///
 /// # Errors
 ///
-/// When the program cannot be launched, or when it exits non-zero.
-fn run_step(name: &str, program: &str, args: &[&str]) -> Result<()> {
-    println!("\n=== {name} ===");
+/// When `out` cannot be written — before the program launches — when the
+/// program cannot be launched, or when it exits non-zero.
+fn run_step(out: &mut impl io::Write, name: &str, program: &str, args: &[&str]) -> Result<()> {
+    writeln!(out, "\n=== {name} ===").context("writing a step's banner")?;
 
     let status = Command::new(program)
         .args(args)
@@ -892,6 +904,40 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+    use crate::tests::ClosesAfter;
+
+    /// A program nobody installs — the name carries this issue's number — so
+    /// reaching it is a launch failure, never a run.
+    const NOT_INSTALLED: &str = "xtask-352-no-such-program";
+
+    /// A step's banner reads the way `cargo xtask ci`'s do, and it is written
+    /// before the program is launched.
+    #[test]
+    fn a_steps_banner_is_written_before_its_program_launches() {
+        let mut out = Vec::new();
+        let err = run_step(&mut out, "a step", NOT_INSTALLED, &[])
+            .expect_err("the program does not exist");
+        assert!(format!("{err:#}").contains("failed to launch"), "{err:#}");
+        assert_eq!(out, b"\n=== a step ===\n");
+    }
+
+    /// A closed stdout stops the step before it launches, and says so: the
+    /// error is the refused write, not the launch failure that would follow
+    /// it if the banner's result were swallowed.
+    #[test]
+    fn a_step_reports_a_closed_stdout_rather_than_launching() {
+        let mut pipe = ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let err = run_step(&mut pipe, "a step", NOT_INSTALLED, &[])
+            .expect_err("stdout was closed, yet the step said Ok");
+        let refused = err
+            .downcast_ref::<io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(refused.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
+    }
 
     /// Three synthetic members, for the cases that must not depend on the shape
     /// of the real tree. `manifest` points at nothing on purpose: these cases are
@@ -1422,14 +1468,63 @@ mod tests {
         block
     }
 
-    /// The `pub(crate) fn <name>() -> Result<()>` items of a module, by name.
+    /// The `pub(crate) fn <name>(…) -> Result<()>` items of a module, by name,
+    /// whatever their parameter list.
     fn exported_lints(source: &str) -> Vec<String> {
         source
             .lines()
             .filter_map(|line| line.strip_prefix("pub(crate) fn "))
-            .filter_map(|rest| rest.split_once("() -> Result<()> {"))
+            .filter(|rest| rest.ends_with(") -> Result<()> {"))
+            .filter_map(|rest| rest.split_once('('))
             .map(|(name, _)| name.to_owned())
             .collect()
+    }
+
+    /// The exported lints `block` never calls with `?`, in either of the two
+    /// spellings a lint's call has: `crate::lints::NAME(out)?;` for one that
+    /// reports through the writer, `crate::lints::NAME()?;` for one that takes
+    /// nothing.
+    fn uncalled_lints<'a>(exported: &'a [String], block: &str) -> Vec<&'a String> {
+        exported
+            .iter()
+            .filter(|name| {
+                !block.contains(&format!("crate::lints::{name}(out)?;"))
+                    && !block.contains(&format!("crate::lints::{name}()?;"))
+            })
+            .collect()
+    }
+
+    /// A lint whose result is dropped is not run as far as the gate is
+    /// concerned: its failure never stops the story grain.
+    ///
+    /// The wrong implementation it rejects matches the call by its prefix,
+    /// which a `let _ =` in front of the call satisfies.
+    #[test]
+    fn a_lint_whose_result_is_dropped_is_not_called() {
+        let exported = ["x".to_owned(), "y".to_owned(), "z".to_owned()];
+        let block = "\
+    let _ = crate::lints::x(out);
+    crate::lints::y(out)?;
+    crate::lints::z()?;
+";
+        assert_eq!(uncalled_lints(&exported, block), ["x"]);
+    }
+
+    /// The scan sees an entry point whatever its parameters are. A lint that
+    /// takes no writer is exactly the one a contributor adds by copying an old
+    /// shape, and the story grain must still be held to calling it.
+    ///
+    /// The wrong implementation it rejects matches one parameter list
+    /// literally: the zero-argument lint below then vanishes from the scan.
+    #[test]
+    fn the_export_scan_sees_a_lint_whatever_its_parameters() {
+        let source = "\
+pub(crate) fn takes_a_writer(out: &mut impl io::Write) -> Result<()> {
+pub(crate) fn takes_nothing() -> Result<()> {
+pub(crate) fn is_not_a_lint(text: &str) -> Vec<String> {
+fn is_private() -> Result<()> {
+";
+        assert_eq!(exported_lints(source), ["takes_a_writer", "takes_nothing"]);
     }
 
     /// The check whose subject is the documents a story *edits*, on the gate
@@ -1447,7 +1542,7 @@ mod tests {
     #[test]
     fn the_unconditional_block_runs_the_stated_rule_counts_lint() {
         assert!(
-            unconditional_block().contains("crate::lints::stated_rule_counts()?;"),
+            unconditional_block().contains("crate::lints::stated_rule_counts(out)?;"),
             "the story-grain gate must run the rule-count check: `.redkiln/config.yaml` \
              wires this command at every advance seam, and a story that adds a \
              conformance rule is the one change it exists to catch"
@@ -1475,11 +1570,7 @@ mod tests {
              check would pass over anything; it saw {exported:?}"
         );
 
-        let block = unconditional_block();
-        let missing = exported
-            .iter()
-            .filter(|name| !block.contains(&format!("crate::lints::{name}()?;")))
-            .collect::<Vec<_>>();
+        let missing = uncalled_lints(&exported, &unconditional_block());
 
         assert!(
             missing.is_empty(),
@@ -1658,7 +1749,7 @@ mod tests {
 
             // Derived. A module that never builds a `Command` starts no
             // process, so its whole input is files — which is exactly what
-            // `print_help` calls "reads a document rather than compiling a
+            // `write_help` calls "reads a document rather than compiling a
             // package". `lints`, `spec_trace`, `lint_narrative`, `lint_pages`
             // and `lint_constitution` hold to that; `proof`, `package` and
             // `narrative_doctests` do not.
@@ -1848,7 +1939,7 @@ mod tests {
 
     /// `cargo xtask lints`, held to the same family.
     ///
-    /// [`print_help`] calls that command *"every step that reads a document
+    /// [`write_help`] calls that command *"every step that reads a document
     /// rather than compiling a package"* and prints its rows from this
     /// selection, so the sentence is true only if the selection is the family.
     /// It named nine of eleven: `spec-trace` and `lint-core-alloc-features`

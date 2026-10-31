@@ -97,16 +97,16 @@ had no expiry, so a rule scheduled forever printed identically to one scheduled 
 
 **That mechanism no longer exists, and what replaced it says ES-6's quiet part out loud.** The
 prose guard was retired: check 4 now guards on `!has_suite(&c.id)` alone
-(`xtask/src/spec_trace.rs:822`), `schedules_new` is gone with it, and its own doc comment records
+(`xtask/src/spec_trace.rs:827`), `schedules_new` is gone with it, and its own doc comment records
 why the switch could not be repaired in place — the sentence explaining that a rule was unwritten
-*was* the switch that stopped the checker looking (`xtask/src/spec_trace.rs:798-816`). A clause's
+*was* the switch that stopped the checker looking (`xtask/src/spec_trace.rs:803-821`). A clause's
 rule name is now either resolvable or declared in `UNRESOLVABLE_RULE_NAMES`
-(`xtask/src/spec_trace.rs:1006`) with the reason nothing can find it. ES-6 has an entry, and it is
+(`xtask/src/spec_trace.rs:1011`) with the reason nothing can find it. ES-6 has an entry, and it is
 one of the fifteen `Scheduled` ones whose owner is not a phase:
 
 > `store_error_crosses_a_join_handle` — "nothing, yet:
 > `crates/happenstance-cloudflare/src/send_shape.rs` argues it is unwritable against today's port,
-> which is a finding rather than a schedule" (`xtask/src/spec_trace.rs:1245-1252`).
+> which is a finding rather than a schedule" (`xtask/src/spec_trace.rs:1250-1257`).
 
 `kb-reference-spec-trace-unresolved-declarations-001` carries the census the entry came out of, and
 is where the other fourteen live. This moves sub-question 2 without closing it. The permanent
@@ -245,7 +245,7 @@ open. Writing the answer into ES-6's prose is phase 17's
 (`runbook/phases/17-breaking-window.md`).
 
 Sub-questions 1–3 are additive or process-only. `store_error_crosses_a_join_handle` is still
-unwritten and still a `Scheduled` entry in `UNRESOLVABLE_RULE_NAMES` (`xtask/src/spec_trace.rs:1247`).
+unwritten and still a `Scheduled` entry in `UNRESOLVABLE_RULE_NAMES` (`xtask/src/spec_trace.rs:1252`).
 `crates/happenstance-cloudflare/src/lib.rs:366-371` records it as unwritable against today's port
 for every adapter, and a testkit rule can land in any minor. Whether an unresolvable entry must
 carry an owning phase is `xtask` policy. **Owner now: phase 17** for the prose; sub-questions 1–3

@@ -31,7 +31,7 @@ last_reviewed: 2026-09-07
 
 ## What is true today
 
-`lints::stated_rule_counts` (`xtask/src/lints.rs:1084`) is the body behind the
+`lints::stated_rule_counts` (`xtask/src/lints.rs:1090`) is the body behind the
 `REQUIRED` gate step named "every stated rule count matches the suite," and it
 runs three unrelated checks in sequence, each guarded by `?`:
 `runbook_status_matches_the_registry()?`, then `citation_ranges_resolve()?`
@@ -73,7 +73,7 @@ can hide another and a reader sees every failure a single run turned up.
 `lint_steps()` entry — correctly extending `affected.rs`'s export scan to
 cover all three, the same mechanism this remediation pass already exercised
 without difficulty for an unrelated new step — with the benefit that
-`cargo xtask lints`' printed rows, which `print_help` uses to tell a reader
+`cargo xtask lints`' printed rows, which `write_help` uses to tell a reader
 what the gate checks, gain three named rows instead of one mislabelled one.
 The two are not mutually exclusive: if split is chosen, each of the three new
 steps should still collect rather than `?` on its own first problem, since

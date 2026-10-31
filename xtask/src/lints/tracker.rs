@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::fs;
-use std::io::{self, Write as _};
+use std::io;
 use std::num::NonZeroU32;
 
 use anyhow::{Context, Result, bail};
@@ -33,15 +33,16 @@ const RUNBOOK_PHASES: &str = "runbook/phases";
 ///
 /// # Errors
 ///
-/// Returns the first failing check's error: the registry axes, then the
-/// status table's Tracker column, then the phase files' work items.
-pub(super) fn runbook_status_and_tracking() -> Result<()> {
-    runbook_status_matches_the_registry()?;
+/// Returns the first failing check's error: the registry axes (whose report
+/// goes to `out`), then the status table's Tracker column, then the phase
+/// files' work items.
+pub(super) fn runbook_status_and_tracking(out: &mut impl io::Write) -> Result<()> {
+    runbook_status_matches_the_registry(out)?;
     let root = workspace_root()?;
     let runbook =
         fs::read_to_string(root.join(RUNBOOK)).with_context(|| format!("reading {RUNBOOK}"))?;
-    status_rows_are_tracked(&phase_rows(&runbook)?)?;
-    runbook_work_items_are_tracked()
+    status_rows_are_tracked(out, &phase_rows(&runbook)?)?;
+    runbook_work_items_are_tracked(out)
 }
 
 /// The `Tracker` cell of one row of the status table.
@@ -151,8 +152,8 @@ fn tracker_problems(rows: &[PhaseRow]) -> Vec<String> {
 ///
 /// Returns an error listing every problem [`tracker_problems`] finds, or if no
 /// row carries an issue at all, which would leave the duplicate check holding
-/// nothing.
-fn status_rows_are_tracked(rows: &[PhaseRow]) -> Result<()> {
+/// nothing, or if `out` cannot be written.
+fn status_rows_are_tracked(out: &mut impl io::Write, rows: &[PhaseRow]) -> Result<()> {
     let problems = tracker_problems(rows);
     if !problems.is_empty() {
         bail!(
@@ -172,7 +173,7 @@ fn status_rows_are_tracked(rows: &[PhaseRow]) -> Result<()> {
         );
     }
     writeln!(
-        io::stdout().lock(),
+        out,
         "status_rows_are_tracked: {tracked} status row(s) name distinct issues"
     )?;
     Ok(())
@@ -266,8 +267,9 @@ fn scan_work_items(file: &str, body: &str) -> WorkItemScan {
 ///
 /// Returns an error if the directory or a file in it cannot be read, if any
 /// work item carries no well-formed issue list, or if no work item carries one
-/// at all, which would mean the grammar moved and this check holds nothing.
-fn runbook_work_items_are_tracked() -> Result<()> {
+/// at all, which would mean the grammar moved and this check holds nothing — or
+/// if `out` cannot be written.
+fn runbook_work_items_are_tracked(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let dir = root.join(RUNBOOK_PHASES);
     let mut files = Vec::new();
@@ -308,7 +310,7 @@ fn runbook_work_items_are_tracked() -> Result<()> {
         );
     }
     writeln!(
-        io::stdout().lock(),
+        out,
         "runbook_work_items_are_tracked: {tracked} work item(s) across {} phase file(s) name \
          their issues",
         files.len()

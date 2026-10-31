@@ -1188,28 +1188,34 @@ const OPTIONAL: &[Step] = &[
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
+    // The tasks that take `out` write only through it, so for them a closed pipe
+    // is an error returned, never a panic. The rest still print or lock (#352).
+    let mut out = std::io::stdout().lock();
 
     let result = match task.as_deref() {
         Some("ci") => match std::env::args().nth(2).as_deref() {
-            None => run_ci(),
-            Some("--fast") => run_fast(),
-            Some(flag) => usage(format_args!("unknown flag for ci: {flag}")),
+            None => run_ci(&mut out),
+            Some("--fast") => run_fast(&mut out),
+            Some(flag) => usage(&mut out, format_args!("unknown flag for ci: {flag}")),
         },
-        Some("wasm") => run_steps(wasm_steps()),
+        Some("wasm") => run_steps(&mut out, wasm_steps()),
         Some("affected") => match (
             std::env::args().nth(2).as_deref(),
             std::env::args().nth(3).as_deref(),
         ) {
-            (None, _) => affected::run(None),
-            (Some("--base"), Some(base)) => affected::run(Some(base)),
-            (Some("--base"), None) => usage(format_args!("--base needs a ref")),
-            (Some(flag), _) => usage(format_args!("unknown flag for affected: {flag}")),
+            (None, _) => affected::run(&mut out, None),
+            (Some("--base"), Some(base)) => affected::run(&mut out, Some(base)),
+            (Some("--base"), None) => usage(&mut out, format_args!("--base needs a ref")),
+            (Some(flag), _) => usage(&mut out, format_args!("unknown flag for affected: {flag}")),
         },
         Some("reserve") => reserve::run(std::env::args().nth(2).as_deref()),
         Some("spec-trace") => match std::env::args().nth(2).as_deref() {
-            None => spec_trace::run(spec_trace::Mode::Check),
-            Some("--write") => spec_trace::run(spec_trace::Mode::Write),
-            Some(flag) => usage(format_args!("unknown flag for spec-trace: {flag}")),
+            None => spec_trace::run(&mut out, spec_trace::Mode::Check),
+            Some("--write") => spec_trace::run(&mut out, spec_trace::Mode::Write),
+            Some(flag) => usage(
+                &mut out,
+                format_args!("unknown flag for spec-trace: {flag}"),
+            ),
         },
         Some("package-check") => package::run(),
         Some("proof-artefact") => proof::run(),
@@ -1221,29 +1227,35 @@ fn main() -> ExitCode {
         // at any time and nothing needs undoing.
         Some("narrative") => lint_narrative::run(),
         Some("site") => site::run(std::env::args_os().skip(2)),
-        Some("lints") => run_steps(lint_steps()),
-        Some("lint-clock") => lints::no_clock(),
-        Some("lint-testkit-version") => lints::testkit_version(),
-        Some("lint-core-alloc-features") => lints::core_alloc_features(),
-        Some("lint-changelog") => lints::changelog_names_every_rule(),
-        Some("lint-enumerations") => lints::rules_are_enumerated(),
-        Some("lint-position-literals") => lints::no_position_literals(),
-        Some("lint-rule-counts") => lints::stated_rule_counts(),
-        Some("lint-retired-rules") => spec_trace::retired_rules(),
+        Some("lints") => run_steps(&mut out, lint_steps()),
+        Some("lint-clock") => lints::no_clock(&mut out),
+        Some("lint-testkit-version") => lints::testkit_version(&mut out),
+        Some("lint-core-alloc-features") => lints::core_alloc_features(&mut out),
+        Some("lint-changelog") => lints::changelog_names_every_rule(&mut out),
+        Some("lint-enumerations") => lints::rules_are_enumerated(&mut out),
+        Some("lint-position-literals") => lints::no_position_literals(&mut out),
+        Some("lint-rule-counts") => lints::stated_rule_counts(&mut out),
+        Some("lint-retired-rules") => spec_trace::retired_rules(&mut out),
         Some("lint-workflows") => lint_workflows::run(),
         Some("lint-kb") => lint_kb::run(),
         Some("lint-pages") => match std::env::args().nth(2).as_deref() {
             None => lint_pages::run(lint_pages::Mode::Check),
             Some("--write") => lint_pages::run(lint_pages::Mode::Write),
-            Some(flag) => usage(format_args!("unknown flag for lint-pages: {flag}")),
+            Some(flag) => usage(
+                &mut out,
+                format_args!("unknown flag for lint-pages: {flag}"),
+            ),
         },
         Some("lint-constitution") => match std::env::args().nth(2).as_deref() {
             None => lint_constitution::run(lint_constitution::Mode::Check),
             Some("--write") => lint_constitution::run(lint_constitution::Mode::Write),
-            Some(flag) => usage(format_args!("unknown flag for lint-constitution: {flag}")),
+            Some(flag) => usage(
+                &mut out,
+                format_args!("unknown flag for lint-constitution: {flag}"),
+            ),
         },
-        Some(other) => usage(format_args!("unknown task: {other}")),
-        None => print_help().context("writing the help text"),
+        Some(other) => usage(&mut out, format_args!("unknown task: {other}")),
+        None => write_help(&mut out).context("writing the help text"),
     };
 
     exit_code(result, &mut std::io::stderr().lock())
@@ -1297,28 +1309,17 @@ impl std::error::Error for Usage {}
 ///
 /// Always — [`Usage`] once both are written, or the write that failed, which
 /// `main` reports like any other failure.
-fn usage(complaint: std::fmt::Arguments<'_>) -> Result<()> {
+fn usage(out: &mut impl std::io::Write, complaint: std::fmt::Arguments<'_>) -> Result<()> {
     use std::io::Write as _;
 
     writeln!(std::io::stderr().lock(), "{complaint}").context("writing to stderr")?;
-    print_help().context("writing the help text")?;
+    write_help(out).context("writing the help text")?;
     Err(Usage.into())
 }
 
-/// `cargo xtask` with no task, or with one it cannot parse, on stdout.
-///
-/// Through one locked handle rather than `println!`, which panics when stdout
-/// is a closed pipe — `cargo xtask | head -3` would otherwise abort mid-text.
-///
-/// # Errors
-///
-/// When stdout cannot be written.
-fn print_help() -> std::io::Result<()> {
-    write_help(&mut std::io::stdout().lock())
-}
-
-/// The help text, into any writer — stdout for [`print_help`], a buffer for
-/// the tests, which read what a reader sees rather than the source that says it.
+/// The help text, into any writer — `main`'s stdout, with no task or with one
+/// it cannot parse, and a buffer for the tests, which read what a reader sees
+/// rather than the source that says it.
 ///
 /// # Errors
 ///
@@ -1464,7 +1465,7 @@ fn wasm_steps() -> Vec<&'static Step> {
 
 /// Every `REQUIRED` step that reads a document rather than compiling a package,
 /// selected by name. It carried a count until the count went wrong — it said
-/// *five* while naming nine of the eleven — so [`print_help`] prints the
+/// *five* while naming nine of the eleven — so [`write_help`] prints the
 /// selection, and `affected.rs` holds the selection to the step table.
 fn lint_steps() -> Vec<&'static Step> {
     steps_named(&[
@@ -1502,11 +1503,24 @@ fn steps_named(names: &[&str]) -> Vec<&'static Step> {
         .collect()
 }
 
-fn run_ci() -> Result<()> {
-    run_steps(REQUIRED)?;
-    run_steps(OPTIONAL)?;
-    println!("\nall checks passed");
-    Ok(())
+/// `REQUIRED` then `OPTIONAL`, their banners and the closing line into `out`.
+///
+/// # Errors
+///
+/// When any step fails, or `out` cannot be written.
+fn run_ci(out: &mut impl std::io::Write) -> Result<()> {
+    run_steps(out, REQUIRED)?;
+    run_steps(out, OPTIONAL)?;
+    ci_passed(out).context("writing the gate's closing line")
+}
+
+/// [`run_ci`]'s closing line, apart so a test can read it without the gate.
+///
+/// # Errors
+///
+/// When `out` cannot be written.
+fn ci_passed(out: &mut impl std::io::Write) -> std::io::Result<()> {
+    writeln!(out, "\nall checks passed")
 }
 
 /// `REQUIRED` without `OPTIONAL` — the project-scoped bar, not the release bar.
@@ -1526,26 +1540,26 @@ fn run_ci() -> Result<()> {
 ///
 /// # Errors
 ///
-/// When any mandatory step fails.
-fn run_fast() -> Result<()> {
-    run_steps(REQUIRED)?;
-    println!(
-        "\nall required checks passed (--fast: {} optional step(s) not run)",
-        OPTIONAL.len()
-    );
-    Ok(())
+/// When any mandatory step fails, or `out` cannot be written.
+fn run_fast(out: &mut impl std::io::Write) -> Result<()> {
+    run_steps(out, REQUIRED)?;
+    fast_passed(out, OPTIONAL.len()).context("writing the gate's closing line")
 }
 
-/// Each step in turn, its banner on stdout, stopping at the first failure.
+/// [`run_fast`]'s closing line, naming how many optional steps it left out.
 ///
 /// # Errors
 ///
-/// When a step fails or cannot be launched, or stdout cannot be written.
-fn run_steps<'a>(steps: impl IntoIterator<Item = &'a Step>) -> Result<()> {
-    run_steps_into(&mut std::io::stdout().lock(), steps)
+/// When `out` cannot be written.
+fn fast_passed(out: &mut impl std::io::Write, not_run: usize) -> std::io::Result<()> {
+    writeln!(
+        out,
+        "\nall required checks passed (--fast: {not_run} optional step(s) not run)"
+    )
 }
 
-/// [`run_steps`], its banners into any writer — a buffer for the tests.
+/// Each step in turn, its banner into `out` — stdout from `main`, a buffer for
+/// the tests — stopping at the first failure.
 ///
 /// Through `writeln!` rather than `println!`, which panics when stdout is a
 /// closed pipe: `cargo xtask ci | head` would otherwise abort between steps.
@@ -1554,7 +1568,7 @@ fn run_steps<'a>(steps: impl IntoIterator<Item = &'a Step>) -> Result<()> {
 /// # Errors
 ///
 /// When a step fails or cannot be launched, or `out` cannot be written.
-fn run_steps_into<'a>(
+fn run_steps<'a>(
     out: &mut impl std::io::Write,
     steps: impl IntoIterator<Item = &'a Step>,
 ) -> Result<()> {
@@ -1778,9 +1792,14 @@ mod tests {
 
     /// A stdout that closes after `budget` bytes, counting the writes it
     /// refuses once it has.
-    struct ClosesAfter {
-        budget: usize,
-        refused: usize,
+    ///
+    /// Shared with every module's output tests, which reach it as
+    /// `crate::tests::ClosesAfter`.
+    pub(crate) struct ClosesAfter {
+        /// Bytes still accepted before the pipe closes.
+        pub(crate) budget: usize,
+        /// Writes refused since it closed.
+        pub(crate) refused: usize,
     }
 
     impl std::io::Write for ClosesAfter {
@@ -1835,6 +1854,9 @@ mod tests {
         program: "xtask-340-no-such-program",
         args: &[],
         env: &[],
+        // The probe really runs: `is_available` spawns it, which is a PATH
+        // lookup. The name carries this issue's number so that no package and
+        // no one's shell installs it — a machine that had it would run the step.
         probe: Some(&["xtask-340-no-such-program", "--version"]),
     };
 
@@ -1850,7 +1872,7 @@ mod tests {
     #[test]
     fn run_steps_writes_the_banner_and_the_skip_line() {
         let mut out = Vec::new();
-        crate::run_steps_into(&mut out, [&SKIPPED]).expect("a skipped step is not a failure");
+        crate::run_steps(&mut out, [&SKIPPED]).expect("a skipped step is not a failure");
         assert_eq!(
             String::from_utf8(out).expect("the banners are UTF-8"),
             "\n=== a step this machine cannot run ===\n\
@@ -1870,7 +1892,7 @@ mod tests {
             budget: 0,
             refused: 0,
         };
-        let err = crate::run_steps_into(&mut pipe, [&UNLAUNCHABLE])
+        let err = crate::run_steps(&mut pipe, [&UNLAUNCHABLE])
             .expect_err("stdout was closed, yet the steps said Ok");
         let io = err
             .downcast_ref::<std::io::Error>()
@@ -1888,10 +1910,50 @@ mod tests {
             budget: banner,
             refused: 0,
         };
-        let err = crate::run_steps_into(&mut pipe, [&SKIPPED])
+        let err = crate::run_steps(&mut pipe, [&SKIPPED])
             .expect_err("stdout closed before the skip line, yet the steps said Ok");
-        assert!(err.downcast_ref::<std::io::Error>().is_some(), "{err:#}");
+        let io = err
+            .downcast_ref::<std::io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(io.kind(), std::io::ErrorKind::BrokenPipe);
         assert_eq!(pipe.refused, 1, "writing went on after a refused write");
+    }
+
+    /// The line a green `cargo xtask ci` ends on, and the one `--fast` ends on,
+    /// byte for byte: a blank line, then the verdict.
+    #[test]
+    fn the_gates_closing_lines_say_what_ran() {
+        let mut ci = Vec::new();
+        crate::ci_passed(&mut ci).expect("a Vec accepts every write");
+        assert_eq!(ci, b"\nall checks passed\n");
+
+        let mut fast = Vec::new();
+        crate::fast_passed(&mut fast, 4).expect("a Vec accepts every write");
+        assert_eq!(
+            String::from_utf8(fast).expect("the line is UTF-8"),
+            "\nall required checks passed (--fast: 4 optional step(s) not run)\n"
+        );
+    }
+
+    /// A green gate whose stdout has closed by its last line reports that
+    /// rather than panicking in `println!`, as both closing lines once did.
+    #[test]
+    fn the_gates_closing_lines_report_a_closed_stdout() {
+        for (gate, wrote) in [
+            (
+                "ci",
+                crate::ci_passed as fn(&mut ClosesAfter) -> std::io::Result<()>,
+            ),
+            ("--fast", |w| crate::fast_passed(w, 4)),
+        ] {
+            let mut pipe = ClosesAfter {
+                budget: 0,
+                refused: 0,
+            };
+            let err = wrote(&mut pipe).expect_err(&format!("{gate}: stdout was closed, yet Ok"));
+            assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe, "{gate}");
+            assert_eq!(pipe.refused, 1, "{gate}: writing went on after a refusal");
+        }
     }
 
     /// `main`'s reporter: a blank line, then the whole context chain.

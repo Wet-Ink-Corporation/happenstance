@@ -58,9 +58,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
-use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 
@@ -635,13 +635,15 @@ fn count_word(text: &str) -> Result<usize, String> {
         })
 }
 
-/// Runs the traceability check, and checks or rewrites §7.1–§7.2.
+/// Runs the traceability check, and checks or rewrites §7.1–§7.2, reporting
+/// into `out`.
 ///
 /// # Errors
 ///
-/// Returns an error if a document cannot be read, if any check fails, or if the
-/// committed §7.1–§7.2 region does not match the computed one.
-pub(crate) fn run(mode: Mode) -> Result<()> {
+/// Returns an error if a document cannot be read, if any check fails, if the
+/// committed §7.1–§7.2 region does not match the computed one, or if `out`
+/// cannot be written.
+pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
     let root = workspace_root()?;
     let spec = read(&root, SPEC)?;
     let cases_doc = read(&root, CASES)?;
@@ -777,9 +779,10 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
 
     // 9. §7.1 and §7.2 say what this run just computed.
     let generated = generated_region(&census, &clauses, &resolvable);
-    let stale = sync_region(&root, &spec, &generated, mode)?;
+    let stale = sync_region(out, &root, &spec, &generated, mode)?;
 
     report(
+        out,
         &census,
         &known_rules,
         &known_cases,
@@ -790,8 +793,10 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
             orphaned,
         },
         &unclaimed_pending,
-        &problems,
-        stale.as_deref(),
+        &Findings {
+            problems: &problems,
+            stale: stale.as_deref(),
+        },
     )
 }
 
@@ -1675,9 +1680,10 @@ fn check_rule_ownership(
 ///
 /// # Errors
 ///
-/// Returns an error if a document cannot be read, if the probe stops parsing, or
-/// if any rule named by a `Retires:` field is still defined in [`RULE_FILES`].
-pub(crate) fn retired_rules() -> Result<()> {
+/// Returns an error if a document cannot be read, if the probe stops parsing, if
+/// any rule named by a `Retires:` field is still defined in [`RULE_FILES`], or if
+/// `out` cannot be written.
+pub(crate) fn retired_rules(out: &mut impl io::Write) -> Result<()> {
     let root = workspace_root()?;
     let spec = read(&root, SPEC)?;
 
@@ -1745,7 +1751,7 @@ pub(crate) fn retired_rules() -> Result<()> {
 
     if !problems.is_empty() {
         for p in &problems {
-            println!("  {p}");
+            writeln!(out, "  {p}").context("writing a live disposition")?;
         }
         bail!(
             "{} disposition(s) naming a rule that is still live. A `Retires:` line is a \
@@ -1755,12 +1761,14 @@ pub(crate) fn retired_rules() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "§7.4: {dispositions} disposition(s) against {} rule(s) in {} file(s), none naming a rule \
          still live",
         known_rules.len(),
         RULE_FILES.len()
-    );
+    )
+    .context("writing the disposition summary")?;
     Ok(())
 }
 
@@ -1807,17 +1815,39 @@ struct Coverage {
     orphaned: usize,
 }
 
+/// The context every failed write of [`report`] carries.
+const REPORTING: &str = "writing the traceability report";
+
+/// What the run found, as opposed to what it measured about its reach.
+///
+/// One struct rather than two more parameters for the reason [`Coverage`] is
+/// one: [`report`] takes the writer too, and sits at clippy's argument ceiling.
+struct Findings<'a> {
+    /// Every defect the checks recorded, one line each.
+    problems: &'a [String],
+    /// How the committed §7.1–§7.2 differs from the computed one, if it does.
+    stale: Option<&'a str>,
+}
+
+/// The run's summary and verdict, into `out`.
+///
+/// Writes only to `out`, and stops at the first write `out` refuses: a closed
+/// pipe is the error this returns, never a panic, and nothing is written
+/// after it.
+///
+/// # Errors
+///
+/// When `out` cannot be written, or when the run found a problem or a stale
+/// region.
 fn report(
+    out: &mut impl io::Write,
     census: &Census,
     rules: &BTreeSet<String>,
     cases: &BTreeSet<String>,
     coverage: &Coverage,
     unclaimed_pending: &[String],
-    problems: &[String],
-    stale: Option<&str>,
+    found: &Findings<'_>,
 ) -> Result<()> {
-    let mut summary = String::new();
-    let _ = write!(summary, "{} clauses (", census.total());
     let mut parts: Vec<String> = MATURITY
         .iter()
         .enumerate()
@@ -1826,28 +1856,27 @@ fn report(
     if census.unmarked > 0 {
         parts.push(format!("{} unmarked", census.unmarked));
     }
-    let _ = write!(summary, "{}), ", parts.join(", "));
-    let _ = write!(
-        summary,
-        "{} conformance rules, {} e2e cases ({} claimed by no clause)",
-        rules.len(),
-        cases.len(),
-        coverage.orphaned
-    );
     // The coverage number is in the summary rather than in a comment because the
     // failure this step spent a phase inside was not a wrong check, it was a
     // check whose scope nobody could see. A reader who is told "338 citations"
     // can notice that the document has more.
     let (checked, external, anchored) = coverage.citations;
-    let _ = write!(
-        summary,
-        ", {checked} citations checked ({anchored} anchored to their subject"
-    );
-    if external > 0 {
-        let _ = write!(summary, ", {external} external");
-    }
-    let _ = write!(summary, ")");
-    println!("{summary}");
+    let external = if external > 0 {
+        format!(", {external} external")
+    } else {
+        String::new()
+    };
+    writeln!(
+        out,
+        "{} clauses ({}), {} conformance rules, {} e2e cases ({} claimed by no clause), \
+         {checked} citations checked ({anchored} anchored to their subject{external})",
+        census.total(),
+        parts.join(", "),
+        rules.len(),
+        cases.len(),
+        coverage.orphaned
+    )
+    .context(REPORTING)?;
 
     // Printed on a green run, for the same reason `unclaimed_pending` is: this
     // is the cost of the check, and a cost that only appears when something is
@@ -1856,44 +1885,54 @@ fn report(
     //
     // [`Elsewhere`]: Unresolvable::Elsewhere
     let [elsewhere, not_a_rule, scheduled] = coverage.unresolvable;
-    println!(
+    writeln!(
+        out,
         "{} rule name(s) a clause cites and the suites cannot resolve, each declared: \
          {elsewhere} confirmed present in a file the suites do not read, {not_a_rule} not rule \
          names, {scheduled} unwritten",
         elsewhere + not_a_rule + scheduled
-    );
+    )
+    .context(REPORTING)?;
 
     if !coverage.cf36.is_empty() {
-        println!(
+        writeln!(
+            out,
             "{} clause(s) name a conformance rule and cite no contract-level case (CF-36), each recorded in `CF36_UNDISCHARGED`: {}",
             coverage.cf36.len(),
             coverage.cf36.join(", ")
-        );
+        )
+        .context(REPORTING)?;
     }
 
     // Printed on a green run, on purpose. An open question that only shows up
     // when something else is already broken is an open question nobody reads.
     if !unclaimed_pending.is_empty() {
-        println!(
+        writeln!(
+            out,
             "{} rule(s) claimed by no clause and owing a decision:",
             unclaimed_pending.len()
-        );
+        )
+        .context(REPORTING)?;
         for r in unclaimed_pending {
-            println!("  {r}");
+            writeln!(out, "  {r}").context(REPORTING)?;
         }
     }
 
+    let Findings { problems, stale } = *found;
     if problems.is_empty() && stale.is_none() {
-        println!("traceability: no problems found; §7.1–§7.2 matches the checker");
+        writeln!(
+            out,
+            "traceability: no problems found; §7.1–§7.2 matches the checker"
+        )
+        .context(REPORTING)?;
         return Ok(());
     }
 
     for p in problems {
-        println!("  {p}");
+        writeln!(out, "  {p}").context(REPORTING)?;
     }
     if let Some(diff) = stale {
-        println!();
-        println!("{diff}");
+        writeln!(out, "\n{diff}").context(REPORTING)?;
     }
 
     match (problems.len(), stale) {
@@ -2109,7 +2148,13 @@ fn clause_number(id: &str, prefix: &str) -> u32 {
 /// displaced, because the first `--write` swallows whatever authored prose sat
 /// between §7.1 and §7.3 and losing that silently is the one failure mode a
 /// generator has that a hand-written table does not.
-fn sync_region(root: &Path, spec: &str, generated: &str, mode: Mode) -> Result<Option<String>> {
+fn sync_region(
+    out: &mut impl io::Write,
+    root: &Path,
+    spec: &str,
+    generated: &str,
+    mode: Mode,
+) -> Result<Option<String>> {
     let lines: Vec<&str> = spec.lines().collect();
     let span = region_span(&lines)?;
     let committed: Vec<&str> = lines[span.clone()].to_vec();
@@ -2125,16 +2170,19 @@ fn sync_region(root: &Path, spec: &str, generated: &str, mode: Mode) -> Result<O
         return Ok(Some(difference));
     }
 
-    let mut out: Vec<&str> = lines[..span.start].to_vec();
-    out.extend_from_slice(&computed);
-    out.extend_from_slice(&lines[span.end..]);
-    let mut body = out.join("\n");
+    let mut rewritten: Vec<&str> = lines[..span.start].to_vec();
+    rewritten.extend_from_slice(&computed);
+    rewritten.extend_from_slice(&lines[span.end..]);
+    let mut body = rewritten.join("\n");
     body.push('\n');
     fs::write(root.join(SPEC), body).with_context(|| format!("rewriting {SPEC}"))?;
 
-    println!("{difference}");
-    println!();
-    println!("rewrote {SPEC} §7.1–§7.2 ({} lines)", computed.len());
+    writeln!(
+        out,
+        "{difference}\n\nrewrote {SPEC} §7.1–§7.2 ({} lines)",
+        computed.len()
+    )
+    .context("writing what the rewrite displaced")?;
     Ok(None)
 }
 
@@ -3362,6 +3410,87 @@ mod tests {
     use std::fmt::Write as _;
 
     use super::*;
+    use crate::tests::ClosesAfter;
+
+    /// The census of an empty document, every count zero.
+    fn empty_census() -> Census {
+        Census::of(&[])
+    }
+
+    /// Nothing measured: no citation, no unresolvable name, no CF-36 breach.
+    fn no_coverage() -> Coverage {
+        Coverage {
+            citations: (0, 0, 0),
+            unresolvable: [0; 3],
+            cf36: Vec::new(),
+            orphaned: 0,
+        }
+    }
+
+    /// Nothing found: no problem, and §7.1–§7.2 current.
+    const NOTHING_FOUND: Findings<'static> = Findings {
+        problems: &[],
+        stale: None,
+    };
+
+    /// A green run's report: the summary, the unresolvable-name cost, and the
+    /// verdict — the lines `cargo xtask spec-trace` prints when nothing is wrong.
+    #[test]
+    fn report_writes_a_green_runs_summary_and_verdict() {
+        let mut out = Vec::new();
+        let (census, coverage) = (empty_census(), no_coverage());
+        let none = BTreeSet::new();
+        report(
+            &mut out,
+            &census,
+            &none,
+            &none,
+            &coverage,
+            &[],
+            &NOTHING_FOUND,
+        )
+        .expect("nothing was found, so the report is green");
+        assert_eq!(
+            String::from_utf8(out).expect("the report is UTF-8"),
+            "0 clauses (0 FROZEN, 0 PROVISIONAL, 0 DEFERRED, 0 NON-NORMATIVE), 0 conformance \
+             rules, 0 e2e cases (0 claimed by no clause), 0 citations checked (0 anchored to \
+             their subject)\n\
+             0 rule name(s) a clause cites and the suites cannot resolve, each declared: 0 \
+             confirmed present in a file the suites do not read, 0 not rule names, 0 unwritten\n\
+             traceability: no problems found; §7.1–§7.2 matches the checker\n"
+        );
+    }
+
+    /// The defect #352 names: `cargo xtask lints | head -2` closed the pipe and
+    /// the child `spec-trace` panicked inside `println!` here. A closed stdout is
+    /// now an error the caller sees, and nothing is written after the refusal.
+    ///
+    /// The wrong implementation it rejects swallows a write's result: the
+    /// report then goes on writing into the closed pipe, or returns `Ok`.
+    #[test]
+    fn report_returns_a_closed_stdout_rather_than_panicking() {
+        let mut pipe = ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let (census, coverage) = (empty_census(), no_coverage());
+        let none = BTreeSet::new();
+        let err = report(
+            &mut pipe,
+            &census,
+            &none,
+            &none,
+            &coverage,
+            &[],
+            &NOTHING_FOUND,
+        )
+        .expect_err("stdout was closed, yet the report said Ok");
+        let refused = err
+            .downcast_ref::<io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(refused.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
+    }
 
     /// This module's own path, read as text the way [`crate::lint_constitution`]
     /// reads a source file rather than through `include_str!`, so the assertion
