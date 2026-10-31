@@ -1286,6 +1286,75 @@ pub mod rules {
             event,
         ))
     }
+
+    #[cfg(test)]
+    mod tests {
+        use alloc::collections::BTreeSet;
+
+        use happenstance_sync::ReplicatedEvent;
+
+        use super::{BYTE_CORNER_ORIGIN, batch_at_the_corner};
+
+        /// The corner's arithmetic at its edges: no bytes, an exact multiple,
+        /// a remainder of one, fewer bytes than events, and a large corner.
+        #[test]
+        fn a_corner_carries_exactly_its_events_and_bytes_spread_evenly() {
+            let cases: [(usize, usize); 6] = [
+                (1, 0),
+                (128, 0),
+                (128, 65_536),
+                (128, 65_537),
+                (3, 2),
+                (10, 1_048_576),
+            ];
+            for (events, bytes) in cases {
+                let batch = batch_at_the_corner(BYTE_CORNER_ORIGIN, events, bytes, "SY-18")
+                    .expect("a corner of at least one event builds");
+                let sizes: Vec<usize> = batch.events().map(ReplicatedEvent::payload_len).collect();
+                let ids: BTreeSet<_> = batch.events().map(|event| event.id).collect();
+                let case = format!("{events} events, {bytes} bytes");
+
+                assert_eq!(sizes.len(), events, "{case}: the event count");
+                assert_eq!(batch.payload_len(), bytes, "{case}: the payload total");
+                let spread = sizes.iter().max().zip(sizes.iter().min());
+                assert!(
+                    spread.is_some_and(|(max, min)| max - min <= 1),
+                    "{case}: sizes {sizes:?} differ by more than one byte"
+                );
+                assert_eq!(ids.len(), events, "{case}: every identity is distinct");
+                assert!(
+                    batch.groups.iter().all(|group| group.events.len() == 1),
+                    "{case}: every group carries one event"
+                );
+            }
+        }
+
+        /// The remainder goes to the first events, one byte each.
+        #[test]
+        fn a_corner_with_a_remainder_lengthens_its_first_events() {
+            let batch = batch_at_the_corner(BYTE_CORNER_ORIGIN, 128, 65_537, "SY-18")
+                .expect("a corner of 128 events builds");
+            let sizes: Vec<usize> = batch.events().map(ReplicatedEvent::payload_len).collect();
+            assert_eq!(sizes.first(), Some(&513));
+            assert!(sizes.iter().skip(1).all(|size| *size == 512), "{sizes:?}");
+        }
+
+        /// A corner of no events is the rule's own mistake, reported as a
+        /// violation rather than a division by zero.
+        #[test]
+        fn a_corner_of_no_events_is_a_violation_not_a_panic() {
+            for bytes in [0, 1, 65_536] {
+                let built = batch_at_the_corner(BYTE_CORNER_ORIGIN, 0, bytes, "SY-18");
+                assert_eq!(
+                    built
+                        .map(|batch| batch.payload_len())
+                        .map_err(|v| v.clause()),
+                    Err("SY-18"),
+                    "0 events, {bytes} bytes"
+                );
+            }
+        }
+    }
 }
 
 /// Hands the complete sync rule set to `$callback`.
