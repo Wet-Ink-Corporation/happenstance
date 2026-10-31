@@ -185,7 +185,7 @@ not the only one — `happenstance-neon` clears it too, over the same server
 through a different transport. Both have been on crates.io since `0.2.0`.
 
 `happenstance-cloudflare` is the row most easily misread, and it ships in
-`0.4.4` with the thinnest evidence of the nine. Two things a reader should have
+`0.4.4` with the thinnest evidence of the four adapters. Two things a reader should have
 before weighing it. In the gate it passes the conformance suite under a
 `node:sqlite`-backed shim rather than under `workerd` itself. Since phase 17, the
 `workerd` CI job, a sibling of the gate, also runs every event-store rule in a real

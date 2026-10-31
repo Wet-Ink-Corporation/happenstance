@@ -569,6 +569,7 @@ not the same as what a user needed to be told.
   exercised. The same job shows an idle object holding the store, with and
   without a partly read stream, evicted by that timer, beside a control holding
   a pending timer that is not.
+
 ## [0.4.2] — 2026-10-13
 
 ### Added
