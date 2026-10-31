@@ -21,6 +21,12 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
+**`0.4.5` is prepared, not yet tagged.** Its release PR moves `[Unreleased]` to
+`[0.4.5] — 2026-10-31` and all nine crates to `0.4.5`. It is additive, cut so
+Redkiln Core can pin a caller-configured SQLite store: `SqliteEventStore::open_on` and
+`remint_identity_on` (#359, PR #361), and an ingest that lands nothing no longer
+advances positions.
+
 **`0.4.4` is released** (2026-10-31; tag `v0.4.4` at `5487546`, published by
 `release.yml`; all nine crates on crates.io and docs.rs). Its release PR (#358) moved `[Unreleased]` to
 `[0.4.4] — 2026-10-31` and all nine crates to `0.4.4`. It was the first release of
@@ -42,7 +48,9 @@ sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-Nothing release-shaped. Batch 8's PRs are merged; #338 waits on the owner.
+The `0.4.5` release PR. The owner merges it and tags its merge commit
+(`git tag -a v0.4.5 <merge-sha> -m "0.4.5"`, then push the tag); `release.yml`
+publishes from the tag. #338 waits on the owner.
 
 ## Next action
 

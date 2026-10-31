@@ -39,7 +39,7 @@ happenstance-sync = { workspace = true, features = ["memory"] }
 # ADR-0057 is about, so this line spells its own path rather than inheriting.
 # `RuleOutcome` is part of this crate's public API through every rule's
 # signature, which is the decision publishing it took (#108 part E, D4).
-happenstance-testkit = { version = "0.4.4", path = "../happenstance-testkit" }
+happenstance-testkit = { version = "0.4.5", path = "../happenstance-testkit" }
 
 [features]
 # The model family (`sync_model`): seeded peer topologies driven through push

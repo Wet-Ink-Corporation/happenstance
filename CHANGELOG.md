@@ -34,6 +34,10 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-10-31
+
+An additive release for consumers that own their SQLite connection.
+
 ### Added
 
 - `happenstance-sqlite`: `SqliteEventStore::open_on` applies the schema on a
@@ -4983,7 +4987,8 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.1...v0.4.2
