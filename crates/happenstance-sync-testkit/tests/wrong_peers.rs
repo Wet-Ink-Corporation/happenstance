@@ -932,3 +932,21 @@ fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_takes_fewer_event
         "SY-18",
     );
 }
+
+/// A peer that declares 128 KiB to a push and enforces 64 KiB: the count
+/// corner carries no bytes and lands, and the full corner, 1,000 events
+/// carrying 128 KiB between them, is refused.
+#[test]
+fn peer_takes_a_batch_at_its_declared_limits_fails_a_peer_that_declares_more_batch_bytes_than_it_takes()
+ {
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_events = 1_000;
+
+    fails_exactly(
+        &verdicts(async || {
+            WrongFixture::with_limits(Mistake::DeclaresMoreBatchBytesThanItTakes, limits.clone())
+        }),
+        "peer_takes_a_batch_at_its_declared_limits",
+        "SY-18",
+    );
+}

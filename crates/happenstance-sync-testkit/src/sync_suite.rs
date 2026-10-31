@@ -166,6 +166,7 @@ pub mod rules {
     /// SY-18's batch rule's two origins: the push at the declared event count
     /// with empty payloads, and the push at that count and the declared bytes.
     const COUNT_CORNER_ORIGIN: StoreId = StoreId::from_bytes([0x91; 16]);
+    const BYTE_CORNER_ORIGIN: StoreId = StoreId::from_bytes([0x92; 16]);
 
     /// SY-1: a peer appends every replicated event it does not already hold,
     /// and never evaluates an append condition — the origin's or its own — as a
@@ -768,7 +769,16 @@ pub mod rules {
             return Ok(RuleOutcome::Ran);
         }
 
+        // The most bytes `events` events carry with none over `max_event_bytes`.
+        let bytes = limits
+            .max_batch_bytes
+            .min(MAX_PROVOKED_BATCH_BYTES)
+            .min(events.saturating_mul(limits.max_event_bytes));
+
         push_the_corner(&peer, &limits, COUNT_CORNER_ORIGIN, events, 0, CLAUSE).await?;
+        if bytes > 0 {
+            push_the_corner(&peer, &limits, BYTE_CORNER_ORIGIN, events, bytes, CLAUSE).await?;
+        }
         Ok(RuleOutcome::Ran)
     }
 
