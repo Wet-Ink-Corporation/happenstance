@@ -856,7 +856,7 @@ impl SqliteEventStore {
     /// recorded time, deduplicated inside the insert against the origin pair's
     /// `UNIQUE` constraint (VT-8); then the group's compensation, as ordinary
     /// local rows, **only if** at least one foreign row of that group went in
-    /// (SY-11); then commit. The whole call is one transaction, which is
+    /// (SY-11); then commit, or roll back when nothing landed. The whole call is one transaction, which is
     /// stronger than the per-group atomicity the port asks for and costs nothing
     /// here, because this adapter serialises its writers anyway.
     ///
@@ -957,8 +957,17 @@ impl SqliteEventStore {
         // a re-import that appended nothing byte-identical (#359). A call that
         // lands some events and skips others still burns positions for its
         // skips: gaps the specification permits.
+        //
+        // `compensated` is checked as a defence: compensation is only written
+        // after a foreign row landed, so `appended == 0` implies it today.
+        //
+        // An explicit rollback, not a drop: this is a success path, and a
+        // failed ROLLBACK swallowed by `Drop` would leave the connection inside
+        // a transaction that refuses every later write.
         if ingested.appended == 0 && ingested.compensated == 0 {
-            drop(transaction);
+            transaction
+                .rollback()
+                .map_err(|error| IngestError::Store(error.into()))?;
             return Ok(ingested);
         }
 

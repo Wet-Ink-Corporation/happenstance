@@ -76,14 +76,28 @@ impl Drop for TempDb {
     }
 }
 
-/// The connection a TRUNCATE-only consumer opens: journal mode and
-/// `user_version` set by the caller, and nothing else.
+/// `synchronous = EXTRA`, which `configure` never sets (it sets `NORMAL`).
+const CALLERS_SYNCHRONOUS: i64 = 3;
+
+/// A busy timeout `configure` never sets (it sets fifteen seconds).
+const CALLERS_BUSY_TIMEOUT_MS: i64 = 1_234;
+
+/// The connection a TRUNCATE-only consumer opens: the journal mode,
+/// `synchronous` and the busy timeout set to values `configure` never
+/// chooses, plus `user_version`, so a store that reconfigured any of them is
+/// caught by [`assert_callers_settings_held`].
 fn callers_connection(path: &Path) -> Connection {
     let connection = Connection::open(path).expect("the temp file opens");
     let mode: String = connection
         .query_row("PRAGMA journal_mode = TRUNCATE", [], |row| row.get(0))
         .expect("journal_mode answers");
     assert_eq!(mode, "truncate", "the caller's setup took");
+    connection
+        .pragma_update(None, "synchronous", CALLERS_SYNCHRONOUS)
+        .expect("synchronous is settable");
+    connection
+        .pragma_update(None, "busy_timeout", CALLERS_BUSY_TIMEOUT_MS)
+        .expect("busy_timeout is settable");
     connection
         .pragma_update(None, "user_version", CALLERS_USER_VERSION)
         .expect("user_version is writable");
@@ -104,6 +118,16 @@ fn assert_callers_settings_held(store: &SqliteEventStore, db: &TempDb) {
         settings.journal_mode(),
         "truncate",
         "the store changed its connection's journal mode"
+    );
+    assert_eq!(
+        settings.synchronous(),
+        CALLERS_SYNCHRONOUS,
+        "the store changed synchronous"
+    );
+    assert_eq!(
+        settings.busy_timeout_ms(),
+        CALLERS_BUSY_TIMEOUT_MS,
+        "the store changed the busy timeout"
     );
     let inspect = Connection::open(db.path()).expect("a second connection opens");
     let mode: String = inspect
