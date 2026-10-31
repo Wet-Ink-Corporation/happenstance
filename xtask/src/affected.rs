@@ -1480,6 +1480,36 @@ mod tests {
             .collect()
     }
 
+    /// The exported lints `block` never calls with `?`, in either of the two
+    /// spellings a lint's call has: `crate::lints::NAME(out)?;` for one that
+    /// reports through the writer, `crate::lints::NAME()?;` for one that takes
+    /// nothing.
+    fn uncalled_lints<'a>(exported: &'a [String], block: &str) -> Vec<&'a String> {
+        exported
+            .iter()
+            .filter(|name| {
+                !block.contains(&format!("crate::lints::{name}(out)?;"))
+                    && !block.contains(&format!("crate::lints::{name}()?;"))
+            })
+            .collect()
+    }
+
+    /// A lint whose result is dropped is not run as far as the gate is
+    /// concerned: its failure never stops the story grain.
+    ///
+    /// The wrong implementation it rejects matches the call by its prefix,
+    /// which a `let _ =` in front of the call satisfies.
+    #[test]
+    fn a_lint_whose_result_is_dropped_is_not_called() {
+        let exported = ["x".to_owned(), "y".to_owned(), "z".to_owned()];
+        let block = "\
+    let _ = crate::lints::x(out);
+    crate::lints::y(out)?;
+    crate::lints::z()?;
+";
+        assert_eq!(uncalled_lints(&exported, block), ["x"]);
+    }
+
     /// The scan sees an entry point whatever its parameters are. A lint that
     /// takes no writer is exactly the one a contributor adds by copying an old
     /// shape, and the story grain must still be held to calling it.
@@ -1540,13 +1570,7 @@ fn is_private() -> Result<()> {
              check would pass over anything; it saw {exported:?}"
         );
 
-        let block = unconditional_block();
-        let missing = exported
-            .iter()
-            // The call, whatever it passes: an export the scan sees with any
-            // parameter list must be matched by its call with any arguments.
-            .filter(|name| !block.contains(&format!("crate::lints::{name}(")))
-            .collect::<Vec<_>>();
+        let missing = uncalled_lints(&exported, &unconditional_block());
 
         assert!(
             missing.is_empty(),

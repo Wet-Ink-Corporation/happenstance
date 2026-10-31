@@ -1188,8 +1188,8 @@ const OPTIONAL: &[Step] = &[
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
-    // The one stdout lock. Every task writes through it and nothing else locks
-    // stdout, so a closed pipe is an error a task returns, never a panic.
+    // The tasks that take `out` write only through it, so for them a closed pipe
+    // is an error returned, never a panic. The rest still print or lock (#352).
     let mut out = std::io::stdout().lock();
 
     let result = match task.as_deref() {
