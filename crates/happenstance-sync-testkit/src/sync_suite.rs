@@ -1160,8 +1160,8 @@ pub mod rules {
         let what = format!("a push of {events} events and {bytes} payload bytes");
         ensure(limits.admits(&batch), clause, || {
             format!(
-                "the declaration {limits:?} admits no {what}, the batch its own limits \
-                 state it accepts"
+                "the declaration {limits:?} does not admit {what}, a batch at the limits \
+                 it states"
             )
         })?;
         let ack = push_or_report(
