@@ -1246,14 +1246,34 @@ fn main() -> ExitCode {
         None => print_help().context("writing the help text"),
     };
 
+    exit_code(result, &mut std::io::stderr().lock())
+}
+
+/// The task's result as an exit status, reporting a failure to `stderr` first.
+///
+/// Never panics, and never succeeds on a failure. A report `stderr` refuses —
+/// the case where `usage` failed *because* stderr is closed — leaves the exit
+/// status as the only channel still open, and it already says failure; there
+/// is nowhere left to say more. `eprintln!` panicked on that write (#340).
+fn exit_code(result: Result<()>, stderr: &mut impl std::io::Write) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) if err.is::<Usage>() => ExitCode::FAILURE,
-        Err(err) => {
-            eprintln!("\nxtask failed: {err:#}");
-            ExitCode::FAILURE
-        }
+        Err(err) => match report(stderr, &err) {
+            // Handled, not dropped: an unwritable report changes nothing the
+            // status can say, and stderr is the channel that just refused it.
+            Ok(()) | Err(_) => ExitCode::FAILURE,
+        },
     }
+}
+
+/// `main`'s failure report: a blank line, then the whole context chain.
+///
+/// # Errors
+///
+/// When `w` cannot be written.
+fn report(w: &mut impl std::io::Write, err: &anyhow::Error) -> std::io::Result<()> {
+    writeln!(w, "\nxtask failed: {err:#}")
 }
 
 /// A command line `main` could not parse, already explained to the user.
@@ -1516,9 +1536,30 @@ fn run_fast() -> Result<()> {
     Ok(())
 }
 
+/// Each step in turn, its banner on stdout, stopping at the first failure.
+///
+/// # Errors
+///
+/// When a step fails or cannot be launched, or stdout cannot be written.
 fn run_steps<'a>(steps: impl IntoIterator<Item = &'a Step>) -> Result<()> {
+    run_steps_into(&mut std::io::stdout().lock(), steps)
+}
+
+/// [`run_steps`], its banners into any writer — a buffer for the tests.
+///
+/// Through `writeln!` rather than `println!`, which panics when stdout is a
+/// closed pipe: `cargo xtask ci | head` would otherwise abort between steps.
+/// A banner that cannot be written stops the run before its step launches.
+///
+/// # Errors
+///
+/// When a step fails or cannot be launched, or `out` cannot be written.
+fn run_steps_into<'a>(
+    out: &mut impl std::io::Write,
+    steps: impl IntoIterator<Item = &'a Step>,
+) -> Result<()> {
     for step in steps {
-        println!("\n=== {} ===", step.name);
+        writeln!(out, "\n=== {} ===", step.name).context("writing a step's banner")?;
 
         // A let-chain, and the first in the workspace. It is here because
         // ADR-0029 raised the MSRV to 1.97.1 and clippy noticed within the hour:
@@ -1530,7 +1571,8 @@ fn run_steps<'a>(steps: impl IntoIterator<Item = &'a Step>) -> Result<()> {
         if let Some(probe) = step.probe
             && !is_available(probe)
         {
-            println!("skipped: `{}` did not succeed", probe.join(" "));
+            writeln!(out, "skipped: `{}` did not succeed", probe.join(" "))
+                .context("writing a step's skip line")?;
             continue;
         }
 
@@ -1579,6 +1621,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use std::fs;
+    use std::process::ExitCode;
 
     use crate::spec_trace::workspace_root;
     use crate::{
@@ -1783,6 +1826,122 @@ mod tests {
                 "closed after {budget} bytes: a refused write was swallowed and writing went on"
             );
         }
+    }
+
+    /// A step whose probe names a program no machine has, so `run_steps`
+    /// prints its banner and its skip line and launches nothing.
+    const SKIPPED: Step = Step {
+        name: "a step this machine cannot run",
+        program: "xtask-340-no-such-program",
+        args: &[],
+        env: &[],
+        probe: Some(&["xtask-340-no-such-program", "--version"]),
+    };
+
+    /// A mandatory step whose program does not exist: reaching it is a launch
+    /// failure, so an error that is *not* one proves the banner stopped the run.
+    const UNLAUNCHABLE: Step = Step {
+        probe: None,
+        ..SKIPPED
+    };
+
+    /// What a reader of `cargo xtask ci` sees around a step: a blank line, the
+    /// banner, and the line naming the probe that skipped it.
+    #[test]
+    fn run_steps_writes_the_banner_and_the_skip_line() {
+        let mut out = Vec::new();
+        crate::run_steps_into(&mut out, [&SKIPPED]).expect("a skipped step is not a failure");
+        assert_eq!(
+            String::from_utf8(out).expect("the banners are UTF-8"),
+            "\n=== a step this machine cannot run ===\n\
+             skipped: `xtask-340-no-such-program --version` did not succeed\n"
+        );
+    }
+
+    /// The reason `run_steps` stopped using `println!`: `cargo xtask ci | head`
+    /// closes stdout, and that is an error the caller sees, not a panic — and
+    /// not a step launched after its banner was lost.
+    ///
+    /// The wrong implementation it rejects swallows the banner's result: the
+    /// run then reaches the program and the error is a launch failure.
+    #[test]
+    fn run_steps_reports_a_closed_stdout_rather_than_panicking() {
+        let mut pipe = ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let err = crate::run_steps_into(&mut pipe, [&UNLAUNCHABLE])
+            .expect_err("stdout was closed, yet the steps said Ok");
+        let io = err
+            .downcast_ref::<std::io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(io.kind(), std::io::ErrorKind::BrokenPipe);
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
+    }
+
+    /// The skip line is a write of its own, and a pipe closing between it and
+    /// the banner is reported the same way.
+    #[test]
+    fn run_steps_reports_a_stdout_closed_after_the_banner() {
+        let banner = "\n=== a step this machine cannot run ===\n".len();
+        let mut pipe = ClosesAfter {
+            budget: banner,
+            refused: 0,
+        };
+        let err = crate::run_steps_into(&mut pipe, [&SKIPPED])
+            .expect_err("stdout closed before the skip line, yet the steps said Ok");
+        assert!(err.downcast_ref::<std::io::Error>().is_some(), "{err:#}");
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
+    }
+
+    /// `main`'s reporter: a blank line, then the whole context chain.
+    #[test]
+    fn the_failure_report_names_the_whole_chain() {
+        let err = anyhow::anyhow!("inner").context("outer");
+        let mut out = Vec::new();
+        crate::report(&mut out, &err).expect("a Vec accepts every write");
+        assert_eq!(
+            String::from_utf8(out).expect("the report is UTF-8"),
+            "\nxtask failed: outer: inner\n"
+        );
+    }
+
+    /// The defect #340 names: `usage` fails because stderr is closed, and the
+    /// reporter then writes that error to the same closed stderr. `eprintln!`
+    /// panicked there; the reporter returns the error instead.
+    #[test]
+    fn the_failure_report_returns_a_closed_stderr_rather_than_panicking() {
+        let mut pipe = ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let err = crate::report(&mut pipe, &anyhow::anyhow!("writing to stderr"))
+            .expect_err("stderr was closed, yet the report said Ok");
+        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
+    }
+
+    /// Every failure exits failing, including the one whose report could not be
+    /// written — the exit status is the last channel left, and it still says so.
+    /// A usage error writes nothing more: `usage` has already explained it.
+    #[test]
+    fn every_failure_exits_failing_and_usage_is_not_reported_twice() {
+        let mut closed = ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let unreported = crate::exit_code(Err(anyhow::anyhow!("boom")), &mut closed);
+        assert_eq!(unreported, ExitCode::FAILURE);
+        assert_eq!(closed.refused, 1, "the report was never attempted");
+
+        let mut out = Vec::new();
+        assert_eq!(
+            crate::exit_code(Err(crate::Usage.into()), &mut out),
+            ExitCode::FAILURE
+        );
+        assert!(out.is_empty(), "a usage error was reported twice");
+
+        assert_eq!(crate::exit_code(Ok(()), &mut out), ExitCode::SUCCESS);
+        assert!(out.is_empty(), "a success was reported");
     }
 
     /// The `default` line of a `[features]` table, as written.
