@@ -75,20 +75,21 @@ enum Mistake {
     SaysNothingOnAShortPage,
     /// A peer that declares more events to a push than it takes: it refuses
     /// any push of more than [`TAKES_EVENTS`], whatever its declaration says.
-    /// SY-37's rule must report the refused count-cut log as refused, because
-    /// no other rule judges a lie about the batch limits.
+    /// SY-37's rule must report the refused count-cut log as refused, a lie
+    /// about the batch limits, which SY-18's batch rule judges.
     TakesFewerEventsThanItDeclares,
     /// A peer that declares larger events than it takes: it refuses any event
     /// over half its declared `max_event_bytes`. SY-37's rule must report the
     /// refused byte-cut log as refused, and as SY-18's subject.
     TakesSmallerEventsThanItDeclares,
     /// Both of the two above at once, so SY-37's rule sees both logs refused
-    /// and must name the count-cut one, which nothing else reports.
+    /// and must name the count-cut one, the batch-limit lie.
     TakesLessOfBothThanItDeclares,
-    /// A peer that declares twice the `max_batch_bytes` it enforces. SY-18's
-    /// rule does not judge a batch-limit lie alone, so SY-37's must not blame
-    /// SY-18 for it: its byte-cut log goes one event to a push, takes it, and
-    /// pages at the limit the peer really imposes.
+    /// A peer that declares twice the `max_batch_bytes` it enforces.
+    /// `peer_declares_its_own_limits` judges per-event limits only, so SY-37's
+    /// rule must not blame it: its byte-cut log goes one event to a push,
+    /// takes it, and pages at the limit the peer really imposes. SY-18's
+    /// batch rule is the one that fails it.
     DeclaresMoreBatchBytesThanItTakes,
     /// SY-31's wrong implementation: a write-behind cache. It acknowledges a
     /// push on admission, with the ack the reference peer would have sent,
@@ -869,6 +870,16 @@ fn sy18_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'
     .map_err(|violation| violation.clause())
 }
 
+/// SY-18's batch rule's verdict alone against `mistake` behind a peer
+/// declaring `limits`: whether the attribution SY-37's count-cut skip makes is
+/// true.
+fn sy18_batch_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'static str> {
+    block_on(rules::peer_takes_a_batch_at_its_declared_limits(
+        async || WrongFixture::with_limits(mistake, limits.clone()),
+    ))
+    .map_err(|violation| violation.clause())
+}
+
 /// SY-37's verdict alone against `mistake` behind a peer declaring `limits`.
 fn sy37_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'static str> {
     block_on(rules::nothing_waiting_means_the_next_pull_is_empty(
@@ -878,8 +889,8 @@ fn sy37_against(mistake: Mistake, limits: &PeerLimits) -> Result<RuleOutcome, &'
 }
 
 /// A peer that refuses the count-cut log has lied about its batch limits,
-/// which no rule judges. The skip says so, and not that its limits are too
-/// large to page: the fix is the opposite one.
+/// which SY-18's batch rule judges. The skip says so, and not that its limits
+/// are too large to page: the fix is the opposite one.
 #[test]
 fn nothing_waiting_means_the_next_pull_is_empty_reports_a_refused_count_cut_log() {
     // 1,000 events to a push and 64 MiB: the count-cut log goes in one push of
@@ -902,6 +913,11 @@ fn nothing_waiting_means_the_next_pull_is_empty_reports_a_refused_count_cut_log(
             capability: LOG_REFUSED,
             reason: COUNT_LOG_REFUSED_REASON,
         })
+    );
+    assert_eq!(
+        sy18_batch_against(Mistake::TakesFewerEventsThanItDeclares, &limits),
+        Err("SY-18"),
+        "the skip says SY-18's batch rule judges this peer, so it must"
     );
 }
 
@@ -946,7 +962,8 @@ fn both_logs_written() -> PeerLimits {
 }
 
 /// Both logs refused: the count-cut refusal is the one named, because
-/// SY-18's rule already reports the byte-cut one and nothing reports this.
+/// `peer_declares_its_own_limits` already reports the byte-cut one, and the
+/// count-cut one is the batch-limit lie.
 #[test]
 fn nothing_waiting_means_the_next_pull_is_empty_names_the_count_cut_log_when_both_are_refused() {
     assert_eq!(
@@ -971,10 +988,11 @@ fn nothing_waiting_means_the_next_pull_is_empty_runs_when_only_the_count_cut_log
     );
 }
 
-/// A peer that overstates only `max_batch_bytes` is a lie SY-18's rule does
-/// not judge, so SY-37's must not report it as SY-18's. Its byte-cut log goes
-/// one event to a push, which the peer takes, and its pulls page at the limit
-/// it really imposes: the rule runs.
+/// A peer that overstates only `max_batch_bytes` tells a lie
+/// `peer_declares_its_own_limits` does not judge, so SY-37's rule must not
+/// report it as that rule's. Its byte-cut log goes one event to a push, which
+/// the peer takes, and its pulls page at the limit it really imposes: the rule
+/// runs. SY-18's batch rule is the one that fails it.
 #[test]
 fn nothing_waiting_means_the_next_pull_is_empty_runs_against_a_peer_overstating_its_batch_bytes() {
     // The inner peer enforces 64 KiB a push and declares 128 KiB: the
@@ -990,8 +1008,13 @@ fn nothing_waiting_means_the_next_pull_is_empty_runs_against_a_peer_overstating_
     assert_eq!(
         sy18_against(Mistake::DeclaresMoreBatchBytesThanItTakes, &limits),
         Ok(RuleOutcome::Ran),
-        "SY-18's rule does not judge a batch-limit lie alone, which is why SY-37's \
-         must not lay it there"
+        "`peer_declares_its_own_limits` judges per-event limits only; the batch lie \
+         is its sibling's, which is why SY-37's must not lay it on either"
+    );
+    assert_eq!(
+        sy18_batch_against(Mistake::DeclaresMoreBatchBytesThanItTakes, &limits),
+        Err("SY-18"),
+        "SY-18's batch rule judges a batch-limit lie, so it must fail this peer"
     );
 }
 
