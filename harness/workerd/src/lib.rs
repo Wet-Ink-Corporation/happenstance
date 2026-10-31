@@ -1,5 +1,5 @@
-//! Every event-store conformance rule, run by `workerd` inside a real Durable
-//! Object — the runtime `happenstance-cloudflare` exists for, rather than the
+//! Every event-store conformance rule, and the ingest family, run by `workerd`
+//! inside a real Durable Object — the runtime `happenstance-cloudflare` exists for, rather than the
 //! `node:sqlite` shim the gate runs it on.
 //!
 //! # Which kind of `publish = false` this is
@@ -53,6 +53,15 @@
 //! only, because local `workerd` does not implement a restore. Beside it runs
 //! the control that skips the re-mint, where an `EventId` must be reissued.
 //!
+//! [`ingest`] runs the other port, `happenstance-sync`'s ingest family, in the
+//! same object (#108 part E3): every ingest rule against
+//! `CloudflareIngestStore`, built by the published
+//! `namespaced_from_object_state` over the object's own `DurableObjectState`,
+//! so each call is one real `ctx.storage.transactionSync`. Beside the family it
+//! holds a census of F's D7 failure classes, each judged by an identical retry
+//! on the same object, and one attempt of the ingest ceiling, which the runner
+//! bisects.
+//!
 //! [`probe`] is the other half of the job: the platform's SQLite walls, measured
 //! on the runtime that imposes them (`experiments/durable-object-limits`).
 //!
@@ -65,6 +74,7 @@ pub mod dispatch;
 pub mod fixture;
 pub mod idle;
 pub mod incarnation;
+pub mod ingest;
 mod object;
 pub mod probe;
 pub mod remint;

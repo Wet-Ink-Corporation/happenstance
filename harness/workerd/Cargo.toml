@@ -19,8 +19,13 @@ crate-type = ["cdylib", "rlib"]
 # `memory` for `restart::InstanceLog`, a wrong store over `MemoryEventStore`.
 # Stated here rather than inherited through the testkit's edge (the D12 lesson).
 happenstance-core = { workspace = true, features = ["std", "memory"] }
-happenstance-cloudflare = { path = "../../crates/happenstance-cloudflare" }
+# `sync` for `CloudflareIngestStore`, the ingest family's subject (#108 part E3),
+# and the `happenstance_sync` re-export the harness names its classes through.
+happenstance-cloudflare = { path = "../../crates/happenstance-cloudflare", features = ["sync"] }
 happenstance-testkit.workspace = true
+# The ingest family's rules and its enumeration, run inside the object (E3).
+# No features: its `proptest` one is target-gated off wasm32 and unused here.
+happenstance-sync-testkit = { path = "../../crates/happenstance-sync-testkit" }
 futures-core.workspace = true
 worker.workspace = true
 

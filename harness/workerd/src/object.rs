@@ -12,11 +12,13 @@
 //! exports the class to JavaScript whatever its Rust visibility.
 
 mod idling;
+mod ingesting;
 mod reminting;
 mod restarts;
 
 use core::cell::{OnceCell, RefCell};
 
+use worker::worker_sys::DurableObjectState;
 use worker::{
     DurableObject, Env, Request, Response, Result, State, WebSocket, WebSocketIncomingMessage,
     WebSocketPair, durable_object, wasm_bindgen,
@@ -33,6 +35,9 @@ use crate::probe;
 #[derive(Debug)]
 pub(crate) struct ConformanceObject {
     state: State,
+    /// The same JavaScript object as `state`, typed as the raw state the
+    /// ingest store's published constructors take. An alias, not a copy.
+    object_state: DurableObjectState,
     /// Minted in `new`, so a new construction answers with a new one.
     incarnation: Incarnation,
     /// The store a cross-restart rule runs against, opened by the first
@@ -93,8 +98,18 @@ fn relay_panics() {
 impl DurableObject for ConformanceObject {
     fn new(state: State, _env: Env) -> Self {
         relay_panics();
+        // Taken apart once, as the adapter's own doctest does: `State::_inner`
+        // consumes, and `DurableObjectState` derives no Rust `Clone`. So the
+        // `JsValue` it wraps is cloned (a second reference to the same
+        // JavaScript object, not a copy: H-08) and given its type back with
+        // `unchecked_into`, which is safe API. The value is the state.
+        let raw = state._inner();
+        let object_state: DurableObjectState = wasm_bindgen::JsCast::unchecked_into(
+            AsRef::<wasm_bindgen::JsValue>::as_ref(&raw).clone(),
+        );
         Self {
-            state,
+            state: State::from(raw),
+            object_state,
             incarnation: Incarnation::mint(),
             held: OnceCell::new(),
             idle: RefCell::new(None),
@@ -106,6 +121,17 @@ impl DurableObject for ConformanceObject {
         let mut segments = path.trim_start_matches('/').splitn(2, '/');
         match (segments.next(), segments.next()) {
             (Some("rules"), None) => Response::ok(dispatch::rule_names().join("\n")),
+            (Some("ingest-rules"), None) => {
+                Response::ok(crate::ingest::dispatch::rule_names().join("\n"))
+            }
+            (Some(route @ ("ingest-rule" | "ingest-ceiling" | "ingest-class")), Some(arg)) => {
+                let ingesting = ingesting::Ingesting {
+                    state: &self.state,
+                    object_state: &self.object_state,
+                    incarnation: self.incarnation,
+                };
+                ingesting.run(route, arg, &req).await
+            }
             (Some("rule"), Some(name)) => {
                 let outcome = dispatch::run(&self.state, name).await;
                 // A deployed object is billed for what it stores; a rule's log
@@ -216,5 +242,6 @@ fn answer(outcome: Dispatched) -> Result<Response> {
         Dispatched::Skipped(line) => Response::ok(format!("skipped\n{line}")),
         Dispatched::Unknown => Response::error("no such rule", 404),
         Dispatched::HarnessFault(faults) => Response::error(faults.join("\n"), 500),
+        Dispatched::Violated(violation) => Response::error(format!("violated\n{violation}"), 422),
     }
 }

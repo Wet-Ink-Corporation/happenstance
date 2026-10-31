@@ -72,13 +72,14 @@
 //! # What has run where
 //!
 //! On `wasm32-unknown-unknown` under the gate's Node shim, whose
-//! `transactionSync` is this module's `model` over `SAVEPOINT`, **not** yet
-//! under `workerd`: the harness drives the published surface, and running the
-//! ingest family there through the constructors below is part E3's. The
-//! primitive itself is probed under `workerd` by `/transaction-probe` routes.
-//! The 1,024-event ceiling is the declared policy, measured for `append`'s
-//! statement count and not re-measured for ingest's (about two statements and
-//! the tags per foreign row, inside a transaction).
+//! `transactionSync` is this module's `model` over `SAVEPOINT`, and under
+//! `workerd`, local and deployed: `harness/workerd` runs the ingest family
+//! through `namespaced_from_object_state` over a real object (#108 part E3).
+//! The primitive itself is probed there by `/transaction-probe` routes. The
+//! 1,024-event ceiling is the declared policy; below it, local `workerd`
+//! commits every call at 1,024 events of 1 or of 1,024 tags (about two
+//! statements and the tags per foreign row, in one transaction), measured in
+//! `experiments/durable-object-limits/results/run-workerd-local-2026-10-31-ingest.txt`.
 //!
 //! # Why here, and why behind `sync`
 //!
@@ -612,9 +613,11 @@ impl Classify for CloudflareEventStoreError {
                 // and takes a fresh cursor.
                 SqlError::AlreadyBorrowed | SqlError::CursorInvalidated => FailureClass::Transient,
                 // An object's storage cap does not empty itself, and a thrown
-                // storage error fails the same way again. No message is parsed
-                // to tell a transient throw apart, until a workerd run shows
-                // which throws recur.
+                // storage error fails the same way again: under workerd a
+                // trigger's RAISE and a missing table each recurred on the
+                // identical retry (#108 part E3's census, in
+                // experiments/durable-object-limits). No message is parsed; a
+                // full object could not be staged there (the PRAGMA is refused).
                 SqlError::StorageLimitExceeded | SqlError::Thrown(_) => FailureClass::Stop,
             },
             // Past what a binding carries exactly, so it can never land here,
