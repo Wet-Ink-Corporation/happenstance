@@ -281,7 +281,7 @@ discovering them in production.
 
 ### Capacity
 
-The store checks each batch against four ceilings before it sends any SQL. A
+The store checks each batch against five ceilings before it sends any SQL. A
 batch over one is refused as `AppendError::ExceedsStoreLimit`, naming the
 `StoreLimit` it crossed, so you can tell a capacity refusal apart from a storage
 failure
@@ -294,14 +294,22 @@ The README states the ceilings under *The limits this store declares*:
 | tags per event | 1,024 |
 | events per append | 1,024 |
 | `metadata` per event | 524,288 bytes (512 KiB) |
+| tags per call, summed over its events | 524,288 |
 
-These numbers are the store's chosen policy, not a measured physical limit. They
+The first four numbers are the store's chosen policy, not a measured physical limit. They
 were set under Cloudflare's documented row limit of 2 MB, read as 2,000,000
 bytes, and the real wall was never located. An event at all four ceilings at once
 still fits that limit. Metadata over its ceiling is refused as `StoreLimit::MetadataLen`. That
 limit has no guaranteed minimum, so another store may accept less metadata. The
 crate publishes no constants for them, so copy the numbers from the README rather
 than naming them in code.
+
+The fifth was measured. A deployed object reset on one call of 757 events of
+1,024 tags each, so the store refuses a call carrying more than 524,288 tags in
+all, as `StoreLimit::TagsPerBatch`, well below that wall
+([VT-36](../spec/SPECIFICATION.md#vt-36--min_supported_tags_per_batch-is-a-floor-of-8192)).
+An `ingest` call counts its compensation too. A sync runner splits a call
+refused this way, because the call is too big and its events are not.
 
 ### Query width
 

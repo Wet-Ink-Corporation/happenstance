@@ -326,6 +326,16 @@ impl Fixture for CloudflareFixture {
     /// `tests/fixture_contract.rs` holds that sum to the limit.
     const MAX_METADATA_LEN: Option<usize> = Some(512 * 1024);
 
+    /// 524,288 tags in one call, summed over its events (VT-36, ADR-0100).
+    ///
+    /// Measured, not carved: a deployed object reset on one call at 757 ×
+    /// 1,024 tags (775,168 tag rows, the CPU limit, 2026-11-01) and at 1,016 ×
+    /// 1,024 (the storage timeout, 2026-10-31). 512 events at
+    /// `MAX_TAGS_PER_EVENT` is 1.48 times below the lower wall, and 64 times
+    /// the `MIN_SUPPORTED_TAGS_PER_BATCH` floor. `tests/fixture_contract.rs`
+    /// holds it to both walls and to the other two ceilings.
+    const MAX_TAGS_PER_BATCH: Option<usize> = Some(512 * 1024);
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // `ready` rather than `async move`: acquiring this handle is a refcount
         // bump and one JS property read, and pretending otherwise would hide

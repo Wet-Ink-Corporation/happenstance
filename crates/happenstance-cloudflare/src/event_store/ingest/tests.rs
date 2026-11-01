@@ -32,16 +32,20 @@ fn sized(data_len: usize, tags: usize, metadata_len: Option<usize>) -> Event {
 }
 
 /// Small ceilings, so a test crosses each with a handful of bytes.
+///
+/// `tags_per_batch` is reachable: three events of two tags is six.
 const SMALL: Ceilings = Ceilings {
     event_data_len: 4,
     tags_per_event: 2,
     events_per_batch: 3,
     metadata_len: 5,
+    tags_per_batch: 5,
 };
 
 /// `Ceilings::exceeded` names the first ceiling crossed, in the order
 /// `check_ceilings` has always refused in: the batch length, then each event's
-/// data, tags and metadata. Exactly at a ceiling is not over it.
+/// data, tags and metadata, then the call's total tags. Exactly at a ceiling is
+/// not over it.
 ///
 /// Rejects an off-by-one at any ceiling, a reordered check (a batch over two
 /// ceilings at once names the earlier one), and a check of the first event
@@ -93,6 +97,35 @@ fn ceilings_name_the_first_exceeded_limit_in_order() {
         ),
         Some((StoreLimit::TagsPerEvent, 3)),
         "the third event is checked as closely as the first"
+    );
+
+    let tagged =
+        |counts: &[usize]| -> Vec<Event> { counts.iter().map(|&n| sized(0, n, None)).collect() };
+    let five = tagged(&[2, 2, 1]);
+    assert_eq!(
+        SMALL.exceeded(five.len(), &five),
+        None,
+        "exactly at the total"
+    );
+    let six = tagged(&[2, 2, 2]);
+    assert_eq!(
+        SMALL.exceeded(six.len(), &six),
+        Some((StoreLimit::TagsPerBatch, 6)),
+        "then the total, over by one with every event within its own ceiling"
+    );
+    let wide = tagged(&[2, 3, 2]);
+    assert_eq!(
+        SMALL.exceeded(wide.len(), &wide),
+        Some((StoreLimit::TagsPerEvent, 3)),
+        "a per-event refusal comes before the total: it is Park, the total is \
+         Split, and a call that is both should not be halved down to the event \
+         that was always going to be refused"
+    );
+    let long = tagged(&[2, 2, 2, 2, 1]);
+    assert_eq!(
+        SMALL.exceeded(4, &long),
+        Some((StoreLimit::EventsPerBatch, 4)),
+        "and the batch length still comes before everything"
     );
 }
 

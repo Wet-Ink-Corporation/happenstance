@@ -166,10 +166,12 @@
 //! | tags per event | 1,024 | `… limit: StoreLimit::TagsPerEvent` |
 //! | events per append | 1,024 | `… limit: StoreLimit::EventsPerBatch` |
 //! | `metadata` per event | 524,288 bytes (512 KiB) | `… limit: StoreLimit::MetadataLen` |
+//! | tags per call, summed over its events | 524,288 | `… limit: StoreLimit::TagsPerBatch` |
 //!
 //! The first three clear their guaranteed minimum by a wide margin — sixteen,
-//! sixteen and eight times — and the metadata ceiling has none to clear
-//! (ADR-0043). Each is a **stated** ceiling, not the physical maximum: **no
+//! sixteen and eight times — the metadata ceiling has none to clear
+//! (ADR-0043), and the tags-per-call ceiling clears its own 64 times. The first
+//! four are each a **stated** ceiling, not the physical maximum: **no
 //! physical wall was observable on the executing host** at 8 MiB of payload,
 //! 16,384 tags or 8,192 consecutive inserts, and that host is a Node process
 //! rather than `workerd`, so it does not enforce the platform's documented caps.
@@ -177,6 +179,11 @@
 //! documented row limit of 2 MB, read as 2,000,000 bytes; one row at all four
 //! ceilings is 1,835,264 bytes and fits (ADR-0093). The experiment's
 //! README records the failure to locate the wall as its central finding.
+//!
+//! The fifth **is** placed against a wall a deployed object hit: one call of
+//! 757 events of 1,024 tags (775,168 tag rows) ran past the object's CPU limit
+//! and reset it, and 524,288 is 1.48 times below that (ADR-0100). `ingest`
+//! counts every foreign event and every compensation toward it.
 //!
 //! What *was* measured, on this host and reproducibly: the declared value is
 //! accepted and read back byte-for-byte, and one more is refused as
