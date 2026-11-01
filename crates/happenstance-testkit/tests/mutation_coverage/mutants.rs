@@ -129,6 +129,8 @@ pub(crate) trait Defect: 'static {
     const MAX_EVENTS_PER_BATCH: Option<usize> = None;
     /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN).
     const MAX_METADATA_LEN: Option<usize> = None;
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN).
+    const MAX_TAGS_PER_BATCH: Option<usize> = None;
 
     /// Step 1 — the events matching `query`.
     fn matching<'a>(events: &'a [SequencedEvent], query: &Query) -> Vec<&'a SequencedEvent> {
@@ -377,6 +379,7 @@ impl<D: Defect> Fixture for MutantFixture<D> {
     const MAX_TAGS_PER_EVENT: Option<usize> = D::MAX_TAGS_PER_EVENT;
     const MAX_EVENTS_PER_BATCH: Option<usize> = D::MAX_EVENTS_PER_BATCH;
     const MAX_METADATA_LEN: Option<usize> = D::MAX_METADATA_LEN;
+    const MAX_TAGS_PER_BATCH: Option<usize> = D::MAX_TAGS_PER_BATCH;
 
     async fn connect(&self) -> Self::Store {
         self.0.clone()
@@ -5387,3 +5390,7 @@ impl Subject for SwallowedReadFaultFixture {
 // directory, so this `mod` resolves to `mutation_coverage/metadata_ceilings.rs`
 // beside this file. It is a set of `Defect`s, which is this module's subject.
 pub(crate) mod metadata_ceilings;
+
+// CF-40's tags-per-batch branch (VT-36), declared here at the end for
+// `metadata_ceilings`' reasons: no line above moves, and no `#[path]` is needed.
+pub(crate) mod tags_per_batch_ceilings;

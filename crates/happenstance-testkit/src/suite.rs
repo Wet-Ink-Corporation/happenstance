@@ -4765,8 +4765,9 @@ pub mod rules {
     /// So the ceiling is a **fact about this store**, and the fixture states it:
     /// [`MAX_EVENT_DATA_LEN`](crate::Fixture::MAX_EVENT_DATA_LEN),
     /// [`MAX_TAGS_PER_EVENT`](crate::Fixture::MAX_TAGS_PER_EVENT),
-    /// [`MAX_EVENTS_PER_BATCH`](crate::Fixture::MAX_EVENTS_PER_BATCH) and
-    /// [`MAX_METADATA_LEN`](crate::Fixture::MAX_METADATA_LEN), each
+    /// [`MAX_EVENTS_PER_BATCH`](crate::Fixture::MAX_EVENTS_PER_BATCH),
+    /// [`MAX_METADATA_LEN`](crate::Fixture::MAX_METADATA_LEN) and
+    /// [`MAX_TAGS_PER_BATCH`](crate::Fixture::MAX_TAGS_PER_BATCH), each
     /// defaulting to `None`.
     ///
     /// They are `Option<usize>` and **not** [`Capability`](crate::Capability),
@@ -4797,6 +4798,19 @@ pub mod rules {
     /// `OffByOneMetadataCeilingStore` refuses the ceiling itself, and
     /// `RefuseAfterInsertMetadataStore` refuses after writing the event.
     ///
+    /// The tags-per-batch branch (VT-36, ADR-0100) has seven, and a control,
+    /// `TagsPerBatchCeilingStore`. `TagsPerBatchThroughStoreStore` refuses
+    /// through `AppendError::Store`, `MisnamedTagsPerBatchStore` names
+    /// `TagsPerEvent`, `PerEventTagsPerBatchStore` compares each event with the
+    /// batch ceiling and so lands the over batch, `OffByOneTagsPerBatchStore`
+    /// refuses the ceiling itself, and `RefuseAfterInsertTagsPerBatchStore`
+    /// refuses after writing. The last two enforce what they state and state
+    /// something incoherent: `UnreachableTagsPerBatchStore` a total no batch can
+    /// reach under its other two ceilings, and
+    /// `TagsPerBatchBelowTagsPerEventStore` a total below its per-event ceiling,
+    /// under which a split batch never stops needing to be split. Those two
+    /// fail before any branch writes, because the declaration is what is wrong.
+    ///
     /// # The at-the-ceiling append is the anchor
     ///
     /// Without it a store that refused *everything* would satisfy every assertion
@@ -4811,18 +4825,24 @@ pub mod rules {
         open: impl AsyncFn() -> F,
     ) -> RuleOutcome {
         // CF-40's gate. Written out rather than behind `require!` because the
-        // four constants are `Option<usize>` rather than `Capability`: a store
+        // five constants are `Option<usize>` rather than `Capability`: a store
         // with no ceiling has nothing to refuse and no trade to record.
         if F::MAX_EVENT_DATA_LEN.is_none()
             && F::MAX_TAGS_PER_EVENT.is_none()
             && F::MAX_EVENTS_PER_BATCH.is_none()
             && F::MAX_METADATA_LEN.is_none()
+            && F::MAX_TAGS_PER_BATCH.is_none()
         {
             return RuleOutcome::Skipped {
                 capability: NO_STORE_LIMITS,
                 reason: NO_CEILING_REASON,
             };
         }
+
+        // VT-36's coherence first, before any branch writes: a batch ceiling
+        // below the per-event one refuses the tag branch's own at-ceiling event,
+        // and the failure a reader should land on is the declaration's.
+        let tags_spread = F::MAX_TAGS_PER_BATCH.map(|ceiling| tags_per_batch_spread::<F>(ceiling));
 
         let fixture = open().await;
         let store = fixture.connect().await;
@@ -4841,6 +4861,10 @@ pub mod rules {
             }
             if let Some(ceiling) = F::MAX_METADATA_LEN {
                 metadata_ceiling_is_honoured(&fixture, &store, ceiling).await?;
+            }
+            // Last, because it is the largest write.
+            if let Some((ceiling, per_event)) = tags_spread {
+                tags_per_batch_ceiling_is_honoured(&fixture, &store, ceiling, per_event).await?;
             }
             Ok(())
         };
@@ -5075,6 +5099,152 @@ pub mod rules {
             "and a store MUST NOT write the refused event, whole or with its \
              metadata clipped: it must not be in the log in any form. Got {:?}",
             positions_of(&leftovers)
+        );
+        Ok(())
+    }
+
+    /// How many tags each event of the tags-per-batch branch carries, after
+    /// checking that the fixture's `ceiling` is coherent with its other two
+    /// (VT-36). Returns the ceiling beside it.
+    ///
+    /// Capped at half the ceiling even when the fixture states no per-event
+    /// ceiling, so the at-ceiling batch is always at least two events: a store
+    /// that compares each event against the batch ceiling, rather than their
+    /// sum, then accepts the over batch and fails.
+    fn tags_per_batch_spread<F: Fixture>(ceiling: usize) -> (usize, usize) {
+        let Some(over) = ceiling.checked_add(1) else {
+            panic!(
+                "VT-36: this fixture states a tags-per-batch ceiling of \
+                 usize::MAX, which has no total past it to refuse. A ceiling \
+                 that cannot be crossed is not a ceiling, and `None` is the \
+                 honest declaration"
+            )
+        };
+        if let Some(per_event) = F::MAX_TAGS_PER_EVENT {
+            assert!(
+                ceiling >= per_event,
+                "VT-36: this fixture states a tags-per-batch ceiling of {ceiling}, \
+                 below its own ceiling of {per_event} tags per event. An event \
+                 within its own ceiling would then be refused as a batch of one, \
+                 as `TagsPerBatch`, which a sync runner splits, and a batch of one \
+                 has nothing left to split"
+            );
+        }
+        let half = ceiling.div_ceil(2).max(1);
+        let per_event = F::MAX_TAGS_PER_EVENT
+            .map_or(half, |stated| stated.min(half))
+            .max(1);
+        if let Some(events) = F::MAX_EVENTS_PER_BATCH {
+            let needed = over.div_ceil(per_event);
+            assert!(
+                needed <= events,
+                "VT-36: this fixture states a tags-per-batch ceiling of {ceiling}, \
+                 and {over} tags at most {per_event} to an event need {needed} \
+                 events, past its ceiling of {events} events per append. The \
+                 ceiling cannot be reached without crossing another first: a \
+                 ceiling that cannot be crossed on its own is not a ceiling, and \
+                 `None` is the honest declaration"
+            );
+        }
+        (ceiling, per_event)
+    }
+
+    /// `total` tags spread over events of `event_type`, `per_event` to an event
+    /// and the remainder on the last. One untagged event when `total` is 0.
+    ///
+    /// The tag names are shared between events, so only `per_event` of them
+    /// are built; each event still owns its own `Tags`.
+    fn spread(total: usize, per_event: usize, event_type: &str) -> Vec<Event> {
+        let names: Vec<String> = (0..per_event.min(total))
+            .map(|n| format!("{n:06}"))
+            .collect();
+        let pairs: Vec<(&str, &str)> = names.iter().map(|name| ("b", name.as_str())).collect();
+        if pairs.is_empty() {
+            return vec![event(event_type)];
+        }
+        let mut events = Vec::with_capacity(total.div_ceil(pairs.len()));
+        let mut left = total;
+        while left > 0 {
+            let here = left.min(pairs.len());
+            events.push(tagged_event(
+                event_type,
+                pairs.get(..here).unwrap_or(&pairs),
+            ));
+            left -= here;
+        }
+        events
+    }
+
+    /// The number of tags across `events`, summed.
+    fn total_tags(events: &[Event]) -> usize {
+        events.iter().map(|event| event.tags().len()).sum()
+    }
+
+    /// The tags-per-batch ceiling (VT-36, ADR-0100). See
+    /// [`payload_ceiling_is_honoured`].
+    ///
+    /// The tags are spread `per_event` to an event, so no event is over its
+    /// own ceiling and the only limit the over batch crosses is the total. The
+    /// at-ceiling batch is dropped before the over batch is built: at
+    /// half a million tags, two batches alive at once is most of an isolate.
+    async fn tags_per_batch_ceiling_is_honoured<F: Fixture>(
+        fixture: &F,
+        store: &F::Store,
+        ceiling: usize,
+        per_event: usize,
+    ) -> Result<(), RuleOutcome> {
+        let at = spread(ceiling, per_event, "TagsPerBatchAtTheCeiling");
+        assert_eq!(
+            total_tags(&at),
+            ceiling,
+            "the anchor: `Tags` deduplicates, so a generator that collided \
+             would leave this rule testing a smaller total than the fixture \
+             claims"
+        );
+        append_ok(store, &at).await;
+        drop(at);
+
+        let over_total = ceiling.saturating_add(1);
+        let over = spread(over_total, per_event, "TagsPerBatchOverTheCeiling");
+        assert_eq!(
+            total_tags(&over),
+            over_total,
+            "and the over-limit batch must really carry one tag more than the \
+             ceiling"
+        );
+        let refused = store.append(&over, None).await;
+        let events = over.len();
+        drop(over);
+        assert!(
+            matches!(
+                refused,
+                Err(AppendError::ExceedsStoreLimit {
+                    limit: StoreLimit::TagsPerBatch,
+                    ..
+                })
+            ),
+            "VT-25 and VT-36: this fixture states a ceiling of {ceiling} tags \
+             per append, so {over_total} tags over {events} events, none of \
+             them over its own ceiling, must be refused as \
+             `AppendError::ExceedsStoreLimit {{ limit: TagsPerBatch, .. }}` — \
+             not as `AppendError::Store`, which a caller cannot tell from a \
+             transient failure, not under the per-event limit, which a sync \
+             runner parks rather than splits, and not by succeeding. Got \
+             {refused:?}"
+        );
+
+        crate::settle::settled(fixture).await?;
+        let leftovers = read_ok(
+            store,
+            &query_of_types(&["TagsPerBatchOverTheCeiling"]),
+            ReadOptions::new(),
+        )
+        .await;
+        assert!(
+            leftovers.is_empty(),
+            "and a refused batch must not be in the log, whole or in part. Got \
+             {} event(s) of it",
+            leftovers.len()
         );
         Ok(())
     }
