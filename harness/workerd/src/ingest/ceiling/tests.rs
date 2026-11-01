@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
-use happenstance_cloudflare::happenstance_sync::FailureClass;
-use happenstance_core::{EventId, SequencePosition};
+use happenstance_cloudflare::happenstance_sync::{FailureClass, ReplicatedEvent};
+use happenstance_core::{EventId, SequencePosition, Tag};
 
 use super::{Attempt, CEILING_ORIGIN, MAX_EVENTS_PER_CALL, Shape, ShapeError, foreign_batch};
 use crate::fixture::WorkerdFixture;
@@ -91,4 +91,55 @@ fn a_refusal_line_names_its_class_and_quotes_the_error() {
         "refused class=Split\ningest exceeds the store's events per batch limit: 1025"
     );
     assert_eq!(accepted.line(), "accepted events=37 appended=37");
+}
+
+/// The addresses of one event's tag names, in order.
+fn name_addresses(event: &ReplicatedEvent) -> Vec<*const u8> {
+    event
+        .event
+        .tags()
+        .iter()
+        .map(|tag| tag.as_str().as_ptr())
+        .collect()
+}
+
+#[test]
+fn every_max_tags_event_borrows_one_static_set_of_tag_names() {
+    let first_call = foreign_batch(Shape::MaxTags, 2).expect("two max-tags events build");
+    let second_call = foreign_batch(Shape::MaxTags, 1).expect("one max-tags event builds");
+    let [one, two] = first_call.as_slice() else {
+        panic!("two events were asked for, got {}", first_call.len());
+    };
+    let [three] = second_call.as_slice() else {
+        panic!("one event was asked for, got {}", second_call.len());
+    };
+
+    // An owned tag is a fresh `String` per event, at a fresh address; a
+    // borrowed one points at the same name for every event and every call.
+    assert_eq!(name_addresses(one).len(), 1_024);
+    assert_eq!(
+        name_addresses(one),
+        name_addresses(two),
+        "two events, one call"
+    );
+    assert_eq!(name_addresses(one), name_addresses(three), "two calls");
+}
+
+#[test]
+fn the_tag_names_are_unchanged() {
+    for (shape, count) in [
+        (Shape::Minimal, 1),
+        (Shape::MaxTags, 1_024),
+        (Shape::MaxData, 1),
+    ] {
+        let batch = foreign_batch(shape, 1).expect("one event builds");
+        let names: Vec<&str> = batch
+            .iter()
+            .flat_map(|event| event.event.tags().iter().map(Tag::as_str))
+            .collect();
+        // `Tags` holds its canonical, sorted form.
+        let expected: BTreeSet<String> = (0..count).map(|n| format!("ceiling:{n}")).collect();
+        let expected: Vec<&str> = expected.iter().map(String::as_str).collect();
+        assert_eq!(names, expected, "{shape:?}");
+    }
 }
