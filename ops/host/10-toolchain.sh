@@ -63,7 +63,7 @@ note "materialising the pinned toolchain from $CHECKOUT/rust-toolchain.toml"
 # rust-toolchain.toml's `targets` applies to the PINNED channel only, so nightly
 # gets the target or the wasm32 docsrs build cannot run.
 note "installing nightly (+wasm32) for the docs.rs configuration step"
-rustup toolchain install nightly --profile minimal --target wasm32-unknown-unknown
+rustup toolchain install nightly-2026-10-31 --profile minimal --target wasm32-unknown-unknown # xtask's NIGHTLY, and must match it (#364)
 
 # --- the tools the gate probes for -----------------------------------------
 note "installing cargo-hack and cargo-deny (the two OPTIONAL gate steps)"

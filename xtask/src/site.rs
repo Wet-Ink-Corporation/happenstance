@@ -279,7 +279,7 @@ fn build_api(root: &Path, api: &Path) -> Result<()> {
     say("building the API with scraped examples (nightly)")?;
     let status = Command::new("cargo")
         .args([
-            "+nightly",
+            crate::NIGHTLY,
             "doc",
             "-Zunstable-options",
             "-Zrustdoc-scrape-examples",
@@ -297,9 +297,12 @@ fn build_api(root: &Path, api: &Path) -> Result<()> {
         .env("RUSTDOCFLAGS", "--cfg docsrs")
         .current_dir(root)
         .status()
-        .context("failed to launch `cargo +nightly doc`")?;
+        .with_context(|| format!("failed to launch `cargo {} doc`", crate::NIGHTLY))?;
     if !status.success() {
-        bail!("the nightly API build failed with {status}");
+        bail!(
+            "the nightly API build ({}) failed with {status}",
+            crate::NIGHTLY
+        );
     }
     copy_tree(&target.join("doc"), api)
 }

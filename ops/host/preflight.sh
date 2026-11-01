@@ -260,7 +260,7 @@ check "cargo-hack" "present" \
 check "cargo-deny" "present" \
   "$(in_repo cargo deny --version >/dev/null 2>&1 && echo present || echo ABSENT)"
 check "nightly toolchain" "present" \
-  "$(RUSTUP_AUTO_INSTALL=0 cargo +nightly --version >/dev/null 2>&1 && echo present || echo ABSENT)"
+  "$(RUSTUP_AUTO_INSTALL=0 cargo +nightly-2026-10-31 --version >/dev/null 2>&1 && echo present || echo ABSENT)"
 check "wasm-bindgen-test-runner" "present" \
   "$(command -v wasm-bindgen-test-runner >/dev/null 2>&1 && echo present || echo ABSENT)"
 check "docker daemon" "up" \
