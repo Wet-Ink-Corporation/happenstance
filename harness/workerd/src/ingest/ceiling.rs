@@ -14,6 +14,7 @@
 
 use core::fmt;
 use core::str::FromStr;
+use std::sync::LazyLock;
 
 use happenstance_cloudflare::CloudflareIngestStore;
 use happenstance_cloudflare::happenstance_sync::{
@@ -44,6 +45,24 @@ const SMALL_DATA_LEN: usize = 8;
 
 /// The ceiling events' type.
 const CEILING_EVENT: EventType = EventType::from_static("IngestCeiling");
+
+/// The names of the ceiling's tags, `ceiling:0` up to the declared maximum
+/// per event, built once per isolate and never written again.
+///
+/// Why a static (OWN-11): a [`Tag`] borrows only `'static` text, and every
+/// event of every attempt names the same tags, so the names have to outlive
+/// any one attempt and be shared by all of them. This is immutable after its
+/// one initialisation, under 40 KB, and bounded by the fixture's declaration
+/// rather than by a request. The alternatives were worse. Each event owning its
+/// tags made a max-tags call hold about a million heap `String`s, which is the
+/// cost #356 needs taken out of the measurement. Leaking a per-attempt buffer
+/// to get `'static` is forbidden (H-07). A `const` table of 1,024 literals
+/// would have to be written out or generated, and would not follow the
+/// fixture's declaration if it moved.
+static CEILING_TAG_NAMES: LazyLock<Box<[String]>> = LazyLock::new(|| {
+    let declared = <WorkerdFixture<'static> as Fixture>::MAX_TAGS_PER_EVENT.unwrap_or(0);
+    (0..declared).map(|n| format!("ceiling:{n}")).collect()
+});
 
 /// What each event of an attempt looks like.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +132,7 @@ pub enum ShapeError {
     },
     /// The adapter's fixture declares no ceiling for this shape's dimension.
     Undeclared,
-    /// A tag the shape builds was refused; the refusal's text.
+    /// The shape asks for more tags than there are names built; why.
     Tag(String),
     /// The event the shape builds was refused; the refusal's text.
     Event(String),
@@ -145,7 +164,9 @@ impl core::error::Error for ShapeError {}
 /// `1..=events`, all of `shape`, for one group with no compensation.
 ///
 /// The data is one buffer shared by every event (`Bytes` clones are reference
-/// bumps), so the harness holds one copy of it; the tags are each event's own.
+/// bumps), so the harness holds one copy of it. The tags borrow
+/// one static set of names, so the names exist once however many events and
+/// attempts name them; each event owns only its slice of borrowed tags.
 ///
 /// # Errors
 ///
@@ -160,10 +181,16 @@ pub fn foreign_batch(shape: Shape, events: usize) -> Result<Vec<ReplicatedEvent>
     }
     let (data_len, tag_count) = shape.dimensions()?;
     let data = Bytes::from(vec![0xE3_u8; data_len]);
-    let tags = (0..tag_count)
-        .map(|n| Tag::new(format!("ceiling:{n}")))
-        .collect::<Result<Tags, _>>()
-        .map_err(|error| ShapeError::Tag(error.to_string()))?;
+    let names = CEILING_TAG_NAMES.get(..tag_count).ok_or_else(|| {
+        ShapeError::Tag(format!(
+            "{tag_count} tags is past the {} names built",
+            CEILING_TAG_NAMES.len()
+        ))
+    })?;
+    // Borrowed, so a clone of these tags copies pointers, not names. Each name
+    // is `ceiling:` and a decimal, which `from_static`'s checks accept: the
+    // panic it documents cannot be reached from text this module writes.
+    let tags: Tags = names.iter().map(|name| Tag::from_static(name)).collect();
     let template = Event::new(CEILING_EVENT, data)
         .map_err(|error| ShapeError::Event(error.to_string()))?
         .with_tags(tags);
@@ -173,8 +200,9 @@ pub fn foreign_batch(shape: Shape, events: usize) -> Result<Vec<ReplicatedEvent>
                 .ok()
                 .and_then(SequencePosition::new)
                 .ok_or(ShapeError::Position)?;
-            // Each event owns its tags, so this duplicates them (H-08); the
-            // data inside is a shared `Bytes`.
+            // Each event owns its tag slice, so this duplicates it (H-08):
+            // one allocation of borrowed tags, no names. The data inside is a
+            // shared `Bytes`.
             Ok(ReplicatedEvent::new(
                 EventId::new(CEILING_ORIGIN, position),
                 RecordedAt::from_millis(1_800_000_000_000),
