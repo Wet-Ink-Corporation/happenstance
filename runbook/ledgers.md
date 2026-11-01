@@ -340,7 +340,7 @@ replication needs no filtered or suffix store: SY-27 and SY-28 freeze on
 | CF-27 | freeze-by-14 | The report shape was decided at 17 by ADR-0028: instrument-local, over an arbitrary retained set, with a defaulted-declined removal capability. Built and frozen at 14. ~~Phase 13's SY-27 needs the same instrument, so it may have to be built at 13~~ It does not since ADR-0027 took whole-log |
 | CF-34 | renew-past-1.0: a complexity property becomes expressible as a deterministic assertion rather than a timing — an instrumented fixture counting rows examined — and the clause splits | Needs an instrumented rows-examined fixture and a record on the scope of CF-33's operation-count ban (`.kb/open-questions/cf-33-cf-34-scope-outside-the-testkit.md`) |
 | CF-40 | freeze-by-13 | ADR-0043's `MetadataLen` is built (#92, phase 17b), and `happenstance-cloudflare` states a metadata ceiling (ADR-0093). Phase 13 decides whether `payload_len` — data plus metadata — is the budget unit |
-| CF-42 | freeze-by-13 | Minted provisional by ADR-0099 (#338), which is proposed. Freezes when both live jobs have run the 83 read-back rules with no skip under `READ_YOUR_OWN_WRITES`, and `frontier_settle` has passed in `live-postgres`. The freeze is the owner's |
+| CF-42 | freeze-by-13 | Minted provisional by ADR-0099 (#338), accepted 2026-11-01. Freezes when both live jobs have run the 83 read-back rules with no skip under `READ_YOUR_OWN_WRITES`, and `frontier_settle` has passed in `live-postgres`. The freeze is the owner's |
 
 ### The blocked cases
 
