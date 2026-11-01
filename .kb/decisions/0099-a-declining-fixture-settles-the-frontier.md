@@ -2,7 +2,7 @@
 id: kb-decision-0099
 title: A fixture that declines read-your-own-writes settles the frontier, and the rules that read back their own writes ask it to
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0099
 reversibility: medium

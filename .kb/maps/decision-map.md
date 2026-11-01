@@ -900,10 +900,10 @@ the frozen SY-1 and SY-33**; acceptance added a pointer to SY-38 in each of thei
 | --- | --- | --- | --- | --- | --- |
 | ADR-0098 | [`kb-decision-0098`](../decisions/0098-an-unheld-own-identity-stops-ingest.md) | An event claiming this store's own identity that it does not hold stops the ingest, and nothing is written | accepted | 13 | — |
 
-## 2026-11-01: a declining fixture settles the frontier (#338), proposed
+## 2026-11-01: a declining fixture settles the frontier (#338), accepted
 
-ADR-0099 is written straight here with no intake step, and is **proposed**: the owner chose its
-option A on 2026-11-01 (`wi-87e964`), and acceptance of the record is theirs. A fixture that declines
+ADR-0099 is written straight here with no intake step, and is **accepted**: the owner chose its
+option A on 2026-11-01 (`wi-87e964`) and accepted the record the same day, after #363 merged. A fixture that declines
 `READ_YOUR_OWN_WRITES` overrides `Fixture::settle_frontier`, and the 83 named rules that read back
 their own appends ask it to settle first, or skip under that capability. It mints CF-42
 `[PROVISIONAL]`. The three Weigh-In atoms move here from intake; `wi-a4ab49` and `wi-fab349` record
@@ -911,7 +911,7 @@ the same answer as `wi-87e964`. It supersedes nothing.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0099 | [`kb-decision-0099`](../decisions/0099-a-declining-fixture-settles-the-frontier.md) | A fixture that declines read-your-own-writes settles the frontier, and the rules that read back their own writes ask it to | proposed | — | — |
+| ADR-0099 | [`kb-decision-0099`](../decisions/0099-a-declining-fixture-settles-the-frontier.md) | A fixture that declines read-your-own-writes settles the frontier, and the rules that read back their own writes ask it to | accepted | — | — |
 | — | [`kb-decision-wi-87e964`](../decisions/wi-87e964-338-should-happenstance-testkit-gain-a-provided.md) | The testkit gains a provided `Fixture::settle_frontier() -> Settled`, with CF-42 and ADR-0099 (owner, Weigh-In) | accepted | — | — |
 | — | [`kb-decision-wi-a4ab49`](../decisions/wi-a4ab49-should-338-gate-read-your-own-writes-rules-on.md) | The read-back rules read to a settled frontier rather than gating on the capability | accepted | — | — |
 | — | [`kb-decision-wi-fab349`](../decisions/wi-fab349-should-338-s-rules-that-read-their-own-writes.md) | The read-back rules settle through a new public testkit hook (a duplicate of `wi-87e964`) | accepted | — | — |
