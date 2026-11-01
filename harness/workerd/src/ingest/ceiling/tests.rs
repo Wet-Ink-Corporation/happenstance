@@ -127,7 +127,11 @@ fn every_max_tags_event_borrows_one_static_set_of_tag_names() {
 
 #[test]
 fn the_tag_names_are_unchanged() {
-    for (shape, count) in [(Shape::Minimal, 1), (Shape::MaxTags, 1_024)] {
+    for (shape, count) in [
+        (Shape::Minimal, 1),
+        (Shape::MaxTags, 1_024),
+        (Shape::MaxData, 1),
+    ] {
         let batch = foreign_batch(shape, 1).expect("one event builds");
         let names: Vec<&str> = batch
             .iter()
