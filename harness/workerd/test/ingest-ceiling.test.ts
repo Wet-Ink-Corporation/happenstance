@@ -4,9 +4,9 @@
 //
 // Strict on two axes. `minimal`: 1,024 events is the adapter's declared
 // per-call ceiling, so the runtime must commit it and the attempt at 1,025
-// must be the adapter's own refusal, `class=Split`. `max-tags`: 512 events of
-// 1,024 tags is the declared 524,288 tags per call (ADR-0100), so the runtime
-// must commit 512 and the attempt at 513 must be the adapter's own refusal,
+// must be the adapter's own refusal, `class=Split`. `max-tags`: 256 events of
+// 1,024 tags is the declared 262,144 tags per call (ADR-0100), so the runtime
+// must commit 256 and the attempt at 257 must be the adapter's own refusal,
 // `class=Split`, naming the total. `max-data` is printed and copied into
 // experiments/durable-object-limits/results/ when it is taken as a
 // measurement. It carries its own timeout, as limits.test.ts
@@ -40,7 +40,7 @@ it("measures the ingest ceiling of local workerd", async () => {
   expect(minimal.refusal, lines.join("\n")).toContain("class=Split");
 
   const maxTags = walls.get("max-tags");
-  expect(maxTags.accepted, lines.join("\n")).toBe(512);
+  expect(maxTags.accepted, lines.join("\n")).toBe(256);
   expect(maxTags.refusal, lines.join("\n")).toContain("class=Split");
-  expect(maxTags.refusal, lines.join("\n")).toContain("tags per batch limit: 525312");
+  expect(maxTags.refusal, lines.join("\n")).toContain("tags per batch limit: 263168");
 }, 900_000);

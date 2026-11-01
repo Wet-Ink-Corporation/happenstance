@@ -147,13 +147,13 @@ fn the_tag_names_are_unchanged() {
     }
 }
 
-/// The `max-tags` shape's wall is now the adapter's own refusal: 512 events of
-/// 1,024 tags is exactly the declared tags-per-batch ceiling, and 513 is over
-/// it (VT-36, ADR-0100). Arithmetic only, from the fixture's declarations: 513
-/// events of 1,024 tags is half a million owned tags, which this host has no
-/// business building.
+/// The `max-tags` shape's wall is now the adapter's own refusal: 256 events of
+/// 1,024 tags is exactly the declared tags-per-batch ceiling, and 257 is over
+/// it (VT-36, ADR-0100). Arithmetic only, from the fixture's declarations: 257
+/// events of 1,024 tags is a quarter of a million owned tags, which this host
+/// has no business building.
 #[test]
-fn the_max_tags_shape_crosses_the_tags_per_batch_ceiling_past_512_events() {
+fn the_max_tags_shape_crosses_the_tags_per_batch_ceiling_past_256_events() {
     let fixture = |name: &str, declared: Option<usize>| {
         declared.unwrap_or_else(|| panic!("{name} is declared by this fixture"))
     };
@@ -166,7 +166,7 @@ fn the_max_tags_shape_crosses_the_tags_per_batch_ceiling_past_512_events() {
         <WorkerdFixture<'static> as happenstance_testkit::Fixture>::MAX_TAGS_PER_EVENT,
     );
 
-    assert_eq!(MAX_TAGS_EVENTS_AT_CEILING, 512);
+    assert_eq!(MAX_TAGS_EVENTS_AT_CEILING, 256);
     assert_eq!(MAX_TAGS_EVENTS_AT_CEILING * per_event, per_batch);
     assert!((MAX_TAGS_EVENTS_AT_CEILING + 1) * per_event > per_batch);
     // The search reaches past the tags-per-batch wall.

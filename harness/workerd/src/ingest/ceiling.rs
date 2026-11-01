@@ -1,7 +1,7 @@
 //! The ingest ceiling: the largest single `ingest` call the runtime commits,
 //! per event shape, below the adapter's declared per-call ceiling.
 //!
-//! The adapter refuses a call over its declared 1,024 events or 524,288 tags
+//! The adapter refuses a call over its declared 1,024 events or 262,144 tags
 //! **before** any SQL, so an attempt through it can only rediscover those
 //! declarations at the top. What is open is below it: does the real runtime
 //! commit every call the adapter accepts, inside one `transactionSync`, at the
@@ -42,7 +42,7 @@ pub const MAX_EVENTS_PER_CALL: usize =
 
 /// The most `max-tags` events one call carries before the adapter refuses it
 /// for its total tags: the declared tags-per-batch ceiling over the declared
-/// tags per event, 524,288 / 1,024 = 512 (ADR-0100). Falls back to
+/// tags per event, 262,144 / 1,024 = 256 (ADR-0100). Falls back to
 /// [`MAX_EVENTS_PER_CALL`] when either is undeclared, as then no total wall
 /// is the adapter's.
 pub const MAX_TAGS_EVENTS_AT_CEILING: usize = match (

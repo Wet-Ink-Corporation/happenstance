@@ -379,7 +379,7 @@ It is never quietly cut short
 | `SqliteEventStore` | 1,048,576 | 128 | 256 | none declared | none declared |
 | `PostgresEventStore` | 1,048,576 | 128 | 256 | none declared | none declared |
 | `NeonEventStore<T>` | 131,072 | 128 | 128 | none declared | none declared |
-| `CloudflareEventStore` | 1,048,576 | 1,024 | 1,024 | 524,288 | 524,288 |
+| `CloudflareEventStore` | 1,048,576 | 1,024 | 1,024 | 524,288 | 262,144 |
 | `MemoryEventStore` | none declared | none declared | none declared | none declared | none declared |
 
 `SqliteEventStore`, `PostgresEventStore` and `NeonEventStore` publish these

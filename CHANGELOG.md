@@ -60,12 +60,12 @@ not the same as what a user needed to be told.
 ### Changed
 
 - **Behaviour change: `happenstance-cloudflare` refuses a call carrying more
-  than 524,288 tags in total**, as `StoreLimit::TagsPerBatch`, before it sends
+  than 262,144 tags in total**, as `StoreLimit::TagsPerBatch`, before it sends
   any SQL, on `append` and on `ingest`, whose total counts its compensation
   ([ADR-0100](.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md),
   #356). A call that a host, or local `workerd`, accepted above that total is
-  now refused; a deployed object reset on one call of 757 events of 1,024 tags
-  (775,168), and the ceiling is 1.48 times below that. Every call at or under
+  now refused; a deployed object reset on one call of 512 events of 1,024 tags
+  (524,288, #371), and the ceiling is half that. Every call at or under
   it is accepted as before.
 - `happenstance-sync`: an `IngestError::ExceedsStoreLimit` naming
   `StoreLimit::TagsPerBatch` is `FailureClass::Split`, as `EventsPerBatch` is

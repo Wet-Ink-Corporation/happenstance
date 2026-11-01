@@ -518,20 +518,21 @@ fn the_tags_per_batch_limit_is_declared_not_defaulted() {
 ///
 /// Coherent (VT-36): at least the per-event ceiling, so an event within its
 /// own ceiling is never refused as a batch of one, and below events × tags per
-/// event, so one tag over it can be sent. Clear: the lower measured wall is
-/// 757 events of 1,024 tags, 775,168 tag rows, at which a deployed object
-/// exceeded its CPU limit and was reset
-/// (`experiments/durable-object-limits/results/run-workerd-deployed-2026-11-01-ingest.txt`);
-/// the other is 1,016 × 1,024, 1,040,384, the storage timeout
-/// (`…/run-workerd-deployed-2026-10-31-ingest.txt`). The walls moved 1.34
-/// times between two runs, so the ceiling keeps a margin of 1.4 under the
-/// lower.
+/// event, so one tag over it can be sent. Clear: the lowest measured wall is
+/// 512 events of 1,024 tags, 524,288 tag rows, at which a deployed object hit
+/// its storage timeout and was reset (`…/run-workerd-deployed-2026-11-01-append-reset.txt`,
+/// #371's strict leg); above it
+/// are 757 × 1,024, the CPU limit
+/// (`experiments/durable-object-limits/results/run-workerd-deployed-2026-11-01-ingest.txt`),
+/// and 1,016 × 1,024 (`…/run-workerd-deployed-2026-10-31-ingest.txt`). The
+/// walls moved 1.98 times across three runs, and the lowest had passed once
+/// before it reset, so the ceiling keeps a margin of 2 under it.
 ///
 /// The named wrong implementation it rejects is the ceiling raised toward a
 /// wall it was measured below, or a per-event ceiling raised past it.
 #[test]
 fn the_tags_per_batch_ceiling_is_reachable_and_below_the_measured_wall() {
-    const LOWER_WALL: usize = 757 * 1024;
+    const LOWER_WALL: usize = 512 * 1024;
     const UPPER_WALL: usize = 1016 * 1024;
 
     let stated = |name: &str, declared: Option<usize>| {
@@ -550,16 +551,16 @@ fn the_tags_per_batch_ceiling_is_reachable_and_below_the_measured_wall() {
         <CloudflareFixture as Fixture>::MAX_EVENTS_PER_BATCH,
     );
 
-    assert_eq!((LOWER_WALL, UPPER_WALL), (775_168, 1_040_384));
-    assert_eq!(per_batch, 524_288, "the number ADR-0100 and the docs state");
+    assert_eq!((LOWER_WALL, UPPER_WALL), (524_288, 1_040_384));
+    assert_eq!(per_batch, 262_144, "the number ADR-0100 and the docs state");
     assert!(per_event <= per_batch, "below the per-event ceiling");
     assert!(
         per_batch < events * per_event,
         "reachable under the other two"
     );
     assert!(
-        per_batch * 14 <= LOWER_WALL * 10,
-        "{per_batch} tags per call leaves less than 1.4 times' margin under \
+        per_batch * 2 <= LOWER_WALL,
+        "{per_batch} tags per call leaves less than 2 times' margin under \
          the {LOWER_WALL}-row wall a deployed object reset at"
     );
 }
