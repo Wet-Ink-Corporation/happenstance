@@ -1129,7 +1129,7 @@ const OPTIONAL: &[Step] = &[
         name: "docs.rs configuration (nightly)",
         program: "cargo",
         args: &[
-            "+nightly",
+            NIGHTLY,
             "doc",
             "--locked",
             "-p",
@@ -1153,7 +1153,7 @@ const OPTIONAL: &[Step] = &[
             "--no-deps",
         ],
         env: &[("RUSTDOCFLAGS", "--cfg docsrs -D warnings")],
-        probe: Some(&["cargo", "+nightly", "--version"]),
+        probe: Some(&["cargo", NIGHTLY, "--version"]),
     },
     Step {
         // The one publishable crate that does not render on the host, and it needs its own step rather than a
@@ -1171,7 +1171,7 @@ const OPTIONAL: &[Step] = &[
         name: "docs.rs configuration for wasm32 (nightly)",
         program: "cargo",
         args: &[
-            "+nightly",
+            NIGHTLY,
             "doc",
             "--locked",
             "-p",
@@ -1182,7 +1182,7 @@ const OPTIONAL: &[Step] = &[
             "--no-deps",
         ],
         env: &[("RUSTDOCFLAGS", "--cfg docsrs -D warnings")],
-        probe: Some(&["cargo", "+nightly", "--version"]),
+        probe: Some(&["cargo", NIGHTLY, "--version"]),
     },
 ];
 
@@ -1629,6 +1629,25 @@ fn is_available(probe: &[&str]) -> bool {
         .status()
         .is_ok_and(|status| status.success())
 }
+
+/// The nightly toolchain every nightly step names, as a `cargo +…` argument.
+///
+/// Pinned to a date rather than the moving `nightly` channel because the
+/// nightly of 2026-11-01 (rustc `f9ceb4a4`) cannot compile `sqlx-core` 0.8.6:
+/// `error[E0391]: cycle detected when computing when 'error::Error' needs
+/// async drop`. That reddened the gate's docs.rs steps and the Pages API build
+/// on every branch, for a reason no change in this workspace could fix. The
+/// pin is the owner's call, recorded on PR #363.
+///
+/// Spelled once so the gate's two docs.rs steps, their probes and
+/// `xtask site` cannot drift apart, and so lifting it is one line here plus the
+/// `rustup toolchain install` lines in `.github/workflows/ci.yml` and
+/// `pages.yml`. Lift it once a later nightly builds `sqlx-core` again.
+///
+/// A plain `const` rather than an environment variable: the gate is meant to
+/// be exactly what CI runs, and a toolchain chosen by the caller's environment
+/// would let a local green differ from CI's without either saying so.
+pub(crate) const NIGHTLY: &str = "+nightly-2026-10-31";
 
 #[cfg(test)]
 mod tests {
@@ -2743,5 +2762,42 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
             !production.contains("is the only way `-D warnings` reaches rustdoc"),
             "main.rs restates the RUSTDOCFLAGS partial-recovery claim RS-01-4 denies"
         );
+    }
+
+    /// Every workflow that installs a nightly installs the one xtask names.
+    ///
+    /// The wrong implementation this rejects is a pin lifted, or moved, in
+    /// one place only: ci.yml installing `nightly` while xtask asks for
+    /// `+nightly-2026-10-31`. The probe would then find no toolchain, and the
+    /// docs.rs steps would print `skipped` on every runner — a green gate that
+    /// checked nothing, which is the decorative failure the probe exists to
+    /// make loud locally and must not become in CI.
+    #[test]
+    fn every_workflow_installs_the_nightly_xtask_names() {
+        let root = workspace_root().unwrap();
+        let toolchain = crate::NIGHTLY.strip_prefix('+').unwrap();
+        let wanted = format!("rustup toolchain install {toolchain} ");
+
+        for workflow in ["ci.yml", "pages.yml"] {
+            let text = fs::read_to_string(root.join(".github/workflows").join(workflow)).unwrap();
+            let installs: Vec<&str> = text
+                .lines()
+                .map(str::trim)
+                .filter_map(|line| line.strip_prefix("run: "))
+                .filter(|run| run.starts_with("rustup toolchain install nightly"))
+                .collect();
+            assert!(
+                !installs.is_empty(),
+                "{workflow} installs no nightly, so xtask's `{}` steps cannot run there",
+                crate::NIGHTLY
+            );
+            for install in installs {
+                assert!(
+                    install.starts_with(&wanted),
+                    "{workflow} runs `{install}`, but xtask names `{}`",
+                    crate::NIGHTLY
+                );
+            }
+        }
     }
 }

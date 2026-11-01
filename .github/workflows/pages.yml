@@ -51,9 +51,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # the `stable` branch, 2026-09-03
       # `rustup` rather than a second toolchain action, for the reason `ci.yml`
       # gives: that action makes what it installs the default, and xtask itself
-      # must build on the pinned channel. `cargo +nightly` reaches this one.
+      # must build on the pinned channel. `cargo +nightly-…` reaches this one.
       - name: Install nightly, for scraped examples
-        run: rustup toolchain install nightly --profile minimal
+        run: rustup toolchain install nightly-2026-10-31 --profile minimal # xtask's NIGHTLY, and must match it (#363)
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install Zola
         run: |
