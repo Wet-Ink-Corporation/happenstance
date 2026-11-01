@@ -136,7 +136,7 @@ const RESERVABLE: &[Reservable] = &[
 ///
 /// Returns an error if `name` is not one of the names this project intends to
 /// hold, if the repository's licence files cannot be read, or if the generated
-/// crate cannot be written.
+/// crate or `out` cannot be written.
 pub(crate) fn run(out: &mut impl io::Write, name: Option<&str>) -> Result<()> {
     let Some(name) = name else {
         return list(out).context(REPORTING);

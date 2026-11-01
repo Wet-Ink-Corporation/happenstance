@@ -75,7 +75,7 @@
 //! that silently updates `Cargo.lock` is a gate that tested a dependency graph
 //! nobody committed.
 //!
-//! No task prints: each writes through the stdout and stderr `main` locks once.
+//! No task prints: each writes through a locked stdout or stderr handle.
 //!
 //! [ADR-0001]: ../../.kb/decisions/0001-async-port-flavours.md
 
@@ -1188,8 +1188,8 @@ const OPTIONAL: &[Step] = &[
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
-    // Every task writes only through these two, so a closed pipe is an error
-    // returned, never a panic (#352).
+    // Tasks write through these two (`usage` and `site` lock their own), so a
+    // closed pipe is an error returned, never a panic (#352).
     let (mut out, mut err) = (std::io::stdout().lock(), std::io::stderr().lock());
 
     let result = match task.as_deref() {
