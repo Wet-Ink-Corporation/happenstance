@@ -45,7 +45,7 @@ defining crate and resolve it — the failure only appears in the first adapter
 crate outside the workspace, months later, and reads as though the adapter did
 something wrong.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:665 (for_each_event_store_rule!($emit))` ·
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:668 (for_each_event_store_rule!($emit))` ·
 `crates/happenstance-testkit/src/registry.rs:82 (bare name resolves in *your* scope)` ·
 [SPECIFICATION CF-23](../../spec/SPECIFICATION.md) *(why the emitter is a
 parameter at all)*
@@ -142,11 +142,11 @@ general arm's expansion happens to type-check anyway, or an
 macro expansion they did not write, naming a binding they never declared. Nothing
 anywhere points at the arm order that caused it.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:615 (macro_rules! event_store_conformance)`
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:618 (macro_rules! event_store_conformance)`
 *(the comment there attributes the order to never having to back out of
 `fixture = $fixture:expr`; measured on 1.97.1 that arm backs out either way —
 the order is load-bearing for the reason above, not that one)* ·
-`crates/happenstance-testkit/src/lib.rs:677 (mod_name = dcb_conformance,)` ·
+`crates/happenstance-testkit/src/lib.rs:680 (mod_name = dcb_conformance,)` ·
 [Reference — macros by example, transcription](https://doc.rust-lang.org/reference/macros-by-example.html)
 *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -192,9 +192,9 @@ backing store, so `two_fixture_instances_observe_none_of_each_others_appends`
 cannot be written at all — and the isolation defect it exists to catch becomes
 untestable rather than undetected.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:636 (__conformance_fixture() -> impl $crate::__private::Fixture)` ·
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:639 (__conformance_fixture() -> impl $crate::__private::Fixture)` ·
 `crates/happenstance-testkit/src/registry.rs:40 (which it could not know)` ·
-`crates/happenstance-testkit/src/concurrency.rs:1502 (impl $crate::__private::ConcurrentFixture)`
+`crates/happenstance-testkit/src/concurrency.rs:1521 (impl $crate::__private::ConcurrentFixture)`
 
 ## RS-41-5. Enforce a caller-side obligation with `#[must_use = "…"]`, and write the consequence into the message.
 
@@ -237,7 +237,7 @@ the result. Every capability-gated rule then passes silently, and the adapter's
 CI reports a full green suite in which `acknowledged_writes_survive_a_reopen`
 never ran and nothing anywhere says so.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1280 (a rule's outcome must be reported)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1344 (a rule's outcome must be reported)` ·
 `crates/happenstance-testkit/src/registry.rs:51 (It is not asked politely)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(the reporting
 obligation this attribute mechanises)*

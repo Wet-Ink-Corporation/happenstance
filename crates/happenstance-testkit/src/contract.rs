@@ -277,13 +277,21 @@ pub trait Fixture {
     ///
     /// Two exits were considered and both are closed.
     ///
-    /// **Waiting for the frontier is forbidden.** `[FROZEN]` CF-33 bans a
-    /// conformance rule from reading a clock, sleeping, or asserting on an
+    /// **A rule waiting for the frontier is forbidden.** `[FROZEN]` CF-33 bans
+    /// a conformance rule from reading a clock, sleeping, or asserting on an
     /// operation count, and its `Rejects:` names this exact pathology: a rule
     /// that *"passes on the author's machine, fails on a loaded CI runner"*.
     /// That is not a rule this suite is allowed to write, and the reason given
     /// there is the right one — a flaky suite teaches adapter authors to re-run
     /// until green, and that habit is what lets a real failure through.
+    ///
+    /// The **fixture** may wait, and that is where the waiting went (CF-42). A
+    /// named rule that reads back its own append calls
+    /// [`settle_frontier`](Self::settle_frontier) first, and a declining
+    /// fixture that can bring its frontier past every acknowledged row
+    /// overrides it to do so. One that cannot keeps the provided body, and
+    /// those rules then report a skip under this capability, with the reason
+    /// given here.
     ///
     /// **A prefix-only weakening does not reach far enough; a larger one does.**
     /// The [model family](crate::model) *predicts* whether the store will
@@ -638,6 +646,62 @@ pub trait Fixture {
     /// override that answers [`Armed::Staged`] and arms nothing.
     fn arm_held_above_frontier(&self) -> impl Future<Output = Armed> {
         core::future::ready(Armed::Nothing)
+    }
+
+    /// Brings this store's visibility frontier up to **everything it holds**,
+    /// and says whether it did.
+    ///
+    /// An override that returns [`Settled::Visible`] promises this: every row
+    /// the store held when the call was made is visible to every `read` and
+    /// `head` issued after the call returns, through any handle. That relies on
+    /// the frontier never moving backward afterwards, which this method's
+    /// override promises for its own store. No clause holds a store to it.
+    ///
+    /// # Who calls it, and when
+    ///
+    /// Only a fixture that declines
+    /// [`READ_YOUR_OWN_WRITES`](Self::READ_YOUR_OWN_WRITES) is ever asked. For
+    /// a fixture that supports it the rules make no call at all: the branch is
+    /// on that constant, so the store sees exactly the calls it saw before this
+    /// method existed.
+    ///
+    /// A rule that reads back an append of its own calls this first (CF-42).
+    /// It calls it only where no `append` future of its own is still pending,
+    /// because on a store like `happenstance-postgres` the settle waits for
+    /// every open writer older than a row it holds, and the rule's own
+    /// unfinished append would then never finish. It never calls it after
+    /// [`arm_held_above_frontier`](Self::arm_held_above_frontier), whose rows
+    /// are held above the frontier for the rest of the fixture's life, so a
+    /// settle there could never return.
+    ///
+    /// # Why the fixture settles and not the rule
+    ///
+    /// `[FROZEN]` CF-33 forbids a rule to wait, and a rule that re-read until
+    /// its append appeared would be waiting through the store's own read path:
+    /// a store that lost the row would hang the suite rather than fail a named
+    /// rule. The fixture can ask the storage directly. The Postgres fixture
+    /// polls its own table until no committed row sits at or above
+    /// `pg_snapshot_xmin`. A store whose read path then hides a row still fails
+    /// the rule's assertion, by name.
+    ///
+    /// # The provided body settles nothing
+    ///
+    /// It returns [`Settled::Nothing`], and every rule that reads back its own
+    /// append then reports [`RuleOutcome::Skipped`] under
+    /// `READ_YOUR_OWN_WRITES`, carrying this fixture's own stated reason. That
+    /// is an honest skip: the rule did not run. It is never a pass that holds
+    /// only because the server happened to be quiet, and never a failure the
+    /// adapter did not earn.
+    ///
+    /// # Panics
+    ///
+    /// An override panics when it cannot settle within its own bound, for
+    /// [`connect`](Self::connect)'s reason: a frontier still held back long
+    /// after every writer has finished is a broken **test environment**, not a
+    /// non-conformant adapter. Answering [`Settled::Nothing`] instead would
+    /// report a stuck server as a skip.
+    fn settle_frontier(&self) -> impl Future<Output = Settled> {
+        core::future::ready(Settled::Nothing)
     }
 }
 
@@ -1531,5 +1595,24 @@ pub enum Armed {
     /// frontier.
     Staged,
     /// Nothing was armed. Only the provided body returns this.
+    Nothing,
+}
+
+/// What [`Fixture::settle_frontier`] reports it did.
+///
+/// A rule reads back its own append only after [`Settled::Visible`]. On
+/// [`Settled::Nothing`] it reports a skip under
+/// [`READ_YOUR_OWN_WRITES`](Fixture::READ_YOUR_OWN_WRITES) instead, with the
+/// fixture's own reason.
+///
+/// Deliberately exhaustive, like [`Armed`]. A settle either happened or it did
+/// not, and a third answer would be one the rule could not act on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use = "a rule reads back only after a settle it can vouch for; dropping this hides a forgotten override"]
+pub enum Settled {
+    /// Every row the store held when the call was made is now visible to every
+    /// `read` and `head` issued after it returned, through any handle.
+    Visible,
+    /// Nothing was settled. Only the provided body returns this.
     Nothing,
 }

@@ -99,9 +99,23 @@ you were told succeeded shows up in your next read through the same handle.
 
 A store whose reads can briefly lag an acknowledged append should decline it,
 with its own reason. The PostgreSQL and Neon fixtures do, because a read there
-only shows rows below a server-wide snapshot point. Only the model family reads
-this capability (`Fixture::READ_YOUR_OWN_WRITES`, read by
-`ops_agree_with_the_model`). Without it the family does not skip: it runs a
+only shows rows below a server-wide snapshot point. Two parts of the suite read
+this capability (`Fixture::READ_YOUR_OWN_WRITES`).
+
+The first is the 83 named rules that read back their own appends. When your
+fixture declines the capability, each of them calls
+`Fixture::settle_frontier` after its writes and before it reads them back
+([CF-42](../spec/SPECIFICATION.md#63-the-fixture-contract)). Override it to
+wait until a read shows every row your store holds, then return
+`Settled::Visible`. The PostgreSQL and Neon fixtures poll the read path's own
+predicate, with a deadline. A rule never waits on its own, so the waiting
+belongs in your fixture. If you keep the provided body, it returns
+`Settled::Nothing` and those 83 rules report a skip under
+`READ_YOUR_OWN_WRITES` with your reason. A fixture that supports the capability
+is never asked to settle.
+
+The second is the model family (`ops_agree_with_the_model`). Without the
+capability the family does not skip: it runs a
 weaker check. Each full read must be a prefix of what you accepted that never
 shrinks, and each condition verdict is judged over what your store holds,
 deferred while the positions that decide it are unknown. The rule's rustdoc

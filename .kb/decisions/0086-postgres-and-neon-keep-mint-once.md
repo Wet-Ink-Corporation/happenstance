@@ -153,7 +153,7 @@ takes that choice (`runbook/phases/17-breaking-window.md:128-136`).
   (`spec/SPECIFICATION.md:900-902`), and the Neon crate has no entropy on `wasm32`, so each handle
   would pay an extra `gen_random_uuid()` round trip. Minting inside the append statement instead
   is per-append minting, which `append_stamps_a_local_event_id` rejects
-  (`crates/happenstance-testkit/src/suite.rs:2339`).
+  (`crates/happenstance-testkit/src/suite.rs:2395`).
 - **It splits one log across many origins.** That loses the per-origin continuity VT-5's argument
   wants (`spec/SPECIFICATION.md:885-887`).
 - **Making it const-safe would be a major change.** On Neon, keeping `new` a `const fn` needs a
@@ -162,7 +162,7 @@ takes that choice (`runbook/phases/17-breaking-window.md:128-136`).
 
 **It does not fail the suite.** `reopened_store_does_not_reissue_an_event_id` was rewritten under
 ADR-0014 precisely so that it admits mint-per-open
-(`crates/happenstance-testkit/src/suite.rs:2594-2601`, `:2625-2693`). Two texts said it
+(`crates/happenstance-testkit/src/suite.rs:2654-2661`, `:2625-2693`). Two texts said it
 fails outright, `references/adapter-shapes.md:387-393` and the open question's `:124-127`. Both
 are corrected in the change that lands this record.
 

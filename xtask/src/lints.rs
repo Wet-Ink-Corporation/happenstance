@@ -693,7 +693,7 @@ pub(crate) fn no_position_literals(out: &mut impl io::Write) -> Result<()> {
 ///
 /// # Why suffixes and radix prefixes count
 ///
-/// `positions_of` returns `Vec<u64>` (`crates/happenstance-testkit/src/suite.rs:181`),
+/// `positions_of` returns `Vec<u64>` (`crates/happenstance-testkit/src/suite.rs:182`),
 /// so `[1, 2, 3]` only compiles against it because inference obliges. The moment
 /// it does not — a helper signature, a `matches!`, a generic comparison — the
 /// spelling an author reaches for is `[1u64, 2, 3]`, and the digits-only test

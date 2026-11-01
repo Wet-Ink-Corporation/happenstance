@@ -107,7 +107,7 @@ copy is routine:
 VT-6's `Rejects:` paragraph describes the consequence. A peer's dedup treats the colliding events as
 already seen, and real facts are silently dropped, with no error path and no observable symptom.
 Nothing catches it today. `reopened_store_does_not_reissue_an_event_id`
-(`crates/happenstance-testkit/src/suite.rs:2625`) tests a reopen, not a restore, and
+(`crates/happenstance-testkit/src/suite.rs:2685`) tests a reopen, not a restore, and
 `restored_peer_does_not_reissue_identities` is named by VT-6 for `happenstance-sync-testkit`, which
 does not exist yet.
 
@@ -127,7 +127,7 @@ Which of VT-6's arms each adapter takes, and at what cost:
 - **Mint-per-open.** This satisfies the clause by construction, and it is the one arm that changes
   behaviour on a published crate. A server store has no natural "open", and per pool or per handle
   would split one store's history into a great many origins. It does *not* fail
-  `reopened_store_does_not_reissue_an_event_id`, which ADR-0014 rewrote to admit it (`suite.rs:2594-2601`).
+  `reopened_store_does_not_reissue_an_event_id`, which ADR-0014 rewrote to admit it (`suite.rs:2654-2661`).
 
 ## What forces it
 

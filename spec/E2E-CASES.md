@@ -68,7 +68,7 @@ monotonicity and permitted gaps — all properties of *assignment*, none of
 
 **Rejects:** a Postgres adapter allocating positions with `nextval()` outside the
 transaction. It passes `positions_are_unique` and
-`positions_are_strictly_monotonic` (`crates/happenstance-testkit/src/suite.rs:1106-1162`)
+`positions_are_strictly_monotonic` (`crates/happenstance-testkit/src/suite.rs:1135-1193`)
 because both read a quiescent store after a single sequential writer. The
 deterministic fixture that must fail is a store that holds one append's row back
 until a second, later-positioned append has committed.

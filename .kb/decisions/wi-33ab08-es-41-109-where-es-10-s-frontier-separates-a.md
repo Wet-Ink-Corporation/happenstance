@@ -62,7 +62,7 @@ Keep the non-normative prose to 1.0
 ## Evidence
 
 - `spec/SPECIFICATION.md:4958`: whether holds means held in the committed log or visible to read is not settled here
-- `crates/happenstance-testkit/src/contract.rs:290`: ES-25 evaluates a condition over what the store holds
+- `crates/happenstance-testkit/src/contract.rs:298`: ES-25 evaluates a condition over what the store holds
 
 ## Decision outcome
 

@@ -388,9 +388,14 @@ where
 ///
 /// Each has the same shape as an event-store rule — `async fn(open) ->
 /// RuleOutcome` — and differs only in the bound on `F::Store`. None of them is
-/// capability-gated, so none returns [`RuleOutcome::Skipped`](crate::RuleOutcome::Skipped);
-/// a fixture that cannot hand out [`CONTENDERS`] handles onto one store already
-/// fails CF-16's MUST in the event-store family.
+/// capability-gated: a fixture that cannot hand out [`CONTENDERS`] handles onto
+/// one store already fails CF-16's MUST in the event-store family.
+///
+/// Every one of them reads back what its contenders wrote, so each settles the
+/// frontier after the contenders have joined and before its observer reads
+/// (CF-42). That is the one way any of them returns
+/// [`RuleOutcome::Skipped`](crate::RuleOutcome::Skipped): under
+/// `READ_YOUR_OWN_WRITES`, for a fixture that declines it and cannot settle.
 pub mod rules {
     // Every rule panics on failure — that is what a test does, and a `# Panics`
     // section on each of them would say "panics when the adapter is
@@ -407,6 +412,7 @@ pub mod rules {
     use crate::fixtures::{
         condition, condition_after, event, query_of, query_of_types, tagged_event,
     };
+    use crate::settle::settle;
     use crate::{Fixture, RuleOutcome};
 
     /// Of `CONTENDERS` handlers that decided from one snapshot, exactly one
@@ -489,6 +495,10 @@ pub mod rules {
              and told its caller otherwise. Attempts: {attempts:?}"
         );
 
+        // After every contender has joined, so no append is still in flight.
+        // The losers' absence is in the count below, so this is what keeps a
+        // losing row the store wrote anyway from hiding above a frontier.
+        settle!(fixture);
         let observer = fixture.connect().await;
         let landed = read_ok(&observer, &query, ReadOptions::new()).await;
         assert_eq!(
@@ -586,8 +596,7 @@ pub mod rules {
             .map(|course| tagged_event("StudentSubscribed", &[("course", course.as_str())]))
             .collect();
 
-        let contenders = BOUNDARIES * PER_BOUNDARY;
-        let stores = connect_many(&fixture, contenders).await;
+        let stores = connect_many(&fixture, BOUNDARIES * PER_BOUNDARY).await;
         let attempts = race(stores, |index, store| {
             let seat = index % BOUNDARIES;
             crate::block_on(async {
@@ -617,6 +626,7 @@ pub mod rules {
              store made no progress at all. All attempts: {attempts:?}"
         );
 
+        settle!(fixture);
         let observer = fixture.connect().await;
         for (seat, query) in queries.iter().enumerate() {
             // Winners and rejections on this boundary, counted in one pass.
@@ -741,6 +751,7 @@ pub mod rules {
         // here would give one defect two rules to fail and leave a reader of
         // this rule's message — "the sequence was read across a suspension" —
         // looking for a bug in the wrong half of the store.
+        settle!(fixture);
         let observer = fixture.connect().await;
         let all = read_ok(&observer, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
@@ -811,6 +822,7 @@ pub mod rules {
              returned position to check. Attempts: {attempts:?}"
         );
 
+        settle!(fixture);
         let observer = fixture.connect().await;
         for (index, writer) in writers.iter().enumerate() {
             let returned = match &attempts[index] {
@@ -932,6 +944,9 @@ pub mod rules {
              pass. Attempts: {attempts:?}"
         );
 
+        // A `Busy` contender's absence is checked below, so the settle is what
+        // keeps a batch it wrote anyway from hiding above a frontier.
+        settle!(fixture);
         let observer = fixture.connect().await;
         for (index, query) in queries.iter().enumerate() {
             let mine = read_ok(&observer, query, ReadOptions::new()).await;
@@ -1092,7 +1107,11 @@ pub mod rules {
             sightings.partial
         );
 
-        // The post-hoc half. This one is deterministic.
+        // The post-hoc half. This one is deterministic, and it is the only half
+        // that settles: the live reads above run while writers are in flight,
+        // where a frontier store's lag is legitimate and a settle would wait on
+        // the writers it is meant to observe.
+        settle!(fixture);
         let observer = fixture.connect().await;
         let all = read_ok(&observer, &Query::all(), ReadOptions::new()).await;
         assert_eq!(

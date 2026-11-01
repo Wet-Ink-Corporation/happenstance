@@ -446,6 +446,9 @@ pub mod bench;
 // below, which the specification names by that exact path and which therefore
 // cannot be renamed to make room.
 mod contract;
+// CF-42's rule-side half: the one helper, and the macro that returns its skip.
+// Crate-private, and declared ahead of both rule families that use it.
+mod settle;
 // Target-gated and nothing else: the concurrency family needs no optional
 // dependency, only threads. `wasm32-unknown-unknown` has none it can spawn, and
 // the family is opt-in besides — an adapter that cannot race is not asked to.
@@ -479,7 +482,7 @@ mod suite;
 
 pub use contract::{
     Armed, Capability, Fixture, NO_BATCH_READ_PATH, NO_BATCH_READ_PATH_REASON, NO_CEILING_REASON,
-    NO_STORE_LIMITS, ProjectionFixture, RuleOutcome, UNSTATED_COMMIT_FAULT,
+    NO_STORE_LIMITS, ProjectionFixture, RuleOutcome, Settled, UNSTATED_COMMIT_FAULT,
     UNSTATED_HELD_ABOVE_FRONTIER, UNSTATED_MID_BATCH_FAULT, UNSTATED_PROJECTION_SECOND_HANDLE,
     UNSTATED_READ_FAULT, UNSTATED_RESET_REFUSAL,
 };

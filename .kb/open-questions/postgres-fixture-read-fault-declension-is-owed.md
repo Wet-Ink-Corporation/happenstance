@@ -68,7 +68,7 @@ Phase 10's remainder. Until this is built, `happenstance-postgres`'s fixture pri
 This was answered in code at phase 10b, and nobody came back to update this atom. Commit `2ed06b4`
 (*"arm READ_FAULT, which this fixture is the one that owed"*) landed on 2026-09-07 and shipped in
 `0.2.0`; the entry is `CHANGELOG.md:493-507`, under `[0.2.0]`.
-`crates/happenstance-postgres/tests/support/mod.rs:496` declares
+`crates/happenstance-postgres/tests/support/mod.rs:501` declares
 `READ_FAULT: Capability = Capability::SUPPORTED`. `arm_read_fault` and its documentation
 (`:540-592`) run `READ_FAULT_INJECTION` (`:621-634`), which renames `event` aside and puts a view
 in its place. The view's `WHERE` calls a `plpgsql` guard that raises above position 2. The reader's
@@ -86,7 +86,7 @@ The sub-questions, in order:
    CF-39's named hazard arriving one step early, and a fixture whose arming is silently absorbed
    would pass the rule vacuously. And a cursor is session-local, so no second connection can close
    it. Neon did not need a different kind of mechanism. Its fixture claims `READ_FAULT` as well
-   (`crates/happenstance-neon/tests/support/mod.rs:198`, armed at `:259`), and
+   (`crates/happenstance-neon/tests/support/mod.rs:200`, armed at `:259`), and
    `crates/happenstance-neon/tests/neon_conformance.rs:392-408` asserts that the declaration is an
    answer rather than the trait's inherited default.
 3. **Yes, it passes.** The stream yields an `Err` **item** rather than ending, so this adapter does

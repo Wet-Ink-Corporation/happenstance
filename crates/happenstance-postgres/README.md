@@ -36,6 +36,10 @@ with programs you can run.
 > decide yet. What it gives up is listed on `ops_agree_with_the_model` in
 > `happenstance-testkit`: chiefly, a write that never becomes visible reads as
 > lag rather than as a lost write.
+>
+> **None of the others skips for it.** The 83 named rules that read back their
+> own appends ask the fixture to settle the frontier first (CF-42), and the
+> fixture waits there until a read shows every row this schema holds.
 
 ## Which crate do I want?
 

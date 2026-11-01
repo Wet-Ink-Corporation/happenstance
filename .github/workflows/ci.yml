@@ -645,6 +645,33 @@ jobs:
             exit 1
           fi
 
+      # The 83 named rules that read back their own writes RAN rather than
+      # skipped (#338, CF-42). The fixture declines `READ_YOUR_OWN_WRITES` and
+      # settles the frontier instead, so each of them waits there and runs. A
+      # fixture that lost its `settle_frontier` would have them all report a
+      # skip, which libtest counts as a pass; this step is what tells the two
+      # apart.
+      - name: The read-back rules ran against the server rather than skipped
+        if: always()
+        run: |
+          if grep -E '^SKIP .*READ_YOUR_OWN_WRITES' run.txt; then
+            echo "::error::a read-back rule skipped under READ_YOUR_OWN_WRITES; the fixture did not settle"
+            exit 1
+          fi
+
+      # CF-42's live instrument: a read-back rule behind a frontier held by
+      # another transaction, which passes only because the fixture settles.
+      # `--exact` and a count, so a renamed test cannot pass by matching nothing.
+      - name: A read-back rule passes behind a held frontier
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-postgres --all-features \
+            --test frontier_settle -- --ignored --exact --show-output \
+            a_frontier_held_back_by_another_schema_still_passes_after_settling \
+            | tee frontier-settle-run.txt
+          grep -qE '^test result: ok\. 1 passed; 0 failed; 0 ignored' frontier-settle-run.txt
+
       # THE PROJECTION SUITE, AND WHY IT IS A SECOND PAIR OF STEPS.
       #
       # The run above filters to `--test postgres_conformance`, which is the
@@ -1235,6 +1262,17 @@ jobs:
           fi
           if grep -q '^SKIP ops_agree_with_the_model' run-events.txt; then
             echo "::error::ops_agree_with_the_model reported a skip rather than running"
+            exit 1
+          fi
+
+      # The 83 named rules that read back their own writes RAN rather than
+      # skipped (#338, CF-42), for the Postgres job's reason: this fixture
+      # declines `READ_YOUR_OWN_WRITES` and settles the frontier instead.
+      - name: The read-back rules ran against the endpoint rather than skipped
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          if grep -E '^SKIP .*READ_YOUR_OWN_WRITES' run-events.txt; then
+            echo "::error::a read-back rule skipped under READ_YOUR_OWN_WRITES; the fixture did not settle"
             exit 1
           fi
 

@@ -63,7 +63,7 @@ A, reading after every step, so that the writer which started second is resumed 
 reversal is what models the slow transaction that took a low number and published it late." This
 works at all because a Rust future is cold: constructing an `async fn`'s future runs none of its
 body, so building two futures is not starting two writers, it is building two suspended state
-machines the rule fully controls (`suite.rs:2766-2772`), using `pin!` to make them pollable in
+machines the rule fully controls (`suite.rs:2829-2835`), using `pin!` to make them pollable in
 place without a heap allocation.
 
 The rule's own comment states its declared limitation honestly: "an adapter needing three polls is
