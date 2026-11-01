@@ -267,7 +267,7 @@ C4 states: *"`spec_trace.rs`'s check 4 short-circuits on `!has_suite(&c.id)` (`:
 `PS` rule name is resolved at all."* Verified against this worktree, and the first half is wrong:
 
 ```rust
-// xtask/src/spec_trace.rs:1750
+// xtask/src/spec_trace.rs:1760
 fn has_suite(clause_id: &str) -> bool {
     clause_id.starts_with("ES-") || clause_id.starts_with("VT-")
         || clause_id.starts_with("WF-") || clause_id.starts_with("PS-")

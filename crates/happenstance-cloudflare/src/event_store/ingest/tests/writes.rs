@@ -158,6 +158,63 @@ async fn ceilings_are_checked_before_any_statement_against_the_worst_case() {
     assert_eq!(model::calls(&host).expect("the model counts"), 0);
 }
 
+/// The tags-per-batch ceiling (VT-36, ADR-0100) counts the whole call: a
+/// total over it in the foreign events, or in the compensation alone, is
+/// refused as `TagsPerBatch`, `Split`, before any statement; a call exactly at
+/// it lands, compensation and all.
+///
+/// Rejects a total that counts the foreign events only, and a total class of
+/// `Park`.
+#[wasm_bindgen_test]
+async fn the_tags_per_batch_ceiling_counts_the_whole_call() {
+    let Opened { host, sql, store } = open();
+    let store = store.with_ceilings(Ceilings {
+        tags_per_batch: 3,
+        ..Ceilings::UNBOUNDED
+    });
+    let wide = [
+        minted(PEER, 1, 0, b"one", &["a:1", "b:2"]),
+        minted(PEER, 2, 0, b"two", &["c:3", "d:4"]),
+    ];
+    let bare = [minted(PEER, 3, 0, b"bare", &[])];
+    let answer = [
+        local("Compensated", b"c", &["e:5", "f:6"]),
+        local("Compensated", b"c", &["g:7", "h:8"]),
+    ];
+    let from = issued(&sql);
+
+    let foreign = refusal(store.ingest(&[IngestGroup::new(&wide, &[])]).await);
+    let compensation = refusal(store.ingest(&[IngestGroup::new(&bare, &answer)]).await);
+
+    for refused in [&foreign, &compensation] {
+        assert!(
+            matches!(
+                refused,
+                IngestError::ExceedsStoreLimit {
+                    limit: StoreLimit::TagsPerBatch,
+                    len: 4,
+                    ..
+                }
+            ),
+            "{refused:?}"
+        );
+        assert_eq!(refused.class(), FailureClass::Split);
+    }
+    assert_eq!(issued(&sql), from, "no statement before either refusal");
+    assert_eq!(model::calls(&host).expect("the model counts"), 0);
+    assert!(log(&store).await.is_empty(), "and nothing is held");
+
+    let at = store
+        .ingest(&[IngestGroup::new(
+            &wide[..1],
+            &[local("Compensated", b"c", &["e:5"])],
+        )])
+        .await
+        .expect("three tags over the call is at the ceiling, and lands");
+    assert_eq!(at.appended, 1);
+    assert_eq!(log(&store).await.len(), 2, "the event and its compensation");
+}
+
 /// An origin this runtime cannot bind exactly is refused through the port,
 /// `Park`, before any statement.
 #[wasm_bindgen_test]

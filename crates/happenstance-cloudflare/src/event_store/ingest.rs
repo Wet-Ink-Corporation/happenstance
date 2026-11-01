@@ -284,7 +284,8 @@ impl CloudflareIngestStore {
         }
 
         // Against the worst case, the whole call: every foreign event and every
-        // compensation, whichever of them turn out to be skips.
+        // compensation, whichever of them turn out to be skips. Both totals,
+        // the events and their tags, count compensation alike.
         let len = groups.iter().fold(0_usize, |len, group| {
             len.saturating_add(group.events.len())
                 .saturating_add(group.compensation.len())
@@ -638,6 +639,19 @@ impl Classify for CloudflareEventStoreError {
             | Self::UnstampedEvent { .. }
             | Self::StoredPosition { .. } => FailureClass::Stop,
         }
+    }
+}
+
+// Below the `Classify` impl, so that no line the decision records cite above
+// it moves.
+#[cfg(all(test, target_arch = "wasm32"))]
+impl CloudflareIngestStore {
+    /// The same store, refusing calls against `ceilings`: the event store's
+    /// seam, one wrapper up.
+    #[must_use]
+    pub(crate) fn with_ceilings(mut self, ceilings: super::Ceilings) -> Self {
+        self.store = self.store.with_ceilings(ceilings);
+        self
     }
 }
 

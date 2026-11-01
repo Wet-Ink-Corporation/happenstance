@@ -2479,6 +2479,112 @@ const REGISTRY: &[Declared] = &[
             "must not be in the log in any form",
         )],
     },
+    // --- CF-40's tags-per-batch ceiling (VT-36, ADR-0100) -------------
+    //
+    // One check, a total across the append, got right once and wrong seven
+    // ways. The first six state ONLY `MAX_TAGS_PER_BATCH`, so a gate that
+    // forgot the fifth constant would skip them and every mutant row below
+    // would fail as "a declared failure that never ran". The last two state an
+    // incoherent set and enforce it, and only the branch's coherence checks see
+    // them. Each `expect` pins the `Got` or the message the store produced.
+    Declared {
+        name: "TagsPerBatchCeilingStore",
+        kind: Kind::ConformantVariant,
+        fails: &[],
+        provenance: "happenstance-cloudflare: a Durable Object's `transactionSync` resets on CPU \
+             or storage time, which grows with the tag rows one call writes, so the store \
+             counts them and refuses a total over its declared number as \
+             `StoreLimit::TagsPerBatch` before any SQL runs. It is the control that shows the \
+             rule's tags-per-batch branch can be passed at all.",
+        mode: FailureMode::Assertion,
+        expect: &[],
+    },
+    Declared {
+        name: "TagsPerBatchThroughStoreStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "an adapter that met its transaction's row wall before the contract named it: \
+             the count is right and the only channel it had was `AppendError::Store`, which \
+             VT-25 forbids, so a sync runner reads \"split this batch\" as \"retry\".",
+        mode: FailureMode::Assertion,
+        expect: &[("append_reports_exceeded_store_limits", "TooManyTags")],
+    },
+    Declared {
+        name: "MisnamedTagsPerBatchStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "the per-event tag check pasted to make the batch check, with its limit name \
+             left alone. A runner reading `TagsPerEvent` parks an event that would land in a \
+             smaller batch, where `TagsPerBatch` would have had the batch split.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "limit: TagsPerEvent, len",
+        )],
+    },
+    Declared {
+        name: "PerEventTagsPerBatchStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "the per-event loop reused with the batch's number: each event's tag count is \
+             compared with the batch ceiling and nothing is summed, so a total spread over \
+             several events is never refused and the call that resets the object lands.",
+        mode: FailureMode::Assertion,
+        expect: &[("append_reports_exceeded_store_limits", "Got Ok(")],
+    },
+    Declared {
+        name: "OffByOneTagsPerBatchStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "a total checked `>=` where `>` was meant: documented as the most one append \
+             carries and checked as the first total refused. Only an append of exactly the \
+             stated ceiling, the branch's at-ceiling anchor, tells the two apart.",
+        mode: FailureMode::Assertion,
+        // The anchor's own `append_ok`, refused at exactly the ceiling.
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "limit: TagsPerBatch, len: 8192",
+        )],
+    },
+    Declared {
+        name: "RefuseAfterInsertTagsPerBatchStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "the count moved below the tag `INSERT`, where the driver's affected-row count \
+             hands it over for free, with no transaction around the two. The caller is told \
+             the batch was refused, with the right variant, and the batch is in the log.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "refused batch must not be in the log",
+        )],
+    },
+    Declared {
+        name: "UnreachableTagsPerBatchStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "VT-22's, VT-24's and VT-36's floors copied into a store's documentation as \
+             three ceilings, all enforced, and never multiplied: 128 events of at most 64 tags \
+             is 8,192, so a batch one tag over the declared total is refused for its length \
+             or for an event before its total is counted. The declaration names a refusal \
+             no caller can provoke.",
+        mode: FailureMode::Assertion,
+        expect: &[("append_reports_exceeded_store_limits", "cannot be reached")],
+    },
+    Declared {
+        name: "TagsPerBatchBelowTagsPerEventStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "a per-event ceiling from the schema and a batch ceiling from a measurement, \
+             never put side by side: an event within its own ceiling is refused as a batch of \
+             one, `Split`, and a sync runner halving the batch reaches one event with nothing \
+             left to halve.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "below its own ceiling of",
+        )],
+    },
 ];
 
 /// A deterministic disagreement between a store's own read path and
@@ -2652,6 +2758,30 @@ macro_rules! for_each_mutant {
             >,
             crate::mutants::MutantFixture<
                 crate::mutants::metadata_ceilings::RefuseAfterInsertMetadataStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_ceilings::TagsPerBatchCeilingStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_ceilings::TagsPerBatchThroughStoreStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_ceilings::MisnamedTagsPerBatchStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_ceilings::PerEventTagsPerBatchStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_ceilings::OffByOneTagsPerBatchStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_ceilings::RefuseAfterInsertTagsPerBatchStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_ceilings::UnreachableTagsPerBatchStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_ceilings::TagsPerBatchBelowTagsPerEventStore,
             >,
             crate::mutants::MutantFixture<crate::mutants::NormalisingTagStore>,
             crate::mutants::MutantFixture<crate::mutants::KeyedTagMapStore>,
@@ -2882,9 +3012,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Fifty rows below are marked [`ModelOutcome::Agreed`] at this commit; three
-/// of them are the conformant controls and *must* be, which leaves
-/// **forty-seven misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// Fifty-eight rows below are marked [`ModelOutcome::Agreed`] at this commit;
+/// four of them are the conformant controls and *must* be, which leaves
+/// **fifty-four misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -2960,6 +3090,14 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///   `RefuseAfterInsertMetadataStore` — CF-40's metadata ceiling, the same shape one
 ///   column over: the generator's metadata is at most nine bytes, and the
 ///   boundary is at 4,096.
+/// * `TagsPerBatchThroughStoreStore`, `MisnamedTagsPerBatchStore`,
+///   `PerEventTagsPerBatchStore`, `OffByOneTagsPerBatchStore`,
+///   `RefuseAfterInsertTagsPerBatchStore`, `UnreachableTagsPerBatchStore`,
+///   `TagsPerBatchBelowTagsPerEventStore` — CF-40's tags-per-batch ceiling, the
+///   same shape again: the generator writes at most six tags per event in
+///   small batches, and the boundary is at 8,192 tags in one append, or at a
+///   per-event ceiling of 64 or 1,024. Their control,
+///   `TagsPerBatchCeilingStore`, is `Agreed` because it must be.
 ///
 /// That is the shape of the argument for the concurrency family, arriving from
 /// the other direction: three of the window-shaped six are exactly what a
@@ -3077,6 +3215,17 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("TruncatingMetadataStore", ModelOutcome::Agreed),
     ("OffByOneMetadataCeilingStore", ModelOutcome::Agreed),
     ("RefuseAfterInsertMetadataStore", ModelOutcome::Agreed),
+    // CF-40's tags-per-batch ceiling: `any_event` writes a handful of tags in
+    // small batches, so an 8,192-tag boundary is one the generator never
+    // reaches. The first row is the conformant control.
+    ("TagsPerBatchCeilingStore", ModelOutcome::Agreed),
+    ("TagsPerBatchThroughStoreStore", ModelOutcome::Agreed),
+    ("MisnamedTagsPerBatchStore", ModelOutcome::Agreed),
+    ("PerEventTagsPerBatchStore", ModelOutcome::Agreed),
+    ("OffByOneTagsPerBatchStore", ModelOutcome::Agreed),
+    ("RefuseAfterInsertTagsPerBatchStore", ModelOutcome::Agreed),
+    ("UnreachableTagsPerBatchStore", ModelOutcome::Agreed),
+    ("TagsPerBatchBelowTagsPerEventStore", ModelOutcome::Agreed),
     ("NormalisingTagStore", ModelOutcome::Agreed),
     ("KeyedTagMapStore", ModelOutcome::Agreed),
     ("TrimmingIdentifierStore", ModelOutcome::Agreed),
@@ -3854,15 +4003,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 50,
-            "`MODEL_COVERAGE`'s heading says fifty rows are `Agreed` and the \
+            agreed, 58,
+            "`MODEL_COVERAGE`'s heading says fifty-eight rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            47,
-            "`MODEL_COVERAGE`'s heading says forty-seven misses and the table \
+            54,
+            "`MODEL_COVERAGE`'s heading says fifty-four misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls

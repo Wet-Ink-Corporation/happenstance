@@ -1,0 +1,42 @@
+Phase A for ingest on a deployed Durable Object (#108 part E3, #356 step 1),
+through harness/workerd's /ingest-ceiling/<shape>?events=<n> and
+/ingest-class/<case> routes, driven by deployed-ingest.mjs. Taken by the
+workerd CI job's deployed leg on 2026-11-01 (run 41326218022, job
+124906829260, commit 24679d1d, PR #365), after the harness built the max-tags
+batch from one static set of tag names, so that the instrument's own
+allocation no longer stood beside the runtime's in the measurement. The Worker
+was deployed by wrangler 4.146.0 to the account behind CLOUDFLARE_API_TOKEN and
+deleted at the end of the run. Shapes and search bounds are those of
+run-workerd-local-2026-10-31-ingest.txt. Copied from the job log by hand; the
+lines below are verbatim.
+
+== deployed Durable Object ==
+--- deployed ingest ceiling ---
+ingest minimal: accepted 1024; refused above it: [422] refused class=Split ingest exceeds the store's events per batch limit: 1025 (round trip at 1024: 394 ms)
+ingest max-tags: accepted 757; refused above it: [500] Durable Object exceeded its CPU time limit and was reset. (round trip at 757: 17616 ms)
+ingest max-data: accepted 256; no wall up to 256 (round trip at 256: 6684 ms)
+--- deployed ingest classes ---
+trigger-abort:
+verdict=Holds
+case=trigger-abort
+first=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: happenstance conformance fault: the ingest row is refused inside the group: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+retry=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: happenstance conformance fault: the ingest row is refused inside the group: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)
+missing-schema:
+verdict=Holds
+case=missing-schema
+first=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: no such table: census_store_meta: SQLITE_ERROR
+retry=class=Stop variant=Sql(Thrown) error=JavaScript threw: Error: no such table: census_store_meta: SQLITE_ERROR
+storage-full:
+verdict=Unreachable PRAGMA max_page_count = 9: JavaScript threw: Error: not authorized: SQLITE_AUTH
+case=storage-full
+
+== What it decides ==
+max-tags walled lower than on 2026-10-31, and on a different limit: 757 events
+of 1,024 tags (775,168 tag rows) is the largest call committed, and the one
+above it exceeded the object's CPU time limit and reset it, where the run of
+2026-10-31 committed 1,016 and was reset by the storage-operation timeout. The
+wall moved 1.34 times between two runs and is not a function of the tag count
+alone. ADR-0100 answers it with a declared ceiling of 524,288 tags per call,
+1.48 times below the lower wall, refused before any SQL as
+StoreLimit::TagsPerBatch, class=Split. minimal and max-data reach the same
+sizes as the earlier run; no D7 class was falsified.

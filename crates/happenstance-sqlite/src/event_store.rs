@@ -1293,7 +1293,7 @@ fn ingest_begin_error(
 /// arms failed with SQLite's own *"too many terms in compound SELECT"* wrapped
 /// as `AppendError::Store`. That is a refusal at the pushdown limit — VT-23's
 /// named wrong implementation — arriving on the *write* path, where
-/// `crates/happenstance-core/src/limits.rs:46-52` gives it no variant to be
+/// `crates/happenstance-core/src/limits.rs:50-56` gives it no variant to be
 /// honestly reported through. `tests/wide_query.rs::a_wide_append_condition_guard_is_not_refused`
 /// is the standing guard; the conformance suite cannot reach it, because
 /// `MIN_SUPPORTED_QUERY_ITEMS` is 128 and the chunk width is 400.

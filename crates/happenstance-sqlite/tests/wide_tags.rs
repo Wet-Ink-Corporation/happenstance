@@ -35,7 +35,7 @@
 //! `event_store.rs::evaluate`, *inside* `BEGIN IMMEDIATE` with the write lock
 //! held and the caller's decision already made. VT-24 rejects that timing by
 //! name — *"discovers `SQLITE_MAX_VARIABLE_NUMBER` at write time"* — and
-//! `crates/happenstance-core/src/limits.rs:46-52` gives the resulting refusal no
+//! `crates/happenstance-core/src/limits.rs:50-56` gives the resulting refusal no
 //! variant to travel in, so it arrives as `AppendError::Store` wrapping a raw
 //! driver string.
 //!

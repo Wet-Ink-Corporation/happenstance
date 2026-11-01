@@ -374,26 +374,32 @@ An append over a store's limit is refused as `AppendError::ExceedsStoreLimit`.
 It is never quietly cut short
 ([VT-25](../spec/SPECIFICATION.md#vt-25--a-capacity-refusal-is-distinguishable-from-a-store-failure)):
 
-| Store | Bytes of data per event | Tags per event | Events per append | Bytes of metadata per event |
-| --- | --- | --- | --- | --- |
-| `SqliteEventStore` | 1,048,576 | 128 | 256 | none declared |
-| `PostgresEventStore` | 1,048,576 | 128 | 256 | none declared |
-| `NeonEventStore<T>` | 131,072 | 128 | 128 | none declared |
-| `CloudflareEventStore` | 1,048,576 | 1,024 | 1,024 | 524,288 |
-| `MemoryEventStore` | none declared | none declared | none declared | none declared |
+| Store | Bytes of data per event | Tags per event | Events per append | Bytes of metadata per event | Tags per append |
+| --- | --- | --- | --- | --- | --- |
+| `SqliteEventStore` | 1,048,576 | 128 | 256 | none declared | none declared |
+| `PostgresEventStore` | 1,048,576 | 128 | 256 | none declared | none declared |
+| `NeonEventStore<T>` | 131,072 | 128 | 128 | none declared | none declared |
+| `CloudflareEventStore` | 1,048,576 | 1,024 | 1,024 | 524,288 | 524,288 |
+| `MemoryEventStore` | none declared | none declared | none declared | none declared | none declared |
 
 `SqliteEventStore`, `PostgresEventStore` and `NeonEventStore` publish these
 limits as the constants `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT` and
 `MAX_EVENTS_PER_BATCH`. `CloudflareEventStore` has no public constants for
 them. Its row comes from its README, *The limits this store declares*, which
-calls them a stated policy rather than a measured limit of the platform.
+calls the first four a stated policy rather than a measured limit of the
+platform. Its tags-per-append ceiling is the exception: it sits below a wall a
+deployed object was measured to reset at. Where a store declares none, its
+events-per-append and tags-per-event ceilings already bound the total.
 
 If your events have to fit every store, stay within
-`MIN_SUPPORTED_EVENT_DATA_LEN`, `MIN_SUPPORTED_TAGS_PER_EVENT` and
-`MIN_SUPPORTED_EVENTS_PER_BATCH`. These are floors every store accepts
+`MIN_SUPPORTED_EVENT_DATA_LEN`, `MIN_SUPPORTED_TAGS_PER_EVENT`,
+`MIN_SUPPORTED_EVENTS_PER_BATCH` and `MIN_SUPPORTED_TAGS_PER_BATCH`. These are
+floors every store accepts
 ([VT-21](../spec/SPECIFICATION.md#vt-21--min_supported_event_data_len-is-a-floor-of-65536-bytes),
 [VT-22](../spec/SPECIFICATION.md#vt-22--min_supported_tags_per_event-is-a-floor-of-64),
-[VT-24](../spec/SPECIFICATION.md#vt-24--min_supported_events_per_batch-is-a-floor-of-128)).
+[VT-24](../spec/SPECIFICATION.md#vt-24--min_supported_events_per_batch-is-a-floor-of-128),
+[VT-36](../spec/SPECIFICATION.md#vt-36--min_supported_tags_per_batch-is-a-floor-of-8192)).
+The last is the product of the two before it, so it asks nothing new.
 Metadata has no such floor. A store may refuse any amount of it, as
 `StoreLimit::MetadataLen`, so keep metadata small if an event has to fit
 everywhere.

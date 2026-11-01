@@ -212,9 +212,10 @@ landed.
 | tags per event | 1,024 | `… limit: StoreLimit::TagsPerEvent` |
 | events per append | 1,024 | `… limit: StoreLimit::EventsPerBatch` |
 | `metadata` per event | 524,288 bytes (512 KiB) | `… limit: StoreLimit::MetadataLen` |
+| tags per call, summed over its events | 524,288 | `… limit: StoreLimit::TagsPerBatch` |
 
-Read those as **this adapter's stated refusal policy, not a measured physical
-wall** — the difference is the whole of what is honest here. No physical wall was
+Read the first four as **this adapter's stated refusal policy, not a measured
+physical wall** — the difference is the whole of what is honest here. No physical wall was
 observable on the executing host at eight times the payload figure, sixteen times
 the tag figure or eight times the batch figure, and that host is a Node process
 rather than `workerd`, so it does not enforce the platform's documented caps at
@@ -225,6 +226,16 @@ ceiling has no minimum to clear (ADR-0043), and it is sized so that one row at
 all four ceilings is 1,835,264 bytes and still fits ([ADR-0093](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0093-cloudflare-metadata-ceiling-is-carved-from-the-documented-row-limit.md)). What *was* measured, twice
 and reproducibly: the declared value is accepted and read back byte-for-byte, and
 one more is refused, naming the ceiling it crossed.
+
+The fifth is different: it **is** placed against a wall a deployed object hit. One
+call of 757 events of 1,024 tags each (775,168 tag rows) ran past a deployed
+object's CPU limit and reset it, and one of 1,016 such events ran past its
+storage-operation timeout. 524,288 tags is 512 such events, 1.48 times below the
+lower wall and 64 times the `MIN_SUPPORTED_TAGS_PER_BATCH` floor of 8,192
+([ADR-0100](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md)).
+An `ingest` call counts every foreign event and every compensation toward it, and a
+sync runner reads the refusal as `Split`: the call is too big, and its events are
+not.
 
 One more limit belongs beside them, because it is the store's and not the
 platform's: **positions are bounded by 2^53, not 2^64.** Workers SQL widens an

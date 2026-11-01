@@ -389,7 +389,7 @@ pub(crate) fn is_inert(path: &str) -> bool {
         //
         // Unlike `spec/` and `standards/pages/`, this prefix is *not* half of a
         // pair: no unconditional lint runs over it, and none should. CF-34
-        // (`spec/SPECIFICATION.md:9911`) rejects a benchmark result gating a
+        // (`spec/SPECIFICATION.md:9953`) rejects a benchmark result gating a
         // merge, and a `xtask` step that read this tree on every invocation is
         // one edit away from being one.
         "benchmarks/",
@@ -1430,7 +1430,7 @@ mod tests {
     /// Read from disk rather than reasoned about, because what is being
     /// asserted is *which calls are written there*. It is the instrument
     /// `lint_narrative` already points at this exact block
-    /// (`xtask/src/lint_narrative.rs:2557`, `the_checker_joins_the_
+    /// (`xtask/src/lint_narrative.rs:2564`, `the_checker_joins_the_
     /// unconditional_file_reading_list`), and the two checks below are that
     /// one generalised.
     ///

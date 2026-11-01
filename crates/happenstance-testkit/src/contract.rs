@@ -391,7 +391,7 @@ pub trait Fixture {
     ///
     /// # Why this is an `Option<usize>` and not a [`Capability`]
     ///
-    /// The four constants here look like capabilities and are deliberately not
+    /// The five constants here look like capabilities and are deliberately not
     /// spelled as ones. A declined [`Capability`] is a **trade**: the fixture
     /// could have co-operated and chose not to, and the reason string is the
     /// record of that choice, printed on every run so a reviewer and a user of
@@ -431,7 +431,7 @@ pub trait Fixture {
     /// The largest number of tags on one event this fixture's store accepts, or
     /// `None` if it has no ceiling.
     ///
-    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) for why these four
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) for why these five
     /// are `Option<usize>` rather than [`Capability`], and for what stating a
     /// number commits the store to. The floor is `MIN_SUPPORTED_TAGS_PER_EVENT`
     /// (VT-22).
@@ -462,11 +462,35 @@ pub trait Fixture {
     /// refusing one more as `ExceedsStoreLimit { limit: StoreLimit::MetadataLen,
     /// .. }`, never as `EventDataLen`, which names `data`.
     ///
-    /// Unlike the other three there is **no floor** (ADR-0043):
+    /// Unlike the other four there is **no floor** (ADR-0043):
     /// `StoreLimit::MetadataLen.guaranteed_minimum()` is `0`, so any number
     /// here is a legal declaration, and no rule fails a store for stating a
     /// small one.
     const MAX_METADATA_LEN: Option<usize> = None;
+
+    /// The most tags, summed over every event of one append, this fixture's
+    /// store accepts, or `None` if it has no ceiling beyond the one
+    /// [`MAX_EVENTS_PER_BATCH`](Self::MAX_EVENTS_PER_BATCH) ×
+    /// [`MAX_TAGS_PER_EVENT`](Self::MAX_TAGS_PER_EVENT) already implies.
+    ///
+    /// See [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN). Stating a number
+    /// commits the store to accepting an append whose events carry exactly that
+    /// many tags between them, spread so that no event is over its own
+    /// ceiling, and refusing one more as `ExceedsStoreLimit { limit:
+    /// StoreLimit::TagsPerBatch, .. }`. The floor is
+    /// `MIN_SUPPORTED_TAGS_PER_BATCH` (VT-36), which VT-22 and VT-24 already
+    /// imply.
+    ///
+    /// A stated number must also be **coherent** with the other two (VT-36):
+    /// at least `MAX_TAGS_PER_EVENT`, so that a lone event within its own
+    /// ceiling never trips this one and halving a refused batch terminates;
+    /// and reachable, so that one tag more than it fits in
+    /// `MAX_EVENTS_PER_BATCH` events of at most `MAX_TAGS_PER_EVENT` tags. A
+    /// ceiling that cannot be crossed without first crossing another is not a
+    /// ceiling, and `None` is the honest declaration for it.
+    ///
+    /// Defaulted, like its siblings, so that adding it broke no fixture.
+    const MAX_TAGS_PER_BATCH: Option<usize> = None;
 
     /// Arms the store so that the **next** append of more than `after` events
     /// fails while writing event `after + 1`.
@@ -1237,12 +1261,12 @@ impl Capability {
 /// The `capability` name a rule reports when a fixture states **no ceiling at
 /// all** on any store limit.
 ///
-/// Not a [`Fixture`] associated const, and it names all four because the rule
-/// gated on it needs all four to be absent before it has nothing to do. A skip
+/// Not a [`Fixture`] associated const, and it names all five because the rule
+/// gated on it needs all five to be absent before it has nothing to do. A skip
 /// naming only some of them would send an adapter author to look for the
 /// constant they did set.
-pub const NO_STORE_LIMITS: &str =
-    "MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH, MAX_METADATA_LEN";
+pub const NO_STORE_LIMITS: &str = "MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, \
+    MAX_EVENTS_PER_BATCH, MAX_METADATA_LEN, MAX_TAGS_PER_BATCH";
 
 /// The `capability` name a rule reports when an adapter's **batch offers no read
 /// path** at all.

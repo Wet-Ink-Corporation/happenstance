@@ -219,11 +219,11 @@ The deployed leg's (`deployed-ingest.mjs`, record-only) is copied from the
 [`results/run-workerd-deployed-2026-10-31-ingest.txt`](results/run-workerd-deployed-2026-10-31-ingest.txt)
 (CI run 41173513607, commit `f0b426fd`, PR #354).
 
-| Shape (per event) | Searched to | `workerd` 1.20260815.1 | Round trip at the boundary | Deployed Durable Object |
-| --- | --- | --- | --- | --- |
-| minimal: 8 B, 1 tag | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 69 ms | **1,024**; 1,025 refused by the adapter, `class=Split`; 251 ms |
-| max-tags: 8 B, 1,024 tags | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 11,536 ms | **1,016**; above it `[500] Durable Object storage operation exceeded timeout which caused object to be reset`; 26,022 ms at 1,016 (#356) |
-| max-data: 1 MiB, 1 tag | 256 | no wall to **256** (256 MiB in one call) | 1,069 ms | no wall to **256**; 1,881 ms |
+| Shape (per event) | Searched to | `workerd` 1.20260815.1 | Round trip at the boundary | Deployed Durable Object, 2026-10-31 | Deployed Durable Object, 2026-11-01 |
+| --- | --- | --- | --- | --- | --- |
+| minimal: 8 B, 1 tag | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 69 ms | **1,024**; 1,025 refused by the adapter, `class=Split`; 251 ms | **1,024**; 1,025 refused by the adapter, `class=Split`; 394 ms |
+| max-tags: 8 B, 1,024 tags | 1,025 | **1,024**; 1,025 refused by the adapter, `class=Split` | 11,536 ms | **1,016**; above it `[500] Durable Object storage operation exceeded timeout which caused object to be reset`; 26,022 ms at 1,016 (#356) | **757**; above it `[500] Durable Object exceeded its CPU time limit and was reset.`; 17,616 ms at 757 (#356) |
+| max-data: 1 MiB, 1 tag | 256 | no wall to **256** (256 MiB in one call) | 1,069 ms | no wall to **256**; 1,881 ms | no wall to **256**; 6,684 ms |
 
 **The finding.** On local `workerd` the runtime commits every call the adapter
 accepts at the two count-bound shapes, up to the declared 1,024 events, and the
@@ -254,6 +254,21 @@ event owning its own), roughly 40 MB on the harness side, where the `max-data`
 shape shares one 1 MiB buffer across every event. So a deployed `max-tags`
 wall, in memory or in CPU, cannot be attributed wholly to the runtime or to
 the adapter; part of it is this instrument's own allocation.
+
+**The declared tags-per-call ceiling.** The 2026-11-01 column is
+[`results/run-workerd-deployed-2026-11-01-ingest.txt`](results/run-workerd-deployed-2026-11-01-ingest.txt)
+(CI run 41326218022, job 124906829260, PR #365), taken after the harness stopped
+owning a copy of every tag name, so that wall is the runtime's rather than partly
+the instrument's. It is lower, and on a different limit: 757 events of 1,024 tags
+(775,168 tag rows) reset the object on CPU time, where 1,016 had reset it on
+storage time. A wall that moves 1.34 times between two runs and changes which
+limit it is cannot be declared at its measured position, so ADR-0100 declares
+**524,288 tags per call** (512 such events), 1.48 times below the lower wall, as
+`StoreLimit::TagsPerBatch`. The adapter refuses a call over it before any SQL,
+`class=Split`, so the `max-tags` bisection now finds 512 and the call above it is
+the adapter's own refusal, on both legs. `Ceilings::DECLARED.events_per_batch`
+stays at 1,024: a call of 1,024 minimal events lands in 394 ms, and only the tag
+rows were ever the wall.
 
 ### F's D7 classes, by an identical retry
 

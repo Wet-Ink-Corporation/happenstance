@@ -7,7 +7,7 @@ ADR-0015 checked it against?
 
 This is VT-14's falsifier, run. It is issue #86, the item in
 [`runbook/phases/17b-after-the-window.md`](../../runbook/phases/17b-after-the-window.md),
-and the condition `runbook/ledgers.md:292` at `97f0f36` puts on VT-14's freeze: *"An RTL
+and the condition `runbook/ledgers.md:293` at `97f0f36` puts on VT-14's freeze: *"An RTL
 identifier corpus check (Arabic, Hebrew, Persian, with mixed LTR) comes back
 empty, with the E11 reproduction added to `experiments/`."*
 
@@ -237,7 +237,7 @@ depend on that cap.
 
 ### What this licenses
 
-VT-14's freeze condition in `runbook/ledgers.md:292` at `97f0f36` is met: the RTL corpus check
+VT-14's freeze condition in `runbook/ledgers.md:293` at `97f0f36` is met: the RTL corpus check
 came back empty and the E11 reproduction is in `experiments/`. Per *What "empty"
 does not mean* above, that is necessary and not sufficient, and marking the clause
 `[FROZEN]` is the owner's decision. This directory does not edit

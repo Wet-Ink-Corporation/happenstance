@@ -35,7 +35,7 @@ ES-12's falsifier (query_items_share_one_snapshot red on Neon) has fired in CI b
 
 ES-12's falsifier has fired, but the spec marker and Neon's README still say the rule passes.
 
-Raised by an agent (sweep) as a deferral and captured by Weigh-In as `wi-863ab8`. Anchor: `spec/SPECIFICATION.md:3214`.
+Raised by an agent (sweep) as a deferral and captured by Weigh-In as `wi-863ab8`. Anchor: `spec/SPECIFICATION.md:3244`.
 
 ## Decision drivers
 
@@ -59,8 +59,8 @@ L8's superseding ADR records ES-11 and ES-12 together.
 
 ## Evidence
 
-- `spec/SPECIFICATION.md:3214`: ES-12 [PROVISIONAL], says the rule passes
-- `runbook/ledgers.md:191`: ES-11 and ES-12 frozen at 17 by ADR-0087 (the row this cited, ES-12's falsifier, is struck)
+- `spec/SPECIFICATION.md:3244`: ES-12 [PROVISIONAL], says the rule passes
+- `runbook/ledgers.md:192`: ES-11 and ES-12 frozen at 17 by ADR-0087 (the row this cited, ES-12's falsifier, is struck)
 - `PR #36 run 37504851570 (attempt 2)`: query_items_share_one_snapshot ... FAILED
 
 ## Decision outcome

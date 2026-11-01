@@ -54,7 +54,7 @@ is the device most often in hand.
 **The specification has already reserved the word for it.** ES-1 declines
 `trait_variant`'s own name for the bare flavour, `LocalEventStore`, because
 "'Local' already names a local-first application's on-device store in this
-project; the collision would be permanent" (`spec/SPECIFICATION.md:2560-2562`,
+project; the collision would be permanent" (`spec/SPECIFICATION.md:2590-2592`,
 ADR-0001:93-96). The project paid that naming cost for a store it does not ship.
 
 **Replication's spoke has no browser-shaped member.** Phase 13's exit criterion is

@@ -37,7 +37,7 @@ promised, settling ES-11 and ES-12 together"* among phase 17's obligations
 *"104 of 105 observed"* would become *"103 of 105"* if `query_items_share_one_snapshot` went red on
 Neon (`references/adr/0061-es-11s-sufficiency-condition-assumed-a-queue.md:233-235`). It went red:
 in PR #20 (2026-09-28), in CI run `37504851570` (2026-10-06, PR #36) and in CI run `37570009097`,
-passing on re-run each time (ES-12's marker records the first two, `spec/SPECIFICATION.md:3214`).
+passing on re-run each time (ES-12's marker records the first two, `spec/SPECIFICATION.md:3244`).
 So the 104-of-105 figure is false by ADR-0061's own arithmetic. An accepted record cannot be edited
 to say so; only a successor can.
 
@@ -47,8 +47,8 @@ The total number of live-Neon runs this session was not recorded, so no rate is 
 three. The owner made the job non-required until L8 (`wi-0f1291`; §9).
 
 **The shape of both racing rules.** `read_result_is_stable_under_concurrent_append`
-(`crates/happenstance-testkit/src/suite.rs:6316`) and `query_items_share_one_snapshot`
-(`crates/happenstance-testkit/src/suite.rs:6425`) do the same thing on one handle: seed, read
+(`crates/happenstance-testkit/src/suite.rs:6485`) and `query_items_share_one_snapshot`
+(`crates/happenstance-testkit/src/suite.rs:6594`) do the same thing on one handle: seed, read
 `before`, build a stream and poll it **once**, append a late event, drain, and assert that the drain
 equals `before` and does not hold the late event. On Neon the first poll moves the stream from
 `Unsent` to `InFlight` by calling `round_trip` (`crates/happenstance-neon/src/event_store.rs:1465`);
@@ -408,16 +408,16 @@ condition *"When L8's ES-11 record lands, re-add the check to the Protect main r
 None of these is edited by this record. All are applied in the change that lands the fence, and all
 line-neutrally where they are cited by line:
 
-- `spec/SPECIFICATION.md`: ES-11's marker (`spec/SPECIFICATION.md:3087`), its sufficiency paragraph
-  (`spec/SPECIFICATION.md:3146-3150`, restated in exactly five lines), its `Rejects:` bullet
-  (`spec/SPECIFICATION.md:3186-3193`), ES-12's marker (`spec/SPECIFICATION.md:3214`), §6.5's
-  transport row (`spec/SPECIFICATION.md:9295`) and the two trace rows
-  (`spec/SPECIFICATION.md:9874-9875`, `PROVISIONAL` to `FROZEN`).
+- `spec/SPECIFICATION.md`: ES-11's marker (`spec/SPECIFICATION.md:3117`), its sufficiency paragraph
+  (`spec/SPECIFICATION.md:3176-3180`, restated in exactly five lines), its `Rejects:` bullet
+  (`spec/SPECIFICATION.md:3216-3223`), ES-12's marker (`spec/SPECIFICATION.md:3244`), §6.5's
+  transport row (`spec/SPECIFICATION.md:9337`) and the two trace rows
+  (`spec/SPECIFICATION.md:9916-9917`, `PROVISIONAL` to `FROZEN`).
 - `happenstance-neon`'s README section on the rule it does not pass, its crate root's status prose,
   and the read stream's documentation (the spike already rewrote these, line-neutrally, for its own
   branch).
-- `runbook/ledgers.md`: the residual-exposure row (`runbook/ledgers.md:187`); the ES-11 and ES-12
-  disposition rows (`runbook/ledgers.md:289-290`) now name this record, and leave the table when the
+- `runbook/ledgers.md`: the residual-exposure row (`runbook/ledgers.md:188`); the ES-11 and ES-12
+  disposition rows (`runbook/ledgers.md:290-291`) now name this record, and leave the table when the
   clauses freeze.
 - `runbook/phases/17-breaking-window.md:162-169`, ticked when the fence lands, not before.
 - `.kb/open-questions/one-shot-http-conformance-to-es-11.md`: amended to say this record answers it,

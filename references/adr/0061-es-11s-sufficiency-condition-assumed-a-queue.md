@@ -6,7 +6,7 @@
 - **Amends:** ES-11's asynchronous-driver paragraph in `spec/SPECIFICATION.md` §3 — a **narrowing** of a sufficiency condition, not a widening of the obligation
 - **Records:** that `happenstance-neon` does not satisfy ES-11, as a stated limitation
 - **Does not change:** ES-11's MUST, its maturity, its `Rule`, its `Cases`, or ES-12's normative content
-- **Evidence:** `crates/happenstance-neon/tests/support/transport.rs:20-102`; `crates/happenstance-neon/src/event_store.rs:1020-1040`; `crates/happenstance-testkit/src/suite.rs:6217-6277` and `:6169-6224`
+- **Evidence:** `crates/happenstance-neon/tests/support/transport.rs:20-102`; `crates/happenstance-neon/src/event_store.rs:1020-1040`; `crates/happenstance-testkit/src/suite.rs:6386-6446` and `:6169-6224`
 - **Supersedes nothing.** It is the first ES-11 escalation to survive the check below; the previous one was retracted at `2e0a0ae`.
 
 ## The question
@@ -158,11 +158,11 @@ statement, and `happenstance-neon` issues exactly one statement per `read`
 regardless of item count. `query_items_share_one_snapshot` passes, and every
 observed failure in the measured runs is attributed to
 `read_result_is_stable_under_concurrent_append` — the `Later` event named in those
-failures is that rule's (`crates/happenstance-testkit/src/suite.rs:6259`).
+failures is that rule's (`crates/happenstance-testkit/src/suite.rs:6428`).
 
 **The soft edge is worth writing down rather than rounding off.**
 `query_items_share_one_snapshot` appends *after the first poll* and asserts the
-drained set is unchanged (`suite.rs:6464`, `:6471-6480`) — structurally the same
+drained set is unchanged (`suite.rs:6633`, `:6471-6480`) — structurally the same
 exposure as ES-11's rule at `:6364-6373`, differing only in how many events are
 seeded. It was not observed red in sixty measured runs, which at the sibling rule's
 observed rate is consistent with either immunity or luck. So the honest conformance

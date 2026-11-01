@@ -1013,7 +1013,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 62] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
     // ---- VT: value types -------------------------------------------------
     (
         "VT-6",
@@ -1169,6 +1169,16 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 62] = [
         "VT-35",
         "projection_id_from_static_rejects_a_c1_control",
         Unresolvable::Elsewhere("crates/happenstance-core/src/projection.rs"),
+    ),
+    (
+        "VT-36",
+        "every_limit_names_its_floor",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/limits.rs"),
+    ),
+    (
+        "VT-36",
+        "the_tags_per_batch_floor_is_two_floors",
+        Unresolvable::Elsewhere("crates/happenstance-core/src/limits.rs"),
     ),
     (
         "VT-35",
@@ -3524,7 +3534,7 @@ mod tests {
 
     /// The only test that touches the real tree, and it touches it through the
     /// existing helpers rather than around them. `ES-1` and `VT-1` are declared
-    /// at `spec/SPECIFICATION.md:2629` and `:626`.
+    /// at `spec/SPECIFICATION.md:2659` and `:626`.
     #[test]
     fn clause_ids_reads_the_pinned_specification() {
         let ids = clause_ids(&workspace_root().unwrap())

@@ -247,7 +247,7 @@ const UNIT: u8 = 0x1f;
 
 /// The capacity ceilings this store refuses a batch against.
 ///
-/// A seam rather than three literals, because the *channel* and the *numbers*
+/// A seam rather than five literals, because the *channel* and the *numbers*
 /// were settled one milestone apart: a ceiling of `usize::MAX` refuses nothing
 /// and a measured one refuses through the same code path, which is what let the
 /// refusal be proven in both directions before the values existed.
@@ -282,6 +282,8 @@ pub(crate) struct Ceilings {
     pub(crate) events_per_batch: usize,
     /// The largest `metadata` one event may carry.
     pub(crate) metadata_len: usize,
+    /// The most tags one call may carry, summed over all its events.
+    pub(crate) tags_per_batch: usize,
 }
 
 impl Ceilings {
@@ -328,18 +330,28 @@ impl Ceilings {
     ///   fixed-width columns and SQLite's record header. ADR-0043 sets no
     ///   metadata floor, so any number is legal; this one is the largest
     ///   power of two that fits beside the three above.
+    /// * **`tags_per_batch` — 524,288.** Measured, not carved, and the one
+    ///   number here placed against a wall a deployed object hit: one call
+    ///   reset the object at 757 × 1,024 tags (775,168 tag rows, the CPU limit,
+    ///   2026-11-01) and at 1,016 × 1,024 (the storage timeout, 2026-10-31).
+    ///   512 events at `tags_per_event` is 1.48 times below the lower of the
+    ///   two, and 64 times the `MIN_SUPPORTED_TAGS_PER_BATCH` floor
+    ///   (ADR-0100). It is at least `tags_per_event`, so an event within its
+    ///   own ceiling is never refused as a batch of one, and below
+    ///   `events_per_batch × tags_per_event`, so it can be reached.
     pub(crate) const DECLARED: Self = Self {
         event_data_len: 1024 * 1024,
         tags_per_event: 1024,
         events_per_batch: 1024,
         metadata_len: 512 * 1024,
+        tags_per_batch: 512 * 1024,
     };
 
     /// A store that refuses nothing, for the tests that supply their own.
     ///
     /// Kept after [`DECLARED`](Self::DECLARED) landed rather than deleted,
     /// because it is the base every `with_ceilings` test builds from: those
-    /// tests state one small ceiling and inherit "no ceiling" for the other two,
+    /// tests state one small ceiling and inherit "no ceiling" for the others,
     /// and inheriting the *production* numbers there would make each of them
     /// quietly depend on a value it is not about.
     #[cfg(all(test, target_arch = "wasm32"))]
@@ -348,6 +360,7 @@ impl Ceilings {
         tags_per_event: usize::MAX,
         events_per_batch: usize::MAX,
         metadata_len: usize::MAX,
+        tags_per_batch: usize::MAX,
     };
 }
 
@@ -1020,10 +1033,14 @@ impl Ceilings {
     /// `events`, exceeds, with the magnitude that exceeds it.
     ///
     /// The batch length first, then each event's data, tags and metadata, in
-    /// that order: the order `append` has always refused in. `len` is passed
-    /// apart from `events` because a caller whose events are not one slice
-    /// (ingest, whose call is several groups of foreign events and
-    /// compensation) knows the count without collecting them.
+    /// that order: the order `append` has always refused in. Then the call's
+    /// total tags, saturating, last: a per-event refusal is `Park` and a total
+    /// one `Split`, so a call over both is parked at once rather than halved
+    /// down to the one event that was always going to be refused. `len` is
+    /// passed apart from `events` because a caller whose events are not one
+    /// slice (ingest, whose call is several groups of foreign events and
+    /// compensation) knows the count without collecting them. For the same
+    /// reason the total is summed in the same pass rather than a second one.
     fn exceeded<'e>(
         &self,
         len: usize,
@@ -1032,27 +1049,38 @@ impl Ceilings {
         if len > self.events_per_batch {
             return Some((StoreLimit::EventsPerBatch, len));
         }
-        events.into_iter().find_map(|event| {
-            let metadata_len = event
-                .metadata()
-                .map_or(0, happenstance_core::bytes::Bytes::len);
-            [
-                (
-                    StoreLimit::EventDataLen,
-                    event.data().len(),
-                    self.event_data_len,
-                ),
-                (
-                    StoreLimit::TagsPerEvent,
-                    event.tags().len(),
-                    self.tags_per_event,
-                ),
-                (StoreLimit::MetadataLen, metadata_len, self.metadata_len),
-            ]
-            .into_iter()
-            .find(|(_, actual, ceiling)| actual > ceiling)
-            .map(|(limit, actual, _)| (limit, actual))
-        })
+        let mut tags = 0_usize;
+        for event in events {
+            if let Some(found) = self.per_event_exceeded(event) {
+                return Some(found);
+            }
+            tags = tags.saturating_add(event.tags().len());
+        }
+        (tags > self.tags_per_batch).then_some((StoreLimit::TagsPerBatch, tags))
+    }
+
+    /// The first of the per-event ceilings `event` exceeds: its data, its tags,
+    /// then its metadata.
+    fn per_event_exceeded(&self, event: &Event) -> Option<(StoreLimit, usize)> {
+        let metadata_len = event
+            .metadata()
+            .map_or(0, happenstance_core::bytes::Bytes::len);
+        [
+            (
+                StoreLimit::EventDataLen,
+                event.data().len(),
+                self.event_data_len,
+            ),
+            (
+                StoreLimit::TagsPerEvent,
+                event.tags().len(),
+                self.tags_per_event,
+            ),
+            (StoreLimit::MetadataLen, metadata_len, self.metadata_len),
+        ]
+        .into_iter()
+        .find(|(_, actual, ceiling)| actual > ceiling)
+        .map(|(limit, actual, _)| (limit, actual))
     }
 }
 
@@ -2656,6 +2684,53 @@ mod write_path_tests {
             ["Exact"],
             "and the refused event left no row"
         );
+    }
+
+    /// CF-40's tags-per-batch ceiling (VT-36, ADR-0100): a call whose tags sum
+    /// past the ceiling is refused as `TagsPerBatch`, with its total, before
+    /// any SQL runs, though no event is over its own ceiling; and a call at the
+    /// total lands.
+    #[wasm_bindgen_test]
+    async fn a_batch_over_the_tags_per_batch_ceiling_is_refused_before_any_sql() {
+        let sql = durable_object();
+        let store = CloudflareEventStore::new(sql.clone()).with_ceilings(Ceilings {
+            tags_per_batch: 3,
+            ..Ceilings::UNBOUNDED
+        });
+        store.migrate().expect("the schema applies");
+
+        let refused = store
+            .append(
+                &[
+                    tagged("Over", &["a:1", "b:2"]),
+                    tagged("Over", &["c:3", "d:4"]),
+                ],
+                None,
+            )
+            .await;
+        assert!(
+            matches!(
+                refused,
+                Err(AppendError::ExceedsStoreLimit {
+                    limit: StoreLimit::TagsPerBatch,
+                    len: 4
+                })
+            ),
+            "four tags over two events names TagsPerBatch and the total: {refused:?}"
+        );
+        assert!(
+            stored_positions(&sql).is_empty(),
+            "and neither event of the refused call landed"
+        );
+
+        store
+            .append(
+                &[tagged("At", &["a:1", "b:2"]), tagged("At", &["c:3"])],
+                None,
+            )
+            .await
+            .expect("three tags over two events is at the ceiling, and lands");
+        assert_eq!(stored_types(&sql), ["At", "At"]);
     }
 
     /// AC-007. `append` returns the position of the **last** event in slice

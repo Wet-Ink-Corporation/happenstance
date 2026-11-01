@@ -2,7 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-08-13
-- **Settles:** PS-26 – PS-30 (`spec/SPECIFICATION.md:5399-5478`), to the extent
+- **Settles:** PS-26 – PS-30 (`spec/SPECIFICATION.md:5429-5508`), to the extent
   they are the port's at all — which is the decision
 - **Builds on:** ADR-0007 (the pump/decode split), ADR-0017 (`type Batch;`,
   `rollback` stays on the port)
@@ -34,7 +34,7 @@ runner, ADR-0020 / ADR-0021 and PS-33's falsifier to **HS-P0011**,
 `typed-layer-and-alpha-release`. PS-26 – PS-30's rules are, without exception,
 integration-level: `failure_policy_is_per_projection` *"needs a runner, so it
 belongs in the workspace e2e crate rather than the adapter suite"*
-(`spec/SPECIFICATION.md:5403-5406`); `skip_and_record_is_atomic`,
+(`spec/SPECIFICATION.md:5433-5436`); `skip_and_record_is_atomic`,
 `pump_reports_the_failing_position`,
 `one_poisoned_projection_does_not_stall_the_others` and `panicking_apply_rolls_back`
 all need a pump.
@@ -44,7 +44,7 @@ Three things are deferred by name:
 
 | Deferred | Where it is stated | Owner |
 |---|---|---|
-| `PumpError<E::Error, P::Error, A>` and its `Apply { position, error: A }` variant — three type parameters, which is a real cost | `spec/SPECIFICATION.md:5438-5445` | HS-P0011, ADR-0020 / ADR-0021 |
+| `PumpError<E::Error, P::Error, A>` and its `Apply { position, error: A }` variant — three type parameters, which is a real cost | `spec/SPECIFICATION.md:5468-5475` | HS-P0011, ADR-0020 / ADR-0021 |
 | the `SkipAndRecord` policy vocabulary, and what "record" means | PS-27's falsifier (`:5413-5416`) | HS-P0011 |
 | the supervisor's observability half — reporting a terminal state *without being polled* | PS-29's rule (`:5449-5453`) | HS-P0011 |
 
@@ -83,7 +83,7 @@ runner keeps its own marker and its own phase.
 ### The primitive that already exists
 
 The most useful thing in this clause range is a fact nobody had noticed, and
-`spec/SPECIFICATION.md:5420-5427` states it:
+`spec/SPECIFICATION.md:5450-5457` states it:
 
 > The skip *primitive* already exists and nobody has noticed it: `begin()`
 > followed immediately by `commit(batch, id, poison_position, Live)` applies
@@ -112,7 +112,7 @@ widened by it.
 state MUST be observable through the API."* The rule
 `one_poisoned_projection_does_not_stall_the_others` additionally asserts *"that
 the supervisor reports the failure without being polled for it"*
-(`spec/SPECIFICATION.md:5449-5453`). A supervisor exposing
+(`spec/SPECIFICATION.md:5479-5483`). A supervisor exposing
 `fn failures(&self) -> Vec<Poisoned>` makes the terminal state observable through
 the API — satisfying the sentence verbatim — and requires polling, so it fails the
 rule. The sweep grades it a **plausible first cut**: a query method is the obvious
@@ -164,7 +164,7 @@ Three things make that true rather than convenient:
   be a store with an opinion about the domain.
 - **Failure isolation already works structurally.** `Projection::Store` is an
   associated type and checkpoints are per `(store, ProjectionId)` (ADR-0007), *"so
-  a failure cannot span two"* (`spec/SPECIFICATION.md:5455-5458`). PS-29's first
+  a failure cannot span two"* (`spec/SPECIFICATION.md:5485-5488`). PS-29's first
   half is discharged by a decision already taken.
 
 ### 2. `rollback` must survive the port change, and PS-30 is why
@@ -177,7 +177,7 @@ A fan-out runner that catches a panic in `apply` and wraps `&mut P::Batch` in
 `AssertUnwindSafe` is defensible **only** because `rollback` exists:
 *"`AssertUnwindSafe` is a promise that no observer will see a half-mutated value,
 and `rollback` is what discharges it. Without the rollback the promise is a lie"*
-(`spec/SPECIFICATION.md:5471-5475`). Delete `rollback` because "a buffered batch
+(`spec/SPECIFICATION.md:5501-5505`). Delete `rollback` because "a buffered batch
 could just be dropped", and every fan-out runner in the workspace becomes a
 program that asserts something untrue to the compiler.
 
@@ -192,7 +192,7 @@ typed-layer phase.
 PS-26, `[FROZEN]`. The alternative that lost is a runner-level `on_error:
 SkipPolicy` configuration — *"the obvious design, it is what a builder API
 invites, and it forces one wrong answer onto one of Wattline's two projections"*
-(`spec/SPECIFICATION.md:5407-5410`).
+(`spec/SPECIFICATION.md:5437-5440`).
 
 The disagreement between the scenarios **is** the result: halting is correct for a
 revenue ledger — one that skips an event is worse than one that stops — and wrong
@@ -229,7 +229,7 @@ never write. It does not.
 **For the typed layer.** It inherits a well-specified hole rather than a
 half-designed error type. `PumpError`'s three type parameters are a real cost and
 the alternative — `Box<dyn core::error::Error>` — is barred in library code by
-house style and by `no_std` (`spec/SPECIFICATION.md:5443-5445`); that trade is
+house style and by `no_std` (`spec/SPECIFICATION.md:5473-5475`); that trade is
 HS-P0011's to make with a runner in front of it, not this ADR's to make with none.
 
 **For the specification.** Five clauses in this range keep their markers and none
@@ -264,7 +264,7 @@ failure never reaches `commit` at all.
 
 **Designing `PumpError` here.** Rejected in *Out of scope*, and it is the most
 tempting rejection in this record because the shape is already written down at
-`spec/SPECIFICATION.md:5438-5445` and could simply be transcribed. Transcribing it
+`spec/SPECIFICATION.md:5468-5475` and could simply be transcribed. Transcribing it
 would make ADR-0019 the decision HS-P0011 has to supersede on its first day.
 
 **Deleting `rollback` because a buffered batch can be dropped.** Rejected in §2 —

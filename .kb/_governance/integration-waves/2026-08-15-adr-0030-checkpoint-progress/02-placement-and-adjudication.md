@@ -356,7 +356,7 @@ source_paths:
 last_reviewed: 2026-08-15
 ```
 
-**Body:** what the switch is and where (`xtask/src/spec_trace.rs:1750`, and check 4's abstention at
+**Body:** what the switch is and where (`xtask/src/spec_trace.rs:1760`, and check 4's abstention at
 `:699`); the dated fact, with the commit or date stated **in the body** as the reference README's
 dating rule requires; the two tests (`:2363`, `:2387`) and what each holds; and the transferable
 shape in one paragraph, stated as an observation rather than as a rule — a `reference` atom binds
@@ -411,9 +411,9 @@ source did not ask for is how a corpus grows noise. Four things decide it the ot
 
 1. **It is a conflict, and the ingest rule routes conflicts here.** Not a preference between two
    readings — a sentence falsified by a compiler, with the specification's own `Rejects` field
-   naming it (`spec/SPECIFICATION.md:5699`).
+   naming it (`spec/SPECIFICATION.md:5729`).
 2. **The specification asks for it, in a `[FROZEN]` `MUST`, and names this file.**
-   `spec/SPECIFICATION.md:5679` states the correction as owed; `:5714` says *"The staging note for
+   `spec/SPECIFICATION.md:5709` states the correction as owed; `:5714` says *"The staging note for
    the next wave is `.kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md`."* This is that wave.
 3. **`unresolved` is a wave-local channel and this obligation has outlived two waves.** A finding
    that recurs in three consecutive manifests and lands in no atom is a finding the corpus is

@@ -260,7 +260,7 @@ None of the three changes maturity: all three stay `[PROVISIONAL]`.
   for it.
 - **CF-34.** Its falsifier, an instrumented fixture that counts rows examined,
   is **foreclosed by CF-33**. CF-33 is `[FROZEN]` and forbids any conformance
-  rule to assert on an operation count (`spec/SPECIFICATION.md:9079-9080`), so
+  rule to assert on an operation count (`spec/SPECIFICATION.md:9109-9110`), so
   the rule the falsifier imagines could not be admitted. CF-34's falsifier
   becomes the open question that owns both clauses'
   scope. The marker stays until that question is answered, because every
@@ -287,7 +287,7 @@ carries ES-11 as a named, documented exception.
 CF-39 requires that a fixture declaring `MID_BATCH_FAULT` fail the *k*-th write
 **inside the store's own write path**, by a mechanism the store cannot absorb,
 and say what that mechanism is. A fixture whose store can absorb every fault it
-can arm must decline (`spec/SPECIFICATION.md:8422-8427`). Its marker was
+can arm must decline (`spec/SPECIFICATION.md:8452-8457`). Its marker was
 falsified by *"a real adapter whose only injectable mid-batch fault is one its
 driver transparently absorbs"*, named rusqlite and Postgres as the instruments,
 and said *"no adapter has armed a fault yet"* (`:8428-8433`).
@@ -325,7 +325,7 @@ third and a fourth adapter arm real in-store faults as well.**
 The rule is `arming_a_mid_batch_fault_makes_the_append_fail`
 (`crates/happenstance-testkit/src/suite.rs:3186`, registered at
 `registry.rs:168`). It can fail: `NoopFaultFixture`
-(`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:3658`)
+(`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:3661`)
 declares the capability, overrides the arming with an empty body, and is
 rejected. The clause needs no `†`.
 
@@ -358,7 +358,7 @@ Phase 17's breaking window must not change that method's signature, including
 the *k* index, unless it writes a record that supersedes this section.
 
 **The marker text.** It becomes `[FROZEN]` *(by ADR-0066. …)*, the form
-ADR-0063's freezes use (`spec/SPECIFICATION.md:5206`). Its body names the
+ADR-0063's freezes use (`spec/SPECIFICATION.md:5236`). Its body names the
 falsifier, the three arming adapters, and SQLite's declension by scope. Why a
 future absorbing driver can only produce a declension is argued above and is
 not repeated in the marker; the clause's own last sentence is what carries it.
@@ -557,7 +557,7 @@ checks each crate's documented MSRV statement against ADR-0067.
 - **`conflicting_position` is a hint, and that is settled.** ES-25 is `[FROZEN]`
   and already says so: an adapter that detects the conflict without learning the
   culprit MUST be permitted to report `None`, and callers MUST NOT depend on it
-  (`spec/SPECIFICATION.md:3947-3950`). ADR-0012 §8 is the record
+  (`spec/SPECIFICATION.md:3977-3980`). ADR-0012 §8 is the record
   (`references/adr/0012-append-shape-and-preconditions.md:462`). Neon-over-HTTP
   was the forcing case, and it exists and conforms. The ledger's open-decision
   row is struck.
@@ -675,7 +675,7 @@ obligation.
 
 - Survey and verification outputs, 2026-09-29. The phase-16 session keeps them
   outside the tree, and every citation from them above was re-read at `HEAD`.
-- `spec/SPECIFICATION.md:8422-8443` (CF-39, its marker, rule and rejects);
+- `spec/SPECIFICATION.md:8452-8473` (CF-39, its marker, rule and rejects);
   `:9079-9080` (CF-33); VT-9's, CF-17's and CF-34's markers, cited by clause
   because this change rewrites them; `:3947-3950` (ES-25 on `conflicting_position`); `:8984`,
   `:9029` and `:9043` (CF-29, CF-31 and CF-32).

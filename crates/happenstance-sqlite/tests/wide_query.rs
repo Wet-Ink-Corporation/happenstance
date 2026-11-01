@@ -203,7 +203,7 @@ async fn a_query_far_above_the_minimum_is_served() {
 /// `AppendError::Store` — a refusal at the pushdown limit, which is AC-008's
 /// named wrong implementation, arriving on the write path instead of the read
 /// one. VT-23 forbids the refusal wherever it appears, and
-/// `crates/happenstance-core/src/limits.rs:46-52` gives it no variant to be
+/// `crates/happenstance-core/src/limits.rs:50-56` gives it no variant to be
 /// reported through.
 ///
 /// The conformance suite cannot reach this: `MIN_SUPPORTED_QUERY_ITEMS` is 128,

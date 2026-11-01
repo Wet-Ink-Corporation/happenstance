@@ -19,7 +19,7 @@
 
 ## 1. The question
 
-ES-17 (`spec/SPECIFICATION.md:3563-3595`) says `EventStore::append` MUST continue to take
+ES-17 (`spec/SPECIFICATION.md:3593-3625`) says `EventStore::append` MUST continue to take
 `events: &[Event]`. It was `[PROVISIONAL]` on one measurement: *a real adapter showing the
 per-event clone is a material fraction of append cost.* ADR-0012 said what that measurement must
 be (`:244-266`):
@@ -35,7 +35,7 @@ be (`:244-266`):
 If it fired, the successor was `Vec<Event>` and nothing else (`:266`). ADR-0055 restated the
 subject: not SQLite, which binds from the borrow and is null by construction, but
 `happenstance-cloudflare`, whose `write_rows` copies type, payload and metadata into owned
-`SqlValue`s per event (`crates/happenstance-cloudflare/src/event_store.rs:926-937`).
+`SqlValue`s per event (`crates/happenstance-cloudflare/src/event_store.rs:939-950`).
 
 Phase 16 made ES-17 `freeze-by-17`, because the other answer changes `append` on
 `happenstance-core`, the four published adapters, the testkit's own stores and the typed layer,

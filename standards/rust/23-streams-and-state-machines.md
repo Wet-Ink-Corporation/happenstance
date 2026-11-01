@@ -323,7 +323,7 @@ rows already written stay written and no `Result` exists for anyone to read.
 `dropped_append_future_leaves_no_partial_batch` is the only thing that reports it,
 and only for an adapter that has run the suite.
 
-**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:1968 (YieldingRowAtATimeStore)` ·
+**Evidence.** `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:1971 (YieldingRowAtATimeStore)` ·
 `crates/happenstance-postgres/src/read_stream.rs:289 (Dropping the cursor drops the transaction)` ·
 [ES-22](../../spec/SPECIFICATION.md) ·
 [E0053](https://doc.rust-lang.org/error_codes/E0053.html) *(checked 2026-08-09, rustc 1.97.1)*

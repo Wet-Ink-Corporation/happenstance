@@ -84,7 +84,7 @@ deny.toml:75-79                                                  ✓ wrappers = 
 deny.toml:57-66                                                  ✓ the different-argument distinction, already in the file's own comment
 crates/happenstance/tests/flavours.rs                            ✓ exists — the load-bearing guard
 .kb/open-questions/deny-bans-red-on-the-worker-dependency.md      ✓ kb-open-question-worker-async-trait-ban-001, status: accepted
-spec/SPECIFICATION.md:4880-4884                                  ✓ PS-3, [PROVISIONAL], SHOULD with the condition, verbatim
+spec/SPECIFICATION.md:4910-4914                                  ✓ PS-3, [PROVISIONAL], SHOULD with the condition, verbatim
 spec/SPECIFICATION.md:392                                        ✓ the impl census — and it disagrees with one staged sentence, below
 crates/happenstance-testkit/tests/…/mutants.rs:44                ✓ CheckpointOnlyStore, NAME = "CheckpointOnlyStore"
 crates/happenstance-sqlite/tests/projection.rs:44                ✓ #![cfg(all(feature = "projection-store", feature = "conformance"))] — TWO

@@ -641,6 +641,32 @@ fn the_readme_states_the_metadata_ceiling() {
     );
 }
 
+/// CF-40's tags-per-batch ceiling (VT-36, ADR-0100) is stated in the README,
+/// on the line that names the variant it is refused as.
+///
+/// Line-scoped on purpose: 524,288 is also the metadata ceiling (512 KiB), so
+/// a README-wide search for the number is already satisfied and proves
+/// nothing.
+#[test]
+fn the_readme_states_the_tags_per_batch_ceiling() {
+    let readme = packaged("README.md");
+    let declared = <CloudflareFixture as Fixture>::MAX_TAGS_PER_BATCH
+        .expect("this adapter declares a tags-per-batch ceiling");
+
+    let line = readme
+        .lines()
+        .find(|line| line.contains("StoreLimit::TagsPerBatch"));
+    assert!(
+        line.is_some(),
+        "the README does not name the variant a tags-per-batch refusal arrives as"
+    );
+    assert!(
+        line.is_some_and(|line| line.contains(&grouped(declared))),
+        "the README line naming `StoreLimit::TagsPerBatch` does not state the \
+         ceiling the fixture declares: {declared}. Got {line:?}"
+    );
+}
+
 /// The restore procedure VT-6 lets this store rely on is written down where an
 /// operator looks for it (#262).
 ///

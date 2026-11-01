@@ -58,7 +58,7 @@ The specification has no clause on any of this. `spec/SPECIFICATION.md` mentions
 `SqlStatement` and `NeonWriteBatch::push` nowhere, and its `&'static str` hits are about
 `EventType` (`:1274`, `:1300-1307`). No `[FROZEN]` clause moves. The clause that bounds the answer
 is PS-9: "`Batch` MUST NOT carry a universal write vocabulary. A projection writes through the
-concrete adapter's inherent API" (`spec/SPECIFICATION.md:5590-5591`, `[FROZEN]` by ADR-0074).
+concrete adapter's inherent API" (`spec/SPECIFICATION.md:5620-5621`, `[FROZEN]` by ADR-0074).
 
 ## 2. Decision
 
@@ -270,7 +270,7 @@ when the statement is minted.
 
 **4.2 Nothing generic would consume it.** The reason to mint a shared type is to let generic code
 name it. PS-9 is frozen on the ground that no library code writes into an unknown adapter's batch
-(`spec/SPECIFICATION.md:5590-5600`). ADR-0074 made that a compiled fact rather than an argument: a
+(`spec/SPECIFICATION.md:5620-5630`). ADR-0074 made that a compiled fact rather than an argument: a
 skip row was written through `SqliteBatch::push` and through `LivePostgresBatch::execute` with no
 bound on `Batch` (`.kb/decisions/0074-projection-apply-is-async.md:196-221`). ADR-0017 refused the
 universal write vocabulary first (`.kb/decisions/0017-what-a-projection-batch-owns.md:82-88`). A
@@ -319,10 +319,10 @@ Under ADR-0066 a published macro's accepted input is a semver surface as much as
 signature is.
 
 **4.5 It would be the second narrowing of the same parameter.** `push` narrowed once, from
-`impl Into<String>` to `&'static str`, in `0.2.0` (`CHANGELOG.md:1952-1981`, under `## [0.2.0]`). A second
+`impl Into<String>` to `&'static str`, in `0.2.0` (`CHANGELOG.md:1979-2008`, under `## [0.2.0]`). A second
 narrowing in `0.4.0` would break every caller in `examples/` (§8) for a guarantee that §4.3 shows
 only a run-time check can give, and a run-time check needs no new type. The CHANGELOG entry that landed Option A said why that matters: "a signature narrowed twice is
-worse than one narrowed once" (`CHANGELOG.md:1977-1981`).
+worse than one narrowed once" (`CHANGELOG.md:2004-2008`).
 
 ## 5. The arity obligation: what each driver does
 

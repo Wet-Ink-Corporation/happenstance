@@ -418,7 +418,8 @@ fn the_three_store_limits_are_declared_not_defaulted() {
 #[test]
 fn no_declared_ceiling_is_below_its_floor() {
     use happenstance_core::{
-        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_EVENT,
+        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_BATCH,
+        MIN_SUPPORTED_TAGS_PER_EVENT,
     };
 
     for (name, declared, floor) in [
@@ -436,6 +437,11 @@ fn no_declared_ceiling_is_below_its_floor() {
             "MAX_EVENTS_PER_BATCH",
             <CloudflareFixture as Fixture>::MAX_EVENTS_PER_BATCH,
             MIN_SUPPORTED_EVENTS_PER_BATCH,
+        ),
+        (
+            "MAX_TAGS_PER_BATCH",
+            <CloudflareFixture as Fixture>::MAX_TAGS_PER_BATCH,
+            MIN_SUPPORTED_TAGS_PER_BATCH,
         ),
     ] {
         let Some(ceiling) = declared else {
@@ -477,6 +483,84 @@ fn the_metadata_limit_is_declared_not_defaulted() {
         "MAX_METADATA_LEN is `None`, which says this store has no metadata \
          ceiling; it has one, and `append_reports_exceeded_store_limits` would \
          skip its metadata branch"
+    );
+}
+
+/// CF-40's fifth ceiling (VT-36, ADR-0100) is written out in this impl, for
+/// [`the_three_store_limits_are_stated_here`]'s reason.
+#[test]
+fn the_tags_per_batch_limit_is_stated_here() {
+    const SOURCE: &str = include_str!("support/mod.rs");
+
+    assert!(
+        SOURCE.contains("const MAX_TAGS_PER_BATCH"),
+        "`MAX_TAGS_PER_BATCH` is not written in `tests/support/mod.rs`, so this \
+         fixture inherited `None` from the trait"
+    );
+}
+
+/// The tags-per-batch ceiling is declared, so the rule's fifth branch runs here.
+///
+/// `None` would say the store refuses no call for its total tag count, and it
+/// refuses one before any SQL: the call a deployed object resets on.
+#[test]
+fn the_tags_per_batch_limit_is_declared_not_defaulted() {
+    assert!(
+        <CloudflareFixture as Fixture>::MAX_TAGS_PER_BATCH.is_some(),
+        "MAX_TAGS_PER_BATCH is `None`, which says this store has no ceiling on \
+         one call's total tags; it has one, and \
+         `append_reports_exceeded_store_limits` would skip its fifth branch"
+    );
+}
+
+/// The tags-per-batch ceiling is coherent with the other two, and clear of the
+/// walls a deployed object was measured to reset at.
+///
+/// Coherent (VT-36): at least the per-event ceiling, so an event within its
+/// own ceiling is never refused as a batch of one, and below events × tags per
+/// event, so one tag over it can be sent. Clear: the lower measured wall is
+/// 757 events of 1,024 tags, 775,168 tag rows, at which a deployed object
+/// exceeded its CPU limit and was reset
+/// (`experiments/durable-object-limits/results/run-workerd-deployed-2026-11-01-ingest.txt`);
+/// the other is 1,016 × 1,024, 1,040,384, the storage timeout
+/// (`…/run-workerd-deployed-2026-10-31-ingest.txt`). The walls moved 1.34
+/// times between two runs, so the ceiling keeps a margin of 1.4 under the
+/// lower.
+///
+/// The named wrong implementation it rejects is the ceiling raised toward a
+/// wall it was measured below, or a per-event ceiling raised past it.
+#[test]
+fn the_tags_per_batch_ceiling_is_reachable_and_below_the_measured_wall() {
+    const LOWER_WALL: usize = 757 * 1024;
+    const UPPER_WALL: usize = 1016 * 1024;
+
+    let stated = |name: &str, declared: Option<usize>| {
+        declared.unwrap_or_else(|| panic!("{name} is `None` on a store that declares it"))
+    };
+    let per_batch = stated(
+        "MAX_TAGS_PER_BATCH",
+        <CloudflareFixture as Fixture>::MAX_TAGS_PER_BATCH,
+    );
+    let per_event = stated(
+        "MAX_TAGS_PER_EVENT",
+        <CloudflareFixture as Fixture>::MAX_TAGS_PER_EVENT,
+    );
+    let events = stated(
+        "MAX_EVENTS_PER_BATCH",
+        <CloudflareFixture as Fixture>::MAX_EVENTS_PER_BATCH,
+    );
+
+    assert_eq!((LOWER_WALL, UPPER_WALL), (775_168, 1_040_384));
+    assert_eq!(per_batch, 524_288, "the number ADR-0100 and the docs state");
+    assert!(per_event <= per_batch, "below the per-event ceiling");
+    assert!(
+        per_batch < events * per_event,
+        "reachable under the other two"
+    );
+    assert!(
+        per_batch * 14 <= LOWER_WALL * 10,
+        "{per_batch} tags per call leaves less than 1.4 times' margin under \
+         the {LOWER_WALL}-row wall a deployed object reset at"
     );
 }
 

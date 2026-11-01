@@ -184,6 +184,12 @@ pub(crate) enum LogError {
     /// to be reported as `Store`. The defect is carrying it as `Busy`, which
     /// needs a payload to carry.
     DeadlineElapsed,
+    /// One append carried more tags in total than the store accepts.
+    ///
+    /// `TagsPerBatchThroughStoreStore`'s answer: a transaction bounded by its
+    /// row count, refused through `AppendError::Store` where VT-36 gives the
+    /// refusal its own `StoreLimit`.
+    TooManyTags,
 }
 
 impl core::fmt::Display for LogError {
@@ -206,6 +212,7 @@ impl core::fmt::Display for LogError {
             Self::DeadlineElapsed => {
                 f.write_str("the deadline elapsed before the append was acknowledged")
             }
+            Self::TooManyTags => f.write_str("too many tags in one batch"),
         }
     }
 }

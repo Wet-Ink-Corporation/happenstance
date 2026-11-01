@@ -168,7 +168,7 @@ and 0010 owns what the suite may contain.
 
 **Body must carry, and must not.** Must: the three graded halves with the strength table; the
 `E0195` and ICE citations by `file:line` into `references/adapter-shapes.md`; the orphan-rule
-citation (`spec/SPECIFICATION.md:5015-5031`); all seven rejected alternatives with their reasons;
+citation (`spec/SPECIFICATION.md:5045-5061`); all seven rejected alternatives with their reasons;
 the `LiveHandleProjectionStore` disposition; and the PS-8/PS-13 gap-naming with the explicit
 sentence that it repairs nothing. Must not: reproduce the transcripts, the ICE minimisation, or
 the sweep's census — all three are one `file:line` away.
@@ -525,7 +525,7 @@ paragraph. **It must not be corrected.** The layer README bars it, the sweep bar
 (*"an appended, dated amendment note naming the refuted sentence … not an edit to the original
 paragraph"*), and the corpus has a governance atom for exactly this discrimination
 (`kb-governance-referent-not-reasoning-001`). The annotation quotes the refuted sentence, states
-what refutes it, cites `spec/SPECIFICATION.md:5317-5329`, and says what does **not** change: the
+what refutes it, cites `spec/SPECIFICATION.md:5347-5359`, and says what does **not** change: the
 PS-1 pairing defect reproduces independently from `:4733-4759`.
 
 **CL-2 lands here and nowhere else.** ADR-0019 independently observed that PS-29's defect comes

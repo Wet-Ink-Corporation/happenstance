@@ -159,12 +159,12 @@ the answer "it landed". The clause is now `[FROZEN]` at phase 4, with the two
 shapes that get no such guarantee stated as limits and a rule pinning each. The
 deferral was larger than the question.
 
-### The 32 `[PROVISIONAL]` clauses
+### The 33 `[PROVISIONAL]` clauses
 
 Forty-one at the split. CF-39 was frozen at phase 16 by ADR-0066, VT-10 at phase 17
 by ADR-0073, ES-41 and PS-22 at phase 17 by ADR-0028, PS-9 and PS-11 at phase 17
 by ADR-0074, PS-15, PS-23 and PS-24 at phase 17 by ADR-0075, and ES-17 at phase 17 by
-ADR-0080, ES-11 and ES-12 at phase 17 by ADR-0087, VT-14 at phase 17b by ADR-0089, VT-30 at phase 17b by ADR-0096, ES-7 at phase 17b by ADR-0092, and PS-39, minted provisional at phase 17 by ADR-0082, at phase 17b by ADR-0094. CF-42 was minted provisional by ADR-0099 for #338. Their rows stay, struck,
+ADR-0080, ES-11 and ES-12 at phase 17 by ADR-0087, VT-14 at phase 17b by ADR-0089, VT-30 at phase 17b by ADR-0096, ES-7 at phase 17b by ADR-0092, and PS-39, minted provisional at phase 17 by ADR-0082, at phase 17b by ADR-0094. CF-42 was minted provisional by ADR-0099 for #338, and VT-36 by ADR-0100 for #356. Their rows stay, struck,
 because rule 4 keeps it; `cargo xtask lints` now checks the count in this
 heading against §7.2 rather than matching it, so the next freeze changes one number
 here and nothing in the lint.
@@ -181,6 +181,7 @@ separate open questions overstated the exposure by that factor.
 | The ingest seam's placement | ~~VT-10~~ | ~~a real peer needing a foreign identity through `EventStore::append` after all~~ | **frozen at 17 — ADR-0073.** The SQLite spike runs `IngestStore` through `append`'s own row writer; phase 13 confirms it on two real peers. **(#108 part E, marker unchanged):** behind `sync` on all four adapters, published |
 | Const-constructible identifiers | ~~VT-14~~ | ~~`from_static` failing to move the `?` count in the worked example~~ | **frozen at 17b — ADR-0089.** The RTL corpus run in `experiments/identifier-validation/` came back empty: 0 disagreements in 1,112,064 per position, and 0 of 51 Arabic, Hebrew and Persian entries refused. Reopened by a legitimate identifier that requires an explicit bidirectional control |
 | Store limits | VT-21 – VT-24 | a real adapter that cannot honour a stated minimum | 5, tested 8 and 10 |
+| A tags-per-call floor and ceiling | VT-36 | a store whose per-call wall is not a function of the tag count, so that no count says where it is; `happenstance-cloudflare`'s deployed wall moved between 775,168 and 1,040,384 tag rows in one call | 13. Minted by ADR-0100 (#356); `happenstance-cloudflare` and the strict deployed `workerd` leg are its instruments |
 | Per-item boundaries on a condition | ~~VT-30~~ | ~~E2E-04 and E2E-05 still unwritable after phase 4~~ | **frozen at 17b — ADR-0096.** `happenstance-neon` pushes a multi-guard condition into one statement with no self-join per guard; the `min()`-collapse limb is retired by the record, because it could fire only as a major |
 | `Bytes`' human-readable form | WF-11 | a peer that cannot buffer a payload through any human-readable encoder | 9 |
 | The `!Send` flavour and `append` ownership | ~~ES-7~~ | ~~the Cloudflare adapter, and `dynosaur` failing to erase a generic `append`. The row read *"ES-7, ES-17"* until ES-17 was frozen; its struck row follows~~ | **frozen at 17b — ADR-0092.** The caret stays; a derivation contract compiled into `happenstance-core` fails a consumer's build when a `trait-variant` release changes the derived shape, and the weekly `floating-deps` job resolves unlocked. Reopened by a `0.1.z` that fails the contract or makes a downstream direct impl collide |
@@ -303,6 +304,7 @@ replication needs no filtered or suffix store: SY-27 and SY-28 freeze on
 | VT-21 | freeze-by-13 | SY-18 is where a floor is first compared across a peer set, and phase 13's two real peers (Durable Object, Neon over HTTP) are the tightest targets in the plan. Measured at #121: floor 65,536 ≤ `MemorySyncPeer` 65,536 < KV fixture 114,465 < Neon store 131,072 ≤ SQLite, Postgres and Cloudflare 1,048,576 |
 | VT-22 | renew-past-1.0: a real domain event that legitimately carries more than 64 tags | The marker's own domain falsifier; the richest scenario event carries 8. A firing is answered by a store's own larger documented limit — every shipped adapter accepts 128 or more — not by raising the floor within 1.x |
 | VT-23 | renew-past-1.0: a real decision model that legitimately needs more than 128 items | The marker's own domain falsifier; the largest scenario model uses 4. A firing is answered by the store evaluating more, which every chunking adapter already does with no ceiling |
+| VT-36 | freeze-by-13 | Minted provisional by ADR-0100 (#356). Freezes when the strict deployed `workerd` leg has run the 524,288-tag branch of `append_reports_exceeded_store_limits` green across runs, and the floor has met a sync ingest that splits on `TagsPerBatch`. The freeze is the owner's |
 | VT-24 | freeze-by-13 | Sync ingest is the first consumer that batches by the floor (E2E-35), and SY-14 is where a group larger than 128 would surface |
 | ~~VT-30~~ | ~~freeze-by-17b~~ | **frozen at 17b — ADR-0096.** ~~Moved from 17 by ADR-0072, additive. ADR-0054's alias and builder-state decided in one pass; limb 2 retired by a record or by a multi-guard bench scenario~~ |
 | WF-1 | renew-past-1.0: a DCB implementation publishes a wire-level encoding, or a user needs to read another implementation's log | The format is private and WF-8 versions it, so a bridge is additive: a separate `happenstance-dcb-interop` crate with its own ADR. Recorded at phase 13 in ADR-0026's envelope section, which names the experiment: a bridge reading a UmaDB server's log over its published `umadb.proto` gRPC service |

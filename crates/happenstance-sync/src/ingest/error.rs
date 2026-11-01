@@ -84,11 +84,14 @@ pub enum IngestError<E> {
     ///
     /// It mirrors `AppendError::ExceedsStoreLimit`, so a runner tells "this
     /// will never fit here" from "retry" without knowing the adapter (VT-25).
-    /// [`EventsPerBatch`](StoreLimit::EventsPerBatch) is
-    /// [`Split`](FailureClass::Split): the batch is too big and its events are
-    /// not. Groups are atomic, though, so a call of one group over the limit
-    /// cannot be split further, and what a runner does then is #244's. Every
-    /// other limit is about one event, and is [`Park`](FailureClass::Park).
+    /// Two limits are about the batch:
+    /// [`EventsPerBatch`](StoreLimit::EventsPerBatch) and
+    /// [`TagsPerBatch`](StoreLimit::TagsPerBatch) are
+    /// [`Split`](FailureClass::Split), because the batch is too big and its
+    /// events are not. Groups are atomic, though, so a call of one group over
+    /// either limit cannot be split further, and what a runner does then is
+    /// #244's. Every other limit is about one event, and is
+    /// [`Park`](FailureClass::Park).
     #[error("ingest exceeds the store's {limit} limit: {len}")]
     #[non_exhaustive]
     ExceedsStoreLimit {
@@ -171,11 +174,11 @@ impl<E: Classify> Classify for IngestError<E> {
     fn class(&self) -> FailureClass {
         match self {
             Self::ExceedsStoreLimit { limit, .. } => match limit {
-                StoreLimit::EventsPerBatch => FailureClass::Split,
+                StoreLimit::EventsPerBatch | StoreLimit::TagsPerBatch => FailureClass::Split,
                 // `StoreLimit` is `#[non_exhaustive]` and core's, so this arm
                 // also answers a limit added later. Such a limit is assumed to
-                // be about one event, as every limit but the batch's is today,
-                // and parking cannot loop where splitting can.
+                // be about one event, as every limit but the batch's two are
+                // today, and parking cannot loop where splitting can.
                 _ => FailureClass::Park,
             },
             Self::UnheldOwnIdentity { .. } => FailureClass::Stop,
@@ -202,6 +205,12 @@ mod tests {
         }
     }
 
+    impl core::fmt::Display for Never {
+        fn fmt(&self, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            match *self {}
+        }
+    }
+
     /// An adapter error that answers whatever class it was built with.
     #[derive(Debug)]
     struct Answers(FailureClass);
@@ -220,12 +229,25 @@ mod tests {
     ];
 
     #[test]
-    fn exceeding_events_per_batch_is_split() {
+    fn exceeding_a_batch_limit_is_split() {
+        for limit in [StoreLimit::EventsPerBatch, StoreLimit::TagsPerBatch] {
+            let over = IngestError::<Never>::ExceedsStoreLimit { limit, len: 2 };
+            assert_eq!(over.class(), FailureClass::Split, "{limit}");
+        }
+    }
+
+    /// The text a refused call carries out of a Durable Object, which the
+    /// workerd harness matches on.
+    #[test]
+    fn a_tags_per_batch_refusal_names_its_limit_and_total() {
         let over = IngestError::<Never>::ExceedsStoreLimit {
-            limit: StoreLimit::EventsPerBatch,
-            len: 2,
+            limit: StoreLimit::TagsPerBatch,
+            len: 525_312,
         };
-        assert_eq!(over.class(), FailureClass::Split);
+        assert_eq!(
+            over.to_string(),
+            "ingest exceeds the store's tags per batch limit: 525312"
+        );
     }
 
     #[test]

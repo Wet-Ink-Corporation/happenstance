@@ -42,8 +42,35 @@ not the same as what a user needed to be told.
   row its store holds, and answers `Settled::Visible`. The provided body
   answers `Settled::Nothing` without waiting. The method is additive: a fixture
   written against `0.4.5` compiles unchanged.
+- `happenstance-core`: `StoreLimit::TagsPerBatch`, a store's refusal of one
+  append for the total tags across its events, and
+  `MIN_SUPPORTED_TAGS_PER_BATCH`, its floor of 8,192 (VT-36,
+  [ADR-0100](.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md),
+  #356). The floor is the product VT-22 and VT-24 already oblige, so it asks
+  nothing new of a store. Additive: `StoreLimit` is `#[non_exhaustive]`.
+  `happenstance` re-exports the constant.
+- `happenstance-testkit`: `Fixture::MAX_TAGS_PER_BATCH`, defaulted to `None`,
+  and a fifth branch of `append_reports_exceeded_store_limits` that runs when a
+  fixture states one (CF-40, VT-36, #356). It accepts exactly the stated total
+  spread over several events and requires one more to be refused as
+  `TagsPerBatch`, with nothing written, and it fails a fixture whose stated
+  total is below its own tags-per-event ceiling or cannot be reached under its
+  events-per-batch ceiling. A fixture that states nothing runs as before.
 
 ### Changed
+
+- **Behaviour change: `happenstance-cloudflare` refuses a call carrying more
+  than 524,288 tags in total**, as `StoreLimit::TagsPerBatch`, before it sends
+  any SQL, on `append` and on `ingest`, whose total counts its compensation
+  ([ADR-0100](.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md),
+  #356). A call that a host, or local `workerd`, accepted above that total is
+  now refused; a deployed object reset on one call of 757 events of 1,024 tags
+  (775,168), and the ceiling is 1.48 times below that. Every call at or under
+  it is accepted as before.
+- `happenstance-sync`: an `IngestError::ExceedsStoreLimit` naming
+  `StoreLimit::TagsPerBatch` is `FailureClass::Split`, as `EventsPerBatch` is
+  (#356). The wildcard arm that would have answered `Park` still answers every
+  other limit.
 
 - `happenstance-testkit`: the 83 named rules that read back their own appends
   now call `settle_frontier` after their writes when the fixture declines

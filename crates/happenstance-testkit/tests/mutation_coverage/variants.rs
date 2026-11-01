@@ -303,6 +303,11 @@ impl Fixture for GappedPositionFixture {
     // "at the floor" like the three above: a ceiling of 0 would refuse the
     // eight bytes the round-trip rule writes. See [`METADATA_CEILING`].
     const MAX_METADATA_LEN: Option<usize> = Some(METADATA_CEILING);
+    // And no `MAX_TAGS_PER_BATCH`, because none is legal here. At the floors
+    // above, 128 events of at most 64 tags is 8,192 tags, which is VT-36's floor
+    // itself, so any ceiling this store may state is one no batch can reach
+    // without crossing the other two first. `UnreachableTagsPerBatchStore` is
+    // the store that states one anyway.
 
     async fn connect(&self) -> Self::Store {
         GappedPositionStore {

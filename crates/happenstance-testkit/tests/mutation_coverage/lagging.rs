@@ -315,6 +315,7 @@ impl<F: Fixture, M: Mode> Fixture for LaggingFixture<F, M> {
     const MAX_TAGS_PER_EVENT: Option<usize> = F::MAX_TAGS_PER_EVENT;
     const MAX_EVENTS_PER_BATCH: Option<usize> = F::MAX_EVENTS_PER_BATCH;
     const MAX_METADATA_LEN: Option<usize> = F::MAX_METADATA_LEN;
+    const MAX_TAGS_PER_BATCH: Option<usize> = F::MAX_TAGS_PER_BATCH;
     const HELD_ABOVE_FRONTIER: Capability = if F::HELD_ABOVE_FRONTIER.is_supported() {
         Capability::SUPPORTED
     } else {

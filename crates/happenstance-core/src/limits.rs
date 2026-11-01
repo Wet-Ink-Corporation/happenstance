@@ -30,6 +30,10 @@
 //! | event types | 128 × 255 | 32,640 |
 //! | `metadata` | unbounded | — |
 //!
+//! The first two factors of the tags row, 128 × 64, are
+//! [`MIN_SUPPORTED_TAGS_PER_BATCH`]: the total tag count one append must carry,
+//! which a store may also declare a ceiling on (VT-36).
+//!
 //! So **the composed floor has a stated lower bound of 10,510,208 bytes and no
 //! upper bound**, and `[FROZEN]` ES-18 makes the whole of it one atomic unit:
 //! every event of that append lands, or none does.
@@ -73,9 +77,24 @@ pub const MIN_SUPPORTED_QUERY_ITEMS: usize = 128;
 /// parameter per tag is within a factor of 1.3 of the ceiling.
 pub const MIN_SUPPORTED_EVENTS_PER_BATCH: usize = 128;
 
+/// Smallest total number of tags, summed over every event of one append, every
+/// store must accept (VT-36).
+///
+/// Not a new obligation. VT-22 and VT-24 hold at once, so a store already
+/// accepts 128 events of 64 tags each, and this constant is that product
+/// written down. It exists so that a store which bounds the transaction rather
+/// than any one event has a floor to declare its ceiling against: such a store
+/// may refuse a larger total, as
+/// [`StoreLimit::TagsPerBatch`], and never a smaller one.
+///
+/// Written as the product rather than the literal `8_192` so the two floors
+/// that define it cannot drift away from it; a unit test pins the literal.
+pub const MIN_SUPPORTED_TAGS_PER_BATCH: usize =
+    MIN_SUPPORTED_EVENTS_PER_BATCH * MIN_SUPPORTED_TAGS_PER_EVENT;
+
 /// Which capacity limit an append exceeded.
 ///
-/// Four variants, and no `QueryItems`: a query-item refusal is not an append
+/// Five variants, and no `QueryItems`: a query-item refusal is not an append
 /// outcome, so that variant would name a refusal no `append` could produce, and
 /// a store that will not evaluate a large query fails it through its own error.
 /// [`MetadataLen`](Self::MetadataLen) is the one variant with no floor behind
@@ -83,11 +102,13 @@ pub const MIN_SUPPORTED_EVENTS_PER_BATCH: usize = 128;
 ///
 /// # The variant this enum does not have
 ///
-/// Every variant here names **one factor**. None of them can express a refusal
-/// of the batch's *total size* — the product the module documentation works out
-/// above — and that is the refusal a store in the `FoundationDB` or `DynamoDB`
-/// family would need, because what those systems bound is the transaction
-/// rather than any one row in it.
+/// Every variant here but one names **one factor**. The exception,
+/// [`TagsPerBatch`](Self::TagsPerBatch), is a batch-scope *count* (ADR-0100).
+/// None of them can express a refusal of the batch's *total size in bytes* —
+/// the product the module documentation works out above — and that is the
+/// refusal a store in the `FoundationDB` or `DynamoDB` family would need,
+/// because what those systems bound is the transaction's bytes rather than any
+/// one row in it or any one count across it.
 ///
 /// Such a store cannot route the refusal elsewhere either: `[FROZEN]` VT-25
 /// forbids reporting a capacity refusal through
@@ -116,6 +137,16 @@ pub enum StoreLimit {
     /// contract guarantees no metadata capacity (ADR-0043). Whether `data` and
     /// `metadata` should share one budget instead is open, and is phase 13's.
     MetadataLen,
+    /// The batch carried more tags in total, summed over all its events, than
+    /// the store accepts in one append.
+    ///
+    /// Distinct from [`TagsPerEvent`](Self::TagsPerEvent): every event of the
+    /// batch may be within its own ceiling while their sum is not. Its
+    /// [`guaranteed_minimum`](Self::guaranteed_minimum) is
+    /// [`MIN_SUPPORTED_TAGS_PER_BATCH`], which VT-22 and VT-24 already imply
+    /// (VT-36, ADR-0100). A batch refused for it can be split and retried; one
+    /// refused for a per-event limit cannot.
+    TagsPerBatch,
 }
 
 impl StoreLimit {
@@ -134,6 +165,7 @@ impl StoreLimit {
             Self::TagsPerEvent => MIN_SUPPORTED_TAGS_PER_EVENT,
             Self::EventsPerBatch => MIN_SUPPORTED_EVENTS_PER_BATCH,
             Self::MetadataLen => 0,
+            Self::TagsPerBatch => MIN_SUPPORTED_TAGS_PER_BATCH,
         }
     }
 }
@@ -145,6 +177,7 @@ impl core::fmt::Display for StoreLimit {
             Self::TagsPerEvent => "tags per event",
             Self::EventsPerBatch => "events per batch",
             Self::MetadataLen => "metadata length",
+            Self::TagsPerBatch => "tags per batch",
         };
         f.write_str(name)
     }
@@ -153,8 +186,8 @@ impl core::fmt::Display for StoreLimit {
 #[cfg(test)]
 mod tests {
     use super::{
-        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_EVENT,
-        StoreLimit,
+        MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_BATCH,
+        MIN_SUPPORTED_TAGS_PER_EVENT, StoreLimit,
     };
 
     #[test]
@@ -171,6 +204,27 @@ mod tests {
             StoreLimit::EventsPerBatch.guaranteed_minimum(),
             MIN_SUPPORTED_EVENTS_PER_BATCH
         );
+        assert_eq!(
+            StoreLimit::TagsPerBatch.guaranteed_minimum(),
+            MIN_SUPPORTED_TAGS_PER_BATCH
+        );
+    }
+
+    /// VT-36: the tags-per-batch floor is not a new obligation. It is the
+    /// product VT-22 and VT-24 already impose together, held to a literal so
+    /// that raising either factor fails here, beside the prose that quotes it.
+    #[test]
+    fn the_tags_per_batch_floor_is_two_floors() {
+        assert_eq!(MIN_SUPPORTED_TAGS_PER_BATCH, 8_192);
+        assert_eq!(
+            MIN_SUPPORTED_TAGS_PER_BATCH,
+            MIN_SUPPORTED_EVENTS_PER_BATCH * MIN_SUPPORTED_TAGS_PER_EVENT
+        );
+    }
+
+    #[test]
+    fn tags_per_batch_names_itself() {
+        assert_eq!(StoreLimit::TagsPerBatch.to_string(), "tags per batch");
     }
 
     /// ADR-0043: the metadata channel is a refusal path with no floor, so a

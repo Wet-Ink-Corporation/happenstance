@@ -1,11 +1,11 @@
 //! The ingest ceiling: the largest single `ingest` call the runtime commits,
 //! per event shape, below the adapter's declared per-call ceiling.
 //!
-//! The adapter refuses a call over its declared 1,024 events **before** any
-//! SQL, so an attempt through it can only rediscover that declaration at the
-//! top. What is open is below it: does the real runtime commit every call the
-//! adapter accepts, inside one `transactionSync`, at the shapes the per-event
-//! ceilings allow?
+//! The adapter refuses a call over its declared 1,024 events or 524,288 tags
+//! **before** any SQL, so an attempt through it can only rediscover those
+//! declarations at the top. What is open is below it: does the real runtime
+//! commit every call the adapter accepts, inside one `transactionSync`, at the
+//! shapes the per-event ceilings allow?
 //!
 //! The search is **not** here. Each attempt is one request on its own object,
 //! and the runner (`ingest-ceiling.mjs`) bisects, because a shape near the top
@@ -40,6 +40,22 @@ pub const MAX_EVENTS_PER_CALL: usize =
         None => 0,
     };
 
+/// The most `max-tags` events one call carries before the adapter refuses it
+/// for its total tags: the declared tags-per-batch ceiling over the declared
+/// tags per event, 524,288 / 1,024 = 512 (ADR-0100). Falls back to
+/// [`MAX_EVENTS_PER_CALL`] when either is undeclared, as then no total wall
+/// is the adapter's.
+pub const MAX_TAGS_EVENTS_AT_CEILING: usize = match (
+    <WorkerdFixture<'static> as Fixture>::MAX_TAGS_PER_BATCH,
+    <WorkerdFixture<'static> as Fixture>::MAX_TAGS_PER_EVENT,
+) {
+    (Some(per_batch), Some(per_event)) => match per_batch.checked_div(per_event) {
+        Some(events) => events,
+        None => MAX_EVENTS_PER_CALL,
+    },
+    _ => MAX_EVENTS_PER_CALL,
+};
+
 /// The bytes of a minimal or a maximally tagged event.
 const SMALL_DATA_LEN: usize = 8;
 
@@ -70,6 +86,10 @@ pub enum Shape {
     /// Eight bytes of data and one tag.
     Minimal,
     /// Eight bytes of data and the declared maximum of distinct tags.
+    ///
+    /// Its wall is the adapter's own refusal at
+    /// [`MAX_TAGS_EVENTS_AT_CEILING`]` + 1` events, as `TagsPerBatch`, below
+    /// the deployed object's CPU and storage-time resets (ADR-0100).
     MaxTags,
     /// The declared maximum of data and one tag.
     MaxData,
