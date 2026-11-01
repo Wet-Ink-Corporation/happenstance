@@ -75,9 +75,9 @@
 //! that silently updates `Cargo.lock` is a gate that tested a dependency graph
 //! nobody committed.
 //!
+//! No task prints: each writes through a locked stdout or stderr handle.
+//!
 //! [ADR-0001]: ../../.kb/decisions/0001-async-port-flavours.md
-
-#![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::process::{Command, ExitCode, Stdio};
 
@@ -1188,9 +1188,9 @@ const OPTIONAL: &[Step] = &[
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
-    // The tasks that take `out` write only through it, so for them a closed pipe
-    // is an error returned, never a panic. The rest still print or lock (#352).
-    let mut out = std::io::stdout().lock();
+    // Tasks write through these two (`usage` and `site` lock their own), so a
+    // closed pipe is an error returned, never a panic (#352).
+    let (mut out, mut err) = (std::io::stdout().lock(), std::io::stderr().lock());
 
     let result = match task.as_deref() {
         Some("ci") => match std::env::args().nth(2).as_deref() {
@@ -1203,12 +1203,12 @@ fn main() -> ExitCode {
             std::env::args().nth(2).as_deref(),
             std::env::args().nth(3).as_deref(),
         ) {
-            (None, _) => affected::run(&mut out, None),
-            (Some("--base"), Some(base)) => affected::run(&mut out, Some(base)),
+            (None, _) => affected::run(&mut out, &mut err, None),
+            (Some("--base"), Some(base)) => affected::run(&mut out, &mut err, Some(base)),
             (Some("--base"), None) => usage(&mut out, format_args!("--base needs a ref")),
             (Some(flag), _) => usage(&mut out, format_args!("unknown flag for affected: {flag}")),
         },
-        Some("reserve") => reserve::run(std::env::args().nth(2).as_deref()),
+        Some("reserve") => reserve::run(&mut out, std::env::args().nth(2).as_deref()),
         Some("spec-trace") => match std::env::args().nth(2).as_deref() {
             None => spec_trace::run(&mut out, spec_trace::Mode::Check),
             Some("--write") => spec_trace::run(&mut out, spec_trace::Mode::Write),
@@ -1217,15 +1217,15 @@ fn main() -> ExitCode {
                 format_args!("unknown flag for spec-trace: {flag}"),
             ),
         },
-        Some("package-check") => package::run(),
-        Some("proof-artefact") => proof::run(),
-        Some("wasm-conformance") => proof::wasm_run(),
-        Some("wasm-conformance-enumeration") => proof::wasm_enumeration(),
-        Some("narrative-doctests") => narrative_doctests::run(),
+        Some("package-check") => package::run(&mut out),
+        Some("proof-artefact") => proof::run(&mut out, &mut err),
+        Some("wasm-conformance") => proof::wasm_run(&mut out, &mut err),
+        Some("wasm-conformance-enumeration") => proof::wasm_enumeration(&mut out),
+        Some("narrative-doctests") => narrative_doctests::run(&mut out),
         // Read-only, and no `--write` arm: unlike `lint-constitution` there is
         // nothing here a checker could rewrite, so the surface is safe to invoke
         // at any time and nothing needs undoing.
-        Some("narrative") => lint_narrative::run(),
+        Some("narrative") => lint_narrative::run(&mut out, &mut err),
         Some("site") => site::run(std::env::args_os().skip(2)),
         Some("lints") => run_steps(&mut out, lint_steps()),
         Some("lint-clock") => lints::no_clock(&mut out),
@@ -1236,19 +1236,21 @@ fn main() -> ExitCode {
         Some("lint-position-literals") => lints::no_position_literals(&mut out),
         Some("lint-rule-counts") => lints::stated_rule_counts(&mut out),
         Some("lint-retired-rules") => spec_trace::retired_rules(&mut out),
-        Some("lint-workflows") => lint_workflows::run(),
-        Some("lint-kb") => lint_kb::run(),
+        Some("lint-workflows") => lint_workflows::run(&mut out),
+        Some("lint-kb") => lint_kb::run(&mut out),
         Some("lint-pages") => match std::env::args().nth(2).as_deref() {
-            None => lint_pages::run(lint_pages::Mode::Check),
-            Some("--write") => lint_pages::run(lint_pages::Mode::Write),
+            None => lint_pages::run(&mut out, &mut err, lint_pages::Mode::Check),
+            Some("--write") => lint_pages::run(&mut out, &mut err, lint_pages::Mode::Write),
             Some(flag) => usage(
                 &mut out,
                 format_args!("unknown flag for lint-pages: {flag}"),
             ),
         },
         Some("lint-constitution") => match std::env::args().nth(2).as_deref() {
-            None => lint_constitution::run(lint_constitution::Mode::Check),
-            Some("--write") => lint_constitution::run(lint_constitution::Mode::Write),
+            None => lint_constitution::run(&mut out, &mut err, lint_constitution::Mode::Check),
+            Some("--write") => {
+                lint_constitution::run(&mut out, &mut err, lint_constitution::Mode::Write)
+            }
             Some(flag) => usage(
                 &mut out,
                 format_args!("unknown flag for lint-constitution: {flag}"),
@@ -1258,7 +1260,7 @@ fn main() -> ExitCode {
         None => write_help(&mut out).context("writing the help text"),
     };
 
-    exit_code(result, &mut std::io::stderr().lock())
+    exit_code(result, &mut err)
 }
 
 /// The task's result as an exit status, reporting a failure to `stderr` first.

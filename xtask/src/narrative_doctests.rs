@@ -92,12 +92,11 @@ const DOC_TEST: &[&str] = &["test", "--locked", "-p", "xtask", "--doc"];
 /// # Errors
 ///
 /// When the doctests cannot be enumerated, when the enumeration names none of
-/// them, or when a page's examples fail to compile or their assertions fail.
-pub(crate) fn run() -> Result<()> {
-    let listing = list()?;
-    let pages = enumerated_pages(&listing)?;
-
-    println!("  {} page(s)' examples enumerated", pages.len());
+/// them, when a page's examples fail to compile or their assertions fail, or
+/// when `out` cannot be written.
+pub(crate) fn run(out: &mut impl std::io::Write) -> Result<()> {
+    let pages = enumerated_pages(&list()?)?;
+    announce(out, pages.len())?;
 
     let status = Command::new("cargo")
         .args(DOC_TEST)
@@ -110,6 +109,16 @@ pub(crate) fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// The line the step writes between the enumeration and the run.
+///
+/// # Errors
+///
+/// When `out` cannot be written.
+fn announce(out: &mut impl std::io::Write, pages: usize) -> Result<()> {
+    writeln!(out, "  {pages} page(s)' examples enumerated")
+        .context("writing the narrative doctests' report")
 }
 
 /// Every doctest name libtest reports for `xtask`'s lib target.
@@ -503,5 +512,30 @@ mod tests {
                 "{module} must say, unhedged, that this step is silent about teaching"
             );
         }
+    }
+
+    /// The count between the enumeration and the run, into the writer the
+    /// step was handed.
+    #[test]
+    fn the_enumeration_is_announced_into_the_writer() {
+        let mut out = Vec::new();
+        announce(&mut out, 7).expect("a Vec accepts every write");
+        assert_eq!(out, b"  7 page(s)' examples enumerated\n");
+    }
+
+    /// A closed stdout stops the step before it runs the doctests, as the
+    /// error it returns rather than a panic in `println!`.
+    #[test]
+    fn a_closed_stdout_is_returned_rather_than_panicking() {
+        let mut pipe = crate::tests::ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let err = announce(&mut pipe, 7).expect_err("stdout was closed, yet Ok");
+        let refused = err
+            .downcast_ref::<std::io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(refused.kind(), std::io::ErrorKind::BrokenPipe);
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
     }
 }

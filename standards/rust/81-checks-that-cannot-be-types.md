@@ -406,4 +406,4 @@ members are globs, so a member added under a new path is invisible to precisely
 the check that exists to notice new publishable members.
 
 **Evidence.** `xtask/src/package.rs:102 (PUBLISHABLE)` ·
-`xtask/src/package.rs:256 (fn reconcile)` · `xtask/src/package.rs:36 (The derivation is the fact)`
+`xtask/src/package.rs:260 (fn reconcile)` · `xtask/src/package.rs:36 (The derivation is the fact)`

@@ -29,8 +29,8 @@
 //! and the runbook — which is what makes it a reservation with a stated purpose
 //! rather than the parked name crates.io's policy prohibits.
 
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 
@@ -136,72 +136,103 @@ const RESERVABLE: &[Reservable] = &[
 ///
 /// Returns an error if `name` is not one of the names this project intends to
 /// hold, if the repository's licence files cannot be read, or if the generated
-/// crate cannot be written.
-pub(crate) fn run(name: Option<&str>) -> Result<()> {
+/// crate or `out` cannot be written.
+pub(crate) fn run(out: &mut impl io::Write, name: Option<&str>) -> Result<()> {
     let Some(name) = name else {
-        list();
-        return Ok(());
+        return list(out).context(REPORTING);
     };
 
     let Some(crate_) = RESERVABLE.iter().find(|c| c.name == name) else {
-        list();
+        list(out).context(REPORTING)?;
         bail!(
             "`{name}` is not a name this project intends to hold — add it to RESERVABLE first, with the phase that claims it"
         );
     };
 
     let root = workspace_root()?;
-    let out = root.join("target").join("reserve").join(crate_.name);
-    if out.exists() {
-        fs::remove_dir_all(&out)
-            .with_context(|| format!("removing the previous {}", out.display()))?;
+    let dir = root.join("target").join("reserve").join(crate_.name);
+    if dir.exists() {
+        fs::remove_dir_all(&dir)
+            .with_context(|| format!("removing the previous {}", dir.display()))?;
     }
-    fs::create_dir_all(out.join("src")).with_context(|| format!("creating {}", out.display()))?;
+    fs::create_dir_all(dir.join("src")).with_context(|| format!("creating {}", dir.display()))?;
 
     // Copied, not linked. Cargo packages only what is inside the crate
     // directory, which is exactly the defect (D11) that shipped licence
     // metadata with no licence text.
     for licence in ["LICENSE-MIT", "LICENSE-APACHE"] {
         let from = root.join(licence);
-        fs::copy(&from, out.join(licence))
+        fs::copy(&from, dir.join(licence))
             .with_context(|| format!("copying {}", from.display()))?;
     }
 
-    fs::write(out.join("Cargo.toml"), manifest(crate_))?;
-    fs::write(out.join("README.md"), readme(crate_))?;
-    fs::write(out.join("src").join("lib.rs"), lib_rs(crate_))?;
+    fs::write(dir.join("Cargo.toml"), manifest(crate_))?;
+    fs::write(dir.join("README.md"), readme(crate_))?;
+    fs::write(dir.join("src").join("lib.rs"), lib_rs(crate_))?;
 
-    println!("Placeholder for `{}` written to:", crate_.name);
-    println!("  {}", out.display());
-    println!();
-    let manifest_path = out.join("Cargo.toml");
-    println!("Verify, which packages and compiles but does not upload:");
-    println!(
-        "  cargo publish --manifest-path {} --dry-run",
-        manifest_path.display()
-    );
-    println!();
-    println!("Then claim it. This is irreversible — a version can be yanked, never removed:");
-    println!(
-        "  cargo publish --manifest-path {}",
-        manifest_path.display()
-    );
-    println!();
-    println!("The token lives in $CARGO_HOME/credentials.toml, put there by `cargo login`.");
-    println!("Never commit it; .gitignore already covers the repository-local path.");
-
-    Ok(())
+    instructions(out, crate_.name, &dir).context(REPORTING)
 }
 
-/// Prints every name and the phase that claims it.
-fn list() {
-    println!("Names this project intends to hold, and the phase that claims each:");
-    println!();
+/// The context a refused write of this command's output carries.
+const REPORTING: &str = "writing the reservation instructions";
+
+/// What to do with the placeholder generated for `name` at `dir`: verify it,
+/// then claim it.
+///
+/// # Errors
+///
+/// When `out` cannot be written.
+fn instructions(out: &mut impl io::Write, name: &str, dir: &Path) -> io::Result<()> {
+    writeln!(out, "Placeholder for `{name}` written to:")?;
+    writeln!(out, "  {}", dir.display())?;
+    writeln!(out)?;
+    let manifest_path = dir.join("Cargo.toml");
+    writeln!(
+        out,
+        "Verify, which packages and compiles but does not upload:"
+    )?;
+    writeln!(
+        out,
+        "  cargo publish --manifest-path {} --dry-run",
+        manifest_path.display()
+    )?;
+    writeln!(out)?;
+    writeln!(
+        out,
+        "Then claim it. This is irreversible — a version can be yanked, never removed:"
+    )?;
+    writeln!(
+        out,
+        "  cargo publish --manifest-path {}",
+        manifest_path.display()
+    )?;
+    writeln!(out)?;
+    writeln!(
+        out,
+        "The token lives in $CARGO_HOME/credentials.toml, put there by `cargo login`."
+    )?;
+    writeln!(
+        out,
+        "Never commit it; .gitignore already covers the repository-local path."
+    )
+}
+
+/// Writes every name and the phase that claims it.
+///
+/// # Errors
+///
+/// When `out` cannot be written.
+fn list(out: &mut impl io::Write) -> io::Result<()> {
+    writeln!(
+        out,
+        "Names this project intends to hold, and the phase that claims each:"
+    )?;
+    writeln!(out)?;
     for c in RESERVABLE {
-        println!("  phase {:>2}   {}", c.phase, c.name);
+        writeln!(out, "  phase {:>2}   {}", c.phase, c.name)?;
     }
-    println!();
-    println!("Usage: cargo xtask reserve <name>");
+    writeln!(out)?;
+    writeln!(out, "Usage: cargo xtask reserve <name>")
 }
 
 /// The repository root, derived from this crate's manifest rather than from the
@@ -438,6 +469,79 @@ mod tests {
                     number + 1
                 );
             }
+        }
+    }
+
+    /// With no name, the command writes the reservable names into the writer
+    /// it was handed, and nowhere else.
+    #[test]
+    fn no_name_lists_every_reservable_name_into_the_writer() {
+        let mut out = Vec::new();
+        run(&mut out, None).expect("listing writes nothing to disk and cannot fail");
+        let text = String::from_utf8(out).expect("the listing is UTF-8");
+        let mut rows = String::new();
+        for c in RESERVABLE {
+            std::fmt::Write::write_fmt(
+                &mut rows,
+                format_args!("  phase {:>2}   {}\n", c.phase, c.name),
+            )
+            .expect("a String accepts every write");
+        }
+        let expected = format!(
+            "Names this project intends to hold, and the phase that claims each:\n\n{rows}\n\
+             Usage: cargo xtask reserve <name>\n"
+        );
+        assert_eq!(text, expected);
+    }
+
+    /// The instructions name the directory they were handed, in the order a
+    /// reader follows them.
+    #[test]
+    fn the_instructions_name_the_placeholder_directory() {
+        let mut out = Vec::new();
+        let dir = Path::new("target").join("reserve").join("x");
+        instructions(&mut out, "x", &dir).expect("a Vec accepts every write");
+        let text = String::from_utf8(out).expect("the instructions are UTF-8");
+        let manifest = dir.join("Cargo.toml");
+        assert_eq!(
+            text,
+            format!(
+                "Placeholder for `x` written to:\n  {}\n\n\
+                 Verify, which packages and compiles but does not upload:\n  \
+                 cargo publish --manifest-path {} --dry-run\n\n\
+                 Then claim it. This is irreversible — a version can be yanked, never removed:\n  \
+                 cargo publish --manifest-path {}\n\n\
+                 The token lives in $CARGO_HOME/credentials.toml, put there by `cargo login`.\n\
+                 Never commit it; .gitignore already covers the repository-local path.\n",
+                dir.display(),
+                manifest.display(),
+                manifest.display()
+            )
+        );
+    }
+
+    /// A closed stdout is the error `run` returns, not a panic in `println!`,
+    /// and nothing is written after the refusal — on the listing a reader
+    /// gets with no name, and on the one that precedes an unknown name's
+    /// complaint.
+    ///
+    /// The wrong implementation it rejects drops a write's result: the listing
+    /// then writes on into the closed pipe, or `run` says `Ok`.
+    #[test]
+    fn a_closed_stdout_is_returned_rather_than_panicking() {
+        use crate::tests::ClosesAfter;
+
+        for name in [None, Some("not-a-reservable-name")] {
+            let mut pipe = ClosesAfter {
+                budget: 0,
+                refused: 0,
+            };
+            let err = run(&mut pipe, name).expect_err("stdout was closed, yet Ok");
+            let refused = err
+                .downcast_ref::<io::Error>()
+                .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+            assert_eq!(refused.kind(), io::ErrorKind::BrokenPipe, "{name:?}");
+            assert_eq!(pipe.refused, 1, "{name:?}: writing went on after a refusal");
         }
     }
 }

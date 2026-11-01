@@ -90,7 +90,7 @@
 //! it exists to cover.
 
 use std::collections::BTreeSet;
-use std::process::Command;
+use std::{io::Write, process::Command};
 
 use anyhow::{Context, Result, bail};
 
@@ -182,10 +182,10 @@ const REQUIRED_FILES: &[&str] = &["LICENSE-MIT", "LICENSE-APACHE", "README.md"];
 /// is publishable, if a publishable crate's testkit dev-dependency carries a
 /// version requirement ([`testkit_dev_dependencies_are_versionless`]), if
 /// `cargo metadata` or `cargo package --list` cannot be run or fails, or if any
-/// crate's artifact is missing one of [`REQUIRED_FILES`].
-pub(crate) fn run() -> Result<()> {
-    reconcile(&publishable_members()?)?;
-    testkit_dev_dependencies_are_versionless()?;
+/// crate's artifact is missing one of [`REQUIRED_FILES`], or if `out` cannot be written.
+pub(crate) fn run(out: &mut impl Write) -> Result<()> {
+    reconcile(out, &publishable_members()?)?;
+    testkit_dev_dependencies_are_versionless(out)?;
 
     let mut missing: Vec<String> = Vec::new();
 
@@ -219,14 +219,17 @@ pub(crate) fn run() -> Result<()> {
             .collect();
 
         if absent.is_empty() {
-            println!(
+            writeln!(
+                out,
                 "{name}: {} files packaged, including {}",
                 files.len(),
                 REQUIRED_FILES.join(", ")
-            );
+            )
+            .context(REPORTING)?;
         } else {
             for f in absent {
-                println!("{name}: `{f}` is NOT in the packaged artifact");
+                writeln!(out, "{name}: `{f}` is NOT in the packaged artifact")
+                    .context(REPORTING)?;
                 missing.push(format!("{name} is missing {f}"));
             }
         }
@@ -241,7 +244,7 @@ pub(crate) fn run() -> Result<()> {
         );
     }
 
-    release_workflow_names_the_publishable_set()
+    release_workflow_names_the_publishable_set(out)
 }
 
 /// Fails when [`PUBLISHABLE`] and the manifests disagree, naming the direction.
@@ -252,8 +255,9 @@ pub(crate) fn run() -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error if either set contains a name the other does not.
-fn reconcile(derived: &BTreeSet<String>) -> Result<()> {
+/// Returns an error if either set contains a name the other does not, or if
+/// `out` cannot be written.
+fn reconcile(out: &mut impl Write, derived: &BTreeSet<String>) -> Result<()> {
     let declared: BTreeSet<&str> = PUBLISHABLE.iter().copied().collect();
 
     let promoted: Vec<&str> = derived
@@ -294,11 +298,12 @@ fn reconcile(derived: &BTreeSet<String>) -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "publishable set agrees with the manifests: {}",
         PUBLISHABLE.join(", ")
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// The workflow that publishes on a tag, relative to the workspace root.
@@ -328,18 +333,15 @@ const RELEASE_WORKFLOW: &str = ".github/workflows/release.yml";
 /// Returns an error if the workflow cannot be read, if standard output cannot
 /// be written, or if [`release_workflow_problems`] reports anything. The
 /// message names the lines to add.
-fn release_workflow_names_the_publishable_set() -> Result<()> {
-    use std::io::Write as _;
-
+fn release_workflow_names_the_publishable_set(out: &mut impl Write) -> Result<()> {
     let root = crate::spec_trace::workspace_root()?;
     let workflow = std::fs::read_to_string(root.join(RELEASE_WORKFLOW))
         .with_context(|| format!("reading {RELEASE_WORKFLOW}"))?;
 
-    let mut out = std::io::stdout().lock();
     let problems = release_workflow_problems(&workflow, PUBLISHABLE);
     if !problems.is_empty() {
         for problem in &problems {
-            writeln!(out, "  {problem}")?;
+            writeln!(out, "  {problem}").context(REPORTING)?;
         }
         bail!(
             "{RELEASE_WORKFLOW} does not publish what PUBLISHABLE names. It is a protected \
@@ -351,8 +353,8 @@ fn release_workflow_names_the_publishable_set() -> Result<()> {
     writeln!(
         out,
         "{RELEASE_WORKFLOW} names the publishable set in both of its lists"
-    )?;
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// Everything wrong with how `workflow` names `publishable`: the `CRATES:`
@@ -506,8 +508,9 @@ const WORKSPACE_MANIFEST: &str = "Cargo.toml";
 /// # Errors
 ///
 /// Returns an error if a manifest cannot be read, or if
-/// [`testkit_line_problems`] reports anything for any publishable crate.
-fn testkit_dev_dependencies_are_versionless() -> Result<()> {
+/// [`testkit_line_problems`] reports anything for any publishable crate, or if
+/// `out` cannot be written.
+fn testkit_dev_dependencies_are_versionless(out: &mut impl Write) -> Result<()> {
     let root = crate::spec_trace::workspace_root()?;
     let read = |rel: &str| {
         std::fs::read_to_string(root.join(rel)).with_context(|| format!("reading {rel}"))
@@ -522,7 +525,7 @@ fn testkit_dev_dependencies_are_versionless() -> Result<()> {
 
     if !problems.is_empty() {
         for problem in &problems {
-            println!("  {problem}");
+            writeln!(out, "  {problem}").context(REPORTING)?;
         }
         bail!(
             "{} testkit dev-dependency line(s) carry a version requirement (ADR-0057). A \
@@ -534,10 +537,11 @@ fn testkit_dev_dependencies_are_versionless() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "no publishable crate's {TESTKIT} dev-dependency carries a version requirement (ADR-0057)"
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// Everything wrong with how `manifest` (at `rel`) spells its
@@ -945,6 +949,9 @@ fn skip_ws(bytes: &[u8], mut i: usize) -> usize {
     i
 }
 
+/// The context a refused write of this step's report carries.
+const REPORTING: &str = "writing package-check's report";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1278,5 +1285,50 @@ testkit = { path = \"../happenstance-testkit\",
 
         let error = scan_publishable(json).expect_err("`false` is not a shape cargo emits");
         assert!(error.to_string().contains("publish"), "{error}");
+    }
+
+    /// The agreement line goes into the writer `reconcile` was handed, naming
+    /// the publishable set in its authored order.
+    #[test]
+    fn reconcile_writes_its_agreement_into_the_writer() {
+        let derived: BTreeSet<String> = PUBLISHABLE.iter().map(|n| (*n).to_owned()).collect();
+        let mut out = Vec::new();
+        reconcile(&mut out, &derived).expect("the declared set agrees with itself");
+        assert_eq!(
+            String::from_utf8(out).expect("the line is UTF-8"),
+            format!(
+                "publishable set agrees with the manifests: {}\n",
+                PUBLISHABLE.join(", ")
+            )
+        );
+    }
+
+    /// A closed stdout is the error the step returns, not a panic in
+    /// `println!` — on `reconcile`'s verdict and on the testkit check's.
+    ///
+    /// The wrong implementation it rejects drops a write's result and says
+    /// `Ok` over a line nobody received.
+    #[test]
+    fn a_closed_stdout_is_returned_rather_than_panicking() {
+        use crate::tests::ClosesAfter;
+
+        let closed = || ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let derived: BTreeSet<String> = PUBLISHABLE.iter().map(|n| (*n).to_owned()).collect();
+        let mut agreement = closed();
+        let reconciled = reconcile(&mut agreement, &derived).expect_err("stdout was closed");
+        let mut versionless = closed();
+        let testkit = testkit_dev_dependencies_are_versionless(&mut versionless)
+            .expect_err("stdout was closed");
+
+        for (err, pipe) in [(reconciled, agreement), (testkit, versionless)] {
+            let refused = err
+                .downcast_ref::<std::io::Error>()
+                .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+            assert_eq!(refused.kind(), std::io::ErrorKind::BrokenPipe);
+            assert_eq!(pipe.refused, 1, "writing went on after a refused write");
+        }
     }
 }

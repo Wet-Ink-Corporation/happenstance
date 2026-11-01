@@ -383,7 +383,7 @@ fn check_citations(
 /// # Why this window survives when `standards/rust`'s did not
 ///
 /// That corpus's citation lint carried a `const ANCHOR_SLACK: usize = 10` and
-/// now has **no window at all** — `lint_constitution.rs:804 (fn
+/// now has **no window at all** — `lint_constitution.rs:810 (fn
 /// anchor_problem)`. Two instruments carried two tolerances for what looked like
 /// one job, and the difference was written down nowhere. This section is half
 /// the repair and `anchor_problem`'s own documentation is the other half. They

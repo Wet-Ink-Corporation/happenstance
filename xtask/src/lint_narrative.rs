@@ -2086,9 +2086,9 @@ fn summary(pages: &[Page]) -> String {
 /// # Errors
 ///
 /// Fails when the tree is missing or empty, when the harness cannot be read, or
-/// when any check finds a problem.
-pub(crate) fn run() -> Result<()> {
-    check(&workspace_root()?)
+/// when any check finds a problem, or when `out` or `err` cannot be written.
+pub(crate) fn run(out: &mut impl std::io::Write, err: &mut impl std::io::Write) -> Result<()> {
+    check(out, err, &workspace_root()?)
 }
 
 /// The whole step, against one workspace root.
@@ -2100,7 +2100,7 @@ pub(crate) fn run() -> Result<()> {
 /// # Errors
 ///
 /// The same conditions [`run`] documents.
-fn check(root: &Path) -> Result<()> {
+fn check(out: &mut impl std::io::Write, err: &mut impl std::io::Write, root: &Path) -> Result<()> {
     // Resolved first, and exactly once. First because a specification the
     // checker cannot read is the *checker's* failure, and doing it before the
     // tree walk is what stops that failure arriving with a page's name on it.
@@ -2121,15 +2121,18 @@ fn check(root: &Path) -> Result<()> {
     check_decided(root, DECIDED_DOCUMENTATION, &mut problems);
 
     if problems.is_empty() {
-        println!("{}", summary(&pages));
+        writeln!(out, "{}", summary(&pages)).context(REPORTING)?;
         return Ok(());
     }
 
     for problem in &problems {
-        eprintln!("  {problem}");
+        writeln!(err, "  {problem}").context(REPORTING)?;
     }
     bail!("{} problem(s) in {TREE}", problems.len())
 }
+
+/// The context a refused write of this step's report carries.
+const REPORTING: &str = "writing the narrative tree's report";
 
 #[cfg(test)]
 mod tests {
@@ -2549,7 +2552,7 @@ mod tests {
              compiles clean and checks nothing"
         );
         assert!(
-            main.contains("Some(\"narrative\") => lint_narrative::run()"),
+            main.contains("Some(\"narrative\") => lint_narrative::run(&mut out, &mut err)"),
             "`cargo xtask narrative` must dispatch to the checker"
         );
         assert!(
@@ -2564,7 +2567,7 @@ mod tests {
     fn the_checker_joins_the_unconditional_file_reading_list() {
         let affected = read(AFFECTED);
         assert!(
-            affected.contains("crate::lint_narrative::run()?;"),
+            affected.contains("crate::lint_narrative::run(out, err)?;"),
             "`cargo xtask affected` must run the checker whatever the diff touched"
         );
     }
@@ -3939,8 +3942,12 @@ One writer at a time.
     /// asserted to carry no page path at all.
     #[test]
     fn an_unreadable_specification_is_propagated_not_swallowed() {
-        let err = check(Path::new("this-root-does-not-exist"))
-            .expect_err("a missing specification must end the run");
+        let err = check(
+            &mut Vec::new(),
+            &mut Vec::new(),
+            Path::new("this-root-does-not-exist"),
+        )
+        .expect_err("a missing specification must end the run");
 
         let chain = format!("{err:#}");
         assert!(
@@ -5172,7 +5179,7 @@ One writer at a time.
     /// crate's module docs are rendered by nothing in the gate — which is why
     /// `lint_constitution.rs:5`'s `[crate::constitution]` has never failed a
     /// step that denies every rustdoc warning. The technique is
-    /// `lint_constitution.rs:423-425`'s, one file over.
+    /// `lint_constitution.rs:429-431`'s, one file over.
     #[test]
     fn both_modules_state_every_limit_they_own_and_none_of_the_others() {
         for module in [HARNESS, CHECKER] {
@@ -5644,5 +5651,38 @@ One writer at a time.
                 );
             }
         }
+    }
+
+    /// The summary over this repository's own tree goes into the writer the
+    /// step was handed, and nothing goes to the error writer.
+    #[test]
+    fn the_summary_is_written_into_the_writer() {
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        run(&mut out, &mut err).expect("the narrative tree is consistent");
+        let line = String::from_utf8(out).expect("the summary is UTF-8");
+        assert!(
+            line.starts_with("  ")
+                && line.ends_with(" pages, all consistent\n")
+                && line.matches('\n').count() == 1,
+            "{line:?}"
+        );
+        assert!(err.is_empty(), "{:?}", String::from_utf8_lossy(&err));
+    }
+
+    /// A closed stdout is the error the step returns, not a panic in
+    /// `println!`. The wrong implementation it rejects drops the summary
+    /// write's result and reports `Ok` over a line nobody received.
+    #[test]
+    fn a_closed_stdout_is_returned_rather_than_panicking() {
+        let mut pipe = crate::tests::ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let err = run(&mut pipe, &mut Vec::new()).expect_err("stdout was closed, yet Ok");
+        let refused = err
+            .downcast_ref::<std::io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(refused.kind(), std::io::ErrorKind::BrokenPipe);
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
     }
 }

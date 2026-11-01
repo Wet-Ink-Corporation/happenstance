@@ -1660,14 +1660,14 @@ pub(crate) fn stated_rule_counts(out: &mut impl io::Write) -> Result<()> {
 /// [`stale_publication_claims`]: the *check* itself — the
 /// `Result<()>`-returning entry point — lives in `xtask/src/lint_pages.rs`
 /// rather than here, deliberately. `exported_lints`
-/// (`xtask/src/affected.rs:1471-1481`) scans this file for the shape
+/// (`xtask/src/affected.rs:1475-1485`) scans this file for the shape
 /// `pub(crate) fn NAME(…) -> Result<()> {`, any parameters, and requires `affected::run`'s
 /// unconditional block to call each one it finds by name — the invariant
 /// that catches a lint wired into `REQUIRED` and forgotten in the story
 /// grain. A seventh entry point of that shape here would trip the same check
 /// for the wrong reason: it already runs in the story grain, transitively,
 /// because `affected::run` calls `lint_pages::run` unconditionally
-/// (`xtask/src/affected.rs:193`) and `lint_pages::run` calls this check.
+/// (`xtask/src/affected.rs:197`) and `lint_pages::run` calls this check.
 /// `xtask/src/affected.rs` is not a path this change owns, so the fix is to
 /// keep the checked shape out of this file rather than teach a name-matching
 /// scanner about an indirection it cannot see through.

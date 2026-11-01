@@ -95,8 +95,8 @@ forbids. What distinguishes this instance from the first two is reachability. I-
 `cargo test`; L2-03 can redden `cargo xtask ci` on any adapter that mounts the `bench` feature.
 The preflight is invoked by nothing that blocks a merge: it is absent from `xtask/src/main.rs`'s
 step table, from `.redkiln/config.yaml`'s `verify:` block and from `.github/workflows/`, and
-`ops/` is on `is_inert`'s INERT list (`xtask/src/affected.rs:370-440`), held there by
-`the_host_provisioning_tree_selects_no_package` (`xtask/src/affected.rs:1146`) so that a diff
+`ops/` is on `is_inert`'s INERT list (`xtask/src/affected.rs:374-444`), held there by
+`the_host_provisioning_tree_selects_no_package` (`xtask/src/affected.rs:1150`) so that a diff
 confined to it selects no package for the story-grain gate.
 
 ## What is not decided

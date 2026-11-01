@@ -120,8 +120,8 @@ struct Line {
 ///
 /// When `.github/workflows/` cannot be read, when it holds no workflow, when a
 /// line cannot be lexed, when no `uses:` is found anywhere in the corpus, or
-/// when any workflow fails either claim above.
-pub(crate) fn run() -> Result<()> {
+/// when any workflow fails either claim above, or when `out` cannot be written.
+pub(crate) fn run(out: &mut impl std::io::Write) -> Result<()> {
     let root = workspace_root()?;
     let dir = root.join(WORKFLOW_DIR);
 
@@ -191,12 +191,13 @@ pub(crate) fn run() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "lint-workflows: {} workflow(s), {uses_seen} action reference(s) — every one pinned to a \
          commit SHA with its version named, every workflow stating its token scope",
         files.len()
-    );
-    Ok(())
+    )
+    .context("writing lint-workflows' report")
 }
 
 /// Both claims over one workflow: how many action references it made, and every
@@ -723,5 +724,37 @@ jobs:
         );
         assert_eq!(found.len(), 1, "{found:#?}");
         assert!(found[0].contains("@sha256:"), "{}", found[0]);
+    }
+
+    /// The verdict over this repository's own workflows, through the writer
+    /// the step was handed: one line, naming what it counted.
+    #[test]
+    fn the_verdict_is_written_into_the_writer() {
+        let mut out = Vec::new();
+        run(&mut out).expect("this repository's workflows pass their own lint");
+        let line = String::from_utf8(out).expect("the verdict is UTF-8");
+        assert!(
+            line.starts_with("lint-workflows: ")
+                && line.ends_with(", every workflow stating its token scope\n")
+                && line.matches('\n').count() == 1,
+            "{line:?}"
+        );
+    }
+
+    /// A closed stdout is the error the step returns, not a panic in
+    /// `println!`. The wrong implementation it rejects drops the verdict
+    /// write's result and reports `Ok` over a line nobody received.
+    #[test]
+    fn a_closed_stdout_is_returned_rather_than_panicking() {
+        let mut pipe = crate::tests::ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let err = run(&mut pipe).expect_err("stdout was closed, yet Ok");
+        let refused = err
+            .downcast_ref::<std::io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(refused.kind(), std::io::ErrorKind::BrokenPipe);
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
     }
 }
