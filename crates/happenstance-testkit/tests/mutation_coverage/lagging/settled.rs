@@ -100,7 +100,7 @@ fn the_concurrency_family_behind_a_settling_lag_passes_every_rule() {
 fn the_lag_reason() -> &'static str {
     <LaggingFixture<GappedPositionFixture, Unsettling> as Fixture>::READ_YOUR_OWN_WRITES
         .reason()
-        .unwrap_or_default()
+        .expect("the instrument declines READ_YOUR_OWN_WRITES")
 }
 
 /// I1 and I2: a fixture that declines read-your-own-writes and keeps the

@@ -166,10 +166,13 @@ NEON_CONNECTION=postgresql://… cargo test -p happenstance-neon --all-features 
 NEON_CONNECTION=postgresql://… cargo test -p happenstance-neon --all-features -- --ignored --show-output --test-threads=1
 ```
 
-`--test-threads=1` is this adapter's **visibility mechanism**, not a flake
-workaround: `pg_snapshot_xmin` is held back by any open write transaction on the
-branch, including sibling rules of the same run. Run in parallel, most of the
-suite reddens; run serially, it does not.
+`--test-threads=1` is pool and branch arithmetic, not this adapter's visibility
+mechanism: each fixture instance opens its own schema and its rules issue many
+requests at once, so a parallel run multiplies the load one branch has to carry.
+Visibility is the fixture's `settle_frontier` (CF-42). `pg_snapshot_xmin` is held
+back by any open write transaction on the branch, sibling rules of the same run
+included, so each rule that reads back its own appends asks the fixture to wait
+for the frontier first rather than relying on a quiet branch.
 
 **The counts that used to sit here were a phase-10b bring-up measurement** taken
 before three other defects were fixed, and they had drifted out of agreement with

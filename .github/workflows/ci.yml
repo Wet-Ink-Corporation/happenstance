@@ -668,7 +668,7 @@ jobs:
           set -o pipefail
           cargo test -p happenstance-postgres --all-features \
             --test frontier_settle -- --ignored --exact --show-output \
-            a_frontier_held_back_by_another_database_still_passes_after_settling \
+            a_frontier_held_back_by_another_schema_still_passes_after_settling \
             | tee frontier-settle-run.txt
           grep -qE '^test result: ok\. 1 passed; 0 failed; 0 ignored' frontier-settle-run.txt
 

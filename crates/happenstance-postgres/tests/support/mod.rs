@@ -671,13 +671,15 @@ impl Fixture for PostgresFixture {
     /// The probe repeats with a doubling pause, from 1 ms to 100 ms. The waiting
     /// is here rather than in the rule because CF-33 forbids a rule to wait.
     ///
-    /// # Settling after arming never finishes
+    /// # Settling after arming does not succeed
     ///
     /// After [`arm_held_above_frontier`](Fixture::arm_held_above_frontier) every
-    /// append lands at `xact_id` `i64::MAX`, which no frontier passes. After
+    /// append lands at `xact_id` `i64::MAX`, which no frontier passes, so a
+    /// settle would reach the deadline below. After
     /// [`arm_read_fault`](Fixture::arm_read_fault) the probe reads the faulting
-    /// view. No rule settles after either, and a settle that did would reach the
-    /// deadline below.
+    /// view, whose `read_fault_guard` raises on any row it evaluates at a
+    /// position above 2. So the probe errors at once rather than waiting out the
+    /// deadline, and the settle panics naming it. No rule settles after either.
     ///
     /// # Panics
     ///
@@ -688,16 +690,7 @@ impl Fixture for PostgresFixture {
         let settled = async {
             let mut pause = SETTLE_FIRST_PAUSE;
             loop {
-                let visible: bool = sqlx::query_scalar(SETTLE_PROBE)
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap_or_else(|error| {
-                        panic!(
-                            "a broken test environment, not a non-conformant adapter: \
-                             `{SETTLE_PROBE}` failed ({error})"
-                        )
-                    });
-                if visible {
+                if frontier_passes_every_row(&pool).await {
                     return Settled::Visible;
                 }
                 tokio::time::sleep(pause).await;
@@ -758,6 +751,26 @@ const READ_FAULT_INJECTION: &str = concat!(
     "END IF; ",
     "END $arm$;",
 );
+
+/// One [`SETTLE_PROBE`] against `pool`'s schema.
+///
+/// `true` on an empty table, so a caller that needs rows held above the
+/// frontier must see `false` before it can say so.
+///
+/// # Panics
+///
+/// When the server cannot answer the probe. The message names it.
+pub(crate) async fn frontier_passes_every_row(pool: &PgPool) -> bool {
+    sqlx::query_scalar(SETTLE_PROBE)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|error| {
+            panic!(
+                "a broken test environment, not a non-conformant adapter: \
+                 `{SETTLE_PROBE}` failed ({error})"
+            )
+        })
+}
 
 /// Whether every row in this schema's `event` is below the visibility
 /// frontier: the read path's predicate, negated and asked of the whole table.

@@ -332,13 +332,15 @@ impl Fixture for NeonFixture {
     /// read. The probe repeats with a doubling pause, from 1 ms to 100 ms, here
     /// rather than in the rule because CF-33 forbids a rule to wait.
     ///
-    /// # Settling after arming never finishes
+    /// # Settling after arming does not succeed
     ///
     /// After [`arm_held_above_frontier`](Fixture::arm_held_above_frontier) every
-    /// append lands at `xact_id` `i64::MAX`, which no frontier passes. After
+    /// append lands at `xact_id` `i64::MAX`, which no frontier passes, so a
+    /// settle would reach the deadline below. After
     /// [`arm_read_fault`](Fixture::arm_read_fault) the probe reads the faulting
-    /// view. No rule settles after either, and a settle that did would reach the
-    /// deadline below.
+    /// view, whose `read_fault_guard` raises on any row it evaluates at a
+    /// position above 2. So the probe errors at once rather than waiting out the
+    /// deadline, and the settle panics naming it. No rule settles after either.
     ///
     /// # Panics
     ///

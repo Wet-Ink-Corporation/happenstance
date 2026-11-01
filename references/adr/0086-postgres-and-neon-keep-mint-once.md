@@ -136,7 +136,7 @@ There are two ways to get an id, and both are bad:
   design is "two statements in one request is safe; two round trips is not" (`src/lib.rs:115-119`).
 - **`gen_random_uuid()` inlined into each append statement.** That mints per *append*, which the
   first assertion of `reopened_store_does_not_reissue_an_event_id` and the whole of
-  `append_stamps_a_local_event_id` reject (`suite.rs:2339-2386`).
+  `append_stamps_a_local_event_id` reject (`suite.rs:2395-2446`).
 
 ### 4.4 It fragments one log across many origins
 

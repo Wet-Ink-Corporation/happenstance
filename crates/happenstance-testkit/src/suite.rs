@@ -6703,8 +6703,8 @@ pub mod rules {
         }
         // The one settle, and it is here because nowhere earlier is allowed:
         // before this line the slow writer is suspended, and on a store like
-        // `happenstance-postgres` a settle waits for every open writer, the
-        // rule's own included (CF-42). Steps 1 and 2 therefore read whatever a
+        // `happenstance-postgres` a settle waits for every open writer older than
+        // a committed row, the rule's own included (CF-42). Steps 1 and 2 read what a
         // frontier store shows, which is ES-10's own subject; this read is the
         // anchor's.
         settle!(fixture);

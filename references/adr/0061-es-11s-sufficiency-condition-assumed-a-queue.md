@@ -162,8 +162,8 @@ failures is that rule's (`crates/happenstance-testkit/src/suite.rs:6259`).
 
 **The soft edge is worth writing down rather than rounding off.**
 `query_items_share_one_snapshot` appends *after the first poll* and asserts the
-drained set is unchanged (`suite.rs:6207`, `:6221-6224`) — structurally the same
-exposure as ES-11's rule at `:6119-6122`, differing only in how many events are
+drained set is unchanged (`suite.rs:6464`, `:6471-6480`) — structurally the same
+exposure as ES-11's rule at `:6364-6373`, differing only in how many events are
 seeded. It was not observed red in sixty measured runs, which at the sibling rule's
 observed rate is consistent with either immunity or luck. So the honest conformance
 figure for this adapter is **104 of 105 observed**, with a 105th that is exposed to

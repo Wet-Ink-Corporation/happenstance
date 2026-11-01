@@ -2701,6 +2701,12 @@ fn reports() -> Vec<SubjectReport> {
 /// `the_lag_exposed_stores_are_every_store_a_lag_can_reach` requires this list
 /// to be exactly the registered stores that fail one of them.
 ///
+/// Two assumptions carry that, and neither is measured. `Tripwire` runs the
+/// rules on conformant stores only, so it sees the calls a rule makes on its
+/// passing path; a rule that read during a lag only on the way to rejecting a
+/// defect would be missed. And the settle's own inner `connect` and `read` are
+/// taken to change nothing a rule can observe.
+///
 /// Not every store, because each type here instantiates the whole event-store
 /// family once more. Measured on 2026-11-01: this binary peaks at 7.8 GB of
 /// `rustc` memory with the 99 registered stores, and all 99 behind the lag as
