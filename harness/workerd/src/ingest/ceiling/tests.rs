@@ -169,8 +169,6 @@ fn the_max_tags_shape_crosses_the_tags_per_batch_ceiling_past_512_events() {
     assert_eq!(MAX_TAGS_EVENTS_AT_CEILING, 512);
     assert_eq!(MAX_TAGS_EVENTS_AT_CEILING * per_event, per_batch);
     assert!((MAX_TAGS_EVENTS_AT_CEILING + 1) * per_event > per_batch);
-    assert!(
-        MAX_TAGS_EVENTS_AT_CEILING < MAX_EVENTS_PER_CALL,
-        "the search reaches past the tags-per-batch wall"
-    );
+    // The search reaches past the tags-per-batch wall.
+    const { assert!(MAX_TAGS_EVENTS_AT_CEILING < MAX_EVENTS_PER_CALL) };
 }

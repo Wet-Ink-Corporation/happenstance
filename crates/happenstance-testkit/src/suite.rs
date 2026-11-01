@@ -5112,14 +5112,13 @@ pub mod rules {
     /// that compares each event against the batch ceiling, rather than their
     /// sum, then accepts the over batch and fails.
     fn tags_per_batch_spread<F: Fixture>(ceiling: usize) -> (usize, usize) {
-        let Some(over) = ceiling.checked_add(1) else {
-            panic!(
-                "VT-36: this fixture states a tags-per-batch ceiling of \
-                 usize::MAX, which has no total past it to refuse. A ceiling \
-                 that cannot be crossed is not a ceiling, and `None` is the \
-                 honest declaration"
-            )
-        };
+        let over = ceiling.saturating_add(1);
+        assert!(
+            over > ceiling,
+            "VT-36: this fixture states a tags-per-batch ceiling of usize::MAX, \
+             which has no total past it to refuse. A ceiling that cannot be \
+             crossed is not a ceiling, and `None` is the honest declaration"
+        );
         if let Some(per_event) = F::MAX_TAGS_PER_EVENT {
             assert!(
                 ceiling >= per_event,
