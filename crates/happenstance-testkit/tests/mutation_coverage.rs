@@ -2702,8 +2702,10 @@ fn reports() -> Vec<SubjectReport> {
 /// to be exactly the registered stores that fail one of them.
 ///
 /// Not every store, because each type here instantiates the whole event-store
-/// family once more. All 99 doubled this binary's peak compile memory past
-/// 15 GB, which neither this machine nor a CI runner has.
+/// family once more. Measured on 2026-11-01: this binary peaks at 7.8 GB of
+/// `rustc` memory with the 99 registered stores, and all 99 behind the lag as
+/// well ran out of a 15 GB machine. With these six, and the lagging
+/// instrument's own subjects, it peaks at 8.6 GB.
 macro_rules! for_each_lag_exposed {
     ($($callback:tt)+) => {
         $($callback)+! {

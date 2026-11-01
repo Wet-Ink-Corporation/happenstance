@@ -127,7 +127,7 @@ Which of VT-6's arms each adapter takes, and at what cost:
 - **Mint-per-open.** This satisfies the clause by construction, and it is the one arm that changes
   behaviour on a published crate. A server store has no natural "open", and per pool or per handle
   would split one store's history into a great many origins. It does *not* fail
-  `reopened_store_does_not_reissue_an_event_id`, which ADR-0014 rewrote to admit it (`suite.rs:2594-2601`).
+  `reopened_store_does_not_reissue_an_event_id`, which ADR-0014 rewrote to admit it (`suite.rs:2654-2661`).
 
 ## What forces it
 

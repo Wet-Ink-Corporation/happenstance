@@ -67,7 +67,7 @@ thread is not currently parked, the token is recorded once; a *second* `unpark` 
 parks again is coalesced into the same single token rather than queued as a second wakeup. That is
 fine for a single, flat poll loop. It stops being fine the moment a second `block_on` runs *nested*
 inside a rule that is itself being driven by an outer `block_on` on the same thread — the shape at
-`concurrency.rs:1137` through `:1229`, where a rule spawns further polling while already inside the
+`concurrency.rs:1156` through `:1229`, where a rule spawns further polling while already inside the
 registry's own loop. A wakeup meant for the inner future's waker and one meant for the outer loop's
 waker are, from `park`'s point of view, indistinguishable tokens on the same thread: the inner
 call can consume the token the outer loop needed, and the outer loop then parks with nothing left

@@ -97,7 +97,7 @@ feature compiles silently. `crates/happenstance-testkit/Cargo.toml:70` is exactl
 and it is the line this atom's summary cited as evidence. Whether the lane removes it, and whether
 the manifest comment at `Cargo.toml:20-28` that still describes the family as "fenced rather than
 hidden" with "a written semver exemption" is rewritten, is what the third test decides. The
-`lib.rs:466-471` comment stays true under ADR-0063 for a reason unrelated to the exemption: the
+`lib.rs:469-474` comment stays true under ADR-0063 for a reason unrelated to the exemption: the
 module is unconditional so the wasm32 `--tests` step cannot pass while proving nothing.
 
 ## What is not decided
