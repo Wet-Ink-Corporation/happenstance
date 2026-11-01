@@ -54,7 +54,7 @@ semver exemption documented on the module. Read literally, the exemption's scope
 crates and the adapters that forward the flag — nothing in ADR-0036's text reaches
 `happenstance-testkit`.
 
-`crates/happenstance-testkit/src/lib.rs:470-475` states, in its own words, that the crate's
+`crates/happenstance-testkit/src/lib.rs:473-478` states, in its own words, that the crate's
 projection module is "Unconditional, unlike its two nearest templates" — meaning `happenstance-core`
 and `happenstance`, the very crates ADR-0036 exempts. `crates/happenstance-testkit/Cargo.toml:49-55`
 turns `unstable-projection` on for `happenstance-core` unconditionally, from inside the testkit's

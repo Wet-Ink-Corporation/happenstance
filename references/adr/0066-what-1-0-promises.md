@@ -69,7 +69,7 @@ the two sync crates, and phase 13 is what closes that gap. The names
 crates.io** when the registry API was queried on 2026-09-29. So phase 13's
 claim item (`runbook/phases/13-sync.md:57-60`) is on 1.0's critical path, not a
 formality. When the sync crates publish, they must also be added to the semver
-job's hand-written package list (`.github/workflows/ci.yml:1081`), to
+job's hand-written package list (`.github/workflows/ci.yml:1108`), to
 `SECURITY.md`'s scope and to `PUBLISHABLE`. Phase 21 checks all three.
 
 **`happenstance-ladybug` is outside 1.0.** It can have its own `0.x` line once
@@ -304,7 +304,7 @@ third and a fourth adapter arm real in-store faults as well.**
   (`crates/happenstance-sqlite/tests/append.rs:848-886`).
 - **Postgres, phase 10.** The fixture declares the capability supported and arms
   an `AFTER INSERT` trigger that raises on the `after + 1`-th row
-  (`crates/happenstance-postgres/tests/support/mod.rs:467-481`, the raise at
+  (`crates/happenstance-postgres/tests/support/mod.rs:472-486`, the raise at
   `:544`). The `sqlx` pool did not absorb it. The conformance test asserts that
   the capability is supported **and** is not the trait's silent default
   (`crates/happenstance-postgres/tests/postgres_conformance.rs:417-431`). The rule
@@ -317,13 +317,13 @@ third and a fourth adapter arm real in-store faults as well.**
   (`crates/happenstance-cloudflare/tests/support/mod.rs:193-244`).
 - **Neon, phase 10b.** The same trigger, with a transaction-local counter,
   because the `/sql` proxy pools backends across unrelated requests
-  (`crates/happenstance-neon/tests/support/mod.rs:154-173`, the raise at `:226`).
+  (`crates/happenstance-neon/tests/support/mod.rs:156-175`, the raise at `:226`).
   Neon's retry loop matches SQLSTATE `40001` and nothing else
   (`crates/happenstance-neon/src/error.rs:40-48`). The fixture's `RAISE EXCEPTION`
   is `P0001`, so the loop cannot absorb it.
 
 The rule is `arming_a_mid_batch_fault_makes_the_append_fail`
-(`crates/happenstance-testkit/src/suite.rs:3109`, registered at
+(`crates/happenstance-testkit/src/suite.rs:3186`, registered at
 `registry.rs:168`). It can fail: `NoopFaultFixture`
 (`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:3658`)
 declares the capability, overrides the arming with an empty body, and is

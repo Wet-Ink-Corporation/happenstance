@@ -277,13 +277,21 @@ pub trait Fixture {
     ///
     /// Two exits were considered and both are closed.
     ///
-    /// **Waiting for the frontier is forbidden.** `[FROZEN]` CF-33 bans a
-    /// conformance rule from reading a clock, sleeping, or asserting on an
+    /// **A rule waiting for the frontier is forbidden.** `[FROZEN]` CF-33 bans
+    /// a conformance rule from reading a clock, sleeping, or asserting on an
     /// operation count, and its `Rejects:` names this exact pathology: a rule
     /// that *"passes on the author's machine, fails on a loaded CI runner"*.
     /// That is not a rule this suite is allowed to write, and the reason given
     /// there is the right one — a flaky suite teaches adapter authors to re-run
     /// until green, and that habit is what lets a real failure through.
+    ///
+    /// The **fixture** may wait, and that is where the waiting went (CF-42). A
+    /// named rule that reads back its own append calls
+    /// [`settle_frontier`](Self::settle_frontier) first, and a declining
+    /// fixture that can bring its frontier past every acknowledged row
+    /// overrides it to do so. One that cannot keeps the provided body, and
+    /// those rules then report a skip under this capability, with the reason
+    /// given here.
     ///
     /// **A prefix-only weakening does not reach far enough; a larger one does.**
     /// The [model family](crate::model) *predicts* whether the store will

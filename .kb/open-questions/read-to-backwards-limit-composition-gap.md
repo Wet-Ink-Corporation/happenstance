@@ -89,6 +89,6 @@ needs a clause change, a record and a major. So the gap can be closed after 1.0 
 provided the composition is already inside a frozen clause's MUST.
 
 The forcing event passed at `0.2.0` — SQLite and Postgres both ship windowed backwards reads — and
-`read_to_composes_with_limit` (`crates/happenstance-testkit/src/suite.rs:1734`) is still the only
+`read_to_composes_with_limit` (`crates/happenstance-testkit/src/suite.rs:1773`) is still the only
 rule on the composition; no separating fourth mutant has been proposed. **Owner now: after 1.0**,
 any testkit minor. It closes when someone searches for that mutant or records the gap accepted.

@@ -34,6 +34,27 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- `happenstance-testkit`: `Fixture::settle_frontier`, a provided method, and
+  the `Settled` enum it returns (CF-42, ADR-0099, #338). A fixture that
+  declines `READ_YOUR_OWN_WRITES` overrides it to wait until a read shows every
+  row its store holds, and answers `Settled::Visible`. The provided body
+  answers `Settled::Nothing` without waiting. The method is additive: a fixture
+  written against `0.4.5` compiles unchanged.
+
+### Changed
+
+- `happenstance-testkit`: the 83 named rules that read back their own appends
+  now call `settle_frontier` after their writes when the fixture declines
+  `READ_YOUR_OWN_WRITES` (CF-42, #338). A declining fixture that keeps the
+  provided body sees those rules report a skip under `READ_YOUR_OWN_WRITES`
+  with its own reason, where they used to read straight after appending and
+  fail when the frontier trailed (#272). No assertion changed, and a fixture
+  that supports the capability is never asked to settle, so its run is
+  unchanged. The `happenstance-postgres` and `happenstance-neon` test fixtures
+  override the method and wait for the frontier, with a 30-second deadline.
+
 ## [0.4.5] — 2026-10-31
 
 An additive release for consumers that own their SQLite connection.

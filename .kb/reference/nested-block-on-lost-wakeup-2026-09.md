@@ -11,7 +11,7 @@ summary: >-
   std::thread::park on Poll::Pending, with no notified flag of its own. std's park and unpark
   carry a single token per thread, so an unpark delivered while the thread is not parked is
   coalesced rather than queued: a second block_on nested inside a rule already driven by one —
-  the shape at crates/happenstance-testkit/src/concurrency.rs:1137 calling through to :1228 — can
+  the shape at crates/happenstance-testkit/src/concurrency.rs:1156 calling through to :1228 — can
   consume the token the outer loop was waiting for. Measured over four runs: the baseline
   completes, the nested case without a collision completes, and the nested case with a collision
   hangs past ten seconds. This matters beyond the one call site because CF-33 is [FROZEN] and

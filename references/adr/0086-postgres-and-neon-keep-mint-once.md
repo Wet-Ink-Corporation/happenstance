@@ -65,7 +65,7 @@ and the change that lands this record corrects both texts.
 - ADR-0014 replaced VT-6's original rule, `store_id_is_stable_across_reopen`, **because** that
   rule failed mint-per-open (`references/adr/0014-event-identity-and-recorded-time.md:247-256`).
   The replacement's own documentation says so
-  (`crates/happenstance-testkit/src/suite.rs:2594-2601`).
+  (`crates/happenstance-testkit/src/suite.rs:2654-2661`).
 - The rule today (`:2625-2693`) asserts two things only. Two events appended in one open share a
   `StoreId`. An event appended after a reopen has an `EventId` matching neither of them.
   Mint-per-open, or mint-per-handle, passes both.

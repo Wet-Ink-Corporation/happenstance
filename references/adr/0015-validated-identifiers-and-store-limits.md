@@ -1143,7 +1143,7 @@ VT-19, VT-20 and VT-25 are all implemented as written.
     clauses, and `:558`'s assignment of VT-10 to phase 13 is **correct** and must
     not be swept up.
 
-18. **`crates/happenstance-testkit/src/suite.rs:113-142`** — the four private
+18. **`crates/happenstance-testkit/src/suite.rs:113-143`** — the four private
     consts become imports; the comment block that explains their absence becomes a
     one-line citation; and `:128-130`'s claim that the RUNBOOK "carries" the 1 MiB
     discrepancy goes, because it has not been true since phase 3 corrected it.

@@ -39,7 +39,9 @@ with programs you can run.
 >   event-store fixture declines, `READ_YOUR_OWN_WRITES`, carries its reason on
 >   the crate's own front page. Against a fixture that declines it, the model
 >   family runs its trailing model, which both it and `happenstance-postgres`
->   meet; what that model gives up is listed in the rule's rustdoc.
+>   meet; what that model gives up is listed in the rule's rustdoc. The
+>   named rules that read back their own appends settle the frontier through
+>   the fixture's `settle_frontier` first (CF-42), so they run there too.
 > - **`happenstance-ladybug`** — the projection family only, against the real
 >   LadybugDB driver, from phase 11 until it was **retired** at phase 17. It was
 >   never published — `lbug` does not render on docs.rs, this project's bar for a

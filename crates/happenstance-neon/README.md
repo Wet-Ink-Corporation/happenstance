@@ -186,7 +186,9 @@ read to a prefix of what was accepted that never shrinks, and judges each
 condition verdict over what the store holds, deferring a verdict it cannot
 decide yet. What it gives up is listed on `ops_agree_with_the_model` in
 `happenstance-testkit`: chiefly, a write that never becomes visible reads as lag
-rather than as a lost write.
+rather than as a lost write. The 83 named rules that read back their own appends
+do not skip for it: each asks the fixture to settle the frontier first (CF-42),
+and the fixture waits there until a read shows every row its schema holds.
 
 ## Minimum supported Rust version
 

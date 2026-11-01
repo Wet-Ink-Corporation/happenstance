@@ -13,8 +13,9 @@
 //!
 //! # Why these are in a file of their own, and not in `REGISTRY`
 //!
-//! A store that trails its own writes fails the named rules that read back
-//! an append, and that is not the defect any of these is about. So they are
+//! A store that trails its own writes, behind a fixture with no
+//! `settle_frontier` override, skips the named rules that read back an append
+//! (CF-42), and the trailing is not the defect any of these is about. So they are
 //! not in `REGISTRY` or `for_each_mutant!`, where those rules would be held
 //! against them; `for_each_trailing_subject!` and `TRAILING_MODEL_COVERAGE`
 //! are their list and their table. The whole file is behind the `proptest`

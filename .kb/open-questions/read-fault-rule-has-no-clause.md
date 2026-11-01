@@ -60,8 +60,8 @@ The specification owner's attention before phase 12, on the reasoning already re
 
 **Classification: additive** — a clause minted, no signature. **Sub-question 4 is answered in
 the tree:** `happenstance-postgres` and `happenstance-neon` declare `READ_FAULT` supported and
-arm a real fault over a real medium (`crates/happenstance-postgres/tests/support/mod.rs:496`,
-`crates/happenstance-neon/tests/support/mod.rs:198`); SQLite and Cloudflare decline
+arm a real fault over a real medium (`crates/happenstance-postgres/tests/support/mod.rs:501`,
+`crates/happenstance-neon/tests/support/mod.rs:200`); SQLite and Cloudflare decline
 (`crates/happenstance-sqlite/tests/support/mod.rs:199`, `crates/happenstance-cloudflare/tests/support/mod.rs:258`).
 That closes `postgres-fixture-read-fault-declension-is-owed`, and it lifts option A past the
 `[PROVISIONAL]`-at-most this atom assumed — it is the read-side twin of the evidence on which

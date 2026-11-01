@@ -107,7 +107,7 @@ copy is routine:
 VT-6's `Rejects:` paragraph describes the consequence. A peer's dedup treats the colliding events as
 already seen, and real facts are silently dropped, with no error path and no observable symptom.
 Nothing catches it today. `reopened_store_does_not_reissue_an_event_id`
-(`crates/happenstance-testkit/src/suite.rs:2625`) tests a reopen, not a restore, and
+(`crates/happenstance-testkit/src/suite.rs:2685`) tests a reopen, not a restore, and
 `restored_peer_does_not_reissue_identities` is named by VT-6 for `happenstance-sync-testkit`, which
 does not exist yet.
 

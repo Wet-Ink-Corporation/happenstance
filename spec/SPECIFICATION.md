@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 208 clause IDs, of which 201 are normative:
-**160 `[FROZEN]`**, **31 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
+As assembled, this document carries 209 clause IDs, of which 202 are normative:
+**160 `[FROZEN]`**, **32 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -1883,7 +1883,7 @@ why the name was left here rather than dropped until it could be written.
 builder stores `Some(0)` verbatim (`query.rs:387-391`),
 `zero_limit_means_zero_events` (`query.rs:597-610`) asserts it, and
 `read_limit_zero_yields_nothing` is in the suite
-(`crates/happenstance-testkit/src/suite.rs:1539`) and in
+(`crates/happenstance-testkit/src/suite.rs:1575`) and in
 `for_each_event_store_rule!`
 (`crates/happenstance-testkit/src/registry.rs:138`).
 
@@ -4968,7 +4968,7 @@ has not yet passed. That agrees with ES-25, which evaluates a condition over wha
 the store holds, and with VT-8's uniqueness on the origin pair. Neither reading can
 produce a duplicate through ingest, which does not probe first
 (`crates/happenstance-sync/src/ingest.rs:97-101`), so agreement is the reason, and
-`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:6679-6682`, `crates/happenstance-testkit/src/contract.rs:606-640`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
+`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:6850-6853`, `crates/happenstance-testkit/src/contract.rs:614-648`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
 
 The `async fn` spelling is load-bearing and matches ES-30's: a clause written
 without it describes a different method under `trait_variant`.
@@ -9255,6 +9255,38 @@ enforce distinguishably. Nine are compiled and registered: `PayloadCeilingStore`
 where **no** fixture states a ceiling and VT-25 is a variant nothing exercises. `GappedPositionFixture` states the first three at
 VT-21 – VT-24's floors and a metadata ceiling, and is what makes the rule run.
 
+**CF-42.** A fixture that declines `READ_YOUR_OWN_WRITES` MAY override
+`Fixture::settle_frontier` to wait until a read shows every row its store holds,
+and answer `Settled::Visible`. A named rule that reads back its own append MUST
+settle first, at a point where no append of its own is in flight and never after
+`arm_held_above_frontier`, and MUST report a skip under `READ_YOUR_OWN_WRITES`,
+with the fixture's own reason, where the fixture answers `Settled::Nothing`. A
+fixture that supports `READ_YOUR_OWN_WRITES` MUST NOT be asked to settle, so its
+run is the run it had before the method existed. The waiting is the fixture's: a
+rule still never waits (CF-33), which is why the method exists (ADR-0099).
+`[PROVISIONAL — falsified by a frontier adapter that cannot state "everything
+held is visible" as a probe it can repeat, such as a read replica with no view of
+the primary's `xmin`. Such a fixture could only keep the provided body, and 83
+rules would skip against it rather than run. The instruments are
+`happenstance-postgres` and `happenstance-neon`, whose fixtures poll the read
+path's own predicate, negated, with a 30-second deadline
+(`crates/happenstance-postgres/tests/support/mod.rs`,
+`crates/happenstance-neon/tests/support/mod.rs`).]`
+Rule: `an_unsettling_lag_skips_exactly_the_read_back_rules` and
+`the_read_back_inventory_partitions_the_named_rules`, meta-tests in
+`crates/happenstance-testkit/tests/mutation_coverage/lagging/settled.rs`. The
+first runs the suite against `LaggingFixture`, whose reads hide every
+acknowledged append until a settle, with the provided body, and requires exactly
+the 83 rules of `READS_BACK_ITS_OWN_WRITES` to skip. The second requires that
+list and `READS_NOTHING_IT_WROTE`'s 19 to partition both families' rules.
+Cases: none; this constrains the suite, not an adapter.
+Rejects: a read-back rule that passes on a frontier store only because the
+server was quiet, which was #272 on a loaded runner; a settle that waits inside a
+rule; a fixture that supports the capability and is asked anyway, which
+`NeverAsked`, whose `settle_frontier` panics, fails; and a settle that answers
+`Visible` and reveals nothing, which `EmptySettle` shows the read-back rules'
+anchors catch, bar three absence-only rules measured in `EMPTY_SETTLE_UNCAUGHT`.
+
 **CF-19.** A rule MUST assert that an append made through one handle is visible
 to an append condition evaluated through a second handle onto the same backing
 store. `[FROZEN]`
@@ -9358,7 +9390,7 @@ and `conformance_test!` no longer exists anywhere in the workspace:
 `for_each_event_store_rule!`, in
 `crates/happenstance-testkit/src/registry.rs`, has been the single enumeration
 ever since, `event_store_conformance!`
-(`crates/happenstance-testkit/src/lib.rs:615`) is built by invoking it, and
+(`crates/happenstance-testkit/src/lib.rs:618`) is built by invoking it, and
 `no_orphan_rules` is what now makes the two agree. What the clause forbids from
 here is a second hand-maintained list of the *same* family — reintroducing the
 pair that drifts, under whatever name — which is the arrangement the paragraph
@@ -9674,7 +9706,7 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` (the last retired with its crate at phase 17, ADR-0078) | **Far end yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:653-805`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No. Planned for phase 14** (CF-27; ADR-0027's whole-log answer took SY-27 off it). ADR-0028 fixed its report as instrument-local, not a port surface | Fixture first; a device adapter second |
-| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1330`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
+| **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1349`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
 Seven axes, and **the adapter column carries three ticks — durability, handle
@@ -10174,8 +10206,8 @@ between them because its *shape* does not wait on a transport but its
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 38 | 21 | 14 | 3 | 0 |
-| §6 conformance | `CF` | 41 | 35 | 3 | 2 | 1 |
-| **Total** | | **208** | **160** | **31** | **10** | **7** |
+| §6 conformance | `CF` | 42 | 35 | 4 | 2 | 1 |
+| **Total** | | **209** | **160** | **32** | **10** | **7** |
 
 ### 7.2 The table
 
@@ -10416,6 +10448,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-39 | FROZEN | `arming_a_mid_batch_fault_makes_the_append_fail`, `append_is_atomic_under_a_mi… | E2E-07, E2E-39 |
 | CF-40 | PROVISIONAL | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
 | CF-41 | FROZEN | `the_promised_emitters_are_exactly_the_pinned_list`, a meta-test in `crates/ha… | *(none — see clause)* |
+| CF-42 | PROVISIONAL | `an_unsettling_lag_skips_exactly_the_read_back_rules` and `the_read_back_inven… | *(none — see clause)* |
 
 <!-- END GENERATED -->
 
