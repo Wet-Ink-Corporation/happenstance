@@ -85,7 +85,7 @@ supported them (`references/evaluation/ARCHITECTURAL-EVALUATION.md:830`,
 That gap costs decisions, not just positioning:
 
 * **Four `[PROVISIONAL]` clauses name the absent measurement as their blocker** —
-  ES-17 (`spec/SPECIFICATION.md:3524`, the borrowed batch), ES-32 (`:4087`, the
+  ES-17 (`spec/SPECIFICATION.md:3524`, the borrowed batch), ES-32 (`:4559`, the
   polling seam), PS-30 (`:5464`), and the append-condition guard collapse
   (`:1821`).
 * **The repository publishes figures it cannot reproduce.**

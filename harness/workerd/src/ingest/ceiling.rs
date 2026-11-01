@@ -3,9 +3,9 @@
 //!
 //! The adapter refuses a call over its declared 1,024 events or 524,288 tags
 //! **before** any SQL, so an attempt through it can only rediscover those
-//! declarations at the top. What is open is below it: does the real runtime commit every call the
-//! adapter accepts, inside one `transactionSync`, at the shapes the per-event
-//! ceilings allow?
+//! declarations at the top. What is open is below it: does the real runtime
+//! commit every call the adapter accepts, inside one `transactionSync`, at the
+//! shapes the per-event ceilings allow?
 //!
 //! The search is **not** here. Each attempt is one request on its own object,
 //! and the runner (`ingest-ceiling.mjs`) bisects, because a shape near the top

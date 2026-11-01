@@ -316,17 +316,19 @@ impl Defect for UnreachableTagsPerBatchStore {
 /// The per-event ceiling of [`TagsPerBatchBelowTagsPerEventStore`].
 ///
 /// Above VT-22's floor and above every other rule's widest event, so that the
-/// store passes the rest of the suite.
-const WIDE_EVENT: usize = 1024;
+/// store passes the rest of the suite, and above [`NARROW_BATCH`], which is
+/// the one thing wrong with it.
+const WIDE_EVENT: usize = 16_384;
 
 /// The batch ceiling of [`TagsPerBatchBelowTagsPerEventStore`], below its per-event one.
 ///
-/// Above every other rule's total tags in one append, which is 128.
-const NARROW_BATCH: usize = 512;
+/// At VT-36's floor, so the store is wrong only in coherence: a batch ceiling
+/// below the floor would be a second defect the rule does not name.
+const NARROW_BATCH: usize = MIN_SUPPORTED_TAGS_PER_BATCH;
 
 /// A batch ceiling below the per-event ceiling.
 ///
-/// Both enforced correctly, and incoherent together: an event of 1,024 tags is
+/// Both enforced correctly, and incoherent together: an event of 16,384 tags is
 /// within its own ceiling and refused as a batch of one, `Split`. A sync
 /// runner halves the batch until one event is left, and then has nothing left
 /// to halve and a refusal that says it could. The two numbers came from two

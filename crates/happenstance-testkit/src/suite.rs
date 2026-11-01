@@ -5107,10 +5107,10 @@ pub mod rules {
     /// checking that the fixture's `ceiling` is coherent with its other two
     /// (VT-36). Returns the ceiling beside it.
     ///
-    /// Capped at half the ceiling even when the fixture states no per-event
-    /// ceiling, so the at-ceiling batch is always at least two events: a store
-    /// that compares each event against the batch ceiling, rather than their
-    /// sum, then accepts the over batch and fails.
+    /// Capped at half the ceiling even with no per-event ceiling, so the
+    /// at-ceiling batch, not only the over one, spans two events or more. The
+    /// cost: a fixture allowing under three events per append is rejected as
+    /// unreachable, which is below VT-24's floor in any case.
     fn tags_per_batch_spread<F: Fixture>(ceiling: usize) -> (usize, usize) {
         let over = ceiling.saturating_add(1);
         assert!(
