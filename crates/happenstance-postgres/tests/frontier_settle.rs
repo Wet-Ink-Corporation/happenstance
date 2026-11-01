@@ -85,7 +85,7 @@ async fn a_frontier_held_back_by_another_schema_still_passes_after_settling() {
             let rule_pool = rule_pool_rx
                 .wait_for(Option::is_some)
                 .await
-                .expect("the opener keeps the sender alive until it has sent")
+                .expect("the sender lives in the test's frame and outlives the watcher")
                 .clone()
                 .expect("waited for `Some`");
             held_above_the_frontier(&rule_pool).await;

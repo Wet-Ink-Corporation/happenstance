@@ -668,8 +668,8 @@ pub trait Fixture {
     /// A rule that reads back an append of its own calls this first (CF-42).
     /// It calls it only where no `append` future of its own is still pending,
     /// because on a store like `happenstance-postgres` the settle waits for
-    /// every open writer, and the rule's own unfinished append would then never
-    /// finish. It never calls it after
+    /// every open writer older than a row it holds, and the rule's own
+    /// unfinished append would then never finish. It never calls it after
     /// [`arm_held_above_frontier`](Self::arm_held_above_frontier), whose rows
     /// are held above the frontier for the rest of the fixture's life, so a
     /// settle there could never return.
