@@ -30,7 +30,7 @@ tree_hash: "2f25eccf8841e601a8ba820350af089070f5f579"
 
 ADR-0027 (#106): is replication whole-log or scoped at 1.0 (SY-27/28/29)?
 
-Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-53c544`. Anchor: `spec/SPECIFICATION.md:7768`.
+Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-53c544`. Anchor: `spec/SPECIFICATION.md:7798`.
 
 ## Decision outcome
 

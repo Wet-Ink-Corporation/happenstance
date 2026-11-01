@@ -498,7 +498,7 @@ No clause quotes the constant, so ADR-0065 moves a value the specification never
 `cargo xtask spec-trace` has no stake in this wave.
 
 This is not a formality. The sibling finding in the same open question — §8/§16 — has the
-opposite answer: ES-27's `Rejects:` prose at `spec/SPECIFICATION.md:3902-3905` quotes the
+opposite answer: ES-27's `Rejects:` prose at `spec/SPECIFICATION.md:3932-3935` quotes the
 aggregate's *"roughly 200x"*, so repairing it **is** a `[FROZEN]` clause edit that CLAUDE.md
 routes through a new decision. The check is what tells the two apart, and running it is what lets
 this wave say the difference out loud rather than assume it.

@@ -196,7 +196,7 @@ summary: >-
   completes, the nested case without a collision completes, and the nested case with a collision
   hangs past ten seconds. This matters beyond the one call site because CF-33 is [FROZEN] and
   forbids a conformance rule a clock, a watchdog or an elapsed-time assertion, so a hang produces
-  a stopped CI job that names no rule at all. spec/SPECIFICATION.md:4302-4322 already records one
+  a stopped CI job that names no rule at all. spec/SPECIFICATION.md:4332-4352 already records one
   mechanism with that signature - an adapter holding an exclusive resource across its append's
   suspension point, where the read blocks on what the suspended append still holds. This is a
   second, and it lives in the suite rather than in an adapter. crates/happenstance-sqlite/tests/

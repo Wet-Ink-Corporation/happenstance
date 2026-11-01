@@ -34,7 +34,7 @@ ADR-0027 (#106): ratify SY-7 (one adjudicator per fact family), SY-10 (direction
 
 ADR-0027 freezes four sync clauses and an accepted ADR is immutable.
 
-Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-0fbcac`. Anchor: `runbook/ledgers.md:310`.
+Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-0fbcac`. Anchor: `runbook/ledgers.md:312`.
 
 ## Considered options
 

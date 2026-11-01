@@ -108,7 +108,7 @@ re-derives the same scenarios against the real adapter. A private timing loop
 would have produced figures the adapter can never reproduce.
 
 **The durability settings are read back and enforced.**
-`spec/SPECIFICATION.md:7481-7484` names `PRAGMA synchronous = OFF` **by name** as
+`spec/SPECIFICATION.md:7511-7514` names `PRAGMA synchronous = OFF` **by name** as
 a wrong implementation CF-14's reopen rule exists to reject, so a figure produced
 under it is a figure for a store that cannot ship. `Durability::read_back` reads
 `journal_mode`, `synchronous` and `busy_timeout` off the live connection —
@@ -476,7 +476,7 @@ a store whose read path is a long replay wants most. **Rejected: `DELETE`**, the
 rollback journal, which serialises readers against the writer.
 
 **`synchronous = NORMAL`.** **Rejected: `OFF`** — named by
-`spec/SPECIFICATION.md:7481-7484` as a wrong implementation CF-14's reopen rule
+`spec/SPECIFICATION.md:7511-7514` as a wrong implementation CF-14's reopen rule
 exists to reject, so it is not a performance option at all. **Rejected: `FULL`**,
 which fsyncs at every commit; under WAL, `NORMAL` is durable across a process
 crash and loses at most the tail since the last checkpoint on power loss, and

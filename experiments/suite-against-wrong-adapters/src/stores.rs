@@ -58,7 +58,7 @@ pub fn empty_log() -> Log {
 /// [`correct::matching`], with the injected second defect optionally applied.
 ///
 /// The injected arm is `InnerJoinTagStore`'s defect, transcribed from
-/// `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:430-440`: tags
+/// `crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:433-443`: tags
 /// live in a side table and the join that reaches them is in the `FROM` clause
 /// rather than the `WHERE`, so an event with no tags has no row on the other side
 /// and is invisible to every query — `Query::all()` included.

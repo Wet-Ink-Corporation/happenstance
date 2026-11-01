@@ -46,7 +46,7 @@ declined into an atom rather than into silence.
 
 | # | Claim | Why it is a conflict, and what the wave does with it |
 | --- | --- | --- |
-| 1 | `claim-6` — PS-32 | A sentence in an accepted decision's long-form record is **false**, and the falsification is by compilation rather than by argument (`PRESSURE-TEST.md:203-232`: the pump builds). `spec/SPECIFICATION.md:5679` states the correction as a `[FROZEN]` `MUST`, and `:5699` names the sentence in its *Rejects* field. Nothing in `.kb/` owns it. The resolution — a decision atom superseding ADR-0007 — is exactly what this wave has no mandate to author, so it is **routed to `open-questions/`** rather than forced, per the ingest rule and the layer's own first bullet. |
+| 1 | `claim-6` — PS-32 | A sentence in an accepted decision's long-form record is **false**, and the falsification is by compilation rather than by argument (`PRESSURE-TEST.md:203-232`: the pump builds). `spec/SPECIFICATION.md:5709` states the correction as a `[FROZEN]` `MUST`, and `:5699` names the sentence in its *Rejects* field. Nothing in `.kb/` owns it. The resolution — a decision atom superseding ADR-0007 — is exactly what this wave has no mandate to author, so it is **routed to `open-questions/`** rather than forced, per the ingest rule and the layer's own first bullet. |
 
 Two near-misses, both of which read as conflicts on first pass and are not:
 

@@ -25,7 +25,7 @@
 ### The clause
 
 VT-6 (`spec/SPECIFICATION.md:848-906`) is `[PROVISIONAL]`. ADR-0066 marks it freeze-by-13
-(`.kb/decisions/0066-what-1-0-promises.md:161`; `runbook/ledgers.md:275`). It says four things.
+(`.kb/decisions/0066-what-1-0-promises.md:161`; `runbook/ledgers.md:276`). It says four things.
 
 1. A store MUST NOT issue a `(StoreId, SequencePosition)` pair twice (`:852-854`).
 2. Mint-once is allowed **only if** the adapter can detect a restore or clone, **or** the
@@ -443,7 +443,7 @@ it is retired (ADR-0078). The file grows by two lines, so the two citations of
 ~~~
 | `happenstance-postgres` | **mint once, in migration 1** | The documented re-mint (ADR-0086). After `pg_restore`, PITR, a failover that lost acknowledged writes, or any copy: stop every writer, run the re-mint statement on the copy, restart every process holding a `PostgresEventStore` (a handle and its clones cache the identity they read first), then resume appends. Detection is not taken: no candidate fingerprint has been measured, and none is expected to change under a restore into the same database | `crates/happenstance-postgres/migrations/0001_event_log.sql:102-118`; the procedure is in the crate root and README. `remint_identity` and stamping inside the append transaction are phase 13's |
 | `happenstance-neon` | **mint once, in migration 1** | The documented re-mint (ADR-0086). On every branch that is created, reset or restored, and after any restore: stop every writer, run the statement against `NeonConfig::qualified_meta`, then resume appends. No restart is needed, because every append reads the row | `crates/happenstance-neon/migrations/0001_neon_log.sql:126-141`; the procedure is in the crate root and README |
-| `happenstance-cloudflare` | **mint once, at the first `migrate`**, cached per handle | **Undecided.** Durable Object storage outlives the isolate, so eviction is not a restore (`store_id_is_not_reminted_per_handle`). Whether the platform's point-in-time recovery is a restore this adapter must answer for is open (Appendix C) | `crates/happenstance-cloudflare/src/event_store.rs:376`, `:587-603`, `:2274` |
+| `happenstance-cloudflare` | **mint once, at the first `migrate`**, cached per handle | **Undecided.** Durable Object storage outlives the isolate, so eviction is not a restore (`store_id_is_not_reminted_per_handle`). Whether the platform's point-in-time recovery is a restore this adapter must answer for is open (Appendix C) | `crates/happenstance-cloudflare/src/event_store.rs:389`, `:587-603`, `:2274` |
 ~~~
 
 ### A.2 `crates/happenstance-postgres/src/lib.rs`, before `//! # Still open`
@@ -574,7 +574,7 @@ To be written at acceptance as
 `kb-open-question-cloudflare-store-id-and-object-recovery-001`, owned by phase 13.
 
 > `happenstance-cloudflare` mints its `StoreId` once, at the first `migrate`, and caches it per
-> handle in a `RefCell<Option<StoreId>>` (`crates/happenstance-cloudflare/src/event_store.rs:376`,
+> handle in a `RefCell<Option<StoreId>>` (`crates/happenstance-cloudflare/src/event_store.rs:389`,
 > `:587-603`); `store_id_is_not_reminted_per_handle` (`:2274`) pins it. Eviction is answered:
 > Durable Object storage outlives the isolate. Not answered: (1) whether the platform can rewind an
 > object's SQLite storage, by point-in-time recovery or otherwise, and whether a rewind includes

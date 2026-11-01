@@ -83,7 +83,7 @@ standards/rust/90-skeletons-and-todo.md:82                       ✓ "the exempl
 crates/happenstance-core/tests/probe_live_transaction_shape.rs   ✓ exists — the compiled table the OQ already holds
 experiments/live-handle-projection-batch/                        ✓ exists — named as option 2's measurement site
 experiments/ladybug-driver-probes/{README.md,probes.rs}          ✓ both exist; results/ does NOT — see below
-spec/SPECIFICATION.md:5148-5158                                  ✓ PS-4's MUST and its two-condition falsifier, verbatim
+spec/SPECIFICATION.md:5178-5188                                  ✓ PS-4's MUST and its two-condition falsifier, verbatim
 projection_store_conformance! invocations                        ✓ four storage adapters: sqlite, postgres, neon, ladybug
 ```
 

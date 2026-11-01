@@ -18,7 +18,7 @@ Its hard jobs are five:
    `references/adr/0062-…` as its long form and `adr-0063` names `references/adr/0063-…`;
    **neither file exists in this worktree**, and the code both describe has not landed here:
    `ProjectionStore::begin` is still synchronous at `crates/happenstance-core/src/projection.rs:460`,
-   PS-6's MUST still reads *"neither `async` nor fallible"* at `spec/SPECIFICATION.md:5183`,
+   PS-6's MUST still reads *"neither `async` nor fallible"* at `spec/SPECIFICATION.md:5213`,
    `conformance = ["unstable-projection"]` still stands at `crates/happenstance-core/Cargo.toml:110`,
    and §1.3's census still reads 138/46/12/5. `02`, Adjudication 1 — the wave's most contestable
    call, and the one carried to `unresolved[]`.
@@ -92,7 +92,7 @@ benchmarks/tests/controls_fire.rs                                         ✓ ex
 benchmarks/README.md:337                                                  ✓ "## What none of this shows"
 xtask/src/affected.rs:448, :999                                           ✓ "ops/" on INERT; the_host_provisioning_tree_selects_no_package
 references/adr/0022-append-condition-strategy.md:120-144                  ✓ "disagreed by up to 45%… varied by 4x" — the range holds
-spec/SPECIFICATION.md:8747  (cited as CF-34)                              ✗ DRIFTED — CF-34 is at :9021; :8747 is inside CF-38's Rule
+spec/SPECIFICATION.md:8777  (cited as CF-34)                              ✗ DRIFTED — CF-34 is at :9021; :8747 is inside CF-38's Rule
 xtask/src/lints.rs:2007     (cited as CITATION_SCAN_EXCLUDE)              ✗ DRIFTED — the constant is at :2488
 
 ── citation-scan ──
@@ -112,7 +112,7 @@ references/adr/0062-the-probe-seam-moves-and-the-far-end-is-built.md      ✗ AB
 references/adr/0063-the-projection-port-is-frozen.md                      ✗ ABSENT
 crates/happenstance-core/src/projection.rs:460  fn begin(&self) -> Self::Batch
                                                                           ✗ NOT MOVED — synchronous, infallible, as ADR-0060 found it
-spec/SPECIFICATION.md:5183  "PS-6 — begin MUST be neither async nor fallible"
+spec/SPECIFICATION.md:5213  "PS-6 — begin MUST be neither async nor fallible"
                                                                           ✗ NOT REWRITTEN
 crates/happenstance-core/Cargo.toml:110  conformance = ["unstable-projection"]
                                                                           ✗ NOT RETIRED — "conformance implies nothing again" is not yet true here

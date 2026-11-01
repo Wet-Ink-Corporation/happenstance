@@ -77,7 +77,7 @@ last_reviewed: 2026-09-29
 
 ## What is true today
 
-ES-6 (`spec/SPECIFICATION.md:2773`) is `[FROZEN]` and its `Rule:` field names
+ES-6 (`spec/SPECIFICATION.md:2803`) is `[FROZEN]` and its `Rule:` field names
 `store_error_crosses_a_join_handle`, marked **(new)** (`SPECIFICATION.md:2816`). §7.2's generated
 table renders it with `†` (`SPECIFICATION.md:9952`), where the legend defines `†` as "does not
 exist yet". That identifier occurs as no `fn` anywhere in the workspace. It occurs only in prose:
@@ -106,7 +106,7 @@ one of the fifteen `Scheduled` ones whose owner is not a phase:
 
 > `store_error_crosses_a_join_handle` — "nothing, yet:
 > `crates/happenstance-cloudflare/src/send_shape.rs` argues it is unwritable against today's port,
-> which is a finding rather than a schedule" (`xtask/src/spec_trace.rs:1250-1257`).
+> which is a finding rather than a schedule" (`xtask/src/spec_trace.rs:1260-1267`).
 
 `kb-reference-spec-trace-unresolved-declarations-001` carries the census the entry came out of, and
 is where the other fourteen live. This moves sub-question 2 without closing it. The permanent
@@ -191,7 +191,7 @@ missing rule. The driver re-export pass went looking for a clause governing whet
 adapter re-exports the driver crate whose types appear in its public signatures, and found ES-6 as
 the nearest one — pointing the *other* way, because ES-6 endorses the wrapping, citing
 `SqliteEventStoreError`'s "twelve real variants over `rusqlite::Error`, `JoinError`,
-`TryCurrentError` and the crate's own decode failures" (`spec/SPECIFICATION.md:2784-2786`) as the
+`TryCurrentError` and the crate's own decode failures" (`spec/SPECIFICATION.md:2814-2816`) as the
 instrument that made the clause decidable at all. What ES-6 does not say is whether the *wrapped
 type* is part of the promise the `#[non_exhaustive]` error enum makes. That is not idle: the
 sealing option in that pass — wrap `rusqlite::Error` behind an opaque value enum and stop naming it
@@ -245,8 +245,8 @@ open. Writing the answer into ES-6's prose is phase 17's
 (`runbook/phases/17-breaking-window.md`).
 
 Sub-questions 1–3 are additive or process-only. `store_error_crosses_a_join_handle` is still
-unwritten and still a `Scheduled` entry in `UNRESOLVABLE_RULE_NAMES` (`xtask/src/spec_trace.rs:1252`).
-`crates/happenstance-cloudflare/src/lib.rs:366-371` records it as unwritable against today's port
+unwritten and still a `Scheduled` entry in `UNRESOLVABLE_RULE_NAMES` (`xtask/src/spec_trace.rs:1262`).
+`crates/happenstance-cloudflare/src/lib.rs:373-378` records it as unwritable against today's port
 for every adapter, and a testkit rule can land in any minor. Whether an unresolvable entry must
 carry an owning phase is `xtask` policy. **Owner now: phase 17** for the prose; sub-questions 1–3
 stay open with no phase, not blocking 1.0.

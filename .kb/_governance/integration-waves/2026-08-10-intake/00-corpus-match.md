@@ -138,6 +138,6 @@ both.
 | Pair | Score | Why linked only |
 | --- | --- | --- |
 | gap 6 (CL-11) ↔ post-phase reconciliation (CL-12) | 38 | The intake connects them explicitly: a falsifier that has already occurred is undetectable by a gate step and wants a phase-exit reading task. Different questions; CL-12 links outward. |
-| post-phase reconciliation sub-question 2 ↔ ratchet playbook (CL-4) | 35 | Both turn on the self-referential-count failure mode at `xtask/src/spec_trace.rs:1965-1967`. CL-4 states the rule; CL-12 is bound by it. |
+| post-phase reconciliation sub-question 2 ↔ ratchet playbook (CL-4) | 35 | Both turn on the self-referential-count failure mode at `xtask/src/spec_trace.rs:1975-1977`. CL-4 states the rule; CL-12 is bound by it. |
 | gaps 1 and 2 ↔ ratchet playbook (CL-4) | 45 | Those two gaps *are* the two `UNCLAIMED_PENDING_ADR` entries the ratchet holds. The playbook is the mechanism; the gaps are the owed decisions. Merging would file a live question in a guideline atom. |
 | frozen-clause playbook (CL-5) ↔ gaps 3, 4, 6 | 42 | CL-5 uses PS-1, PS-19, ES-7 and VT-9 as worked examples of "a gap, not a repair". The examples stay; the questions live in `open-questions/`, per the decisions README's "a decision not yet taken" rule applied one layer over. |

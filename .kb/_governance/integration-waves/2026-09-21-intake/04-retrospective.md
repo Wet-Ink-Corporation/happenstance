@@ -88,7 +88,7 @@ full detail in `02`'s adjudications:
   ms\|5000 ms" spec/SPECIFICATION.md` returns nothing, confirming ADR-0065
   itself needed no `cargo xtask spec-trace` consideration; the same check in
   the other direction confirms ES-27's `Rejects:` prose at
-  `spec/SPECIFICATION.md:3902-3905` quotes the §8/§16 aggregate's "roughly
+  `spec/SPECIFICATION.md:3932-3935` quotes the §8/§16 aggregate's "roughly
   200x," so *that* repair is a decision CLAUDE.md routes through a new ADR,
   not a documentation sweep this wave could fold in (Adjudication 6).
 

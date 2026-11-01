@@ -257,7 +257,7 @@ that is never compiled is decoration (F1-04, and
 `crates/happenstance-core/src/lib.rs:177 (pub use futures_core)` ·
 `crates/happenstance-sqlite/src/lib.rs:148 (pub use rusqlite)` ·
 `crates/happenstance-sqlite/src/lib.rs:190 (compile_fail,E0433)` ·
-`crates/happenstance-cloudflare/src/lib.rs:612 (pub use {happenstance_core, worker})` ·
+`crates/happenstance-cloudflare/src/lib.rs:619 (pub use {happenstance_core, worker})` ·
 `crates/happenstance-core/src/store.rs:188 (impl Stream<Item = Result<SequencedEvent, Self::Error>>)` ·
 [ADR-0003](../../.kb/decisions/0003-opaque-payloads.md)
 
@@ -301,8 +301,8 @@ the trade would leave no line in the CI log at all, and the reviewer approving
 the pull request would see a green build and thirty-four fewer rules than they
 thought they had.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1214 (pub const fn declined)` ·
-`crates/happenstance-testkit/src/contract.rs:1207 (Where it does *not* fire)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1238 (pub const fn declined)` ·
+`crates/happenstance-testkit/src/contract.rs:1231 (Where it does *not* fire)` ·
 `crates/happenstance-testkit/src/fixtures.rs:282 (const REOPEN)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(why a declined
 capability still emits a reported test)*

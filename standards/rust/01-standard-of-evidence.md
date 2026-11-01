@@ -78,7 +78,7 @@ experiment that would ever remove it — so it accumulates, and the corpus's sig
 per token falls for everyone.
 
 **Evidence.** `CONTRIBUTING.md:205 (Write the wrong implementation)` ·
-`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:436 (impl Defect for InnerJoinTagStore)` ·
+`crates/happenstance-testkit/tests/mutation_coverage/mutants.rs:439 (impl Defect for InnerJoinTagStore)` ·
 [SPECIFICATION CF-1](../../spec/SPECIFICATION.md#61-the-suites-own-proof-obligation) ·
 [ADR-0010](../../.kb/decisions/0010-the-suite-must-prove-itself.md)
 
@@ -125,7 +125,7 @@ demonstrate. The gate is green, the atom looks proved, and the constraint it
 documents has been unchecked since phase 0.
 
 **Evidence.** `xtask/src/constitution.rs:22 (cfg(doctest))` ·
-`spec/SPECIFICATION.md:6715 (rustdoc on stable 1.97.1)` ·
+`spec/SPECIFICATION.md:6745 (rustdoc on stable 1.97.1)` ·
 [rustdoc unstable features](https://doc.rust-lang.org/rustdoc/unstable-features.html#error-numbers-for-compile_fail-doctests)
 *(checked 2026-08-09, rustc 1.97.1)*
 

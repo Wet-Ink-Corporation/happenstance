@@ -229,7 +229,7 @@ counting polls, so CF-33's tension never has to be resolved.
 
 The consumer-facing bill this mechanism buys — a frontier `head`, no
 read-your-own-writes, and a staleness bound that is a property of the cluster —
-is stated today as **prose inside ES-10** (`spec/SPECIFICATION.md:2883-2893`) and
+is stated today as **prose inside ES-10** (`spec/SPECIFICATION.md:2913-2923`) and
 carries no rule id of its own. `postgres-structural-bill` (HS-S0066) was required
 to decide whether a clause of its own is owed, *as a decision rather than a
 default*, and this section is where that verdict is recorded.
@@ -248,14 +248,14 @@ cluster's longest write transaction. A rule can only fail a store that does
 something forbidden, and none of that is forbidden. The single testable sentence
 in the vicinity — that a head is a **bound** and not an equality — is already
 `head_is_the_highest_visible_position` under ES-30
-(`spec/SPECIFICATION.md:4107-4111`), whose `Rejects:` names three compiling
+(`spec/SPECIFICATION.md:4137-4141`), whose `Rejects:` names three compiling
 implementations it catches. Minting a clause that greps for prose instead would
 be decorative in exactly the way this repository keeps finding.
 
 **Second: the second copy is the failure this document already carries a scar
 from.** ES-10 ends by declaring itself *"the sole statement of the visibility
 invariant"*, because VT-12 carried a second copy and the two drifted apart within
-one editing pass (`spec/SPECIFICATION.md:2902-2906`; VT-12 survives as a
+one editing pass (`spec/SPECIFICATION.md:2932-2936`; VT-12 survives as a
 cross-reference at `:1086`). A sibling clause restating arm C's consequences is
 that second copy with the serial number filed off — and this record can
 demonstrate the drift rather than merely predict it: **ES-10's frozen prose
@@ -266,11 +266,11 @@ A second clause would have acquired the same lag, in a second place.
 
 **What a phase-12 auditor reads instead**, in this order:
 
-1. **ES-10** (`spec/SPECIFICATION.md:2866-2975`) — the normative invariant, and at
+1. **ES-10** (`spec/SPECIFICATION.md:2896-3005`) — the normative invariant, and at
    `:2883-2893` the three consequences of buying it this way. Frozen. Its
    staleness magnitudes are phase 2's and are superseded by §4 of this record.
 2. **ES-30's `head_is_the_highest_visible_position`**
-   (`spec/SPECIFICATION.md:4107-4111`) — the only one of the three consequences
+   (`spec/SPECIFICATION.md:4137-4141`) — the only one of the three consequences
    any conformance rule observes, and it observes it as a bound.
 3. **§3 and §4 of this record** — the structural half of the bill, and the
    magnitudes with their conditions and their control.

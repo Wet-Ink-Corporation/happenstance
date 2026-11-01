@@ -72,7 +72,7 @@ breaks every atom that references it, and nothing brings the key back.
 
 **Two citation rules bind every atom this wave writes, and they are the `host` file's own
 request applied to all five.** First, every `path:line` is re-anchored against `86a410c`:
-CF-34 is `spec/SPECIFICATION.md:9021` (not `:8747`), `CITATION_SCAN_EXCLUDE` is
+CF-34 is `spec/SPECIFICATION.md:9051` (not `:8747`), `CITATION_SCAN_EXCLUDE` is
 `xtask/src/lints.rs:2488` (not `:2003` or `:2007`), and `Projection::apply` is
 `crates/happenstance/src/domain.rs:249`. Second — and this is new — **no atom cites a line into a
 file that is absent from this worktree or into code the brief says has moved and this tree says
@@ -92,7 +92,7 @@ wave's most contestable call, and the first entry in `unresolved[]`
 **What was verified, and what was not.** `00`'s provenance block has the full list. In one line:
 neither ADR's long-form record exists here, `ProjectionStore::begin` is synchronous at
 `crates/happenstance-core/src/projection.rs:460`, PS-6's MUST is unrewritten at
-`spec/SPECIFICATION.md:5183`, `conformance = ["unstable-projection"]` stands at
+`spec/SPECIFICATION.md:5213`, `conformance = ["unstable-projection"]` stands at
 `crates/happenstance-core/Cargo.toml:110`, the typed layer still forwards the feature at
 `crates/happenstance/Cargo.toml:142`, there is no `LivePostgresProjectionStore` in
 `happenstance-postgres`, and the census is 138/46/12/5. `lane/projection-probe-seam` exists, is
@@ -560,7 +560,7 @@ superseded in its reasoning, which was right when written."* Three things follow
 
 **Both decisions were conditional, and the condition is named in the clause they applied.**
 PS-3's SHOULD reads *"**Until PS-2's bar is met** the port SHOULD ship behind an off-by-default
-feature"* (`spec/SPECIFICATION.md:5056`). 0036 evaluated that bar and found part 2 unmet; 0060
+feature"* (`spec/SPECIFICATION.md:5086`). 0036 evaluated that bar and found part 2 unmet; 0060
 found part 2 *unmeetable through the port's own signatures* and kept the gate on that ground.
 ADR-0062 met the bar. A conditional decision whose condition arrives has run its course; it has
 not been found wrong.

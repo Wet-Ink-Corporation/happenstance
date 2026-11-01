@@ -92,15 +92,15 @@ large for the peer. `SyncError` (`peer.rs:393-421`) covers only the runner's own
    - `Stop`: authorisation or configuration; halt the edge and report it.
 
    The class is a function of the error alone. No class exists for a condition-level refusal,
-   because SY-33 forbids that refusal (`spec/SPECIFICATION.md:8106-8129`). `SyncError`, the
+   because SY-33 forbids that refusal (`spec/SPECIFICATION.md:8136-8159`). `SyncError`, the
    runner's own enum, states a class too: `BatchTooLarge` is `Split`, `BelowRetentionFloor` and
    `UnknownPeer` are `Stop`. It gains no variant here; the message set is ADR-0027's.
-2. **It is minted as SY-36 `[PROVISIONAL]`** (`spec/SPECIFICATION.md:8150-8188`), with the rule
+2. **It is minted as SY-36 `[PROVISIONAL]`** (`spec/SPECIFICATION.md:8180-8218`), with the rule
    `every_refusal_states_its_class` in `happenstance-sync-testkit` and a mutant that reports
    every failure as one class. The marker moves when the rule exists in the tree, not before;
    its 1.0 disposition is `freeze-by-13` (`runbook/ledgers.md`, the SY-36 row).
 3. **Recorded, not reopened.** Ingest never refuses, and a conflict is compensated by an
-   ordinary append (SY-1 – SY-7, `spec/SPECIFICATION.md:6963-7196`). `SyncPeer` describes one
+   ordinary append (SY-1 – SY-7, `spec/SPECIFICATION.md:6993-7226`). `SyncPeer` describes one
    relationship and hub-ness is not a type (SY-8, SY-9, `:7195-7233`). Re-delivery is a no-op,
    deduped on the store-assigned `EventId` and never on a hash of the bytes (SY-11 – SY-13,
    `:7260-7357`). Every method completes in one round trip, resume state is an owned value the
@@ -119,7 +119,7 @@ large for the peer. `SyncError` (`peer.rs:393-421`) covers only the runner's own
    testkit's are, never stubbed: LiveStore's offline test is a no-op for six of its seven
    providers.
 7. **Envelope section: WF-1 renews past 1.0 (#119).** The format stays private
-   (`spec/SPECIFICATION.md:2060`). Interop, if wanted, is a separate `happenstance-dcb-interop`
+   (`spec/SPECIFICATION.md:2090`). Interop, if wanted, is a separate `happenstance-dcb-interop`
    crate with its own ADR, additive because WF-8 versions the envelope. The named experiment is a
    bridge that reads a UmaDB server's log over its published `umadb.proto` gRPC service and
    ingests it through `IngestStore`. The DCB reference still publishes no format; UmaDB's

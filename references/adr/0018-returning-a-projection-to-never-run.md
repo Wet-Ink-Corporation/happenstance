@@ -2,7 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-08-13
-- **Settles:** PS-16 – PS-20 (`spec/SPECIFICATION.md:5172-5276`), and the
+- **Settles:** PS-16 – PS-20 (`spec/SPECIFICATION.md:5202-5306`), and the
   three-variant `Checkpoint` at `:4643-4658`
 - **Builds on:** ADR-0007 (checkpoints are per `(store, ProjectionId)`),
   ADR-0017 (`type Batch;` and `ProjectionProbe::probe_delete_all`)
@@ -63,7 +63,7 @@ and PS-20 on a type-level distinction.
 
 ### The incident the atomicity decision models
 
-`spec/SPECIFICATION.md:5181-5187` records what the two-statement runbook procedure
+`spec/SPECIFICATION.md:5211-5217` records what the two-statement runbook procedure
 did on a real night desk:
 
 > the truncate committed at 02:46:31, the pod died at 02:46:33, the runner
@@ -79,7 +79,7 @@ failure mode the whole port exists to make impossible.
 
 *"The design question is not whether to add `reset` but **how it clears the
 rows**, because the port has no idea what the read model is. The answer is that
-it does not clear them"* (`spec/SPECIFICATION.md:5165-5170`). `reset` is
+it does not clear them"* (`spec/SPECIFICATION.md:5195-5200`). `reset` is
 `commit`'s dual: it takes a batch the caller has already filled with its own
 deletes. Same transaction, same atomicity, no new knowledge required of the
 adapter — and `ProjectionProbe::probe_delete_all` (ADR-0017 §2) exists so the
@@ -92,7 +92,7 @@ suite can exercise it without knowing either.
 Its `MUST` is scoped *"After a successful `reset`"*; §4.11 additionally assigns it
 `fresh_projection_has_no_checkpoint`, which asks about an id that has never been
 seen. `references/evaluation/ps-clause-pairing-sweep.md` re-derived the defect
-from the clause text at `spec/SPECIFICATION.md:5218-5223` rather than inheriting
+from the clause text at `spec/SPECIFICATION.md:5248-5253` rather than inheriting
 it, and named a **plausible first cut** that exposes it: a store whose
 `checkpoint` is `SELECT position, authority FROM checkpoints WHERE id = ?` and
 whose Rust resolves the missing row with
@@ -150,7 +150,7 @@ PS-17, `[FROZEN]`.
 
 **This half is settled by a prior decision.** ADR-0007 already fixed checkpoints
 per `(store, ProjectionId)`; PS-17 is *"the same decision applied to the operation
-that removes one"* (`spec/SPECIFICATION.md:5190-5191`). This ADR cites
+that removes one"* (`spec/SPECIFICATION.md:5220-5221`). This ADR cites
 `.kb/decisions/0007-projection-runner-decodes.md` and stops. Re-arguing it here
 would produce a second, independently-worded statement of one commitment, which is
 how two decisions come to disagree without anyone reversing either.
@@ -158,7 +158,7 @@ how two decisions come to disagree without anyone reversing either.
 What the clause rejects is worth carrying: a `reset()` that truncates the
 checkpoint table. *"Cheap, obvious, and it destroys the append-only regulatory
 ledger sharing the file — Kestrel Cold Chain's `van_stock` must reset several
-times a day and `fgas_ledger` must never"* (`spec/SPECIFICATION.md:5196-5199`).
+times a day and `fgas_ledger` must never"* (`spec/SPECIFICATION.md:5226-5229`).
 
 ### 3. Refusal is a port mechanism; the policy lives in the domain
 
@@ -171,7 +171,7 @@ it is genuinely attractive: **refusal as purely a typed-layer concern.** That is
 where the *policy* belongs — the projection knows that `audit_trail_export` is a
 hash chain a regulator already holds, and the store does not. But *"a policy with
 no port-level mechanism is bypassed by anyone holding the store, which is every
-operator with a runbook"* (`spec/SPECIFICATION.md:5211-5215`). The port supplies
+operator with a runbook"* (`spec/SPECIFICATION.md:5241-5245`). The port supplies
 the mechanism; the domain decides what to protect. It is the same division of
 labour the specification takes for sync compensation.
 
@@ -181,7 +181,7 @@ the typed layer. *Evaluated at the exit of the projection-port phase by asking
 whether the SQLite adapter implemented it.* This is question 4 of §4.1a's six —
 *"Does anyone **call** these?"* — and it is the one most at risk of never being
 asked, because *"'nobody ever needed it' is not something you can observe by
-waiting"* (`spec/SPECIFICATION.md:4812`). The phase exit that counts callers
+waiting"* (`spec/SPECIFICATION.md:4842`). The phase exit that counts callers
 is the only thing that makes this marker mean anything.
 
 **What `ResetError::Refused` carries is not decided here.** Whether the variant
@@ -205,7 +205,7 @@ pub enum Checkpoint {
 
 The alternative is `(Option<SequencePosition>, bool)`, and it loses on one
 sentence: it can spell `(None, true)` — *"authoritative, never run — which means
-nothing"* (`spec/SPECIFICATION.md:4643-4658`). This is the crate's own *illegal
+nothing"* (`spec/SPECIFICATION.md:4673-4688`). This is the crate's own *illegal
 states are unrepresentable* line applied where a reader will otherwise write
 `if let Some(p) = checkpoint` and get it wrong.
 
@@ -216,7 +216,7 @@ Two consequences the enum buys, both normative:
   `commit(empty_batch, id, SequencePosition::FIRST, Live)`. Under the tuple it is
   not: `commit(empty, id, FIRST)` reads back as `Some(1)`, the runner advances
   past it, *"and event 1 is skipped permanently, silently, and nobody will ever
-  find it"* (`spec/SPECIFICATION.md:5245-5247`).
+  find it"* (`spec/SPECIFICATION.md:5275-5277`).
 - **PS-20**: a runner resumes strictly *after* the checkpoint's position, and
   starts at the store's first position, **inclusive**, when the checkpoint is
   `NeverRun`. The off-by-one runs in both directions, and the clause names its
@@ -255,7 +255,7 @@ not repaired here*. And the rebuild question this ADR touches but does not settl
 — in-place versus rebuild-into-a-second-`ProjectionId`-and-swap — is §4.1a's
 question 3, discriminated by storage rather than by preference: *"a store that
 cannot hold two copies of a 4.1M-event read model has no swap available"*
-(`spec/SPECIFICATION.md:5334-5338`). This ADR assumes neither.
+(`spec/SPECIFICATION.md:5364-5368`). This ADR assumes neither.
 
 **One thing deliberately not touched.** A *boundary-scoped* projection checkpoint
 would reopen ADR-0013's globally frozen visibility invariant. It surfaced while

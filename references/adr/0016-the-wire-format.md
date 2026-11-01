@@ -682,7 +682,7 @@ which the `proof.rs` step already does in order to list its neighbours.
 
 **D12 was closed at phase 0**, by commit `927d291` (2026-08-06), whose message says
 *"**D12** — `serde/alloc` arrived by accident … Now stated."* The fix is at
-`crates/happenstance-core/Cargo.toml:36` and `CHANGELOG.md:1147` records it.
+`crates/happenstance-core/Cargo.toml:36` and `CHANGELOG.md:1174` records it.
 
 **Its failure is not reproducible at HEAD**, which is the whole argument for the
 instrument. `bytes` 1.12.1 — the version `Cargo.lock:92-93` pins — declares its own
@@ -710,7 +710,7 @@ no marker. **Recomputed by hand under ADR-0015 §13's rule. Unchanged.**
 
 ### 15. `cargo xtask spec-trace` is fixed in this phase, and the fix is three changes, not one
 
-`backticked_idents` (`xtask/src/spec_trace.rs:1379-1392`) accepts a backticked chunk only
+`backticked_idents` (`xtask/src/spec_trace.rs:1389-1402`) accepts a backticked chunk only
 if every character is an ASCII lowercase letter, an underscore or a digit. A `::` fails
 that test, so every `::`-qualified name a clause mentions is **silently dropped**. Its own
 neighbourhood knows this — `:1323-1328` records that the same defect dropped
@@ -782,7 +782,7 @@ phrase "compile test", and §13 rewrites that line to *"a const-evaluation asser
 **not** a compile test"* — the phrase survives only as a negation. The outcome is right and
 the mechanism is not: `read_options_is_not_serialisable` is a `const _` and not a `#[test]`,
 so no resolution source can ever find it and it must stay `elsewhere` permanently. So the
-amended `Rule:` line keeps those two words deliberately, `spec_trace.rs:1329-1330` gains a
+amended `Rule:` line keeps those two words deliberately, `spec_trace.rs:1339-1340` gains a
 comment recording that WF-12 depends on them, and WF-12's row (`:8196`) joins the
 regeneration prediction below, because its `Rule:` text changes entirely.
 
@@ -1213,7 +1213,7 @@ re-canonicalises, `query.rs:297-302` re-validates through `QueryItem::new`)"* be
   `rule_cell` renders its prose, and neither name is ever resolved. It is the one place in
   §15's convention that is satisfied by a second property rather than by the spelling, and
   the two properties are coupled — the day WF-12 stops being `elsewhere` it acquires two
-  rules that cannot exist. The comment §15 puts on `spec_trace.rs:1329-1330` is what a
+  rules that cannot exist. The comment §15 puts on `spec_trace.rs:1339-1340` is what a
   reader arrives at from there.
 - **`:2134-2137`, the "fifth hazard" paragraph** **becomes**: *"The impls at
   `query.rs:394-425` are on no wire path that exists and are maintenance the crate does not

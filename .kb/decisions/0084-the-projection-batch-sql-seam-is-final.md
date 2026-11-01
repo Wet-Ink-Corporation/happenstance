@@ -112,7 +112,7 @@ The published seam has eight entry points, not the three that phase 16 named:
    - **It has no shared form.** A `Statement` type would have to be minted separately by each
      adapter, because SQLite's `?1` and Postgres's `$1` are different dialects.
    - **It has no generic consumer.** PS-9 is `[FROZEN]`: "A projection writes through the concrete
-     adapter's inherent API" (`spec/SPECIFICATION.md:5590-5591`). ADR-0017 refused a universal
+     adapter's inherent API" (`spec/SPECIFICATION.md:5620-5621`). ADR-0017 refused a universal
      write vocabulary (`.kb/decisions/0017-what-a-projection-batch-owns.md:82-88`).
    - **It brings exported macro surface.** `standards/rust/41-declarative-macros.md` would apply in
      full.

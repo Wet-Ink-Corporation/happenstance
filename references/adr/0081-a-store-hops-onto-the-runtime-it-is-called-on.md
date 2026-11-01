@@ -132,7 +132,7 @@ cites at `:265-273`. `PgCursor::drop` (`read_stream.rs:246`) still prefers the r
 recorded; that is the runtime the cursor's work ran on, which after this change is the poll's own,
 so it is consistent with the decision rather than an exception to it.
 
-ES-11's prose describing the seam (`spec/SPECIFICATION.md:3104-3109`) is reconciled line-neutrally
+ES-11's prose describing the seam (`spec/SPECIFICATION.md:3134-3139`) is reconciled line-neutrally
 in the same change. ES-11 is `[PROVISIONAL]` and no `[FROZEN]` clause names the seam.
 
 ## 5. The remedies considered

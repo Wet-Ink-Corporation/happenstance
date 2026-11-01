@@ -184,7 +184,7 @@ them are more specific.
 | --- | --- |
 | `experiments/position-visibility/README.md` | The house format for a measurement writeup, and the methods failure that produced it. The closest thing to a template that exists. |
 | `spec/SPECIFICATION.md` §6.7 | `CF-33` and `CF-34` — why benchmarks are not conformance, stated as clauses with the wrong implementation each forbids. |
-| `spec/SPECIFICATION.md:1821-1824, :3291-3295, :4025-4030, :5464-5467` | The four provisional clauses whose stated blocker is the absent harness. |
+| `spec/SPECIFICATION.md:1851-1854, :3291-3295, :4025-4030, :5464-5467` | The four provisional clauses whose stated blocker is the absent harness. |
 | `RUNBOOK.md:4207-4228` | The harness work item the in-flight SQLite phase already owns, and the exit criterion demanding a number rather than a claim. |
 | `references/evaluation/ARCHITECTURAL-EVALUATION.md:825-830` | Findings P1–P4: the unreproduced figures, and the case for benchmarks that adapters inherit. |
 | `.kb/reference/README.md` and `.kb/reference/position-visibility-experiment-2026-08.md` | How a measurement becomes citable here, and the rule that a number without a date is false rather than weak. |

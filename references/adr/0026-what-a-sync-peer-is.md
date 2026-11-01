@@ -14,7 +14,7 @@
 - **Supersedes:** nothing. The published-surface half was moved to phase 17 and settled there by
   [ADR-0073](../../.kb/decisions/0073-the-foreign-identity-write-path-is-the-adapters.md); this
   record cites it for that half.
-- **Mints:** SY-36, `[PROVISIONAL]` (`spec/SPECIFICATION.md:8002-8040`).
+- **Mints:** SY-36, `[PROVISIONAL]` (`spec/SPECIFICATION.md:8032-8070`).
 - **Evidence:** a reading of `main` at `a69ded4`. Nothing new was measured. The phase-2 sketch
   is the type-level evidence; the LiveStore prior-art audit of 2026-10-11 (read at
   `livestorejs/livestore@3cb74e62` and `livestorejs/livestore-contrib@c375b5ab`) is the
@@ -73,7 +73,7 @@ The sketch already knows the classes; it writes them in prose where no runner ca
 - `PullBatchLimit::admits` says an oversized single event "returns `false` for ever", and that
   the runner has to tell "wait" from "this will never move" (`peer.rs:349-351`).
 - VT-25 exists so that a sync runner can tell "this will never be accepted here, park it" from
-  "the disk is full, retry" (`spec/SPECIFICATION.md:7519-7521`, inside SY-18).
+  "the disk is full, retry" (`spec/SPECIFICATION.md:7549-7551`, inside SY-18).
 
 ## 2. The decision: a peer's error states its class
 
@@ -90,7 +90,7 @@ FailureClass {Transient, Split, Park, Stop}; testkit rule checks every refusal's
 | `Stop` | authorisation or configuration | halt this edge and report it |
 
 SY-33 permits exactly two kinds of refusal, transport and authorisation, and names their opposite
-remedies (`spec/SPECIFICATION.md:7958-7981`): a transport refusal is retried, an authorisation
+remedies (`spec/SPECIFICATION.md:7988-8011`): a transport refusal is retried, an authorisation
 refusal is not. `Transient` and `Stop` are those two. `Split` and `Park` are the two capacity
 outcomes SY-18 and VT-25 already distinguish. There is no class for a condition-level refusal,
 because SY-33 forbids one; a peer that wants that class has found a violation.
@@ -120,7 +120,7 @@ Three Rust choices in it, each with an alternative:
 `fn classify(&self, error: &Self::Error) -> FailureClass` on `SyncPeer`. It works only while the
 peer is in hand. An error does not stay beside its peer: the runner logs it, boxes it into a
 report, and returns it across an `.await` after the peer handle may have been dropped — which
-SY-16 says is the normal termination path at the edge (`spec/SPECIFICATION.md:7448-7464`). A
+SY-16 says is the normal termination path at the edge (`spec/SPECIFICATION.md:7478-7494`). A
 bound on the associated type makes the class travel with the value. It is the same placement
 ADR-0009 chose for the error's *thread-safety*: a property of the error, stated on the error.
 
@@ -163,7 +163,7 @@ grow with is ADR-0027's.
 
 ### 2.5 The clause and the rule
 
-SY-36 is minted `[PROVISIONAL]` (`spec/SPECIFICATION.md:8002-8040`). In this repository a marker
+SY-36 is minted `[PROVISIONAL]` (`spec/SPECIFICATION.md:8032-8070`). In this repository a marker
 moves only when its rule exists in the tree, and `every_refusal_states_its_class` does not exist
 yet: `happenstance-sync-testkit` is #111's. The rule drives the fixture peer into every refusal it
 can produce and asserts each reports the class the fixture declares. Its mutant reports every
@@ -182,7 +182,7 @@ because this is the record that was owed them, not because any is open.
 
 | Question | Answer | Clause |
 |---|---|---|
-| May ingest refuse an event? | No. A conflict is compensated by an ordinary append, atomic with the losing event; the port supplies atomicity, identity and idempotence; nothing is quarantined; ingest appends at the tail; a wire condition is evidence; at most one peer authors a compensation per fact family | SY-1 – SY-7, `spec/SPECIFICATION.md:6962-7183` |
+| May ingest refuse an event? | No. A conflict is compensated by an ordinary append, atomic with the losing event; the port supplies atomicity, identity and idempotence; nothing is quarantined; ingest appends at the tail; a wire condition is evidence; at most one peer authors a compensation per fact family | SY-1 – SY-7, `spec/SPECIFICATION.md:6992-7213` |
 | What is a peer? | One relationship. Fan-out, ordering between peers and disagreement are a runner's policy | SY-8, `:7195-7213` |
 | Is hub-ness a type? | No. A Durable Object can be a spoke to an estate store and a hub to 138 tablets | SY-9, `:7215-7233` |
 | What makes re-delivery harmless? | It is a no-op, deduped on the store-assigned `EventId`, never on a hash of the wire bytes | SY-11 – SY-13, `:7260-7357` |
@@ -222,7 +222,7 @@ SY-6: the condition's query is what an adjudicator needs, and happenstance alrea
 **Device-local state goes through `ProjectionStore`, not into the log (L-22).** LiveStore has
 client-only events: written to the device's log, never pushed, numbered on a separate counter.
 Copying that breaks `[FROZEN]` SY-24, which says a peer forwards every event it holds
-(`spec/SPECIFICATION.md:7683`). State that belongs to one device is derived state, and SY-31
+(`spec/SPECIFICATION.md:7713`). State that belongs to one device is derived state, and SY-31
 already puts the per-peer watermark in a projection store for the same reason. If a domain needs
 local-only *facts*, that is a case for SY-27's scoped replication, which ADR-0027 decides.
 
@@ -239,7 +239,7 @@ and states why, and the rule reports that reason instead of passing. Otherwise
 This is #119's record, and the one ADR-0066's dispositions point at
 (`references/adr/0066-what-1-0-promises.md:150`; `runbook/ledgers.md`, the WF-1 row).
 
-**Named.** WF-1 (`spec/SPECIFICATION.md:2060`) keeps happenstance's wire format private: the
+**Named.** WF-1 (`spec/SPECIFICATION.md:2090`) keeps happenstance's wire format private: the
 `serde` encoding moves events between happenstance instances and is not an interoperability
 surface.
 

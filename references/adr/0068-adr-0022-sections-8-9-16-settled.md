@@ -14,7 +14,7 @@
 - **Does not decide:** §9. Its falsifier asks for a deployment, and none exists in this tree. §7.
 - **Ratifies:** §§1–7, 10 and 12–15, each with its falsifier's state recorded. §8.
 - **Authorises one `[FROZEN]` clause edit, made in the same change:** ES-27's `Rejects:` prose
-  (`spec/SPECIFICATION.md:4061-4066`). §5.
+  (`spec/SPECIFICATION.md:4091-4096`). §5.
 - **Evidence:** `experiments/correlated-exists-guard/` (one `./run.sh`, 2026-09-05) and
   `experiments/shipped-append-condition-sql/` (one `./run.sh`, 2026-09-03). Both sit outside the
   workspace and outside the gate (CF-34).
@@ -158,7 +158,7 @@ the upsert's.
 
 ## 5. ES-27's `Rejects:` prose, a `[FROZEN]` clause, repaired by this record
 
-`spec/SPECIFICATION.md:4061-4066` read, until the change that lands this record:
+`spec/SPECIFICATION.md:4091-4096` read, until the change that lands this record:
 
 > … the landed SQLite schema puts tags in a separate table
 > (`crates/happenstance-sqlite/src/event_store.rs:62-67`) — measured at roughly

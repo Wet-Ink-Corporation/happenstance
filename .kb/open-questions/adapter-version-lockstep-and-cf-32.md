@@ -56,7 +56,7 @@ through workspace inheritance — `Cargo.toml:39-41` gives
 `happenstance` — with one deliberate exception: `happenstance-testkit` carries
 its own `version` key rather than `version.workspace = true`
 (`crates/happenstance-testkit/Cargo.toml:21`). That exception is not an
-oversight. It is **CF-32**, `[FROZEN]` (`spec/SPECIFICATION.md:9521-9539`),
+oversight. It is **CF-32**, `[FROZEN]` (`spec/SPECIFICATION.md:9563-9581`),
 enforced by a `cargo xtask ci` manifest check that reads the `[package]` table
 and fails on an absent `version` key or one that mentions `workspace`. The
 clause states its reason at length: under a shared key, adding a conformance
@@ -131,7 +131,7 @@ claims more than the adapter needs fails in CI rather than on a consumer's machi
 already re-exports the core it was built against — `pub use happenstance_core;` at
 `crates/happenstance-sqlite/src/lib.rs:148`, `crates/happenstance-postgres/src/lib.rs:230` and
 `crates/happenstance-neon/src/lib.rs:173`, and `pub use {happenstance_core, worker};` at
-`crates/happenstance-cloudflare/src/lib.rs:612` — so a consumer who reaches core through the adapter
+`crates/happenstance-cloudflare/src/lib.rs:619` — so a consumer who reaches core through the adapter
 cannot end up holding the second `Event` this atom opens with.
 
 The sub-questions:

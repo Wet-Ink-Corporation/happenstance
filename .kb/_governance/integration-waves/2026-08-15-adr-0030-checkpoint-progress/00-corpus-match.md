@@ -58,14 +58,14 @@ references/evaluation/ps-clause-pairing-sweep.md                          ✓
 references/evaluation/PRESSURE-TEST.md §3.4 (:203-232)                    ✓  the compiled pump
 references/adr/0007-projection-runner-decodes.md:37                       ✓  the wrong sentence
 references/adr/0017-what-a-projection-batch-owns.md:356-361               ✓  correction recorded owed
-spec/SPECIFICATION.md:5679 (PS-32), :5699 (Rejects)                       ✓
-xtask/src/spec_trace.rs:1750 has_suite, :2363 the_projection_family_…     ✓  and :2387 SY abstains
+spec/SPECIFICATION.md:5709 (PS-32), :5699 (Rejects)                       ✓
+xtask/src/spec_trace.rs:1760 has_suite, :2363 the_projection_family_…     ✓  and :2387 SY abstains
 standards/rust/70-rustdoc-obligations.md                                  ✓  (claim 7's instrument)
 ```
 
 Two things the check turned up that the intake does not say, and both change a placement:
 
-1. **`spec/SPECIFICATION.md:5714` names this very intake file** as "the staging note for the next
+1. **`spec/SPECIFICATION.md:5744` names this very intake file** as "the staging note for the next
    wave" for PS-32. The specification is asking, in a `[FROZEN]` clause, for this wave to carry the
    correction forward. That is why claim 6 becomes an atom instead of a third `unresolved` line.
 2. **`kb-decision-0007`'s atom body does not contain the wrong sentence.** The claim

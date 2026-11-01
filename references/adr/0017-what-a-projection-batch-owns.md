@@ -2,7 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-08-13
-- **Settles:** PS-4 – PS-15 (`spec/SPECIFICATION.md:4849-5171`)
+- **Settles:** PS-4 – PS-15 (`spec/SPECIFICATION.md:4879-5201`)
 - **Answers:** `kb-open-question-projection-batch-no-apply-001`
   (`.kb/open-questions/projection-store-batch-has-no-apply-seam.md`),
   sub-questions 1, 2 and 4. Sub-question 3 — whether closing this retroactively
@@ -138,7 +138,7 @@ type, or a method on `ProjectionStore` — and asks which.
 
 **The answer is none of the three**, and flattening it to *"the port grows a
 write method"* is the single most likely way to read this ADR wrong. The
-reconciliation is a split by consumer, and `spec/SPECIFICATION.md:4934-4945`
+reconciliation is a split by consumer, and `spec/SPECIFICATION.md:4964-4975`
 already states it:
 
 > An **application's runner** does not need a generic write vocabulary. ADR-0007's
@@ -204,7 +204,7 @@ What survives that instrument, and what the clause therefore rests on:
   owned type to `type Batch<'a>` buys none of the relief; the impl must still
   spell `Self::Batch<'_>` literally (`references/adapter-shapes.md:186-194`).
   This is the trap PS-34 exists for and *"the entire explanation for zero
-  adapters"* (`spec/SPECIFICATION.md:5553-5557`).
+  adapters"* (`spec/SPECIFICATION.md:5583-5587`).
 - **A non-`'static` store crashes the compiler**, in the error-reporting path,
   with `DefId::expect_local` — and `where Self: 'a` on the port's GAT is one of
   the five independently necessary ingredients
@@ -216,7 +216,7 @@ to an open upstream ICE as a side effect rather than as a hope.
 
 **What the owned batch does not buy, stated so nobody claims it later.** It does
 **not** close the foreign-batch hazard. Tying the batch to the receiver's
-lifetime was compiled and refuted (`spec/SPECIFICATION.md:5108-5116`): *"A
+lifetime was compiled and refuted (`spec/SPECIFICATION.md:5138-5146`): *"A
 lifetime names a **region** of the program, not an **instance**, and two `&Store`
 references unify to a common region without complaint."* The only type-level
 construction that names an instance is a generative brand, which forces
@@ -259,7 +259,7 @@ An adapter crate implementing a testkit trait for its own type is legal — the
 type is local — but the natural place to write that impl is the adapter's
 `tests/` directory, *"and that is a **different crate**: neither the trait nor the
 type is local there, and the impl is rejected"*
-(`spec/SPECIFICATION.md:5015-5031`). Putting it in the testkit forces every
+(`spec/SPECIFICATION.md:5045-5061`). Putting it in the testkit forces every
 adapter into a non-dev dependency on `happenstance-testkit`. Putting it in the
 contract crate costs *"one feature flag on a dependency the adapter already has,
 and no new edge in the graph."*
@@ -280,7 +280,7 @@ exit (RUNBOOK phase 3 / HS-P0011), by counting consumers.**
 
 **PS-7, `[FROZEN]`, and both conjuncts are load-bearing.** *"'Rolls back' alone
 certifies a store that has permanently lost its only writer"*
-(`spec/SPECIFICATION.md:4907-4910`) — a reviewer's probe already found exactly
+(`spec/SPECIFICATION.md:4937-4940`) — a reviewer's probe already found exactly
 that: a pooled connection whose `Drop` returned it to nothing, after which the
 store answered `Busy` forever.
 
@@ -334,7 +334,7 @@ recorded rather than assumed. PS-34 dies the moment `type Batch;` lands; if PS-5
 is ever falsified, PS-34 becomes binding again and the doctest it names is owed.
 
 **For the suite.** `ProjectionProbe` is the mechanism, not a rule of its own
-(`spec/SPECIFICATION.md:4981-4983`). Every projection rule is downstream of it,
+(`spec/SPECIFICATION.md:5011-5013`). Every projection rule is downstream of it,
 and `READS_THROUGH_BATCH` is a probe const rather than a fixture capability
 because PS-12's decline is a property of the batch type, not of the fixture's
 environment.
@@ -349,7 +349,7 @@ sits beside `unstable-projection` (PS-3), and the interaction of the two is
 that is a smaller promise than the clause's reader may expect. PS-9 and PS-11 are
 provisional on a consumer count nobody can observe passively — the same shape
 ADR-0007's own falsifier has, and the same risk: *"nobody ever needed it" is not
-something you can observe by waiting* (`spec/SPECIFICATION.md:4812`). The
+something you can observe by waiting* (`spec/SPECIFICATION.md:4842`). The
 phase-3 exit criterion that counts consumers is what makes these markers mean
 anything.
 
@@ -368,14 +368,14 @@ free. It is not: *"it obliges a graph store and a relational store each to carry
 key-value table nobody asked for, and it reintroduces at the read-model layer the
 opaque blob that ADR-0003 deliberately confined to event payloads. A read model
 exists to be queried by the application; a blob keyed by string is not one"*
-(`spec/SPECIFICATION.md:4957-4962`). Rejected because it pays a permanent
+(`spec/SPECIFICATION.md:4987-4992`). Rejected because it pays a permanent
 modelling cost for one consumer's convenience — and that consumer is the suite,
 which §2 serves without it.
 
 **The probe trait in `happenstance-testkit`.** Rejected by the orphan rule, and
 expensively: the impl's natural home is the adapter's `tests/` directory, a
 different crate where neither trait nor type is local
-(`spec/SPECIFICATION.md:5015-5031`). The cost of the rejection is a non-dev
+(`spec/SPECIFICATION.md:5045-5061`). The cost of the rejection is a non-dev
 dependency on the testkit for every adapter, and a new edge in the dependency
 graph that publication then has to justify.
 
@@ -393,7 +393,7 @@ will reach for it (`crates/happenstance-ladybug/src/live_handle.rs:9-31`).
 **A generative brand for the foreign-batch hazard.** Works, and is unusable:
 `begin` becomes `store.with_batch(|batch| …)`, which fights `async` and forbids
 the batch escaping the closure — precisely what a runner holding a
-`HashMap<DepotId, Store>` needs it to do (`spec/SPECIFICATION.md:5117-5124`).
+`HashMap<DepotId, Store>` needs it to do (`spec/SPECIFICATION.md:5147-5154`).
 Rejected in favour of a run-time stamp, with PS-15 left `[PROVISIONAL]` so a
 zero-cost construction can still replace it with a compile error, which would be
 strictly better.
