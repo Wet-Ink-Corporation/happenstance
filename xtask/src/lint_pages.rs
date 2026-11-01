@@ -57,7 +57,7 @@
 //! 1. **The fence rule inverts, and there is no `check_harness` equivalent.**
 //!    `check_fences` rejects an *untagged* fence because `standards/rust/` **is**
 //!    registered in the doctest harness, bidirectionally checked by
-//!    `lint_constitution::check_harness` (`xtask/src/lint_constitution.rs:423-458`).
+//!    `lint_constitution::check_harness` (`xtask/src/lint_constitution.rs:429-464`).
 //!    This tree is deliberately **not** registered with any harness, so a
 //!    `rust`-tagged fence here is a Rust claim nothing in the workspace compiles.
 //!    Both `rust`-tagged and untagged fences are rejected; `text` and `markdown`
@@ -81,8 +81,8 @@
 //! a generator would have to invent it.
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::Path;
+use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 
@@ -182,7 +182,7 @@ const NEED_SET_ATOM: &str = "10-the-need-set.md";
 ///
 /// Named once, here, for the reason [`crate::lint_narrative::STEP`] is: `REQUIRED`
 /// and `lint_steps()` both depend on it by value and `steps_named` panics on a
-/// mismatch (`xtask/src/main.rs:1494-1501`). The *value* is pinned by the
+/// mismatch (`xtask/src/main.rs:1496-1503`). The *value* is pinned by the
 /// signed-off design (`_design.md`, `## Surfaces`, sign-off condition 2) and
 /// changing it is a design amendment, not an edit.
 pub(crate) const STEP: &str = "every page declares one need";
@@ -341,8 +341,8 @@ struct Page {
 /// # Errors
 ///
 /// Fails when either pinned tree cannot be read, when either is empty, or when
-/// any check finds a problem.
-pub(crate) fn run(mode: Mode) -> Result<()> {
+/// any check finds a problem, or when `out` or `err` cannot be written.
+pub(crate) fn run(out: &mut impl io::Write, err: &mut impl io::Write, mode: Mode) -> Result<()> {
     // C2-07, called from here rather than run as a check of its own: this
     // module's `run` is the only entry point `xtask/src/main.rs`'s dispatch
     // already wires to a bare subcommand (`lint-pages`), and C2-07's fix is
@@ -353,21 +353,21 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     // `lints::TESTKIT_LIB`, for why the check itself lives *here* rather than
     // as a `lints::`-shaped export next to `testkit_version` and
     // `stated_rule_counts`, which is where it would otherwise belong.
-    no_stale_publication_claims()?;
+    no_stale_publication_claims(out)?;
     // C2-07b, called from here for the same reason and reported after it: the
     // negative matcher above names the two historical sentences, which is the
     // text a reader repairing a page wants first; the positive pin below is
     // what a *paraphrase* of either has to get past.
-    positive_publication_pin()?;
+    positive_publication_pin(out)?;
     // C2-02, and third for a reason of reading order rather than of
     // precedence: the two above ask whether the page's *prose* is true, this
     // one asks whether the one block on it a reader will paste into their own
     // manifest resolves at all.
-    recipe_fence_resolves()?;
+    recipe_fence_resolves(out)?;
     // C2-01 and C2-05, last of the four and reading the same fence the one
     // above does: that one asks whether the block resolves, this one asks
     // whether what the page says the block *costs* is true.
-    feature_cost_is_stated()?;
+    feature_cost_is_stated(out)?;
 
     let root = workspace_root()?;
 
@@ -378,7 +378,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
 
     let mut problems: Vec<Problem> = Vec::new();
 
-    check_router(&root, &atoms, mode, &mut problems)?;
+    check_router(out, &root, &atoms, mode, &mut problems)?;
     check_need_set(&atoms, &mut problems);
     for atom in &atoms {
         check_atom_shape(atom, &mut problems);
@@ -388,7 +388,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     check_orientation_ceiling(&pages, &mut problems);
     check_docs_index_lists_every_page(&root, &pages, &mut problems);
 
-    report(&pages, &atoms, problems)
+    report(out, err, &pages, &atoms, problems)
 }
 
 /// C2-07: neither of `happenstance-testkit`'s two rendered surfaces may tell
@@ -401,11 +401,11 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
 /// matters, and belongs there by subject. But `xtask/src/affected.rs`'s
 /// `exported_lints` scans `lints.rs` for the shape `pub(crate) fn
 /// NAME(…) -> Result<()> {`, any parameters, and requires `affected::run`'s unconditional block
-/// to call each one it finds by name (`xtask/src/affected.rs:1561-1582`) —
+/// to call each one it finds by name (`xtask/src/affected.rs:1565-1586`) —
 /// the invariant that catches a lint wired into `REQUIRED` and forgotten in
 /// the story grain. This check already runs in the story grain: `run` above
 /// is called unconditionally by `affected::run`
-/// (`xtask/src/affected.rs:193`), and `run` calls this. Giving it that same
+/// (`xtask/src/affected.rs:197`), and `run` calls this. Giving it that same
 /// shape in `lints.rs` would trip the scanner over reachability it cannot see
 /// through a name match, and `xtask/src/affected.rs` is not a path this
 /// change owns. So the entry point stays here, where `run` already reaches
@@ -429,7 +429,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
 ///
 /// Returns an error if either document cannot be read, or if
 /// [`crate::lints::stale_publication_claims`] finds a problem in either.
-fn no_stale_publication_claims() -> Result<()> {
+fn no_stale_publication_claims(out: &mut impl io::Write) -> Result<()> {
     use crate::lints::{
         SQLITE_CONFORMANCE_TEST, TESTKIT_LIB, TESTKIT_README, stale_publication_claims,
     };
@@ -444,7 +444,7 @@ fn no_stale_publication_claims() -> Result<()> {
     let problems = stale_publication_claims(&lib, &readme, sqlite_conformance_exists);
     if !problems.is_empty() {
         for p in &problems {
-            println!("  {p}");
+            writeln!(out, "  {p}").context(REPORTING)?;
         }
         bail!(
             "{} stale publication claim(s) in the surfaces a happenstance-testkit reader meets \
@@ -454,11 +454,12 @@ fn no_stale_publication_claims() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "C2-07: {TESTKIT_LIB} and {TESTKIT_README} state no publication claim the repository \
          contradicts"
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// The adapter whose conformance target settles whether *any* adapter has run
@@ -946,7 +947,7 @@ fn publication_pin_problems(facts: &PublicationFacts, lib: &str, readme: &str) -
 ///
 /// Returns an error if any of the six artefacts cannot be read, or if
 /// [`publication_pin_problems`] finds a problem.
-fn positive_publication_pin() -> Result<()> {
+fn positive_publication_pin(out: &mut impl io::Write) -> Result<()> {
     use crate::lints::{SQLITE_CONFORMANCE_TEST, TESTKIT_LIB, TESTKIT_README};
 
     let root = workspace_root()?;
@@ -971,7 +972,7 @@ fn positive_publication_pin() -> Result<()> {
     let problems = publication_pin_problems(&facts, &lib, &readme);
     if !problems.is_empty() {
         for problem in &problems {
-            println!("  {problem}");
+            writeln!(out, "  {problem}").context(REPORTING)?;
         }
         bail!(
             "{} unpinned publication fact(s) — `positive_publication_pin` (C2-07b): a rendered \
@@ -981,11 +982,12 @@ fn positive_publication_pin() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "C2-07b: {TESTKIT_LIB} and {TESTKIT_README} state the publication and conformance facts \
          {CHANGELOG} and {ADAPTER_LIB} settled, in those artefacts' own words"
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// The `toml` fences of a Rust file's **module** documentation, each as its own
@@ -1296,7 +1298,7 @@ fn recipe_fence_problems(facts: &RecipeFacts, lib: &str, fences: &[Vec<String>])
 ///
 /// Returns an error if any of the four artefacts cannot be read, or if
 /// [`recipe_fence_problems`] finds a problem.
-fn recipe_fence_resolves() -> Result<()> {
+fn recipe_fence_resolves(out: &mut impl io::Write) -> Result<()> {
     use crate::lints::{TESTKIT_LIB, TESTKIT_README};
 
     let root = workspace_root()?;
@@ -1321,7 +1323,7 @@ fn recipe_fence_resolves() -> Result<()> {
     let problems = recipe_fence_problems(&facts, &lib, &doc_toml_fences(&lib));
     if !problems.is_empty() {
         for problem in &problems {
-            println!("  {problem}");
+            writeln!(out, "  {problem}").context(REPORTING)?;
         }
         bail!(
             "{} problem(s) with the recipe an adapter author copies — `recipe_fence_resolves` \
@@ -1332,11 +1334,12 @@ fn recipe_fence_resolves() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "C2-02: {TESTKIT_LIB}'s recipe fence resolves against {WORKSPACE_MANIFEST} and \
          {TESTKIT_MANIFEST}, and carries {TESTKIT_README}'s pin advice"
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// The `toml` fences of a Rust file's **item** documentation (`///`), each as
@@ -1711,7 +1714,7 @@ fn dev_dependency_cost_problems(
 ///
 /// Returns an error if any of the four artefacts cannot be read, or if
 /// [`feature_cost_problems`] finds a problem.
-fn feature_cost_is_stated() -> Result<()> {
+fn feature_cost_is_stated(out: &mut impl io::Write) -> Result<()> {
     use crate::lints::TESTKIT_LIB;
 
     let root = workspace_root()?;
@@ -1741,7 +1744,7 @@ fn feature_cost_is_stated() -> Result<()> {
     let problems = feature_cost_problems(&facts, &lib, &doc_toml_fences(&lib));
     if !problems.is_empty() {
         for problem in &problems {
-            println!("  {problem}");
+            writeln!(out, "  {problem}").context(REPORTING)?;
         }
         bail!(
             "{} problem(s) with what {TESTKIT_LIB} tells an outside author their manifest \
@@ -1752,11 +1755,12 @@ fn feature_cost_is_stated() -> Result<()> {
         );
     }
 
-    println!(
+    writeln!(
+        out,
         "C2-01/C2-05: {TESTKIT_LIB}'s feature-graph account agrees with {CORE_MANIFEST} and \
          {PORT_RECIPE}, and names what {TESTKIT_MANIFEST} adds under `cargo test`"
-    );
-    Ok(())
+    )
+    .context(REPORTING)
 }
 
 /// The feature name whose implications C2-01 is about.
@@ -1810,21 +1814,31 @@ fn section_version(manifest: &str, header: &str) -> Option<String> {
     None
 }
 
-/// Prints the run's outcome, and is the only place that decides how.
+/// Writes the run's outcome, and is the only place that decides how.
 ///
 /// # Errors
 ///
-/// When there is at least one problem.
-fn report(pages: &[Page], atoms: &[Atom], mut problems: Vec<Problem>) -> Result<()> {
+/// When there is at least one problem, or when `out` or `err` cannot be written.
+fn report(
+    out: &mut impl io::Write,
+    err: &mut impl io::Write,
+    pages: &[Page],
+    atoms: &[Atom],
+    mut problems: Vec<Problem>,
+) -> Result<()> {
     if problems.is_empty() {
         let rules: usize = atoms.iter().map(|atom| atom.rules.len()).sum();
-        println!("  {} pages, {rules} rules, all consistent", pages.len());
-        return Ok(());
+        return writeln!(
+            out,
+            "  {} pages, {rules} rules, all consistent",
+            pages.len()
+        )
+        .context(REPORTING);
     }
 
     problems.sort();
     for problem in &problems {
-        eprintln!("  {}", problem.render());
+        writeln!(err, "  {}", problem.render()).context(REPORTING)?;
     }
     bail!(
         "{} problem(s) in {RULE_DIR} + {}",
@@ -2318,6 +2332,7 @@ fn check_atom_fences(atom: &Atom, problems: &mut Vec<Problem>) {
 ///
 /// When the router cannot be read, or cannot be rewritten under [`Mode::Write`].
 fn check_router(
+    out: &mut impl io::Write,
     root: &Path,
     atoms: &[Atom],
     mode: Mode,
@@ -2363,7 +2378,8 @@ fn check_router(
                     rebuilt.extend(current[end..].iter().map(|l| (*l).to_owned()));
                     fs::write(&path, rebuilt.join("\n") + "\n")
                         .with_context(|| format!("writing {ROUTER}"))?;
-                    println!("  rewrote {ROUTER}'s generated `## Index`");
+                    writeln!(out, "  rewrote {ROUTER}'s generated `## Index`")
+                        .context(REPORTING)?;
                 } else {
                     problems.push(Problem::whole(
                         ROUTER,
@@ -2381,7 +2397,7 @@ fn check_router(
 /// What the router's `## Index` region must contain.
 ///
 /// Byte for byte `lint_constitution::generated_region`'s format
-/// (`xtask/src/lint_constitution.rs:400-420`) — the shape
+/// (`xtask/src/lint_constitution.rs:406-426`) — the shape
 /// `router-precedence-and-announcement` committed the region in, as a forward
 /// contract on this generator: the first `--write` against that router must
 /// produce no diff.
@@ -2702,6 +2718,9 @@ fn fence_problems(text: &str) -> Vec<(usize, String)> {
     wrong
 }
 
+/// The context a refused write of this lint's report carries.
+const REPORTING: &str = "writing lint-pages' report";
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
@@ -2835,7 +2854,7 @@ mod tests {
     /// The row the generator would emit for one atom.
     ///
     /// Byte-for-byte `lint_constitution::generated_region`'s per-atom format
-    /// (`xtask/src/lint_constitution.rs:400-420`): a markdown link to the file,
+    /// (`xtask/src/lint_constitution.rs:406-426`): a markdown link to the file,
     /// the first `Load when` source line with every interior `|` escaped (or an
     /// em dash when absent), then the comma-separated rule ids. Derived from the
     /// real atom rather than written down, so the checker's first `--write`
@@ -4641,7 +4660,7 @@ mod tests {
         );
         let atoms = rule_atoms(&root).unwrap();
         let mut problems = Vec::new();
-        check_router(&root, &atoms, Mode::Check, &mut problems).unwrap();
+        check_router(&mut Vec::new(), &root, &atoms, Mode::Check, &mut problems).unwrap();
         let lines = rendered(&problems);
         assert_eq!(lines.len(), 1, "{lines:?}");
         assert!(
@@ -4660,7 +4679,7 @@ mod tests {
         );
         let atoms = rule_atoms(&root).unwrap();
         let mut problems = Vec::new();
-        check_router(&root, &atoms, Mode::Write, &mut problems).unwrap();
+        check_router(&mut Vec::new(), &root, &atoms, Mode::Write, &mut problems).unwrap();
         assert!(problems.is_empty(), "{:?}", rendered(&problems));
 
         let rewritten = fs::read_to_string(root.join(ROUTER)).unwrap();
@@ -4673,7 +4692,7 @@ mod tests {
         assert_eq!(lines[start..end].join("\n"), generated_index(&atoms));
 
         let mut again = Vec::new();
-        check_router(&root, &atoms, Mode::Check, &mut again).unwrap();
+        check_router(&mut Vec::new(), &root, &atoms, Mode::Check, &mut again).unwrap();
         assert!(
             again.is_empty(),
             "a second `--write` is idempotent: {:?}",
@@ -4696,7 +4715,7 @@ mod tests {
             &format!("{router}\nSee [`99-gone.md`](99-gone.md).\n"),
         );
         let mut problems = Vec::new();
-        check_router(&root, &atoms, Mode::Check, &mut problems).unwrap();
+        check_router(&mut Vec::new(), &root, &atoms, Mode::Check, &mut problems).unwrap();
         let lines = rendered(&problems);
         assert!(
             lines
@@ -5582,6 +5601,87 @@ happenstance-core = { version = \"0.2.0-alpha.1\", path = \"crates/happenstance-
             None,
             "a section that is not there answers nothing rather than the next \
              `version` key it happens to find"
+        );
+    }
+
+    /// A clean run's verdict goes into the writer for stdout; problems go,
+    /// sorted, into the writer for stderr, ahead of the bail that counts them.
+    #[test]
+    fn the_report_writes_the_verdict_and_the_problems_into_their_writers() {
+        let pages = [synthetic_page("docs/a.md", "")];
+        let atoms = [synthetic_atom("10-the-need-set.md", "")];
+
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        report(&mut out, &mut err, &pages, &atoms, Vec::new()).expect("nothing was found");
+        assert_eq!(out, b"  1 pages, 0 rules, all consistent\n");
+        assert!(err.is_empty());
+
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let problems = vec![
+            Problem::at("docs/b.md", 2, "second".to_owned()),
+            Problem::whole("docs/a.md", "first".to_owned()),
+        ];
+        let failed = report(&mut out, &mut err, &pages, &atoms, problems)
+            .expect_err("two problems were found");
+        assert!(
+            format!("{failed:#}").starts_with("2 problem(s) in "),
+            "{failed:#}"
+        );
+        assert!(out.is_empty());
+        assert_eq!(
+            err,
+            "  docs/a.md — first\n  docs/b.md:2 — second\n".as_bytes()
+        );
+    }
+
+    /// A closed pipe under either writer is the error the report returns, not
+    /// a panic in `println!` or `eprintln!`, and nothing is written after the
+    /// refusal.
+    ///
+    /// The wrong implementation it rejects drops a write's result: the report
+    /// then says `Ok` over a verdict nobody received, or writes on past the
+    /// refusal and returns the problem count instead of the write that failed.
+    #[test]
+    fn the_report_returns_a_closed_pipe_rather_than_panicking() {
+        use crate::tests::ClosesAfter;
+
+        let pages = [synthetic_page("docs/a.md", "")];
+        let atoms = [synthetic_atom("10-the-need-set.md", "")];
+        let closed = || ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+
+        let mut verdict = closed();
+        let passing = report(&mut verdict, &mut Vec::new(), &pages, &atoms, Vec::new())
+            .expect_err("stdout was closed, yet Ok");
+        let mut listing = closed();
+        let problems = vec![
+            Problem::whole("docs/a.md", "first".to_owned()),
+            Problem::whole("docs/b.md", "second".to_owned()),
+        ];
+        let failing = report(&mut Vec::new(), &mut listing, &pages, &atoms, problems)
+            .expect_err("stderr was closed, yet Ok");
+
+        for (err, pipe) in [(passing, verdict), (failing, listing)] {
+            let refused = err
+                .downcast_ref::<io::Error>()
+                .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+            assert_eq!(refused.kind(), io::ErrorKind::BrokenPipe);
+            assert_eq!(pipe.refused, 1, "writing went on after a refused write");
+        }
+    }
+
+    /// A C2 check's verdict, through the writer it was handed — the real
+    /// tree's testkit surfaces, so the line is the one CI prints.
+    #[test]
+    fn a_c2_check_writes_its_verdict_into_the_writer() {
+        let mut out = Vec::new();
+        no_stale_publication_claims(&mut out).expect("the testkit's surfaces are true");
+        let line = String::from_utf8(out).expect("the verdict is UTF-8");
+        assert!(
+            line.starts_with("C2-07: ") && line.matches('\n').count() == 1,
+            "{line:?}"
         );
     }
 }

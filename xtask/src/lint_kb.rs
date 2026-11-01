@@ -109,11 +109,12 @@ pub(crate) const STEP: crate::Step = crate::Step {
 ///
 /// When the base cannot be resolved, when the clone is shallow and no base is
 /// named, when git fails, when no accepted decision exists at the base, or when
-/// any accepted body has changed or its atom has gone.
-pub(crate) fn run() -> Result<()> {
+/// any accepted body has changed or its atom has gone, or when `out` cannot be
+/// written.
+pub(crate) fn run(out: &mut impl std::io::Write) -> Result<()> {
     let root = workspace_root()?;
     let base = resolve_base(&root)?;
-    check_against(&root, &base)
+    check_against(out, &root, &base)
 }
 
 /// The same check, against a base the caller has already chosen.
@@ -126,7 +127,7 @@ pub(crate) fn run() -> Result<()> {
 /// # Errors
 ///
 /// As [`run`], less the environment variable.
-pub(crate) fn run_against(base: &str) -> Result<()> {
+pub(crate) fn run_against(out: &mut impl std::io::Write, base: &str) -> Result<()> {
     let root = workspace_root()?;
     let merge_base = git(&root, &["merge-base", base, "HEAD"])
         .with_context(|| format!("lint-kb: `{base}` does not resolve to a commit"))?;
@@ -139,11 +140,11 @@ pub(crate) fn run_against(base: &str) -> Result<()> {
         head.trim(),
         parent.as_deref().map(str::trim),
     )?;
-    check_against(&root, &choice)
+    check_against(out, &root, &choice)
 }
 
-fn check_against(root: &Path, base: &str) -> Result<()> {
-    println!("  comparing {DECISIONS}/ against {base}");
+fn check_against(out: &mut impl std::io::Write, root: &Path, base: &str) -> Result<()> {
+    writeln!(out, "  comparing {DECISIONS}/ against {base}").context(REPORTING)?;
 
     let listing = git(
         root,
@@ -189,9 +190,15 @@ fn check_against(root: &Path, base: &str) -> Result<()> {
             problems.join("\n  ")
         );
     }
-    println!("  {accepted} accepted decision(s), every body unchanged");
-    Ok(())
+    writeln!(
+        out,
+        "  {accepted} accepted decision(s), every body unchanged"
+    )
+    .context(REPORTING)
 }
+
+/// The context a refused write of this step's report carries.
+const REPORTING: &str = "writing lint-kb's report";
 
 /// Resolve the base commit, or fail saying why there is none.
 fn resolve_base(root: &Path) -> Result<String> {
@@ -801,5 +808,41 @@ mod tests {
         assert_eq!(status("status: \"accepted\""), Some("accepted"));
         assert_eq!(status("status: accepted  # UNCHANGED"), Some("accepted"));
         assert_eq!(status("id: x\nkind: decision"), None);
+    }
+
+    /// The step's first line goes into the writer it was handed, before git is
+    /// asked anything: a base that names no commit fails after it.
+    #[test]
+    fn the_comparison_is_announced_into_the_writer() {
+        let root = workspace_root().expect("the workspace root resolves");
+        let mut out = Vec::new();
+        let err = check_against(&mut out, &root, "refs/xtask-352/no-such-base")
+            .expect_err("a base that names no commit cannot be compared against");
+        assert!(format!("{err:#}").contains("git ls-tree"), "{err:#}");
+        assert_eq!(
+            String::from_utf8(out).expect("the report is UTF-8"),
+            "  comparing .kb/decisions/ against refs/xtask-352/no-such-base\n"
+        );
+    }
+
+    /// A closed stdout is the error the step returns, ahead of any git call,
+    /// and not a panic in `println!`.
+    ///
+    /// The wrong implementation it rejects drops the announcement's result:
+    /// the step then goes on to git and fails, or passes, on something else.
+    #[test]
+    fn a_closed_stdout_is_returned_rather_than_panicking() {
+        let root = workspace_root().expect("the workspace root resolves");
+        let mut pipe = crate::tests::ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let err = check_against(&mut pipe, &root, "refs/xtask-352/no-such-base")
+            .expect_err("stdout was closed, yet Ok");
+        let refused = err
+            .downcast_ref::<std::io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(refused.kind(), std::io::ErrorKind::BrokenPipe);
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
     }
 }

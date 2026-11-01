@@ -102,9 +102,9 @@
 //! [ADR-0010]: ../../.kb/decisions/0010-the-suite-must-prove-itself.md
 //! [ADR-0016]: ../../.kb/decisions/0016-the-wire-format.md
 
-use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 
@@ -1733,17 +1733,17 @@ fn cargo_args(artefact: &Artefact) -> [&'static str; 7] {
 ///
 /// Returns an error if a test target cannot be built or enumerated, if any name
 /// an [`Artefact`] lists is absent from its listing, or if the tests themselves
-/// fail.
-pub(crate) fn run() -> Result<()> {
+/// fail, or if `out` or `err` cannot be written.
+pub(crate) fn run(out: &mut impl io::Write, err: &mut impl io::Write) -> Result<()> {
     for artefact in ARTEFACTS {
-        check(artefact)?;
+        check(out, err, artefact)?;
     }
 
     Ok(())
 }
 
 /// One artefact: assert its names out of `--list`, report, then run it.
-fn check(artefact: &Artefact) -> Result<()> {
+fn check(out: &mut impl io::Write, err: &mut impl io::Write, artefact: &Artefact) -> Result<()> {
     let Artefact {
         package,
         target,
@@ -1779,12 +1779,14 @@ fn check(artefact: &Artefact) -> Result<()> {
         // Reported beside its own entry rather than made a column every entry has
         // to answer, and keyed to *this* artefact rather than to its package: the
         // count is about one registry, and two targets in one package have two.
-        println!(
+        writeln!(
+            out,
             "{package}/{target}: {present} named tests present, {} registry rows",
             registry_len(registry)?
-        );
+        )
+        .context(REPORTING)?;
     } else {
-        println!("{package}/{target}: {present} named tests present");
+        writeln!(out, "{package}/{target}: {present} named tests present").context(REPORTING)?;
     }
 
     // `.output()` rather than `.status()`, and the transcript forwarded
@@ -1799,8 +1801,7 @@ fn check(artefact: &Artefact) -> Result<()> {
         .with_context(|| format!("failed to launch `cargo test` for `{package}`'s `{target}`"))?;
 
     let transcript = String::from_utf8_lossy(&run.stdout);
-    print!("{transcript}");
-    eprint!("{}", String::from_utf8_lossy(&run.stderr));
+    forward(out, err, &transcript, &run.stderr)?;
 
     if !run.status.success() {
         bail!(
@@ -1893,7 +1894,7 @@ fn locked_wasm_bindgen_version() -> Result<String> {
 /// way through a test binary, which reads as *the conformance suite broke* when
 /// it means *reinstall one tool*. Naming the two versions and the command that
 /// reconciles them is the difference.
-fn check_wasm_runner_version() -> Result<()> {
+fn check_wasm_runner_version(out: &mut impl io::Write) -> Result<()> {
     let expected = locked_wasm_bindgen_version()?;
 
     let output = Command::new(WASM_RUNNER)
@@ -1913,8 +1914,31 @@ fn check_wasm_runner_version() -> Result<()> {
         );
     }
 
-    println!("{WASM_RUNNER} {installed} matches Cargo.lock's {WASM_BINDGEN} {expected}");
-    Ok(())
+    writeln!(
+        out,
+        "{WASM_RUNNER} {installed} matches Cargo.lock's {WASM_BINDGEN} {expected}"
+    )
+    .context(REPORTING)
+}
+
+/// The context a refused write of this step's report carries.
+const REPORTING: &str = "writing the proof artefacts' report";
+
+/// A child's transcript, forwarded verbatim: its stdout into `out` and its
+/// stderr into `err`, each as the lossy UTF-8 the step has always printed.
+///
+/// # Errors
+///
+/// When `out` or `err` cannot be written.
+fn forward(
+    out: &mut impl io::Write,
+    err: &mut impl io::Write,
+    transcript: &str,
+    stderr: &[u8],
+) -> Result<()> {
+    out.write_all(transcript.as_bytes()).context(REPORTING)?;
+    err.write_all(String::from_utf8_lossy(stderr).as_bytes())
+        .context(REPORTING)
 }
 
 /// The head of a list of missing names, with the rest counted rather than
@@ -1968,9 +1992,10 @@ fn first_few(names: &[String]) -> String {
 ///
 /// Returns an error if the runner is absent or mismatched, if a target cannot be
 /// built or enumerated, if any rule the enumeration declares is missing from a
-/// target's listing, or if the rules themselves fail.
-pub(crate) fn wasm_run() -> Result<()> {
-    check_wasm_runner_version()?;
+/// target's listing, if the rules themselves fail, or if `out` or `err` cannot
+/// be written.
+pub(crate) fn wasm_run(out: &mut impl io::Write, err: &mut impl io::Write) -> Result<()> {
+    check_wasm_runner_version(out)?;
 
     let env = [(WASM_RUNNER_VAR, WASM_RUNNER)];
 
@@ -2020,13 +2045,15 @@ pub(crate) fn wasm_run() -> Result<()> {
             );
         }
 
-        println!(
+        writeln!(
+            out,
             "{}/{}: {} rules enumerated, {} named, executing on {WASM_TRIPLE}",
             wasm.package,
             wasm.target,
             enumerated.len(),
             wasm.rules.len()
-        );
+        )
+        .context(REPORTING)?;
 
         // `.output()` rather than `.status()`, for the host path's reason and
         // with the same consequence: an exit status cannot tell `94 passed`
@@ -2048,8 +2075,7 @@ pub(crate) fn wasm_run() -> Result<()> {
             .with_context(|| format!("failed to launch `cargo test` for {label}"))?;
 
         let transcript = String::from_utf8_lossy(&run.stdout);
-        print!("{transcript}");
-        eprint!("{}", String::from_utf8_lossy(&run.stderr));
+        forward(out, err, &transcript, &run.stderr)?;
 
         if !run.status.success() {
             bail!("{label} failed with {}", run.status);
@@ -2080,7 +2106,7 @@ pub(crate) fn wasm_run() -> Result<()> {
         }
     }
 
-    wasm_unit_run(&env)
+    wasm_unit_run(out, err, &env)
 }
 
 /// Executes every registered non-conformance `wasm32` target.
@@ -2098,8 +2124,13 @@ pub(crate) fn wasm_run() -> Result<()> {
 /// # Errors
 ///
 /// Returns an error if a target cannot be built or enumerated, if a named test
-/// is absent from its listing, or if the tests themselves fail.
-fn wasm_unit_run(env: &[(&str, &str); 1]) -> Result<()> {
+/// is absent from its listing, if the tests themselves fail, or if `out` or
+/// `err` cannot be written.
+fn wasm_unit_run(
+    out: &mut impl io::Write,
+    err: &mut impl io::Write,
+    env: &[(&str, &str); 1],
+) -> Result<()> {
     for unit in WASM_UNIT_TARGETS {
         let label = format!(
             "`{}`'s {} on {WASM_TRIPLE}",
@@ -2129,14 +2160,16 @@ fn wasm_unit_run(env: &[(&str, &str); 1]) -> Result<()> {
             );
         }
 
-        println!(
+        writeln!(
+            out,
             "{}/{}: {} tests listed, {} named, executing on {WASM_TRIPLE}\n  host: {}",
             unit.package,
             unit.selector.join(" "),
             listed.len(),
             unit.tests.len(),
             unit.host
-        );
+        )
+        .context(REPORTING)?;
 
         // `.output()`, for the reason the conformance loop above gives.
         let run = Command::new("cargo")
@@ -2147,8 +2180,7 @@ fn wasm_unit_run(env: &[(&str, &str); 1]) -> Result<()> {
             .with_context(|| format!("failed to launch `cargo test` for {label}"))?;
 
         let transcript = String::from_utf8_lossy(&run.stdout);
-        print!("{transcript}");
-        eprint!("{}", String::from_utf8_lossy(&run.stderr));
+        forward(out, err, &transcript, &run.stderr)?;
 
         if !run.status.success() {
             bail!(
@@ -2212,8 +2244,8 @@ fn wasm_unit_cargo_args(unit: &WasmUnitTarget) -> Vec<&'static str> {
 /// carries a block comment the code scan cannot read, or no longer invokes its
 /// family's suite through that family's `wasm32` emitter, if a row names no
 /// rules, if a named rule is absent from the enumeration, or if a target writes
-/// a rule list of its own.
-pub(crate) fn wasm_enumeration() -> Result<()> {
+/// a rule list of its own, or if `out` cannot be written.
+pub(crate) fn wasm_enumeration(out: &mut impl io::Write) -> Result<()> {
     if WASM_TARGETS.is_empty() {
         bail!(
             "no conformance target is registered for execution on {WASM_TRIPLE}. \
@@ -2351,14 +2383,16 @@ pub(crate) fn wasm_enumeration() -> Result<()> {
             );
         }
 
-        println!(
+        writeln!(
+            out,
             "{}/{}: {} named rules, all declared by `{}`'s enumeration of {}",
             wasm.package,
             wasm.target,
             wasm.rules.len(),
             wasm.family.enumeration,
             enumerated.len()
-        );
+        )
+        .context(REPORTING)?;
     }
 
     Ok(())
@@ -3254,6 +3288,70 @@ mod tests {
                 doc.contains(claim),
                 "the artefact's limits section never names `{claim}`"
             );
+        }
+    }
+
+    /// A child's transcript reaches the two writers the step was handed,
+    /// stdout to stdout and stderr to stderr, byte for byte — and stderr as
+    /// the lossy UTF-8 the step has always printed.
+    #[test]
+    fn a_transcript_is_forwarded_into_its_two_writers() {
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        forward(&mut out, &mut err, "running 2 tests\n", b"warn\xff\n")
+            .expect("a Vec accepts every write");
+        assert_eq!(out, b"running 2 tests\n");
+        assert_eq!(err, "warn\u{fffd}\n".as_bytes());
+    }
+
+    /// The wasm32 conformance targets' enumeration verdicts go into the writer
+    /// it was handed, one line per registered target.
+    #[test]
+    fn the_enumeration_writes_one_verdict_per_target_into_the_writer() {
+        let mut out = Vec::new();
+        wasm_enumeration(&mut out).expect("the registered wasm32 targets are honest");
+        let text = String::from_utf8(out).expect("the verdicts are UTF-8");
+        assert_eq!(text.lines().count(), WASM_TARGETS.len(), "{text}");
+        for (line, wasm) in text.lines().zip(WASM_TARGETS) {
+            assert!(
+                line.starts_with(&format!("{}/{}: ", wasm.package, wasm.target)),
+                "{line}"
+            );
+        }
+    }
+
+    /// A closed pipe under either writer is the error the step returns, not a
+    /// panic in `print!` or `eprint!`, and nothing is written after the
+    /// refusal.
+    ///
+    /// The wrong implementation it rejects drops a write's result: the step
+    /// then goes on to judge a transcript nobody saw, or says `Ok`.
+    #[test]
+    fn a_closed_pipe_is_returned_rather_than_panicking() {
+        use crate::tests::ClosesAfter;
+
+        let closed = || ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let mut stdout = closed();
+        let on_stdout = forward(&mut stdout, &mut Vec::new(), "out\n", b"err\n")
+            .expect_err("stdout was closed, yet Ok");
+        let mut stderr = closed();
+        let on_stderr = forward(&mut Vec::new(), &mut stderr, "out\n", b"err\n")
+            .expect_err("stderr was closed, yet Ok");
+        let mut verdicts = closed();
+        let enumeration = wasm_enumeration(&mut verdicts).expect_err("stdout was closed, yet Ok");
+
+        for (err, pipe) in [
+            (on_stdout, stdout),
+            (on_stderr, stderr),
+            (enumeration, verdicts),
+        ] {
+            let refused = err
+                .downcast_ref::<io::Error>()
+                .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+            assert_eq!(refused.kind(), io::ErrorKind::BrokenPipe);
+            assert_eq!(pipe.refused, 1, "writing went on after a refused write");
         }
     }
 }

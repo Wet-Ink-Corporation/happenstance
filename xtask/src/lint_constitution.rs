@@ -46,8 +46,8 @@
 //! same defect.
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::Path;
+use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 
@@ -176,8 +176,8 @@ struct Fence {
 ///
 /// # Errors
 ///
-/// Fails when any check finds a problem, or when the corpus cannot be read.
-pub(crate) fn run(mode: Mode) -> Result<()> {
+/// Fails when any check finds a problem, when the corpus cannot be read, or on a refused write.
+pub(crate) fn run(out: &mut impl io::Write, err: &mut impl io::Write, mode: Mode) -> Result<()> {
     let root = workspace_root()?;
     let atoms = atoms(&root)?;
     let mut problems = Vec::new();
@@ -186,7 +186,7 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
         bail!("{ATOM_DIR} holds no atoms, so every check below is vacuous");
     }
 
-    check_router(&root, &atoms, mode, &mut problems)?;
+    check_router(out, &root, &atoms, mode, &mut problems)?;
     check_harness(&root, &atoms, &mut problems)?;
     check_summaries(&root, &mut problems)?;
 
@@ -199,12 +199,12 @@ pub(crate) fn run(mode: Mode) -> Result<()> {
     }
 
     if problems.is_empty() {
-        println!("  {} atoms, all consistent", atoms.len());
+        writeln!(out, "  {} atoms, all consistent", atoms.len()).context(REPORTING)?;
         return Ok(());
     }
 
     for problem in &problems {
-        eprintln!("  {problem}");
+        writeln!(err, "  {problem}").context(REPORTING)?;
     }
     bail!("{} problem(s) in {ATOM_DIR}", problems.len())
 }
@@ -341,7 +341,13 @@ fn fences(text: &str) -> Vec<Fence> {
 
 /// C1 and C2 — the router names every atom exactly once, and its generated
 /// region agrees with what the atoms actually say.
-fn check_router(root: &Path, atoms: &[Atom], mode: Mode, problems: &mut Vec<String>) -> Result<()> {
+fn check_router(
+    out: &mut impl io::Write,
+    root: &Path,
+    atoms: &[Atom],
+    mode: Mode,
+    problems: &mut Vec<String>,
+) -> Result<()> {
     let path = root.join(ROUTER);
     let router = fs::read_to_string(&path).with_context(|| format!("reading {ROUTER}"))?;
 
@@ -381,7 +387,7 @@ fn check_router(root: &Path, atoms: &[Atom], mode: Mode, problems: &mut Vec<Stri
                     rebuilt.extend(current[end..].iter().map(|l| (*l).to_owned()));
                     fs::write(&path, rebuilt.join("\n") + "\n")
                         .with_context(|| format!("writing {ROUTER}"))?;
-                    println!("  rewrote {ROUTER}'s generated region");
+                    writeln!(out, "  rewrote {ROUTER}'s generated region").context(REPORTING)?;
                 } else {
                     problems.push(format!(
                         "{ROUTER} — the generated region disagrees with the atoms; \
@@ -914,6 +920,9 @@ fn markdown_links(line: &str) -> Vec<String> {
     out
 }
 
+/// The context a refused write of this lint's report carries.
+const REPORTING: &str = "writing lint-constitution's report";
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code, per the house style")]
@@ -1129,5 +1138,39 @@ mod tests {
             "the report must say the anchor is gone, not merely misplaced: {}",
             problems[0]
         );
+    }
+
+    /// The verdict over this repository's own constitution goes into the
+    /// writer the lint was handed, and nothing goes to the error writer.
+    #[test]
+    fn the_verdict_is_written_into_the_writer() {
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        run(&mut out, &mut err, Mode::Check).expect("the constitution is consistent");
+        let line = String::from_utf8(out).expect("the verdict is UTF-8");
+        assert!(
+            line.starts_with("  ")
+                && line.ends_with(" atoms, all consistent\n")
+                && line.matches('\n').count() == 1,
+            "{line:?}"
+        );
+        assert!(err.is_empty(), "{:?}", String::from_utf8_lossy(&err));
+    }
+
+    /// A closed stdout is the error the lint returns, not a panic in
+    /// `println!`. The wrong implementation it rejects drops the verdict
+    /// write's result and reports `Ok` over a line nobody received.
+    #[test]
+    fn a_closed_stdout_is_returned_rather_than_panicking() {
+        let mut pipe = crate::tests::ClosesAfter {
+            budget: 0,
+            refused: 0,
+        };
+        let err =
+            run(&mut pipe, &mut Vec::new(), Mode::Check).expect_err("stdout was closed, yet Ok");
+        let refused = err
+            .downcast_ref::<io::Error>()
+            .unwrap_or_else(|| panic!("not a write failure: {err:#}"));
+        assert_eq!(refused.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(pipe.refused, 1, "writing went on after a refused write");
     }
 }

@@ -146,9 +146,13 @@ pub(crate) struct Member {
 /// When the workspace root cannot be resolved, when git cannot answer what
 /// changed (including a `base` that does not resolve to a commit — a gate that
 /// cannot tell what changed must not report green), when a member manifest
-/// declares no package name, when any check it runs fails, or when `out` cannot
-/// be written.
-pub(crate) fn run(out: &mut impl io::Write, base: Option<&str>) -> Result<()> {
+/// declares no package name, when any check it runs fails, or when `out` or
+/// `err` cannot be written.
+pub(crate) fn run(
+    out: &mut impl io::Write,
+    err: &mut impl io::Write,
+    base: Option<&str>,
+) -> Result<()> {
     let base = base.unwrap_or("main");
     let root = workspace_root()?;
 
@@ -182,7 +186,7 @@ pub(crate) fn run(out: &mut impl io::Write, base: Option<&str>) -> Result<()> {
     // story whose whole deliverable is a page under `docs/` is exactly the case
     // a package-shaped gate reads nothing for, and `.redkiln/config.yaml` wires
     // this command as that story's grain.
-    crate::lint_narrative::run()?;
+    crate::lint_narrative::run(out, err)?;
     // The page-need discipline, for the same reason and as one half of a pair.
     // The other half is `"standards/pages/"` on `INERT` below: that tree reaches
     // no package, so without this line a rules-only pull request would run
@@ -190,7 +194,7 @@ pub(crate) fn run(out: &mut impl io::Write, base: Option<&str>) -> Result<()> {
     // replaces. The pages tree has the same shape one step further on — `docs/`
     // is on the `xtask` arm rather than `INERT`, but a pages-only diff would
     // still never reach a page-need check without this call.
-    crate::lint_pages::run(crate::lint_pages::Mode::Check)?;
+    crate::lint_pages::run(out, err, crate::lint_pages::Mode::Check)?;
     // Called rather than excused, and the decision is the one
     // `OFF_THE_STORY_GRAIN` exists to force. `.github/workflows/` reaches no
     // package at all, so a story whose diff is a new CI job — which is exactly
@@ -198,12 +202,12 @@ pub(crate) fn run(out: &mut impl io::Write, base: Option<&str>) -> Result<()> {
     // `permissions:` key — would otherwise clear its own grain having had its
     // only deliverable read by nothing. The check opens one directory and
     // starts no process, so it costs what the neighbours above it cost.
-    crate::lint_workflows::run()?;
+    crate::lint_workflows::run(out)?;
     // Accepted decisions are immutable, and the story grain compares against the
     // same base it was handed, so a branch that rewords one fails here and not
     // first in CI. It reads the base through `git`, which is why it is also named
     // in `RUNS_A_PACKAGE` below: it starts a process without compiling anything.
-    crate::lint_kb::run_against(base)?;
+    crate::lint_kb::run_against(out, base)?;
 
     let members = members(&root)?;
     let changed = changed_files(&root, base)?;
@@ -1430,7 +1434,7 @@ mod tests {
     /// Read from disk rather than reasoned about, because what is being
     /// asserted is *which calls are written there*. It is the instrument
     /// `lint_narrative` already points at this exact block
-    /// (`xtask/src/lint_narrative.rs:2564`, `the_checker_joins_the_
+    /// (`xtask/src/lint_narrative.rs:2567`, `the_checker_joins_the_
     /// unconditional_file_reading_list`), and the two checks below are that
     /// one generalised.
     ///
