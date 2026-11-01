@@ -269,7 +269,7 @@ pub use happenstance_core::{InvalidQuery, InvalidTag};
 pub use happenstance_core::{MAX_TAG_LEN, Tag, Tags};
 pub use happenstance_core::{
     MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_QUERY_ITEMS,
-    MIN_SUPPORTED_TAGS_PER_EVENT, StoreLimit,
+    MIN_SUPPORTED_TAGS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_EVENT, StoreLimit,
 };
 pub use happenstance_core::{Query, QueryItem, ReadOptions};
 pub use happenstance_core::{SequencePosition, SequencedEvent};
