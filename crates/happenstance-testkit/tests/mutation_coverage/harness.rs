@@ -658,6 +658,9 @@ fn declines<S: Subject>() -> Vec<(&'static str, &'static str)> {
         declined("MID_BATCH_FAULT", S::MID_BATCH_FAULT),
         declined("READ_FAULT", S::READ_FAULT),
         declined("HELD_ABOVE_FRONTIER", S::HELD_ABOVE_FRONTIER),
+        // CF-42: a read-back rule skips under this name when the fixture
+        // declines it and cannot settle its frontier.
+        declined("READ_YOUR_OWN_WRITES", S::READ_YOUR_OWN_WRITES),
     ]
     .into_iter()
     .flatten()

@@ -112,6 +112,7 @@ pub mod rules {
         item_of_types, item_tagged, query_of, query_of_items, query_of_types, query_tagged,
         tagged_event, tags,
     };
+    use crate::settle::settle;
     use crate::{Armed, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, RuleOutcome};
 
     // ---------------------------------------------------------------------
@@ -218,6 +219,10 @@ pub mod rules {
 
         append_ok(&writer, &[event("A")]).await;
 
+        // Both instances: the second read is an absence check, and it must not
+        // pass because a frontier hid a row the instances wrongly share.
+        settle!(first);
+        settle!(second);
         let written = read_ok(&writer, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             types_of(&written),
@@ -279,7 +284,9 @@ pub mod rules {
 
         let written = append_ok(&writer, core::slice::from_ref(&subscribed)).await;
 
-        // The read side.
+        // The read side. The condition half below needs no settle: it is judged
+        // over what the store holds (ES-25), not over what a read shows.
+        settle!(fixture);
         let seen = read_ok(&reader, &query, ReadOptions::new()).await;
         assert_eq!(
             positions_of(&seen),
@@ -343,6 +350,7 @@ pub mod rules {
 
         fixture.reopen().await;
 
+        settle!(fixture);
         let store = fixture.connect().await;
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
@@ -379,6 +387,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[event("Cee"), event("Bee"), event("Ay")]).await;
 
+        settle!(fixture);
         let found = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             types_of(&found),
@@ -395,6 +404,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[event("A"), event("B"), event("C")]).await;
 
+        settle!(fixture);
         let found = read_ok(&store, &query_of_types(&["A", "C"]), ReadOptions::new()).await;
         assert_eq!(
             types_of(&found),
@@ -419,6 +429,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let found = read_ok(
             &store,
             &query_tagged(&[("course", "c1"), ("student", "s1")]),
@@ -450,6 +461,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let found = read_ok(
             &store,
             &query_tagged(&[("course", "c1")]),
@@ -473,6 +485,9 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[tagged_event("A", &[("course", "c1")])]).await;
 
+        // The read is absence-only, so the settle is what keeps it from passing
+        // because a frontier hid the event rather than because the tags missed.
+        settle!(fixture);
         let found = read_ok(
             &store,
             &query_tagged(&[("course", "c1"), ("student", "s1")]),
@@ -505,6 +520,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         // The anchor has to exist before it can be compared against. Without
         // this, a store that returns too few events fails the rule with `range
@@ -571,6 +587,7 @@ pub mod rules {
         ])
         .expect("non-empty query");
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -609,6 +626,7 @@ pub mod rules {
         let store = fixture.connect().await;
         let plain = append_ok(&store, &[event("Plain")]).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             positions_of(&all),
@@ -649,6 +667,7 @@ pub mod rules {
         .await;
         let plain = append_ok(&store, &[event("Noted")]).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.iter().filter(|e| e.position == multi).count(),
@@ -721,6 +740,7 @@ pub mod rules {
         let types_first = query_of_items([item_of_types(&["Later"]), item_tagged(&[("k", "v")])]);
         let tags_first = query_of_items([item_tagged(&[("k", "v")]), item_of_types(&["Later"])]);
 
+        settle!(fixture);
         let first = read_ok(&store, &types_first, ReadOptions::new()).await;
         let second = read_ok(&store, &tags_first, ReadOptions::new()).await;
 
@@ -796,6 +816,7 @@ pub mod rules {
         let right = query_of_items([course_two.clone()]);
         let concatenated = query_of_items([course_one, course_two]);
 
+        settle!(fixture);
         let left_set = read_ok(&store, &left, ReadOptions::new()).await;
         assert_eq!(
             positions_of(&left_set),
@@ -837,7 +858,9 @@ pub mod rules {
         // The anchor, in the idiom this file uses thirty lines above: without
         // it a store that returns nothing from *every* read passes this rule
         // for the wrong reason, and `InnerJoinTagStore` — which drops untagged
-        // events from every query — is exactly that store.
+        // events from every query — is exactly that store. One settle covers
+        // the anchor and the absence read below it.
+        settle!(fixture);
         let present = read_ok(&store, &query_of_types(&["A"]), ReadOptions::new()).await;
         assert_eq!(
             positions_of(&present),
@@ -885,6 +908,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[event("Cee"), event("Bee"), event("Ay")]).await;
 
+        settle!(fixture);
         let found = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         let positions = positions_of(&found);
         assert_eq!(
@@ -907,6 +931,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[event("A"), event("B"), event("C")]).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -938,6 +963,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[event("Cee"), event("Bee"), event("Ay")]).await;
 
+        settle!(fixture);
         let found = read_ok(&store, &Query::all(), ReadOptions::new().backwards()).await;
         assert_eq!(
             types_of(&found),
@@ -963,6 +989,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let found = read_ok(&store, &Query::all(), ReadOptions::new().limit(2)).await;
         assert_eq!(
             types_of(&found),
@@ -986,6 +1013,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -1078,6 +1106,7 @@ pub mod rules {
         let store = fixture.connect().await;
         let (first, second, _third) = seed_hits_between_misses(&store).await;
 
+        settle!(fixture);
         let found = read_ok(
             &store,
             &query_of_types(&["Hit"]),
@@ -1108,6 +1137,7 @@ pub mod rules {
         let store = fixture.connect().await;
         let (_first, second, third) = seed_hits_between_misses(&store).await;
 
+        settle!(fixture);
         let found = read_ok(
             &store,
             &query_of_types(&["Hit"]),
@@ -1153,6 +1183,7 @@ pub mod rules {
 
         let query = query_of_items([item_of_types(&["Alpha"]), item_tagged(&[("topic", "t1")])]);
 
+        settle!(fixture);
         let resumed = read_ok(&store, &query, ReadOptions::new().from(anchor)).await;
         assert_eq!(
             positions_of(&resumed),
@@ -1261,6 +1292,7 @@ pub mod rules {
 
         let query = query_of_items([item_of_types(&["Left"]), item_of_types(&["Right"])]);
 
+        settle!(fixture);
         let page = read_ok(&store, &query, ReadOptions::new().from(left_mid).limit(3)).await;
         assert_eq!(
             positions_of(&page),
@@ -1308,6 +1340,7 @@ pub mod rules {
         let second = append_ok(&store, &[tagged_event("Bee", &[("window", "closed")])]).await;
         append_ok(&store, &[tagged_event("Cee", &[("window", "closed")])]).await;
 
+        settle!(fixture);
         let bounded = read_ok(&store, &Query::all(), ReadOptions::new().to(second)).await;
         assert_eq!(
             positions_of(&bounded),
@@ -1349,6 +1382,7 @@ pub mod rules {
         let upper = append_ok(&store, &[tagged_event("Dee", &[("window", "closed")])]).await;
         append_ok(&store, &[tagged_event("Ee", &[("window", "closed")])]).await;
 
+        settle!(fixture);
         let window = read_ok(
             &store,
             &Query::all(),
@@ -1393,6 +1427,7 @@ pub mod rules {
         let middle = append_ok(&store, &[tagged_event("Dee", &[("window", "closed")])]).await;
         let newest = append_ok(&store, &[tagged_event("Ee", &[("window", "closed")])]).await;
 
+        settle!(fixture);
         let found = read_ok(
             &store,
             &Query::all(),
@@ -1497,6 +1532,7 @@ pub mod rules {
 
         let query = query_of_items([item_tagged(&[("side", "left")]), item_of_types(&["Cee"])]);
 
+        settle!(fixture);
         let window = read_ok(&store, &query, ReadOptions::new().to(stop)).await;
         assert_eq!(
             positions_of(&window),
@@ -1550,6 +1586,8 @@ pub mod rules {
         append_ok(&store, &[tagged_event("Budget", &[("run", "z2")])]).await;
         append_ok(&store, &[tagged_event("Budget", &[("run", "z3")])]).await;
 
+        // One settle covers the absence reads and the anchor that follows them.
+        settle!(fixture);
         let none = read_ok(&store, &Query::all(), ReadOptions::new().limit(0)).await;
         assert!(
             none.is_empty(),
@@ -1633,6 +1671,7 @@ pub mod rules {
 
         let query = query_of_items([item_of_types(&["Left"]), item_of_types(&["Right"])]);
 
+        settle!(fixture);
         let budgeted = read_ok(&store, &query, ReadOptions::new().limit(4)).await;
         assert_eq!(
             positions_of(&budgeted),
@@ -1744,6 +1783,7 @@ pub mod rules {
         let window_top = append_ok(&store, &[tagged_event("Dee", &[("chunk", "c4")])]).await;
         append_ok(&store, &[tagged_event("Ee", &[("chunk", "c5")])]).await;
 
+        settle!(fixture);
         let page = read_ok(
             &store,
             &Query::all(),
@@ -1821,6 +1861,8 @@ pub mod rules {
             );
         };
 
+        // One settle covers the absence read and the presence reads below it.
+        settle!(fixture);
         let above = read_ok(&store, &Query::all(), ReadOptions::new().from(beyond)).await;
         assert!(
             above.is_empty(),
@@ -1901,6 +1943,7 @@ pub mod rules {
         append_ok(&store, &[event("A"), event("B")]).await;
         append_ok(&store, &[event("C")]).await;
 
+        settle!(fixture);
         let positions = positions_of(&read_ok(&store, &Query::all(), ReadOptions::new()).await);
         let mut sorted = positions.clone();
         sorted.sort_unstable();
@@ -1934,6 +1977,8 @@ pub mod rules {
         append_ok(&store, &[event("Dee"), event("Cee")]).await;
         append_ok(&store, &[event("Bee"), event("Ay")]).await;
 
+        // One settle covers the read and the head below it.
+        settle!(fixture);
         let positions = positions_of(&read_ok(&store, &Query::all(), ReadOptions::new()).await);
         assert_eq!(
             positions.len(),
@@ -1976,6 +2021,11 @@ pub mod rules {
     /// unloaded and 4010.719 ms behind an unrelated five-second write in an
     /// unrelated database, both measured — and CF-33 forbids this rule from
     /// waiting for it to pass.
+    ///
+    /// The **relation** stays a bound for that reason. The three rules that call
+    /// this helper anchor on their own appends, though, and an anchor is a
+    /// read-back: each settles the frontier before it calls this (CF-42), so the
+    /// waiting, where there is any, is the fixture's and not the rule's.
     ///
     /// The frontier is not a softening of ES-30's MUST. "The highest position
     /// currently **visible**" is the clause's own wording, and where visibility
@@ -2064,6 +2114,7 @@ pub mod rules {
         // written for it.
         let written = append_ok(&store, &[tagged_event("Seeded", &[("edge", "head")])]).await;
 
+        settle!(fixture);
         let visible = head_not_below_the_visible_log(&store).await;
         assert!(
             visible.iter().any(|event| event.position == written),
@@ -2082,9 +2133,11 @@ pub mod rules {
     /// ES-30, in the portable form ADR-0013 §4 amends the clause to: append a
     /// batch holding at least one event a narrower default query would not
     /// match, read the whole store with `Query::all()`, and assert `head()` is
-    /// not below the highest position that read yielded. It deliberately does
-    /// **not** assert read-your-own-writes;
-    /// `head_not_below_the_visible_log` carries the whole argument for why.
+    /// not below the highest position that read yielded. The relation does
+    /// **not** assert read-your-own-writes, and
+    /// `head_not_below_the_visible_log` carries the whole argument for why. The
+    /// anchor does read back the untagged append, so the rule settles the
+    /// frontier first (CF-42).
     ///
     /// # The seeding is the rule
     ///
@@ -2121,6 +2174,7 @@ pub mod rules {
         // give a query-scoped head something to miss.
         let untagged = append_ok(&store, &[event("Untagged")]).await;
 
+        settle!(fixture);
         let visible = head_not_below_the_visible_log(&store).await;
         assert!(
             visible.iter().any(|event| event.position == untagged),
@@ -2186,6 +2240,7 @@ pub mod rules {
         let low = append_ok(&writer, &[tagged_event("CaseOpened", &[("case", "head")])]).await;
         let high = append_ok(&writer, &[tagged_event("CaseSettled", &[("case", "head")])]).await;
 
+        settle!(fixture);
         let visible = head_not_below_the_visible_log(&observer).await;
         assert_eq!(
             positions_of(&visible),
@@ -2275,6 +2330,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -2351,6 +2407,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -2419,6 +2476,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -2484,6 +2542,7 @@ pub mod rules {
 
         append_ok(&store, &[consumed, again]).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -2541,6 +2600,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[tagged_event("Issued", &[("unit", "u1")])]).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -2642,6 +2702,7 @@ pub mod rules {
             )
             .await;
 
+            settle!(fixture);
             let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
             assert_eq!(
                 all.len(),
@@ -2669,6 +2730,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[tagged_event("Cee", &[("seat", "s3")])]).await;
 
+        settle!(fixture);
         let after = read_ok(&store, &query_of_types(&["Cee"]), ReadOptions::new()).await;
         assert_eq!(
             after.len(),
@@ -2723,6 +2785,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[tagged_event("Issued", &[("unit", "u1")])]).await;
 
+        settle!(fixture);
         let first = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             first.len(),
@@ -2798,6 +2861,7 @@ pub mod rules {
             let store = fixture.connect().await;
             append_ok(&store, &[tagged_event("Issued", &[("unit", "u1")])]).await;
 
+            settle!(fixture);
             let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
             assert_eq!(
                 all.len(),
@@ -2811,6 +2875,7 @@ pub mod rules {
 
         fixture.reopen().await;
 
+        settle!(fixture);
         let store = fixture.connect().await;
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
@@ -2877,6 +2942,9 @@ pub mod rules {
         )
         .await;
 
+        // Before the read that harvests the identities. The probes themselves
+        // are over what is held (ADR-0095) and need none.
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -2942,6 +3010,8 @@ pub mod rules {
         let store = fixture.connect().await;
         let returned = append_ok(&store, &[event("A"), event("B"), event("C")]).await;
 
+        // One settle covers both handles' reads.
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             Some(returned),
@@ -2976,6 +3046,9 @@ pub mod rules {
 
         assert!(result.is_err(), "the append should have been rejected");
 
+        // After the refusal, so that a row the store wrote and then refused is
+        // in the read rather than hidden above a frontier.
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             types_of(&all),
@@ -3027,6 +3100,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[event("Existing")]).await;
 
+        settle!(fixture);
         let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             types_of(&before),
@@ -3042,6 +3116,9 @@ pub mod rules {
         let batch = [event("X"), event("Y"), event("Z")];
         let outcome = store.append(&batch, None).await;
 
+        // Again, after the faulted append has finished: a row it left behind
+        // must be in this read, whichever answer the store gave.
+        settle!(fixture);
         let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         if outcome.is_err() {
             assert_eq!(
@@ -3220,6 +3297,9 @@ pub mod rules {
         append_ok(&store, &seeded).await;
 
         // The anchor: unarmed, this exact read succeeds and returns all four.
+        // Settled before the fault is armed, never after it: the armed read
+        // below expects an `Err`, and a settle in between could spend the fault.
+        settle!(fixture);
         let control = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             control.len(),
@@ -3319,6 +3399,7 @@ pub mod rules {
 
         append_ok(&store, core::slice::from_ref(&original)).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(all.len(), 1);
         assert_eq!(
@@ -3379,6 +3460,7 @@ pub mod rules {
         ];
         append_ok(&store, &batch).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -3494,6 +3576,8 @@ pub mod rules {
              store that already holds the first and refuses it. Got {landed:?}"
         );
 
+        // The refused reissue below is not read back, so this is the one settle.
+        settle!(fixture);
         let stored = read_ok(&store, &query_of_types(&["Enrolled"]), ReadOptions::new()).await;
         assert_eq!(
             stored.len(),
@@ -3560,6 +3644,7 @@ pub mod rules {
         let store = fixture.connect().await;
         append_ok(&store, &[tagged_event("Existing", &[("row", "seed")])]).await;
 
+        settle!(fixture);
         let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             types_of(&before),
@@ -3588,6 +3673,9 @@ pub mod rules {
             assert_appended(outcome);
         }
 
+        // After the dropped future's block, so that nothing of the rule's own is
+        // still in flight: a settle that waited on it would never return.
+        settle!(fixture);
         let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         let landed = after.len().saturating_sub(before.len());
         assert!(
@@ -3710,6 +3798,9 @@ pub mod rules {
              outcome. Got {second:?}"
         );
 
+        // After the refused reissue, so that a second copy the store wrote and
+        // then refused is counted rather than hidden.
+        settle!(fixture);
         let all = read_ok(&store, &query, ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -3755,6 +3846,7 @@ pub mod rules {
         append_ok(&store, core::slice::from_ref(&noted)).await;
         append_ok(&store, core::slice::from_ref(&noted)).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &query_of_types(&["Noted"]), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -3851,6 +3943,7 @@ pub mod rules {
              admitted. Got {second:?}"
         );
 
+        settle!(fixture);
         let all = read_ok(
             &store,
             &query_of_types(&["StudentSubscribed"]),
@@ -3921,6 +4014,7 @@ pub mod rules {
             event_with_payload("Zeroed", b"").with_tags(tags(&[("edge", "empty-payload")]));
         append_ok(&store, core::slice::from_ref(&original)).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -3977,6 +4071,7 @@ pub mod rules {
         )
         .await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         let find = |wanted: &str| {
             all.iter()
@@ -4063,6 +4158,7 @@ pub mod rules {
 
         append_ok(&store, core::slice::from_ref(&original)).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(all.len(), 1, "the store must hold the event it accepted");
         assert_eq!(
@@ -4121,6 +4217,7 @@ pub mod rules {
         let first = append_ok(&store, core::slice::from_ref(&ordered)).await;
         append_ok(&store, core::slice::from_ref(&acknowledged)).await;
 
+        settle!(fixture);
         // Read by type rather than through `Query::all()`, because the second
         // read is the one that matters here: a store that keeps the bytes and
         // mangles the index passes a round trip and fails this.
@@ -4205,6 +4302,7 @@ pub mod rules {
 
         append_ok(&store, core::slice::from_ref(&original)).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(all.len(), 1, "the store must hold the event it accepted");
         assert_eq!(
@@ -4266,6 +4364,7 @@ pub mod rules {
 
         append_ok(&store, core::slice::from_ref(&original)).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(all.len(), 1, "the store must hold the event it accepted");
         assert_eq!(
@@ -4325,6 +4424,7 @@ pub mod rules {
              rule testing a smaller number than it claims"
         );
 
+        settle!(fixture);
         let found = read_ok(&store, &query, ReadOptions::new()).await;
         assert_eq!(
             positions_of(&found),
@@ -4378,6 +4478,7 @@ pub mod rules {
             .collect();
         append_ok(&store, &batch).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             all.len(),
@@ -4444,6 +4545,7 @@ pub mod rules {
         let first = append_ok(&store, &[tagged_event("Ordered", &[("shop", composed)])]).await;
         let second = append_ok(&store, &[tagged_event("Ordered", &[("shop", decomposed)])]).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             positions_of(&all),
@@ -4526,6 +4628,7 @@ pub mod rules {
 
         let written = append_ok(&store, core::slice::from_ref(&shared)).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(all.len(), 1, "the store must hold the event it accepted");
         assert_eq!(
@@ -4602,6 +4705,7 @@ pub mod rules {
         let original = tagged_event(padded_type, &[("turbine", padded_value)]);
         let written = append_ok(&store, core::slice::from_ref(&original)).await;
 
+        settle!(fixture);
         let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(all.len(), 1, "the store must hold the event it accepted");
         assert_eq!(
@@ -4723,20 +4827,28 @@ pub mod rules {
         let fixture = open().await;
         let store = fixture.connect().await;
 
-        if let Some(ceiling) = F::MAX_EVENT_DATA_LEN {
-            payload_ceiling_is_honoured(&store, ceiling).await;
-        }
-        if let Some(ceiling) = F::MAX_TAGS_PER_EVENT {
-            tag_ceiling_is_honoured(&store, ceiling).await;
-        }
-        if let Some(ceiling) = F::MAX_EVENTS_PER_BATCH {
-            batch_ceiling_is_honoured(&store, ceiling).await;
-        }
-        if let Some(ceiling) = F::MAX_METADATA_LEN {
-            metadata_ceiling_is_honoured(&store, ceiling).await;
-        }
+        // Each helper settles after its refused append and before it looks for
+        // leftovers (CF-42), so it hands back the skip when the fixture cannot.
+        let checked = async {
+            if let Some(ceiling) = F::MAX_EVENT_DATA_LEN {
+                payload_ceiling_is_honoured(&fixture, &store, ceiling).await?;
+            }
+            if let Some(ceiling) = F::MAX_TAGS_PER_EVENT {
+                tag_ceiling_is_honoured(&fixture, &store, ceiling).await?;
+            }
+            if let Some(ceiling) = F::MAX_EVENTS_PER_BATCH {
+                batch_ceiling_is_honoured(&fixture, &store, ceiling).await?;
+            }
+            if let Some(ceiling) = F::MAX_METADATA_LEN {
+                metadata_ceiling_is_honoured(&fixture, &store, ceiling).await?;
+            }
+            Ok(())
+        };
 
-        RuleOutcome::Ran
+        match checked.await {
+            Ok(()) => RuleOutcome::Ran,
+            Err(skip) => skip,
+        }
     }
 
     /// One ceiling of `append_reports_exceeded_store_limits`, checked at both
@@ -4755,7 +4867,16 @@ pub mod rules {
     /// rules would cost three registry entries, three changelog entries and three
     /// clause `Rule:` lines for three failures that can only arrive together in
     /// an adapter that got its capacity reporting wrong once.
-    async fn payload_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
+    ///
+    /// Each helper settles the frontier after its refused append and before the
+    /// leftovers read (CF-42), and hands back the skip when the fixture cannot:
+    /// an absence check over a frontier that hid the at-the-ceiling row would
+    /// also hide a refused row the store wrote anyway.
+    async fn payload_ceiling_is_honoured<F: Fixture>(
+        fixture: &F,
+        store: &F::Store,
+        ceiling: usize,
+    ) -> Result<(), RuleOutcome> {
         let at = event_with_owned_payload("AtTheCeiling", patterned(ceiling))
             .with_tags(tags(&[("edge", "data-at")]));
         append_ok(store, core::slice::from_ref(&at)).await;
@@ -4779,6 +4900,7 @@ pub mod rules {
             ceiling + 1
         );
 
+        crate::settle::settled(fixture).await?;
         let leftovers = read_ok(
             store,
             &query_tagged(&[("edge", "data-over")]),
@@ -4791,10 +4913,15 @@ pub mod rules {
              not be in the log in any form. Got {:?}",
             positions_of(&leftovers)
         );
+        Ok(())
     }
 
     /// The tag-count ceiling. See [`payload_ceiling_is_honoured`].
-    async fn tag_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
+    async fn tag_ceiling_is_honoured<F: Fixture>(
+        fixture: &F,
+        store: &F::Store,
+        ceiling: usize,
+    ) -> Result<(), RuleOutcome> {
         let owned: Vec<(String, String)> = (0..=ceiling)
             .map(|n| (format!("k{n:05}"), format!("v{n:05}")))
             .collect();
@@ -4837,6 +4964,7 @@ pub mod rules {
             ceiling + 1
         );
 
+        crate::settle::settled(fixture).await?;
         let leftovers = read_ok(
             store,
             &query_of_types(&["TagsOverTheCeiling"]),
@@ -4850,10 +4978,15 @@ pub mod rules {
              never find, with no error anywhere. Got {} event(s)",
             leftovers.len()
         );
+        Ok(())
     }
 
     /// The batch-size ceiling. See [`payload_ceiling_is_honoured`].
-    async fn batch_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
+    async fn batch_ceiling_is_honoured<F: Fixture>(
+        fixture: &F,
+        store: &F::Store,
+        ceiling: usize,
+    ) -> Result<(), RuleOutcome> {
         let at: Vec<Event> = (0..ceiling)
             .map(|n| tagged_event("BatchAtTheCeiling", &[("n", format!("{n:05}").as_str())]))
             .collect();
@@ -4879,6 +5012,7 @@ pub mod rules {
             ceiling + 1
         );
 
+        crate::settle::settled(fixture).await?;
         let leftovers = read_ok(
             store,
             &query_of_types(&["BatchOverTheCeiling"]),
@@ -4893,6 +5027,7 @@ pub mod rules {
              tail. Got {} event(s) of a refused batch in the store",
             leftovers.len()
         );
+        Ok(())
     }
 
     /// The metadata ceiling (ADR-0043). See [`payload_ceiling_is_honoured`].
@@ -4900,7 +5035,11 @@ pub mod rules {
     /// The refusal must name `MetadataLen`, never `EventDataLen`: the payload
     /// here is a few bytes, so a store naming `data` names the field that was
     /// not too long. No floor is asserted, because ADR-0043 sets none.
-    async fn metadata_ceiling_is_honoured<S: EventStore>(store: &S, ceiling: usize) {
+    async fn metadata_ceiling_is_honoured<F: Fixture>(
+        fixture: &F,
+        store: &F::Store,
+        ceiling: usize,
+    ) -> Result<(), RuleOutcome> {
         let at = tagged_event("MetadataAtTheCeiling", &[("edge", "metadata-at")])
             .with_metadata(patterned(ceiling));
         append_ok(store, core::slice::from_ref(&at)).await;
@@ -4924,6 +5063,7 @@ pub mod rules {
             ceiling + 1
         );
 
+        crate::settle::settled(fixture).await?;
         let leftovers = read_ok(
             store,
             &query_tagged(&[("edge", "metadata-over")]),
@@ -4936,6 +5076,7 @@ pub mod rules {
              metadata clipped: it must not be in the log in any form. Got {:?}",
             positions_of(&leftovers)
         );
+        Ok(())
     }
 
     /// `len` bytes of a repeating non-zero pattern, for the two byte ceilings.
@@ -5482,6 +5623,7 @@ pub mod rules {
         let fixture = open().await;
         let store = fixture.connect().await;
         append_ok(&store, &[event("A"), event("B")]).await;
+        settle!(fixture);
         let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             types_of(&before),
@@ -5495,6 +5637,9 @@ pub mod rules {
             .append(&[event("C")], Some(&condition(query_of_types(&["A"]))))
             .await;
 
+        // Again after the refusal, so that a row it left behind is in `after`
+        // and in `elsewhere` rather than above a frontier.
+        settle!(fixture);
         let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             before, after,
@@ -5923,6 +6068,9 @@ pub mod rules {
              enforced at all. Got {second:?}"
         );
 
+        // After the loser's refusal, so that a losing row the store wrote anyway
+        // is counted rather than hidden above a frontier.
+        settle!(fixture);
         let all = read_ok(
             &store,
             &query_of_types(&["StudentSubscribed"]),
@@ -6037,6 +6185,10 @@ pub mod rules {
              rather than as an adapter error. Got {outcomes:?}"
         );
 
+        // Only now, with both futures finished. A settle while either was still
+        // suspended would wait on the rule's own append, which on a store like
+        // `happenstance-postgres` never finishes while the rule is waiting.
+        settle!(fixture);
         let landed = read_ok(
             &store,
             &query_of_types(&["StudentSubscribed"]),
@@ -6076,6 +6228,9 @@ pub mod rules {
         let fixture = open().await;
         let store = fixture.connect().await;
         let seeded = append_ok(&store, &[event("Seeded")]).await;
+
+        // Before the stream opens, so that the seed is what it is opened over.
+        settle!(fixture);
 
         // Bound to a named local rather than passed as a temporary: under
         // edition 2024 `read`'s RPITIT captures every in-scope lifetime, so the
@@ -6170,6 +6325,7 @@ pub mod rules {
         let two = append_ok(&store, &[tagged_event("Seeded", &[("writer", "b2")])]).await;
         let three = append_ok(&store, &[tagged_event("Seeded", &[("writer", "b3")])]).await;
 
+        settle!(fixture);
         let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             positions_of(&before),
@@ -6199,6 +6355,10 @@ pub mod rules {
 
         let later = append_ok(&store, &[tagged_event("Later", &[("writer", "after")])]).await;
 
+        // With the stream pinned and no append of the rule's in flight. A store
+        // that re-samples per page must be able to see `later` when it does, or
+        // a frontier would hide its defect; this settle also covers `after`.
+        settle!(fixture);
         drained.extend(drain_rest(stream.as_mut()).await);
 
         assert_eq!(
@@ -6274,6 +6434,7 @@ pub mod rules {
         // Two disjoint items, and the second is what the late append will match.
         let query = query_of_items([item_of_types(&["Alpha"]), item_of_types(&["Omega"])]);
 
+        settle!(fixture);
         let before = read_ok(&store, &query, ReadOptions::new()).await;
         assert_eq!(
             positions_of(&before),
@@ -6302,6 +6463,9 @@ pub mod rules {
         // `reissued_unconditional_batch_lands_twice` already owns.
         let late = append_ok(&store, &[tagged_event("Omega", &[("item", "late")])]).await;
 
+        // As in `read_result_is_stable_under_concurrent_append`: a later
+        // statement must be able to see `late`, or a frontier hides the tear.
+        settle!(fixture);
         drained.extend(drain_rest(stream.as_mut()).await);
 
         assert_eq!(
@@ -6537,6 +6701,13 @@ pub mod rules {
         if !slow_done {
             assert_appended(Some(slow.await));
         }
+        // The one settle, and it is here because nowhere earlier is allowed:
+        // before this line the slow writer is suspended, and on a store like
+        // `happenstance-postgres` a settle waits for every open writer, the
+        // rule's own included (CF-42). Steps 1 and 2 therefore read whatever a
+        // frontier store shows, which is ES-10's own subject; this read is the
+        // anchor's.
+        settle!(fixture);
         observe(&store, &mut seen, "after the slow writer committed").await;
 
         // The non-vacuity anchor. Without it a store that returned nothing from
@@ -6685,6 +6856,10 @@ pub mod rules {
         let store = fixture.connect().await;
 
         append_ok(&store, &[event("Anchor")]).await;
+        // Before the arming and never after it: an armed row is held above the
+        // frontier for the rest of the fixture's life, so a settle there would
+        // never return (CF-42).
+        settle!(fixture);
         let anchored = read_ok(&store, &Query::all(), ReadOptions::new()).await;
         assert_eq!(
             anchored.len(),

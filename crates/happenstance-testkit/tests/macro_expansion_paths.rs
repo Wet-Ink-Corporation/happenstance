@@ -64,9 +64,10 @@ use std::collections::BTreeSet;
 /// time and a file that stops existing is a build error rather than a silently
 /// shorter scan. [`every_macro_carrying_file_is_scanned`] is what stops the list
 /// going stale in the other direction.
-const SOURCES: [(&str, &str); 7] = [
+const SOURCES: [(&str, &str); 8] = [
     ("src/lib.rs", include_str!("../src/lib.rs")),
     ("src/registry.rs", include_str!("../src/registry.rs")),
+    ("src/settle.rs", include_str!("../src/settle.rs")),
     ("src/suite.rs", include_str!("../src/suite.rs")),
     ("src/projection.rs", include_str!("../src/projection.rs")),
     ("src/concurrency.rs", include_str!("../src/concurrency.rs")),

@@ -991,3 +991,9 @@ impl ProjectionSubject for MemoryProjectionFixture {
 // `proptest` because the model family is, and nothing else drives them.
 #[cfg(feature = "proptest")]
 pub(crate) mod trailing;
+
+// CF-42's instrument: any registered fixture behind a lag that only its
+// fixture's `settle_frontier` ends, and the meta-tests that measure the
+// read-back rules against it. Declared here for `trailing`'s reason, and not
+// feature-gated, because the rules it drives are not.
+pub(crate) mod lagging;
