@@ -2692,6 +2692,58 @@ fn reports() -> Vec<SubjectReport> {
     for_each_mutant!(run_each)
 }
 
+/// Hands every registered store a lag can reach to `$callback`.
+///
+/// A subset of [`for_each_mutant!`], and the subset is measured rather than
+/// chosen. After a settle the lag shows everything until the next acknowledged
+/// append, so a store behind it answers a rule exactly as it answers without it,
+/// unless the rule reads while the lag runs. `Tripwire` finds those rules, and
+/// `the_lag_exposed_stores_are_every_store_a_lag_can_reach` requires this list
+/// to be exactly the registered stores that fail one of them.
+///
+/// Not every store, because each type here instantiates the whole event-store
+/// family once more. All 99 doubled this binary's peak compile memory past
+/// 15 GB, which neither this machine nor a CI runner has.
+macro_rules! for_each_lag_exposed {
+    ($($callback:tt)+) => {
+        $($callback)+! {
+            crate::mutants::UnarmedFrontierFixture,
+            crate::mutants::EmptyArmFrontierFixture,
+            crate::variants::FrontierFixture<crate::mutants::FrontierFilteredMembership>,
+            crate::mutants::PreCommitPositionFixture,
+            crate::mutants::PollPaddedPositionFixture,
+            crate::mutants::AwaitAcrossBorrowFixture,
+        }
+    };
+}
+
+/// Every store a lag can reach, behind CF-42's settling lag, through every rule.
+///
+/// Here rather than in `variants/lagging/parity.rs`, which reads it, because
+/// `for_each_lag_exposed!` is in scope only below its definition in this file.
+fn lagging_reports() -> Vec<SubjectReport> {
+    macro_rules! run_each {
+        ($($subject:ty),* $(,)?) => {
+            ::std::vec![ $(
+                crate::harness::run_subject::<crate::variants::lagging::LaggingFixture<$subject>>()
+            ),* ]
+        };
+    }
+
+    for_each_lag_exposed!(run_each)
+}
+
+/// The `NAME` of every store in [`for_each_lag_exposed!`].
+fn lag_exposed_names() -> Vec<&'static str> {
+    macro_rules! names {
+        ($($subject:ty),* $(,)?) => {
+            ::std::vec![ $( <$subject as crate::harness::Subject>::NAME ),* ]
+        };
+    }
+
+    for_each_lag_exposed!(names)
+}
+
 /// The `NAME` of every registered store, from the store types themselves.
 fn registered_names() -> Vec<&'static str> {
     macro_rules! names {
@@ -3542,6 +3594,36 @@ fn racer_reports() -> Vec<(&'static str, &'static str, RacerOutcome, String)> {
         ($($subject:ty),* $(,)?) => {
             ::std::vec![ $(
                 crate::harness::concurrency_probes::<$subject>()
+                    .into_iter()
+                    .map(|probe| {
+                        let verdict = crate::harness::run_probe(probe);
+                        (
+                            <$subject as crate::harness::Subject>::NAME,
+                            probe.name,
+                            racer_outcome(&verdict),
+                            verdict.describe(),
+                        )
+                    })
+                    .collect::<::std::vec::Vec<_>>()
+            ),* ]
+        };
+    }
+
+    let per_subject: Vec<Vec<_>> = for_each_racer!(run_each);
+    per_subject.into_iter().flatten().collect()
+}
+
+/// [`racer_reports`] with every racing store behind CF-42's settling lag.
+///
+/// Beside it for [`lagging_reports`]'s reason: `for_each_racer!` is in scope
+/// only below its definition.
+fn lagging_racer_reports() -> Vec<(&'static str, &'static str, RacerOutcome, String)> {
+    macro_rules! run_each {
+        ($($subject:ty),* $(,)?) => {
+            ::std::vec![ $(
+                crate::harness::concurrency_probes::<
+                    crate::variants::lagging::LaggingFixture<$subject>,
+                >()
                     .into_iter()
                     .map(|probe| {
                         let verdict = crate::harness::run_probe(probe);
@@ -4438,7 +4520,10 @@ mod mutation_coverage {
     }
 
     /// The undeclared half of CF-3: a pass, or a skip the fixture accounted for.
-    fn assert_undeclared_outcome(
+    ///
+    /// `pub(crate)` for CF-42's parity test, which holds every mutant behind a
+    /// settling lag to this same bar rather than to a copy of it.
+    pub(crate) fn assert_undeclared_outcome(
         entry: &Declared,
         declines: &[(&'static str, &'static str)],
         rule: &str,
@@ -4468,7 +4553,9 @@ mod mutation_coverage {
 
     /// The declared-failure half of CF-3, including CF-2's *wrong reason*
     /// hazard.
-    fn assert_declared_failure(entry: &Declared, rule: &str, verdict: &Verdict) {
+    ///
+    /// `pub(crate)` for [`assert_undeclared_outcome`]'s reason.
+    pub(crate) fn assert_declared_failure(entry: &Declared, rule: &str, verdict: &Verdict) {
         let Verdict::Panicked { message, origin } = verdict else {
             // Three outcomes, three readings, and conflating the last two is
             // exactly what breaks CF-3. A rule that *passed* means the defect is

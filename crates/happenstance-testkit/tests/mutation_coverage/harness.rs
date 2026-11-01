@@ -532,6 +532,25 @@ pub(crate) fn run_subject<S: Subject>() -> SubjectReport {
     }
 }
 
+/// [`run_subject`] for the concurrency family.
+///
+/// The racer meta-tests classify each verdict as they go and need no report;
+/// CF-42's need the declines beside the verdicts, as [`run_subject`] keeps them.
+pub(crate) fn run_concurrency_subject<S>() -> SubjectReport
+where
+    S: Subject,
+    S::Store: Send,
+{
+    SubjectReport {
+        name: S::NAME,
+        outcomes: concurrency_probes::<S>()
+            .into_iter()
+            .map(|probe| (probe.name, run_probe(probe)))
+            .collect(),
+        declines: declines::<S>(),
+    }
+}
+
 // =====================================================================
 // The same three things, for the projection family
 // =====================================================================

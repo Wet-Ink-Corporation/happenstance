@@ -14,6 +14,8 @@
 //!   report a skip under `READ_YOUR_OWN_WRITES`.
 //! - [`EmptySettle`] answers `Visible` and settles nothing: the lying
 //!   override, `EmptyArmFrontierFixture`'s analogue one hook over.
+//! - [`Tripwire`] settles as [`Settles`] does, and panics on any read or `head`
+//!   issued while the lag runs. It finds the rules a lag can reach at all.
 //!
 //! # The lag, and what it deliberately does not hide
 //!
@@ -130,6 +132,20 @@ impl Lag {
 pub(crate) struct LaggingStore<S> {
     inner: S,
     lag: Lag,
+    /// [`Mode::TRIPS`], copied at `connect`.
+    trips: bool,
+}
+
+/// The panic [`Tripwire`] raises, which `parity.rs` reads back.
+pub(crate) const TRIPPED: &str = "the lagging instrument's tripwire: a read during a lag";
+
+impl<S> LaggingStore<S> {
+    /// The cap a read or `head` issued now applies, after the tripwire.
+    fn cap(&self) -> Cap {
+        let cap = self.lag.with(|state| state.cap());
+        assert!(!(self.trips && cap != Cap::ShowAll), "{TRIPPED}");
+        cap
+    }
 }
 
 /// The inner store's read stream, with the rows above the cap removed.
@@ -167,7 +183,7 @@ impl<S: EventStore> EventStore for LaggingStore<S> {
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
         Lagged {
             inner: Box::pin(self.inner.read(query, options)),
-            cap: self.lag.with(|state| state.cap()),
+            cap: self.cap(),
         }
     }
 
@@ -185,7 +201,7 @@ impl<S: EventStore> EventStore for LaggingStore<S> {
 
     async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
         let inner = self.inner.head().await?;
-        Ok(self.lag.with(|state| state.cap()).head(inner))
+        Ok(self.cap().head(inner))
     }
 
     // Held, whatever a read shows (ADR-0095), so the lag does not apply.
@@ -202,6 +218,8 @@ impl<S: EventStore> EventStore for LaggingStore<S> {
 pub(crate) trait Mode {
     /// The behaviour, as data the fixture matches on.
     const SETTLE: Settle;
+    /// Whether a read or `head` issued during a lag panics with [`TRIPPED`].
+    const TRIPS: bool = false;
 }
 
 /// The three answers a lagging fixture can give a settle.
@@ -237,6 +255,19 @@ pub(crate) struct EmptySettle;
 
 impl Mode for EmptySettle {
     const SETTLE: Settle = Settle::Lie;
+}
+
+/// The conformant override, with a read during a lag made loud.
+///
+/// It finds the rules that read while the lag runs. Only those can answer a
+/// lagging store differently from the store it wraps, because after a settle the
+/// lag shows everything until the next acknowledged append.
+#[derive(Debug)]
+pub(crate) struct Tripwire;
+
+impl Mode for Tripwire {
+    const SETTLE: Settle = Settle::Reveal;
+    const TRIPS: bool = true;
 }
 
 // =====================================================================
@@ -298,6 +329,7 @@ impl<F: Fixture, M: Mode> Fixture for LaggingFixture<F, M> {
             inner: self.inner.connect().await,
             // A cheap handle onto the one lag every handle shares.
             lag: Lag(Arc::clone(&self.lag.0)),
+            trips: M::TRIPS,
         }
     }
 
@@ -347,7 +379,12 @@ impl<F: Subject, M: Mode> Subject for LaggingFixture<F, M> {
     }
 }
 
+// Which named rules read back their own writes, as data.
+mod inventory;
+// The wrapper that panics if a rule settles a fixture that reads its writes.
+mod never_asked;
 // The meta-tests that run the suite against this instrument.
+mod parity;
 mod settled;
 
 // =====================================================================
