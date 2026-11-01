@@ -922,12 +922,12 @@ ADR-0100 is written straight here with no intake step, and is **proposed**. A de
 Object reset on one call of 757 and of 1,016 events of 1,024 tags. `happenstance-core` gains
 `StoreLimit::TagsPerBatch` and `MIN_SUPPORTED_TAGS_PER_BATCH` (8,192), `happenstance-sync` classes
 the refusal `Split`, the testkit gains `Fixture::MAX_TAGS_PER_BATCH`, and `happenstance-cloudflare`
-declares 524,288 tags per call. It mints VT-36 `[PROVISIONAL]`, narrows published behaviour as
+declares 262,144 tags per call, lowered from 524,288 after #371's reset. It mints VT-36 `[PROVISIONAL]`, narrows published behaviour as
 ADR-0093 did, and supersedes nothing.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0100 | [`kb-decision-0100`](../decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md) | happenstance-cloudflare declares a ceiling of 524,288 tags per call, refused as StoreLimit::TagsPerBatch | proposed | — | — |
+| ADR-0100 | [`kb-decision-0100`](../decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md) | happenstance-cloudflare declares a ceiling of 262,144 tags per call, refused as StoreLimit::TagsPerBatch | proposed | — | — |
 
 ## Adding a row
 

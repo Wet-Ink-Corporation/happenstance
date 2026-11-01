@@ -644,9 +644,9 @@ fn the_readme_states_the_metadata_ceiling() {
 /// CF-40's tags-per-batch ceiling (VT-36, ADR-0100) is stated in the README,
 /// on the line that names the variant it is refused as.
 ///
-/// Line-scoped on purpose: 524,288 is also the metadata ceiling (512 KiB), so
-/// a README-wide search for the number is already satisfied and proves
-/// nothing.
+/// Line-scoped on purpose: the README states five ceilings and the walls they
+/// sit under, and this one's old number, 524,288, is the metadata ceiling, so
+/// a README-wide search for a number proves nothing.
 #[test]
 fn the_readme_states_the_tags_per_batch_ceiling() {
     let readme = packaged("README.md");

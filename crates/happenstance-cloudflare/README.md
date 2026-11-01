@@ -212,7 +212,7 @@ landed.
 | tags per event | 1,024 | `… limit: StoreLimit::TagsPerEvent` |
 | events per append | 1,024 | `… limit: StoreLimit::EventsPerBatch` |
 | `metadata` per event | 524,288 bytes (512 KiB) | `… limit: StoreLimit::MetadataLen` |
-| tags per call, summed over its events | 524,288 | `… limit: StoreLimit::TagsPerBatch` |
+| tags per call, summed over its events | 262,144 | `… limit: StoreLimit::TagsPerBatch` |
 
 Read the first four as **this adapter's stated refusal policy, not a measured
 physical wall** — the difference is the whole of what is honest here. No physical wall was
@@ -228,10 +228,10 @@ and reproducibly: the declared value is accepted and read back byte-for-byte, an
 one more is refused, naming the ceiling it crossed.
 
 The fifth is different: it **is** placed against a wall a deployed object hit. One
-call of 757 events of 1,024 tags each (775,168 tag rows) ran past a deployed
-object's CPU limit and reset it, and one of 1,016 such events ran past its
-storage-operation timeout. 524,288 tags is 512 such events, 1.48 times below the
-lower wall and 64 times the `MIN_SUPPORTED_TAGS_PER_BATCH` floor of 8,192
+call of 757 events of 1,024 tags each ran past a deployed object's CPU limit and
+reset it, and one of 1,016 such events, and later one of 512, ran past its
+storage-operation timeout. 262,144 tags is 256 such events, half the lowest
+wall and 32 times the `MIN_SUPPORTED_TAGS_PER_BATCH` floor of 8,192
 ([ADR-0100](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md)).
 An `ingest` call counts every foreign event and every compensation toward it, and a
 sync runner reads the refusal as `Split`: the call is too big, and its events are

@@ -330,12 +330,12 @@ impl Ceilings {
     ///   fixed-width columns and SQLite's record header. ADR-0043 sets no
     ///   metadata floor, so any number is legal; this one is the largest
     ///   power of two that fits beside the three above.
-    /// * **`tags_per_batch` — 524,288.** Measured, not carved, and the one
+    /// * **`tags_per_batch` — 262,144.** Measured, not carved, and the one
     ///   number here placed against a wall a deployed object hit: one call
-    ///   reset the object at 757 × 1,024 tags (775,168 tag rows, the CPU limit,
-    ///   2026-11-01) and at 1,016 × 1,024 (the storage timeout, 2026-10-31).
-    ///   512 events at `tags_per_event` is 1.48 times below the lower of the
-    ///   two, and 64 times the `MIN_SUPPORTED_TAGS_PER_BATCH` floor
+    ///   reset the object at 512 × 1,024 tags (the storage timeout, #371), at
+    ///   757 × 1,024 (the CPU limit, both 2026-11-01) and at 1,016 × 1,024.
+    ///   256 events at `tags_per_event` is half the lowest of the three, and
+    ///   32 times the `MIN_SUPPORTED_TAGS_PER_BATCH` floor
     ///   (ADR-0100). It is at least `tags_per_event`, so an event within its
     ///   own ceiling is never refused as a batch of one, and below
     ///   `events_per_batch × tags_per_event`, so it can be reached.
@@ -344,7 +344,7 @@ impl Ceilings {
         tags_per_event: 1024,
         events_per_batch: 1024,
         metadata_len: 512 * 1024,
-        tags_per_batch: 512 * 1024,
+        tags_per_batch: 256 * 1024,
     };
 
     /// A store that refuses nothing, for the tests that supply their own.
