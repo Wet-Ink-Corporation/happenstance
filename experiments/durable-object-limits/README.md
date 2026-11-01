@@ -267,8 +267,7 @@ limit it is cannot be declared at its measured position, so ADR-0100 declared
 `StoreLimit::TagsPerBatch`. That number did not hold: on 2026-11-01 (PR #371, job
 124961271831) the strict deployed conformance leg's `append` of 512 events of
 1,024 tags reset the object, `storage operation exceeded timeout`, after passing
-once on #367's run. It is not in `results/`, which keep the ingest walls as
-recorded. ADR-0100 now declares **262,144** (256 such events), half that wall.
+once on #367's run ([`results/run-workerd-deployed-2026-11-01-append-reset.txt`](results/run-workerd-deployed-2026-11-01-append-reset.txt)). ADR-0100 now declares **262,144** (256 such events), half that wall.
 The adapter refuses a call over it before any SQL, `class=Split`, so the
 `max-tags` bisection finds 256 and the call above it is the adapter's own
 refusal, on both legs. `Ceilings::DECLARED.events_per_batch`

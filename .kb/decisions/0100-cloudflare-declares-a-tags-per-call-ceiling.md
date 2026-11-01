@@ -68,11 +68,12 @@ The `workerd` harness's deployed leg measured what a real object does with that:
 | --- | --- | --- |
 | 2026-10-31, run 41173513607 | 1,016 × 1,024 = 1,040,384 tag rows | `storage operation exceeded timeout which caused object to be reset` |
 | 2026-11-01, run 41326218022 | 757 × 1,024 = 775,168 tag rows | `exceeded its CPU time limit and was reset` |
+| 2026-11-01, run 41344471106 (append, #371) | none at 512 × 1,024 = 524,288 tag rows, which had committed once on #367's run | `storage operation exceeded timeout which caused object to be reset` |
 
-Both are in `experiments/durable-object-limits/results/`. A reset is not an answer from the
+All three are in `experiments/durable-object-limits/results/`. A reset is not an answer from the
 adapter, so the call fails with no class, and a sync runner cannot tell it from a transport fault.
 The second run was taken after #365 stopped the harness owning a copy of every tag name, so its wall
-is the runtime's. The wall moved 1.34 times between two runs and changed which limit it was; no
+is the runtime's. The wall moved 1.98 times across three runs and changed which limit it was; no
 count says exactly where it is.
 
 The contract had no way to say "this call carries too many tags in total": every `StoreLimit`

@@ -333,7 +333,7 @@ impl Ceilings {
     /// * **`tags_per_batch` — 262,144.** Measured, not carved, and the one
     ///   number here placed against a wall a deployed object hit: one call
     ///   reset the object at 512 × 1,024 tags (the storage timeout, #371), at
-    ///   757 × 1,024 (the CPU limit, both 2026-11-01) and at 1,016 × 1,024.
+    ///   757 × 1,024 (the CPU limit, both 2026-11-01) and 1,016 × 1,024 (2026-10-31).
     ///   256 events at `tags_per_event` is half the lowest of the three, and
     ///   32 times the `MIN_SUPPORTED_TAGS_PER_BATCH` floor
     ///   (ADR-0100). It is at least `tags_per_event`, so an event within its

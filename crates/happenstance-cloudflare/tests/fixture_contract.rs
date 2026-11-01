@@ -520,7 +520,8 @@ fn the_tags_per_batch_limit_is_declared_not_defaulted() {
 /// own ceiling is never refused as a batch of one, and below events × tags per
 /// event, so one tag over it can be sent. Clear: the lowest measured wall is
 /// 512 events of 1,024 tags, 524,288 tag rows, at which a deployed object hit
-/// its storage timeout and was reset (#371's strict leg, 2026-11-01); above it
+/// its storage timeout and was reset (`…/run-workerd-deployed-2026-11-01-append-reset.txt`,
+/// #371's strict leg); above it
 /// are 757 × 1,024, the CPU limit
 /// (`experiments/durable-object-limits/results/run-workerd-deployed-2026-11-01-ingest.txt`),
 /// and 1,016 × 1,024 (`…/run-workerd-deployed-2026-10-31-ingest.txt`). The
