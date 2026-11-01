@@ -11,8 +11,10 @@
 
 // What is searched, and how far. `minimal` and `max-tags` stop one past the
 // adapter's declared 1,024 events per call, so the top answers the adapter's
-// own refusal (`class=Split`); `max-data` stops at 256 MiB in one call, twice
-// the deployed isolate's 128 MiB memory limit, src/probe.rs's "twice the
+// own refusal (`class=Split`); `max-tags` meets the adapter's 524,288 tags per
+// call first, so its bisection finds 512 and the refusal above it names the
+// total (ADR-0100). `max-data` stops at 256 MiB in one call, twice the
+// deployed isolate's 128 MiB memory limit, src/probe.rs's "twice the
 // platform's own ceiling" convention.
 export const SHAPES = [
   { shape: "minimal", searchedTo: 1025 },

@@ -3,7 +3,10 @@ use std::collections::BTreeSet;
 use happenstance_cloudflare::happenstance_sync::{FailureClass, ReplicatedEvent};
 use happenstance_core::{EventId, SequencePosition, Tag};
 
-use super::{Attempt, CEILING_ORIGIN, MAX_EVENTS_PER_CALL, Shape, ShapeError, foreign_batch};
+use super::{
+    Attempt, CEILING_ORIGIN, MAX_EVENTS_PER_CALL, MAX_TAGS_EVENTS_AT_CEILING, Shape, ShapeError,
+    foreign_batch,
+};
 use crate::fixture::WorkerdFixture;
 
 fn at(position: u64) -> EventId {
@@ -142,4 +145,32 @@ fn the_tag_names_are_unchanged() {
         let expected: Vec<&str> = expected.iter().map(String::as_str).collect();
         assert_eq!(names, expected, "{shape:?}");
     }
+}
+
+/// The `max-tags` shape's wall is now the adapter's own refusal: 512 events of
+/// 1,024 tags is exactly the declared tags-per-batch ceiling, and 513 is over
+/// it (VT-36, ADR-0100). Arithmetic only, from the fixture's declarations: 513
+/// events of 1,024 tags is half a million owned tags, which this host has no
+/// business building.
+#[test]
+fn the_max_tags_shape_crosses_the_tags_per_batch_ceiling_past_512_events() {
+    let fixture = |name: &str, declared: Option<usize>| {
+        declared.unwrap_or_else(|| panic!("{name} is declared by this fixture"))
+    };
+    let per_batch = fixture(
+        "MAX_TAGS_PER_BATCH",
+        <WorkerdFixture<'static> as happenstance_testkit::Fixture>::MAX_TAGS_PER_BATCH,
+    );
+    let per_event = fixture(
+        "MAX_TAGS_PER_EVENT",
+        <WorkerdFixture<'static> as happenstance_testkit::Fixture>::MAX_TAGS_PER_EVENT,
+    );
+
+    assert_eq!(MAX_TAGS_EVENTS_AT_CEILING, 512);
+    assert_eq!(MAX_TAGS_EVENTS_AT_CEILING * per_event, per_batch);
+    assert!((MAX_TAGS_EVENTS_AT_CEILING + 1) * per_event > per_batch);
+    assert!(
+        MAX_TAGS_EVENTS_AT_CEILING < MAX_EVENTS_PER_CALL,
+        "the search reaches past the tags-per-batch wall"
+    );
 }
