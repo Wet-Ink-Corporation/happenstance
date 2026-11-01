@@ -63,7 +63,7 @@ use happenstance_postgres::projection_store::PostgresProjectionStore;
 use happenstance_postgres::sqlx::postgres::PgPoolOptions;
 use happenstance_postgres::sqlx::{Executor, PgPool};
 use happenstance_testkit::concurrency::CONTENDERS;
-use happenstance_testkit::{Armed, Capability, Fixture};
+use happenstance_testkit::{Armed, Capability, Fixture, Settled};
 use testcontainers::ReuseDirective;
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
@@ -456,6 +456,11 @@ impl Fixture for PostgresFixture {
     /// failure: a prefix of what was accepted, never shrinking, with every
     /// condition verdict judged over what the store holds. So the rule runs
     /// against this fixture, and the CI job checks that it did.
+    ///
+    /// Nor does it skip the named rules that read back their own writes. Each
+    /// asks [`settle_frontier`](Fixture::settle_frontier) first (CF-42), and
+    /// this fixture waits there for the frontier, so the rule runs and the CI
+    /// job checks that none reported a skip under this capability.
     const READ_YOUR_OWN_WRITES: Capability = Capability::declined(
         "reads and `head` admit only rows whose `xact_id` is below \
          `pg_snapshot_xmin(pg_current_snapshot())`, so an append this caller \
@@ -651,6 +656,67 @@ impl Fixture for PostgresFixture {
         Armed::Staged
     }
 
+    /// Waits until every row this instance's schema holds is below the
+    /// visibility frontier, so the next `read` or `head` shows all of them.
+    ///
+    /// # What it waits for
+    ///
+    /// [`SETTLE_PROBE`]: no row in `event` whose `xact_id` is at or above
+    /// `pg_snapshot_xmin(pg_current_snapshot())`, which is the read path's own
+    /// predicate negated. The frontier never moves backward, so a row below it
+    /// for this probe is below it for every later read. Only this schema's rows
+    /// are asked about; a transaction open elsewhere on the server delays the
+    /// answer and does not change it.
+    ///
+    /// The probe repeats with a doubling pause, from 1 ms to 100 ms. The waiting
+    /// is here rather than in the rule because CF-33 forbids a rule to wait.
+    ///
+    /// # Settling after arming never finishes
+    ///
+    /// After [`arm_held_above_frontier`](Fixture::arm_held_above_frontier) every
+    /// append lands at `xact_id` `i64::MAX`, which no frontier passes. After
+    /// [`arm_read_fault`](Fixture::arm_read_fault) the probe reads the faulting
+    /// view. No rule settles after either, and a settle that did would reach the
+    /// deadline below.
+    ///
+    /// # Panics
+    ///
+    /// When the frontier has not passed every row after [`SETTLE_DEADLINE`], or
+    /// the server cannot answer the probe. The message names the probe.
+    async fn settle_frontier(&self) -> Settled {
+        let pool = self.pool().await;
+        let settled = async {
+            let mut pause = SETTLE_FIRST_PAUSE;
+            loop {
+                let visible: bool = sqlx::query_scalar(SETTLE_PROBE)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "a broken test environment, not a non-conformant adapter: \
+                             `{SETTLE_PROBE}` failed ({error})"
+                        )
+                    });
+                if visible {
+                    return Settled::Visible;
+                }
+                tokio::time::sleep(pause).await;
+                pause = pause.saturating_mul(2).min(SETTLE_PAUSE_CEILING);
+            }
+        };
+        tokio::time::timeout(SETTLE_DEADLINE, settled)
+            .await
+            .unwrap_or_else(|_elapsed| {
+                panic!(
+                    "the visibility frontier did not pass schema `{}`'s rows within \
+                     {SETTLE_DEADLINE:?}: `{SETTLE_PROBE}` still answered false. A \
+                     transaction open on the server holds the frontier back, or a \
+                     rule settled after arming a held row.",
+                    self.schema
+                )
+            })
+    }
+
     async fn reopen(&self) {
         // Every handle this fixture handed out owns its own `PgPool`, and this
         // fixture keeps none of them — so there is nothing here to close, and
@@ -692,6 +758,24 @@ const READ_FAULT_INJECTION: &str = concat!(
     "END IF; ",
     "END $arm$;",
 );
+
+/// Whether every row in this schema's `event` is below the visibility
+/// frontier: the read path's predicate, negated and asked of the whole table.
+const SETTLE_PROBE: &str = "SELECT NOT EXISTS (SELECT 1 FROM event \
+     WHERE xact_id >= pg_snapshot_xmin(pg_current_snapshot()))";
+
+/// How long [`PostgresFixture`]'s settle waits before it fails the rule.
+///
+/// Thirty seconds, which is seven times the longest lag measured behind a
+/// five-second write elsewhere (4010.719 ms). A settle that reaches it is a
+/// stuck server or a held row, and either should fail loudly rather than skip.
+const SETTLE_DEADLINE: Duration = Duration::from_secs(30);
+
+/// The first pause between two settle probes. Each pause doubles.
+const SETTLE_FIRST_PAUSE: Duration = Duration::from_millis(1);
+
+/// The longest pause between two settle probes.
+const SETTLE_PAUSE_CEILING: Duration = Duration::from_millis(100);
 
 /// The held-above-the-frontier staging, as SQL.
 ///

@@ -36,11 +36,11 @@
 #![allow(dead_code)]
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use happenstance_neon::event_store::NeonEventStore;
 use happenstance_neon::{NeonConfig, SqlRequest, SqlStatement, SqlTransport, migration};
-use happenstance_testkit::{Armed, Capability, Fixture};
+use happenstance_testkit::{Armed, Capability, Fixture, Settled};
 use tokio::sync::OnceCell;
 
 pub(crate) mod transport;
@@ -150,6 +150,8 @@ impl Fixture for NeonFixture {
          when it committed has ended. Distinct from ES-11, which is about \
          transport ordering, not visibility, and which the transport's fence buys.",
     );
+    // The named rules that read back their own writes still run: each settles
+    // first (CF-42), and `settle_frontier` below waits for the frontier.
 
     /// Supported, and armed for real.
     ///
@@ -318,6 +320,58 @@ impl Fixture for NeonFixture {
         )
         .await;
         Armed::Staged
+    }
+
+    /// Waits until every row this instance's schema holds is below the
+    /// visibility frontier, so the next `read` or `head` shows all of them.
+    ///
+    /// `happenstance-postgres`'s settle, schema-qualified and one request per
+    /// probe: no row in this schema's `event` whose `xact_id` is at or above
+    /// `pg_snapshot_xmin(pg_current_snapshot())`. The frontier never moves
+    /// backward, so a row below it for the probe is below it for every later
+    /// read. The probe repeats with a doubling pause, from 1 ms to 100 ms, here
+    /// rather than in the rule because CF-33 forbids a rule to wait.
+    ///
+    /// # Settling after arming never finishes
+    ///
+    /// After [`arm_held_above_frontier`](Fixture::arm_held_above_frontier) every
+    /// append lands at `xact_id` `i64::MAX`, which no frontier passes. After
+    /// [`arm_read_fault`](Fixture::arm_read_fault) the probe reads the faulting
+    /// view. No rule settles after either, and a settle that did would reach the
+    /// deadline below.
+    ///
+    /// # Panics
+    ///
+    /// When the frontier has not passed every row after [`SETTLE_DEADLINE`], or
+    /// the endpoint cannot answer the probe. The message names the probe.
+    async fn settle_frontier(&self) -> Settled {
+        self.migrate().await;
+        let probe = format!(
+            "SELECT (NOT EXISTS (SELECT 1 FROM {} \
+             WHERE xact_id >= pg_snapshot_xmin(pg_current_snapshot())))::text AS visible",
+            self.config.qualified_event()
+        );
+        let settled = async {
+            let mut pause = SETTLE_FIRST_PAUSE;
+            loop {
+                if settle_probe(&probe).await {
+                    return Settled::Visible;
+                }
+                tokio::time::sleep(pause).await;
+                pause = pause.saturating_mul(2).min(SETTLE_PAUSE_CEILING);
+            }
+        };
+        tokio::time::timeout(SETTLE_DEADLINE, settled)
+            .await
+            .unwrap_or_else(|_elapsed| {
+                panic!(
+                    "the visibility frontier did not pass schema `{}`'s rows within \
+                     {SETTLE_DEADLINE:?}: `{probe}` still answered false. A transaction \
+                     open on the server holds the frontier back, or a rule settled after \
+                     arming a held row.",
+                    self.schema()
+                )
+            })
     }
 
     async fn reopen(&self) {
@@ -602,4 +656,51 @@ async fn execute(request: SqlRequest, what: &str, schema: &str) {
             .take(400)
             .collect::<String>()
     );
+}
+
+/// How long [`NeonFixture`]'s settle waits before it fails the rule.
+///
+/// `happenstance-postgres`'s deadline, for its reason: seven times the longest
+/// lag measured behind a five-second write elsewhere on the server.
+const SETTLE_DEADLINE: Duration = Duration::from_secs(30);
+
+/// The first pause between two settle probes. Each pause doubles.
+const SETTLE_FIRST_PAUSE: Duration = Duration::from_millis(1);
+
+/// The longest pause between two settle probes.
+const SETTLE_PAUSE_CEILING: Duration = Duration::from_millis(100);
+
+/// One settle probe: whether the endpoint answered `probe` with `true`.
+///
+/// # Panics
+///
+/// When the endpoint cannot be reached, refuses the probe, or answers with a
+/// body that does not parse. The message names the probe, as [`execute`]'s does.
+async fn settle_probe(probe: &str) -> bool {
+    let transport = HyperTransport::shared();
+    let response = transport
+        .round_trip(SqlRequest::single(SqlStatement::new(probe)).read_only())
+        .await
+        .unwrap_or_else(|error| {
+            panic!(
+                "a broken test environment, not a non-conformant adapter: `{probe}` could \
+                 not reach {} ({error})",
+                transport.host()
+            )
+        });
+    assert!(
+        response.is_success(),
+        "a broken test environment: `{probe}` failed (HTTP {}) — {}",
+        response.status,
+        String::from_utf8_lossy(&response.body)
+            .chars()
+            .take(400)
+            .collect::<String>()
+    );
+    let body = happenstance_neon::wire::ResponseBody::parse(&response.body)
+        .unwrap_or_else(|error| panic!("`{probe}` answered a body that does not parse ({error})"));
+    body.result_sets()
+        .first()
+        .and_then(|result| result.text(0, "visible"))
+        == Some("true")
 }
