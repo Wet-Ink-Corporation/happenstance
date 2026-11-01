@@ -1637,12 +1637,14 @@ fn is_available(probe: &[&str]) -> bool {
 /// `error[E0391]: cycle detected when computing when 'error::Error' needs
 /// async drop`. That reddened the gate's docs.rs steps and the Pages API build
 /// on every branch, for a reason no change in this workspace could fix. The
-/// pin is the owner's call, recorded on PR #363.
+/// pin is the owner's call, recorded on PR #364.
 ///
 /// Spelled once so the gate's two docs.rs steps, their probes and
 /// `xtask site` cannot drift apart, and so lifting it is one line here plus the
-/// `rustup toolchain install` lines in `.github/workflows/ci.yml` and
-/// `pages.yml`. Lift it once a later nightly builds `sqlx-core` again.
+/// lines `every_workflow_installs_the_nightly_xtask_names` holds to it: the
+/// `rustup toolchain install` in `ci.yml`, `pages.yml` and
+/// `ops/host/10-toolchain.sh`, and the probe in `ops/host/preflight.sh`. Lift
+/// it once a later nightly builds `sqlx-core` again.
 ///
 /// A plain `const` rather than an environment variable: the gate is meant to
 /// be exactly what CI runs, and a toolchain chosen by the caller's environment
@@ -2764,37 +2766,52 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
         );
     }
 
-    /// Every workflow that installs a nightly installs the one xtask names.
+    /// Every file that installs or probes a nightly names the one xtask does.
     ///
     /// The wrong implementation this rejects is a pin lifted, or moved, in
-    /// one place only: ci.yml installing `nightly` while xtask asks for
-    /// `+nightly-2026-10-31`. The probe would then find no toolchain, and the
-    /// docs.rs steps would print `skipped` on every runner — a green gate that
-    /// checked nothing, which is the decorative failure the probe exists to
-    /// make loud locally and must not become in CI.
+    /// one place only: ci.yml — or the bench host's provisioning script —
+    /// installing `nightly` while xtask asks for `+nightly-2026-10-31`. The
+    /// probe would then find no toolchain, and the docs.rs steps would print
+    /// `skipped` on every runner — a green gate that checked nothing, which is
+    /// the decorative failure the probe exists to make loud locally and must
+    /// not become in CI. `preflight.sh` is held too, because a preflight that
+    /// probes plain `nightly` reports `present` beside a gate that skipped.
+    ///
+    /// Matched anywhere in a line rather than after `run: `, so an install
+    /// inside a multi-line `run: |` block is read as well; comment lines are
+    /// skipped, because prose may name the channel without running it.
     #[test]
     fn every_workflow_installs_the_nightly_xtask_names() {
+        const INSTALL: &str = "rustup toolchain install nightly";
+        const PROBE: &str = "cargo +nightly";
+
         let root = workspace_root().unwrap();
         let toolchain = crate::NIGHTLY.strip_prefix('+').unwrap();
-        let wanted = format!("rustup toolchain install {toolchain} ");
+        let wanted_install = format!("rustup toolchain install {toolchain} ");
+        let wanted_probe = format!("cargo {} ", crate::NIGHTLY);
 
-        for workflow in ["ci.yml", "pages.yml"] {
-            let text = fs::read_to_string(root.join(".github/workflows").join(workflow)).unwrap();
-            let installs: Vec<&str> = text
+        for (file, needle, wanted) in [
+            (".github/workflows/ci.yml", INSTALL, &wanted_install),
+            (".github/workflows/pages.yml", INSTALL, &wanted_install),
+            ("ops/host/10-toolchain.sh", INSTALL, &wanted_install),
+            ("ops/host/preflight.sh", PROBE, &wanted_probe),
+        ] {
+            let text = fs::read_to_string(root.join(file)).unwrap();
+            let hits: Vec<&str> = text
                 .lines()
                 .map(str::trim)
-                .filter_map(|line| line.strip_prefix("run: "))
-                .filter(|run| run.starts_with("rustup toolchain install nightly"))
+                .filter(|line| !line.starts_with('#'))
+                .filter_map(|line| line.find(needle).and_then(|at| line.get(at..)))
                 .collect();
             assert!(
-                !installs.is_empty(),
-                "{workflow} installs no nightly, so xtask's `{}` steps cannot run there",
+                !hits.is_empty(),
+                "{file} has no `{needle}`, so it no longer installs or probes xtask's `{}`",
                 crate::NIGHTLY
             );
-            for install in installs {
+            for hit in hits {
                 assert!(
-                    install.starts_with(&wanted),
-                    "{workflow} runs `{install}`, but xtask names `{}`",
+                    hit.starts_with(wanted.as_str()),
+                    "{file} runs `{hit}`, but xtask names `{}`",
                     crate::NIGHTLY
                 );
             }

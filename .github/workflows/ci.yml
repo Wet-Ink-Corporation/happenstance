@@ -200,7 +200,7 @@ jobs:
       # installs and stops. `--profile minimal` is enough — rustdoc ships in the
       # `rustc` component, not in `rust-docs`.
       #
-      # `cargo +nightly` reaches it despite rust-toolchain.toml's
+      # `cargo +nightly-…` reaches it despite rust-toolchain.toml's
       # `channel = "1.97.1"`: a `+toolchain` argument is the highest-precedence
       # override rustup has, above the environment, directory overrides and the
       # toolchain file. The pin does not neuter this step; do not delete it
@@ -224,7 +224,7 @@ jobs:
       # that had run the step already had the target installed for nightly.
       - name: Install nightly, for the docs.rs configuration step
         if: env.FULL_GATE == 'true'
-        run: rustup toolchain install nightly-2026-10-31 --profile minimal --target wasm32-unknown-unknown # xtask's NIGHTLY, and must match it (#363)
+        run: rustup toolchain install nightly-2026-10-31 --profile minimal --target wasm32-unknown-unknown # xtask's NIGHTLY, and must match it (#364)
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         if: env.FULL_GATE == 'true'
