@@ -916,6 +916,19 @@ the same answer as `wi-87e964`. It supersedes nothing.
 | — | [`kb-decision-wi-a4ab49`](../decisions/wi-a4ab49-should-338-gate-read-your-own-writes-rules-on.md) | The read-back rules read to a settled frontier rather than gating on the capability | accepted | — | — |
 | — | [`kb-decision-wi-fab349`](../decisions/wi-fab349-should-338-s-rules-that-read-their-own-writes.md) | The read-back rules settle through a new public testkit hook (a duplicate of `wi-87e964`) | accepted | — | — |
 
+## 2026-11-01: a declared tags-per-call ceiling on Cloudflare (#356), proposed
+
+ADR-0100 is written straight here with no intake step, and is **proposed**. A deployed Durable
+Object reset on one call of 757 and of 1,016 events of 1,024 tags. `happenstance-core` gains
+`StoreLimit::TagsPerBatch` and `MIN_SUPPORTED_TAGS_PER_BATCH` (8,192), `happenstance-sync` classes
+the refusal `Split`, the testkit gains `Fixture::MAX_TAGS_PER_BATCH`, and `happenstance-cloudflare`
+declares 524,288 tags per call. It mints VT-36 `[PROVISIONAL]`, narrows published behaviour as
+ADR-0093 did, and supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0100 | [`kb-decision-0100`](../decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md) | happenstance-cloudflare declares a ceiling of 524,288 tags per call, refused as StoreLimit::TagsPerBatch | proposed | — | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

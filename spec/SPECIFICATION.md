@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 209 clause IDs, of which 202 are normative:
-**160 `[FROZEN]`**, **32 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
+As assembled, this document carries 210 clause IDs, of which 203 are normative:
+**160 `[FROZEN]`**, **33 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -1745,6 +1745,36 @@ move.** Their falsifiers are about a *named target that cannot honour the floor*
 and one adapter clearing four floors comfortably is not that target; discharging
 the documentation half is a different claim from settling the number.
 
+#### VT-36 — `MIN_SUPPORTED_TAGS_PER_BATCH` is a floor of 8,192
+
+There MUST NOT be a `MAX_TAGS_PER_BATCH` constant in `happenstance-core`. Every
+store MUST accept an append whose events carry `MIN_SUPPORTED_TAGS_PER_BATCH` =
+8,192 tags in all, the product VT-22 and VT-24 already oblige, so the floor adds
+no obligation of its own. A store MAY refuse a larger total, and if it does it
+MUST document its ceiling and MUST refuse beyond it as
+`AppendError::ExceedsStoreLimit { limit: StoreLimit::TagsPerBatch, .. }`. Its
+ceiling MUST be at least its own tags-per-event ceiling, so that a split batch
+reaches one that lands, and MUST be reachable under its events-per-batch ceiling,
+or it refuses nothing.
+
+`[PROVISIONAL — falsified by a store whose per-call wall is not a function of the
+tag count, so that no count says where it is; the instrument is
+happenstance-cloudflare, whose deployed wall moved between 775,168 and 1,040,384
+tag rows in one call]`
+`Rule:` unit tests `every_limit_names_its_floor` and
+`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`
+`Cases:` E2E-35, E2E-42
+`Rejects:` a floor of 0, which would let a store refuse 128 events of 64 tags
+while claiming VT-22 and VT-24; and a ceiling below the per-event one, under
+which a sync runner's `Split` never reaches a batch it can land. The second is
+`TagsPerBatchBelowTagsPerEventStore`, and an unreachable ceiling is
+`UnreachableTagsPerBatchStore`.
+
+`happenstance-cloudflare` is the one store that declares the ceiling: 524,288
+tags per call, 1.48 times below the lower measured wall (ADR-0100). Every other
+store's events-per-batch and tags-per-event ceilings already bound the total, so
+each states none.
+
 #### VT-25 — A capacity refusal is distinguishable from a store failure
 
 `AppendError` MUST carry a variant `ExceedsStoreLimit { limit: StoreLimit, len:
@@ -1766,11 +1796,11 @@ switch on. `AppendError`'s three variants as this clause was written contained n
 
 **Discharged at phase 4.** `AppendError::ExceedsStoreLimit { limit, len }` is in
 the tree (`error.rs:237-254`), `StoreLimit` is the `#[non_exhaustive]` enum
-naming which limit was exceeded (`limits.rs:102-119`), and the variant is carried
+naming which limit was exceeded (`limits.rs:123-150`), and the variant is carried
 through `map_store` (`error.rs:359`). `AppendError` was already
 `#[non_exhaustive]` (`error.rs:223`) and its documentation already told callers a
 wildcard arm is required (`error.rs:220-221`), so the variant landed additively,
-as predicted. `StoreLimit` has since gained a fourth variant the same way: `MetadataLen` (`limits.rs:118`), at phase 17b by ADR-0093, the one limit with no guaranteed minimum (ADR-0043), which CF-40's `MAX_METADATA_LEN` states.
+as predicted. `StoreLimit` has since gained a fourth variant the same way: `MetadataLen` (`limits.rs:139`), at phase 17b by ADR-0093, the one limit with no guaranteed minimum (ADR-0043), which CF-40's `MAX_METADATA_LEN` states; and a fifth, `TagsPerBatch` (`limits.rs:149`), by ADR-0100, whose floor is VT-36's.
 
 ---
 
@@ -2864,7 +2894,7 @@ payloads in scope, by crate:
   holds an `Rc<worker::Error>` and is built by a public
   `JsThrow::from_error(worker::Error)`
   (`crates/happenstance-cloudflare/src/js.rs:168-173`, `:188`), with
-  `pub use worker` (`crates/happenstance-cloudflare/src/lib.rs:612`).
+  `pub use worker` (`crates/happenstance-cloudflare/src/lib.rs:619`).
 - **`happenstance-neon`** — `NeonError::MalformedResponse(serde_json::Error)`
   (`crates/happenstance-neon/src/error.rs:104`), with `pub use serde_json`
   (`crates/happenstance-neon/src/lib.rs:175`).
@@ -2925,7 +2955,7 @@ impls now do, and one of them is the proof rather than the breadth: `LocalMemory
 (`crates/happenstance-testkit/tests/local_conformance.rs:198`) is a direct `impl
 EventStore for` in a genuinely downstream crate, beside the blanket impl without
 `error[E0119]`, passing every rule natively and on `wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:1239`) and `happenstance-neon`'s two
+(`crates/happenstance-cloudflare/src/event_store.rs:1267`) and `happenstance-neon`'s two
 (`crates/happenstance-neon/src/event_store.rs:852`, `:1549`) widen the evidence without
 adding to it. ADR-0001's marker was lifted on that basis at phase 1 (`references/adr/0001-async-port-flavours.md:5-6`).
 
@@ -4465,7 +4495,7 @@ today, four of them skeletons — `happenstance-sqlite` was the fifth until phas
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
 `crates/happenstance-sqlite/src/event_store.rs:1962`,
 `crates/happenstance-postgres/src/event_store.rs:467`,
-`crates/happenstance-cloudflare/src/event_store.rs:1239` and
+`crates/happenstance-cloudflare/src/event_store.rs:1267` and
 `crates/happenstance-neon/src/event_store.rs:852`, `:1549`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
@@ -4968,7 +4998,7 @@ has not yet passed. That agrees with ES-25, which evaluates a condition over wha
 the store holds, and with VT-8's uniqueness on the origin pair. Neither reading can
 produce a duplicate through ingest, which does not probe first
 (`crates/happenstance-sync/src/ingest.rs:97-101`), so agreement is the reason, and
-`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:6850-6853`, `crates/happenstance-testkit/src/contract.rs:614-648`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
+`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:7020-7023`, `crates/happenstance-testkit/src/contract.rs:638-672`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
 
 The `async fn` spelling is load-bearing and matches ES-30's: a clause written
 without it describes a different method under `trait_variant`.
@@ -9207,11 +9237,14 @@ unreachable for a conformant fixture, and is retained deliberately.
 
 **CF-40.** A fixture MUST state its store's capacity ceilings as
 `Option<usize>` associated constants — `MAX_EVENT_DATA_LEN`, `MAX_TAGS_PER_EVENT`,
-`MAX_EVENTS_PER_BATCH`, `MAX_METADATA_LEN` — each defaulting to `None`. A stated
-ceiling is a promise about the store: a value at exactly that limit MUST be
-accepted and one larger MUST be refused as `AppendError::ExceedsStoreLimit` naming
-the corresponding `StoreLimit` — `MetadataLen` for metadata, which has no floor
-(ADR-0043). `None` means the store has no ceiling for that limit, and a rule
+`MAX_EVENTS_PER_BATCH`, `MAX_METADATA_LEN`, `MAX_TAGS_PER_BATCH` — each defaulting
+to `None`. A stated ceiling is a promise about the store: a value at exactly that
+limit MUST be accepted and one larger MUST be refused as
+`AppendError::ExceedsStoreLimit` naming the corresponding `StoreLimit` —
+`MetadataLen` for metadata, which has no floor (ADR-0043), and `TagsPerBatch` for
+the total tags of one append, spread so that no event is over its own ceiling
+(VT-36). A stated `MAX_TAGS_PER_BATCH` MUST also be coherent with the others: at
+least `MAX_TAGS_PER_EVENT`, and reachable under `MAX_EVENTS_PER_BATCH`. `None` means the store has no ceiling for that limit, and a rule
 that needs one MUST report a skip rather than being omitted.
 
 They MUST NOT be spelled as `Capability`. A declined capability is a **trade** —
@@ -9239,21 +9272,30 @@ ceiling is **not** a constant — the Postgres row whose TOAST threshold moves
 with the rest of the row, the KV store whose per-value cap moves with the key —
 for which no single number is honest. The instruments are the Cloudflare adapter
 at phase 9 and the Postgres adapter at phase 10, whichever states a varying
-ceiling first. Cloudflare's answer, at phase 17b, is ADR-0093's: its documented 2 MB row limit is a budget the four fields share, and the adapter carves it into four constant ceilings, so it states constants rather than a varying ceiling — one row at all four is 1,835,264 bytes (`crates/happenstance-cloudflare/src/lib.rs:163-178`).]`
+ceiling first. Cloudflare's answer, at phase 17b, is ADR-0093's: its documented 2 MB row limit is a budget the four fields share, and the adapter carves it into four constant ceilings, so it states constants rather than a varying ceiling — one row at all four is 1,835,264 bytes (`crates/happenstance-cloudflare/src/lib.rs:163-180`). Its fifth, ADR-0100's 524,288 tags per call, is a constant placed below a deployed wall that moved between two runs (775,168 and 1,040,384 tag rows), which is VT-36's falsifier rather than this one's: the count still says where the adapter refuses.]`
 Rule: `append_reports_exceeded_store_limits`, which is unwritable without it —
 a rule cannot locate a boundary the store has not named, and asserting a
 hard-coded one would be a `MAX_EVENT_DATA_LEN` constant by another route, which
 VT-21 forbids in terms.
 Cases: E2E-35, E2E-42.
 Rejects: a fixture that states a ceiling its store does not have, or does not
-enforce distinguishably. Nine are compiled and registered: `PayloadCeilingStore`,
-`BatchParameterCeilingStore` and `MetadataCeilingStore` refuse through `Store`;
-`MisnamedMetadataCeilingStore` names `EventDataLen`; `TruncatingPayloadStore`,
-`ChunkLosingBatchStore` and `TruncatingMetadataStore` do not refuse at all;
-`OffByOneMetadataCeilingStore` refuses the ceiling itself; and
-`RefuseAfterInsertMetadataStore` refuses after writing. It also rejects a suite
+enforce distinguishably. Sixteen are compiled and registered: `PayloadCeilingStore`,
+`BatchParameterCeilingStore`, `MetadataCeilingStore` and
+`TagsPerBatchThroughStoreStore` refuse through `Store`;
+`MisnamedMetadataCeilingStore` names `EventDataLen` and
+`MisnamedTagsPerBatchStore` names `TagsPerEvent`; `TruncatingPayloadStore`,
+`ChunkLosingBatchStore` and `TruncatingMetadataStore` do not refuse at all, and
+`PerEventTagsPerBatchStore` compares each event with the batch ceiling and so lands
+the over batch; `OffByOneMetadataCeilingStore` and `OffByOneTagsPerBatchStore`
+refuse the ceiling itself; `RefuseAfterInsertMetadataStore` and
+`RefuseAfterInsertTagsPerBatchStore` refuse after writing; and
+`UnreachableTagsPerBatchStore` and `TagsPerBatchBelowTagsPerEventStore` enforce an
+incoherent set of ceilings. It also rejects a suite
 where **no** fixture states a ceiling and VT-25 is a variant nothing exercises. `GappedPositionFixture` states the first three at
-VT-21 – VT-24's floors and a metadata ceiling, and is what makes the rule run.
+VT-21 – VT-24's floors and a metadata ceiling, and is what makes the rule run. It
+states no `MAX_TAGS_PER_BATCH` because at those floors none is legal: 128 events
+of 64 tags is VT-36's floor itself, so any ceiling it stated would be unreachable.
+`TagsPerBatchCeilingStore` is the conformant control for the fifth branch.
 
 **CF-42.** A fixture that declines `READ_YOUR_OWN_WRITES` MAY override
 `Fixture::settle_frontier` to wait until a read shows every row its store holds,
@@ -10201,13 +10243,13 @@ between them because its *shape* does not wait on a transport but its
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 35 | 28 | 6 | 0 | 1 |
+| §2.1–§2.6 value types | `VT` | 36 | 28 | 7 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
 | §5 `SyncPeer` | `SY` | 38 | 21 | 14 | 3 | 0 |
 | §6 conformance | `CF` | 42 | 35 | 4 | 2 | 1 |
-| **Total** | | **209** | **160** | **32** | **10** | **7** |
+| **Total** | | **210** | **160** | **33** | **10** | **7** |
 
 ### 7.2 The table
 
@@ -10250,6 +10292,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-33 | FROZEN | unit tests `a_borrowed_and_an_owned_tag_are_one_value`, `a_map_keyed_by_event_… | E2E-40, E2E-51 |
 | VT-34 | FROZEN | `read_from_is_inclusive` | *(none — see clause)* |
 | VT-35 | FROZEN | unit tests `projection_id_refuses_what_vt_14_refuses`, `projection_id_accepts_… | *(none — see clause)* |
+| VT-36 | PROVISIONAL | unit tests `every_limit_names_its_floor` and `the_tags_per_batch_floor_is_two_… | E2E-35, E2E-42 |
 
 #### `WF` — wire format (§2.7)
 
