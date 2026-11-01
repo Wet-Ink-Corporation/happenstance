@@ -47,8 +47,8 @@ The total number of live-Neon runs this session was not recorded, so no rate is 
 three. The owner made the job non-required until L8 (`wi-0f1291`; §9).
 
 **The shape of both racing rules.** `read_result_is_stable_under_concurrent_append`
-(`crates/happenstance-testkit/src/suite.rs:6486`) and `query_items_share_one_snapshot`
-(`crates/happenstance-testkit/src/suite.rs:6595`) do the same thing on one handle: seed, read
+(`crates/happenstance-testkit/src/suite.rs:6485`) and `query_items_share_one_snapshot`
+(`crates/happenstance-testkit/src/suite.rs:6594`) do the same thing on one handle: seed, read
 `before`, build a stream and poll it **once**, append a late event, drain, and assert that the drain
 equals `before` and does not hold the late event. On Neon the first poll moves the stream from
 `Unsent` to `InFlight` by calling `round_trip` (`crates/happenstance-neon/src/event_store.rs:1465`);
