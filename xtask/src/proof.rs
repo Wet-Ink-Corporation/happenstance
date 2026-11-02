@@ -1203,7 +1203,7 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 ///   module that stopped compiling would leave that permission resting on
 ///   nothing;
 /// * the ingest store (#108, part F; behind `sync` since part E, which is why
-///   this row's selector passes `--features sync`): the six ingest rules and
+///   this row's selector passes `--features sync`): the seven ingest rules and
 ///   the fixture's capability check, mounted in a `--lib` module, so it has no
 ///   `WASM_TARGETS` row to be held to the enumeration by; the unit cases the
 ///   store's atomicity rests on — the settle table, the throw that takes the
@@ -1260,6 +1260,7 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::family::ingest_conformance::dedupe_reaches_identity_without_decoding",
     "event_store::ingest::tests::family::ingest_conformance::every_declined_capability_is_stated_by_this_fixture",
     "event_store::ingest::tests::family::ingest_conformance::ingest_group_is_atomic_under_a_mid_group_fault",
+    "event_store::ingest::tests::family::ingest_conformance::ingest_holds_the_call_to_its_tags_per_batch_ceiling",
     "event_store::ingest::tests::family::ingest_conformance::ingest_preserves_origin_identity",
     "event_store::ingest::tests::family::ingest_conformance::ingest_validates_every_event_not_the_head",
     "event_store::ingest::tests::family::ingest_conformance::ingested_events_land_above_the_local_head",
