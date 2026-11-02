@@ -909,9 +909,10 @@ async fn apply_is_handed_the_origin_identity_not_the_local_position() {
         seen: Vec::new(),
     };
 
-    let _ = run_projection(&events, &models, &mut identities, &Json, chunk(8))
+    let progressed = run_projection(&events, &models, &mut identities, &Json, chunk(8))
         .await
         .expect("the runner completes");
+    assert_eq!(progressed.applied, 3, "every restored event was applied");
 
     assert_eq!(
         identities.seen, expected,
