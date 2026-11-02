@@ -443,9 +443,14 @@ mod tests {
                 let at = control(ceiling, per_event);
                 assert_eq!(total(&at), ceiling, "control at {ceiling} by {per_event}");
                 assert!(at.iter().all(|shape| within(shape, per_event)));
-                assert!(
-                    at.iter().any(|shape| shape.compensation.is_some()),
-                    "the control carries compensation"
+                // The rule counts the control's two compensation events, and
+                // only the second group carries them.
+                assert_eq!(
+                    at.iter()
+                        .map(|shape| shape.compensation.is_some())
+                        .collect::<Vec<_>>(),
+                    [false, true],
+                    "control at {ceiling} by {per_event}"
                 );
 
                 let over = spread_over(ceiling, per_event);
