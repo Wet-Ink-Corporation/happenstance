@@ -52,8 +52,8 @@ impl SqliteProjectionStore {
     /// projection that is already protected is not an error.
     ///
     /// The first protection a file carries raises its projection schema marker
-    /// to [`SCHEMA_VERSION`](super::SCHEMA_VERSION), in the same transaction as
-    /// the mark, so a build that predates protection refuses to open the file
+    /// to 2 (see [`SCHEMA_VERSION`](super::SCHEMA_VERSION)), in the same
+    /// transaction as the mark, so a build that predates protection refuses to open the file
     /// rather than reset a protected projection without knowing. The marker is
     /// read when a handle opens, so a handle an older build opened **before**
     /// that is not stopped: deploy this build everywhere before protecting.
