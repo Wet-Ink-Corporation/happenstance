@@ -85,7 +85,7 @@ backporting: a fix lands in the next release, and the release before it is not
 patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
 upgrade.
 
-`0.2.0` was the first stable release and `0.4.5` is current; what each promises
+`0.2.0` was the first stable release and `0.4.6` is current; what each promises
 is worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
 `0.2.0`. `ProjectionStore` was **not** at `0.2.0` — it shipped behind an
@@ -98,7 +98,8 @@ violation of this table.
 
 | Version | Supported |
 |---|---|
-| `0.4.5` | ✅ current |
+| `0.4.6` | ✅ current |
+| `0.4.5` | ❌ superseded by `0.4.6`, an additive release with one narrowing: `happenstance-core` gains `StoreLimit::TagsPerBatch` and `MIN_SUPPORTED_TAGS_PER_BATCH`, `happenstance-testkit` gains `Fixture::settle_frontier` and `Fixture::MAX_TAGS_PER_BATCH`, and `happenstance-cloudflare` now refuses a call carrying more than 262,144 tags |
 | `0.4.4` | ❌ superseded by `0.4.5`, an additive release: `happenstance-sqlite` gains `SqliteEventStore::open_on` and `remint_identity_on` for a caller-configured connection, and an ingest that lands nothing no longer advances positions |
 | `0.4.3` | ❌ superseded by `0.4.4`, an additive release: the first of `happenstance-sync` and `happenstance-sync-testkit`, and a `sync` feature on every adapter |
 | `0.4.2` | ❌ superseded by `0.4.3`, an additive release adding `CloudflareEventStore::remint_identity`; `happenstance-cloudflare` now reads its `StoreId` on every append |

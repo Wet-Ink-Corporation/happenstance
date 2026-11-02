@@ -10,6 +10,27 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-02 — `0.4.6`, Cloudflare's tags-per-call ceiling
+
+*Committed on `claude/project-thread-uikw3l-046`.* `[Unreleased]` becomes
+`[0.4.6] — 2026-11-02`, and all nine crates move to `0.4.6`, with the workspace
+requirements, `happenstance-sync-testkit`'s on `happenstance-testkit`, the testkit's
+recipe pin and the six examples raised to match. It ships #356's ceiling (PRs #367
+and #372): `StoreLimit::TagsPerBatch`, `MIN_SUPPORTED_TAGS_PER_BATCH`,
+`Fixture::MAX_TAGS_PER_BATCH` and the `Split` arm in `happenstance-sync`, with
+`happenstance-cloudflare` refusing a call over 262,144 tags in total, a narrowing of
+published behaviour as ADR-0093's was; and #338's `Fixture::settle_frontier` (CF-42,
+ADR-0099, PR #363). PRs #364, #365 and #371 touched CI, the harness and `xtask` only
+and carry no entry; PR #373 accepted ADR-0100 and is `.kb` only. The
+status table gains the `0.4.6` row; the owner merges the PR and tags its merge commit.
+
+**Verified.** `cargo xtask lints`, `spec-trace`, `lint-kb` against `0c257a8`,
+`package-check` and the temper gate locally; `cargo-semver-checks` is not installed
+here, so the release PR's `semver compatibility` job runs it against the published
+`0.4.5`.
+
+---
+
 ## 2026-10-31 — `0.4.5`, a caller-configured SQLite store
 
 *Committed on `claude/project-thread-iqwt3o`.* `[Unreleased]` becomes

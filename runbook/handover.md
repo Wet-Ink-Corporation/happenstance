@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/project-thread-xp895l-release-043`, on `ab1066c` (`main`, where PR #313
-merged). 2026-10-14.
+`claude/project-thread-uikw3l-046`, on `0c257a8` (`main`, where PR #373
+merged). 2026-11-02.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -21,11 +21,21 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.4.5` is prepared, not yet tagged.** Its release PR moves `[Unreleased]` to
-`[0.4.5] — 2026-10-31` and all nine crates to `0.4.5`. It is additive, cut so
-Redkiln Core can pin a caller-configured SQLite store: `SqliteEventStore::open_on` and
-`remint_identity_on` (#359, PR #361), and an ingest that lands nothing no longer
-advances positions.
+**`0.4.6` is prepared, not yet tagged.** Its release PR moves `[Unreleased]` to
+`[0.4.6] — 2026-11-02` and all nine crates to `0.4.6`. It is additive in API and
+narrows one published behaviour: `StoreLimit::TagsPerBatch`,
+`MIN_SUPPORTED_TAGS_PER_BATCH` and `Fixture::MAX_TAGS_PER_BATCH` (VT-36, CF-40,
+#356, PRs #367 and #372), with `happenstance-cloudflare` refusing a call over 262,144
+tags in total, as ADR-0093's metadata ceiling narrowed `0.4.2`; and
+`Fixture::settle_frontier` (CF-42, ADR-0099, #338, PR #363). ADR-0100 is
+accepted (owner, 2026-11-02, PR #373).
+
+**`0.4.5` is released** (2026-10-31; tag `v0.4.5` at `3ccca03`, published by
+`release.yml`; all nine crates on crates.io). Its release PR (#362) moved
+`[Unreleased]` to `[0.4.5] — 2026-10-31` and all nine crates to `0.4.5`. It was
+additive, cut so Redkiln Core can pin a caller-configured SQLite store:
+`SqliteEventStore::open_on` and `remint_identity_on` (#359, PR #361), and an ingest
+that lands nothing no longer advances positions.
 
 **`0.4.4` is released** (2026-10-31; tag `v0.4.4` at `5487546`, published by
 `release.yml`; all nine crates on crates.io and docs.rs). Its release PR (#358) moved `[Unreleased]` to
@@ -48,16 +58,16 @@ sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-The `0.4.5` release PR. The owner merges it and tags its merge commit
-(`git tag -a v0.4.5 <merge-sha> -m "0.4.5"`, then push the tag); `release.yml`
-publishes from the tag. #338 waits on the owner.
+The `0.4.6` release PR. The owner merges it and tags its merge commit
+(`git tag -a v0.4.6 <merge-sha> -m "0.4.6"`, then push the tag); `release.yml`
+publishes from the tag.
 
 ## Next action
 
 1. Phase 18 (#63), the typed runner. Its breaking chains open as `door:one-way` PRs,
    and it needs the owner present.
-2. #338 (settle-to-frontier for the rules that read their own writes) waits on the
-   owner's call; #352's remaining xtask print sites are two-way.
+2. #356 is still open with ADR-0100 accepted (PR #373); closing it is the owner's.
+   #338 and #352 are closed, by PRs #363 and #371.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
