@@ -1561,6 +1561,14 @@ const FROZEN_DOC_MUSTS: &[DocumentationMust] = &[
             reason: "as CF-39: the ceilings a fixture states are the fixture's",
         },
     },
+    DocumentationMust {
+        clause: "CF-43",
+        disposition: Disposition::Excluded {
+            reason: "as CF-39, and the sentence is CF-39's verbatim — `The fixture MUST state \
+                     the mechanism` — for `RESET_REFUSAL`: the mechanism a fixture states is \
+                     its store's, not the contract's own documentation",
+        },
+    },
 ];
 
 /// One phrase an accepted decision put into the contract's documentation, and
