@@ -194,9 +194,9 @@ the difference is deliberate rather than an inconsistency:
   are now met (its `Rule` records how), ADR-0063 lifted the gate, and a
   `[FROZEN]` `PS` clause is semver-binding exactly as an `ES` one is. What the
   typed layer still holds behind `happenstance`'s own `unstable-projection` is
-  the *runner*, for a reason of its own — `Projection::apply` is synchronous,
-  and ADR-0074 decided at phase 17 that it becomes `async`, which phase 18
-  builds — and that is not this port's.
+  the *runner*, for a reason of its own — phase 18 is building ADR-0074's
+  shape: `Projection::apply` is `async` and handed a `Delivered` event, and the
+  error type and failure-policy seam follow — and that is not this port's.
 - `happenstance-sync` publishes unfinished (#108 part E) and with no semver
   exemption, so a `[FROZEN]` `SY` clause is semver-binding as an `ES` one is.
 
@@ -402,7 +402,7 @@ unrelated crate wanted replication.
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
 | **`EventStore`** | `crates/happenstance-core/src/store.rs:151-331` | Four methods; 96 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it was the workspace's only adapter instrument to have *failed* a clause rather than passed one, until ADR-0087's fence made it pass. Two `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-35, ES-40) — ES-10 was a fifth until phase 4 froze it, and ES-11 and ES-12 left at phase 17 (ADR-0087), and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
-| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug` (retired at phase 17 by ADR-0078 and outside the workspace, so five remain and four of them build), a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:455-685`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` can drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:570-637`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:653-805`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six ran against the suite, and four still do since ADR-0078 retired the Ladybug adapter at phase 17** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063); the `unstable-projection` feature survived on the contract crate as an empty name, so that `0.2.0` manifests resolved, until `0.4.0` removed it | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the three buffered stores do not occupy |
+| **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug` (retired at phase 17 by ADR-0078 and outside the workspace, so five remain and four of them build), a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:455-685`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` could drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:570-637`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:653-805`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six ran against the suite, and four still do since ADR-0078 retired the Ladybug adapter at phase 17** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063); the `unstable-projection` feature survived on the contract crate as an empty name, so that `0.2.0` manifests resolved, until `0.4.0` removed it | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the three buffered stores do not occupy |
 | **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`crates/happenstance-sync/src/ingest.rs:140`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
 
 The asymmetry is the point, and it has narrowed to one port. `EventStore` is
@@ -474,14 +474,14 @@ answer.
   with a finding about its own signatures, ADR-0062 moved the signatures and
   `happenstance-postgres` built the far end, and ADR-0063 froze the port on
   that evidence. What that pass found and left open is one layer up:
-  `Projection::apply` is synchronous, so an application can push into a
-  buffered batch and cannot issue a statement into a batch that is a live
+  `Projection::apply` was synchronous, so an application could push into a
+  buffered batch and could not issue a statement into a batch that is a live
   transaction. The runner stays behind `happenstance`'s `unstable-projection`
   until that shape is proved at its far end or deliberately kept. **Decided at
   phase 17** by ADR-0074 (`.kb/decisions/0074-projection-apply-is-async.md`),
   on a spike that drove a live transaction: `apply` becomes `async`, handed a
-  position-free `Delivered` event and the batch. Phase 18 builds it and lifts
-  the gate.
+  position-free `Delivered` event and the batch. **Built at phase 18** (#98); the runner
+  stays behind `unstable-projection` until the rest of phase 18 lands (#132).
 - **Retention, deletion and completeness** (ES-39, CF-27). A store that has been
   deleted from is currently indistinguishable from a young one at every value in
   §2, and four of the six scenarios reach that from unrelated doors. ADR-0028
@@ -6424,7 +6424,7 @@ new port surface and no store-side knowledge of what a skip means.
 **Evaluated at the typed layer's phase exit, and the count is zero — but not for
 the reason the falsifier anticipated.** The falsifier expected *"record"* to
 degrade into *"log a warning"*. It did not: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:524`) writes nothing anywhere, logs nothing,
+(`crates/happenstance/src/runner.rs:545`) writes nothing anywhere, logs nothing,
 and **halts** on the first failure it meets. There is no `on_error`, no
 `SkipPolicy` and no policy argument of any kind, and that absence is deliberate
 rather than unfinished — it is this clause's own *Rejects* read one layer up. A
@@ -6525,7 +6525,7 @@ and the obstacle is now stronger than *"nobody got round to it"*.** The port's
 shared between tasks at all — and moving one into a `tokio::spawn` would
 additionally require `Send`, which the flavour that exists for `wasm32` cannot
 promise. `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:524`) therefore drives exactly one
+(`crates/happenstance/src/runner.rs:545`) therefore drives exactly one
 projection per call, catches no unwind, and spawns nothing; N read models cost N
 independent reads.
 
@@ -6653,7 +6653,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:524`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:545`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 
@@ -7795,11 +7795,11 @@ reach is `SequencedEvent::position`, the arrival order here. The two coincide in
 *value* for an event this store authored, because the origin and the arrival are
 the same store; that does not break convergence, since the value is reached through
 `EventId`, which is identical on every peer, and never through the arrival field.
-[ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) fixes the surface at
-phase 17: `apply` is handed a `Delivered<E>` with `id()` and no position accessor,
-and asking it for one is `E0599` (`experiments/apply-shape`, which also ran a
-restored log whose local and origin orders differ and saw the origin identities
-delivered). Phase 18 builds it and freezes this clause on it.
+[ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) fixed the surface at phase 17 and phase 18 built it (#98):
+`apply` is handed a `happenstance::Delivered<E>` with `id()` and no position accessor, and asking it for one is `E0599`,
+held by a `compile_fail` doctest beside a compiling control. `experiments/apply-shape` ran a restored log whose local and
+origin orders differ and saw the origin identities delivered; `crates/happenstance/tests/projection_runner.rs`'s
+`apply_is_handed_the_origin_identity_not_the_local_position` runs that case through the shipped runner. The freeze is #127's.
 
 *Rejects:* ADR-0007's `apply` signature as it currently stands, which hands the
 projection `Sequenced<Self::Event>`

@@ -126,7 +126,7 @@ renews them with the disposition phase 16 gave.
 - [ ] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
 - [ ] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
-      (`crates/happenstance/src/runner.rs:519`) becomes a named `Chunk`:
+      (`crates/happenstance/src/runner.rs:550`) becomes a named `Chunk`:
       `#[non_exhaustive]`, private representation, `Chunk::of(NonZeroUsize)` its
       first constructor — the shape `Retry` already has
       (`crates/happenstance/src/command.rs:43-62`). The fan-out runner above takes
