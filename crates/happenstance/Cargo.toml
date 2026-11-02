@@ -54,6 +54,15 @@ happenstance-core = { workspace = true }
 # `[workspace.dependencies]`, so no new crate enters the graph.
 serde = { workspace = true }
 thiserror = { workspace = true }
+# Derives `SendProjection`, the `Send` flavour of `Projection`, from the one
+# trait this crate writes (ADR-0074 decision 1), as `happenstance-core` derives
+# its ports' flavours. The requirement is the workspace's caret, which ADR-0092
+# keeps and answers with the derivation contract in `src/derivation.rs`.
+#
+# Unconditional rather than optional behind `unstable-projection`: it adds no
+# node to any dependency graph, because `happenstance-core` already depends on
+# it unconditionally, so a `dep:` switch would gate nothing.
+trait-variant = { workspace = true }
 # One optional crate per codec, each reached only through the feature that names
 # it with `dep:` below. A bare `serde_json/std` inside a feature would enable the
 # dependency as a side effect, which is how a feature ends up shipping a crate
@@ -125,16 +134,17 @@ postcard = ["dep:postcard"]
 # alpha would have shipped `json` + `postcard` and this line would be the reason
 # it did not.
 cbor = ["dep:ciborium"]
-# The typed projection runner: `Projection`, `run_projection`, `Progressed` and
-# `ProjectionError`. **Off by default**, and the name is still the promise —
-# but the subject of the instability moved. Until ADR-0063 it was the port
+# The typed projection runner: `Projection`, `SendProjection`, `Delivered`,
+# `run_projection`, `Progressed` and `ProjectionError`. **Off by default**, and
+# the name is still the promise — but the subject of the instability moved. Until ADR-0063 it was the port
 # beneath the runner, `happenstance-core`'s `ProjectionStore`, which is frozen
-# now and reachable here without any feature. What is unproved is the runner's
-# own shape: `Projection::apply` is synchronous, so a projection can push into
-# a buffered batch and cannot issue a statement into a batch that is a live
-# transaction (ADR-0062 named this as the axis after the port's). These four
-# items make no semver promise until that is settled, and a reader still has to
-# type the word `unstable` before any of them is in their build.
+# now and reachable here without any feature. What is moving is the runner's
+# own shape. `Projection::apply` is `async` and handed a `Delivered` event since
+# ADR-0074 was built, so a projection can await a statement on a live batch;
+# phase 18 is still settling the rest (the error type, the failure policy,
+# `Chunk`). These items make no semver promise until that is settled (#132), and
+# a reader still has to type the word `unstable` before any of them is in their
+# build.
 #
 # It no longer forwards to the contract crate: `happenstance-core`'s
 # `unstable-projection` gated nothing from ADR-0063 and was removed in `0.4.0`,

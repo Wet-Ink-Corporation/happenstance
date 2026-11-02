@@ -38,8 +38,8 @@
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Codec, CodecError, DecisionModel, DomainEvent, EventType, InvalidTag, Projection, ProjectionId,
-    ProjectionStore, Tag, Tags,
+    Codec, CodecError, DecisionModel, Delivered, DomainEvent, EventType, InvalidTag, Projection,
+    ProjectionId, ProjectionStore, Tag, Tags,
 };
 use happenstance_core::MemoryProjectionBatch;
 use happenstance_sqlite::projection_store::SqliteProjectionStore;
@@ -247,14 +247,14 @@ impl Projection for SqliteTotals {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Self::Event,
+        event: Delivered<Self::Event>,
         batch: &mut <Self::Store as ProjectionStore>::Batch,
     ) -> Result<(), <Self::Store as ProjectionStore>::Error> {
         let Recorded::Happened {
             account, amount, ..
-        } = event;
+        } = event.into_event();
         batch.push(
             "INSERT INTO account_total (account, total) VALUES (?1, ?2) \
              ON CONFLICT(account) DO UPDATE SET total = account_total.total + excluded.total",
@@ -304,14 +304,14 @@ impl Projection for MemoryTotals {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Self::Event,
+        event: Delivered<Self::Event>,
         batch: &mut MemoryProjectionBatch,
     ) -> Result<(), <Self::Store as ProjectionStore>::Error> {
         let Recorded::Happened {
             account, amount, ..
-        } = event;
+        } = event.into_event();
         batch.write(account.as_str().to_owned(), u64::from(amount));
         Ok(())
     }

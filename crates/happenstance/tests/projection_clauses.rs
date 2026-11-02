@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Checkpoint, Codec, CodecError, DomainEvent, Event, EventStore, EventType, Json,
+    Checkpoint, Codec, CodecError, Delivered, DomainEvent, Event, EventStore, EventType, Json,
     MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
     Projection, ProjectionId, ProjectionStore, ResetError, Tags, run_projection,
 };
@@ -179,12 +179,12 @@ impl Projection for Shreds {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Part,
+        event: Delivered<Part>,
         batch: &mut MemoryProjectionBatch,
     ) -> Result<(), MemoryProjectionStoreError> {
-        let Part::Shredded { vin } = event;
+        let Part::Shredded { vin } = event.into_event();
         assert!(
             self.panic_on.as_deref() != Some(vin.as_str()),
             "the PS-30 subject: `apply` panics part-way through a chunk"

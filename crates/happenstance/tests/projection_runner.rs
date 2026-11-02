@@ -24,11 +24,11 @@ use std::collections::BTreeMap;
 use futures_core::Stream;
 use happenstance::bytes::Bytes;
 use happenstance::{
-    AppendCondition, AppendError, Checkpoint, Codec, CodecError, DomainEvent, Event, EventId,
-    EventStore, EventType, Json, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
-    MemoryProjectionStoreError, MemoryStoreError, Progressed, Projection, ProjectionError,
-    ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions, SequencePosition, SequencedEvent,
-    Tags, run_projection,
+    AppendCondition, AppendError, Checkpoint, Codec, CodecError, Delivered, DomainEvent, Event,
+    EventId, EventStore, EventType, Json, MemoryEventStore, MemoryProjectionBatch,
+    MemoryProjectionStore, MemoryProjectionStoreError, MemoryStoreError, Progressed, Projection,
+    ProjectionError, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
+    SequencePosition, SequencedEvent, Tags, run_projection,
 };
 use happenstance_testkit::GappyMemoryStore;
 use serde::{Deserialize, Serialize};
@@ -151,14 +151,15 @@ impl Projection for VanStock {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Self::Event,
+        event: Delivered<Self::Event>,
         batch: &mut MemoryProjectionBatch,
     ) -> Result<(), MemoryProjectionStoreError> {
         // The match is on the application's **own enum**, not on an
         // `EventType` and not on `Bytes`. A signature taking `Bytes` would not
         // compile against this impl.
+        let event = event.into_event();
         let (depot, delta) = match &event {
             Stock::Delivered { depot, units } => (depot.clone(), i128::from(*units)),
             Stock::Dispatched { depot, units } => (depot.clone(), -i128::from(*units)),
@@ -441,7 +442,8 @@ async fn checkpoint_only_runner(
             .decode(event.event.data())
             .expect("the fixture decodes");
         projection
-            .apply(decoded, &mut batch)
+            .apply(Delivered::new(event.id, decoded), &mut batch)
+            .await
             .expect("the oracle cannot fail");
         // The defect, in one line: the batch is dropped and a fresh, empty one
         // carries the checkpoint forward.
@@ -766,4 +768,157 @@ fn a_buffered_run_is_ready_at_its_first_poll_without_a_runtime() {
     };
     assert_eq!(progress.applied, 2);
     assert_eq!(progress.through, events.last_position());
+}
+
+/// A future that is `Pending` once, having woken itself, and then `Ready`.
+struct YieldOnce(bool);
+
+impl Future for YieldOnce {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        if self.0 {
+            return Poll::Ready(());
+        }
+        self.0 = true;
+        cx.waker().wake_by_ref();
+        Poll::Pending
+    }
+}
+
+/// `VanStock`, except that `apply` yields once before it writes: the shape of
+/// a projection awaiting a statement on a live batch.
+#[derive(Debug)]
+struct Yielding(VanStock);
+
+impl Projection for Yielding {
+    type Event = Stock;
+    type Store = MemoryProjectionStore;
+
+    fn id(&self) -> &ProjectionId {
+        self.0.id()
+    }
+
+    fn scope(&self) -> &Tags {
+        self.0.scope()
+    }
+
+    async fn apply(
+        &mut self,
+        event: Delivered<Stock>,
+        batch: &mut MemoryProjectionBatch,
+    ) -> Result<(), MemoryProjectionStoreError> {
+        YieldOnce(false).await;
+        self.0.apply(event, batch).await
+    }
+}
+
+/// The control that keeps the first-poll test above from being decorative.
+///
+/// The same run, the same stores, one difference: `apply` yields. The first
+/// poll is `Pending`, so the instrument can tell a run that yields from one
+/// that does not, and the buffered run being `Ready` is a measurement.
+#[test]
+fn a_run_whose_apply_yields_is_pending_at_its_first_poll() {
+    let events =
+        MemoryEventStore::with_events([landed(&delivered("d7", 3)), landed(&delivered("d7", 4))]);
+    let models = MemoryProjectionStore::new();
+    let mut stock = Yielding(VanStock::for_depot("d7"));
+
+    let mut context = Context::from_waker(core::task::Waker::noop());
+    let run = core::pin::pin!(run_projection(
+        &events,
+        &models,
+        &mut stock,
+        &Json,
+        chunk(1)
+    ));
+    let outcome = run.poll(&mut context);
+
+    assert!(
+        outcome.is_pending(),
+        "an `apply` that yields must make the run yield: {outcome:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SY-21 — `apply` is handed the origin's identity, not the local position
+// ---------------------------------------------------------------------------
+
+/// Records the identity of every event it is handed, and nothing else.
+#[derive(Debug)]
+struct Identities {
+    id: ProjectionId,
+    scope: Tags,
+    seen: Vec<EventId>,
+}
+
+impl Projection for Identities {
+    type Event = Stock;
+    type Store = MemoryProjectionStore;
+
+    fn id(&self) -> &ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    async fn apply(
+        &mut self,
+        event: Delivered<Stock>,
+        _: &mut MemoryProjectionBatch,
+    ) -> Result<(), MemoryProjectionStoreError> {
+        self.seen.push(event.id());
+        Ok(())
+    }
+}
+
+/// A restored log whose local order is not its origin's.
+///
+/// Locally the three events sit at 1, 2 and 3; the store that originated them
+/// gave them 30, 10 and 20. The wrong implementation this rejects is a runner
+/// that re-mints the identity from what it read locally,
+/// `EventId::new(local_store, event.position)`: every id it hands over would
+/// name the wrong store and the wrong position.
+#[tokio::test]
+async fn apply_is_handed_the_origin_identity_not_the_local_position() {
+    let origin = happenstance::StoreId::from_bytes([7; 16]);
+    let local = happenstance::StoreId::from_bytes([1; 16]);
+    let log: Vec<SequencedEvent> = [(1, 30), (2, 10), (3, 20)]
+        .into_iter()
+        .map(|(here, there)| {
+            SequencedEvent::new(
+                SequencePosition::new(here).expect("a non-zero local position"),
+                EventId::new(
+                    origin,
+                    SequencePosition::new(there).expect("a non-zero origin position"),
+                ),
+                happenstance::RecordedAt::from_millis(0),
+                landed(&delivered("d7", here)),
+            )
+        })
+        .collect();
+    let expected: Vec<EventId> = log.iter().map(|event| event.id).collect();
+    let events = MemoryEventStore::restore(local, log);
+    let models = MemoryProjectionStore::new();
+    let mut identities = Identities {
+        id: ProjectionId::from_static("identities"),
+        scope: depot_tags("d7"),
+        seen: Vec::new(),
+    };
+
+    let _ = run_projection(&events, &models, &mut identities, &Json, chunk(8))
+        .await
+        .expect("the runner completes");
+
+    assert_eq!(
+        identities.seen, expected,
+        "`apply` saw the origin's identities, in local order"
+    );
+    assert!(
+        identities.seen.iter().all(|id| id.store() == origin),
+        "no identity was re-minted under the local store"
+    );
 }

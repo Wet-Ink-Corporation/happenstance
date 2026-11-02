@@ -32,9 +32,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use happenstance::{
-    Codec, CodecError, DomainEvent, Event, EventStore, EventType, InvalidProjectionId, Json,
-    MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
-    Progressed, Projection, ProjectionId, ProjectionStore, SequencePosition, Tags,
+    Codec, CodecError, Delivered, DomainEvent, Event, EventStore, EventType, InvalidProjectionId,
+    Json, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
+    MemoryProjectionStoreError, Progressed, Projection, ProjectionId, ProjectionStore,
+    SequencePosition, Tags,
 };
 use serde::{Deserialize, Serialize};
 
@@ -292,9 +293,9 @@ impl Projection for View {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        _: Measured,
+        _: Delivered<Measured>,
         batch: &mut MemoryProjectionBatch,
     ) -> Result<(), MemoryProjectionStoreError> {
         self.applied += 1;

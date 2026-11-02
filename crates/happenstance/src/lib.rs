@@ -108,10 +108,10 @@
 //! * [**The typed projection runner**][projection-runner] — decoded events into
 //!   a read model, in chunks, with the rows and the checkpoint moving in one
 //!   commit. Behind `unstable-projection` — not for the port beneath it, which
-//!   is frozen since ADR-0063, but for `Projection::apply` being synchronous:
-//!   a projection can push into a buffered batch and cannot issue a statement
-//!   into a live one, and whether that shape survives is the runner's own open
-//!   axis. One call drives one projection, and it never buffers the replay.
+//!   is frozen since ADR-0063, but because the runner's own shape is settling
+//!   at phase 18: `apply` is `async` now (ADR-0074), so it can await a live
+//!   batch, and its error type and failure policy follow. One call drives one
+//!   projection, and it never buffers the replay.
 //!
 //! # Features
 //!
@@ -126,7 +126,7 @@
 //! | `std` *(default)* | the standard library, forwarded to the contract |
 //! | `memory` *(default)* | `MemoryEventStore`, forwarded to the contract |
 //! | `serde` | the contract's wire-format derives, for replication |
-//! | `unstable-projection` | the projection runner; `apply` is unproved |
+//! | `unstable-projection` | the projection runner; its shape is still moving |
 //!
 //! # Testing in memory
 //!
@@ -189,6 +189,8 @@ mod codec;
 mod command;
 #[cfg(feature = "unstable-projection")]
 mod delivered;
+#[cfg(feature = "unstable-projection")]
+mod derivation;
 mod domain;
 // `runner`, not `projection`. The contract crate already publishes a
 // `projection` module, and this crate re-exports it as
@@ -241,7 +243,7 @@ pub use domain::{DecisionModel, DomainEvent};
 // finding out from a compiler error instead of from the documentation.
 #[cfg(feature = "unstable-projection")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
-pub use runner::{Progressed, Projection, ProjectionError, run_projection};
+pub use runner::{Progressed, Projection, ProjectionError, SendProjection, run_projection};
 
 // The contract's surface, mounted here so a reader who installed the facade can
 // still type the paths the contract's own documentation uses.
