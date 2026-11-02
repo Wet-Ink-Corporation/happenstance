@@ -240,6 +240,8 @@ fn new_identifiers_fit_the_item_table() {
         "Postcard",
         "Cbor",
         "Projection",
+        "SendProjection",
+        "Delivered",
         "run_projection",
         "Progressed",
         "ProjectionError",
@@ -338,6 +340,7 @@ fn crate_root_renders_the_projection_surface() {
     assert!(root.contains("pub use happenstance_core::projection;"));
     for item in [
         "Projection",
+        "SendProjection",
         "run_projection",
         "Progressed",
         "ProjectionError",
@@ -349,7 +352,11 @@ fn crate_root_renders_the_projection_surface() {
     }
     assert!(
         root.contains("pub use runner::{"),
-        "the four items are not re-exported from the crate's own module"
+        "the runner's items are not re-exported from the crate's own module"
+    );
+    assert!(
+        root.contains("pub use delivered::Delivered;"),
+        "`Delivered`, the argument of `apply`, is not re-exported at the root"
     );
 
     // The density budget, in the units the design fixed; 132 since #193's
@@ -686,4 +693,58 @@ fn run_projection_states_the_single_writer_obligation() {
         "`{heading}` states the obligation without saying that \
          `CheckpointRegression` guards only the backwards half: {body}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// #138 — no page in this crate still says `apply` is synchronous
+// ---------------------------------------------------------------------------
+
+/// Prose with its comment markers stripped and its whitespace collapsed, so a
+/// sentence broken across lines reads as one.
+fn prose(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            ["//!", "///", "//", "#"]
+                .iter()
+                .find_map(|marker| trimmed.strip_prefix(marker))
+                .unwrap_or(trimmed)
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// ADR-0074 made `apply` `async`, and the pages a reader meets first say so.
+///
+/// The trait page carries the section that explains the keyword, and neither
+/// it, the crate root nor the README still describes `apply` as synchronous:
+/// the shape every one of them used to explain was the one this replaced. A
+/// text read, so it runs in every feature configuration (RS-81).
+#[test]
+fn the_trait_page_says_why_apply_is_async() {
+    let runner = read("runner.rs");
+    let doc = item_doc(&runner, "pub trait Projection");
+    assert!(
+        doc.iter().any(|line| line == "# Why `apply` is `async`"),
+        "the `Projection` page has no `# Why `apply` is `async`` section"
+    );
+
+    let readme = std::fs::read_to_string(src().join("../README.md"))
+        .expect("the crate's README is readable");
+    for (page, text) in [
+        ("the `Projection` page", doc.join(" ")),
+        ("lib.rs", read("lib.rs")),
+        ("README.md", readme),
+    ] {
+        let text = prose(&text);
+        for stale in ["is synchronous", "being synchronous"] {
+            assert!(
+                !text.contains(stale),
+                "{page} still says `apply` {stale}: ADR-0074 made it `async`"
+            );
+        }
+    }
 }

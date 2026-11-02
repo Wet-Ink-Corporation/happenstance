@@ -12,8 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/project-thread-uikw3l-046`, on `0c257a8` (`main`, where PR #373
-merged). 2026-11-02.
+`claude/project-thread-u1dtdj-98`, on `phase-18` at `ac02857`. 2026-11-02.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -57,6 +56,12 @@ and retention (14), and `1.0.0` (21) last.
 sessions cannot push tags; the owner pushes them.
 
 ## In flight
+
+Phase 18, on the `phase-18` integration branch. `claude/project-thread-u1dtdj-98`
+builds #135 and #138 for #98: `Projection::apply` is `async` and handed a
+`Delivered<E>`, and `SendProjection` is derived. The #98 box stays open until #142
+runs a live-Postgres projection through it. PR #375 (`0.5.0`) and #120 (`Chunk`)
+land on `phase-18` beside it.
 
 The `0.4.6` release PR. The owner merges it and tags its merge commit
 (`git tag -a v0.4.6 <merge-sha> -m "0.4.6"`, then push the tag); `release.yml`

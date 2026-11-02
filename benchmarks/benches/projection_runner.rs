@@ -4,7 +4,7 @@
 //!
 //! `run_projection` does one read for the whole run and pulls the stream item
 //! by item, holding at most `chunk` events between `begin` and `commit`
-//! (`crates/happenstance/src/runner.rs:418`). That is its **only** throughput
+//! (`crates/happenstance/src/runner.rs:449`). That is its **only** throughput
 //! knob, and PS-13/PS-14 require the *result* to be identical at every value of
 //! it — `rebuild_is_chunk_size_invariant` is a conformance rule.
 //!

@@ -126,7 +126,7 @@ renews them with the disposition phase 16 gave.
 - [ ] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
 - [ ] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
-      (`crates/happenstance/src/runner.rs:521`) becomes a named `Chunk`:
+      (`crates/happenstance/src/runner.rs:552`) becomes a named `Chunk`:
       `#[non_exhaustive]`, private representation, `Chunk::of(NonZeroUsize)` its
       first constructor — the shape `Retry` already has
       (`crates/happenstance/src/command.rs:43-62`). The fan-out runner above takes
@@ -197,6 +197,13 @@ PS-30 each with a rule and a mutant that fails it.
 
 **Session log**
 
+- 2026-11-02 — #135 and #138 built on `claude/project-thread-u1dtdj-98`, for #98:
+  `Projection::apply` is `async` and handed a `Delivered<E>`, `SendProjection` is
+  derived with `trait_variant`, and every `impl Projection` in the tree is rewritten.
+  The runner hands `apply` the `EventId` it read (SY-21's typed-layer test). The #98
+  box stays open: its live-Postgres leg is #142, which also owns
+  `happenstance-postgres`'s four "apply is synchronous" passages. SY-21 stays
+  `[PROVISIONAL]` until #127.
 - 2026-11-02 — #120: `Chunk` shipped as a plain `chunk: Chunk` parameter, not
   `impl Into<Chunk>`. The compile showed `impl Into` keeps only the sites already
   holding a `NonZeroUsize`, while the seven `x.try_into()?` sites break either way

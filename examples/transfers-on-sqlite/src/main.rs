@@ -64,9 +64,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Boundary, Chunk, Codec, CodecError, CommandError, DecisionModel, DomainEvent, EventStore,
-    EventType, InvalidTag, Json, Projection, ProjectionId, Query, ReadOptions, Retry, Tag, Tags,
-    collect, commit, read_decision_model, run_projection,
+    Boundary, Chunk, Codec, CodecError, CommandError, DecisionModel, Delivered, DomainEvent,
+    EventStore, EventType, InvalidTag, Json, Projection, ProjectionId, Query, ReadOptions, Retry,
+    Tag, Tags, collect, commit, read_decision_model, run_projection,
 };
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
@@ -553,12 +553,12 @@ impl Projection for Balances {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Ledger,
+        event: Delivered<Ledger>,
         batch: &mut SqliteBatch,
     ) -> Result<(), SqliteProjectionStoreError> {
-        let (account, delta) = match event {
+        let (account, delta) = match event.into_event() {
             Ledger::AccountOpened { account } => (account, 0),
             Ledger::Deposited { account, amount } => (account, i64::from(amount)),
             Ledger::Withdrawn { account, amount } => (account, -i64::from(amount)),

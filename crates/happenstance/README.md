@@ -39,9 +39,9 @@ and works up to dynamic consistency boundaries. Its source is `docs/`.
   condition names; the contract crate's `projection` module carries the
   account. What this crate still holds behind its off-by-default
   `unstable-projection` feature is the typed **runner** — `Projection`,
-  `run_projection` and their companions — because `Projection::apply` is
-  synchronous and that shape is not yet proved at its far end. The port needs
-  no feature; the runner still needs the word `unstable`.
+  `run_projection` and their companions — because its shape is still settling
+  at phase 18: `apply` is `async` now, and its error type and failure policy
+  follow. The port needs no feature; the runner still needs the word `unstable`.
 - **Pin [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)
   exactly** if you depend on it. It carries its own version, and adding a
   conformance rule is a semver-*minor* change there that can turn a passing

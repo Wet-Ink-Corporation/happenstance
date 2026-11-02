@@ -18,7 +18,7 @@ summary: >-
   hand-written wrapper does, with no unsafe. And ADR-0009's marker-trait shape has now been
   exercised by a real consumer — run_projection cannot be spawned without a caller-side bound,
   which is ES-6 working as frozen rather than a defect, with the consequence finally written
-  where a caller meets it, on run_projection's own page at crates/happenstance/src/runner.rs:297-310.
+  where a caller meets it, on run_projection's own page at crates/happenstance/src/runner.rs:325-338.
 depends_on: []
 related:
   - kb-decision-0001
@@ -125,7 +125,7 @@ reporting a promise **kept** rather than a premise half wrong, and it is listed 
 reason: the other six each correct something, and a register that records only corrections reads as
 a defect list. What was actually missing was that nobody had written the consequence where a caller
 meets it, which is now on `run_projection`'s own page
-(`crates/happenstance/src/runner.rs:297-310`), with the worked shape in
+(`crates/happenstance/src/runner.rs:325-338`), with the worked shape in
 `crates/happenstance/tests/flavours.rs`.
 
 ## Provenance

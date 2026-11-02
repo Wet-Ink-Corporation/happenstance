@@ -28,19 +28,41 @@ not the same as what a user needed to be told.
   ADR-0063 lifted the gate on the evidence ADR-0062 produced. The feature
   survived on `happenstance-core` as an empty name, so that `0.2.0` manifests
   resolved, until `0.4.0` removed it. What `happenstance` still holds behind a feature
-  of the same name is the typed **runner**, whose `Projection::apply` shape is
-  not yet proved at its far end. See
+  of the same name is the typed **runner**, whose shape phase 18 is still
+  settling. See
   [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
 ## [Unreleased]
 
 ### Changed
 
+- **Breaking, behind `unstable-projection`: `happenstance::Projection::apply` is
+  `async` and is handed a `Delivered<Self::Event>`**
+  ([ADR-0074](.kb/decisions/0074-projection-apply-is-async.md), #98, #135, #138).
+  An implementation changes `fn apply(&mut self, event: E, batch: &mut B)` to
+  `async fn apply(&mut self, event: Delivered<E>, batch: &mut B)` with the same
+  return type, and reads the event with `event.into_event()` or `event.event()`.
+  A projection over a buffered batch never awaits: its run is ready at the
+  first poll and behaves as before. A projection over a live batch can now
+  await a statement through it. The error type is unchanged in this release.
+  `unstable-projection` makes no semver promise (ADR-0066).
 - `happenstance` (behind `unstable-projection`): `run_projection` takes
   `chunk: Chunk` rather than a bare `NonZeroUsize` (ADR-0070, #120). Migrate
   with `Chunk::of(n)`. `Chunk` is `#[non_exhaustive]` and `Copy`, with a
   private representation and no `Default`; the runner stays exempt from semver
   while the feature gates it.
+
+### Added
+
+- `happenstance` (behind `unstable-projection`): `Delivered<E>`, the event
+  `apply` is handed. It exposes `id()`, the origin's `EventId`, `event()` and
+  `into_event()`, and a public `Delivered::new(id, event)` so an application can
+  unit-test its own `apply`. It has no accessor for the local arrival position
+  (SY-21).
+- `happenstance` (behind `unstable-projection`): `SendProjection`, the `Send`
+  flavour of `Projection`, derived with `trait_variant`. Implement exactly one
+  of the two. `trait-variant` is now a direct dependency of `happenstance`,
+  under the workspace's existing caret, and adds no crate to the graph.
 
 ## [0.4.6] — 2026-11-02
 

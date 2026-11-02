@@ -108,10 +108,10 @@
 //! * [**The typed projection runner**][projection-runner] — decoded events into
 //!   a read model, in chunks, with the rows and the checkpoint moving in one
 //!   commit. Behind `unstable-projection` — not for the port beneath it, which
-//!   is frozen since ADR-0063, but for `Projection::apply` being synchronous:
-//!   a projection can push into a buffered batch and cannot issue a statement
-//!   into a live one, and whether that shape survives is the runner's own open
-//!   axis. One call drives one projection, and it never buffers the replay.
+//!   is frozen since ADR-0063, but because the runner's own shape is settling
+//!   at phase 18: `apply` is `async` now (ADR-0074), so it can await a live
+//!   batch, and its error type and failure policy follow. One call drives one
+//!   projection, and it never buffers the replay.
 //!
 //! # Features
 //!
@@ -126,7 +126,7 @@
 //! | `std` *(default)* | the standard library, forwarded to the contract |
 //! | `memory` *(default)* | `MemoryEventStore`, forwarded to the contract |
 //! | `serde` | the contract's wire-format derives, for replication |
-//! | `unstable-projection` | the projection runner; `apply` is unproved |
+//! | `unstable-projection` | the projection runner; its shape is still moving |
 //!
 //! # Testing in memory
 //!
@@ -187,6 +187,10 @@ mod composition;
 mod boundary;
 mod codec;
 mod command;
+#[cfg(feature = "unstable-projection")]
+mod delivered;
+#[cfg(feature = "unstable-projection")]
+mod derivation;
 mod domain;
 // `runner`, not `projection`. The contract crate already publishes a
 // `projection` module, and this crate re-exports it as
@@ -230,13 +234,16 @@ pub use codec::{Codec, CodecError};
 #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 pub use command::commit;
 pub use command::{CommandError, CommandOutcome, Committed, Retry, commit_with};
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use delivered::Delivered;
 pub use domain::{DecisionModel, DomainEvent};
 // Off by default, and the badge is what says so on the rendered page: an
 // item that only exists behind a feature and does not name it is the reader
 // finding out from a compiler error instead of from the documentation.
 #[cfg(feature = "unstable-projection")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
-pub use runner::{Progressed, Projection, ProjectionError, run_projection};
+pub use runner::{Progressed, Projection, ProjectionError, SendProjection, run_projection};
 // `Chunk` is the runner's vocabulary, not the runner: its own module, so the
 // fan-out runner (#112) takes it from the same place `run_projection` does.
 #[cfg(feature = "unstable-projection")]

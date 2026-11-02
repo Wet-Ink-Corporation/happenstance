@@ -58,9 +58,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Checkpoint, Chunk, Codec, CodecError, CommandError, DecisionModel, DomainEvent, EventStore,
-    EventType, InvalidTag, Json, Projection, ProjectionError, ProjectionId, ProjectionStore, Query,
-    ReadOptions, Retry, Tag, Tags, collect, commit, run_projection,
+    Checkpoint, Chunk, Codec, CodecError, CommandError, DecisionModel, Delivered, DomainEvent,
+    EventStore, EventType, InvalidTag, Json, Projection, ProjectionError, ProjectionId,
+    ProjectionStore, Query, ReadOptions, Retry, Tag, Tags, collect, commit, run_projection,
 };
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
@@ -1084,12 +1084,12 @@ impl Projection for StockOnHand {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Fulfilment,
+        event: Delivered<Fulfilment>,
         batch: &mut SqliteBatch,
     ) -> Result<(), SqliteProjectionStoreError> {
-        let (sku, delta) = match event {
+        let (sku, delta) = match event.into_event() {
             Fulfilment::StockReceived { sku, quantity }
             | Fulfilment::OrderCancelled { sku, quantity, .. } => (sku, i64::from(quantity)),
             Fulfilment::OrderPlaced { sku, quantity, .. } => (sku, -i64::from(quantity)),
@@ -1145,12 +1145,12 @@ impl Projection for OrderStatus {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Fulfilment,
+        event: Delivered<Fulfilment>,
         batch: &mut SqliteBatch,
     ) -> Result<(), SqliteProjectionStoreError> {
-        let (order, status, sku, quantity) = match event {
+        let (order, status, sku, quantity) = match event.into_event() {
             Fulfilment::OrderPlaced {
                 order,
                 sku,
@@ -1314,12 +1314,12 @@ impl Projection for DailyDispatches {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Fulfilment,
+        event: Delivered<Fulfilment>,
         batch: &mut SqliteBatch,
     ) -> Result<(), SqliteProjectionStoreError> {
-        let (day, delta) = match event {
+        let (day, delta) = match event.into_event() {
             Fulfilment::OrderDispatched { day, quantity, .. } => match self.counting {
                 Counting::Orders => (day, 1),
                 Counting::Units => (day, i64::from(quantity)),
@@ -1378,12 +1378,12 @@ impl Projection for Couriered {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Handover,
+        event: Delivered<Handover>,
         batch: &mut SqliteBatch,
     ) -> Result<(), SqliteProjectionStoreError> {
-        let Handover::OrderDispatched { order, courier } = event;
+        let Handover::OrderDispatched { order, courier } = event.into_event();
 
         batch.push(
             "INSERT INTO couriered (order_ref, courier) VALUES (?1, ?2) \

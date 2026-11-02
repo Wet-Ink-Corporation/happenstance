@@ -445,8 +445,12 @@ struct Enrolments {
     count: u64,
 }
 
+// The `Send` flavour, `SendProjection`, reaching the bare `Projection` that
+// `run_projection` binds through the blanket impl `trait_variant` derives. This
+// is the test that spawns, so it is where the two meet across a real
+// `tokio::spawn`.
 #[cfg(feature = "unstable-projection")]
-impl happenstance::Projection for Enrolments {
+impl happenstance::SendProjection for Enrolments {
     type Event = Subscribed;
     type Store = happenstance::MemoryProjectionStore;
 
@@ -458,9 +462,9 @@ impl happenstance::Projection for Enrolments {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        _event: Self::Event,
+        _event: happenstance::Delivered<Self::Event>,
         batch: &mut happenstance::MemoryProjectionBatch,
     ) -> Result<(), happenstance::MemoryProjectionStoreError> {
         self.count += 1;
@@ -571,6 +575,91 @@ async fn run_projection_spawns_from_generic() {
         .expect("the spawned task did not panic");
 
     assert_eq!(counted, 2, "one applied event plus a non-empty head");
+    assert_eq!(models.get("enrolments"), Some(1));
+}
+
+/// A read model that is genuinely `!Send`: its count lives behind an `Rc`.
+///
+/// `Rc<Cell<_>>` rather than a plain field because the count is read back
+/// after the run through a second handle, which is exactly the sharing a
+/// single-threaded runtime allows and a `Send` bound would refuse.
+#[cfg(feature = "unstable-projection")]
+#[derive(Debug)]
+struct LocalEnrolments {
+    id: happenstance::ProjectionId,
+    scope: Tags,
+    count: Rc<core::cell::Cell<u64>>,
+}
+
+#[cfg(feature = "unstable-projection")]
+impl happenstance::Projection for LocalEnrolments {
+    type Event = Subscribed;
+    type Store = happenstance::MemoryProjectionStore;
+
+    fn id(&self) -> &happenstance::ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    async fn apply(
+        &mut self,
+        _event: happenstance::Delivered<Self::Event>,
+        batch: &mut happenstance::MemoryProjectionBatch,
+    ) -> Result<(), happenstance::MemoryProjectionStoreError> {
+        self.count.set(self.count.get() + 1);
+        batch.write("enrolments", self.count.get());
+        Ok(())
+    }
+}
+
+/// `run_projection` binds the bare `Projection`, so a `!Send` projection runs.
+///
+/// The same guarantee `every_entry_point_binds_the_weak_flavour` holds for the
+/// store, one argument over: a runner that started binding `SendProjection`
+/// would refuse this call with `E0277`, and a `wasm32` projection holding an
+/// `Rc` would have no runner. The probe is the positive control that the
+/// projection really is `!Send`, so the call is not passing on a `Send` type.
+#[cfg(feature = "unstable-projection")]
+#[tokio::test]
+async fn a_not_send_projection_runs_through_the_bare_flavour() {
+    use core::marker::PhantomData;
+    use core::num::NonZeroUsize;
+
+    use happenstance::{MemoryProjectionStore, ProjectionId};
+    use send_probe::{NotSend as _, Probe};
+
+    assert!(
+        !Probe::<LocalEnrolments>(PhantomData).is_send(),
+        "the projection under test must not be `Send`, or this proves nothing"
+    );
+
+    let store = LocalStore::new();
+    let _seeded = commit_with(&store, seats(), &Json, Retry::once(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Subscribed {
+            student: "s1".to_owned(),
+        }])
+    })
+    .await
+    .expect("an uncontended commit against a !Send store");
+
+    let count = Rc::new(core::cell::Cell::new(0));
+    let mut local = LocalEnrolments {
+        id: ProjectionId::from_static("enrolments"),
+        scope: course_tags(),
+        count: Rc::clone(&count),
+    };
+    let models = MemoryProjectionStore::new();
+    let chunk = happenstance::Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
+
+    let progressed = run_projection(&store, &models, &mut local, &Json, chunk)
+        .await
+        .expect("a replay of a !Send projection against a !Send store");
+
+    assert_eq!(progressed.applied, 1);
+    assert_eq!(count.get(), 1);
     assert_eq!(models.get("enrolments"), Some(1));
 }
 

@@ -222,7 +222,7 @@ closes the question that ADR-0066 left inside the promise. `projection-store` is
 - **SQLite and Postgres:** no signature changes. On Postgres, a statement with a surplus value,
   which today sometimes commits, is always refused once the count check lands. Every in-tree caller already passes a literal or a `const`, in
   `examples/rebuilding-read-models/src/main.rs:1100-1123`, `:1218`, `:1356`,
-  `examples/tickets-over-http/src/lib.rs:622-630` and `examples/transfers-on-sqlite/src/main.rs:562-567`.
+  `examples/tickets-over-http/src/lib.rs:622-630` and `examples/transfers-on-sqlite/src/main.rs:564-569`.
 - **Neon:** the change is breaking.
   - `push(SqlStatement::with_params(lit, v))` becomes `push(lit, v)`.
   - A computed statement becomes `push_raw_sql(SqlStatement::…)`.

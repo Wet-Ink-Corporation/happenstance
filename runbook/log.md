@@ -10,6 +10,22 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-02 — `Projection::apply` is `async` (#98, #135, #138)
+
+*Committed on `claude/project-thread-u1dtdj-98`, based on `phase-18`.* ADR-0074
+decisions 1–4 are built behind `unstable-projection`: `apply` is `async` and handed a
+`Delivered<E>` with `id()` and no arrival position, `SendProjection` is derived with
+`trait_variant` (now a direct dependency of `happenstance`, under the workspace
+caret), and the twelve impls and one doctest in the tree are rewritten. The error
+type is unchanged; #99 owns it. `happenstance-postgres`'s passages saying `apply` is
+synchronous are #142's, and SY-21's freeze is #127's. Detail in
+[phase 18's session log](phases/18-typed-runner.md).
+
+**Verified.** The temper gate, `cargo xtask lints`, `spec-trace`, `lint-kb` against
+`ac02857`, and `cargo check -p happenstance` for `wasm32-unknown-unknown` with
+`unstable-projection`; `benchmarks/` checked and `experiments/polling-cost` tested
+from their own workspaces.
+
 ## 2026-11-02 — `0.4.6`, Cloudflare's tags-per-call ceiling
 
 *Committed on `claude/project-thread-uikw3l-046`.* `[Unreleased]` becomes

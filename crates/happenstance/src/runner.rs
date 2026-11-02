@@ -15,6 +15,7 @@ use happenstance_core::{
 use crate::boundary::{AtLeastOneType, derive_query};
 use crate::chunk::Chunk;
 use crate::codec::{Codec, CodecError, decode_event};
+use crate::delivered::Delivered;
 use crate::domain::DomainEvent;
 
 /// The adapter error of whatever store a projection writes into.
@@ -47,18 +48,30 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// The cost is real and worth naming: two read models in two stores are two
 /// implementations of this trait, and their checkpoints advance independently.
 ///
-/// # Why `apply` is synchronous
+/// # Why `apply` is `async`
 ///
-/// It writes into a batch that is already open — a buffer, a statement list, a
-/// transaction the adapter is holding — and buffering a row does not await.
-/// An `async fn apply` was the alternative: it would double the surface every
-/// application implements (`trait_variant` derives the `Send` flavour, and
-/// `#[async_trait]` is forbidden outright because its injected `+ Send` makes
-/// the `wasm32` target impossible), in exchange for an await nothing here
-/// needs. An implementation that genuinely must await should do the awaiting
-/// in the adapter's `commit`, which is already `async`.
+/// Because a batch can be a live transaction. A buffered batch, a map or a
+/// statement list, is written by pushing: its `apply` never awaits, so its
+/// future is ready at the first poll and the keyword costs a buffered
+/// projection nothing at run time. A batch that *is* the transaction, such as
+/// `happenstance-postgres`'s `LivePostgresBatch`, is written by awaiting a
+/// statement, which a synchronous `apply` could not do. The alternative that
+/// lost was a second, `async` trait beside a synchronous one, with a second
+/// runner: it doubles what an application chooses between, where one
+/// `async fn` doubles only the names this crate exports (ADR-0074).
+///
+/// # Which flavour to implement
+///
+/// `#[trait_variant::make]` derives [`SendProjection`], whose `apply` future
+/// is `Send`, and a blanket impl makes every `SendProjection` a `Projection`.
+/// Implement exactly one, as an adapter does for the ports: implementing both
+/// is `E0119`. Implement `SendProjection` when the run will be spawned onto a
+/// multi-threaded runtime, and `Projection` otherwise: a projection holding an
+/// `Rc`, a `!Send` batch, or `wasm32`. `#[async_trait]` is not used, because
+/// the `+ Send` it injects makes the `wasm32` target impossible.
 ///
 /// [`Query`]: happenstance_core::Query
+#[trait_variant::make(SendProjection: Send)]
 pub trait Projection {
     /// The application's own event enum. Not `Bytes`: the runner decodes.
     type Event: DomainEvent;
@@ -81,10 +94,18 @@ pub trait Projection {
     /// somewhere, and the somewhere is always library code.
     fn scope(&self) -> &Tags;
 
-    /// Applies one decoded event into the adapter's open write set.
+    /// Applies one delivered event into the store's open write set.
     ///
-    /// The event arrives as [`Self::Event`], so the fold matches on its own
-    /// variants. Nothing here is durable until the runner commits the chunk.
+    /// The event arrives as a [`Delivered`] of [`Self::Event`]:
+    /// [`into_event`](Delivered::into_event) or [`event`](Delivered::event)
+    /// gives the application's own enum to match on, and
+    /// [`id`](Delivered::id) its origin identity. There is no arrival
+    /// position to read, on purpose; [`Delivered`] says why. Nothing here is
+    /// durable until the runner commits the chunk.
+    ///
+    /// `async` so that a live batch can be awaited through. A buffered
+    /// `apply` never awaits. Dropping the run while `apply` is pending drops
+    /// the open batch uncommitted, so a cancelled run commits nothing.
     ///
     /// # Errors
     ///
@@ -92,11 +113,18 @@ pub trait Projection {
     /// through [`rollback`](ProjectionStore::rollback) and reports the position
     /// it stopped at, so the checkpoint stays where the last good commit left
     /// it.
-    fn apply(
+    //
+    // The store's types are spelled as explicit projections rather than through
+    // `StoreBatch<Self>` and `StoreError<Self>`: those aliases go through
+    // `<P as Projection>`, which the derived `SendProjection` satisfies only
+    // with `Self: Sized`, and the derivation fails with `E0277` (ADR-0074).
+    // The parameters are plain names because the derived blanket impl forwards
+    // by name and refuses a pattern.
+    async fn apply(
         &mut self,
-        event: Self::Event,
-        batch: &mut StoreBatch<Self>,
-    ) -> Result<(), StoreError<Self>>;
+        event: Delivered<Self::Event>,
+        batch: &mut <Self::Store as ProjectionStore>::Batch,
+    ) -> Result<(), <Self::Store as ProjectionStore>::Error>;
 }
 
 /// How far a run got, and how much it applied.
@@ -368,7 +396,7 @@ where
 /// use happenstance::{Event, EventStore, EventType, Json, Tags};
 /// use happenstance::{MemoryEventStore, MemoryProjectionBatch};
 /// use happenstance::{MemoryProjectionStore, MemoryProjectionStoreError};
-/// use happenstance::{Projection, ProjectionId, run_projection};
+/// use happenstance::{Delivered, Projection, ProjectionId, run_projection};
 /// use happenstance::Chunk;
 /// # use std::error::Error;
 /// # #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {
@@ -395,8 +423,11 @@ where
 ///     type Store = MemoryProjectionStore;
 ///     fn id(&self) -> &ProjectionId { &self.id }
 ///     fn scope(&self) -> &Tags { &self.scope }
-///     fn apply(&mut self, _: Seat, batch: &mut MemoryProjectionBatch)
-///         -> Result<(), MemoryProjectionStoreError> {
+///     async fn apply(
+///         &mut self,
+///         _: Delivered<Seat>,
+///         batch: &mut MemoryProjectionBatch,
+///     ) -> Result<(), MemoryProjectionStoreError> {
 ///         self.sold += 1;
 ///         batch.write("sold", self.sold);
 ///         Ok(())
@@ -497,10 +528,10 @@ where
 ///
 // The three sections above sit *after* the fence rather than beside the subject
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:401` as the location of this item and that
+// `crates/happenstance/src/runner.rs:547` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
 // above it pushes the `run_projection` call down and leaves the three citations
-// pointing at whatever now occupies 401.
+// pointing at whatever now occupies 545.
 //
 // **The gate does not catch that, and this comment used to say it did.**
 // `spec-trace` counts a citation and only *anchors* it where it can derive a
@@ -577,7 +608,7 @@ where
             Err(source) => return Err(ProjectionError::Begin { progress, source }),
         };
 
-        if let Err(stopped) = apply_one(projection, codec, &first, &mut batch) {
+        if let Err(stopped) = apply_one(projection, codec, &first, &mut batch).await {
             let rollback = models.rollback(batch).await.err();
             return Err(stopped.into_error(progress, rollback));
         }
@@ -600,7 +631,7 @@ where
                     break;
                 }
                 Some(Ok(event)) => {
-                    if let Err(stop) = apply_one(projection, codec, &event, &mut batch) {
+                    if let Err(stop) = apply_one(projection, codec, &event, &mut batch).await {
                         stopped = Some(stop);
                         break;
                     }
@@ -639,7 +670,7 @@ where
 ///
 /// Split out so the chunk loop reads as a loop: the two failures it can produce
 /// are the two that discard the chunk.
-fn apply_one<P, C, R>(
+async fn apply_one<P, C, R>(
     projection: &mut P,
     codec: &C,
     event: &SequencedEvent,
@@ -656,8 +687,13 @@ where
         source,
     })?;
 
+    // The identity the store read, handed over unchanged: the origin's, never
+    // one re-minted from the local position (SY-21). A plain `.await`, so the
+    // future is held inline in the runner's own state machine and nothing is
+    // boxed or spawned.
     projection
-        .apply(decoded, batch)
+        .apply(Delivered::new(event.id, decoded), batch)
+        .await
         .map_err(|source| Stopped::Apply {
             position: event.position,
             source,

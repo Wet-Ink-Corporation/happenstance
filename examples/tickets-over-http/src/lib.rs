@@ -15,9 +15,9 @@ use std::path::Path;
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Checkpoint, Codec, CodecError, CommandError, CommandOutcome, DecisionModel, DomainEvent,
-    EventType, InvalidTag, Projection, ProjectionId, ProjectionStore, Retry, SequencePosition, Tag,
-    Tags, commit,
+    Checkpoint, Codec, CodecError, CommandError, CommandOutcome, DecisionModel, Delivered,
+    DomainEvent, EventType, InvalidTag, Projection, ProjectionId, ProjectionStore, Retry,
+    SequencePosition, Tag, Tags, commit,
 };
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
@@ -615,12 +615,12 @@ impl Projection for SeatHolders {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Ticketing,
+        event: Delivered<Ticketing>,
         batch: &mut SqliteBatch,
     ) -> Result<(), SqliteProjectionStoreError> {
-        match event {
+        match event.into_event() {
             Ticketing::SeatReserved { seat, patron, .. } => batch.push(
                 "INSERT INTO seat_holder (seat, patron) VALUES (?1, ?2) \
                  ON CONFLICT(seat) DO UPDATE SET patron = excluded.patron",

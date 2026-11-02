@@ -41,9 +41,10 @@ feeds them to your projection in chunks.
 ### Before you start: the runner is not yet stable
 
 `run_projection` sits behind the `unstable-projection` feature, and makes no
-promise of compatibility between releases. That is because the `apply` method
-your projection implements is going to change: it is due to become `async`
-([ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) says why).
+promise of compatibility between releases. The `apply` method your projection
+implements has just become `async` and is handed a `Delivered` event
+([ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) says why), and
+the rest of the runner's shape is still settling.
 The `ProjectionStore` trait underneath it is stable.
 
 So the programs on this page call only the trait, using

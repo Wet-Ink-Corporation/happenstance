@@ -49,7 +49,7 @@ last_reviewed: 2026-09-29
 ## Why this is decided now and not at phase 18
 
 `run_projection`'s signature is `(events, models, projection, codec, chunk: NonZeroUsize)`
-(`crates/happenstance/src/runner.rs:514-520`, `chunk` at `:519`). While `happenstance`'s
+(`crates/happenstance/src/runner.rs:547-553`, `chunk` at `:519`). While `happenstance`'s
 `unstable-projection` gates the runner, that signature carries no semver promise, so changing it is
 free. The moment phase 18 lifts the gate, it is published surface, and replacing `NonZeroUsize` with
 anything else is a major version. The observation seam is the opposite case: every form of it is

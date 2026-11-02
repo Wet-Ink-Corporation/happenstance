@@ -150,7 +150,7 @@ layer's side of that line.
 
 **Classification: exempt surface today, decided in phase 17's `apply` record**
 (`runbook/phases/17-breaking-window.md`). `Projection` sits behind `happenstance`'s
-`unstable-projection`, which makes no semver promise (`crates/happenstance/Cargo.toml:128-148`),
+`unstable-projection`, which makes no semver promise (`crates/happenstance/Cargo.toml:137-158`),
 so changing `apply` breaks nothing published. Phase 18 implements the answer and lifts the gate.
 If it does not, `kb-decision-0066` declares the runner exempt at 1.0. The record also carries
 PS-9, PS-11 and SY-21 (`runbook/ledgers.md`, *The 1.0 dispositions*).
@@ -159,7 +159,7 @@ This atom's premise needs correcting. It cites `crates/happenstance/src/domain.r
 `DecisionModel::apply`. `Projection::apply` is at `crates/happenstance/src/runner.rs:95-99`, and it
 already takes `batch: &mut StoreBatch<Self>` and returns `Result`, so the batch-handle shape has
 landed and only sync-versus-async is open. The stale claim in its own section is resolved:
-`crates/happenstance/Cargo.toml:148` no longer forwards to core. `kb-decision-0070` settles the
+`crates/happenstance/Cargo.toml:158` no longer forwards to core. `kb-decision-0070` settles the
 adjacent `Chunk` question. **Owner now: phase 17 decides, phase 18 builds.**
 
 ## Closed — 2026-09-29
