@@ -201,7 +201,7 @@ static BENCH_PROJECTION: ProjectionId = ProjectionId::from_static("benchmark-tot
 /// A read model over one account, into `happenstance-sqlite`'s deferred batch.
 ///
 /// The `apply` body is one upsert, copied in shape from
-/// `examples/transfers-on-sqlite/src/main.rs:562` — a projection that did less
+/// `examples/transfers-on-sqlite/src/main.rs:564` — a projection that did less
 /// would price the runner's loop without the write it exists to perform, and
 /// one that did more would be measuring an application's SQL rather than the
 /// port's.

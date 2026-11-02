@@ -244,6 +244,13 @@ pub use domain::{DecisionModel, DomainEvent};
 #[cfg(feature = "unstable-projection")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use runner::{Progressed, Projection, ProjectionError, SendProjection, run_projection};
+// `Chunk` is the runner's vocabulary, not the runner: its own module, so the
+// fan-out runner (#112) takes it from the same place `run_projection` does.
+#[cfg(feature = "unstable-projection")]
+mod chunk;
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use chunk::Chunk;
 
 // The contract's surface, mounted here so a reader who installed the facade can
 // still type the paths the contract's own documentation uses.

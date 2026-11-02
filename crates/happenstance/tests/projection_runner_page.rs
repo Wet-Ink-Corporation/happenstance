@@ -1,6 +1,6 @@
 //! What the runner's page owes an operator, and what it owed and did not say.
 //!
-//! Two gaps, one outcome. `run_projection` takes a `chunk: NonZeroUsize` whose
+//! Two gaps, one outcome. `run_projection` takes a `chunk: Chunk` whose
 //! whole specification was its declaration — the page named it once, as the
 //! unit of the buffer, and the doctest supplied `64` with no reason. And the
 //! run is unobservable between chunk commits: no callback, no channel, no
@@ -154,7 +154,7 @@ fn prose_added_to_this_page_stays_below_the_fence() {
             "`{heading}` was added above the doctest fence. Every line above \
              the fence pushes the `run_projection(` call inside it down, and \
              three sentences of `SPECIFICATION.md` cite this item at \
-             `runner.rs:545`, the line it is declared on. `spec-trace` does not \
+             `runner.rs:547`, the line it is declared on. `spec-trace` does not \
              anchor those three, so it will not tell you: this is where it is \
              said"
         );

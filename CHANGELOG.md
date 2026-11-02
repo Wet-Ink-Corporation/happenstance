@@ -46,6 +46,11 @@ not the same as what a user needed to be told.
   first poll and behaves as before. A projection over a live batch can now
   await a statement through it. The error type is unchanged in this release.
   `unstable-projection` makes no semver promise (ADR-0066).
+- `happenstance` (behind `unstable-projection`): `run_projection` takes
+  `chunk: Chunk` rather than a bare `NonZeroUsize` (ADR-0070, #120). Migrate
+  with `Chunk::of(n)`. `Chunk` is `#[non_exhaustive]` and `Copy`, with a
+  private representation and no `Default`; the runner stays exempt from semver
+  while the feature gates it.
 
 ### Added
 

@@ -366,7 +366,7 @@ async fn every_entry_point_binds_the_weak_flavour() {
     {
         use core::num::NonZeroUsize;
 
-        use happenstance::{MemoryProjectionStore, ProjectionId, run_projection};
+        use happenstance::{Chunk, MemoryProjectionStore, ProjectionId, run_projection};
 
         let models = MemoryProjectionStore::new();
         let mut seen = Enrolments {
@@ -374,7 +374,7 @@ async fn every_entry_point_binds_the_weak_flavour() {
             scope: course_tags(),
             count: 0,
         };
-        let chunk = NonZeroUsize::new(64).expect("64 is not zero");
+        let chunk = Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
 
         let progressed = run_projection(&store, &models, &mut seen, &Json, chunk)
             .await
@@ -528,7 +528,8 @@ where
     S: ThreadSafeEventStore + Send + Sync + 'static,
 {
     tokio::spawn(async move {
-        let chunk = core::num::NonZeroUsize::new(64).expect("64 is not zero");
+        let chunk =
+            happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
 
         // `map_or` rather than `?`: the whole `ProjectionError<S::Error, _>` is
         // collapsed to a `usize` here, so nothing of it is alive at the second
@@ -651,7 +652,7 @@ async fn a_not_send_projection_runs_through_the_bare_flavour() {
         count: Rc::clone(&count),
     };
     let models = MemoryProjectionStore::new();
-    let chunk = NonZeroUsize::new(64).expect("64 is not zero");
+    let chunk = happenstance::Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
 
     let progressed = run_projection(&store, &models, &mut local, &Json, chunk)
         .await
@@ -664,7 +665,7 @@ async fn a_not_send_projection_runs_through_the_bare_flavour() {
 
 /// F1-05: the comment hoisting `chunk` inside [`spawns_the_projection_runner`]
 /// invokes RS-22-3 (`impl Trait` capturing a *borrowed* parameter's lifetime),
-/// but `run_projection` is a free `pub async fn` and `chunk: NonZeroUsize` is a
+/// but `run_projection` is a free `pub async fn` and `chunk: Chunk` is a
 /// `Copy` scalar taken by value — no RPITIT, no borrow, nothing to capture.
 ///
 /// `_accepts_inline_chunk` is the check the entry names as decisive: inlining
@@ -674,9 +675,12 @@ async fn a_not_send_projection_runs_through_the_bare_flavour() {
 /// `chunk` binding.
 #[test]
 fn chunk_argument_inlines_without_hoisting() {
+    #[cfg(feature = "unstable-projection")]
     fn _accepts_inline_chunk() {
-        fn takes(_: core::num::NonZeroUsize) {}
-        takes(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
+        fn takes(_: happenstance::Chunk) {}
+        takes(happenstance::Chunk::of(
+            core::num::NonZeroUsize::new(64).expect("64 is not zero"),
+        ));
     }
 
     // Built from two literals rather than one: `include_str!` below reads this
@@ -690,4 +694,18 @@ fn chunk_argument_inlines_without_hoisting() {
          RS-22-3 governs `impl Trait` returns capturing a *borrowed* parameter's \
          lifetime, not this construct (F1-05)"
     );
+}
+
+/// ADR-0070 §4: a fan-out runner hands one `Chunk` to every view, possibly
+/// from a spawned task. That needs a plain value — `Copy`, `Send`, `Sync`
+/// and owning no borrow.
+///
+/// The wrong implementation this rejects is a representation that holds an
+/// `Rc` or a `RefCell` (a shared adaptive policy, say): it would still pass
+/// every single-view test, and make the spawned fan-out impossible to write.
+#[cfg(feature = "unstable-projection")]
+#[test]
+fn chunk_is_a_plain_value_a_spawned_runner_can_own() {
+    fn assert_plain<T: Copy + Send + Sync + 'static>() {}
+    assert_plain::<happenstance::Chunk>();
 }

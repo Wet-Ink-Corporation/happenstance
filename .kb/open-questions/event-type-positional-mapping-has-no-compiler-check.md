@@ -63,7 +63,7 @@ is edited to agree with the outcome.
 and the answer is ADR-0059's.** Every rendered surface now declares each name once
 as a `const EventType` and returns it by name —
 `examples/course-subscriptions/src/main.rs:196-202` and
-`examples/transfers-on-sqlite/src/main.rs:288-294` are the two this question
+`examples/transfers-on-sqlite/src/main.rs:290-296` are the two this question
 named, and four more example crates went with them, along with every `///` and
 `//!` doctest in `crates/happenstance/`. `no_rendered_surface_indexes_event_types`
 in `xtask/src/lints.rs` is what keeps it answered; before it, the pattern's only

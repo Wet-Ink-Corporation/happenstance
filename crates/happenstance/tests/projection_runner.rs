@@ -24,8 +24,8 @@ use std::collections::BTreeMap;
 use futures_core::Stream;
 use happenstance::bytes::Bytes;
 use happenstance::{
-    AppendCondition, AppendError, Checkpoint, Codec, CodecError, Delivered, DomainEvent, Event,
-    EventId, EventStore, EventType, Json, MemoryEventStore, MemoryProjectionBatch,
+    AppendCondition, AppendError, Checkpoint, Chunk, Codec, CodecError, Delivered, DomainEvent,
+    Event, EventId, EventStore, EventType, Json, MemoryEventStore, MemoryProjectionBatch,
     MemoryProjectionStore, MemoryProjectionStoreError, MemoryStoreError, Progressed, Projection,
     ProjectionError, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
     SequencePosition, SequencedEvent, Tags, run_projection,
@@ -172,8 +172,8 @@ impl Projection for VanStock {
     }
 }
 
-fn chunk(n: usize) -> NonZeroUsize {
-    NonZeroUsize::new(n).expect("a non-zero chunk")
+fn chunk(n: usize) -> Chunk {
+    Chunk::of(NonZeroUsize::new(n).expect("a non-zero chunk"))
 }
 
 /// The query the derivation must produce, spelled independently of the runner.
@@ -535,6 +535,58 @@ async fn resume_advances_past_the_checkpoint() {
     assert_eq!(third.seen, vec![dispatched("d7", 2)]);
     let last = events.snapshot().last().expect("three events").position;
     assert_eq!(progress.through, Some(last));
+}
+
+/// ADR-0070 §4 — one `Chunk` value serves every view it is handed to.
+///
+/// The wrong implementation this rejects is a `Chunk` that is not `Copy` —
+/// one that grew a boxed policy, say — which a fan-out runner would have to
+/// clone or rebuild per view. Here one binding is passed to two projections
+/// and then a third time, which does not compile (`E0382`) unless it copies.
+#[tokio::test]
+async fn one_chunk_serves_every_view() {
+    let events = MemoryEventStore::new();
+    seed(
+        &events,
+        &[delivered("d7", 3), delivered("d8", 5), dispatched("d7", 1)],
+    )
+    .await;
+    let positions: Vec<_> = events.snapshot().iter().map(|e| e.position).collect();
+    let [_, d8_last, d7_last] = positions[..] else {
+        panic!("three events were seeded");
+    };
+
+    let models = MemoryProjectionStore::new();
+    let per_commit = chunk(2);
+    let mut d7 = VanStock {
+        id: ProjectionId::from_static("van_stock_d7"),
+        ..VanStock::for_depot("d7")
+    };
+    let mut d8 = VanStock {
+        id: ProjectionId::from_static("van_stock_d8"),
+        ..VanStock::for_depot("d8")
+    };
+
+    let seven = run_projection(&events, &models, &mut d7, &Json, per_commit)
+        .await
+        .expect("the d7 view completes");
+    let eight = run_projection(&events, &models, &mut d8, &Json, per_commit)
+        .await
+        .expect("the d8 view completes");
+    let again = run_projection(&events, &models, &mut d7, &Json, per_commit)
+        .await
+        .expect("the idle d7 run completes");
+
+    assert_eq!((seven.applied, eight.applied, again.applied), (2, 1, 0));
+    assert_eq!(models.get("d7"), Some(2));
+    assert_eq!(models.get("d8"), Some(5));
+    // Each view's checkpoint is its own: the last event its scope matched.
+    for (view, through) in [(&d7, d7_last), (&d8, d8_last)] {
+        assert_eq!(
+            models.checkpoint(view.id()).await.unwrap(),
+            Checkpoint::Live { through }
+        );
+    }
 }
 
 #[tokio::test]
