@@ -31,7 +31,10 @@ use happenstance_core::{
     Authority, Checkpoint, ProjectionId, ProjectionProbe, ProjectionStore, ResetError,
     SequencePosition,
 };
-use happenstance_sqlite::projection_store::{SqliteProjectionStore, SqliteProjectionStoreError};
+use happenstance_sqlite::projection_store::{
+    SCHEMA_VERSION, SqliteProjectionStore, SqliteProjectionStoreError,
+};
+use happenstance_sqlite::rusqlite;
 
 /// The probe key these tests write, distinct from every key the suite uses.
 const KEY: &str = "fgas-cylinder-17";
@@ -67,6 +70,13 @@ impl Database {
     /// One more real connection onto this file, migrated by this build.
     fn open(&self) -> SqliteProjectionStore {
         SqliteProjectionStore::open(&self.path)
+            .expect("a broken test environment, not a non-conformant adapter")
+    }
+
+    /// A connection onto this file that no store owns, for reading what the
+    /// adapter wrote rather than what it reports.
+    fn raw(&self) -> rusqlite::Connection {
+        rusqlite::Connection::open(&self.path)
             .expect("a broken test environment, not a non-conformant adapter")
     }
 
@@ -159,4 +169,363 @@ async fn a_protected_projection_refuses_reset_and_changes_nothing() {
         },
         "a refused reset must leave the checkpoint as it was"
     );
+}
+
+/// The mark is in the file, so it holds after every handle that saw it set has
+/// closed, for a store opened afterwards.
+///
+/// The wrong implementation is a mark held by the handle, say a set behind the
+/// store's `Arc`: clones share it, so a rule that protects and resets through
+/// one store passes, and the next `open` has never heard of it. That is the
+/// protection PS-18's `Rejects:` says anyone holding the store bypasses.
+#[tokio::test]
+async fn protection_survives_every_handle_closing() {
+    let database = Database::new();
+    let id = ProjectionId::from_static("fgas_ledger");
+    {
+        let store = database.open();
+        commit_probe(&store, &id, SequencePosition::FIRST).await;
+        store
+            .protect_from_reset(&id)
+            .await
+            .expect("protecting a projection succeeds");
+    }
+
+    let reopened = database.open();
+
+    assert!(
+        reopened
+            .is_protected_from_reset(&id)
+            .await
+            .expect("the read succeeds"),
+        "a protection must outlive every handle that saw it set"
+    );
+    let outcome = reset_probe(&reopened, &id).await;
+    assert!(
+        matches!(outcome, Err(ResetError::Refused)),
+        "a store opened after every other handle closed must still refuse, and \
+         `reset` answered {outcome:?}"
+    );
+    assert_eq!(
+        reopened.probe_read(KEY).await.expect("the read succeeds"),
+        Some(VALUE)
+    );
+}
+
+/// Protection is scoped to one `ProjectionId`, byte for byte (PS-17, PS-39).
+///
+/// Two wrong implementations: a check for *any* mark in the table, which
+/// refuses every reset in a file once one projection is protected, so
+/// Kestrel's `van_stock` stops resetting the day `fgas_ledger` is protected;
+/// and a case-folded key, which protects `ledger` when `Ledger` was named.
+#[tokio::test]
+async fn protection_is_scoped_to_one_projection() {
+    let database = Database::new();
+    let store = database.open();
+    let ledger = ProjectionId::from_static("fgas_ledger");
+    let stock = ProjectionId::from_static("van_stock");
+    let upper = ProjectionId::from_static("Ledger");
+    let lower = ProjectionId::from_static("ledger");
+    for id in [&ledger, &stock, &lower] {
+        commit_probe(&store, id, SequencePosition::FIRST).await;
+    }
+    for id in [&ledger, &upper] {
+        store
+            .protect_from_reset(id)
+            .await
+            .expect("protecting a projection succeeds");
+    }
+
+    for id in [&stock, &lower] {
+        // An empty batch: the probe rows are shared, and this test is about
+        // which checkpoint moves.
+        let batch = store.begin().await.expect("begin never fails here");
+        let outcome = store.reset(batch, id).await;
+        assert!(
+            outcome.is_ok(),
+            "`{}` is not protected and its reset must proceed, and answered {outcome:?}",
+            id.as_str()
+        );
+        assert_eq!(
+            store.checkpoint(id).await.expect("the read succeeds"),
+            Checkpoint::NeverRun,
+            "`{}` was reset",
+            id.as_str()
+        );
+    }
+    assert_eq!(
+        store.checkpoint(&ledger).await.expect("the read succeeds"),
+        Checkpoint::Live {
+            through: SequencePosition::FIRST
+        },
+        "resetting another projection must not touch the protected one"
+    );
+    assert!(
+        !store
+            .is_protected_from_reset(&lower)
+            .await
+            .expect("the read succeeds"),
+        "protecting `Ledger` must not protect `ledger`"
+    );
+}
+
+/// Protection guards `reset` and nothing else: a protected projection still
+/// commits.
+///
+/// The wrong implementation checks the mark in `commit` too, which stops the
+/// protected ledger's own runner the moment it is protected, and so makes
+/// protecting the projection that matters most the way to break it.
+#[tokio::test]
+async fn protection_does_not_block_commit() {
+    let database = Database::new();
+    let store = database.open();
+    let id = ProjectionId::from_static("fgas_ledger");
+    let second = SequencePosition::new(2).expect("2 is non-zero");
+    commit_probe(&store, &id, SequencePosition::FIRST).await;
+    store
+        .protect_from_reset(&id)
+        .await
+        .expect("protecting a projection succeeds");
+
+    let batch = store.begin().await.expect("begin never fails here");
+    let outcome = store.commit(batch, &id, second, Authority::Live).await;
+
+    assert!(
+        outcome.is_ok(),
+        "a protected projection must still commit, and `commit` answered {outcome:?}"
+    );
+    assert_eq!(
+        store.checkpoint(&id).await.expect("the read succeeds"),
+        Checkpoint::Live { through: second }
+    );
+}
+
+/// `allow_reset` lifts the mark, and the next reset proceeds in full.
+///
+/// The wrong implementation is an `allow_reset` that does nothing, which makes
+/// every protection permanent unless an operator reaches past the port into an
+/// adapter-owned table with raw SQL.
+#[tokio::test]
+async fn allow_reset_lifts_the_protection() {
+    let database = Database::new();
+    let store = database.open();
+    let id = ProjectionId::from_static("fgas_ledger");
+    commit_probe(&store, &id, SequencePosition::FIRST).await;
+    store
+        .protect_from_reset(&id)
+        .await
+        .expect("protecting a projection succeeds");
+
+    store
+        .allow_reset(&id)
+        .await
+        .expect("lifting a protection succeeds");
+    let outcome = reset_probe(&store, &id).await;
+
+    assert!(
+        outcome.is_ok(),
+        "a lifted protection must let the reset proceed, and `reset` answered {outcome:?}"
+    );
+    assert_eq!(
+        store.checkpoint(&id).await.expect("the read succeeds"),
+        Checkpoint::NeverRun
+    );
+    assert_eq!(
+        store.probe_read(KEY).await.expect("the read succeeds"),
+        None
+    );
+}
+
+/// Protecting twice and lifting what is not there are both `Ok`, and the read
+/// tracks each step.
+///
+/// The wrong implementation is a plain `INSERT`, which answers a `UNIQUE`
+/// constraint failure the second time a deploy script protects the same
+/// projection.
+#[tokio::test]
+async fn protecting_and_allowing_are_idempotent() {
+    let database = Database::new();
+    let store = database.open();
+    let id = ProjectionId::from_static("fgas_ledger");
+    let mut observed = Vec::new();
+
+    store
+        .allow_reset(&id)
+        .await
+        .expect("lifting an absent protection is not an error");
+    observed.push(store.is_protected_from_reset(&id).await.expect("read"));
+    for _ in 0..2 {
+        store
+            .protect_from_reset(&id)
+            .await
+            .expect("protecting a protected projection is not an error");
+        observed.push(store.is_protected_from_reset(&id).await.expect("read"));
+    }
+    for _ in 0..2 {
+        store
+            .allow_reset(&id)
+            .await
+            .expect("lifting a lifted protection is not an error");
+        observed.push(store.is_protected_from_reset(&id).await.expect("read"));
+    }
+
+    assert_eq!(observed, [false, true, true, false, false]);
+}
+
+/// A refused reset leaves its handle, and the file, usable: it holds no
+/// transaction and no write lock.
+///
+/// The wrong implementation is a hand-rolled `BEGIN IMMEDIATE` with an early
+/// return that never issues `ROLLBACK`. The connection is left inside a
+/// transaction, so its next write cannot begin one, and every other connection
+/// waits out the busy timeout for a lock nobody will release.
+#[tokio::test]
+async fn a_refused_reset_leaves_the_handle_usable() {
+    let database = Database::new();
+    let store = database.open();
+    let id = ProjectionId::from_static("fgas_ledger");
+    let second = SequencePosition::new(2).expect("2 is non-zero");
+    commit_probe(&store, &id, SequencePosition::FIRST).await;
+    store
+        .protect_from_reset(&id)
+        .await
+        .expect("protecting a projection succeeds");
+    let refused = reset_probe(&store, &id).await;
+    assert!(matches!(refused, Err(ResetError::Refused)), "{refused:?}");
+
+    let same_handle = store
+        .commit(
+            store.begin().await.expect("begin never fails here"),
+            &id,
+            second,
+            Authority::Live,
+        )
+        .await;
+    let other = database.open();
+    let other_handle = other
+        .commit(
+            other.begin().await.expect("begin never fails here"),
+            &ProjectionId::from_static("van_stock"),
+            SequencePosition::FIRST,
+            Authority::Live,
+        )
+        .await;
+
+    assert!(
+        same_handle.is_ok(),
+        "the refusing handle must commit afterwards, and answered {same_handle:?}"
+    );
+    assert!(
+        other_handle.is_ok(),
+        "another handle must commit afterwards, and answered {other_handle:?}"
+    );
+}
+
+/// A fresh file is written at schema 1 and carries the protection table; the
+/// first protection raises the marker to 2, and lifting it does not lower it.
+///
+/// Two wrong implementations, one each way. An eager bump marks every file 2
+/// on its first open by this build, so an older build refuses files that hold
+/// nothing it could mishandle. No bump at all lets an older build open a file
+/// with a protected projection and reset it blind.
+#[tokio::test]
+async fn the_schema_marker_rises_only_when_a_projection_is_protected() {
+    let database = Database::new();
+    let store = database.open();
+    let id = ProjectionId::from_static("fgas_ledger");
+
+    let fresh = schema_marker(&database);
+    let table = has_protection_table(&database);
+    store
+        .protect_from_reset(&id)
+        .await
+        .expect("protecting a projection succeeds");
+    let protected = schema_marker(&database);
+    store
+        .allow_reset(&id)
+        .await
+        .expect("lifting a protection succeeds");
+    let lifted = schema_marker(&database);
+
+    assert!(table, "every open must create `projection_protection`");
+    assert_eq!(
+        (fresh, protected, lifted),
+        (1, SCHEMA_VERSION, SCHEMA_VERSION),
+        "the marker must stay at 1 until a protection, then rise and stay"
+    );
+    drop(store);
+    assert!(
+        SqliteProjectionStore::open(&database.path).is_ok(),
+        "this build must open a file it raised"
+    );
+}
+
+/// A file written before protection existed opens, gains the table, and can be
+/// protected.
+///
+/// The file is built by hand in migration 1's shape at marker 1, with no
+/// `projection_protection`, which is what every build before this one left
+/// behind. The wrong implementation creates the table only for a fresh file, so
+/// the first reset on an upgraded file fails with `no such table`.
+#[tokio::test]
+async fn a_file_from_before_protection_opens_and_can_be_protected() {
+    let database = Database::new();
+    database
+        .raw()
+        .execute_batch(
+            "CREATE TABLE projection_checkpoint (
+                 projection_id TEXT    NOT NULL PRIMARY KEY,
+                 position      INTEGER NOT NULL,
+                 authority     TEXT    NOT NULL
+             ) WITHOUT ROWID;
+             CREATE TABLE projection_meta (
+                 k TEXT    NOT NULL PRIMARY KEY,
+                 v INTEGER NOT NULL
+             ) WITHOUT ROWID;
+             INSERT INTO projection_meta (k, v) VALUES ('schema_version', 1);",
+        )
+        .expect("the test environment writes the old file, not the adapter");
+    let id = ProjectionId::from_static("fgas_ledger");
+
+    let store = database.open();
+    commit_probe(&store, &id, SequencePosition::FIRST).await;
+    store
+        .protect_from_reset(&id)
+        .await
+        .expect("protecting a projection on an upgraded file succeeds");
+    let outcome = reset_probe(&store, &id).await;
+
+    assert!(
+        matches!(outcome, Err(ResetError::Refused)),
+        "an upgraded file must refuse a protected reset, and `reset` answered {outcome:?}"
+    );
+    assert_eq!(
+        store.probe_read(KEY).await.expect("the read succeeds"),
+        Some(VALUE)
+    );
+}
+
+/// The projection schema marker as the file stores it.
+fn schema_marker(database: &Database) -> u32 {
+    database
+        .raw()
+        .query_row(
+            "SELECT v FROM projection_meta WHERE k = 'schema_version'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("every migrated file carries a marker")
+}
+
+/// Whether the file has a `projection_protection` table.
+fn has_protection_table(database: &Database) -> bool {
+    database
+        .raw()
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master \
+             WHERE type = 'table' AND name = 'projection_protection')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the schema is readable")
 }
