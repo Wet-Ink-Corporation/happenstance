@@ -196,3 +196,11 @@ PS-30 each with a rule and a mutant that fails it.
 **Estimate.** 5–8 days.
 
 **Session log**
+
+- 2026-11-02 — #135 and #138 built on `claude/project-thread-u1dtdj-98`, for #98:
+  `Projection::apply` is `async` and handed a `Delivered<E>`, `SendProjection` is
+  derived with `trait_variant`, and every `impl Projection` in the tree is rewritten.
+  The runner hands `apply` the `EventId` it read (SY-21's typed-layer test). The #98
+  box stays open: its live-Postgres leg is #142, which also owns
+  `happenstance-postgres`'s four "apply is synchronous" passages. SY-21 stays
+  `[PROVISIONAL]` until #127.
