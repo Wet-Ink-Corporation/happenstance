@@ -1,0 +1,17 @@
+# Deployed Durable Object conformance, 2026-11-01, run 41344471106 (PR #371), job 124961271831
+# Excerpt of the strict deployed leg. The at-ceiling append in append_reports_exceeded_store_limits
+# carried 512 events x 1,024 tags = 524,288 tag rows (the ceiling #367 declared) and reset the object.
+# The same branch passed on #367's run 41332704993. Recorded as taken; see ADR-0100.
+
+ok   store_accepts_the_guaranteed_minimum_tag_count
+ok   store_evaluates_a_query_at_the_guaranteed_minimum_item_count
+ok   store_accepts_the_guaranteed_minimum_batch_size
+ok   tags_differing_only_by_unicode_normalisation_are_distinct
+ok   tags_may_repeat_a_key
+ok   append_preserves_event_type_and_tags_byte_for_byte
+FAIL append_reports_exceeded_store_limits  [500] Durable Object storage operation exceeded timeout which caused object to be reset.
+ok   condition_without_after_rejects_any_match
+ok   condition_without_after_allows_non_match
+ok   condition_matches_on_every_tag_in_an_item
+ok   condition_matching_every_tag_rejects_the_append
+ok   condition_after_ignores_events_at_the_boundary

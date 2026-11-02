@@ -242,11 +242,11 @@ mod tests {
     fn a_tags_per_batch_refusal_names_its_limit_and_total() {
         let over = IngestError::<Never>::ExceedsStoreLimit {
             limit: StoreLimit::TagsPerBatch,
-            len: 525_312,
+            len: 263_168,
         };
         assert_eq!(
             over.to_string(),
-            "ingest exceeds the store's tags per batch limit: 525312"
+            "ingest exceeds the store's tags per batch limit: 263168"
         );
     }
 

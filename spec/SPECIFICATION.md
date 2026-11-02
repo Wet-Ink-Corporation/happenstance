@@ -1759,7 +1759,7 @@ or it refuses nothing.
 
 `[PROVISIONAL — falsified by a store whose per-call wall is not a function of the
 tag count, so that no count says where it is; the instrument is
-happenstance-cloudflare, whose deployed wall moved between 775,168 and 1,040,384
+happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384
 tag rows in one call]`
 `Rule:` unit tests `every_limit_names_its_floor` and
 `the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`
@@ -1770,8 +1770,8 @@ which a sync runner's `Split` never reaches a batch it can land. The second is
 `TagsPerBatchBelowTagsPerEventStore`, and an unreachable ceiling is
 `UnreachableTagsPerBatchStore`.
 
-`happenstance-cloudflare` is the one store that declares the ceiling: 524,288
-tags per call, 1.48 times below the lower measured wall (ADR-0100). Every other
+`happenstance-cloudflare` is the one store that declares the ceiling: 262,144
+tags per call, half the lowest measured wall (ADR-0100). Every other
 store's events-per-batch and tags-per-event ceilings already bound the total, so
 each states none.
 
@@ -9272,7 +9272,7 @@ ceiling is **not** a constant — the Postgres row whose TOAST threshold moves
 with the rest of the row, the KV store whose per-value cap moves with the key —
 for which no single number is honest. The instruments are the Cloudflare adapter
 at phase 9 and the Postgres adapter at phase 10, whichever states a varying
-ceiling first. Cloudflare's answer, at phase 17b, is ADR-0093's: its documented 2 MB row limit is a budget the four fields share, and the adapter carves it into four constant ceilings, so it states constants rather than a varying ceiling — one row at all four is 1,835,264 bytes (`crates/happenstance-cloudflare/src/lib.rs:163-180`). Its fifth, ADR-0100's 524,288 tags per call, is a constant placed below a deployed wall that moved between two runs (775,168 and 1,040,384 tag rows), which is VT-36's falsifier rather than this one's: the count still says where the adapter refuses.]`
+ceiling first. Cloudflare's answer, at phase 17b, is ADR-0093's: its documented 2 MB row limit is a budget the four fields share, and the adapter carves it into four constant ceilings, so it states constants rather than a varying ceiling — one row at all four is 1,835,264 bytes (`crates/happenstance-cloudflare/src/lib.rs:163-180`). Its fifth, ADR-0100's 262,144 tags per call, is a constant placed below a deployed wall that moved across three runs (524,288, 775,168 and 1,040,384 tag rows), which is VT-36's falsifier rather than this one's: the count still says where the adapter refuses.]`
 Rule: `append_reports_exceeded_store_limits`, which is unwritable without it —
 a rule cannot locate a boundary the store has not named, and asserting a
 hard-coded one would be a `MAX_EVENT_DATA_LEN` constant by another route, which
