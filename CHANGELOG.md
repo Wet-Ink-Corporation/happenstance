@@ -34,6 +34,14 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Changed
+
+- `happenstance` (behind `unstable-projection`): `run_projection` takes
+  `chunk: Chunk` rather than a bare `NonZeroUsize` (ADR-0070, #120). Migrate
+  with `Chunk::of(n)`. `Chunk` is `#[non_exhaustive]` and `Copy`, with a
+  private representation and no `Default`; the runner stays exempt from semver
+  while the feature gates it.
+
 ## [0.4.6] — 2026-11-02
 
 Additive in API, with one narrowing of published behaviour: `happenstance-cloudflare`

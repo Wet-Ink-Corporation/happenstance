@@ -686,7 +686,9 @@ fn run_once(
     view: &mut View,
     cell: &Cell,
 ) -> Result<Progressed, HarnessError> {
-    let chunk = std::num::NonZeroUsize::new(cell.chunk).unwrap_or(std::num::NonZeroUsize::MIN);
+    let chunk = happenstance::Chunk::of(
+        std::num::NonZeroUsize::new(cell.chunk).unwrap_or(std::num::NonZeroUsize::MIN),
+    );
     block_on(happenstance::run_projection(
         events, models, view, &Json, chunk,
     ))

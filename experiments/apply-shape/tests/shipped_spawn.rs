@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use apply_shape::domain::{Ticked, scope, tick};
 use happenstance::{
-    Json, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
+    Chunk, Json, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
     MemoryProjectionStoreError, Projection, ProjectionId, SendEventStore, SendProjectionStore,
     Tags, run_projection,
 };
@@ -31,7 +31,7 @@ fn spawn_shipped<S, P, St>(
     events: Arc<S>,
     models: Arc<St>,
     mut projection: P,
-    chunk: NonZeroUsize,
+    chunk: Chunk,
 ) -> tokio::task::JoinHandle<(P, Result<usize, String>)>
 where
     S: SendEventStore<Error: Send> + Sync + 'static,
@@ -56,7 +56,7 @@ fn spawn_shipped_store_as_projection<S, P>(
     events: Arc<S>,
     models: Arc<P::Store>,
     mut projection: P,
-    chunk: NonZeroUsize,
+    chunk: Chunk,
 ) -> tokio::task::JoinHandle<(P, Result<usize, String>)>
 where
     S: SendEventStore<Error: Send> + Sync + 'static,
@@ -119,7 +119,7 @@ async fn the_shipped_runner_spawns_from_generic_code_when_the_store_is_a_type_pa
         Arc::clone(&events),
         Arc::clone(&models),
         count,
-        NonZeroUsize::new(2).unwrap(),
+        Chunk::of(NonZeroUsize::new(2).unwrap()),
     )
     .await
     .unwrap();

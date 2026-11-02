@@ -58,8 +58,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Checkpoint, Codec, CodecError, CommandError, DecisionModel, DomainEvent, EventStore, EventType,
-    InvalidTag, Json, Projection, ProjectionError, ProjectionId, ProjectionStore, Query,
+    Checkpoint, Chunk, Codec, CodecError, CommandError, DecisionModel, DomainEvent, EventStore,
+    EventType, InvalidTag, Json, Projection, ProjectionError, ProjectionId, ProjectionStore, Query,
     ReadOptions, Retry, Tag, Tags, collect, commit, run_projection,
 };
 use happenstance_sqlite::connection::open_configured;
@@ -1415,7 +1415,8 @@ async fn drive<P>(
 where
     P: Projection<Store = SqliteProjectionStore>,
 {
-    let progress = run_projection(events, models, projection, &Json, chunk.try_into()?).await?;
+    let chunk = Chunk::of(chunk.try_into()?);
+    let progress = run_projection(events, models, projection, &Json, chunk).await?;
     Ok(progress.applied)
 }
 
@@ -1430,7 +1431,8 @@ async fn poison(
     models: &SqliteProjectionStore,
     projection: &mut Couriered,
 ) -> Result<(u64, String)> {
-    match run_projection(events, models, projection, &Json, CHUNK.try_into()?).await {
+    let chunk = Chunk::of(CHUNK.try_into()?);
+    match run_projection(events, models, projection, &Json, chunk).await {
         Ok(progress) => bail!(
             "the couriered view decoded {} event(s) it could not have",
             progress.applied
