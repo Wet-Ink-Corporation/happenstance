@@ -34,6 +34,11 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.4.6] — 2026-11-02
+
+Additive in API, with one narrowing of published behaviour: `happenstance-cloudflare`
+refuses a call carrying more than 262,144 tags in total.
+
 ### Added
 
 - `happenstance-testkit`: `Fixture::settle_frontier`, a provided method, and
@@ -63,7 +68,7 @@ not the same as what a user needed to be told.
   than 262,144 tags in total**, as `StoreLimit::TagsPerBatch`, before it sends
   any SQL, on `append` and on `ingest`, whose total counts its compensation
   ([ADR-0100](.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md),
-  #356). A call that a host, or local `workerd`, accepted above that total is
+  accepted by the owner with the narrowing on 2026-11-02, #356). A call that a host, or local `workerd`, accepted above that total is
   now refused; a deployed object reset on one call of 512 events of 1,024 tags
   (524,288, #371), and the ceiling is half that. Every call at or under
   it is accepted as before.
@@ -5035,7 +5040,8 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.2...v0.4.3
