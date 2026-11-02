@@ -4,7 +4,6 @@
 //! function that drives it. The rows and the checkpoint move together because
 //! the port beneath offers no way to move them apart.
 
-use core::num::NonZeroUsize;
 use core::pin::Pin;
 
 use futures_core::Stream;
@@ -14,6 +13,7 @@ use happenstance_core::{
 };
 
 use crate::boundary::{AtLeastOneType, derive_query};
+use crate::chunk::Chunk;
 use crate::codec::{Codec, CodecError, decode_event};
 use crate::domain::DomainEvent;
 
@@ -369,6 +369,7 @@ where
 /// use happenstance::{MemoryEventStore, MemoryProjectionBatch};
 /// use happenstance::{MemoryProjectionStore, MemoryProjectionStoreError};
 /// use happenstance::{Projection, ProjectionId, run_projection};
+/// use happenstance::Chunk;
 /// # use std::error::Error;
 /// # #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {
 ///
@@ -412,8 +413,9 @@ where
 ///     scope: Tags::empty(),
 ///     sold: 0,
 /// };
+/// let chunk = Chunk::of(64.try_into()?);
 /// let done =
-///     run_projection(&events, &models, &mut sold, &Json, 64.try_into()?)
+///     run_projection(&events, &models, &mut sold, &Json, chunk)
 ///         .await?;
 ///
 /// assert_eq!(done.applied, 2);
@@ -441,15 +443,15 @@ where
 /// discarded whole, so everything since the last commit is re-read and
 /// re-applied.
 ///
-/// There is no default and no named type, and that is a gap rather than a
-/// position. [`Retry`](crate::Retry) — the same kind of caller-supplied
-/// bound one module over — carries both, and the argument it makes for
-/// having *no* default is about a worst case a caller must see, which does
-/// not transfer unexamined to a knob that changes no outcome. What settles
-/// it is a measurement — wall time, peak resident memory and commit count
-/// against a real adapter across the range — which belongs in
-/// `experiments/`, out of the gate, and which nobody has run. Until then
-/// the `64` above is the doctest's number and not advice.
+/// The number is a named type, [`Chunk`], as [`Retry`](crate::Retry) — the
+/// same kind of caller-supplied bound one module over — is. Like `Retry`
+/// it has no default, by ADR-0070 §3, and for a different reason: `Retry`'s
+/// is a worst case a caller must see, while a chunk changes no outcome, so
+/// a default here would hide only a cost. What would choose one is a
+/// measurement — wall time, peak resident memory and commit count against
+/// a real adapter across the range — which belongs in `experiments/`, out
+/// of the gate, and which nobody has run. Until then the `64` above is the
+/// doctest's number and not advice.
 ///
 /// # What can be seen while it runs
 ///
@@ -516,7 +518,7 @@ pub async fn run_projection<S, P, C>(
     models: &P::Store,
     projection: &mut P,
     codec: &C,
-    chunk: NonZeroUsize,
+    chunk: Chunk,
 ) -> Result<Progressed, ProjectionError<S::Error, StoreError<P>>>
 where
     S: EventStore,

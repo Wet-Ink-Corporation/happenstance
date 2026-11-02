@@ -243,6 +243,7 @@ fn new_identifiers_fit_the_item_table() {
         "run_projection",
         "Progressed",
         "ProjectionError",
+        "Chunk",
     ] {
         assert!(
             name.len() <= 24,

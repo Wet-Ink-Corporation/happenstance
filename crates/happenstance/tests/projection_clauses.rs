@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Checkpoint, Codec, CodecError, DomainEvent, Event, EventStore, EventType, Json,
+    Checkpoint, Chunk, Codec, CodecError, DomainEvent, Event, EventStore, EventType, Json,
     MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
     Projection, ProjectionId, ProjectionStore, ResetError, Tags, run_projection,
 };
@@ -196,8 +196,8 @@ impl Projection for Shreds {
     }
 }
 
-fn chunk(n: usize) -> NonZeroUsize {
-    NonZeroUsize::new(n).expect("a non-zero chunk")
+fn chunk(n: usize) -> Chunk {
+    Chunk::of(NonZeroUsize::new(n).expect("a non-zero chunk"))
 }
 
 fn shredded(vin: &str) -> Event {

@@ -126,7 +126,7 @@ renews them with the disposition phase 16 gave.
 - [ ] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
 - [ ] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
-      (`crates/happenstance/src/runner.rs:519`) becomes a named `Chunk`:
+      (`crates/happenstance/src/runner.rs:521`) becomes a named `Chunk`:
       `#[non_exhaustive]`, private representation, `Chunk::of(NonZeroUsize)` its
       first constructor — the shape `Retry` already has
       (`crates/happenstance/src/command.rs:43-62`). The fan-out runner above takes
@@ -196,3 +196,10 @@ PS-30 each with a rule and a mutant that fails it.
 **Estimate.** 5–8 days.
 
 **Session log**
+
+- 2026-11-02 — #120: `Chunk` shipped as a plain `chunk: Chunk` parameter, not
+  `impl Into<Chunk>`. The compile showed `impl Into` keeps only the sites already
+  holding a `NonZeroUsize`, while the seven `x.try_into()?` sites break either way
+  and break worse under `impl Into` (inference falls to `!`). The examples spell
+  it `Chunk::of(CHUNK.try_into()?)`. One `Copy` type serves the fan-out runner
+  too, so ADR-0070's falsifier did not fire.
