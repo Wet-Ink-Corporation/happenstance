@@ -238,13 +238,13 @@
 //!
 //! ```toml
 //! [dependencies]
-//! happenstance-core = "0.4"
+//! happenstance-core = "0.5"
 //!
 //! [features]
 //! conformance = ["happenstance-core/conformance"]
 //!
 //! [dev-dependencies]
-//! happenstance-testkit = "=0.4.6"
+//! happenstance-testkit = "=0.5.0"
 //! tokio = { version = "1", features = ["macros", "rt"] }
 //! ```
 //!
