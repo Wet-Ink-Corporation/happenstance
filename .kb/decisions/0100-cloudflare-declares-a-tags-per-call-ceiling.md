@@ -2,7 +2,7 @@
 id: kb-decision-0100
 title: happenstance-cloudflare declares a ceiling of 262,144 tags per call, refused as StoreLimit::TagsPerBatch
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0100
 reversibility: medium
