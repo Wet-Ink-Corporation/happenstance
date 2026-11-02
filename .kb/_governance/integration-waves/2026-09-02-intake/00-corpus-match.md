@@ -87,7 +87,7 @@ crates/happenstance/tests/flavours.rs                            ✓ exists — 
 spec/SPECIFICATION.md:4910-4914                                  ✓ PS-3, [PROVISIONAL], SHOULD with the condition, verbatim
 spec/SPECIFICATION.md:392                                        ✓ the impl census — and it disagrees with one staged sentence, below
 crates/happenstance-testkit/tests/…/mutants.rs:44                ✓ CheckpointOnlyStore, NAME = "CheckpointOnlyStore"
-crates/happenstance-sqlite/tests/projection.rs:44                ✓ #![cfg(all(feature = "projection-store", feature = "conformance"))] — TWO
+crates/happenstance-sqlite/tests/projection.rs:50                ✓ #![cfg(all(feature = "projection-store", feature = "conformance"))] — TWO
 crates/happenstance-sqlite/tests/projection.rs:226               ✓ projection_store_conformance!(SqliteProjectionFixture::new())
 crates/happenstance-sqlite/Cargo.toml                            ✓ default = ["event-store"] — the fix landed, and the comment cites PS-3
 crates/happenstance-neon/Cargo.toml                              ✗ NOT what the intake says — Correction 1
