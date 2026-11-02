@@ -731,3 +731,39 @@ async fn decode_failure_names_its_position_and_rolls_back() {
         Checkpoint::Live { through: good }
     );
 }
+
+// ---------------------------------------------------------------------------
+// ADR-0074 — a buffered run costs nothing for `apply` being `async`
+// ---------------------------------------------------------------------------
+
+/// The **runner**, not `apply` alone, polled once under a no-op waker.
+///
+/// A projection whose `apply` never awaits is ready at its first poll by
+/// async-fn semantics alone, so polling `apply` by itself could not fail.
+/// Polling the whole run over the two memory stores can: an await that yields
+/// anywhere on the runner's path returns `Pending` here, and
+/// `a_run_whose_apply_yields_is_pending_at_its_first_poll` is the control that
+/// shows it would. No tokio: a `Waker::noop` context is the whole executor.
+#[test]
+fn a_buffered_run_is_ready_at_its_first_poll_without_a_runtime() {
+    let events =
+        MemoryEventStore::with_events([landed(&delivered("d7", 3)), landed(&delivered("d7", 4))]);
+    let models = MemoryProjectionStore::new();
+    let mut stock = VanStock::for_depot("d7");
+
+    let mut context = Context::from_waker(core::task::Waker::noop());
+    let run = core::pin::pin!(run_projection(
+        &events,
+        &models,
+        &mut stock,
+        &Json,
+        chunk(1)
+    ));
+    let outcome = run.poll(&mut context);
+
+    let Poll::Ready(Ok(progress)) = outcome else {
+        panic!("a buffered run must complete on its first poll: {outcome:?}");
+    };
+    assert_eq!(progress.applied, 2);
+    assert_eq!(progress.through, events.last_position());
+}

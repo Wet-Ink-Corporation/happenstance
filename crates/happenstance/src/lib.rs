@@ -187,6 +187,8 @@ mod composition;
 mod boundary;
 mod codec;
 mod command;
+#[cfg(feature = "unstable-projection")]
+mod delivered;
 mod domain;
 // `runner`, not `projection`. The contract crate already publishes a
 // `projection` module, and this crate re-exports it as
@@ -230,6 +232,9 @@ pub use codec::{Codec, CodecError};
 #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 pub use command::commit;
 pub use command::{CommandError, CommandOutcome, Committed, Retry, commit_with};
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use delivered::Delivered;
 pub use domain::{DecisionModel, DomainEvent};
 // Off by default, and the badge is what says so on the rendered page: an
 // item that only exists behind a feature and does not name it is the reader
