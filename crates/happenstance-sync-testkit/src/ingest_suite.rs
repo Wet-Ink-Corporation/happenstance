@@ -50,6 +50,30 @@ pub const NO_PER_EVENT_LIMITS_REASON: &str = "this fixture declares no per-event
 /// reason.
 pub const MAX_PROVOKED_TAGS: usize = 4_096;
 
+/// The `capability` VT-36's ingest rule reports when the fixture declares no
+/// tags-per-batch ceiling it can exercise: the
+/// [`IngestFixture`](crate::IngestFixture) constant it reads.
+pub const NO_TAGS_PER_BATCH_LIMIT: &str = "MAX_TAGS_PER_BATCH";
+
+/// The reason VT-36's ingest rule reports when it exercised no ceiling.
+///
+/// Written by this crate rather than by the fixture, because it is the same
+/// sentence for every store that earns it.
+pub const NO_TAGS_PER_BATCH_LIMIT_REASON: &str = "this fixture declares no tags-per-batch ceiling the \
+     rule can exercise, none at all or one at or above the total this crate will allocate, so a \
+     store that counts each group, or only the foreign events, could not be told from one that \
+     counts the whole call; the rule is unverified for this store";
+
+/// The most tags VT-36's ingest rule puts in one call, whatever ceiling the
+/// fixture declares (H-13).
+///
+/// A declared `MAX_TAGS_PER_BATCH` at or above this is not exercised: the
+/// over-ceiling call carries one tag more than the ceiling, and the rule does
+/// not allocate a number it was handed. Twice the one ceiling a shipped
+/// adapter declares, `happenstance-cloudflare`'s 262,144, so that one is
+/// exercised; one call at this cap is about half a million owned tags.
+pub const MAX_PROVOKED_TAGS_PER_BATCH: usize = 524_288;
+
 /// The ingest rules. See the [crate documentation](crate) for what each covers.
 ///
 /// Each rule is an async function taking `impl AsyncFn() -> F`, how to make a
@@ -91,12 +115,18 @@ pub mod ingest_rules {
     use happenstance_testkit::RuleOutcome;
 
     use super::{
-        MAX_PROVOKED_TAGS, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, NO_PER_EVENT_LIMITS,
-        NO_PER_EVENT_LIMITS_REASON,
+        MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON,
+        NO_PER_EVENT_LIMITS, NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT,
+        NO_TAGS_PER_BATCH_LIMIT_REASON,
     };
 
     use crate::violation::{Violation, ensure};
     use crate::{IngestFixture, MAX_PROVOKED_BATCH_BYTES};
+
+    // VT-36's arrangements, a file of their own because this one is long
+    // enough. A child module, so it reaches the helpers below through `super`
+    // without widening any of them.
+    mod batch_scope;
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -1064,6 +1094,85 @@ pub mod ingest_rules {
         })
     }
 
+    /// VT-36 on the ingest path: a store that declares a tags-per-batch
+    /// ceiling holds the **whole call** to it, every foreign event and every
+    /// compensation event of every group counted together, and refuses a call
+    /// one tag over as [`IngestError::ExceedsStoreLimit`] naming
+    /// [`StoreLimit::TagsPerBatch`] and the call's total, class
+    /// [`FailureClass::Split`], with nothing written (ADR-0100). SY-18 is why
+    /// the refusal has to be a true one.
+    ///
+    /// The rule reads the ceiling from the fixture's
+    /// [`MAX_TAGS_PER_BATCH`](IngestFixture::MAX_TAGS_PER_BATCH), checks that
+    /// it is at least the fixture's own
+    /// [`MAX_TAGS_PER_EVENT`](IngestFixture::MAX_TAGS_PER_EVENT) and has a
+    /// total past it, and then, on one fresh fixture, after one local event:
+    ///
+    /// 1. **The control.** Two groups whose tags, the second group's
+    ///    compensation included, sum to exactly the ceiling, land: every
+    ///    foreign event appended and both compensation events written.
+    /// 2. **Over, spread across groups.** Two groups, each at or under the
+    ///    ceiling on its own, one tag over it together: refused, the log,
+    ///    head and watermark as they were, and no event of either held.
+    /// 3. **Over, in the compensation alone.** One group whose foreign events
+    ///    are at or under the ceiling and whose compensation takes the call
+    ///    one tag over: refused in the same way.
+    ///
+    /// Tags are spread over many events, each one tag under a declared
+    /// per-event ceiling, so no event approaches its own ceiling and a store
+    /// off by one there fails SY-18's rule and not this one. A ceiling at or
+    /// above [`MAX_PROVOKED_TAGS_PER_BATCH`] is not exercised, because the
+    /// over-ceiling call is allocated whole (H-13). A fixture that declares
+    /// no ceiling, or only one that large, is reported
+    /// [`Skipped`](RuleOutcome::Skipped) with [`NO_TAGS_PER_BATCH_LIMIT`].
+    ///
+    /// # Not checked: the call's length
+    ///
+    /// `IngestFixture` declares no events-per-call ceiling, so the rule cannot
+    /// check before it writes that the over-ceiling call fits under one, the
+    /// "reachable" half of VT-36 that the event-store family checks against
+    /// `MAX_EVENTS_PER_BATCH`. A store whose call-length ceiling is too small
+    /// for `ceiling + 1` tags at the rule's spread fails the second
+    /// arrangement naming the limit it refused under instead.
+    ///
+    /// # Rejects
+    ///
+    /// A store that holds each group to the ceiling apart, the append path's
+    /// check reused per group; one that counts the foreign events and never
+    /// the compensation it writes itself; one that refuses a call exactly at
+    /// the ceiling, which only the control sees; and one that refuses the
+    /// total under the per-event limit, `Park`, so a runner parks a call that
+    /// would have landed halved. `tests/wrong_ingest_stores.rs` carries all
+    /// four.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of VT-36 if the declared ceiling is incoherent, if the
+    /// control is refused or miscounted, or if an over-ceiling call is
+    /// accepted, refused as anything but that limit and total or with a class
+    /// other than `Split`, or leaves anything behind. The wrong-arm message
+    /// cites VT-25.
+    pub async fn ingest_holds_the_call_to_its_tags_per_batch_ceiling<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let skipped = RuleOutcome::Skipped {
+            capability: NO_TAGS_PER_BATCH_LIMIT,
+            reason: NO_TAGS_PER_BATCH_LIMIT_REASON,
+        };
+        let Some(ceiling) = F::MAX_TAGS_PER_BATCH else {
+            return Ok(skipped);
+        };
+        // Coherence first, which allocates nothing, so a ceiling too large to
+        // exercise is still held to its declaration.
+        let per_event = batch_scope::per_event::<F>(ceiling)?;
+        // Below the cap, so one over the ceiling is still inside it (H-13).
+        if ceiling >= MAX_PROVOKED_TAGS_PER_BATCH {
+            return Ok(skipped);
+        }
+        batch_scope::the_call_is_held_to(&open().await, ceiling, per_event).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What a refused or skipped ingest must leave as it found it.
     #[derive(Debug, PartialEq)]
     struct Observed {
@@ -1355,6 +1464,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- Every event is held to the declared ceilings (SY-18) -------
             ingest_validates_every_event_not_the_head,
+
+            // --- A call is held to its tags-per-batch ceiling (VT-36, SY-18) -
+            ingest_holds_the_call_to_its_tags_per_batch_ceiling,
         }
     };
 }
@@ -1489,7 +1601,11 @@ mod tests {
 
     use happenstance_testkit::{RuleOutcome, block_on};
 
-    use super::{MAX_PROVOKED_TAGS, NO_PER_EVENT_LIMITS, NO_PER_EVENT_LIMITS_REASON, ingest_rules};
+    use super::{
+        MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_PER_EVENT_LIMITS,
+        NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT, NO_TAGS_PER_BATCH_LIMIT_REASON,
+        ingest_rules,
+    };
     use crate::{IngestFixture, MemoryIngestFixture, MemoryIngestHandle};
 
     /// The oracle, declaring a tag ceiling at the rule's cap and nothing else.
@@ -1521,5 +1637,103 @@ mod tests {
                 reason: NO_PER_EVENT_LIMITS_REASON,
             })
         );
+    }
+
+    /// The tags-per-batch skip, as the rule reports it.
+    const BATCH_SKIP: RuleOutcome = RuleOutcome::Skipped {
+        capability: NO_TAGS_PER_BATCH_LIMIT,
+        reason: NO_TAGS_PER_BATCH_LIMIT_REASON,
+    };
+
+    /// A fixture that declares no tags-per-batch ceiling is a skip, not a
+    /// pass: the oracle enforces none, so a rule that ran would fail here.
+    #[test]
+    fn a_fixture_declaring_no_tags_per_batch_ceiling_is_a_skip() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling(async || {
+                MemoryIngestFixture::new()
+            }),
+        );
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(BATCH_SKIP)
+        );
+    }
+
+    /// The oracle, declaring a tags-per-batch ceiling at the rule's cap and
+    /// nothing else.
+    struct BatchAtTheCap(MemoryIngestFixture);
+
+    impl IngestFixture for BatchAtTheCap {
+        type Store = MemoryIngestHandle;
+        const MAX_TAGS_PER_BATCH: Option<usize> = Some(MAX_PROVOKED_TAGS_PER_BATCH);
+
+        fn connect(&self) -> impl Future<Output = Self::Store> {
+            self.0.connect()
+        }
+    }
+
+    /// A tags-per-batch ceiling the rule would have to allocate past its cap
+    /// to exceed is not exercised (H-13), and is reported as a skip.
+    #[test]
+    fn a_tags_per_batch_ceiling_at_the_cap_is_not_exercised() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling(async || {
+                BatchAtTheCap(MemoryIngestFixture::new())
+            }),
+        );
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(BATCH_SKIP)
+        );
+    }
+
+    /// The oracle, declaring a tags-per-batch ceiling of `BATCH` and a
+    /// per-event one of 8.
+    struct Incoherent<const BATCH: usize>(MemoryIngestFixture);
+
+    impl<const BATCH: usize> IngestFixture for Incoherent<BATCH> {
+        type Store = MemoryIngestHandle;
+        const MAX_TAGS_PER_EVENT: Option<usize> = Some(8);
+        const MAX_TAGS_PER_BATCH: Option<usize> = Some(BATCH);
+
+        fn connect(&self) -> impl Future<Output = Self::Store> {
+            self.0.connect()
+        }
+    }
+
+    /// A ceiling below the fixture's own per-event one is a violation before
+    /// anything is written: a split never reaches a batch that lands.
+    #[test]
+    fn a_ceiling_below_the_per_event_one_is_a_violation() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling(async || {
+                Incoherent::<4>(MemoryIngestFixture::new())
+            }),
+        );
+
+        let violation = outcome.expect_err("a ceiling of 4 under 8 per event is incoherent");
+        assert_eq!(violation.clause(), "VT-36");
+        assert!(
+            violation.message().contains("below its own ceiling of 8"),
+            "{violation}"
+        );
+    }
+
+    /// `usize::MAX` has no total past it, and is held to its declaration
+    /// although it is far past the cap.
+    #[test]
+    fn a_ceiling_of_usize_max_is_a_violation() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling(async || {
+                Incoherent::<{ usize::MAX }>(MemoryIngestFixture::new())
+            }),
+        );
+
+        let violation = outcome.expect_err("usize::MAX is not a ceiling");
+        assert_eq!(violation.clause(), "VT-36");
+        assert!(violation.message().contains("usize::MAX"), "{violation}");
     }
 }

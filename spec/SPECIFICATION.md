@@ -1755,20 +1755,20 @@ MUST document its ceiling and MUST refuse beyond it as
 `AppendError::ExceedsStoreLimit { limit: StoreLimit::TagsPerBatch, .. }`. Its
 ceiling MUST be at least its own tags-per-event ceiling, so that a split batch
 reaches one that lands, and MUST be reachable under its events-per-batch ceiling,
-or it refuses nothing.
+or it refuses nothing. On the ingest path the batch is the call: every foreign event and every compensation of one `ingest` count together, and a refusal is `IngestError::ExceedsStoreLimit { limit: StoreLimit::TagsPerBatch, .. }`, which `happenstance-sync` classifies `Split`.
 
 `[PROVISIONAL — falsified by a store whose per-call wall is not a function of the
 tag count, so that no count says where it is; the instrument is
 happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384
 tag rows in one call]`
 `Rule:` `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit_names_its_floor` and
-`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`
+`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared ceiling to the whole ingest call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `TagsPerBatch`, `Split`, with nothing written
 `Cases:` E2E-35, E2E-42
 `Rejects:` a floor of 0, which would let a store refuse 128 events of 64 tags
 while claiming VT-22 and VT-24; and a ceiling below the per-event one, under
 which a sync runner's `Split` never reaches a batch it can land. The second is
 `TagsPerBatchBelowTagsPerEventStore`, and an unreachable ceiling is
-`UnreachableTagsPerBatchStore`. A store that binds four parameters per tag row into one statement and meets `SQLITE_MAX_VARIABLE_NUMBER` at 8,192 tags is `TagRowParameterCeilingStore`, its clamping fix is `TagRowClampingStore`, and a ceiling declared below the floor is `TagsPerBatchBelowTheFloorStore`.
+`UnreachableTagsPerBatchStore`. On the ingest path: a store that holds each group to the ceiling apart (`CountsEachGroupApart`), one that leaves the compensation out of the total (`LeavesCompensationUncounted`), one that refuses a call exactly at it (`RefusesAtTheBatchLimit`), and one that refuses the total as `TagsPerEvent`, `Park` (`RefusesTheTotalAsPerEvent`), all in `crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`. A store that binds four parameters per tag row into one statement and meets `SQLITE_MAX_VARIABLE_NUMBER` at 8,192 tags is `TagRowParameterCeilingStore`, its clamping fix is `TagRowClampingStore`, and a ceiling declared below the floor is `TagsPerBatchBelowTheFloorStore`.
 
 `happenstance-cloudflare` is the one store that declares the ceiling: 262,144
 tags per call, half the lowest measured wall (ADR-0100). Every other
@@ -7631,7 +7631,7 @@ with a 128 KiB value cap, against an origin store that has already durably
 committed a 340 KB payload. The experiment is whether a capability declaration
 prevents the failure or merely relocates it. Owning phase: the phase that builds
 the two peer adapters.]`
-Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte, the count capped at `MAX_PROVOKED_BATCH_EVENTS` and the bytes at `MAX_PROVOKED_BATCH_BYTES` and at what that many events can carry under `max_event_bytes`.
+Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared tags-per-batch ceiling to the whole call, compensation included; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte, the count capped at `MAX_PROVOKED_BATCH_EVENTS` and the bytes at `MAX_PROVOKED_BATCH_BYTES` and at what that many events can carry under `max_event_bytes`.
 Cases: E2E-35.
 
 *Rejects:* the asynchronous form of the declaration, which is the shape a peer
