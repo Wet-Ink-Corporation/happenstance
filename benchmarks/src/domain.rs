@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS account_total (
 impl Projection for SqliteTotals {
     type Event = Recorded;
     type Store = SqliteProjectionStore;
+    type Error = <Self::Store as ProjectionStore>::Error;
 
     fn id(&self) -> &ProjectionId {
         &BENCH_PROJECTION
@@ -295,6 +296,7 @@ impl MemoryTotals {
 impl Projection for MemoryTotals {
     type Event = Recorded;
     type Store = happenstance_core::MemoryProjectionStore;
+    type Error = <Self::Store as ProjectionStore>::Error;
 
     fn id(&self) -> &ProjectionId {
         &BENCH_PROJECTION

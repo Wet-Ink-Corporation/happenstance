@@ -43,6 +43,25 @@ const _: () = {
         is_send(&SendProjection::apply(projection, event, batch));
     }
 
+    /// The `Send` flavour keeps `Error`'s `From` bound.
+    ///
+    /// So `?` on a store error compiles inside an `apply` written against
+    /// `SendProjection`.
+    fn _send_flavour_error_converts_from_the_store_error<P: SendProjection>(
+        error: <P::Store as ProjectionStore>::Error,
+    ) -> P::Error {
+        <P::Error as From<_>>::from(error)
+    }
+
+    /// The blanket impl forwards `Error` unchanged.
+    ///
+    /// The error a `SendProjection` declares is the one `run_projection`
+    /// reports.
+    fn _send_projection_error_is_the_projection_error<P: SendProjection>() {
+        fn same<P: crate::runner::Projection<Error = E>, E>() {}
+        same::<P, <P as SendProjection>::Error>();
+    }
+
     /// The variant's supertrait: every `SendProjection` is itself `Send`.
     fn _every_send_projection_is_send<P: SendProjection>() {
         fn is_send<T: Send>() {}

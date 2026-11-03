@@ -6424,7 +6424,7 @@ new port surface and no store-side knowledge of what a skip means.
 **Evaluated at the typed layer's phase exit, and the count is zero — but not for
 the reason the falsifier anticipated.** The falsifier expected *"record"* to
 degrade into *"log a warning"*. It did not: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:547`) writes nothing anywhere, logs nothing,
+(`crates/happenstance/src/runner.rs:610`) writes nothing anywhere, logs nothing,
 and **halts** on the first failure it meets. There is no `on_error`, no
 `SkipPolicy` and no policy argument of any kind, and that absence is deliberate
 rather than unfinished — it is this clause's own *Rejects* read one layer up. A
@@ -6450,15 +6450,15 @@ able to carry an application error type distinct from the projection store's.**
 **Rule:** the new `pump_reports_the_failing_position` — integration-level; assert
 the returned error names *P* and that `checkpoint` sits at the last good position.
 
-**Recorded pairing finding, and it is undetermined rather than sound.** The second
-assertion is not in this MUST, and whether it reaches past it turns entirely on
-what *"the last good position"* means, which the rule does not say. Under *last
-successfully applied event* a chunked runner fails it while satisfying this
-sentence, because its checkpoint sits at the previous chunk boundary after a
-mid-chunk failure; under *last successfully committed position* the two coincide
-and the pairing is sound. Both readings are available from the text. What resolves
-it is defining the phrase when the rule is written, which is the typed-layer
-phase's (`references/evaluation/ps-clause-pairing-sweep.md:285`).
+**Recorded pairing finding, resolved when the rule was written.** The second
+assertion is not in this MUST, and whether it reached past it turned on what *"the
+last good position"* means. Under *last successfully applied event* a chunked
+runner fails it, its checkpoint at the previous chunk boundary after a mid-chunk
+failure; under *last successfully committed position* the two coincide. The rule
+(`references/evaluation/ps-clause-pairing-sweep.md:285` left it the definition),
+in `crates/happenstance/tests/projection_runner.rs`, defines it as **the last
+committed position**: the error names the refused event, and the checkpoint and
+the error's `progress` sit at the last chunk boundary. The pairing is sound.
 **Cases:** E2E-26.
 **Rejects:** ADR-0007's own signature. It types the callback's error as
 `P::Error` (`0007:62-67`) — a **projection store** error — so a *decode* failure
@@ -6525,7 +6525,7 @@ and the obstacle is now stronger than *"nobody got round to it"*.** The port's
 shared between tasks at all — and moving one into a `tokio::spawn` would
 additionally require `Send`, which the flavour that exists for `wasm32` cannot
 promise. `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:547`) therefore drives exactly one
+(`crates/happenstance/src/runner.rs:610`) therefore drives exactly one
 projection per call, catches no unwind, and spawns nothing; N read models cost N
 independent reads.
 
@@ -6653,7 +6653,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:547`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:610`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 

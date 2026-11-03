@@ -1322,7 +1322,7 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
     (
         "PS-28",
         "pump_reports_the_failing_position",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
     ),
     (
         "PS-29",

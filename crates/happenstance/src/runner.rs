@@ -60,6 +60,15 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// runner: it doubles what an application chooses between, where one
 /// `async fn` doubles only the names this crate exports (ADR-0074).
 ///
+/// # Its error is its own
+///
+/// [`apply`](Self::apply) returns [`Self::Error`], not the store's error, so
+/// a projection that refuses an event says why in its own type and the runner
+/// reports it as [`ProjectionError::Apply`] beside the refused event's
+/// position. The store's error converts into it through `From`, so a write
+/// inside `apply` still propagates with `?`. A projection whose only failure
+/// is the store's names that error and is done.
+///
 /// # Which flavour to implement
 ///
 /// `#[trait_variant::make]` derives [`SendProjection`], whose `apply` future
@@ -78,6 +87,14 @@ pub trait Projection {
 
     /// The store this read model and its checkpoint live in.
     type Store: ProjectionStore;
+
+    /// The projection's own refusal (PS-28).
+    ///
+    /// `From` the store's error, so `batch.execute(..).await?` inside `apply`
+    /// needs no `map_err`. There is no default: a projection whose only
+    /// failure is the store's writes `type Error = <its store's error>;`,
+    /// which the reflexive `From<T> for T` satisfies.
+    type Error: core::error::Error + From<<Self::Store as ProjectionStore>::Error> + 'static;
 
     /// Which read model this is, within [`Self::Store`].
     ///
@@ -109,10 +126,11 @@ pub trait Projection {
     ///
     /// # Errors
     ///
-    /// Returns the adapter's own error. The runner discards the whole chunk
-    /// through [`rollback`](ProjectionStore::rollback) and reports the position
-    /// it stopped at, so the checkpoint stays where the last good commit left
-    /// it.
+    /// Returns the projection's own [`Self::Error`]; a store error converts
+    /// into it through `?`. The runner discards the whole chunk through
+    /// [`rollback`](ProjectionStore::rollback) and reports the position of
+    /// the event that failed, so the checkpoint stays where the last commit
+    /// left it.
     //
     // The store's types are spelled as explicit projections rather than through
     // `StoreBatch<Self>` and `StoreError<Self>`: those aliases go through
@@ -124,7 +142,7 @@ pub trait Projection {
         &mut self,
         event: Delivered<Self::Event>,
         batch: &mut <Self::Store as ProjectionStore>::Batch,
-    ) -> Result<(), <Self::Store as ProjectionStore>::Error>;
+    ) -> Result<(), Self::Error>;
 }
 
 /// How far a run got, and how much it applied.
@@ -155,22 +173,44 @@ pub struct Progressed {
 
 /// Why a projection run stopped.
 ///
-/// Two type parameters, not three. `R` is the event store's error and `W` the
-/// projection store's; the decode failure carries the **concrete**
-/// [`CodecError`], which is the whole reason a decode failure has a home here
-/// at all — an associated codec error would have been a third parameter on
-/// every signature downstream, and a checkpoint pump typing its callback's
-/// error as the projection store's cannot represent a decode failure without
-/// the application forging one into the adapter's own error enum.
+/// Three type parameters: `R` is the event store's error, `W` the projection
+/// store's, and `A` the projection's own, [`Projection::Error`] (PS-28). An
+/// application's refusal is reported as itself, rather than forged into the
+/// adapter's `#[non_exhaustive]` error enum. `A` has no default `A = W`: a
+/// default would let a signature naming two parameters keep compiling while
+/// silently meaning the store's error (ADR-0074). Nor is it a
+/// `Box<dyn Error>`, which would erase the type a caller matches on.
+///
+/// The decode failure carries the **concrete** [`CodecError`] rather than a
+/// fourth parameter: an associated codec error would be one more parameter on
+/// every signature downstream, for an error this crate already owns.
+///
+/// Two parameters do not compile, so no caller is left naming the old shape:
+///
+/// ```compile_fail,E0107
+/// use happenstance::{MemoryProjectionStoreError, MemoryStoreError};
+/// use happenstance::ProjectionError;
+/// type Old =
+///     ProjectionError<MemoryStoreError, MemoryProjectionStoreError>;
+/// ```
+///
+/// ```
+/// use happenstance::{MemoryProjectionStoreError, MemoryStoreError};
+/// use happenstance::ProjectionError;
+///
+/// type Same = MemoryProjectionStoreError;
+/// type Now = ProjectionError<MemoryStoreError, Same, Same>;
+/// ```
 ///
 /// Every foreign error is a typed [`source`](core::error::Error::source), never
 /// a string, so a caller reports the chain rather than re-parsing a message.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum ProjectionError<R, W>
+pub enum ProjectionError<R, W, A>
 where
     R: core::error::Error + 'static,
     W: core::error::Error + 'static,
+    A: core::error::Error + 'static,
 {
     /// The projection constrains neither event types nor tags.
     ///
@@ -242,9 +282,28 @@ where
         progress: Progressed,
         /// Where the offending event sits in the store's order.
         position: SequencePosition,
-        /// The projection store's own refusal, as `apply` reported it.
+        /// The projection's own refusal, [`Projection::Error`] (PS-28).
         #[source]
-        source: W,
+        source: A,
+        /// A rollback that also failed while the chunk was being discarded.
+        rollback: Option<W>,
+    },
+
+    /// The projection's failure policy itself failed.
+    ///
+    /// Writing a record of the refused event into the batch, for instance
+    /// (ADR-0074 decisions 6 and 8). Produced once the failure-policy seam,
+    /// a per-projection `on_error`, lands (#101); nothing in this release
+    /// constructs it.
+    #[error("the failure policy for the event at position {position} failed")]
+    Policy {
+        /// What the run had committed before this.
+        progress: Progressed,
+        /// Where the event the policy was handling sits in the store's order.
+        position: SequencePosition,
+        /// The projection's own error, as its policy reported it.
+        #[source]
+        source: A,
         /// A rollback that also failed while the chunk was being discarded.
         rollback: Option<W>,
     },
@@ -283,10 +342,11 @@ where
     },
 }
 
-impl<R, W> ProjectionError<R, W>
+impl<R, W, A> ProjectionError<R, W, A>
 where
     R: core::error::Error + 'static,
     W: core::error::Error + 'static,
+    A: core::error::Error + 'static,
 {
     /// What the run committed before it stopped.
     ///
@@ -300,6 +360,7 @@ where
             Self::Read { progress, .. }
             | Self::Decode { progress, .. }
             | Self::Apply { progress, .. }
+            | Self::Policy { progress, .. }
             | Self::Begin { progress, .. }
             | Self::Commit { progress, .. } => *progress,
         }
@@ -313,7 +374,9 @@ where
     #[must_use]
     pub fn position(&self) -> Option<SequencePosition> {
         match self {
-            Self::Decode { position, .. } | Self::Apply { position, .. } => Some(*position),
+            Self::Decode { position, .. }
+            | Self::Apply { position, .. }
+            | Self::Policy { position, .. } => Some(*position),
             Self::KeySpaceExhausted { through } => Some(*through),
             _ => None,
         }
@@ -421,6 +484,7 @@ where
 /// impl Projection for Sold {
 ///     type Event = Seat;
 ///     type Store = MemoryProjectionStore;
+///     type Error = MemoryProjectionStoreError;
 ///     fn id(&self) -> &ProjectionId { &self.id }
 ///     fn scope(&self) -> &Tags { &self.scope }
 ///     async fn apply(
@@ -528,29 +592,28 @@ where
 ///
 // The three sections above sit *after* the fence rather than beside the subject
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:547` as the location of this item and that
+// `crates/happenstance/src/runner.rs:610` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
 // above it pushes the `run_projection` call down and leaves the three citations
-// pointing at whatever now occupies 545.
+// pointing at whatever now occupies 608.
 //
-// **The gate does not catch that, and this comment used to say it did.**
-// `spec-trace` counts a citation and only *anchors* it where it can derive a
-// subject from the prose beside it — 80 of 401, and these three are not among
-// them. Measured rather than assumed: moving `# Choosing `chunk`` above the
-// fence puts the call 39 lines from the cited line, and `spec-trace` reports the
-// same "80 anchored" and exits 0. What actually holds the line is
-// `crates/happenstance/tests/projection_runner_page.rs`, which asserts the two
-// sections this lane added stay below the fence and says why.
+// **The gate catches that now, and when this comment was first written it did
+// not.** `spec-trace` only *anchors* a citation where it can derive a subject
+// from the prose beside it, and these three were once outside that set (80 of
+// 401). Measured again at #99: adding lines above the item made `spec-trace`
+// fail, naming all three. `crates/happenstance/tests/projection_runner_page.rs`
+// still asserts the two sections this lane added stay below the fence, which
+// fails closer to the cause.
 //
 // Moving a section up is still *allowed*; it costs the three citations moving
-// with it, and nothing but a reader will tell you.
+// with it.
 pub async fn run_projection<S, P, C>(
     events: &S,
     models: &P::Store,
     projection: &mut P,
     codec: &C,
     chunk: Chunk,
-) -> Result<Progressed, ProjectionError<S::Error, StoreError<P>>>
+) -> Result<Progressed, ProjectionError<S::Error, StoreError<P>, P::Error>>
 where
     S: EventStore,
     P: Projection,
@@ -675,7 +738,7 @@ async fn apply_one<P, C, R>(
     codec: &C,
     event: &SequencedEvent,
     batch: &mut StoreBatch<P>,
-) -> Result<(), Stopped<R, StoreError<P>>>
+) -> Result<(), Stopped<R, P::Error>>
 where
     P: Projection,
     C: Codec,
@@ -706,7 +769,11 @@ where
 /// run had got and whether the rollback that followed also failed. Keeping them
 /// apart is what stops a `progress` field being threaded through every
 /// construction site.
-enum Stopped<R, W> {
+///
+/// `A` is the projection's error; the store's `W` appears only on `into_error`,
+/// because no stop ever holds one and a type parameter would put it in the
+/// runner's state machine for nothing.
+enum Stopped<R, A> {
     Read(R),
     Decode {
         position: SequencePosition,
@@ -714,17 +781,20 @@ enum Stopped<R, W> {
     },
     Apply {
         position: SequencePosition,
-        source: W,
+        source: A,
     },
 }
 
-impl<R, W> Stopped<R, W>
+impl<R, A> Stopped<R, A>
 where
     R: core::error::Error + 'static,
-    W: core::error::Error + 'static,
+    A: core::error::Error + 'static,
 {
     /// Attaches the run's partial progress and whatever the rollback said.
-    fn into_error(self, progress: Progressed, rollback: Option<W>) -> ProjectionError<R, W> {
+    fn into_error<W>(self, progress: Progressed, rollback: Option<W>) -> ProjectionError<R, W, A>
+    where
+        W: core::error::Error + 'static,
+    {
         match self {
             Self::Read(source) => ProjectionError::Read {
                 progress,

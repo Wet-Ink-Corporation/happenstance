@@ -1075,6 +1075,7 @@ impl StockOnHand {
 impl Projection for StockOnHand {
     type Event = Fulfilment;
     type Store = SqliteProjectionStore;
+    type Error = SqliteProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
@@ -1136,6 +1137,7 @@ impl OrderStatus {
 impl Projection for OrderStatus {
     type Event = Fulfilment;
     type Store = SqliteProjectionStore;
+    type Error = SqliteProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
@@ -1305,6 +1307,7 @@ impl DailyDispatches {
 impl Projection for DailyDispatches {
     type Event = Fulfilment;
     type Store = SqliteProjectionStore;
+    type Error = SqliteProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
@@ -1369,6 +1372,7 @@ impl Couriered {
 impl Projection for Couriered {
     type Event = Handover;
     type Store = SqliteProjectionStore;
+    type Error = SqliteProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
@@ -1406,6 +1410,10 @@ impl Projection for Couriered {
 /// associated store, so there is no `dyn Projection` to put in a registry and
 /// no loop to write. A heterogeneous set of views is a sequence of calls, and
 /// that is a property of the port, not a shortcoming of this file.
+///
+/// `P::Error: Send + Sync` because `anyhow` asks it of every error `?` moves
+/// in, and a projection's own error carries no such bound by design: a
+/// `!Send` application is allowed one.
 async fn drive<P>(
     events: &SqliteEventStore,
     models: &SqliteProjectionStore,
@@ -1414,6 +1422,7 @@ async fn drive<P>(
 ) -> Result<usize>
 where
     P: Projection<Store = SqliteProjectionStore>,
+    P::Error: Send + Sync,
 {
     let chunk = Chunk::of(chunk.try_into()?);
     let progress = run_projection(events, models, projection, &Json, chunk).await?;

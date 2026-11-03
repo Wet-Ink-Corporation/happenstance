@@ -606,6 +606,7 @@ impl SeatHolders {
 impl Projection for SeatHolders {
     type Event = Ticketing;
     type Store = SqliteProjectionStore;
+    type Error = SqliteProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id

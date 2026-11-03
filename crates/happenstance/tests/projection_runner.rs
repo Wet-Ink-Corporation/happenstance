@@ -142,6 +142,7 @@ impl VanStock {
 impl Projection for VanStock {
     type Event = Stock;
     type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
@@ -787,6 +788,115 @@ async fn decode_failure_names_its_position_and_rolls_back() {
 }
 
 // ---------------------------------------------------------------------------
+// PS-28 — a projection fails with its own error, at the event that failed
+// ---------------------------------------------------------------------------
+
+/// The projection's own refusal, which no store error could carry.
+#[derive(Debug, thiserror::Error)]
+enum Refusal {
+    #[error("refused a delivery of {units} units")]
+    Refused { units: u64 },
+    #[error(transparent)]
+    Store(#[from] MemoryProjectionStoreError),
+}
+
+/// Units delivered to one depot, refusing any delivery of exactly five.
+struct RefusesFive {
+    id: ProjectionId,
+    scope: Tags,
+    total: u64,
+}
+
+impl Projection for RefusesFive {
+    type Event = Stock;
+    type Store = MemoryProjectionStore;
+    type Error = Refusal;
+
+    fn id(&self) -> &ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    async fn apply(
+        &mut self,
+        event: Delivered<Self::Event>,
+        batch: &mut MemoryProjectionBatch,
+    ) -> Result<(), Refusal> {
+        if let Stock::Delivered { units, .. } = event.into_event() {
+            if units == 5 {
+                return Err(Refusal::Refused { units });
+            }
+            self.total += units;
+            batch.write("d7", self.total);
+        }
+        Ok(())
+    }
+}
+
+/// PS-28's rule. *The last good position* is **the last committed one**: a
+/// failure mid-chunk discards the chunk, so the checkpoint and `progress` sit
+/// at the previous chunk boundary, while `position` names the event whose
+/// `apply` refused. Wrong implementations each assertion rejects: reporting
+/// the last *applied* position (p4) fails `position`; committing the partial
+/// chunk fails the checkpoint and the row; counting applied-but-uncommitted
+/// events fails `progress`; and a runner whose `Apply` arm carries the
+/// store's error cannot hold a `Refusal` at all.
+#[tokio::test]
+async fn pump_reports_the_failing_position() {
+    let events = MemoryEventStore::new();
+    let deliveries: Vec<Stock> = (1..=5).map(|units| delivered("d7", units)).collect();
+    seed(&events, &deliveries).await;
+    let snapshot = events.snapshot();
+    let [_, _, third, _, fifth] = snapshot.as_slice() else {
+        panic!("five events were seeded, found {}", snapshot.len());
+    };
+    let (committed, refused) = (third.position, fifth.position);
+
+    let models = MemoryProjectionStore::new();
+    let mut projection = RefusesFive {
+        id: ProjectionId::from_static("refuses_five"),
+        scope: depot_tags("d7"),
+        total: 0,
+    };
+    let error = run_projection(&events, &models, &mut projection, &Json, chunk(3))
+        .await
+        .expect_err("the refused delivery stops the runner");
+
+    assert!(
+        matches!(
+            &error,
+            ProjectionError::Apply {
+                position,
+                source: Refusal::Refused { units: 5 },
+                rollback: None,
+                ..
+            } if *position == refused
+        ),
+        "expected the projection's own refusal at the fifth event, got {error:?}"
+    );
+    assert_eq!(error.position(), Some(refused));
+    let progress = error.progress();
+    assert_eq!(progress.through, Some(committed));
+    assert_eq!(progress.applied, 3);
+
+    assert_eq!(
+        models.checkpoint(projection.id()).await.unwrap(),
+        Checkpoint::Live { through: committed }
+    );
+    assert_eq!(models.get("d7"), Some(1 + 2 + 3));
+
+    // The `#[source]` chain reaches the projection's own error, not the store's.
+    let source = core::error::Error::source(&error).expect("a typed source");
+    assert!(matches!(
+        source.downcast_ref::<Refusal>(),
+        Some(Refusal::Refused { units: 5 })
+    ));
+}
+
+// ---------------------------------------------------------------------------
 // ADR-0074 — a buffered run costs nothing for `apply` being `async`
 // ---------------------------------------------------------------------------
 
@@ -846,6 +956,7 @@ struct Yielding(VanStock);
 impl Projection for Yielding {
     type Event = Stock;
     type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         self.0.id()
@@ -908,6 +1019,7 @@ struct Identities {
 impl Projection for Identities {
     type Event = Stock;
     type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
