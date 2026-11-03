@@ -1554,10 +1554,10 @@ pub mod rules {
     /// have gone.
     ///
     /// **Rejects:** `RefusalAsSuccessStore` — a store whose protection policy is
-    /// consulted somewhere other than the write path, so `reset` returns `Ok`
-    /// and does the work; and `RefusalAfterTheFactStore` — a store that issues
-    /// its deletes and *then* checks the policy, reporting the refusal honestly
-    /// over a read model that is already gone.
+    /// consulted somewhere other than the write path, so `reset` returns `Ok`;
+    /// `RefusalAfterTheFactStore` — a store that issues its deletes and *then*
+    /// checks the policy, refusing honestly over a read model already gone; and
+    /// `NoopProtectFixture`, a fixture that declares it and protects nothing.
     ///
     /// # Why this rule is capability-gated, and the gate is the fixture's
     ///

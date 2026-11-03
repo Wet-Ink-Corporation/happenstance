@@ -34,7 +34,7 @@ on?* It succeeds inside a task or a `block_on`, and fails on a bare OS thread.
 **Why capture-at-construction strands.** ADR-0022 §9 had both stores in `happenstance-sqlite`, and
 later `PostgresEventStore`, call `Handle::try_current().ok()` in their constructor and keep the
 result (`crates/happenstance-sqlite/src/event_store.rs:513`,
-`crates/happenstance-sqlite/src/projection_store.rs:234`,
+`crates/happenstance-sqlite/src/projection_store.rs:274`,
 `crates/happenstance-postgres/src/event_store.rs:337`), then **prefer** that handle at every use.
 The reason was sound: the conformance suite's concurrency family drives stores from bare OS threads
 with no runtime of their own, and the captured handle is the only one they can reach. But a
@@ -121,7 +121,7 @@ because the bare-thread contenders still need it.
 Four sites change order, and nothing else does:
 
 - `SqliteReadStream::poll_next`, the `Idle` arm (`crates/happenstance-sqlite/src/event_store.rs:2385`);
-- `SqliteProjectionStore::runtime` (`crates/happenstance-sqlite/src/projection_store.rs:344-349`);
+- `SqliteProjectionStore::runtime` (`crates/happenstance-sqlite/src/projection_store.rs:385-390`);
 - `PostgresEventStore::runtime` (`crates/happenstance-postgres/src/event_store.rs:387-392`);
 - `PgReadStream::poll_next`, the `Unstarted` arm (`crates/happenstance-postgres/src/read_stream.rs:386`).
 

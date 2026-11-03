@@ -1016,19 +1016,19 @@ pub trait ProjectionFixture {
     /// also override [`protect_from_reset`](Self::protect_from_reset), which is
     /// the mechanism this constant gates.
     ///
-    /// # What is *not* here, and is owed
+    /// # What declaring it commits a fixture to
     ///
-    /// [`COMMIT_FAULT`](Self::COMMIT_FAULT) carries a CF-39-shaped clause-level
-    /// MUST saying what declaring it commits a fixture to, and that obligation
-    /// is what makes its default safe. This constant carries no equivalent: a
-    /// fixture may declare `RESET_REFUSAL`, implement
-    /// [`protect_from_reset`](Self::protect_from_reset) as a no-op, and turn
-    /// `refused_reset_changes_nothing` into a green result about a store that
-    /// protected nothing — the trait's provided body panics, so only an
-    /// *override* that does nothing reaches it, which is exactly the shape
-    /// CF-39 was written for one port over. Minting that clause is the
-    /// specification owner's act and is not taken here; it is recorded in
-    /// `.kb/_intake/remediation-2026-09-04-briefs/projection-declension-obligations.md`.
+    /// CF-43, CF-39's shape for this capability: once
+    /// [`protect_from_reset`](Self::protect_from_reset) has returned, every later
+    /// `reset` of that id through any handle answers `ResetError::Refused`, by a
+    /// mechanism inside the store's own `reset` that the fixture states; a store
+    /// that refuses no reset declines. A *forgotten* override reaches the panic
+    /// below. An override that does nothing is the quieter mistake, and
+    /// `refused_reset_changes_nothing` rejects it at its first assertion, since
+    /// a store nobody protected answers `Ok`: `NoopProtectFixture`, in this
+    /// crate's `tests/projection_mutation_coverage/mutants.rs`, is registered as
+    /// failing it. `happenstance-sqlite` is the first adapter to declare the
+    /// capability.
     const RESET_REFUSAL: Capability = Capability::declined(UNSTATED_RESET_REFUSAL);
 
     /// Whether this fixture can make a `commit` **report failure**.

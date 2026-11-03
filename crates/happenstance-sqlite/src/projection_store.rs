@@ -69,7 +69,17 @@
 //!     k TEXT    NOT NULL PRIMARY KEY,
 //!     v INTEGER NOT NULL
 //! ) WITHOUT ROWID;
+//!
+//! CREATE TABLE projection_protection (
+//!     projection_id TEXT NOT NULL PRIMARY KEY
+//! ) WITHOUT ROWID;
 //! ```
+//!
+//! `projection_protection` holds one row per projection protected from
+//! [`reset`](happenstance_core::ProjectionStore::reset) (PS-18), written through
+//! [`SqliteProjectionStore::protect_from_reset`]. It is a mark the domain sets,
+//! not a policy this adapter holds, and [`SCHEMA_VERSION`] says why a file that
+//! carries one is marked differently from a file that does not.
 //!
 //! The `authority` column is the half an earlier sketch of this schema left out,
 //! and leaving it out is not a shortcut but an impossibility: without it
@@ -127,13 +137,38 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params_from_i
 use tokio::runtime::{Handle, TryCurrentError};
 use tokio::task::JoinError;
 
-/// The projection migration this build knows how to operate.
+mod protection;
+
+/// The highest projection schema version this build knows how to operate.
 ///
-/// Persisted in `projection_meta` so that migration 2 has something to test
-/// against: a schema with no version marker cannot be migrated later without
-/// guessing. It is **this schema's own** marker, on its own terms — the event
-/// store's lives in `store_meta` and moves on a different story's schedule.
-pub const SCHEMA_VERSION: u32 = 1;
+/// Persisted in `projection_meta` so that a later migration has something to
+/// test against: a schema with no version marker cannot be migrated later
+/// without guessing. It is **this schema's own** marker, on its own terms — the
+/// event store's lives in `store_meta` and moves on a different story's schedule.
+///
+/// # What the marker in a file means
+///
+/// The oldest build that may operate the file, which is not always the newest
+/// schema this build writes. Version 2 added `projection_protection`, and a file
+/// is written at 1 and stays there until something is protected: the table is
+/// created on every open and is inert to a build that predates it, so a file
+/// nothing has protected stays open to that build. The first
+/// [`protect_from_reset`](SqliteProjectionStore::protect_from_reset) raises the
+/// marker to 2, in the same transaction as the mark, and from then on an older
+/// build refuses the file with
+/// [`UnsupportedSchemaVersion`](SqliteProjectionStoreError::UnsupportedSchemaVersion)
+/// rather than reset a protected projection without knowing.
+///
+/// The alternative that lost marked every file 2 on its first open by this
+/// build, which would have stopped an older build reading files that held
+/// nothing it could mishandle.
+pub const SCHEMA_VERSION: u32 = 2;
+
+/// The marker a fresh file is written at: the schema before protection.
+const BASELINE_SCHEMA_VERSION: u32 = 1;
+
+/// The marker a file is raised to by its first protection.
+const PROTECTION_SCHEMA_VERSION: u32 = 2;
 
 /// Migration 1, verbatim. Mirrored in the [module documentation](self).
 ///
@@ -223,6 +258,11 @@ impl SqliteProjectionStore {
     /// is given, so a caller reaching this constructor directly should have
     /// opened it through [`crate::connection::open_configured`].
     ///
+    /// The schema includes `projection_protection`, which a file last migrated by
+    /// a build before `0.5.0` does not have, and `reset` reads it: open such a
+    /// file through [`open`](Self::open) once before wrapping a connection to it
+    /// here.
+    ///
     /// This is where the batch stamp is minted and where the fallback runtime
     /// handle is captured, for calls later made from no runtime at all: it is
     /// the point at which a caller is most likely to be inside one.
@@ -298,11 +338,12 @@ impl SqliteProjectionStore {
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
 
         transaction.execute_batch(MIGRATION_1)?;
+        transaction.execute_batch(protection::PROTECTION_TABLE)?;
         #[cfg(feature = "conformance")]
         transaction.execute_batch(PROBE_TABLE)?;
         transaction.execute(
             "INSERT OR IGNORE INTO projection_meta (k, v) VALUES (?, ?)",
-            rusqlite::params![SCHEMA_VERSION_KEY, SCHEMA_VERSION],
+            rusqlite::params![SCHEMA_VERSION_KEY, BASELINE_SCHEMA_VERSION],
         )?;
 
         let found: u32 = transaction.query_row(
@@ -631,6 +672,19 @@ pub enum SqliteProjectionStoreError {
     ForeignBatch,
 }
 
+/// What a reset that reached the database did.
+///
+/// [`CommitOutcome`]'s reason: the blocking closure knows nothing of
+/// [`ResetError`], so it hands the refusal back as data and the async body
+/// spells it.
+#[derive(Debug)]
+enum ResetOutcome {
+    /// The caller's statements ran and the checkpoint row is gone.
+    Reset,
+    /// The projection is protected, so nothing was written.
+    Refused,
+}
+
 /// What a commit that reached the database did.
 ///
 /// A commit has two port-level outcomes and one adapter-level one, and only the
@@ -756,17 +810,22 @@ impl SendProjectionStore for SqliteProjectionStore {
     /// an adapter that truncated a table of its own naming would be scoped to
     /// something the port deliberately never told it.
     ///
+    /// A projection protected through
+    /// [`protect_from_reset`](SqliteProjectionStore::protect_from_reset) is
+    /// refused. The mark is read first, inside the same `BEGIN IMMEDIATE`, so a
+    /// refused reset has run none of the caller's statements.
+    ///
     /// # Errors
     ///
     /// * [`ResetError::ForeignBatch`] if `batch` was begun on a different store
     ///   instance, decided before any statement is prepared.
+    /// * [`ResetError::Refused`] if `id` is protected from reset. The read model
+    ///   and the checkpoint are exactly as they were (PS-18), and
+    ///   [`is_protected_from_reset`](SqliteProjectionStore::is_protected_from_reset)
+    ///   says which mark refused it.
     /// * [`ResetError::Store`] if the connection mutex was poisoned, the blocking
     ///   task did not complete, there was no runtime to run it on, or the driver
     ///   failed.
-    ///
-    /// [`ResetError::Refused`] is never returned: this store holds no protection
-    /// policy, which is PS-18's mechanism left unexercised by a store that has
-    /// nothing to protect.
     async fn reset(
         &self,
         batch: Self::Batch,
@@ -777,9 +836,15 @@ impl SendProjectionStore for SqliteProjectionStore {
         }
 
         let id = id.clone();
-        self.in_blocking_task(move |connection| reset_locked(connection, &batch, &id))
+        let outcome = self
+            .in_blocking_task(move |connection| reset_locked(connection, &batch, &id))
             .await
-            .map_err(ResetError::Store)
+            .map_err(ResetError::Store)?;
+
+        match outcome {
+            ResetOutcome::Reset => Ok(()),
+            ResetOutcome::Refused => Err(ResetError::Refused),
+        }
     }
 
     /// Discards the batch without committing.
@@ -991,13 +1056,23 @@ fn commit_locked(
     Ok(CommitOutcome::Committed)
 }
 
-/// One transaction: the caller's deletes, then the checkpoint row's removal.
+/// One transaction: the protection check, the caller's deletes, then the
+/// checkpoint row's removal.
 fn reset_locked(
     connection: &mut Connection,
     batch: &SqliteBatch,
     id: &ProjectionId,
-) -> Result<(), SqliteProjectionStoreError> {
+) -> Result<ResetOutcome, SqliteProjectionStoreError> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+
+    // Inside the write lock, for `commit_locked`'s reason: a check made before
+    // `BEGIN IMMEDIATE` races a protection from another process. And before
+    // `apply`, so that a refusal has nothing to undo.
+    if protection::is_protected(&transaction, id)? {
+        // Explicit rather than left to `Drop`, which would swallow a failure.
+        transaction.rollback()?;
+        return Ok(ResetOutcome::Refused);
+    }
 
     apply(&transaction, batch)?;
     transaction.execute(
@@ -1006,7 +1081,7 @@ fn reset_locked(
     )?;
 
     transaction.commit()?;
-    Ok(())
+    Ok(ResetOutcome::Reset)
 }
 
 /// Replays every queued statement, in the order it was pushed.

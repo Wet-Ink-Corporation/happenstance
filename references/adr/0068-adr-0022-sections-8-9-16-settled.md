@@ -227,7 +227,7 @@ to `Handle::try_current()`, so that `SqliteEventStoreError::NoRuntime` keeps a r
 **What fired.** The capture is unconditional. It happens in three places:
 
 - `crates/happenstance-sqlite/src/event_store.rs:512`;
-- `crates/happenstance-sqlite/src/projection_store.rs:234`;
+- `crates/happenstance-sqlite/src/projection_store.rs:274`;
 - `crates/happenstance-postgres/src/event_store.rs:314`.
 
 No constructor clears the captured handle or replaces it. Take a store built inside one runtime and
