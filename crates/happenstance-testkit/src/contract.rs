@@ -479,7 +479,10 @@ pub trait Fixture {
     /// ceiling, and refusing one more as `ExceedsStoreLimit { limit:
     /// StoreLimit::TagsPerBatch, .. }`. The floor is
     /// `MIN_SUPPORTED_TAGS_PER_BATCH` (VT-36), which VT-22 and VT-24 already
-    /// imply.
+    /// imply. Unlike the other ceilings, a number here below the floor fails
+    /// [`store_accepts_the_guaranteed_minimum_tags_per_batch`](crate::rules::store_accepts_the_guaranteed_minimum_tags_per_batch)
+    /// on the declaration itself, before anything is written: declaring less
+    /// is not the fix for a store that cannot clear the floor.
     ///
     /// A stated number must also be **coherent** with the other two (VT-36):
     /// at least `MAX_TAGS_PER_EVENT`, so that a lone event within its own
