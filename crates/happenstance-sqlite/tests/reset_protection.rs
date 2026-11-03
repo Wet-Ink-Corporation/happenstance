@@ -55,7 +55,12 @@ struct Database {
 impl Database {
     /// A fresh file, named by process id and a process-local ordinal.
     fn new() -> Self {
+        // Process-wide on purpose: the harness runs these tests on parallel
+        // threads in one process, and only a counter they all share keeps their
+        // files apart. It is the idiom of every other file in this `tests/`.
         static NEXT: AtomicU64 = AtomicU64::new(1);
+        // `Relaxed`: only the counter's own uniqueness is needed, which every
+        // ordering gives a single atomic; nothing else is published through it.
         let ordinal = NEXT.fetch_add(1, Ordering::Relaxed);
         let mut path = std::env::temp_dir();
         path.push(format!(
