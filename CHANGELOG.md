@@ -44,8 +44,21 @@ not the same as what a user needed to be told.
   return type, and reads the event with `event.into_event()` or `event.event()`.
   A projection over a buffered batch never awaits: its run is ready at the
   first poll and behaves as before. A projection over a live batch can now
-  await a statement through it. The error type is unchanged in this release.
-  `unstable-projection` makes no semver promise (ADR-0066).
+  await a statement through it. Its error type changed too, in the next
+  entry. `unstable-projection` makes no semver promise (ADR-0066).
+- **Breaking, behind `unstable-projection`: a projection fails with its own
+  error** (PS-28, ADR-0074 decision 8, #99). `Projection` gains
+  `type Error: core::error::Error + From<<Self::Store as ProjectionStore>::Error> + 'static`,
+  and `apply` returns `Result<(), Self::Error>`. A projection whose only
+  failure is the store's migrates with one line,
+  `type Error = <its store's error>;`, and `?` on a store call inside `apply`
+  still compiles. `ProjectionError` gains a third type parameter `A`, the
+  projection's error, which `Apply`'s `source` now carries, and there is no
+  default: `ProjectionError<R, W>` no longer compiles. It also gains a
+  `Policy` arm for a failing per-projection failure policy, which nothing
+  constructs until that policy lands (#101). A caller generic over `P` that
+  sends the error elsewhere, into `anyhow` for instance, adds
+  `P::Error: Send + Sync` to its own bounds.
 - `happenstance` (behind `unstable-projection`): `run_projection` takes
   `chunk: Chunk` rather than a bare `NonZeroUsize` (ADR-0070, #120). Migrate
   with `Chunk::of(n)`. `Chunk` is `#[non_exhaustive]` and `Copy`, with a

@@ -171,6 +171,7 @@ impl Shreds {
 impl Projection for Shreds {
     type Event = Part;
     type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id

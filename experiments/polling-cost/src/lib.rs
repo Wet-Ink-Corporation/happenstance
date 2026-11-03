@@ -284,6 +284,7 @@ impl View {
 impl Projection for View {
     type Event = Measured;
     type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
