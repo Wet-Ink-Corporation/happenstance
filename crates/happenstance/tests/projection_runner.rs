@@ -25,10 +25,10 @@ use futures_core::Stream;
 use happenstance::bytes::Bytes;
 use happenstance::{
     AppendCondition, AppendError, Checkpoint, Chunk, Codec, CodecError, Delivered, DomainEvent,
-    Event, EventId, EventStore, EventType, Json, MemoryEventStore, MemoryProjectionBatch,
-    MemoryProjectionStore, MemoryProjectionStoreError, MemoryStoreError, Progressed, Projection,
-    ProjectionError, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
-    SequencePosition, SequencedEvent, Tags, checkpoint_id, run_projection,
+    Event, EventId, EventStore, EventType, InvalidCheckpointId, Json, MemoryEventStore,
+    MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError, MemoryStoreError,
+    Progressed, Projection, ProjectionError, ProjectionId, ProjectionStore, Query, QueryItem,
+    ReadOptions, SequencePosition, SequencedEvent, Tags, checkpoint_id, run_projection,
 };
 use happenstance_testkit::GappyMemoryStore;
 use serde::{Deserialize, Serialize};
@@ -1272,6 +1272,48 @@ async fn changed_query_starts_a_new_checkpoint() {
     assert_ne!(v3_key, v1_key);
     assert_eq!(
         models.checkpoint(&v3_key).await.unwrap(),
+        Checkpoint::NeverRun
+    );
+}
+
+/// A name with no room for the digest stops the run before anything is read.
+///
+/// The wrong implementations this rejects are a runner that truncates the
+/// name to fit, which applies the event and commits under an id two
+/// projections could share, and one that reports the refusal through another
+/// arm, which a caller matching on `CheckpointId` would never see.
+#[tokio::test]
+async fn a_name_too_long_for_a_checkpoint_id_stops_the_run() {
+    let events = MemoryEventStore::new();
+    seed(&events, &[delivered("d7", 3)]).await;
+
+    let models = MemoryProjectionStore::new();
+    let mut projection = VanStock {
+        id: ProjectionId::new("n".repeat(239)).expect("a valid 239-byte id"),
+        ..VanStock::for_depot("d7")
+    };
+    assert_eq!(
+        checkpoint_id(&projection),
+        Err(InvalidCheckpointId::NameTooLong { len: 239 })
+    );
+
+    let error = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+        .await
+        .expect_err("a name with no room for the digest stops the run");
+
+    assert!(
+        matches!(
+            &error,
+            ProjectionError::CheckpointId(InvalidCheckpointId::NameTooLong { len: 239 })
+        ),
+        "expected the checkpoint-id refusal, got {error:?}"
+    );
+    assert_eq!(error.progress(), Progressed::default());
+    assert_eq!(error.position(), None);
+    assert!(projection.seen.is_empty(), "the run read the log anyway");
+    assert!(models.is_empty(), "the run wrote rows anyway");
+    assert_eq!(
+        models.checkpoint(projection.id()).await.unwrap(),
         Checkpoint::NeverRun
     );
 }

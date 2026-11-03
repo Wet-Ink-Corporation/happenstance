@@ -154,9 +154,10 @@ fn prose_added_to_this_page_stays_below_the_fence() {
             "`{heading}` was added above the doctest fence. Every line above \
              the fence pushes the `run_projection(` call inside it down, and \
              three sentences of `SPECIFICATION.md` cite this item at \
-             `runner.rs:630`, the line it is declared on. `spec-trace` does \
-             not always report the moved citations; this is where the cause \
-             is said"
+             `runner.rs:630`, the line it is declared on. `spec-trace` \
+             anchors them on the item's name within twelve lines, so it \
+             misses the move whenever the name sits in that window too; \
+             this is where the cause is said"
         );
     }
 }

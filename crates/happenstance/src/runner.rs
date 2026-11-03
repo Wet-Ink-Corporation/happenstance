@@ -614,16 +614,16 @@ where
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
 // `crates/happenstance/src/runner.rs:630` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
-// above it pushes the `run_projection` call down and leaves the three citations
+// above it pushes the item's declaration down and leaves the three citations
 // pointing at whatever line the item used to occupy.
 //
-// **Do not rely on the gate to catch that.** `spec-trace` only *anchors* a
-// citation where it can derive a subject from the prose beside it. At #99,
-// adding lines above the item made it fail, naming all three; at #107 the item
-// moved twenty lines and it passed, so the three were repointed by hand. The
-// test `crates/happenstance/tests/projection_runner_page.rs` still asserts the
-// two sections this lane added stay below the fence, which fails closer to the
-// cause.
+// `spec-trace` anchors the three on the item's name within twelve lines of
+// the cited one. At #107 the item moved twenty lines and the stale citations
+// still passed, because this comment then named the item in backticks inside
+// that window. It no longer names it, so only the declaration can satisfy the
+// anchor; keep it that way. The test
+// `crates/happenstance/tests/projection_runner_page.rs` asserts the two
+// sections this lane added stay below the fence, closer to the cause.
 //
 // Moving a section up is still *allowed*; it costs the three citations moving
 // with it.

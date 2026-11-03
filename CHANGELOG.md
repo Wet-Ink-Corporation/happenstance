@@ -93,7 +93,6 @@ not the same as what a user needed to be told.
   could not be derived, and `MAX_CHECKPOINT_NAME_LEN`, 238 (PS-25, #107). The
   digest function, its encoding and the `@` separator are pinned by golden
   values and documented on `checkpoint_id`.
-
 - `happenstance` (behind `unstable-projection`): `Delivered<E>`, the event
   `apply` is handed. It exposes `id()`, the origin's `EventId`, `event()` and
   `into_event()`, and a public `Delivered::new(id, event)` so an application can
