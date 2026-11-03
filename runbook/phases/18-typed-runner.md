@@ -52,7 +52,7 @@ renews them with the disposition phase 16 gave.
       - #142 · `crates/happenstance-postgres/src/live_projection_store.rs`'s paragraph
         saying `run_projection` cannot drive it removed, and a row-writing
         projection run through it against a real server.
-- [ ] #99 · **PS-28's error type** (ADR-0074 decision 8). `type Error:
+- [x] #99 · **PS-28's error type** (ADR-0074 decision 8). `type Error:
       core::error::Error + From<<Self::Store as ProjectionStore>::Error> +
       'static` on `Projection`; `apply` and `on_error` return `Self::Error`;
       `ProjectionError<R, W, A>` with `Apply { progress, position, source: A,
@@ -210,3 +210,16 @@ PS-30 each with a rule and a mutant that fails it.
   and break worse under `impl Into` (inference falls to `!`). The examples spell
   it `Chunk::of(CHUNK.try_into()?)`. One `Copy` type serves the fan-out runner
   too, so ADR-0070's falsifier did not fire.
+- 2026-11-02 — #99: `Projection` gains `type Error` (`From` the store's error) and
+  `apply` returns it; `ProjectionError<R, W, A>` carries it in `Apply`, with no
+  default `A = W` (a `compile_fail,E0107` fence holds that). *The last good
+  position* is **the last committed one**: `pump_reports_the_failing_position`
+  pins the refused event's position on the error and the checkpoint at the last
+  chunk boundary, and PS-28's pairing finding is rewritten as resolved (D3).
+  No alias ships (D1); an application writes its own one-line alias. The
+  failing-`on_error` arm is declared now as `ProjectionError::Policy`, with its
+  accessors tested, and nothing constructs it until #101 (D2). A generic caller
+  that moves the error into `anyhow` now needs `P::Error: Send + Sync`, as
+  `examples/rebuilding-read-models` shows. `.kb/decisions/0074…:226` still cites
+  `runner.rs:158`, *"two type parameters, not three"*: its referent is the text
+  this change deleted, so it stays as the record of the shipped 0.4 shape.

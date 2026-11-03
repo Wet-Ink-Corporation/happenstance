@@ -819,3 +819,53 @@ fn application_metadata_is_copied_through_untouched() {
     // And nothing rewrote it: the region is a prefix, so the two lengths add up.
     assert_eq!(framed.len(), b"hpst\x01json\xFF".len() + application.len());
 }
+
+// ---------------------------------------------------------------------------
+// PS-28 — the failure-policy arm reports like the apply arm
+//
+// Crate-internal because nothing outside can build the variant: it is
+// `#[non_exhaustive]`, and until the failure-policy seam lands (#101) the
+// runner does not construct it either. The wrong implementation this rejects
+// is a `position()` or `progress()` match that forgot the new arm and fell
+// through to `None` or to the default.
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "unstable-projection")]
+mod policy_arm {
+    use happenstance_core::SequencePosition;
+
+    use crate::{Progressed, ProjectionError};
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("the refusal record could not be written")]
+    struct Unrecorded;
+
+    #[test]
+    fn a_failing_policy_names_its_event_and_its_progress() {
+        let committed = SequencePosition::new(3).expect("a non-zero position");
+        let failed = SequencePosition::new(5).expect("a non-zero position");
+        let progress = Progressed {
+            through: Some(committed),
+            applied: 3,
+        };
+        let error: ProjectionError<core::fmt::Error, core::fmt::Error, Unrecorded> =
+            ProjectionError::Policy {
+                progress,
+                position: failed,
+                source: Unrecorded,
+                rollback: None,
+            };
+
+        assert_eq!(error.position(), Some(failed));
+        assert_eq!(error.progress(), progress);
+        assert_eq!(
+            error.to_string(),
+            format!("the failure policy for the event at position {failed} failed")
+        );
+        let source = core::error::Error::source(&error).expect("a typed source");
+        assert!(matches!(
+            source.downcast_ref::<Unrecorded>(),
+            Some(Unrecorded)
+        ));
+    }
+}

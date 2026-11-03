@@ -453,6 +453,7 @@ struct Enrolments {
 impl happenstance::SendProjection for Enrolments {
     type Event = Subscribed;
     type Store = happenstance::MemoryProjectionStore;
+    type Error = happenstance::MemoryProjectionStoreError;
 
     fn id(&self) -> &happenstance::ProjectionId {
         &self.id
@@ -595,6 +596,7 @@ struct LocalEnrolments {
 impl happenstance::Projection for LocalEnrolments {
     type Event = Subscribed;
     type Store = happenstance::MemoryProjectionStore;
+    type Error = happenstance::MemoryProjectionStoreError;
 
     fn id(&self) -> &happenstance::ProjectionId {
         &self.id

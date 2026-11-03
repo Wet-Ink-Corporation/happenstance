@@ -544,6 +544,7 @@ impl Balances {
 impl Projection for Balances {
     type Event = Ledger;
     type Store = SqliteProjectionStore;
+    type Error = SqliteProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
