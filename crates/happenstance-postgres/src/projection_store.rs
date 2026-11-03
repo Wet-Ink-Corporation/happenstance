@@ -45,10 +45,10 @@
 //! owned, `Send`, `'static` list of parameterised statements, replayed inside
 //! one transaction that `commit` and `reset` open for themselves — PS-4's
 //! deferred write set, the same shape `happenstance-sqlite` reaches by a
-//! different route. It is the store an application uses, because the typed
-//! layer's `Projection::apply` is synchronous and can push into a buffer but
-//! cannot issue a statement into a live transaction. The live store is an
-//! instrument; this one is the product.
+//! different route. It is the default an application reaches for: it holds no
+//! connection while `apply` runs, and nothing reaches the server until `commit`.
+//! Since ADR-0074 the live store is drivable by the typed runner too, and pays
+//! a pooled connection held for each chunk in return for reading its own writes.
 //!
 //! # What that costs, stated rather than discovered
 //!

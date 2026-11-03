@@ -151,18 +151,21 @@ panicked `JoinError`. `PostgresEventStore::new` documents both under *Runtimes*.
 ## What the projection batch is, and what it costs you
 
 `PostgresProjectionBatch` is an **owned buffered write set**, not a live
-`sqlx::Transaction`, and that is the store an application uses: the typed
-layer's `Projection::apply` is synchronous and can push into a buffer. Its
-transaction is opened inside `commit`, which replays your statements and writes
-the checkpoint in one unit. `ProjectionStore::begin` has been `async` and
-fallible since ADR-0062, which is what lets `LivePostgresProjectionStore` open
-a real transaction *there* instead — the instrument for the port's freeze, not
-the store you build a projection on.
+`sqlx::Transaction`, and it is the default to reach for: it holds no connection
+while `apply` runs. Its transaction is opened inside `commit`, which replays
+your statements and writes the checkpoint in one unit.
 
 The consequence for you: **a projection whose `apply` must read what it has
-already written in the same batch cannot be written against this adapter.**
-`READS_THROUGH_BATCH` is `false` and the conformance suite reports it as a skip
-rather than passing quietly.
+already written in the same batch cannot be written against the buffered
+store.** `READS_THROUGH_BATCH` is `false` and the conformance suite reports it
+as a skip rather than passing quietly.
+
+`LivePostgresProjectionStore` can. Its batch is a real transaction opened at
+`begin`, and since the typed layer's `apply` became `async` (ADR-0074) a
+projection awaits `LivePostgresBatch::execute` inside it and `run_projection`
+drives it. The trade: a pooled connection held for a whole chunk, and a
+statement the server refuses aborts the transaction then and there, with no
+savepoint to recover it yet (#103).
 
 ## Limits this store enforces
 

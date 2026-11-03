@@ -28,6 +28,18 @@
 //! real database until now, execute here for the first time against something
 //! that is not an in-process map. The adapter-private test below asserts that
 //! on the `RuleOutcome` value rather than on stdout.
+//!
+//! # The typed runner
+//!
+//! The last three tests drive this store with `happenstance::run_projection`
+//! and a projection whose `async fn apply` awaits `LivePostgresBatch::execute`
+//! (ADR-0074, #142): `run_projection_drives_a_row_writing_projection_through_a_live_batch`
+//! commits rows and checkpoint together across chunks,
+//! `a_server_refused_statement_rolls_the_live_chunk_back_through_the_runner`
+//! discards a chunk the server aborted, and
+//! `a_commit_fault_takes_the_projections_rows_with_it` rolls back rows already
+//! sent when the checkpoint upsert fails. The typed layer is a path-only
+//! dev-dependency for them alone.
 
 #![cfg(all(
     feature = "projection-store",
@@ -38,10 +50,20 @@
 
 mod support;
 
+use core::num::NonZeroUsize;
+
+use happenstance::bytes::Bytes;
+use happenstance::{
+    Chunk, Codec, CodecError, Delivered, DomainEvent, Event, EventStore, EventType, Json,
+    MemoryEventStore, Progressed, Projection, ProjectionError, Tags, run_projection,
+};
 use happenstance_core::{
     Authority, Checkpoint, ProjectionId, ProjectionProbe, ProjectionStore, SequencePosition,
 };
 use happenstance_postgres::error::PostgresProjectionStoreError;
+use happenstance_postgres::live_projection_store::{
+    LivePostgresBatch, LivePostgresProjectionStore,
+};
 use happenstance_postgres::projection_store::PgParam;
 use happenstance_postgres::sqlx;
 use happenstance_testkit::{ProjectionFixture, RuleOutcome};
@@ -343,4 +365,349 @@ async fn a_poisoned_live_batch_cannot_reset_and_moves_nothing() {
         },
         "and the checkpoint was not deleted"
     );
+}
+
+// -------------------------------------------------------------------------
+// The typed runner drives it (#142)
+// -------------------------------------------------------------------------
+
+const DEPOSITED: EventType = EventType::from_static("Deposited");
+
+/// The read model the projection below writes, one row per account.
+const LEDGER_TABLE: &str = "CREATE TABLE ledger (account text PRIMARY KEY, cents bigint NOT NULL)";
+
+/// Every row of the read model, in a stable order.
+const LEDGER_ROWS: &str = "SELECT account, cents FROM ledger ORDER BY account";
+
+/// One domain event, encoded through the codec as an `(account, cents)` tuple
+/// so this test needs no `serde` derive and no dev-dependency beyond the typed
+/// layer itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Deposited {
+    account: String,
+    cents: i64,
+}
+
+impl DomainEvent for Deposited {
+    const EVENT_TYPES: &'static [EventType] = &[DEPOSITED];
+
+    fn event_type(&self) -> EventType {
+        DEPOSITED
+    }
+
+    fn tags(&self) -> Tags {
+        Tags::empty()
+    }
+
+    fn encode<C: Codec>(&self, codec: &C) -> Result<Bytes, CodecError> {
+        codec.encode(&(self.account.as_str(), self.cents))
+    }
+
+    fn decode<C: Codec>(codec: &C, _: &EventType, data: &Bytes) -> Result<Self, CodecError> {
+        let (account, cents): (String, i64) = codec.decode(data)?;
+        Ok(Self { account, cents })
+    }
+}
+
+/// The projection's own refusal (PS-28). One arm, so that `?` on
+/// `LivePostgresBatch::execute` inside `apply` is the `From` the typed layer's
+/// `type Error` bound promises (ADR-0074 F8).
+#[derive(Debug, thiserror::Error)]
+enum LedgerError {
+    #[error(transparent)]
+    Store(#[from] PostgresProjectionStoreError),
+}
+
+/// A projection that writes **rows**: every event is an `INSERT … ON CONFLICT`
+/// awaited through the live transaction, which a synchronous `apply` could not
+/// express at all.
+struct Ledger {
+    id: ProjectionId,
+    scope: Tags,
+    /// An account whose deposit is sent to a table the server does not have.
+    ///
+    /// A knob on this hand-written double rather than a branch in production
+    /// code (TST-09): it is how the refusal test gets a statement the *server*
+    /// refuses, mid-chunk, after earlier statements already reached it.
+    refuse: Option<&'static str>,
+}
+
+impl Ledger {
+    fn new(refuse: Option<&'static str>) -> Self {
+        Self {
+            id: ProjectionId::from_static("ledger"),
+            scope: Tags::empty(),
+            refuse,
+        }
+    }
+}
+
+impl Projection for Ledger {
+    type Event = Deposited;
+    type Store = LivePostgresProjectionStore;
+    type Error = LedgerError;
+
+    fn id(&self) -> &ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    async fn apply(
+        &mut self,
+        event: Delivered<Deposited>,
+        batch: &mut LivePostgresBatch,
+    ) -> Result<(), LedgerError> {
+        let Deposited { account, cents } = event.into_event();
+        let sql = if self.refuse == Some(account.as_str()) {
+            "INSERT INTO no_such_table (account, cents) VALUES ($1, $2)"
+        } else {
+            "INSERT INTO ledger (account, cents) VALUES ($1, $2) \
+             ON CONFLICT (account) DO UPDATE SET cents = ledger.cents + excluded.cents"
+        };
+        // The await a synchronous `apply` could not write, and the `?` that
+        // `type Error: From<store error>` turns into a `LedgerError`.
+        batch
+            .execute(sql, [PgParam::text(account), PgParam::int8(cents)])
+            .await?;
+        Ok(())
+    }
+}
+
+/// Appends one `Deposited` per `(account, cents)` pair and returns the
+/// positions the store assigned, in order.
+///
+/// Returned rather than assumed: the specification permits gaps, so a test
+/// compares against what the store actually handed out.
+async fn deposit(
+    events: &MemoryEventStore,
+    deposits: &[(&str, i64)],
+) -> Result<Vec<SequencePosition>, Box<dyn std::error::Error>> {
+    let encoded = deposits
+        .iter()
+        .map(|&(account, cents)| {
+            let data = Deposited {
+                account: account.to_owned(),
+                cents,
+            }
+            .encode(&Json)?;
+            Ok(Event::new(DEPOSITED, data)?)
+        })
+        .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+    events.append(&encoded, None).await?;
+    Ok(events
+        .snapshot()
+        .iter()
+        .map(|recorded| recorded.position)
+        .collect())
+}
+
+/// Creates the read model's table in the fixture's schema.
+async fn create_ledger(fixture: &LivePostgresProjectionFixture) -> Result<(), sqlx::Error> {
+    sqlx::query(LEDGER_TABLE)
+        .execute(&fixture.pool_for_test().await)
+        .await?;
+    Ok(())
+}
+
+/// The read model as a raw `SELECT` on the fixture's pool sees it: committed
+/// rows only, read outside any batch.
+async fn ledger_rows(
+    fixture: &LivePostgresProjectionFixture,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    sqlx::query_as(LEDGER_ROWS)
+        .fetch_all(&fixture.pool_for_test().await)
+        .await
+}
+
+/// `run_projection` drives a projection whose `apply` awaits a statement into
+/// the live transaction, and the rows and the checkpoint land together.
+///
+/// Five deposits in chunks of two are three commits, and `alice` crosses both
+/// chunk boundaries, so a sum that is right says every chunk's statements were
+/// committed on the transaction the checkpoint went into. Rejects an adapter
+/// whose `commit` commits a different transaction than the statements went
+/// into (the rows are absent from the raw read), and a runner that commits
+/// under one id and is read under another (`Live` is absent from the second
+/// handle).
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn run_projection_drives_a_row_writing_projection_through_a_live_batch() {
+    let fixture = LivePostgresProjectionFixture::new();
+    create_ledger(&fixture).await.unwrap();
+    let events = MemoryEventStore::new();
+    let positions = deposit(
+        &events,
+        &[
+            ("alice", 1),
+            ("bob", 20),
+            ("alice", 300),
+            ("bob", 4_000),
+            ("alice", 50_000),
+        ],
+    )
+    .await
+    .unwrap();
+    let last = positions.last().copied();
+    let models = fixture.connect().await;
+    let mut ledger = Ledger::new(None);
+
+    let progressed = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
+        .await
+        .unwrap();
+
+    assert_eq!(progressed.applied, 5, "every deposit was applied once");
+    assert_eq!(
+        progressed.through, last,
+        "the run reports the last position"
+    );
+    assert_eq!(
+        ledger_rows(&fixture).await.unwrap(),
+        vec![("alice".to_owned(), 50_301), ("bob".to_owned(), 4_020)],
+        "every chunk's rows are committed, and none twice"
+    );
+    let second = fixture.connect().await;
+    // #107 moves this: the checkpoint is read under `ledger.id()` until
+    // `checkpoint_id` lands, and the `Live` assertion fails loudly then.
+    assert_eq!(
+        second.checkpoint(ledger.id()).await.unwrap(),
+        Checkpoint::Live {
+            through: last.expect("five deposits were appended")
+        },
+        "a second handle reads the checkpoint the last chunk committed"
+    );
+}
+
+/// A statement the server refuses mid-chunk fails the run with the
+/// projection's own error, and the whole chunk goes with it.
+///
+/// The fourth deposit hits a table that does not exist, in the second chunk,
+/// after the third deposit's `INSERT` has already reached the server. Rejects a
+/// runner that commits a chunk after an `apply` error, and an adapter whose
+/// `rollback` leaves an aborted transaction's earlier statements committed.
+/// The runner-level twin of
+/// `a_refused_statement_poisons_the_batch_and_commit_says_so`.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn a_server_refused_statement_rolls_the_live_chunk_back_through_the_runner() {
+    let fixture = LivePostgresProjectionFixture::new();
+    create_ledger(&fixture).await.unwrap();
+    let events = MemoryEventStore::new();
+    let positions = deposit(
+        &events,
+        &[
+            ("alice", 1),
+            ("bob", 20),
+            ("alice", 300),
+            ("mallory", 4_000),
+        ],
+    )
+    .await
+    .unwrap();
+    let &[_, second, _, fourth] = positions.as_slice() else {
+        panic!("four deposits were appended: {positions:?}");
+    };
+    let models = fixture.connect().await;
+    let mut ledger = Ledger::new(Some("mallory"));
+
+    let refused = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
+        .await
+        .expect_err("the server refused the fourth deposit's statement");
+
+    assert!(
+        matches!(
+            refused,
+            ProjectionError::Apply {
+                position,
+                source: LedgerError::Store(PostgresProjectionStoreError::Driver(_)),
+                rollback: None,
+                ..
+            } if position == fourth
+        ),
+        "the projection's own error, at the refused event, with a clean rollback: {refused:?}"
+    );
+    assert_eq!(
+        refused.progress().through,
+        Some(second),
+        "the first chunk is what the run committed"
+    );
+    assert_eq!(
+        ledger_rows(&fixture).await.unwrap(),
+        vec![("alice".to_owned(), 1), ("bob".to_owned(), 20)],
+        "the third deposit, applied into the aborted chunk, is not visible"
+    );
+    assert_eq!(
+        fixture
+            .connect()
+            .await
+            .checkpoint(ledger.id())
+            .await
+            .unwrap(),
+        Checkpoint::Live { through: second },
+        "the checkpoint sits at the last committed position"
+    );
+}
+
+/// A commit that fails takes the rows `apply` already sent with it.
+///
+/// Every `INSERT` of the chunk has reached the server when the armed trigger
+/// refuses the checkpoint upsert. Rejects an adapter that commits the
+/// read-model statements separately from the checkpoint: PS-1's invariant,
+/// exercised by a projection's rows rather than by the probe's.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn a_commit_fault_takes_the_projections_rows_with_it() {
+    let fixture = LivePostgresProjectionFixture::new();
+    create_ledger(&fixture).await.unwrap();
+    fixture.arm_commit_fault().await;
+    let events = MemoryEventStore::new();
+    deposit(&events, &[("alice", 1), ("bob", 20), ("alice", 300)])
+        .await
+        .unwrap();
+    let models = fixture.connect().await;
+    let mut ledger = Ledger::new(None);
+
+    let refused = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
+        .await
+        .expect_err("the armed trigger refuses the first commit");
+
+    assert!(
+        matches!(
+            refused,
+            ProjectionError::Commit {
+                source: happenstance_core::CommitError::Store(
+                    PostgresProjectionStoreError::Driver(_)
+                ),
+                ..
+            }
+        ),
+        "the adapter's own commit failure: {refused:?}"
+    );
+    assert_eq!(
+        refused.progress(),
+        Progressed::default(),
+        "nothing was committed"
+    );
+    assert_eq!(
+        ledger_rows(&fixture).await.unwrap(),
+        Vec::<(String, i64)>::new(),
+        "the rows the chunk sent were rolled back with the checkpoint"
+    );
+    assert_eq!(
+        fixture
+            .connect()
+            .await
+            .checkpoint(ledger.id())
+            .await
+            .unwrap(),
+        Checkpoint::NeverRun,
+        "and the checkpoint never moved"
+    );
+}
+
+/// Chunks of two: small enough that five deposits cross two boundaries.
+fn chunk_of_two() -> Chunk {
+    Chunk::of(NonZeroUsize::MIN.saturating_add(1))
 }
