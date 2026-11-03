@@ -100,7 +100,7 @@ large for the peer. `SyncError` (`peer.rs:393-421`) covers only the runner's own
    every failure as one class. The marker moves when the rule exists in the tree, not before;
    its 1.0 disposition is `freeze-by-13` (`runbook/ledgers.md`, the SY-36 row).
 3. **Recorded, not reopened.** Ingest never refuses, and a conflict is compensated by an
-   ordinary append (SY-1 – SY-7, `spec/SPECIFICATION.md:6993-7226`). `SyncPeer` describes one
+   ordinary append (SY-1 – SY-7, `spec/SPECIFICATION.md:7011-7244`). `SyncPeer` describes one
    relationship and hub-ness is not a type (SY-8, SY-9, `:7195-7233`). Re-delivery is a no-op,
    deduped on the store-assigned `EventId` and never on a hash of the bytes (SY-11 – SY-13,
    `:7260-7357`). Every method completes in one round trip, resume state is an owned value the

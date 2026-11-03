@@ -6,6 +6,12 @@
 //! nothing, because no author would have written it. Each entry names the adapter
 //! shape it comes from in its `REGISTRY` row.
 //!
+//! One entry, at the end, is a wrong **fixture** rather than a wrong store:
+//! `NoopProtectFixture` wraps the correct core and declares a capability its
+//! hook does not supply (CF-43). It is a subject like the others, so it is
+//! registered like them, but it is written as a `ProjectionFixture` impl rather
+//! than an `impl Defect`.
+//!
 //! # How to add one
 //!
 //! 1. Write the defect here as an `impl Defect` overriding **one** step.
@@ -21,12 +27,15 @@
 //! `projection_mutant_registry_is_exhaustive` exists to hold them together.
 
 use core::cell::Cell;
+use core::future::Future;
 
 use happenstance_core::{
     Authority, Checkpoint, CommitError, ProjectionId, ResetError, SequencePosition,
 };
+use happenstance_testkit::{Capability, ProjectionFixture};
 
-use crate::correct::{Defect, MutantBatch, MutantError, State, apply};
+use crate::correct::{Defect, MutantBatch, MutantError, MutantFixture, MutantStore, State, apply};
+use crate::harness::ProjectionSubject;
 
 /// Commits the checkpoint and discards the write set.
 ///
@@ -663,5 +672,84 @@ impl Defect for CanonicalEquivalenceKeyStore {
     fn checkpoint_key(id: &ProjectionId) -> String {
         // The whole defect: `e` + U+0301 composed to U+00E9, as NFC would.
         id.as_str().replace("e\u{301}", "\u{e9}")
+    }
+}
+
+// =====================================================================
+// The wrong fixture
+// =====================================================================
+
+/// The correct core, unmutated: what [`NoopProtectFixture`] wraps, so the only
+/// defect in that subject is the fixture's.
+///
+/// Every step keeps the trait's correct body. It is never registered on its
+/// own: as a store it is the reference this whole binary mutates, and its
+/// name only has to be unique.
+pub(crate) struct UnmutatedCore;
+
+impl Defect for UnmutatedCore {
+    const NAME: &'static str = "UnmutatedCore";
+}
+
+/// A fixture that declares `RESET_REFUSAL` supported and **protects nothing**.
+///
+/// The store is correct, and protects exactly what it is told to. The defect is
+/// the fixture's: `protect_from_reset` is overridden with an empty body, so it
+/// never reaches the trait's panic, and the store is never told anything. This
+/// is the shape CF-43 names, and the projection family's counterpart of
+/// `NoopFaultFixture` one port over.
+///
+/// # The empty body is load-bearing, and a forgotten override is not the same
+/// mistake
+///
+/// `ProjectionFixture::protect_from_reset`'s provided body panics, and its
+/// message names this hazard, so a fixture that declares the capability and
+/// forgets the override aborts loudly. The silent case needs an override that is
+/// present, honest-looking and empty, and that is what is written below.
+///
+/// # Why it is plausible
+///
+/// A fixture author whose store has a protection API declares the capability,
+/// writes `protect_from_reset` as an empty `async {}` meaning to fill it in, or
+/// protects through a cache local to one handle that the rule's writer never
+/// reads. `refused_reset_changes_nothing` rejects it at its first assertion,
+/// because a store nobody protected answers `Ok`: the rule reports the mistake
+/// rather than certifying it.
+#[derive(Debug)]
+pub(crate) struct NoopProtectFixture(MutantFixture<UnmutatedCore>);
+
+impl ProjectionFixture for NoopProtectFixture {
+    type Store = MutantStore<UnmutatedCore>;
+
+    // `MutantFixture`'s three answers, for its reasons: every rule here must
+    // run, so that the only rule this subject fails is the one its defect is in.
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    // THE DEFECT, first half: the claim.
+    const RESET_REFUSAL: Capability = Capability::SUPPORTED;
+    const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+
+    fn arm_commit_fault(&self) -> impl Future<Output = ()> {
+        self.0.arm_commit_fault()
+    }
+
+    // THE DEFECT, second half: an override with an empty body. Not a forgotten
+    // override, which reaches the trait's panic and is a different mistake.
+    fn protect_from_reset(&self, id: &ProjectionId) -> impl Future<Output = ()> {
+        // `let _` rather than an unused parameter, for `NoopFaultFixture`'s
+        // reason: what is modelled is a body that forgot to use it.
+        let _ = id;
+        core::future::ready(())
+    }
+
+    fn connect(&self) -> impl Future<Output = Self::Store> {
+        self.0.connect()
+    }
+}
+
+impl ProjectionSubject for NoopProtectFixture {
+    const NAME: &'static str = "NoopProtectFixture";
+
+    fn open() -> Self {
+        Self(<MutantFixture<UnmutatedCore> as ProjectionSubject>::open())
     }
 }

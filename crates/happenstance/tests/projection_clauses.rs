@@ -419,7 +419,7 @@ fn no_fan_out_runner_catches_a_panic() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn reset_refusal_has_a_mechanism_and_no_adapter() {
+fn reset_refusal_has_a_mechanism_and_an_adapter() {
     // The subject exists — which it did not when this story was specified.
     // Naming the variant is the compile-level half of the count.
     let refused: ResetError<MemoryProjectionStoreError> = ResetError::Refused;
@@ -432,8 +432,8 @@ fn reset_refusal_has_a_mechanism_and_no_adapter() {
         "PS-18's named rule has vanished from the testkit"
     );
 
-    // What is missing is an adapter. The only fixture in the tree declines the
-    // capability, with the store's own reason.
+    // The reference fixture still declines, with the store's own reason:
+    // `MemoryProjectionStore` holds no protection.
     let fixtures = read("crates/happenstance-testkit/src/fixtures.rs");
     assert!(
         fixtures.contains("const RESET_REFUSAL: Capability = Capability::declined("),
@@ -441,7 +441,26 @@ fn reset_refusal_has_a_mechanism_and_no_adapter() {
          changed and the verdict needs retaking"
     );
 
+    // The adapter is `happenstance-sqlite` (#118): its fixture declares the
+    // capability, so the rule runs there rather than skipping, and PS-18 and
+    // the fixture clause it leans on (CF-43) both say so.
+    let sqlite = read("crates/happenstance-sqlite/tests/projection.rs");
+    assert!(
+        sqlite.contains("const RESET_REFUSAL: Capability = Capability::SUPPORTED;"),
+        "happenstance-sqlite's fixture no longer declares RESET_REFUSAL, so PS-18 \
+         has no adapter again and its text needs retaking"
+    );
+    assert!(
+        read("spec/SPECIFICATION.md").contains("**CF-43.** A projection fixture declaring"),
+        "CF-43, the obligation a fixture takes on by declaring RESET_REFUSAL, \
+         is missing from the specification"
+    );
+
     let ps18 = clause("PS-18");
+    assert!(
+        ps18.contains("happenstance-sqlite"),
+        "PS-18 does not name the adapter that implements it: {ps18}"
+    );
     assert!(
         ps18.contains("[DEFERRED"),
         "PS-18 still reads as provisional after its evaluation exit: {ps18}"

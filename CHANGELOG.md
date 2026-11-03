@@ -64,6 +64,17 @@ not the same as what a user needed to be told.
   with `Chunk::of(n)`. `Chunk` is `#[non_exhaustive]` and `Copy`, with a
   private representation and no `Default`; the runner stays exempt from semver
   while the feature gates it.
+- `happenstance-sqlite` (behind `projection-store`): the projection schema
+  gains a `projection_protection` table, created on every open, and
+  `projection_store::SCHEMA_VERSION` is `2` (PS-18, #118). A file is still
+  written at marker 1 and stays there until its first protection raises it to
+  2. So a build older than this one keeps opening files nothing has protected,
+  and refuses a file with a protected projection with `UnsupportedSchemaVersion`
+  rather than reset it blind. A handle that older build opened **before** the
+  first protection is not stopped: deploy this build everywhere before
+  protecting. A caller wrapping a connection with `SqliteProjectionStore::new`
+  over a file last migrated before this release opens it once through `open`
+  first, which adds the table.
 
 ### Added
 
@@ -76,6 +87,19 @@ not the same as what a user needed to be told.
   flavour of `Projection`, derived with `trait_variant`. Implement exactly one
   of the two. `trait-variant` is now a direct dependency of `happenstance`,
   under the workspace's existing caret, and adds no crate to the graph.
+- `happenstance-sqlite` (behind `projection-store`): a refusable reset (PS-18,
+  #118). `SqliteProjectionStore::protect_from_reset` marks a projection
+  protected, in the file, for every handle onto it; `reset` of a protected
+  projection answers `ResetError::Refused` and runs none of its batch.
+  `allow_reset` lifts the mark and `is_protected_from_reset` reads it, since
+  `Refused` carries no context. `commit` is unaffected. The SQLite projection
+  fixture now declares `RESET_REFUSAL`, so `refused_reset_changes_nothing` runs
+  against it rather than reporting a skip.
+- Specification: CF-43, `[PROVISIONAL]`, states what a fixture declaring
+  `RESET_REFUSAL` commits to. `happenstance-testkit`'s own tests register
+  `NoopProtectFixture`, the fixture that declares it and protects nothing, as
+  failing `refused_reset_changes_nothing`. No conformance rule changes, and
+  the testkit's published change is documentation only.
 
 ## [0.4.6] — 2026-11-02
 

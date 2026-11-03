@@ -210,6 +210,17 @@ PS-30 each with a rule and a mutant that fails it.
   and break worse under `impl Into` (inference falls to `!`). The examples spell
   it `Chunk::of(CHUNK.try_into()?)`. One `Copy` type serves the fan-out runner
   too, so ADR-0070's falsifier did not fire.
+- 2026-11-02 — #118: `happenstance-sqlite` implements PS-18's refusable reset (owner decision
+  D4). `SqliteProjectionStore::protect_from_reset`, `allow_reset` and
+  `is_protected_from_reset` write, lift and read a mark in `projection_protection`, and
+  `reset` reads it inside its `BEGIN IMMEDIATE` before any of the caller's statements. The
+  SQLite fixture declares `RESET_REFUSAL`, so `refused_reset_changes_nothing` runs there. CF-43
+  is minted `[PROVISIONAL]` and `NoopProtectFixture` registered against it. The schema question
+  went with the recommended option while it waits on the owner: the table is created on every
+  open, and the marker rises to 2 only inside the first protection. That reverses the fixture's
+  old argument against a protected-projections table, and this line and the rewritten fixture
+  doc record it rather than a decision atom. PS-18 stays `[DEFERRED]`; its freeze and the ledger
+  rows are #127's.
 - 2026-11-02 — #99: `Projection` gains `type Error` (`From` the store's error) and
   `apply` returns it; `ProjectionError<R, W, A>` carries it in `Apply`, with no
   default `A = W` (a `compile_fail,E0107` fence holds that). *The last good

@@ -40,6 +40,12 @@
 //! opens of one path. They are **not** additions to the conformance suite, which
 //! this project may not touch — they are this crate's own tests, in this crate's
 //! own target.
+//!
+//! The protection from reset this fixture declares (`RESET_REFUSAL`) has its
+//! adapter-private tests in a target of its own, `tests/reset_protection.rs`:
+//! that the mark outlives every handle, is scoped to one id, guards `reset`
+//! alone, can be lifted, and raises the schema marker only when a file first
+//! carries one.
 
 #![cfg(all(feature = "projection-store", feature = "conformance"))]
 // The house style's test-module exception: a fixture that cannot connect is a
@@ -142,35 +148,20 @@ impl ProjectionFixture for SqliteProjectionFixture {
     /// the commit, and that is what this buys.
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
 
-    /// Declined, and the reason is the store's rather than the fixture's
-    /// convenience: `SqliteProjectionStore` holds **no protection policy**.
+    /// Supported, and the mechanism is the store's own, which CF-43 asks the
+    /// fixture to state: `SqliteProjectionStore::protect_from_reset` writes the id
+    /// into `projection_protection`, and `reset` reads that table inside its
+    /// `BEGIN IMMEDIATE`, before any of the batch's statements, and answers
+    /// `ResetError::Refused` having written nothing.
     ///
-    /// PS-18 makes refusal a mechanism the port supplies and leaves *what to
-    /// protect* to the domain; this adapter owns the checkpoint table and the
-    /// transaction that carries it, and knows nothing about which projection a
-    /// regulator already holds a hash chain for. There is therefore no path in
-    /// `reset` that returns `ResetError::Refused`, and a fixture that claimed the
-    /// capability would fail `refused_reset_changes_nothing` at its first
-    /// assertion.
-    ///
-    /// The alternative that lost is worth naming, because it is cheap and it is
-    /// wrong: a protected-projections table consulted by `reset`, invented here so
-    /// that one more rule reports `Ran`. That would put a **policy** into an
-    /// adapter whose whole design keeps the read model — and therefore the
-    /// domain — out of it, and would certify a mechanism no application had asked
-    /// for. Declining is this adapter's real answer, and PS-18's own falsifier is
-    /// *"evaluated by asking whether the SQLite adapter implemented it"*: this
-    /// line is that answer.
-    const RESET_REFUSAL: Capability = Capability::declined(
-        "SqliteProjectionStore holds no protection policy: the read model belongs \
-         to the caller and this adapter owns only the checkpoint row and the \
-         transaction that carries it, so there is no projection it could decline \
-         to reset and `reset` returns `Refused` on no path at all. The \
-         alternative — a protected-projections table invented here so that one \
-         more rule reports `Ran` — would put a domain policy into an adapter \
-         designed to keep the domain out, and certify a mechanism no application \
-         asked for",
-    );
+    /// This line declined until #118, arguing that a protected-projections table
+    /// would put a domain policy into an adapter built to keep the domain out.
+    /// The table holds a **mark**, not a policy: the domain still decides what to
+    /// protect, by calling the method, and the adapter enforces the mark where
+    /// every holder of the store meets it. That is PS-18's own division — the
+    /// port supplies the mechanism, the domain decides what to protect — and the
+    /// owner chose this adapter to carry it (D4, #118).
+    const RESET_REFUSAL: Capability = Capability::SUPPORTED;
 
     /// Supported, and armed for real. This adapter can be made to fail a commit
     /// **between** the read-model writes and the checkpoint write, because both
@@ -221,6 +212,19 @@ impl ProjectionFixture for SqliteProjectionFixture {
                  BEFORE UPDATE ON projection_checkpoint
                  BEGIN SELECT RAISE(ABORT, 'the fixture armed a commit fault'); END;",
             )
+            .expect("a broken test environment, not a non-conformant adapter");
+    }
+
+    /// Protects `id` through a **fresh** handle, not the rule's writer.
+    ///
+    /// Deliberately: the rule resets through a handle it opened before this
+    /// call, so the protection has to cross a connection to refuse it. A mark
+    /// held per handle would pass a rule that protected and reset through one.
+    async fn protect_from_reset(&self, id: &ProjectionId) {
+        self.connect()
+            .await
+            .protect_from_reset(id)
+            .await
             .expect("a broken test environment, not a non-conformant adapter");
     }
 }
