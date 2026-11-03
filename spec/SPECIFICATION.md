@@ -1750,7 +1750,7 @@ the documentation half is a different claim from settling the number.
 There MUST NOT be a `MAX_TAGS_PER_BATCH` constant in `happenstance-core`. Every
 store MUST accept an append whose events carry `MIN_SUPPORTED_TAGS_PER_BATCH` =
 8,192 tags in all, the product VT-22 and VT-24 already oblige, so the floor adds
-no obligation of its own. A store MAY refuse a larger total, and if it does it
+no obligation of its own, and `store_accepts_the_guaranteed_minimum_tags_per_batch` is what holds a store to the product. A store MAY refuse a larger total, and if it does it
 MUST document its ceiling and MUST refuse beyond it as
 `AppendError::ExceedsStoreLimit { limit: StoreLimit::TagsPerBatch, .. }`. Its
 ceiling MUST be at least its own tags-per-event ceiling, so that a split batch
@@ -1761,14 +1761,14 @@ or it refuses nothing.
 tag count, so that no count says where it is; the instrument is
 happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384
 tag rows in one call]`
-`Rule:` unit tests `every_limit_names_its_floor` and
+`Rule:` `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit_names_its_floor` and
 `the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`
 `Cases:` E2E-35, E2E-42
 `Rejects:` a floor of 0, which would let a store refuse 128 events of 64 tags
 while claiming VT-22 and VT-24; and a ceiling below the per-event one, under
 which a sync runner's `Split` never reaches a batch it can land. The second is
 `TagsPerBatchBelowTagsPerEventStore`, and an unreachable ceiling is
-`UnreachableTagsPerBatchStore`.
+`UnreachableTagsPerBatchStore`. A store that binds four parameters per tag row into one statement and meets `SQLITE_MAX_VARIABLE_NUMBER` at 8,192 tags is `TagRowParameterCeilingStore`, its clamping fix is `TagRowClampingStore`, and a ceiling declared below the floor is `TagsPerBatchBelowTheFloorStore`.
 
 `happenstance-cloudflare` is the one store that declares the ceiling: 262,144
 tags per call, half the lowest measured wall (ADR-0100). Every other
@@ -4998,7 +4998,7 @@ has not yet passed. That agrees with ES-25, which evaluates a condition over wha
 the store holds, and with VT-8's uniqueness on the origin pair. Neither reading can
 produce a duplicate through ingest, which does not probe first
 (`crates/happenstance-sync/src/ingest.rs:97-101`), so agreement is the reason, and
-`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:7019-7022`, `crates/happenstance-testkit/src/contract.rs:638-672`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
+`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:7116-7119`, `crates/happenstance-testkit/src/contract.rs:641-675`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
 
 The `async fn` spelling is load-bearing and matches ES-30's: a clause written
 without it describes a different method under `trait_variant`.
@@ -10292,7 +10292,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-33 | FROZEN | unit tests `a_borrowed_and_an_owned_tag_are_one_value`, `a_map_keyed_by_event_… | E2E-40, E2E-51 |
 | VT-34 | FROZEN | `read_from_is_inclusive` | *(none — see clause)* |
 | VT-35 | FROZEN | unit tests `projection_id_refuses_what_vt_14_refuses`, `projection_id_accepts_… | *(none — see clause)* |
-| VT-36 | PROVISIONAL | unit tests `every_limit_names_its_floor` and `the_tags_per_batch_floor_is_two_… | E2E-35, E2E-42 |
+| VT-36 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit… | E2E-35, E2E-42 |
 
 #### `WF` — wire format (§2.7)
 
