@@ -246,6 +246,9 @@ fn new_identifiers_fit_the_item_table() {
         "Progressed",
         "ProjectionError",
         "Chunk",
+        "checkpoint_id",
+        "InvalidCheckpointId",
+        "MAX_CHECKPOINT_NAME_LEN",
     ] {
         assert!(
             name.len() <= 24,

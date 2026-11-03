@@ -634,7 +634,11 @@ fn staleness(cell: &Cell) -> Result<Record, HarnessError> {
             let mut outstanding = false;
             for (view, observer) in views.iter_mut().zip(observers.iter_mut()) {
                 let _ = run_once(&events, &models, view, cell)?;
-                let checkpoint = block_on(models.checkpoint(view.id()))
+                // Under the id the runner commits under (PS-25). The bare name
+                // reads `NeverRun` for ever and would corrupt the measurement.
+                let key = happenstance::checkpoint_id(&*view)
+                    .map_err(|e| HarnessError::Run(e.to_string()))?;
+                let checkpoint = block_on(models.checkpoint(&key))
                     .map_err(|e| HarnessError::Run(e.to_string()))?;
                 observer.observe(checkpoint, now);
                 let pending = observer.pending(checkpoint);

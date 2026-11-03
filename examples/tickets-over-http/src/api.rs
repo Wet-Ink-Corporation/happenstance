@@ -20,13 +20,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
+use happenstance::{ProjectionId, checkpoint_id};
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::SqliteEventStore;
 use happenstance_sqlite::projection_store::SqliteProjectionStore;
 use tickets_over_http::http::{Request, respond};
 use tickets_over_http::{
-    CAPACITY, Reservation, checkpoint_through, ensure_schema, open_show, requested_position,
-    reserve, seat_rows,
+    CAPACITY, Reservation, SeatHolders, checkpoint_through, ensure_schema, open_show,
+    requested_position, reserve, seat_rows,
 };
 use tokio::net::{TcpListener, TcpStream};
 
@@ -44,6 +45,8 @@ struct State {
     events: SqliteEventStore,
     /// The checkpoint store this process only ever reads.
     models: SqliteProjectionStore,
+    /// The id the runner commits the view's checkpoint under, derived once.
+    checkpoint: ProjectionId,
     /// The file, for opening a read-model connection per request.
     path: PathBuf,
 }
@@ -69,9 +72,14 @@ pub(crate) async fn run(path: PathBuf) -> Result<()> {
     // stdout is line-buffered, so this reaches the pipe before `accept` blocks.
     println!("listening on {}", listener.local_addr()?);
 
+    // The runner process derives the same id from the same view: the name and
+    // a digest of its query (PS-25). Reading under the bare name would answer
+    // `202` for ever.
+    let checkpoint = checkpoint_id(&SeatHolders::new())?;
     let state = Arc::new(State {
         events,
         models,
+        checkpoint,
         path,
     });
 
@@ -151,7 +159,7 @@ async fn take_a_seat(state: &State, request: &Request, stream: &mut TcpStream) -
 /// the usual shape of it is a client that writes, immediately reads, sees
 /// nothing, and concludes the write was lost.
 async fn show_the_seats(state: &State, request: &Request, stream: &mut TcpStream) -> Result<()> {
-    let through = checkpoint_through(&state.models).await?;
+    let through = checkpoint_through(&state.models, &state.checkpoint).await?;
     let checkpoint = through.map_or_else(|| "none".to_owned(), |position| position.to_string());
 
     if let Some(raw) = request.param("at") {

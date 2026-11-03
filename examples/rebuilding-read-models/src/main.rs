@@ -60,7 +60,8 @@ use happenstance::bytes::Bytes;
 use happenstance::{
     Checkpoint, Chunk, Codec, CodecError, CommandError, DecisionModel, Delivered, DomainEvent,
     EventStore, EventType, InvalidTag, Json, Projection, ProjectionError, ProjectionId,
-    ProjectionStore, Query, ReadOptions, Retry, Tag, Tags, collect, commit, run_projection,
+    ProjectionStore, Query, ReadOptions, Retry, Tag, Tags, checkpoint_id, collect, commit,
+    run_projection,
 };
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
@@ -228,7 +229,8 @@ async fn two_views_two_checkpoints(
     // Both are caught up here, which is the only state in which the skew below
     // is attributable to what this function does next rather than to how they
     // were built.
-    print_checkpoints(models, &[stock.id(), status.id()]).await?;
+    print_checkpoint(models, &stock).await?;
+    print_checkpoint(models, &status).await?;
 
     writeln!(
         io::stdout().lock(),
@@ -240,7 +242,8 @@ async fn two_views_two_checkpoints(
         io::stdout().lock(),
         "   stock_on_hand applied {applied_stock}, order_status was not run"
     )?;
-    print_checkpoints(models, &[stock.id(), status.id()]).await?;
+    print_checkpoint(models, &stock).await?;
+    print_checkpoint(models, &status).await?;
 
     writeln!(io::stdout().lock(), "\n   stock_on_hand:")?;
     print_table(app, "SELECT sku, on_hand FROM stock_on_hand ORDER BY sku")?;
@@ -264,7 +267,8 @@ async fn two_views_two_checkpoints(
         io::stdout().lock(),
         "   order_status applied {applied_status}"
     )?;
-    print_checkpoints(models, &[stock.id(), status.id()]).await?;
+    print_checkpoint(models, &stock).await?;
+    print_checkpoint(models, &status).await?;
 
     Ok(())
 }
@@ -279,8 +283,9 @@ async fn two_views_two_checkpoints(
 /// The promotion is plain SQL this file writes, because the read model belongs
 /// to this application. **The `ProjectionId` deliberately does not change with
 /// it.** `daily_dispatches_v2` keeps its name after the swap, because the
-/// checkpoint is keyed by that id — renaming it to look tidy would throw the
-/// resume point away and replay the whole log.
+/// checkpoint is keyed by that name and the derived query (`checkpoint_id`) —
+/// renaming it to look tidy would throw the resume point away and replay the
+/// whole log. The table is not part of the query, so the swap keeps the key.
 ///
 /// The swap is pushed into the *old* id's reset batch rather than run beside
 /// it, and that is what makes it one transaction. It is attempted once with
@@ -334,11 +339,11 @@ async fn a_third_view_added_late(
         io::stdout().lock(),
         "\n   -- a promotion whose rename fails --"
     )?;
-    match retire(models, blue.id(), &MISTYPED_PROMOTION).await {
+    match retire(models, &blue, &MISTYPED_PROMOTION).await {
         Ok(()) => bail!("a promotion from a table that does not exist was committed"),
         Err(err) => writeln!(io::stdout().lock(), "   refused: {err}")?,
     }
-    print_checkpoints(models, &[blue.id()]).await?;
+    print_checkpoint(models, &blue).await?;
     print_table(
         app,
         "SELECT day, dispatched FROM daily_dispatches ORDER BY day",
@@ -358,9 +363,15 @@ async fn a_third_view_added_late(
     // as a retirement and then a separate swap, the gap between the two is a
     // view with no rows and an id at `NeverRun` — which the attempt above
     // would have left behind for good.
-    retire(models, blue.id(), &PROMOTION).await?;
+    retire(models, &blue, &PROMOTION).await?;
     let mut promoted = DailyDispatches::promoted();
-    print_checkpoints(models, &[promoted.id()]).await?;
+    // The resume below rests on this: the promoted view derives green's
+    // checkpoint id, because it shares green's name, event type and scope.
+    // Only its table changed, and the table is not part of the query.
+    if checkpoint_id(&promoted)? != checkpoint_id(&green)? {
+        bail!("the promoted view would not resume from green's checkpoint");
+    }
+    print_checkpoint(models, &promoted).await?;
 
     dispatch_order(events, "o-3", DAYS[1]).await?;
     let applied = drive(events, models, &mut promoted, CHUNK).await?;
@@ -405,8 +416,8 @@ async fn reset_and_rebuild(
 
     for chunk in REBUILD_CHUNKS {
         let mut stock = StockOnHand::new();
-        retire(models, stock.id(), &["DELETE FROM stock_on_hand"]).await?;
-        let cleared = models.checkpoint(stock.id()).await?;
+        retire(models, &stock, &["DELETE FROM stock_on_hand"]).await?;
+        let cleared = models.checkpoint(&checkpoint_id(&stock)?).await?;
         let applied = drive(events, models, &mut stock, chunk).await?;
         writeln!(
             io::stdout().lock(),
@@ -466,7 +477,8 @@ async fn one_poisoned_view(
     // Every `.await` is resolved before the `writeln!` that prints its result:
     // the locked handle is taken before the format arguments are evaluated, so
     // an `.await` inside them would hold the guard across a suspension.
-    let checkpoint = render_checkpoint(models.checkpoint(couriered.id()).await?);
+    let key = checkpoint_id(&couriered)?;
+    let checkpoint = render_checkpoint(models.checkpoint(&key).await?);
     writeln!(
         io::stdout().lock(),
         "   its checkpoint is {checkpoint} — the chunk was rolled back and nothing was committed"
@@ -1245,8 +1257,9 @@ const MISTYPED_PROMOTION: [&str; 2] = [
 #[derive(Debug)]
 struct DailyDispatches {
     /// Which read model this is. **It does not change when the table is
-    /// promoted** — the checkpoint is keyed by this id, and renaming it to
-    /// match the promoted table would discard the resume point.
+    /// promoted** — the checkpoint is keyed by this name and the derived
+    /// query, and renaming it to match the promoted table would discard the
+    /// resume point.
     id: ProjectionId,
     /// Every event, so the tags constrain nothing.
     scope: Tags,
@@ -1486,25 +1499,36 @@ fn error_chain(error: &dyn core::error::Error) -> String {
 /// A slice of statements rather than one string of several: the batch runs one
 /// statement per `push`, and rusqlite refuses a push that holds two with
 /// `MultipleStatement` — at commit, after the batch has left this function.
-async fn retire(
+///
+/// It takes the projection rather than an id, so the reset names the id the
+/// runner commits under, `checkpoint_id`. A reset of `projection.id()`, the
+/// bare name, clears a row the runner never wrote and leaves its checkpoint
+/// standing.
+async fn retire<P: Projection>(
     models: &SqliteProjectionStore,
-    id: &ProjectionId,
+    projection: &P,
     statements: &[&'static str],
 ) -> Result<()> {
+    let key = checkpoint_id(projection)?;
     let mut batch = models.begin().await?;
     for statement in statements {
         batch.push(statement, []);
     }
-    models.reset(batch, id).await?;
+    models.reset(batch, &key).await?;
     Ok(())
 }
 
-/// Prints where each named view has got to.
-async fn print_checkpoints(models: &SqliteProjectionStore, ids: &[&ProjectionId]) -> Result<()> {
-    for id in ids {
-        let checkpoint = render_checkpoint(models.checkpoint(id).await?);
-        writeln!(io::stdout().lock(), "   {id} is {checkpoint}")?;
-    }
+/// Prints where a view has got to, under its name.
+///
+/// Read through `checkpoint_id` for the reason `retire` resets through it:
+/// the bare name reads `never run` whatever the runner did.
+async fn print_checkpoint<P: Projection>(
+    models: &SqliteProjectionStore,
+    projection: &P,
+) -> Result<()> {
+    let name = projection.id();
+    let checkpoint = render_checkpoint(models.checkpoint(&checkpoint_id(projection)?).await?);
+    writeln!(io::stdout().lock(), "   {name} is {checkpoint}")?;
     Ok(())
 }
 

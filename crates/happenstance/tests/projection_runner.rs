@@ -28,7 +28,7 @@ use happenstance::{
     Event, EventId, EventStore, EventType, Json, MemoryEventStore, MemoryProjectionBatch,
     MemoryProjectionStore, MemoryProjectionStoreError, MemoryStoreError, Progressed, Projection,
     ProjectionError, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
-    SequencePosition, SequencedEvent, Tags, run_projection,
+    SequencePosition, SequencedEvent, Tags, checkpoint_id, run_projection,
 };
 use happenstance_testkit::GappyMemoryStore;
 use serde::{Deserialize, Serialize};
@@ -399,9 +399,10 @@ async fn read_model_and_checkpoint_commit_together() {
 
     let models = MemoryProjectionStore::new();
     let mut projection = VanStock::for_depot("d7");
+    let key = checkpoint_id(&projection).expect("a derivable id");
 
     // Before the run: neither half exists.
-    assert!(rows_and_checkpoint_agree(&models, projection.id()).await);
+    assert!(rows_and_checkpoint_agree(&models, &key).await);
 
     let progress = run_projection(&events, &models, &mut projection, &Json, chunk(1))
         .await
@@ -409,7 +410,7 @@ async fn read_model_and_checkpoint_commit_together() {
 
     // After it: both do, and the checkpoint names a position the store really
     // assigned — never a literal, because positions may gap.
-    assert!(rows_and_checkpoint_agree(&models, projection.id()).await);
+    assert!(rows_and_checkpoint_agree(&models, &key).await);
     let last = events
         .snapshot()
         .last()
@@ -417,7 +418,7 @@ async fn read_model_and_checkpoint_commit_together() {
         .position;
     assert_eq!(progress.through, Some(last));
     assert_eq!(
-        models.checkpoint(projection.id()).await.unwrap(),
+        models.checkpoint(&key).await.unwrap(),
         Checkpoint::Live { through: last }
     );
 }
@@ -491,10 +492,8 @@ async fn first_run_starts_from_the_beginning() {
 
     // `Checkpoint::NeverRun` means never run — not "caught up", and not
     // position zero.
-    assert_eq!(
-        models.checkpoint(projection.id()).await.unwrap(),
-        Checkpoint::NeverRun
-    );
+    let key = checkpoint_id(&projection).expect("a derivable id");
+    assert_eq!(models.checkpoint(&key).await.unwrap(), Checkpoint::NeverRun);
 
     let progress = run_projection(&events, &models, &mut projection, &Json, chunk(8))
         .await
@@ -584,7 +583,10 @@ async fn one_chunk_serves_every_view() {
     // Each view's checkpoint is its own: the last event its scope matched.
     for (view, through) in [(&d7, d7_last), (&d8, d8_last)] {
         assert_eq!(
-            models.checkpoint(view.id()).await.unwrap(),
+            models
+                .checkpoint(&checkpoint_id(view).expect("a derivable id"))
+                .await
+                .unwrap(),
             Checkpoint::Live { through }
         );
     }
@@ -640,6 +642,7 @@ async fn a_checkpoint_at_the_last_position_reports_exhausted_key_space() {
 
     let models = MemoryProjectionStore::new();
     let mut projection = VanStock::for_depot("d7");
+    let key = checkpoint_id(&projection).expect("a derivable id");
 
     // A projection that has run to the top of the key space: rows written, and
     // a checkpoint at the last position anything can occupy.
@@ -647,7 +650,7 @@ async fn a_checkpoint_at_the_last_position_reports_exhausted_key_space() {
     let mut batch = models.begin().await.unwrap();
     batch.write("d7", 7);
     models
-        .commit(batch, projection.id(), last, happenstance::Authority::Live)
+        .commit(batch, &key, last, happenstance::Authority::Live)
         .await
         .expect("the oracle commits");
 
@@ -672,7 +675,7 @@ async fn a_checkpoint_at_the_last_position_reports_exhausted_key_space() {
     // And it stopped without touching either half of the store.
     assert_eq!(models.get("d7"), Some(7));
     assert_eq!(
-        models.checkpoint(projection.id()).await.unwrap(),
+        models.checkpoint(&key).await.unwrap(),
         Checkpoint::Live { through: last }
     );
 }
@@ -764,10 +767,8 @@ async fn decode_failure_names_its_position_and_rolls_back() {
 
     // Nothing was committed, so the checkpoint did not move.
     assert!(models.is_empty());
-    assert_eq!(
-        models.checkpoint(projection.id()).await.unwrap(),
-        Checkpoint::NeverRun
-    );
+    let key = checkpoint_id(&projection).expect("a derivable id");
+    assert_eq!(models.checkpoint(&key).await.unwrap(), Checkpoint::NeverRun);
 
     // With a chunk of two, the first chunk is durable and the checkpoint sits
     // at the last **good** position rather than at the poisoned one.
@@ -782,7 +783,7 @@ async fn decode_failure_names_its_position_and_rolls_back() {
     assert_eq!(error.progress().applied, 2);
     assert_eq!(error.progress().through, Some(good));
     assert_eq!(
-        models.checkpoint(projection.id()).await.unwrap(),
+        models.checkpoint(&key).await.unwrap(),
         Checkpoint::Live { through: good }
     );
 }
@@ -882,8 +883,9 @@ async fn pump_reports_the_failing_position() {
     assert_eq!(progress.through, Some(committed));
     assert_eq!(progress.applied, 3);
 
+    let key = checkpoint_id(&projection).expect("a derivable id");
     assert_eq!(
-        models.checkpoint(projection.id()).await.unwrap(),
+        models.checkpoint(&key).await.unwrap(),
         Checkpoint::Live { through: committed }
     );
     assert_eq!(models.get("d7"), Some(1 + 2 + 3));
@@ -1085,5 +1087,191 @@ async fn apply_is_handed_the_origin_identity_not_the_local_position() {
     assert!(
         identities.seen.iter().all(|id| id.store() == origin),
         "no identity was re-minted under the local store"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PS-25 — the runner commits under a derived checkpoint id
+// ---------------------------------------------------------------------------
+
+/// The run reads and commits under `checkpoint_id`, and never under the name.
+///
+/// The wrong implementations this rejects are a runner that reads under the
+/// derived id and commits under the bare one, which leaves the derived row
+/// `NeverRun`, and the reverse, which leaves the bare row `Live`. The digest
+/// was computed outside Rust, from the encoding table on `checkpoint_id`.
+#[tokio::test]
+async fn the_runner_commits_under_the_derived_id() {
+    let events = MemoryEventStore::new();
+    seed(&events, &[delivered("d7", 3), dispatched("d7", 1)]).await;
+    let last = events.snapshot().last().expect("two events").position;
+
+    let models = MemoryProjectionStore::new();
+    let mut projection = VanStock::for_depot("d7");
+    let key = checkpoint_id(&projection).expect("a derivable id");
+    assert_eq!(key.as_str(), "van_stock@dc525f3f5d262b19");
+
+    let _ = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+        .await
+        .expect("the runner completes");
+
+    assert_eq!(
+        models.checkpoint(&key).await.unwrap(),
+        Checkpoint::Live { through: last }
+    );
+    assert_eq!(
+        models.checkpoint(projection.id()).await.unwrap(),
+        Checkpoint::NeverRun,
+        "the runner wrote under the bare name"
+    );
+
+    // And it resumes under the id it committed under: a second run applies
+    // nothing.
+    let mut again = VanStock::for_depot("d7");
+    let idle = run_projection(&events, &models, &mut again, &Json, chunk(8))
+        .await
+        .expect("the idle run completes");
+    assert_eq!(idle.applied, 0);
+}
+
+/// `Stock` narrowed to its deliveries: the query a view had before it was
+/// widened to dispatches too.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DeliveriesOnly(Stock);
+
+impl DomainEvent for DeliveriesOnly {
+    const EVENT_TYPES: &'static [EventType] = &[DELIVERED];
+
+    fn event_type(&self) -> EventType {
+        self.0.event_type()
+    }
+
+    fn tags(&self) -> Tags {
+        self.0.tags()
+    }
+
+    fn encode<C: Codec>(&self, codec: &C) -> Result<Bytes, CodecError> {
+        self.0.encode(codec)
+    }
+
+    fn decode<C: Codec>(
+        codec: &C,
+        event_type: &EventType,
+        data: &Bytes,
+    ) -> Result<Self, CodecError> {
+        if !Self::EVENT_TYPES.contains(event_type) {
+            return Err(CodecError::UnknownEventType {
+                event_type: event_type.clone(),
+            });
+        }
+        Stock::decode(codec, event_type, data).map(Self)
+    }
+}
+
+/// One view named `view`, over whichever event type `E` it is given.
+#[derive(Debug)]
+struct View<E> {
+    id: ProjectionId,
+    scope: Tags,
+    seen: Vec<E>,
+}
+
+impl<E> View<E> {
+    fn scoped(scope: Tags) -> Self {
+        Self {
+            id: ProjectionId::from_static("view"),
+            scope,
+            seen: Vec::new(),
+        }
+    }
+}
+
+impl<E: DomainEvent> Projection for View<E> {
+    type Event = E;
+    type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
+
+    fn id(&self) -> &ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    async fn apply(
+        &mut self,
+        event: Delivered<E>,
+        _: &mut MemoryProjectionBatch,
+    ) -> Result<(), MemoryProjectionStoreError> {
+        self.seen.push(event.into_event());
+        Ok(())
+    }
+}
+
+/// PS-25's rule: a projection whose query changed starts a new checkpoint.
+///
+/// `v1` sees deliveries; `v2`, under the same name, is widened to dispatches
+/// too, and must be handed the dispatch that sits **below** `v1`'s
+/// checkpoint. Wrong implementations each assertion rejects: today's runner,
+/// keyed on the name alone, resumes `v2` past the dispatch and applies
+/// nothing; a digest over the event types alone gives `v3`, which changed
+/// only its scope, `v1`'s checkpoint; a digest over the name alone fails
+/// every assertion.
+#[tokio::test]
+async fn changed_query_starts_a_new_checkpoint() {
+    let events = MemoryEventStore::new();
+    seed(
+        &events,
+        &[delivered("a", 1), dispatched("a", 1), delivered("a", 2)],
+    )
+    .await;
+    let snapshot = events.snapshot();
+    let [_, _, last] = snapshot.as_slice() else {
+        panic!("three events were seeded, found {}", snapshot.len());
+    };
+
+    let models = MemoryProjectionStore::new();
+    let mut v1 = View::<DeliveriesOnly>::scoped(Tags::empty());
+    let first = run_projection(&events, &models, &mut v1, &Json, chunk(8))
+        .await
+        .expect("the narrow view completes");
+    assert_eq!(first.applied, 2);
+    let v1_key = checkpoint_id(&v1).expect("a derivable id");
+    assert_eq!(
+        models.checkpoint(&v1_key).await.unwrap(),
+        Checkpoint::Live {
+            through: last.position
+        }
+    );
+
+    let mut v2 = View::<Stock>::scoped(Tags::empty());
+    let v2_key = checkpoint_id(&v2).expect("a derivable id");
+    assert_eq!(v1.id(), v2.id(), "one name, two queries");
+    assert_ne!(v2_key, v1_key);
+    assert_eq!(
+        models.checkpoint(&v2_key).await.unwrap(),
+        Checkpoint::NeverRun
+    );
+
+    let widened = run_projection(&events, &models, &mut v2, &Json, chunk(8))
+        .await
+        .expect("the widened view completes");
+    assert_eq!(
+        widened.applied, 3,
+        "the widened view replayed from the start"
+    );
+    assert_eq!(
+        v2.seen,
+        vec![delivered("a", 1), dispatched("a", 1), delivered("a", 2)]
+    );
+
+    // A scope change is a query change.
+    let v3 = View::<DeliveriesOnly>::scoped(depot_tags("a"));
+    let v3_key = checkpoint_id(&v3).expect("a derivable id");
+    assert_ne!(v3_key, v1_key);
+    assert_eq!(
+        models.checkpoint(&v3_key).await.unwrap(),
+        Checkpoint::NeverRun
     );
 }

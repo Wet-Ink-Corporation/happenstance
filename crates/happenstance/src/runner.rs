@@ -13,6 +13,7 @@ use happenstance_core::{
 };
 
 use crate::boundary::{AtLeastOneType, derive_query};
+use crate::checkpoint::{self, InvalidCheckpointId};
 use crate::chunk::Chunk;
 use crate::codec::{Codec, CodecError, decode_event};
 use crate::delivered::Delivered;
@@ -96,11 +97,20 @@ pub trait Projection {
     /// which the reflexive `From<T> for T` satisfies.
     type Error: core::error::Error + From<<Self::Store as ProjectionStore>::Error> + 'static;
 
-    /// Which read model this is, within [`Self::Store`].
+    /// The projection's name: which read model this is, within
+    /// [`Self::Store`].
     ///
-    /// Checkpoints are per `(store, ProjectionId)`, so two stores projecting
-    /// the same events sit at different positions and a caller reading both
-    /// must tolerate the skew.
+    /// The runner does not commit under it. It commits under
+    /// [`checkpoint_id`](crate::checkpoint_id)`(self)`, the name and a digest
+    /// of the derived query, so a projection whose query changes starts again
+    /// (PS-25). Read the checkpoint through `checkpoint_id`, never through
+    /// `id()`, which reads [`Checkpoint::NeverRun`]. A name longer than
+    /// [`MAX_CHECKPOINT_NAME_LEN`](crate::MAX_CHECKPOINT_NAME_LEN), 238 bytes,
+    /// leaves room for no digest and the run refuses it.
+    ///
+    /// Checkpoints are per store, so two stores projecting the same events
+    /// sit at different positions and a caller reading both must tolerate
+    /// the skew.
     fn id(&self) -> &ProjectionId;
 
     /// The tags this projection is scoped to, already validated.
@@ -219,6 +229,13 @@ where
     /// well-formed projection.
     #[error(transparent)]
     Boundary(#[from] InvalidQuery),
+
+    /// The checkpoint id could not be derived from the name and the query.
+    ///
+    /// Nothing was read and nothing was applied. `#[source]` rather than
+    /// `#[from]`, so a `?` elsewhere cannot land here by accident.
+    #[error("deriving the checkpoint id failed")]
+    CheckpointId(#[source] InvalidCheckpointId),
 
     /// The projection store could not report where this projection had got to.
     ///
@@ -354,9 +371,10 @@ where
     /// has to ask the store how far it got in order to decide whether to retry.
     pub fn progress(&self) -> Progressed {
         match self {
-            Self::Boundary(_) | Self::Checkpoint(_) | Self::KeySpaceExhausted { .. } => {
-                Progressed::default()
-            }
+            Self::Boundary(_)
+            | Self::CheckpointId(_)
+            | Self::Checkpoint(_)
+            | Self::KeySpaceExhausted { .. } => Progressed::default(),
             Self::Read { progress, .. }
             | Self::Decode { progress, .. }
             | Self::Apply { progress, .. }
@@ -439,15 +457,15 @@ where
 /// through P"*, but this runner only ever claims
 /// [`Authority::Live`]. To
 /// rebuild without serving half-built rows, run the rebuild under a **second**
-/// [`ProjectionId`] and swap the reader over when it catches up: the port
-/// already permits it and nothing else has to change.
+/// name, which derives a second checkpoint id, and swap the reader over when it
+/// catches up: the port already permits it and nothing else has to change.
 ///
 /// # Errors
 ///
-/// See [`ProjectionError`]. In short: the derived query, the checkpoint read,
-/// the event stream, the decode, `apply`, the commit and the rollback each have
-/// their own arm, every one of them carries the partial [`Progressed`], and the
-/// two that name an event carry its position.
+/// See [`ProjectionError`]. In short: the derived query and checkpoint id,
+/// the checkpoint read, the stream, the decode, `apply`, the commit and the
+/// rollback each have their own arm, every one of them carries the partial
+/// [`Progressed`], and the two that name an event carry its position.
 ///
 /// # Example
 ///
@@ -570,10 +588,12 @@ where
 /// # Exactly one runner per projection, and the caller owns that
 ///
 /// Nothing here enforces it. A [`ProjectionId`] names a checkpoint, not a
-/// lease, and a second runner on the same `(store, ProjectionId)` is
+/// lease, and a second runner on the same `(store, checkpoint_id)` is
 /// accepted by every store in this workspace — so **exactly one runner per
-/// `(store, ProjectionId)` is the caller's to guarantee**, by whatever
-/// their deployment already uses to elect a singleton.
+/// `(store, checkpoint_id)` is the caller's to guarantee**, by whatever
+/// their deployment already uses to elect a singleton. The id is
+/// [`checkpoint_id`](crate::checkpoint_id): the name and a digest of the
+/// derived query, so two runners of one name and one query share it.
 ///
 /// Only the *backwards* half is guarded. `CheckpointRegression` stops a
 /// stale runner dragging the checkpoint down, which is the rolling-redeploy
@@ -592,18 +612,18 @@ where
 ///
 // The three sections above sit *after* the fence rather than beside the subject
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:610` as the location of this item and that
+// `crates/happenstance/src/runner.rs:630` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
 // above it pushes the `run_projection` call down and leaves the three citations
-// pointing at whatever now occupies 608.
+// pointing at whatever line the item used to occupy.
 //
-// **The gate catches that now, and when this comment was first written it did
-// not.** `spec-trace` only *anchors* a citation where it can derive a subject
-// from the prose beside it, and these three were once outside that set (80 of
-// 401). Measured again at #99: adding lines above the item made `spec-trace`
-// fail, naming all three. `crates/happenstance/tests/projection_runner_page.rs`
-// still asserts the two sections this lane added stay below the fence, which
-// fails closer to the cause.
+// **Do not rely on the gate to catch that.** `spec-trace` only *anchors* a
+// citation where it can derive a subject from the prose beside it. At #99,
+// adding lines above the item made it fail, naming all three; at #107 the item
+// moved twenty lines and it passed, so the three were repointed by hand. The
+// test `crates/happenstance/tests/projection_runner_page.rs` still asserts the
+// two sections this lane added stay below the fence, which fails closer to the
+// cause.
 //
 // Moving a section up is still *allowed*; it costs the three citations moving
 // with it.
@@ -625,9 +645,13 @@ where
     let () = AtLeastOneType::<P::Event>::CHECKED;
 
     let query = derive_query(P::Event::EVENT_TYPES, projection.scope())?;
+    // Keyed on the name **and** the query (PS-25), so a projection whose query
+    // changed reads `NeverRun` and replays, instead of resuming past events
+    // its old query never nominated. Read and commit share this one value.
+    let key = checkpoint::derive(projection.id(), &query).map_err(ProjectionError::CheckpointId)?;
 
     let checkpoint = models
-        .checkpoint(projection.id())
+        .checkpoint(&key)
         .await
         .map_err(ProjectionError::Checkpoint)?;
 
@@ -717,7 +741,7 @@ where
         // computed or anticipated one — and there is always one, because a
         // chunk is only opened once its first event is in hand.
         models
-            .commit(batch, projection.id(), last, Authority::Live)
+            .commit(batch, &key, last, Authority::Live)
             .await
             .map_err(|source| ProjectionError::Commit { progress, source })?;
         progress.through = Some(last);
