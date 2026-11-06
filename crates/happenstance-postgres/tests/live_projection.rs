@@ -55,7 +55,7 @@ use core::num::NonZeroUsize;
 use happenstance::bytes::Bytes;
 use happenstance::{
     Chunk, Codec, CodecError, Delivered, DomainEvent, Event, EventStore, EventType, Json,
-    MemoryEventStore, Progressed, Projection, ProjectionError, Tags, run_projection,
+    MemoryEventStore, Progressed, Projection, ProjectionError, Tags, checkpoint_id, run_projection,
 };
 use happenstance_core::{
     Authority, Checkpoint, ProjectionId, ProjectionProbe, ProjectionStore, SequencePosition,
@@ -572,10 +572,10 @@ async fn run_projection_drives_a_row_writing_projection_through_a_live_batch() {
         "every chunk's rows are committed, and none twice"
     );
     let second = fixture.connect().await;
-    // #107 moves this: the checkpoint is read under `ledger.id()` until
-    // `checkpoint_id` lands, and the `Live` assertion fails loudly then.
+    // Under the key the runner commits to (#107), not the bare `ledger.id()`.
+    let key = checkpoint_id(&ledger).unwrap();
     assert_eq!(
-        second.checkpoint(ledger.id()).await.unwrap(),
+        second.checkpoint(&key).await.unwrap(),
         Checkpoint::Live {
             through: last.expect("five deposits were appended")
         },
@@ -645,7 +645,7 @@ async fn a_server_refused_statement_rolls_the_live_chunk_back_through_the_runner
         fixture
             .connect()
             .await
-            .checkpoint(ledger.id())
+            .checkpoint(&checkpoint_id(&ledger).unwrap())
             .await
             .unwrap(),
         Checkpoint::Live { through: second },
@@ -702,7 +702,7 @@ async fn a_commit_fault_takes_the_projections_rows_with_it() {
         fixture
             .connect()
             .await
-            .checkpoint(ledger.id())
+            .checkpoint(&checkpoint_id(&ledger).unwrap())
             .await
             .unwrap(),
         Checkpoint::NeverRun,
