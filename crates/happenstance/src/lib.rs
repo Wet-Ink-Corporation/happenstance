@@ -192,6 +192,8 @@ mod delivered;
 #[cfg(feature = "unstable-projection")]
 mod derivation;
 mod domain;
+#[cfg(feature = "unstable-projection")]
+mod policy;
 // `runner`, not `projection`. The contract crate already publishes a
 // `projection` module, and this crate re-exports it as
 // `happenstance::projection`; a private module of the same name shadows it
@@ -244,6 +246,11 @@ pub use domain::{DecisionModel, DomainEvent};
 #[cfg(feature = "unstable-projection")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use runner::{Progressed, Projection, ProjectionError, SendProjection, run_projection};
+// What `on_error` is handed and what it answers (PS-27). Its own module, as
+// `Delivered` is, to keep `runner.rs` from growing above `run_projection`.
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use policy::{ApplyFailure, Policy};
 // `Chunk` is the runner's vocabulary, not the runner: its own module, so the
 // fan-out runner (#112) takes it from the same place `run_projection` does.
 #[cfg(feature = "unstable-projection")]

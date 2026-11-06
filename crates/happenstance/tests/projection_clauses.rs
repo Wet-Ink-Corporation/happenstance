@@ -7,10 +7,11 @@
 //! (`.kb/open-questions/es-7-and-vt-9-provisional-markers.md`).
 //!
 //! So each test below pins **both halves** — the verdict text in the clause and
-//! the fact about the tree it was derived from. Grow the runner a skip policy or
-//! a fan-out path and the clause that says there is none goes red; revert a
-//! clause to an unevaluated marker and the same test goes red from the other
-//! side. Neither half can drift without the other noticing.
+//! the fact about the tree it was derived from. Grow the runner a fan-out path
+//! and the clause that says there is none goes red; take away the projection's
+//! failure policy and PS-27's, which now pins its presence, goes red too.
+//! Revert a clause to an unevaluated marker and the same test goes red from
+//! the other side. Neither half can drift without the other noticing.
 //!
 //! No conformance rule is added, and that is the correct answer: PS-33 is a
 //! phase gate no adapter can fail, and CF-36 forbids a clause backed only by
@@ -279,25 +280,42 @@ fn no_checkpoint_pump_exists_in_the_contract_crate() {
 }
 
 // ---------------------------------------------------------------------------
-// PS-27 — skip-and-record, counted
+// PS-27 — skip-and-record, offered
 // ---------------------------------------------------------------------------
 
 #[test]
-fn no_skip_and_record_path_is_offered() {
-    // The signature carries no failure policy, and the trait carries no
-    // `on_error`. Comments stripped first: the runner's own page names the
-    // rejected spelling in order to say it lost.
+fn the_failure_policy_is_the_projections_and_halts_by_default() {
+    // The seam is on the trait, provided, and its default halts. Comments
+    // stripped first: the runner's own page names the rejected spelling in
+    // order to say it lost.
     let runner = code("crates/happenstance/src/runner.rs");
-    for absent in ["on_error", "SkipPolicy", "skip"] {
+    for present in ["fn on_error(", "Ok(Policy::Halt)"] {
         assert!(
-            !runner.contains(absent),
-            "the runner grew `{absent}`; PS-27's verdict is now wrong"
+            runner.contains(present),
+            "the runner lost `{present}`; PS-27's verdict is now wrong"
         );
     }
+    // And it is not the loop's: no policy type and no sixth argument, which
+    // is PS-26's *Rejects* executed.
+    assert!(
+        !runner.contains("SkipPolicy"),
+        "the runner grew a per-run `SkipPolicy`; PS-26 rejects it"
+    );
+    let signature = runner
+        .split("pub async fn run_projection")
+        .nth(1)
+        .and_then(|rest| rest.split(") ->").next())
+        .expect("`run_projection` is declared in `runner.rs`");
+    assert_eq!(
+        signature.matches(": ").count(),
+        5,
+        "`run_projection` grew a parameter; a run-level failure policy is \
+         the alternative PS-26 rejects: {signature}"
+    );
 
-    // And the behaviour: a poisoned event halts the run. A skip-and-record
-    // path would have advanced the checkpoint *past* it and left a record
-    // behind; neither happens.
+    // And the behaviour: `Shreds` does not override `on_error`, so a poisoned
+    // event halts the run. A skipping default would have advanced the
+    // checkpoint *past* it; that does not happen.
     let events = MemoryEventStore::new();
     let models = MemoryProjectionStore::new();
     block_on(async {
@@ -325,25 +343,31 @@ fn no_skip_and_record_path_is_offered() {
                 .await
                 .unwrap(),
             Checkpoint::Live { through: good },
-            "the checkpoint advanced past the poisoned event, which is the \
-             skip half of skip-and-record"
+            "the checkpoint advanced past the poisoned event under the \
+             default policy, which is a skip nobody asked for"
         );
-        // The third event was never reached: a skipping runner would have
+        // The third event was never reached: a skipping default would have
         // applied it.
         assert_eq!(models.get("VIN2"), None);
     });
 
+    // The clause says the seam exists and names its rule. Freezing it is
+    // #127's, so the marker word stays.
     let ps27 = clause("PS-27");
     assert!(
         ps27.contains("[DEFERRED"),
-        "PS-27 still reads as provisional after its evaluation exit: {ps27}"
+        "PS-27's marker moved; freezing it is #127's, with its ledger row: {ps27}"
     );
-    for required in ["halt", "HS-P0010"] {
+    for required in ["on_error", "skip_and_record_is_atomic", "halt", "HS-P0010"] {
         assert!(
             ps27.contains(required),
             "PS-27's verdict does not state `{required}`: {ps27}"
         );
     }
+    assert!(
+        !ps27.contains("the count is zero"),
+        "PS-27 still says no skip-and-record path exists: {ps27}"
+    );
 }
 
 // ---------------------------------------------------------------------------

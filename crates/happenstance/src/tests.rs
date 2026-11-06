@@ -824,8 +824,9 @@ fn application_metadata_is_copied_through_untouched() {
 // PS-28 — the failure-policy arm reports like the apply arm
 //
 // Crate-internal because nothing outside can build the variant: it is
-// `#[non_exhaustive]`, and until the failure-policy seam lands (#101) the
-// runner does not construct it either. The wrong implementation this rejects
+// `#[non_exhaustive]`. The runner builds it when `on_error` fails (#101), and
+// `tests/failure_policy.rs` drives that end to end; this pins the accessors
+// with a progress no run could fake. The wrong implementation this rejects
 // is a `position()` or `progress()` match that forgot the new arm and fell
 // through to `None` or to the default.
 // ---------------------------------------------------------------------------
@@ -847,6 +848,7 @@ mod policy_arm {
         let progress = Progressed {
             through: Some(committed),
             applied: 3,
+            skipped: 1,
         };
         let error: ProjectionError<core::fmt::Error, core::fmt::Error, Unrecorded> =
             ProjectionError::Policy {
