@@ -71,17 +71,22 @@ while it replays sees a partial answer that claims to be current.
 So: if nobody reads the view during the replay, or a partial answer does no
 harm, reset it in place. If not, build under a second id.
 
-**Second: a changed fold always needs one of the two.** The checkpoint is
-stored under the `ProjectionId` and nothing else. Nothing notices when the
-events a projection asks for, or what it does with them, have changed.
+**Second: a changed fold always needs one of the two.** The runner stores the
+checkpoint under `checkpoint_id(&projection)`: the projection's name and a
+digest of the query it derives from its event types and scope
+([PS-25](../spec/SPECIFICATION.md#47-checkpoint-semantics)). When the query
+changes, so does the id, and the next run starts from the beginning. A
+projection that starts reading a new event type therefore sees every older
+event of that type.
 
-That has a sharp consequence. A projection that starts reading a new event type
-resumes from its old checkpoint, past every older event of that type, and never
-sees them. The planned fix is an id derived from the projection's query, which
-changes when the query does
-([PS-25](../spec/SPECIFICATION.md#47-checkpoint-semantics)). It is provisional,
-not built yet, and nothing tests it. Until it is, choosing a new id is up to
-you.
+Nothing notices when what a projection *does* with its events has changed,
+though. A changed fold over an unchanged query resumes from its old checkpoint,
+so choosing a new name, or resetting the view, is up to you.
+
+A checkpoint written before the id was derived sits under the bare name, so
+after upgrading every view rebuilds once. To keep a view's position instead,
+adopt its old checkpoint before the new runner first runs, and only if its
+query did not change. The documentation of `checkpoint_id` shows how.
 
 ## Reset the view
 
@@ -101,7 +106,9 @@ transaction as its checkpoint.
 
 A reset touches only the view you name. Every other view in the same store
 stays where it was, so you can rebuild one view without pausing the rest
-([PS-17](../spec/SPECIFICATION.md#46-reset)).
+([PS-17](../spec/SPECIFICATION.md#46-reset)). For a view the runner maintains,
+name it by `checkpoint_id(&projection)`, not `projection.id()`: the runner
+never writes under the bare name.
 
 ### Reset, not a commit at the first position
 

@@ -1307,7 +1307,7 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
     (
         "PS-25",
         "changed_query_starts_a_new_checkpoint",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
     ),
     (
         "PS-26",

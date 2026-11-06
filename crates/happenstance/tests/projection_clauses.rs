@@ -30,7 +30,7 @@ use happenstance::{
     Checkpoint, Chunk, Codec, CodecError, Delivered, DomainEvent, Event, EventStore, EventType,
     Json, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
     MemoryProjectionStoreError, Projection, ProjectionId, ProjectionStore, ResetError, Tags,
-    run_projection,
+    checkpoint_id, run_projection,
 };
 use happenstance_testkit::block_on;
 
@@ -320,7 +320,10 @@ fn no_skip_and_record_path_is_offered() {
         // The checkpoint sits at the last GOOD position, not past the poison.
         let good = events.snapshot()[0].position;
         assert_eq!(
-            models.checkpoint(shreds.id()).await.unwrap(),
+            models
+                .checkpoint(&checkpoint_id(&shreds).expect("a derivable id"))
+                .await
+                .unwrap(),
             Checkpoint::Live { through: good },
             "the checkpoint advanced past the poisoned event, which is the \
              skip half of skip-and-record"
@@ -386,16 +389,16 @@ fn no_fan_out_runner_catches_a_panic() {
         "the runner caught the panic, so it is doing the fan-out runner's job"
     );
 
+    // The id the runner would have committed under. The bare name reads
+    // `NeverRun` whatever the runner did, which would make this vacuous.
+    let key = checkpoint_id(&Shreds::new(Some("BOOM"))).expect("a derivable id");
     block_on(async {
         assert!(
             models.is_empty(),
             "a panicking `apply` left rows behind: the batch outlived its chunk"
         );
         assert_eq!(
-            models
-                .checkpoint(&ProjectionId::from_static("shreds"))
-                .await
-                .unwrap(),
+            models.checkpoint(&key).await.unwrap(),
             Checkpoint::NeverRun,
             "a panicking `apply` moved the checkpoint"
         );

@@ -251,6 +251,13 @@ mod chunk;
 #[cfg(feature = "unstable-projection")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use chunk::Chunk;
+// The id the runner keys a checkpoint on: the name and a digest of the derived
+// query (PS-25). Its own module, because the digest is its own concept.
+#[cfg(feature = "unstable-projection")]
+mod checkpoint;
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use checkpoint::{InvalidCheckpointId, MAX_CHECKPOINT_NAME_LEN, checkpoint_id};
 
 // The contract's surface, mounted here so a reader who installed the facade can
 // still type the paths the contract's own documentation uses.
