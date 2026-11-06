@@ -5394,3 +5394,6 @@ pub(crate) mod metadata_ceilings;
 // CF-40's tags-per-batch branch (VT-36), declared here at the end for
 // `metadata_ceilings`' reasons: no line above moves, and no `#[path]` is needed.
 pub(crate) mod tags_per_batch_ceilings;
+
+// VT-36's floor (#368), declared here at the end for the same reasons.
+pub(crate) mod tags_per_batch_floor;
