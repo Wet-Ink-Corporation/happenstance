@@ -9,6 +9,8 @@
 // answering an error, and an in-object bisection would die with its first
 // trap. A thrown attempt is therefore a refusal, quoted by its message.
 
+import { resetSuffix } from "./platform-miss.mjs";
+
 // What is searched, and how far. `minimal` and `max-tags` stop one past the
 // adapter's declared 1,024 events per call, so the top answers the adapter's
 // own refusal (`class=Split`); `max-tags` meets the adapter's 262,144 tags per
@@ -96,12 +98,14 @@ export function ceilingLine(shape, wall) {
 // on a 200 whose body is exactly `accepted events=<n> appended=<n>`, every
 // event sent having landed; anything else is a refusal, its status kept and
 // its body flattened onto one line, verbatim otherwise. A call that committed
-// fewer rows than it carried is not a call of that size.
+// fewer rows than it carried is not a call of that size. An object reset is a
+// refusal too, labelled with its cause and `class=Split` (platform-miss.mjs's
+// objectReset); the bisection reads it as it reads any other refusal.
 export function readAttempt(status, body) {
   const counts = /^accepted events=(\d+) appended=(\d+)$/.exec(body.trim());
   const accepted = status === 200 && counts !== null && counts[1] === counts[2];
   return {
     accepted,
-    text: accepted ? body : `[${status}] ${body.trim().replace(/\s*\n\s*/g, " ")}`,
+    text: accepted ? body : `[${status}] ${body.trim().replace(/\s*\n\s*/g, " ")}${resetSuffix(status, body)}`,
   };
 }
