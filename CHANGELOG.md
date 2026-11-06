@@ -96,6 +96,14 @@ not the same as what a user needed to be told.
   protecting. A caller wrapping a connection with `SqliteProjectionStore::new`
   over a file last migrated before this release opens it once through `open`
   first, which adds the table.
+- `happenstance-postgres` (documentation, no API change):
+  `LivePostgresProjectionStore` is driven by `run_projection` since `apply`
+  became `async`, and its crate docs and README no longer say it cannot be
+  (#142). A projection awaits `LivePostgresBatch::execute` inside the live
+  transaction, and the crate's live tests now run one against a server. The
+  buffered `PostgresProjectionStore` stays the default: the live store holds a
+  pooled connection for each chunk, and one statement the server refuses
+  aborts its transaction at once, with no savepoint to recover it yet (#103).
 
 ### Added
 

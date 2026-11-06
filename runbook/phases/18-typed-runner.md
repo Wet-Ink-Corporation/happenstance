@@ -20,7 +20,7 @@ renews them with the disposition phase 16 gave.
 
 **Work**
 
-- [ ] #98 · **`Projection::apply` in ADR-0074's shape**, against both batch shapes the
+- [x] #98 · **`Projection::apply` in ADR-0074's shape**, against both batch shapes the
       port was frozen on: a buffered batch, and `LivePostgresProjectionStore`'s
       live `sqlx` transaction. The spike in `experiments/apply-shape/src/shape.rs`
       is the reference, not the code to copy:
@@ -237,6 +237,19 @@ PS-30 each with a rule and a mutant that fails it.
   `examples/rebuilding-read-models` shows. `.kb/decisions/0074…:226` still cites
   `runner.rs:158`, *"two type parameters, not three"*: its referent is the text
   this change deleted, so it stays as the record of the shipped 0.4 shape.
+- 2026-11-03 — #142, the #98 box's live leg: `run_projection` drives
+  `LivePostgresProjectionStore` with a projection whose `async fn apply` awaits
+  `LivePostgresBatch::execute`. Three tests in `happenstance-postgres`'s
+  `tests/live_projection.rs` (rows and checkpoint together across chunks; a chunk the
+  server aborted discarded whole; rows already sent rolled back by a commit fault) run
+  in the `live-postgres` job's existing trio, whose count derives from `--list`. D1 went
+  with option A: a path-only `happenstance` dev-dependency, the first adapter → typed
+  layer edge, dev-only. D2 went with (a): the docs say the live store is drivable and
+  keep the buffered store the default, with the held connection and the
+  no-savepoint abort (#103) stated. The four rewrites are line-neutral, so ADR-0084's
+  and the spec's citations below them hold. `.kb/decisions/0074…:68` and `:331` still
+  cite `live_projection_store.rs:38-47` as the *cannot be driven* paragraph; that
+  text is the one replaced, so they stay as the record of what it said.
 - 2026-11-03 — #107: `run_projection` reads and commits under
   `checkpoint_id(&projection)`, `name@` and 16 lowercase hex digits of a
   hand-written 64-bit FNV-1a, and a changed query starts a new checkpoint
