@@ -272,6 +272,13 @@ mod checkpoint;
 #[cfg(feature = "unstable-projection")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use checkpoint::{InvalidCheckpointId, MAX_CHECKPOINT_NAME_LEN, checkpoint_id};
+// N views over one read (PS-30). Its own module, so `runner.rs` does not grow
+// above the lines the specification cites.
+#[cfg(feature = "unstable-projection")]
+mod fan_out;
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use fan_out::{FanOut, ViewError, run_fan_out};
 
 // The contract's surface, mounted here so a reader who installed the facade can
 // still type the paths the contract's own documentation uses.
