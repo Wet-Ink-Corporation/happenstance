@@ -365,6 +365,21 @@ const REBUILDING_VIEWS_TESTS: &[&str] = &[
     "runs::the_poisoned_view_stops_and_the_others_advance",
 ];
 
+/// PS-16's composed half: a typed rebuild through `reset` on two tables (#129).
+///
+/// A second target in the same package, and not more names in `runs`, because
+/// these tests drive the stores directly rather than reading the binary's
+/// transcript. The first two are the names PS-16's `Rule:` line cites, so a
+/// rename has to meet the clause. `the_runbook_procedure_is_caught` is listed
+/// for the reason a mutant's meta-test is: it is the wrong implementation the
+/// first rule's predicate is shown to reject, and an `#[ignore]` on it would
+/// leave that predicate unproved while the rule it judges still passed.
+const REBUILD_THROUGH_RESET_TESTS: &[&str] = &[
+    "rebuild_through_reset::rebuild_through_reset_restores_every_table",
+    "rebuild_through_reset::protected_reset_is_refused_and_the_view_keeps_running",
+    "rebuild_through_reset::the_runbook_procedure_is_caught",
+];
+
 /// The two halves of `handles-and-quotas`: the boundaries, and the retry.
 ///
 /// `the_binary_takes_every_decision` checks that three *different* scopes are
@@ -473,6 +488,12 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         package: "rebuilding-read-models",
         target: "runs",
         tests: REBUILDING_VIEWS_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "rebuilding-read-models",
+        target: "rebuild_through_reset",
+        tests: REBUILD_THROUGH_RESET_TESTS,
         registry: None,
     },
     Artefact {
