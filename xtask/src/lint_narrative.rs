@@ -1374,7 +1374,7 @@ struct DocumentationMust {
 /// re-derivation is written down in
 /// `.bklg/docs-that-teach/checked-documentation-surface/frozen-documentation-must-pin/`.
 /// No count is written anywhere here: `UNCLAIMED_PENDING_ADR` already refused
-/// that trade (`xtask/src/spec_trace.rs:2985-2987`), because a comment naming a
+/// that trade (`xtask/src/spec_trace.rs:2999-3001`), because a comment naming a
 /// total above an array holding a different one is the defect this pin exists
 /// to prevent, one level up. The count is the array's length and nothing
 /// restates it.
@@ -4126,7 +4126,7 @@ One writer at a time.
     }
 
     /// The trade `UNCLAIMED_PENDING_ADR` already made
-    /// (`xtask/src/spec_trace.rs:2985-2987`): a count written into a comment can
+    /// (`xtask/src/spec_trace.rs:2999-3001`): a count written into a comment can
     /// come to disagree with the array beneath it, which is the defect BR-10
     /// exists to prevent, one level up.
     #[test]

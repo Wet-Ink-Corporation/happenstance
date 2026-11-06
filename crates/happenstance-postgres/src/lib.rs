@@ -14,15 +14,15 @@
 //!
 //! It carries **two** projection stores, and they are not two ways of doing the
 //! same thing. [`projection_store`]'s batch is an owned statement list replayed
-//! at commit — the shape an application uses, because the typed layer's
-//! `Projection::apply` is synchronous and can push into a buffer. The skeleton
+//! at commit — the default an application reaches for, because it holds no
+//! connection while `apply` runs. The skeleton
 //! had declared `sqlx::Transaction<'static, Postgres>` instead, and that binding
 //! could not be discharged while `begin` was total, synchronous and infallible;
 //! a skeleton did not report it because `todo!()` has type `!` and coerces to
 //! anything. ADR-0062 moved `begin` and the probe seam, and
 //! [`live_projection_store`] is that binding discharged: a batch that **is** a
-//! live transaction, standing at the far end of PS-2's batch-shape axis and
-//! passing the suite there — an instrument for the freeze rather than a product.
+//! live transaction, at the far end of PS-2's batch-shape axis, passing the
+//! suite there, and since ADR-0074 one that `run_projection` drives.
 //!
 //! **The crate shipped in `0.2.0`.** The release set was five, decided, and the
 //! owner re-opened it on this crate's evidence at `e597c34`; the manifest carries

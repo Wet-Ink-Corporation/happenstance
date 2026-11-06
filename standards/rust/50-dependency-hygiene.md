@@ -43,7 +43,7 @@ majors of it, discovered — if ever — in `cargo deny` output nobody reads.
 
 **Evidence.** `Cargo.toml:75 (zero new crates)` ·
 `Cargo.toml:79 (a warning nobody reads)` ·
-`deny.toml:23 (multiple-versions)` ·
+`deny.toml:30 (multiple-versions)` ·
 [cargo-deny bans](https://embarkstudios.github.io/cargo-deny/checks/bans/cfg.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-2. Write `default-features = false` on the workspace's internal entries: a member can add a default back, never take one away.
@@ -162,7 +162,7 @@ local gate on one OS is then the whole of the evidence.
 
 **Evidence.** `Cargo.toml:125 (webpki-roots-0.26.11)` ·
 `Cargo.toml:128 (is the Mozilla CA root)` ·
-`deny.toml:9 (version = 2)` · `deny.toml:2 (all-features = true)` ·
+`deny.toml:16 (version = 2)` · `deny.toml:2 (all-features = true)` ·
 [cargo-deny licenses](https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-5. Do not add a dependency to run four assertions — model the shape with a stand-in and cite the real call site.

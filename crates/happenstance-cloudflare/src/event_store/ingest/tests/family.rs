@@ -55,6 +55,9 @@ impl IngestFixture for CloudflareIngestFixture {
     const MAX_TAGS_PER_EVENT: Option<usize> = Some(Ceilings::DECLARED.tags_per_event);
     /// Mirrored from the ceilings the store declares.
     const MAX_METADATA_LEN: Option<usize> = Some(Ceilings::DECLARED.metadata_len);
+    /// Mirrored from the ceilings the store declares: the call is the batch,
+    /// so VT-36's ingest rule holds every group and compensation to it.
+    const MAX_TAGS_PER_BATCH: Option<usize> = Some(Ceilings::DECLARED.tags_per_batch);
 
     /// Through the public constructor, as a consumer builds one.
     fn connect(&self) -> impl Future<Output = Self::Store> {
