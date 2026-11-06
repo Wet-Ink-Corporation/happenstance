@@ -53,8 +53,10 @@
 ///
 /// # Declaring it
 ///
-/// The first fence compiles, and is the control: it is what goes red if
-/// the trait is renamed or gains a supertrait. It needs `memory` and `json`.
+/// The first fence compiles, and is the control: it goes red if the trait
+/// is renamed or gains a supertrait `Sold` does not meet. It needs `memory`
+/// and `json`. A `: Projection` supertrait is refused elsewhere, by the
+/// generic spawn test in `tests/convergence.rs`.
 ///
 /// ```
 /// use happenstance::{ConvergentProjection, Projection};
