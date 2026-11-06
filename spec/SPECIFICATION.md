@@ -6444,8 +6444,8 @@ new port surface and no store-side knowledge of what a skip means.
 
 **Count retaken at phase 18: one.** The falsifier expected *"record"* to
 degrade into *"log a warning"*, and it never did: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:846`) writes nothing of its own and logs
-nothing. What it does now is offer the failure. `Projection` carries a provided
+(`crates/happenstance/src/runner.rs:846`) writes nothing anywhere, logs nothing,
+and now offers the failure instead. `Projection` carries a provided
 `on_error`, defaulting to halt, so a projection that says nothing stops at the
 first failure as the alpha's runner did; one that answers `Policy::Skip` has its
 record ride its own batch, which the runner commits with the checkpoint that

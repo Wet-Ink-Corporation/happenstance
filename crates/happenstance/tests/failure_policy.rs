@@ -573,6 +573,10 @@ impl Runner for Shipped {
 /// record and the checkpoint past the poison are **both present**; after a
 /// failure injected between the record and the commit, both are **absent**;
 /// and a restart writes both. Never one without the other.
+///
+/// Leg B is chunk-scoped: it also rejects a runner that commits at each skip
+/// and opens a fresh batch, which is atomic in PS-27's sense but breaks the
+/// chunk window. A runner with another window (#112's fan-out) reads it so.
 async fn skip_and_record_holds(runner: &impl Runner) -> Result<(), String> {
     let mut failed = Vec::new();
 
