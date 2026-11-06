@@ -75,10 +75,140 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// `#[trait_variant::make]` derives [`SendProjection`], whose `apply` future
 /// is `Send`, and a blanket impl makes every `SendProjection` a `Projection`.
 /// Implement exactly one, as an adapter does for the ports: implementing both
-/// is `E0119`. Implement `SendProjection` when the run will be spawned onto a
-/// multi-threaded runtime, and `Projection` otherwise: a projection holding an
-/// `Rc`, a `!Send` batch, or `wasm32`. `#[async_trait]` is not used, because
-/// the `+ Send` it injects makes the `wasm32` target impossible.
+/// is `E0119`. A projection whose concrete type is spawned works through
+/// either flavour: the compiler sees its `apply` future, and its `Send`-ness
+/// leaks as any `async fn`'s does. `SendProjection` matters where code
+/// **generic over the projection** spawns the run: there, only
+/// `P: SendProjection` promises that `apply`'s future is `Send`. Implement
+/// `SendProjection` for a projection handed to such code, a supervisor or a
+/// library's spawner, and `Projection` for one holding an `Rc`, writing a
+/// `!Send` batch, or built for `wasm32`. `#[async_trait]` is not used,
+/// because the `+ Send` it injects makes the `wasm32` target impossible.
+///
+/// # Spawning a run from code generic over the projection
+///
+/// The bounds are the caller's to write, and [`run_projection`]'s page says
+/// what each one pays for. `Store = St` is the one that surprises: a fresh
+/// type parameter, not `P::Store`. The fence needs `memory` and `json`.
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use happenstance::{Chunk, Json, Progressed, run_projection};
+/// use happenstance::{SendEventStore, SendProjection};
+/// use happenstance::SendProjectionStore;
+/// # use happenstance::{bytes::Bytes, Codec, CodecError, DomainEvent};
+/// # use happenstance::{Delivered, Event, EventType, ProjectionId, Tags};
+/// # use happenstance::{MemoryEventStore, MemoryProjectionBatch};
+/// # use happenstance::{MemoryProjectionStore, MemoryProjectionStoreError};
+/// # #[derive(serde::Serialize, serde::Deserialize)]
+/// # enum Seat { Taken }
+/// # const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
+/// # impl DomainEvent for Seat {
+/// #     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN];
+/// #     fn event_type(&self) -> EventType { SEAT_TAKEN }
+/// #     fn tags(&self) -> Tags { Tags::empty() }
+/// #     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
+/// #         c.encode(self)
+/// #     }
+/// #     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
+/// #         -> Result<Self, CodecError> { c.decode(d) }
+/// # }
+/// # struct Sold { id: ProjectionId, scope: Tags, sold: u64 }
+/// # impl SendProjection for Sold {
+/// #     type Event = Seat;
+/// #     type Store = MemoryProjectionStore;
+/// #     type Error = MemoryProjectionStoreError;
+/// #     fn id(&self) -> &ProjectionId { &self.id }
+/// #     fn scope(&self) -> &Tags { &self.scope }
+/// #     async fn apply(
+/// #         &mut self,
+/// #         _: Delivered<Seat>,
+/// #         batch: &mut MemoryProjectionBatch,
+/// #     ) -> Result<(), MemoryProjectionStoreError> {
+/// #         self.sold += 1;
+/// #         batch.write("sold", self.sold);
+/// #         Ok(())
+/// #     }
+/// # }
+///
+/// fn spawn_run<S, P, St>(
+///     events: Arc<S>,
+///     models: Arc<St>,
+///     mut projection: P,
+///     chunk: Chunk,
+/// ) -> tokio::task::JoinHandle<(P, Result<Progressed, String>)>
+/// where
+///     S: SendEventStore<Error: Send> + Sync + 'static,
+///     P: SendProjection<Store = St, Event: Send, Error: Send>
+///         + 'static,
+///     St: SendProjectionStore<Batch: Send> + Sync + 'static,
+/// {
+///     tokio::spawn(async move {
+///         // Reduced to its message: the handle asks no more bounds.
+///         // To keep the chain, return it and add `St::Error: Send`.
+///         let run = run_projection(
+///             &*events, &*models, &mut projection, &Json, chunk,
+///         )
+///         .await
+///         .map_err(|e| e.to_string());
+///         (projection, run)
+///     })
+/// }
+///
+/// # #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let events = Arc::new(MemoryEventStore::new());
+/// let taken = Event::new("SeatTaken", Json.encode(&Seat::Taken)?)?;
+/// events.append(&[taken], None).await?;
+///
+/// let models = Arc::new(MemoryProjectionStore::new());
+/// let sold = Sold {
+///     id: ProjectionId::new("seats_sold")?,
+///     scope: Tags::empty(),
+///     sold: 0,
+/// };
+/// let chunk = Chunk::of(64.try_into()?);
+/// let (sold, run) =
+///     spawn_run(events, Arc::clone(&models), sold, chunk).await?;
+///
+/// assert_eq!(run?.applied, 1);
+/// assert_eq!(sold.sold, 1, "the projection came back with its state");
+/// assert_eq!(models.get("sold"), Some(1));
+/// # Ok(()) }
+/// ```
+///
+/// Written over `P::Store`, the same spawner does not compile. The
+/// associated type's own bound is the bare [`ProjectionStore`], and that is
+/// the bound the compiler reads, so none of the store's futures is `Send`
+/// (`E0277`), whatever the `where` clause says about `P::Store`:
+///
+/// ```compile_fail,E0277
+/// # use std::sync::Arc;
+/// # use happenstance::{Chunk, Json, Progressed, run_projection};
+/// # use happenstance::{SendEventStore, SendProjection};
+/// # use happenstance::SendProjectionStore;
+/// fn spawn_run<S, P>(
+///     events: Arc<S>,
+///     models: Arc<P::Store>,
+///     mut projection: P,
+///     chunk: Chunk,
+/// ) -> tokio::task::JoinHandle<(P, Result<Progressed, String>)>
+/// where
+///     S: SendEventStore<Error: Send> + Sync + 'static,
+///     P: SendProjection<Event: Send, Error: Send> + 'static,
+///     P::Store: SendProjectionStore<Batch: Send> + Sync + 'static,
+/// {
+///     tokio::spawn(async move {
+///         let run = run_projection(
+///             &*events, &*models, &mut projection, &Json, chunk,
+///         )
+///         .await
+///         .map_err(|e| e.to_string());
+///         (projection, run)
+///     })
+/// }
+/// ```
 ///
 /// [`Query`]: happenstance_core::Query
 #[trait_variant::make(SendProjection: Send)]
@@ -416,14 +546,34 @@ where
 /// held through an `Rc` on a single-threaded edge runtime runs a projection
 /// here, and a `Send` store does too, through the blanket impl.
 ///
-/// Spawning the returned future onto a multi-threaded runtime asks for one
-/// thing more, and it is the caller's to supply. On a failure this runner
-/// holds the stop — which carries `S::Error` — across the port's `rollback`
-/// await, because one [`ProjectionError`] needs the error *and* what the
-/// rollback said. `Error` carries no `Send` bound by design, so add
-/// `S::Error: Send + Sync` to your own signature, or declare the marker
-/// trait ADR-0009 records and bound on that instead.
-/// `crates/happenstance/tests/flavours.rs` carries the worked shape.
+/// Spawning the returned future from code generic over the projection asks
+/// for these bounds, and they are the caller's to write. Each was measured
+/// load-bearing by removing it:
+///
+/// - `P: SendProjection<Store = St>`, with `St` a type parameter of your
+///   own. Written as `P::Store`, the store's futures are not `Send`
+///   (`E0277`), because the associated type's bound is the bare
+///   [`ProjectionStore`].
+/// - `St: SendProjectionStore<Batch: Send>`: the batch is held across every
+///   `apply` await.
+/// - `P::Event: Send`: the blanket `Projection` impl forwards to
+///   `SendProjection::apply` from an `async fn` of its own, whose state
+///   holds the delivered event across that await.
+/// - `P::Error: Send`, and `Error: Send` on the `Send` flavour of the event
+///   store: on a failure this runner holds the stop, which carries either,
+///   across the port's `rollback` await, because one [`ProjectionError`]
+///   needs the error *and* what the rollback said.
+/// - `Sync` on both stores, which are borrowed across awaits, and `'static`
+///   on all three, for the spawn.
+///
+/// `P: Send` comes with `SendProjection`, its supertrait. No `Error: Sync`
+/// is needed, and no store error crosses an await. `Error` has no `Send`
+/// bound by design, on the port's error and the projection's, so the bound
+/// is yours to add, or declare ADR-0009's marker trait and bound on that.
+/// [`Projection`]'s *Spawning a run from code generic over the projection*
+/// compiles the shape and the spelling that fails, and the test
+/// `run_projection_spawns_from_code_generic_over_the_projection` in
+/// `crates/happenstance/tests/flavours.rs` runs it.
 ///
 /// # It streams, and that is not an implementation detail
 ///
@@ -612,7 +762,7 @@ where
 ///
 // The three sections above sit *after* the fence rather than beside the subject
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:630` as the location of this item and that
+// `crates/happenstance/src/runner.rs:780` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
 // above it pushes the item's declaration down and leaves the three citations
 // pointing at whatever line the item used to occupy.

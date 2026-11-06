@@ -130,8 +130,8 @@ fn the_page_says_what_can_be_seen_while_it_runs() {
 
 /// Both new sections sit *below* the doctest, and that is load-bearing.
 ///
-/// `spec/SPECIFICATION.md` cites `run_projection` by the line of the call
-/// inside the fence, and `cargo xtask spec-trace` resolves a citation within a
+/// `spec/SPECIFICATION.md` cites `run_projection` by the line it is declared
+/// on, and `cargo xtask spec-trace` resolves a citation within a
 /// twelve-line window. Prose inserted *above* the fence pushes that call out of
 /// the window and fails the gate — with a message about an unresolved citation,
 /// which is a long way from "you added a paragraph in the wrong place".
@@ -154,7 +154,7 @@ fn prose_added_to_this_page_stays_below_the_fence() {
             "`{heading}` was added above the doctest fence. Every line above \
              the fence pushes the `run_projection(` call inside it down, and \
              three sentences of `SPECIFICATION.md` cite this item at \
-             `runner.rs:630`, the line it is declared on. `spec-trace` \
+             `runner.rs:780`, the line it is declared on. `spec-trace` \
              anchors them on the item's name within twelve lines, so it \
              misses the move whenever the name sits in that window too; \
              this is where the cause is said"

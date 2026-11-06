@@ -106,7 +106,7 @@ renews them with the disposition phase 16 gave.
       checkpoint under a bare id reads `NeverRun` after the upgrade, so the
       release **needs a `CHANGELOG.md` entry** stating the rebuild and the
       adoption procedure. Write `changed_query_starts_a_new_checkpoint`.
-- [ ] #110 · **F1 in the runner's documentation** (ADR-0074 decision 10). A generic
+- [x] #110 · **F1 in the runner's documentation** (ADR-0074 decision 10). A generic
       spawner writes `P: SendProjection<Store = St>` with `St` a type parameter,
       or every store future is `!Send`. This applies to the shipped
       `run_projection` too. The *what spawning it costs* rustdoc states the
@@ -126,7 +126,7 @@ renews them with the disposition phase 16 gave.
 - [ ] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
 - [ ] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
-      (`crates/happenstance/src/runner.rs:635`) becomes a named `Chunk`:
+      (`crates/happenstance/src/runner.rs:785`) becomes a named `Chunk`:
       `#[non_exhaustive]`, private representation, `Chunk::of(NonZeroUsize)` its
       first constructor — the shape `Retry` already has
       (`crates/happenstance/src/command.rs:43-62`). The fan-out runner above takes
@@ -283,3 +283,22 @@ PS-30 each with a rule and a mutant that fails it.
   `reset` or `protect_from_reset` still type-checks and targets a row the runner
   never writes; the file's documentation says so and no API changes (D3). SQLite
   only: the `TRUNCATE` caveat is on #127's PS-16 line above (D4).
+- 2026-11-06 — #110: the bounds a spawner generic over the projection writes, measured
+  on the shipped runner by removing each in turn (D1, the minimal set at merge):
+  `S: SendEventStore<Error: Send> + Sync + 'static`,
+  `P: SendProjection<Store = St, Event: Send, Error: Send> + 'static`,
+  `St: SendProjectionStore<Batch: Send> + Sync + 'static`. Each removal fails: `Store = St`
+  as `P::Store` with five `E0277`s on the store's futures and batch (F1); `Batch: Send`,
+  `S::Error: Send` and `P::Error: Send` with `E0277`, the errors on `Stopped` across
+  `rollback`; `Sync` on either store with `E0277`, even when the stores are owned by the
+  task rather than in an `Arc`; `'static` with `E0310`. `Event: Send`, which the plan
+  expected only after #101, is needed now: `trait_variant`'s blanket `Projection` impl is an
+  `async fn` forwarding to `SendProjection::apply`, and its state holds the
+  `Delivered<P::Event>`. Not needed: `P: Send` (a supertrait), `St::Error: Send`, any
+  `Error: Sync`. #101 owes the `Error: Sync` its `on_error` borrow adds. The fences sit on
+  `Projection`'s page, not `run_projection`'s, because `entry_points_state_their_flavour`
+  forbids the name `SendEventStore` there; `run_projection`'s page lists the bounds and
+  points to them. The `compile_fail,E0277` fence (D2) is not checked for its code on stable
+  rustdoc, so its five `E0277`s were read off a compiled copy. D3:
+  `a_concrete_bare_projection_spawns`. `experiments/apply-shape/tests/shipped_spawn.rs`
+  still binds the bare, synchronous shape and stays as the spike's record.
