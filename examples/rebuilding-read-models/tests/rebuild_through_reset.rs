@@ -617,8 +617,8 @@ mod rebuild_through_reset {
     /// The reset goes through `late`, a handle opened before the mark was
     /// written, so the refusal can only have come from the file. Rejects: a
     /// refusal reported as success (`NoopProtectFixture`'s shape: the tables
-    /// are emptied); a store that runs the batch and then checks the mark (the
-    /// tables are emptied and the checkpoint kept); and a mark held in the
+    /// are emptied); a store that runs and commits the batch, then checks the
+    /// mark (the tables are emptied and the checkpoint kept); and a mark held in the
     /// handle that wrote it, which `late` never sees. The second half rejects
     /// a protection that guards `commit` as well, which would stall the view.
     #[tokio::test]
