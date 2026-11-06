@@ -18,6 +18,7 @@ use crate::chunk::Chunk;
 use crate::codec::{Codec, CodecError, decode_event};
 use crate::delivered::Delivered;
 use crate::domain::DomainEvent;
+use crate::policy::{ApplyFailure, Policy};
 
 /// The adapter error of whatever store a projection writes into.
 type StoreError<P> = <<P as Projection>::Store as ProjectionStore>::Error;
@@ -69,6 +70,14 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// position. The store's error converts into it through `From`, so a write
 /// inside `apply` still propagates with `?`. A projection whose only failure
 /// is the store's names that error and is done.
+///
+/// # What it does with an event it cannot take
+///
+/// That is the projection's to decide, not the runner's: two read models of
+/// different tolerance are the case one run-level answer gets wrong (PS-26).
+/// [`on_error`](Self::on_error) is provided and defaults to halting, so a
+/// projection that says nothing stops at the first failure; one that skips
+/// writes its record into the batch that moves past the event (PS-27).
 ///
 /// # Which flavour to implement
 ///
@@ -140,7 +149,7 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// ) -> tokio::task::JoinHandle<(P, Result<Progressed, String>)>
 /// where
 ///     S: SendEventStore<Error: Send> + Sync + 'static,
-///     P: SendProjection<Store = St, Event: Send, Error: Send>
+///     P: SendProjection<Store = St, Event: Send, Error: Send + Sync>
 ///         + 'static,
 ///     St: SendProjectionStore<Batch: Send> + Sync + 'static,
 /// {
@@ -196,7 +205,7 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// ) -> tokio::task::JoinHandle<(P, Result<Progressed, String>)>
 /// where
 ///     S: SendEventStore<Error: Send> + Sync + 'static,
-///     P: SendProjection<Event: Send, Error: Send> + 'static,
+///     P: SendProjection<Event: Send, Error: Send + Sync> + 'static,
 ///     P::Store: SendProjectionStore<Batch: Send> + Sync + 'static,
 /// {
 ///     tokio::spawn(async move {
@@ -267,10 +276,11 @@ pub trait Projection {
     /// # Errors
     ///
     /// Returns the projection's own [`Self::Error`]; a store error converts
-    /// into it through `?`. The runner discards the whole chunk through
-    /// [`rollback`](ProjectionStore::rollback) and reports the position of
-    /// the event that failed, so the checkpoint stays where the last commit
-    /// left it.
+    /// into it through `?`. The runner offers the failure to
+    /// [`on_error`](Self::on_error) first; under the default it discards the
+    /// whole chunk through [`rollback`](ProjectionStore::rollback) and reports
+    /// the position of the event that failed, so the checkpoint stays where
+    /// the last commit left it.
     //
     // The store's types are spelled as explicit projections rather than through
     // `StoreBatch<Self>` and `StoreError<Self>`: those aliases go through
@@ -283,6 +293,48 @@ pub trait Projection {
         event: Delivered<Self::Event>,
         batch: &mut <Self::Store as ProjectionStore>::Batch,
     ) -> Result<(), Self::Error>;
+
+    /// Decides what happens to an event that could not be decoded or applied.
+    ///
+    /// Provided, and the default answers [`Policy::Halt`]: a projection that
+    /// says nothing stops at the first such event, exactly as before.
+    ///
+    /// [`Policy::Skip`] leaves the event out. It still counts toward `chunk`,
+    /// it is counted in [`Progressed::skipped`], and the checkpoint moves past
+    /// it when the chunk commits. A record written into `batch` here commits
+    /// with that move or not at all (PS-27). [`Policy::Halt`] rolls the chunk
+    /// back, with anything written here, and the run reports
+    /// [`ProjectionError::Decode`] or [`ProjectionError::Apply`].
+    ///
+    /// The batch is handed over as `apply` left it: a refused `apply` that had
+    /// already written keeps those writes under `Skip`. The runner cannot undo
+    /// part of a batch without a generic write (PS-9), so an `apply` that may
+    /// refuse should refuse before it writes. [`ApplyFailure`] says which half
+    /// failed and the event's identity, never its local position.
+    ///
+    /// The runner holds the borrowed failure across this await, so code
+    /// generic over the projection that spawns the run adds `Error: Sync`.
+    ///
+    /// # Errors
+    ///
+    /// An `Err` stops the run with [`ProjectionError::Policy`] at the event's
+    /// position, and the chunk is rolled back.
+    //
+    // `-> impl Future` with a block, not `async fn` with a body: trait_variant
+    // 0.1.3 copies the block into `SendProjection`'s `-> impl Future + Send`.
+    // The parameters are named and discarded with `let _`, never `_`-prefixed:
+    // the derived blanket impl forwards them by name, and an `_failure` there
+    // is a used underscore binding that pedantic clippy refuses (ADR-0074,
+    // finding F2). Neither value is fallible, so nothing is being swallowed.
+    fn on_error(
+        &mut self,
+        failure: &ApplyFailure<'_, Self::Error>,
+        batch: &mut <Self::Store as ProjectionStore>::Batch,
+    ) -> impl Future<Output = Result<Policy, Self::Error>> {
+        let _ = failure;
+        let _ = batch;
+        async { Ok(Policy::Halt) }
+    }
 }
 
 /// How far a run got, and how much it applied.
@@ -309,6 +361,11 @@ pub struct Progressed {
     /// Events applied into a batch that was then discarded do not count: a
     /// number that included them would describe work no reader can observe.
     pub applied: usize,
+    /// How many events `on_error` chose to skip, and were committed past.
+    ///
+    /// Not in `applied`: a skipped event changed no row but its record, and a
+    /// count that folded the two would hide the skip PS-27 exists to show.
+    pub skipped: usize,
 }
 
 /// Why a projection run stopped.
@@ -407,8 +464,10 @@ where
 
     /// A nominated event could not be decoded into the projection's own type.
     ///
-    /// The half-applied chunk is discarded, so the checkpoint still sits at the
-    /// last good position and a restart applies nothing twice.
+    /// And the projection's [`on_error`](Projection::on_error) answered
+    /// [`Policy::Halt`]. The half-applied chunk is discarded, so the checkpoint
+    /// still sits at the last good position and a restart applies nothing
+    /// twice.
     #[error("decoding the event at position {position} failed")]
     Decode {
         /// What the run had committed before this.
@@ -423,6 +482,9 @@ where
     },
 
     /// [`Projection::apply`] refused the event.
+    ///
+    /// And the projection's [`on_error`](Projection::on_error) answered
+    /// [`Policy::Halt`]. The chunk is discarded, as for a decode failure.
     #[error("applying the event at position {position} failed")]
     Apply {
         /// What the run had committed before this.
@@ -438,10 +500,10 @@ where
 
     /// The projection's failure policy itself failed.
     ///
-    /// Writing a record of the refused event into the batch, for instance
-    /// (ADR-0074 decisions 6 and 8). Produced once the failure-policy seam,
-    /// a per-projection `on_error`, lands (#101); nothing in this release
-    /// constructs it.
+    /// [`Projection::on_error`] returned an error, writing its record for
+    /// instance (ADR-0074 decisions 6 and 8). The chunk is discarded. The
+    /// failure it was handling is not carried: it is the event at `position`,
+    /// and a restart offers it again.
     #[error("the failure policy for the event at position {position} failed")]
     Policy {
         /// What the run had committed before this.
@@ -536,8 +598,8 @@ where
 /// One call drives one projection: it derives the query, asks the store where
 /// this projection had got to, resumes **past** that position, and then pulls
 /// the replay item by item. Every `chunk` events it opens a write set, applies
-/// them into it, and hands the write set and the position of the last applied
-/// event to the port's single [`commit`](ProjectionStore::commit) — which is
+/// them into it, and hands the write set and the position of the last event
+/// it took to the port's single [`commit`](ProjectionStore::commit) — which is
 /// what makes the read model and the checkpoint move together or not at all.
 ///
 /// # Which flavour this binds, and what spawning it costs
@@ -563,11 +625,14 @@ where
 ///   store: on a failure this runner holds the stop, which carries either,
 ///   across the port's `rollback` await, because one [`ProjectionError`]
 ///   needs the error *and* what the rollback said.
+/// - `P::Error: Sync`: the runner holds the [`ApplyFailure`] it hands
+///   [`on_error`](Projection::on_error), which borrows the error, across
+///   that await, and `&A` is `Send` only where `A` is `Sync`.
 /// - `Sync` on both stores, which are borrowed across awaits, and `'static`
 ///   on all three, for the spawn.
 ///
-/// `P: Send` comes with `SendProjection`, its supertrait. No `Error: Sync`
-/// is needed, and no store error crosses an await. `Error` has no `Send`
+/// `P: Send` comes with `SendProjection`, its supertrait. No store error
+/// crosses an await, so no store error needs `Sync`. `Error` has no `Send`
 /// bound by design, on the port's error and the projection's, so the bound
 /// is yours to add, or declare ADR-0009's marker trait and bound on that.
 /// [`Projection`]'s *Spawning a run from code generic over the projection*
@@ -587,11 +652,11 @@ where
 ///
 /// # There is no per-run failure policy, and offering one would be wrong
 ///
-/// The runner halts on the first failure. The alternative that lost was an
-/// `on_error: SkipPolicy` argument, which is what a builder API invites: it
-/// forces one answer onto every projection an application runs, and two read
-/// models of different tolerance are exactly the case that makes one answer
-/// wrong. Failure policy belongs to the projection, not to the loop.
+/// The runner takes no policy of its own. The alternative that lost was an
+/// `on_error: SkipPolicy` argument, as a builder API invites: it forces one
+/// answer onto every projection an application runs, and two read models of
+/// different tolerance are the case that makes one answer wrong. The policy
+/// is the projection's: [`Projection::on_error`], which defaults to halting.
 ///
 /// # One projection per call
 ///
@@ -613,9 +678,10 @@ where
 /// # Errors
 ///
 /// See [`ProjectionError`]. In short: the derived query and checkpoint id,
-/// the checkpoint read, the stream, the decode, `apply`, the commit and the
-/// rollback each have their own arm, every one of them carries the partial
-/// [`Progressed`], and the two that name an event carry its position.
+/// the checkpoint read, the stream, the decode, `apply`, a failing
+/// `on_error`, the commit and the rollback each have their own arm, every one
+/// of them carries the partial [`Progressed`], and the three that name an
+/// event carry its position.
 ///
 /// # Example
 ///
@@ -762,7 +828,7 @@ where
 ///
 // The three sections above sit *after* the fence rather than beside the subject
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:780` as the location of this item and that
+// `crates/happenstance/src/runner.rs:846` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
 // above it pushes the item's declaration down and leaves the three citations
 // pointing at whatever line the item used to occupy.
@@ -845,19 +911,23 @@ where
             Err(source) => return Err(ProjectionError::Begin { progress, source }),
         };
 
-        if let Err(stopped) = apply_one(projection, codec, &first, &mut batch).await {
-            let rollback = models.rollback(batch).await.err();
-            return Err(stopped.into_error(progress, rollback));
+        let mut tally = Tally::default();
+        match apply_one(projection, codec, &first, &mut batch).await {
+            Ok(took) => tally.took(took),
+            Err(stopped) => {
+                let rollback = models.rollback(batch).await.err();
+                return Err(stopped.into_error(progress, rollback));
+            }
         }
-        let mut applied = 1usize;
         let mut last = first.position;
         let mut stopped = None;
         let mut exhausted = false;
 
         // The bounded buffer: at most `chunk` events between one `begin` and
         // its `commit`. The stream is pulled item by item and never collected,
-        // so memory stays flat in the length of the replay.
-        while applied < chunk.get() {
+        // so memory stays flat in the length of the replay. A skipped event
+        // counts toward it, so a log of nothing but poison still commits.
+        while tally.len() < chunk.get() {
             match next_event(stream.as_mut()).await {
                 None => {
                     exhausted = true;
@@ -867,14 +937,16 @@ where
                     stopped = Some(Stopped::Read(source));
                     break;
                 }
-                Some(Ok(event)) => {
-                    if let Err(stop) = apply_one(projection, codec, &event, &mut batch).await {
+                Some(Ok(event)) => match apply_one(projection, codec, &event, &mut batch).await {
+                    Ok(took) => {
+                        tally.took(took);
+                        last = event.position;
+                    }
+                    Err(stop) => {
                         stopped = Some(stop);
                         break;
                     }
-                    applied += 1;
-                    last = event.position;
-                }
+                },
             }
         }
 
@@ -887,15 +959,17 @@ where
         }
 
         // The rows and the checkpoint in the port's **single** `commit`. The
-        // position is the one the last applied event actually carries, never a
-        // computed or anticipated one — and there is always one, because a
-        // chunk is only opened once its first event is in hand.
+        // position is the one the last event the chunk took actually carries,
+        // applied or skipped, never a computed or anticipated one — and there
+        // is always one, because a chunk is only opened once its first event
+        // is in hand. A skip record rides this commit with it (PS-27).
         models
             .commit(batch, &key, last, Authority::Live)
             .await
             .map_err(|source| ProjectionError::Commit { progress, source })?;
         progress.through = Some(last);
-        progress.applied += applied;
+        progress.applied += tally.applied;
+        progress.skipped += tally.skipped;
 
         if exhausted {
             return Ok(progress);
@@ -903,38 +977,97 @@ where
     }
 }
 
+/// What became of one event the chunk took.
+#[derive(Clone, Copy)]
+enum Took {
+    Applied,
+    Skipped,
+}
+
+/// How many events the open chunk took, by what became of them.
+///
+/// Both counts are bounded by `chunk`, a `usize`, so `+= 1` cannot overflow
+/// before the window closes.
+#[derive(Default)]
+struct Tally {
+    applied: usize,
+    skipped: usize,
+}
+
+impl Tally {
+    fn took(&mut self, took: Took) {
+        match took {
+            Took::Applied => self.applied += 1,
+            Took::Skipped => self.skipped += 1,
+        }
+    }
+
+    /// The window: every event the chunk took, applied or skipped.
+    const fn len(&self) -> usize {
+        self.applied + self.skipped
+    }
+}
+
 /// Decodes one read event and applies it into the open write set.
 ///
-/// Split out so the chunk loop reads as a loop: the two failures it can produce
-/// are the two that discard the chunk.
+/// Split out so the chunk loop reads as a loop. A decode or apply failure is
+/// offered to [`Projection::on_error`] with the same batch, before anything
+/// is rolled back; its answer decides whether the chunk carries on.
 async fn apply_one<P, C, R>(
     projection: &mut P,
     codec: &C,
     event: &SequencedEvent,
     batch: &mut StoreBatch<P>,
-) -> Result<(), Stopped<R, P::Error>>
+) -> Result<Took, Stopped<R, P::Error>>
 where
     P: Projection,
     C: Codec,
 {
+    let position = event.position;
     // The crate's one decode path, through the codec tag the writer left, so an
     // event written under an older encoding still folds into today's model.
-    let decoded = decode_event::<P::Event, C>(codec, event).map_err(|source| Stopped::Decode {
-        position: event.position,
-        source,
-    })?;
+    let decoded = match decode_event::<P::Event, C>(codec, event) {
+        Ok(decoded) => decoded,
+        Err(source) => {
+            let answer = projection
+                .on_error(&ApplyFailure::decode(event.id, &source), batch)
+                .await;
+            return settle(answer, position, || Stopped::Decode { position, source });
+        }
+    };
 
     // The identity the store read, handed over unchanged: the origin's, never
     // one re-minted from the local position (SY-21). A plain `.await`, so the
     // future is held inline in the runner's own state machine and nothing is
     // boxed or spawned.
-    projection
+    match projection
         .apply(Delivered::new(event.id, decoded), batch)
         .await
-        .map_err(|source| Stopped::Apply {
-            position: event.position,
-            source,
-        })
+    {
+        Ok(()) => Ok(Took::Applied),
+        Err(source) => {
+            let answer = projection
+                .on_error(&ApplyFailure::apply(event.id, &source), batch)
+                .await;
+            settle(answer, position, || Stopped::Apply { position, source })
+        }
+    }
+}
+
+/// Turns `on_error`'s answer into what the chunk does next.
+///
+/// `halt` is built only on [`Policy::Halt`], after the borrow `on_error` was
+/// handed has ended, so the original failure moves into the stop unchanged.
+fn settle<R, A>(
+    answer: Result<Policy, A>,
+    position: SequencePosition,
+    halt: impl FnOnce() -> Stopped<R, A>,
+) -> Result<Took, Stopped<R, A>> {
+    match answer {
+        Ok(Policy::Skip) => Ok(Took::Skipped),
+        Ok(Policy::Halt) => Err(halt()),
+        Err(source) => Err(Stopped::Policy { position, source }),
+    }
 }
 
 /// Why a chunk stopped, before the partial progress is attached to it.
@@ -954,6 +1087,10 @@ enum Stopped<R, A> {
         source: CodecError,
     },
     Apply {
+        position: SequencePosition,
+        source: A,
+    },
+    Policy {
         position: SequencePosition,
         source: A,
     },
@@ -982,6 +1119,12 @@ where
                 rollback,
             },
             Self::Apply { position, source } => ProjectionError::Apply {
+                progress,
+                position,
+                source,
+                rollback,
+            },
+            Self::Policy { position, source } => ProjectionError::Policy {
                 progress,
                 position,
                 source,

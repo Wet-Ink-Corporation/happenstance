@@ -6408,12 +6408,10 @@ onto one of Wattline's two projections.
 
 **PS-27 — The policy MUST offer skip-and-record, and the record MUST be written
 into the same batch that advances the checkpoint past the poisoned position.**
-`[DEFERRED — evaluated at the typed layer's phase exit and the count is zero:
-the alpha's runner halts on the first failure and offers no failure-policy seam
-at all, so there is no path that could write a skip record. Not withdrawn — the
-Kestrel Motor shred case still needs it. Owned by `projection-store-freeze`
-(HS-P0010), which owns both the suite rule and the port surface a skip record
-would be written through.]` The seam's shape is fixed by
+`[DEFERRED — the seam was built at phase 18 (#101) and its rule passes; freezing
+it is that phase's exit (#127). Not withdrawn at any point — the Kestrel Motor
+shred case needs it. Owned by `projection-store-freeze` (HS-P0010), which owns
+both the rule and the port surface a skip record is written through.]` The seam's shape is fixed by
 [ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) at phase 17 and
 built at phase 18: a provided `on_error` on `Projection`, defaulting to halt,
 handed the failure — a decode failure or an apply failure, each carrying the
@@ -6422,11 +6420,16 @@ batch that advances the checkpoint. Over a live batch, a statement the server
 refuses aborts the transaction, so skipping past it needs a savepoint around the
 failing statement; the runner cannot issue one without a generic write, which PS-9
 forbids.
-**Rule:** the new `skip_and_record_is_atomic` — a projection whose
-`Projection::on_error` writes a probe row; feed it a failing event; assert the
-probe row and the advanced checkpoint are both present after a crash injected
-between them. Integration-level: it needs a runner, so §4.11 lists it apart from
-the adapter suite and its home is the workspace e2e crate. (The callback is
+**Rule:** `skip_and_record_is_atomic`, in
+`crates/happenstance/tests/failure_policy.rs` — a projection whose
+`Projection::on_error` writes a record row and answers `Policy::Skip`; feed it a
+poisoned event. After the skip, the record and the checkpoint at the poisoned
+position are both present. After a failure injected between the record and the
+commit, both are absent, and a restart writes them together. Never one without
+the other. The same file runs the rule against three wrong runners, one defect
+each — a swallowed skip, a checkpoint short of the skip, and a record committed
+in a batch of its own — and each fails it. Integration-level: it needs a
+runner, so §4.11 lists it apart from the adapter suite. (The callback is
 qualified for the reason PS-16's probe method is —
 `references/evaluation/ps-clause-pairing-sweep.md:466-474`.)
 **Cases:** E2E-26, E2E-27.
@@ -6439,28 +6442,18 @@ Article 17 evidence, so a swallowed skip is a compliance failure rather than a
 missing log line. Routing the record through the projection's own batch means no
 new port surface and no store-side knowledge of what a skip means.
 
-**Evaluated at the typed layer's phase exit, and the count is zero — but not for
-the reason the falsifier anticipated.** The falsifier expected *"record"* to
-degrade into *"log a warning"*. It did not: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:780`) writes nothing anywhere, logs nothing,
-and **halts** on the first failure it meets. There is no `on_error`, no
-`SkipPolicy` and no policy argument of any kind, and that absence is deliberate
-rather than unfinished — it is this clause's own *Rejects* read one layer up. A
-runner-level policy forces a single answer onto every projection an application
-runs, and two read models of different tolerance are exactly the case that makes
-one answer wrong; failure policy belongs to the projection, and the projection
-trait has no seam for it yet.
-
-**So the requirement is deferred, not discharged and not withdrawn.** The skip
-primitive is still reachable by hand — a caller who spells `begin()` and
-`commit(batch, id, poison, Live)` themselves skips atomically today — and what
-is still missing is the typed way to record that it happened.
-`projection-store-freeze` (HS-P0010) owns both halves: the suite rule
-`skip_and_record_is_atomic` and the port surface the record would ride on. The
-artefact that reopens this clause is a per-projection failure policy on
-`Projection`; until one exists, an executed test holds the count
-(`crates/happenstance/tests/projection_clauses.rs`), so the day the runner grows
-one, the clause that says it has not goes red.
+**Count retaken at phase 18: one.** The falsifier expected *"record"* to
+degrade into *"log a warning"*, and it never did: `happenstance::run_projection`
+(`crates/happenstance/src/runner.rs:846`) writes nothing anywhere, logs nothing,
+and now offers the failure instead. `Projection` carries a provided
+`on_error`, defaulting to halt, so a projection that says nothing stops at the
+first failure as the alpha's runner did; one that answers `Policy::Skip` has its
+record ride its own batch, which the runner commits with the checkpoint that
+moves past the poisoned event. The policy is the projection's and not the
+loop's — no `SkipPolicy`, no sixth argument — which is this clause's *Rejects*
+read one layer up. The tripwire that pinned the absence now pins the presence
+(`crates/happenstance/tests/projection_clauses.rs`), so the day the seam goes,
+the clause that says it exists goes red.
 
 **PS-28 — A failing `apply` MUST report the position it failed at, and MUST be
 able to carry an application error type distinct from the projection store's.**
@@ -6543,7 +6536,7 @@ and the obstacle is now stronger than *"nobody got round to it"*.** The port's
 shared between tasks at all — and moving one into a `tokio::spawn` would
 additionally require `Send`, which the flavour that exists for `wasm32` cannot
 promise. `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:780`) therefore drives exactly one
+(`crates/happenstance/src/runner.rs:846`) therefore drives exactly one
 projection per call, catches no unwind, and spawns nothing; N read models cost N
 independent reads.
 
@@ -6671,7 +6664,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:780`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:846`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 

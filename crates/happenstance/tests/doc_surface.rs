@@ -242,6 +242,8 @@ fn new_identifiers_fit_the_item_table() {
         "Projection",
         "SendProjection",
         "Delivered",
+        "ApplyFailure",
+        "Policy",
         "run_projection",
         "Progressed",
         "ProjectionError",
@@ -360,6 +362,11 @@ fn crate_root_renders_the_projection_surface() {
     assert!(
         root.contains("pub use delivered::Delivered;"),
         "`Delivered`, the argument of `apply`, is not re-exported at the root"
+    );
+    assert!(
+        root.contains("pub use policy::{ApplyFailure, Policy};"),
+        "`ApplyFailure` and `Policy`, what `on_error` is handed and answers, \
+         are not re-exported at the root"
     );
 
     // The density budget, in the units the design fixed; 132 since #193's

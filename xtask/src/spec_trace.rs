@@ -1331,7 +1331,7 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 66] = [
     (
         "PS-27",
         "skip_and_record_is_atomic",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/failure_policy.rs"),
     ),
     (
         "PS-28",

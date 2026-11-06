@@ -61,7 +61,7 @@ renews them with the disposition phase 16 gave.
       progress, position, source: A, rollback }`, named here. Whether an alias
       ships is this phase's choice. Write `pump_reports_the_failing_position`,
       defining *the last good position* as the last committed one.
-- [ ] #101 · **The failure-policy seam** through which *skip and record* is written
+- [x] #101 · **The failure-policy seam** through which *skip and record* is written
       atomically with the checkpoint (PS-27), in ADR-0074's shape: a provided
       `on_error(&mut self, failure: &ApplyFailure<'_, Self::Error>, batch: &mut
       <Self::Store as ProjectionStore>::Batch) -> impl Future<Output =
@@ -126,7 +126,7 @@ renews them with the disposition phase 16 gave.
 - [ ] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
 - [ ] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
-      (`crates/happenstance/src/runner.rs:785`) becomes a named `Chunk`:
+      (`crates/happenstance/src/runner.rs:851`) becomes a named `Chunk`:
       `#[non_exhaustive]`, private representation, `Chunk::of(NonZeroUsize)` its
       first constructor — the shape `Retry` already has
       (`crates/happenstance/src/command.rs:43-62`). The fan-out runner above takes
@@ -302,3 +302,22 @@ PS-30 each with a rule and a mutant that fails it.
   rustdoc, so its five `E0277`s were read off a compiled copy. D3:
   `a_concrete_bare_projection_spawns`. `experiments/apply-shape/tests/shipped_spawn.rs`
   still binds the bare, synchronous shape and stays as the spike's record.
+- 2026-11-06 — #101: `Projection` gains the provided `on_error`, handed an
+  `ApplyFailure` (`Decode` or `Apply`, each carrying the `EventId` and a borrowed
+  source) and the open batch, answering a `Policy` (`Halt`, `Skip`). The default
+  halts; no projection in the tree was edited. The owner decisions were taken **as
+  recommended** while the owner is asked, one commit each where the code allows:
+  O1(a), a generic spawner adds `P::Error: Sync`, measured by the `E0277` on
+  `run_projection_spawns_from_code_generic_over_the_projection` without it; O2(a),
+  `Progressed::skipped`; O3(a), `const fn` constructors `ApplyFailure::decode` and
+  `::apply`, which the rule's wrong runners need to live outside the crate. A skip
+  counts toward `chunk`, and the checkpoint moves to a skipped event (the window
+  rule): a log of nothing but poison still commits every `chunk` events.
+  `skip_and_record_is_atomic` reads PS-27's *"crash injected between them"* as
+  *both present after a skip, both absent after a failure injected between the
+  record and the commit, and both written by the restart*; it runs against
+  `run_projection` and three wrong runners in `tests/failure_policy.rs`, each
+  failing the legs it names. The tripwire item above names the old test; its
+  replacement is `the_failure_policy_is_the_projections_and_halts_by_default`,
+  which pins the seam's presence. PS-27 stays `[DEFERRED]` for #127; PS-26's rule
+  stays #112's.

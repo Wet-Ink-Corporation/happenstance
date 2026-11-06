@@ -20,6 +20,7 @@
 use happenstance_core::ProjectionStore;
 
 use crate::delivered::Delivered;
+use crate::policy::ApplyFailure;
 use crate::runner::SendProjection;
 
 const _: () = {
@@ -41,6 +42,19 @@ const _: () = {
     ) {
         fn is_send<T: Send>(_: &T) {}
         is_send(&SendProjection::apply(projection, event, batch));
+    }
+
+    /// `on_error`'s future on the `Send` flavour is `Send`, from the trait.
+    ///
+    /// It is a provided `-> impl Future` item, not an `async fn`, so this
+    /// rejects a `trait-variant` that adds `+ Send` to one spelling only.
+    fn _send_flavour_on_error_future_is_send<P: SendProjection>(
+        projection: &mut P,
+        failure: &ApplyFailure<'_, P::Error>,
+        batch: &mut <P::Store as ProjectionStore>::Batch,
+    ) {
+        fn is_send<T: Send>(_: &T) {}
+        is_send(&SendProjection::on_error(projection, failure, batch));
     }
 
     /// The `Send` flavour keeps `Error`'s `From` bound.
