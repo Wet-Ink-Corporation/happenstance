@@ -129,7 +129,7 @@ body stays byte-identical — the shape `kb-decision-0029` used against `kb-deci
 
 **Sub-question 1 is answered `ratify`, and one `wrappers` list carries both names.**
 `deny.toml`'s single `deny` entry for `async-trait` now lists three wrappers —
-`wasm-bindgen-test`, `worker`, `worker-macros` (`deny.toml:74-80`) — so the second half of
+`wasm-bindgen-test`, `worker`, `worker-macros` (`deny.toml:81-87`) — so the second half of
 the sub-question resolves the way the mechanism forces rather than the way taste would:
 `wrappers` matches by crate name, `worker-macros` is a distinct node in the graph, and one
 name could not have covered both. What the decision refused to do is collapse the *reason*.
@@ -138,7 +138,7 @@ appearing in no published artifact; `worker` is a normal dependency of
 `happenstance-cloudflare` and does ship, and is exempt on the different argument this atom
 already set out above — it uses the macro for its own `DurableObject` trait, which the
 workspace implements without deriving any `happenstance` port from it. Both arguments are
-written into `deny.toml` beside the entry (`deny.toml:49-73`), which is what the ratify
+written into `deny.toml` beside the entry (`deny.toml:56-80`), which is what the ratify
 shape asked for, and the entry's `reason` string names both ADRs.
 
 **Sub-question 2 is not reached, and stops being this atom's.** It was conditional on

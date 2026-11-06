@@ -8,7 +8,7 @@
 //! read-back rule that forgot to settle fails a conformant store behind a lag,
 //! and a rule here that does not settle is caught by not skipping.
 
-/// The 83 named rules that read, count or exclude an event they appended, and
+/// The 84 named rules that read, count or exclude an event they appended, and
 /// so settle the frontier before they do (CF-42).
 ///
 /// The last six are the concurrency family's. Every one of them settles once,
@@ -79,6 +79,7 @@ pub(crate) const READS_BACK_ITS_OWN_WRITES: &[&str] = &[
     "store_accepts_the_guaranteed_minimum_tag_count",
     "store_evaluates_a_query_at_the_guaranteed_minimum_item_count",
     "store_accepts_the_guaranteed_minimum_batch_size",
+    "store_accepts_the_guaranteed_minimum_tags_per_batch",
     "tags_differing_only_by_unicode_normalisation_are_distinct",
     "tags_may_repeat_a_key",
     "append_preserves_event_type_and_tags_byte_for_byte",

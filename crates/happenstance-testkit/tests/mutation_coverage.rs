@@ -622,6 +622,10 @@ const REGISTRY: &[Declared] = &[
             // declared; this is the one whose failure is the loudest and whose
             // provenance names the same schema.
             "store_accepts_the_guaranteed_minimum_tag_count",
+            // And VT-36's, for the same reason: its batch is 128 events of
+            // sixty-four tags, read back through `Query::all()`, so every event
+            // comes back sixty-four times.
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
             // And unavoidable for the same reason one clause over: VT-17's rule
             // is about two values under one key, so its event carries three tags
             // by construction and this store returns three copies of it. There is
@@ -1090,9 +1094,9 @@ const REGISTRY: &[Declared] = &[
             // Inflation, and intrinsic rather than sloppy: a batch written
             // backwards is a batch read back backwards, so every rule that
             // appends more than one event in one call and cares which one is
-            // where fails too. Eight of them do. The registry's own caution about
+            // where fails too. Nine of them do. The registry's own caution about
             // reading this table as a map applies here more than anywhere except
-            // `InnerJoinTagStore`: these eight evidence the reordering, and the
+            // `InnerJoinTagStore`: these nine evidence the reordering, and the
             // first entry is the only one that evidences the *clause*.
             "query_all_matches_every_event",
             "query_item_types_are_or",
@@ -1102,6 +1106,7 @@ const REGISTRY: &[Declared] = &[
             "read_limit_truncates",
             "read_backwards_from_with_limit",
             "store_accepts_the_guaranteed_minimum_batch_size",
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
         ],
         provenance: "a multi-row `INSERT` assembled by pushing rows onto a stack and draining \
              it, or one that groups the batch by event type to bind one interned type id per \
@@ -2329,7 +2334,13 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "PackedTagColumnStore",
         kind: Kind::Mutant,
-        fails: &["store_accepts_the_guaranteed_minimum_tag_count"],
+        fails: &[
+            "store_accepts_the_guaranteed_minimum_tag_count",
+            // VT-36's floor is 128 events of VT-22's 64 tags, so every event of
+            // its batch overflows the same 255-byte column. Inflation: the
+            // defect is VT-22's, met again by the rule that multiplies it.
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
+        ],
         provenance: "the schema that avoids a side table and a join: the canonical tag list \
              joined into one `VARCHAR(255)`. It is correct for every event anybody \
              looked at — the richest in the six scenarios is Wattline's \
@@ -2371,6 +2382,9 @@ const REGISTRY: &[Declared] = &[
             // CF-40: the driver's parameter ceiling, stated as the batch ceiling it
             // actually is, and still refused through `AppendError::Store`.
             "append_reports_exceeded_store_limits",
+            // VT-36's batch is VT-24's 128 events, past this store's 100.
+            // Inflation: the defect is VT-24's, met by the rule that multiplies it.
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
         ],
         provenance: "a multi-row `INSERT` binding one parameter set per event and per tag, \
              meeting its driver's ceiling at write time — after the caller has made \
@@ -2391,6 +2405,9 @@ const REGISTRY: &[Declared] = &[
             // CF-40. `BatchParameterCeilingStore` with the fix applied wrongly: it
             // clamps rather than refusing, so nothing is reported at all.
             "append_reports_exceeded_store_limits",
+            // VT-36's batch is VT-24's 128 events, and this store keeps 100 of
+            // them. Inflation, as on the row above.
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
         ],
         provenance: "the fix applied after meeting `BatchParameterCeilingStore` in production, \
              applied wrongly: `&events[..CEILING]` where `events.chunks(CEILING)` \
@@ -2535,7 +2552,14 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "OffByOneTagsPerBatchStore",
         kind: Kind::Mutant,
-        fails: &["append_reports_exceeded_store_limits"],
+        fails: &[
+            "append_reports_exceeded_store_limits",
+            // Its stated ceiling is VT-36's floor, and `>=` refuses exactly the
+            // floor's batch. Coverage rather than inflation: a ceiling checked
+            // one short of the floor is a store below the floor, which is this
+            // rule's subject.
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
+        ],
         provenance: "a total checked `>=` where `>` was meant: documented as the most one append \
              carries and checked as the first total refused. Only an append of exactly the \
              stated ceiling, the branch's at-ceiling anchor, tells the two apart.",
@@ -2583,6 +2607,57 @@ const REGISTRY: &[Declared] = &[
         expect: &[(
             "append_reports_exceeded_store_limits",
             "below its own ceiling of",
+        )],
+    },
+    // --- VT-36's floor: 8,192 tags in one append (#368) ---------------
+    //
+    // VT-22's and VT-24's floors multiplied, which neither floor's own rule
+    // writes. One store meets a driver's parameter limit at the floor, one
+    // clamps to it, and one declares a ceiling under it. Each fails only the
+    // floor rule, and each `expect` pins the line that tells the three apart.
+    Declared {
+        name: "TagRowParameterCeilingStore",
+        kind: Kind::Mutant,
+        fails: &["store_accepts_the_guaranteed_minimum_tags_per_batch"],
+        provenance: "every tag row of an append bound into one multi-row `INSERT` at four \
+             parameters a row (tag, position, event type, store). `SQLITE_MAX_VARIABLE_NUMBER` \
+             has been 32,766 since SQLite 3.32, and 4 x 8,192 is 32,768, so the floor's \
+             batch is refused at write time, after the caller has decided. 8,191 tags fit, \
+             so nothing short of the floor finds it.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
+            "TooManyParameters",
+        )],
+    },
+    Declared {
+        name: "TagRowClampingStore",
+        kind: Kind::Mutant,
+        fails: &["store_accepts_the_guaranteed_minimum_tags_per_batch"],
+        provenance: "the fix for `TagRowParameterCeilingStore` applied wrongly: `&rows[..8_191]` \
+             where `rows.chunks(8_191)` was meant. The batch's first 8,191 tag rows are \
+             written, the rest are not, and `Ok` comes back carrying a real position.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
+            "every tag of every event must come back",
+        )],
+    },
+    Declared {
+        name: "TagsPerBatchBelowTheFloorStore",
+        kind: Kind::Mutant,
+        fails: &["store_accepts_the_guaranteed_minimum_tags_per_batch"],
+        provenance: "a measured wall declared as `MAX_TAGS_PER_BATCH` and never compared with \
+             VT-36's floor: one tag under it, enforced correctly as `TagsPerBatch` before any \
+             write, so `append_reports_exceeded_store_limits` passes it. Declaring the smaller \
+             number is not a fix for a store below the floor.",
+        mode: FailureMode::Assertion,
+        // The declaration check, not the refused append: without the check this
+        // store fails the same rule at `append_ok`, `limit: TagsPerBatch, len:
+        // 8192`, and the pin is what proves the check fires first.
+        expect: &[(
+            "store_accepts_the_guaranteed_minimum_tags_per_batch",
+            "below the floor of",
         )],
     },
 ];
@@ -2782,6 +2857,13 @@ macro_rules! for_each_mutant {
             >,
             crate::mutants::MutantFixture<
                 crate::mutants::tags_per_batch_ceilings::TagsPerBatchBelowTagsPerEventStore,
+            >,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_floor::TagRowParameterCeilingStore,
+            >,
+            crate::mutants::MutantFixture<crate::mutants::tags_per_batch_floor::TagRowClampingStore>,
+            crate::mutants::MutantFixture<
+                crate::mutants::tags_per_batch_floor::TagsPerBatchBelowTheFloorStore,
             >,
             crate::mutants::MutantFixture<crate::mutants::NormalisingTagStore>,
             crate::mutants::MutantFixture<crate::mutants::KeyedTagMapStore>,
@@ -3012,9 +3094,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Fifty-eight rows below are marked [`ModelOutcome::Agreed`] at this commit;
+/// Sixty-one rows below are marked [`ModelOutcome::Agreed`] at this commit;
 /// four of them are the conformant controls and *must* be, which leaves
-/// **fifty-four misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **fifty-seven misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -3098,6 +3180,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///   small batches, and the boundary is at 8,192 tags in one append, or at a
 ///   per-event ceiling of 64 or 1,024. Their control,
 ///   `TagsPerBatchCeilingStore`, is `Agreed` because it must be.
+/// * `TagRowParameterCeilingStore`, `TagRowClampingStore`,
+///   `TagsPerBatchBelowTheFloorStore` — VT-36's floor, at the same boundary of
+///   8,192 tags in one append, approached from below.
 ///
 /// That is the shape of the argument for the concurrency family, arriving from
 /// the other direction: three of the window-shaped six are exactly what a
@@ -3226,6 +3311,11 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("RefuseAfterInsertTagsPerBatchStore", ModelOutcome::Agreed),
     ("UnreachableTagsPerBatchStore", ModelOutcome::Agreed),
     ("TagsPerBatchBelowTagsPerEventStore", ModelOutcome::Agreed),
+    // VT-36's floor: the boundary is 8,192 tags in one append, which the
+    // generator's handful of tags in small batches never reaches.
+    ("TagRowParameterCeilingStore", ModelOutcome::Agreed),
+    ("TagRowClampingStore", ModelOutcome::Agreed),
+    ("TagsPerBatchBelowTheFloorStore", ModelOutcome::Agreed),
     ("NormalisingTagStore", ModelOutcome::Agreed),
     ("KeyedTagMapStore", ModelOutcome::Agreed),
     ("TrimmingIdentifierStore", ModelOutcome::Agreed),
@@ -4003,15 +4093,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 58,
-            "`MODEL_COVERAGE`'s heading says fifty-eight rows are `Agreed` and the \
+            agreed, 61,
+            "`MODEL_COVERAGE`'s heading says sixty-one rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            54,
-            "`MODEL_COVERAGE`'s heading says fifty-four misses and the table \
+            57,
+            "`MODEL_COVERAGE`'s heading says fifty-seven misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls

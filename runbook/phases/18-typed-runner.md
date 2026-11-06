@@ -20,7 +20,7 @@ renews them with the disposition phase 16 gave.
 
 **Work**
 
-- [ ] #98 · **`Projection::apply` in ADR-0074's shape**, against both batch shapes the
+- [x] #98 · **`Projection::apply` in ADR-0074's shape**, against both batch shapes the
       port was frozen on: a buffered batch, and `LivePostgresProjectionStore`'s
       live `sqlx` transaction. The spike in `experiments/apply-shape/src/shape.rs`
       is the reference, not the code to copy:
@@ -143,7 +143,10 @@ renews them with the disposition phase 16 gave.
 - [ ] #127 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-18` row
       in [the 1.0 dispositions](../ledgers.md), and what freezes it:
       - **PS-16** — a typed-runner rebuild through `reset` against a multi-table
-        or graph read model, with the `RESET_REFUSAL` clause composed in.
+        or graph read model, with the `RESET_REFUSAL` clause composed in. Built
+        at #129, and on SQLite only, so the freeze record has to say that the
+        `TRUNCATE` axis PS-16's falsifier names is held by the port rule's runs
+        on Postgres, Neon and Cloudflare, not by the typed test.
       - **PS-18** — the refusable reset above, a CF-39-shaped clause, and a
         `NoopProtectFixture` mutant. If this phase cannot deliver it, PS-18 is
         renewed past 1.0 as additive, by a record rather than by default.
@@ -234,6 +237,19 @@ PS-30 each with a rule and a mutant that fails it.
   `examples/rebuilding-read-models` shows. `.kb/decisions/0074…:226` still cites
   `runner.rs:158`, *"two type parameters, not three"*: its referent is the text
   this change deleted, so it stays as the record of the shipped 0.4 shape.
+- 2026-11-03 — #142, the #98 box's live leg: `run_projection` drives
+  `LivePostgresProjectionStore` with a projection whose `async fn apply` awaits
+  `LivePostgresBatch::execute`. Three tests in `happenstance-postgres`'s
+  `tests/live_projection.rs` (rows and checkpoint together across chunks; a chunk the
+  server aborted discarded whole; rows already sent rolled back by a commit fault) run
+  in the `live-postgres` job's existing trio, whose count derives from `--list`. D1 went
+  with option A: a path-only `happenstance` dev-dependency, the first adapter → typed
+  layer edge, dev-only. D2 went with (a): the docs say the live store is drivable and
+  keep the buffered store the default, with the held connection and the
+  no-savepoint abort (#103) stated. The four rewrites are line-neutral, so ADR-0084's
+  and the spec's citations below them hold. `.kb/decisions/0074…:68` and `:331` still
+  cite `live_projection_store.rs:38-47` as the *cannot be driven* paragraph; that
+  text is the one replaced, so they stay as the record of what it said.
 - 2026-11-03 — #107: `run_projection` reads and commits under
   `checkpoint_id(&projection)`, `name@` and 16 lowercase hex digits of a
   hand-written 64-bit FNV-1a, and a changed query starts a new checkpoint
@@ -252,6 +268,21 @@ PS-30 each with a rule and a mutant that fails it.
   adoption procedure is a compiled fence on `checkpoint_id` and a CHANGELOG
   entry (D7). Ten test sites moved onto `checkpoint_id` with no expected value
   changed (D4). PS-25 stays `[PROVISIONAL]` for #127.
+- 2026-11-06 — #129: PS-16's composed half, in
+  `examples/rebuilding-read-models/tests/rebuild_through_reset.rs`, a second target
+  in a package that already compiles the typed layer and `happenstance-sqlite`, so
+  no crate gains a dependency edge (D1). A typed `Projection` writes two tables, one
+  accumulating and one insert-only, is reset under `checkpoint_id(&view)` and
+  rebuilt to the same rows at two chunk sizes
+  (`rebuild_through_reset_restores_every_table`). The runbook procedure is written
+  down and shown to fail the same predicate, a reset whose third statement fails
+  leaves both tables and the checkpoint, and a protected reset through a handle
+  opened before the mark is refused while the view keeps running. PS-16's `Rule:`
+  line names the two rules in place, line for line, and `proof.rs` holds three of
+  the five names. PS-16 stays `[PROVISIONAL]` for #127 (D2). `view.id()` passed to
+  `reset` or `protect_from_reset` still type-checks and targets a row the runner
+  never writes; the file's documentation says so and no API changes (D3). SQLite
+  only: the `TRUNCATE` caveat is on #127's PS-16 line above (D4).
 - 2026-11-06 — #110: the bounds a spawner generic over the projection writes, measured
   on the shipped runner by removing each in turn (D1, the minimal set at merge):
   `S: SendEventStore<Error: Send> + Sync + 'static`,

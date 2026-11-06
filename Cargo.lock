@@ -974,6 +974,7 @@ name = "happenstance-postgres"
 version = "0.5.0"
 dependencies = [
  "futures-core",
+ "happenstance",
  "happenstance-core",
  "happenstance-sync",
  "happenstance-sync-testkit",

@@ -36,16 +36,16 @@
 //!   PS-12's rule, `batch_reads_reflect_pending_writes`, runs here against a real
 //!   database for the first time.
 //!
-//! # What a caller cannot do with it, stated rather than discovered
+//! # Driving it with the typed runner, and what that costs
 //!
-//! The typed layer's `Projection::apply` is synchronous — buffering a row does
-//! not await — so a projection cannot issue a statement into a
-//! [`LivePostgresBatch`] from inside `apply`. This store therefore cannot be
-//! driven by `happenstance::run_projection` for a projection that writes rows;
-//! the buffered [`PostgresProjectionStore`](crate::projection_store::PostgresProjectionStore)
-//! is what an application reaches for. Opening the probe seam let the **suite**
-//! observe a live-transaction batch; letting an **application** write into one
-//! is the axis after this one, and it belongs to the typed layer.
+//! Since ADR-0074 the typed layer's `Projection::apply` is `async`, so a
+//! projection awaits [`LivePostgresBatch::execute`] inside the live transaction
+//! and `happenstance::run_projection` drives it (`tests/live_projection.rs`).
+//! Statements reach the server as `apply` runs, at a cost: a pooled connection
+//! held for a whole chunk, and a refused statement aborts the transaction at
+//! once, with no savepoint yet (#103). The batch exposes no query method, so
+//! `apply` cannot read its pending writes back; only the probe does (PS-12).
+//! [`PostgresProjectionStore`](crate::projection_store::PostgresProjectionStore) stays the default.
 //!
 //! # The invariant
 //!

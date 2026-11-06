@@ -145,6 +145,10 @@ impl IngestFixture for WorkerdIngestFixture {
     const MAX_TAGS_PER_EVENT: Option<usize> =
         <WorkerdFixture<'static> as Fixture>::MAX_TAGS_PER_EVENT;
     const MAX_METADATA_LEN: Option<usize> = <WorkerdFixture<'static> as Fixture>::MAX_METADATA_LEN;
+    // The per-call ceiling, so the deployed leg runs VT-36's at-ceiling call
+    // through `ingest` on the real object: ADR-0100's falsifier on this path.
+    const MAX_TAGS_PER_BATCH: Option<usize> =
+        <WorkerdFixture<'static> as Fixture>::MAX_TAGS_PER_BATCH;
 
     /// A handle onto the one store `open` built: `Clone` is two `Rc` bumps.
     fn connect(&self) -> impl Future<Output = Self::Store> {
