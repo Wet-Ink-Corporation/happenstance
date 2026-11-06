@@ -828,7 +828,7 @@ where
 ///
 // The three sections above sit *after* the fence rather than beside the subject
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:780` as the location of this item and that
+// `crates/happenstance/src/runner.rs:846` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
 // above it pushes the item's declaration down and leaves the three citations
 // pointing at whatever line the item used to occupy.

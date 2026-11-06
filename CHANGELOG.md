@@ -55,8 +55,7 @@ not the same as what a user needed to be told.
   still compiles. `ProjectionError` gains a third type parameter `A`, the
   projection's error, which `Apply`'s `source` now carries, and there is no
   default: `ProjectionError<R, W>` no longer compiles. It also gains a
-  `Policy` arm for a failing per-projection failure policy, which nothing
-  constructs until that policy lands (#101). A caller generic over `P` that
+  `Policy` arm, for a failing `on_error` (below). A caller generic over `P` that
   sends the error elsewhere, into `anyhow` for instance, adds
   `P::Error: Send + Sync` to its own bounds.
 - `happenstance` (behind `unstable-projection`): `run_projection` takes
@@ -85,6 +84,15 @@ not the same as what a user needed to be told.
   because the name and its digest must fit VT-35's 255. Code that read a
   runner's checkpoint through `projection.id()` reads it through
   `checkpoint_id` now.
+- **Breaking, behind `unstable-projection`: `Projection` gains a provided
+  `on_error`** (PS-27, ADR-0074 decision 5, #101). No implementation has to
+  change: the default answers `Policy::Halt`, and a run halts on a decode or
+  apply failure exactly as before, with the same arm, position and checkpoint.
+  `Progressed`, `#[non_exhaustive]`, gains `skipped`: the events `on_error`
+  skipped and the run committed past, never counted in `applied`. Code generic
+  over the projection that spawns the run adds `P::Error: Sync` beside
+  `P::Error: Send`, because the runner holds the failure it hands `on_error`,
+  which borrows the error, across that await.
 - `happenstance-sqlite` (behind `projection-store`): the projection schema
   gains a `projection_protection` table, created on every open, and
   `projection_store::SCHEMA_VERSION` is `2` (PS-18, #118). A file is still
@@ -136,7 +144,19 @@ not the same as what a user needed to be told.
   are not `Send` (`E0277`). The `Projection` page compiles both spellings,
   and *Which flavour to implement* now says that `SendProjection` matters
   only where code generic over the projection spawns the run. No code
-  changes.
+  changes. Since #101 the projection's bound is
+  `Error: Send + Sync`; see `on_error` above.
+- `happenstance` (behind `unstable-projection`): skip-and-record (PS-27, #101).
+  `Projection::on_error` is handed an `ApplyFailure` and the open batch, and
+  answers a `Policy`. `Policy` is `Halt` or `Skip`, `#[non_exhaustive]`.
+  `ApplyFailure` is `Decode` or `Apply`, each carrying the event's `EventId`
+  and a borrowed source, with `id()` and the `const fn` constructors
+  `ApplyFailure::decode` and `ApplyFailure::apply`, so an application can
+  unit-test its own `on_error`; it has no accessor for the local position
+  (SY-21). Under `Skip`, a record `on_error` writes into the batch commits with
+  the checkpoint that moves past the event, or not at all, and the skipped
+  event counts toward `chunk`. A failing `on_error` stops the run with
+  `ProjectionError::Policy`.
 
 ## [0.4.6] — 2026-11-02
 

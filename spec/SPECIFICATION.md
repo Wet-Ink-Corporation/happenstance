@@ -6444,7 +6444,7 @@ new port surface and no store-side knowledge of what a skip means.
 
 **Count retaken at phase 18: one.** The falsifier expected *"record"* to
 degrade into *"log a warning"*, and it never did: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:780`) writes nothing of its own and logs
+(`crates/happenstance/src/runner.rs:846`) writes nothing of its own and logs
 nothing. What it does now is offer the failure. `Projection` carries a provided
 `on_error`, defaulting to halt, so a projection that says nothing stops at the
 first failure as the alpha's runner did; one that answers `Policy::Skip` has its
@@ -6536,7 +6536,7 @@ and the obstacle is now stronger than *"nobody got round to it"*.** The port's
 shared between tasks at all — and moving one into a `tokio::spawn` would
 additionally require `Send`, which the flavour that exists for `wasm32` cannot
 promise. `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:780`) therefore drives exactly one
+(`crates/happenstance/src/runner.rs:846`) therefore drives exactly one
 projection per call, catches no unwind, and spawns nothing; N read models cost N
 independent reads.
 
@@ -6664,7 +6664,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:780`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:846`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 
