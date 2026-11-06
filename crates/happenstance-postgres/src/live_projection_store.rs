@@ -40,12 +40,12 @@
 //!
 //! Since ADR-0074 the typed layer's `Projection::apply` is `async`, so a
 //! projection awaits [`LivePostgresBatch::execute`] inside the live transaction
-//! and `happenstance::run_projection` drives this store; `tests/live_projection.rs`
-//! runs one against a server. The cost: a pooled connection is held for a whole
-//! chunk, and a statement the server refuses aborts the transaction then and
-//! there, with no savepoint to recover it yet (#103). The buffered [`PostgresProjectionStore`](crate::projection_store::PostgresProjectionStore)
-//! holds no connection while `apply` runs and stays the default; this one is
-//! for a projection that must read its own pending writes.
+//! and `happenstance::run_projection` drives it (`tests/live_projection.rs`).
+//! Statements reach the server as `apply` runs, at a cost: a pooled connection
+//! held for a whole chunk, and a refused statement aborts the transaction at
+//! once, with no savepoint yet (#103). The batch exposes no query method, so
+//! `apply` cannot read its pending writes back; only the probe does (PS-12).
+//! [`PostgresProjectionStore`](crate::projection_store::PostgresProjectionStore) stays the default.
 //!
 //! # The invariant
 //!

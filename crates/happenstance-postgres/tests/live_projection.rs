@@ -477,10 +477,11 @@ impl Projection for Ledger {
 }
 
 /// Appends one `Deposited` per `(account, cents)` pair and returns the
-/// positions the store assigned, in order.
+/// positions the store assigned to those events, in order.
 ///
-/// Returned rather than assumed: the specification permits gaps, so a test
-/// compares against what the store actually handed out.
+/// The events already held are skipped, and nothing else appends to `events`
+/// while this runs. Returned rather than assumed: the specification permits
+/// gaps, so a test compares against what the store actually handed out.
 async fn deposit(
     events: &MemoryEventStore,
     deposits: &[(&str, i64)],
@@ -496,10 +497,12 @@ async fn deposit(
             Ok(Event::new(DEPOSITED, data)?)
         })
         .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+    let before = events.snapshot().len();
     events.append(&encoded, None).await?;
     Ok(events
         .snapshot()
         .iter()
+        .skip(before)
         .map(|recorded| recorded.position)
         .collect())
 }

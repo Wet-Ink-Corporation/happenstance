@@ -48,7 +48,7 @@
 //! different route. It is the default an application reaches for: it holds no
 //! connection while `apply` runs, and nothing reaches the server until `commit`.
 //! Since ADR-0074 the live store is drivable by the typed runner too, and pays
-//! a pooled connection held for each chunk in return for reading its own writes.
+//! a pooled connection held for each chunk to send statements as `apply` runs.
 //!
 //! # What that costs, stated rather than discovered
 //!

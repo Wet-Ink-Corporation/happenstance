@@ -160,12 +160,16 @@ already written in the same batch cannot be written against the buffered
 store.** `READS_THROUGH_BATCH` is `false` and the conformance suite reports it
 as a skip rather than passing quietly.
 
-`LivePostgresProjectionStore` can. Its batch is a real transaction opened at
-`begin`, and since the typed layer's `apply` became `async` (ADR-0074) a
-projection awaits `LivePostgresBatch::execute` inside it and `run_projection`
-drives it. The trade: a pooled connection held for a whole chunk, and a
-statement the server refuses aborts the transaction then and there, with no
-savepoint to recover it yet (#103).
+`LivePostgresProjectionStore`'s batch is a real transaction opened at `begin`,
+and since the typed layer's `apply` became `async` (ADR-0074) a projection
+awaits `LivePostgresBatch::execute` inside it and `run_projection` drives it:
+statements reach the server as `apply` runs. The transaction does read through
+(PS-12's rule runs against it, through the conformance probe), but
+`LivePostgresBatch` has no query method yet, so `apply` cannot read its pending
+writes back on either store. The trade for the live store: a pooled connection
+held for a whole chunk, and a statement the server refuses aborts the
+transaction then and there, with no savepoint to recover it yet (#103). The
+buffered store stays the default.
 
 ## Limits this store enforces
 
