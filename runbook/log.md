@@ -10,6 +10,24 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-06 — the savepoint caveat on a live batch (#103)
+
+*Committed on `claude/project-thread-u1dtdj-103`, stacked on #388, #391 and #393 and
+merged with `origin/phase-18` (#142, #129) in a commit of its own.* `Policy::Skip`'s
+rustdoc says it is not universal: over a batch that is a live transaction, a statement
+the server refuses aborts it, and only a savepoint `apply` itself sets recovers the
+batch for `on_error`'s record. `on_error`'s page states the limit, line-neutrally.
+`LivePostgresBatch` gains no helper (O1(a)); PS-9's text is untouched, and its "has not
+been run" is left for #127 (O2(b)). Detail in
+[phase 18's session log](phases/18-typed-runner.md).
+
+**Verified.** The temper gate against `origin/phase-18` on the merge commit and on the
+head; the live run, `cargo test -p happenstance-postgres --all-features --test
+live_projection -- --ignored --test-threads=1`, against PostgreSQL 17.10: `test result:
+ok. 28 passed; 0 failed`; `cargo xtask lints`, `spec-trace`, `lint-constitution`,
+`proof-artefact`, and `lint-kb` against `origin/phase-18`; `git diff --numstat` shows
+`runner.rs`, `live_projection_store.rs` and `SPECIFICATION.md` line-neutral.
+
 ## 2026-11-02 — `Projection::apply` is `async` (#98, #135, #138)
 
 *Committed on `claude/project-thread-u1dtdj-98`, based on `phase-18`.* ADR-0074

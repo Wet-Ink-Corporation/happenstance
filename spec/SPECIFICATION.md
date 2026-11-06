@@ -6417,9 +6417,9 @@ built at phase 18: a provided `on_error` on `Projection`, defaulting to halt,
 handed the failure — a decode failure or an apply failure, each carrying the
 `EventId` — and the batch, so the record is written by application code into the
 batch that advances the checkpoint. Over a live batch, a statement the server
-refuses aborts the transaction, so skipping past it needs a savepoint around the
-failing statement; the runner cannot issue one without a generic write, which PS-9
-forbids.
+refuses aborts the transaction, so skipping past it needs a savepoint `apply`
+itself sets around the failing statement; the runner cannot issue one without a
+generic write, which PS-9 forbids.
 **Rule:** `skip_and_record_is_atomic`, in
 `crates/happenstance/tests/failure_policy.rs` — a projection whose
 `Projection::on_error` writes a record row and answers `Policy::Skip`; feed it a
