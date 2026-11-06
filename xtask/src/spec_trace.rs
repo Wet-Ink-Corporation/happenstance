@@ -1013,7 +1013,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 66] = [
     // ---- VT: value types -------------------------------------------------
     (
         "VT-6",
@@ -1303,6 +1303,20 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
         "PS-6",
         "begin_resolves_at_its_first_poll_without_a_runtime",
         Unresolvable::Elsewhere("crates/happenstance-core/tests/projection_memory.rs"),
+    ),
+    (
+        // The composed half of PS-16: a typed `Projection` over two SQLite
+        // tables, reset and rebuilt through `run_projection`. It needs the typed
+        // layer and an adapter in one test graph, and the example package is
+        // the one place both already are, so no crate gains a dependency edge.
+        "PS-16",
+        "rebuild_through_reset_restores_every_table",
+        Unresolvable::Elsewhere("examples/rebuilding-read-models/tests/rebuild_through_reset.rs"),
+    ),
+    (
+        "PS-16",
+        "protected_reset_is_refused_and_the_view_keeps_running",
+        Unresolvable::Elsewhere("examples/rebuilding-read-models/tests/rebuild_through_reset.rs"),
     ),
     (
         "PS-25",
