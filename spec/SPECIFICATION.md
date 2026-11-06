@@ -1750,25 +1750,25 @@ the documentation half is a different claim from settling the number.
 There MUST NOT be a `MAX_TAGS_PER_BATCH` constant in `happenstance-core`. Every
 store MUST accept an append whose events carry `MIN_SUPPORTED_TAGS_PER_BATCH` =
 8,192 tags in all, the product VT-22 and VT-24 already oblige, so the floor adds
-no obligation of its own. A store MAY refuse a larger total, and if it does it
+no obligation of its own, and `store_accepts_the_guaranteed_minimum_tags_per_batch` is what holds a store to the product. A store MAY refuse a larger total, and if it does it
 MUST document its ceiling and MUST refuse beyond it as
 `AppendError::ExceedsStoreLimit { limit: StoreLimit::TagsPerBatch, .. }`. Its
 ceiling MUST be at least its own tags-per-event ceiling, so that a split batch
 reaches one that lands, and MUST be reachable under its events-per-batch ceiling,
-or it refuses nothing.
+or it refuses nothing. On the ingest path the batch is the call: every foreign event and every compensation of one `ingest` count together, and a refusal is `IngestError::ExceedsStoreLimit { limit: StoreLimit::TagsPerBatch, .. }`, which `happenstance-sync` classifies `Split`.
 
 `[PROVISIONAL — falsified by a store whose per-call wall is not a function of the
 tag count, so that no count says where it is; the instrument is
 happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384
 tag rows in one call]`
-`Rule:` unit tests `every_limit_names_its_floor` and
-`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`
+`Rule:` `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit_names_its_floor` and
+`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared ceiling to the whole ingest call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `TagsPerBatch`, `Split`, with nothing written
 `Cases:` E2E-35, E2E-42
 `Rejects:` a floor of 0, which would let a store refuse 128 events of 64 tags
 while claiming VT-22 and VT-24; and a ceiling below the per-event one, under
 which a sync runner's `Split` never reaches a batch it can land. The second is
 `TagsPerBatchBelowTagsPerEventStore`, and an unreachable ceiling is
-`UnreachableTagsPerBatchStore`.
+`UnreachableTagsPerBatchStore`. On the ingest path: a store that holds each group to the ceiling apart (`CountsEachGroupApart`), one that leaves the compensation out of the total (`LeavesCompensationUncounted`), one that refuses a call exactly at it (`RefusesAtTheBatchLimit`), and one that refuses the total as `TagsPerEvent`, `Park` (`RefusesTheTotalAsPerEvent`), all in `crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`. A store that binds four parameters per tag row into one statement and meets `SQLITE_MAX_VARIABLE_NUMBER` at 8,192 tags is `TagRowParameterCeilingStore`, its clamping fix is `TagRowClampingStore`, and a ceiling declared below the floor is `TagsPerBatchBelowTheFloorStore`.
 
 `happenstance-cloudflare` is the one store that declares the ceiling: 262,144
 tags per call, half the lowest measured wall (ADR-0100). Every other
@@ -4998,7 +4998,7 @@ has not yet passed. That agrees with ES-25, which evaluates a condition over wha
 the store holds, and with VT-8's uniqueness on the origin pair. Neither reading can
 produce a duplicate through ingest, which does not probe first
 (`crates/happenstance-sync/src/ingest.rs:97-101`), so agreement is the reason, and
-`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:7019-7022`, `crates/happenstance-testkit/src/contract.rs:638-672`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
+`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:7116-7119`, `crates/happenstance-testkit/src/contract.rs:641-675`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
 
 The `async fn` spelling is load-bearing and matches ES-30's: a clause written
 without it describes a different method under `trait_variant`.
@@ -5995,10 +5995,10 @@ expressed through the same batch that carries ordinary writes; a store whose
 watch. Owned by the projection-port phase (RUNBOOK phase 2).]`
 **Rule:** `reset_clears_rows_and_checkpoint_together` — commit probe rows and a
 checkpoint, then `reset` with a batch carrying `ProjectionProbe::probe_delete_all`;
-assert both gone. Paired with a failure-injecting variant asserting that a `reset`
-that errors leaves both halves as they were. (The probe method is qualified so
-that `spec-trace` reads it as the seam it is rather than as a second conformance
-rule — `references/evaluation/ps-clause-pairing-sweep.md:466-474`.)
+assert both gone, and that a failing `reset` leaves both (the probe is qualified as
+a seam — `references/evaluation/ps-clause-pairing-sweep.md:466-474`). Composed on two
+SQLite tables through the typed runner: `rebuild_through_reset_restores_every_table`,
+and, refused, `protected_reset_is_refused_and_the_view_keeps_running` (PS-18, CF-43).
 **Cases:** E2E-15, E2E-17.
 **Rejects:** the runbook procedure, which is two statements on two connections
 and is what Norvant's night desk executed: the truncate committed at 02:46:31,
@@ -7642,7 +7642,7 @@ with a 128 KiB value cap, against an origin store that has already durably
 committed a 340 KB payload. The experiment is whether a capability declaration
 prevents the failure or merely relocates it. Owning phase: the phase that builds
 the two peer adapters.]`
-Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte, the count capped at `MAX_PROVOKED_BATCH_EVENTS` and the bytes at `MAX_PROVOKED_BATCH_BYTES` and at what that many events can carry under `max_event_bytes`.
+Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared tags-per-batch ceiling to the whole call, compensation included; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte, the count capped at `MAX_PROVOKED_BATCH_EVENTS` and the bytes at `MAX_PROVOKED_BATCH_BYTES` and at what that many events can carry under `max_event_bytes`.
 Cases: E2E-35.
 
 *Rejects:* the asynchronous form of the declaration, which is the shape a peer
@@ -10346,7 +10346,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-33 | FROZEN | unit tests `a_borrowed_and_an_owned_tag_are_one_value`, `a_map_keyed_by_event_… | E2E-40, E2E-51 |
 | VT-34 | FROZEN | `read_from_is_inclusive` | *(none — see clause)* |
 | VT-35 | FROZEN | unit tests `projection_id_refuses_what_vt_14_refuses`, `projection_id_accepts_… | *(none — see clause)* |
-| VT-36 | PROVISIONAL | unit tests `every_limit_names_its_floor` and `the_tags_per_batch_floor_is_two_… | E2E-35, E2E-42 |
+| VT-36 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit… | E2E-35, E2E-42 |
 
 #### `WF` — wire format (§2.7)
 
@@ -10432,7 +10432,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-13 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-21, E2E-22 |
 | PS-14 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-22 |
 | PS-15 | FROZEN | `commit_rejects_a_foreign_batch` | E2E-19 |
-| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` | E2E-15, E2E-17 |
+| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together`, `rebuild_through_reset_restores_e… | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` | E2E-18 |
 | PS-18 | DEFERRED | `refused_reset_changes_nothing` | E2E-18 |
 | PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-16 |

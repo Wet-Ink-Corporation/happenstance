@@ -4,6 +4,13 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# RUSTSEC-2026-0440: astral-tokio-tar is unmaintained (2026-11-03), no fixed
+# version exists, and it reaches this workspace only through testcontainers
+# 0.28.0, a dev-dependency of happenstance-postgres. Nothing published depends
+# on it. Remove this entry once testcontainers moves off it (#387).
+ignore = [
+    { id = "RUSTSEC-2026-0440", reason = "unmaintained, dev-only via testcontainers 0.28.0; no fix exists yet (#387)" },
+]
 
 [licenses]
 version = 2
