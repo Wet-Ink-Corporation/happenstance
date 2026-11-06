@@ -1233,7 +1233,7 @@ pub enum CloudflareEventStoreError {
         ///
         /// Carried beside `cause` rather than replacing it, the way
         /// `happenstance::runner::Error::Read`'s `rollback` sits beside its own
-        /// `source` (`crates/happenstance/src/runner.rs:202-219`): thiserror
+        /// `source` (`crates/happenstance/src/runner.rs:394-405`): thiserror
         /// permits one `#[source]` per variant, `cause` is what a caller must
         /// act on, and this field stays out of the chain rather than hiding it.
         while_discarding: Box<CloudflareEventStoreError>,

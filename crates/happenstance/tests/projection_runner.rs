@@ -885,7 +885,10 @@ async fn pump_reports_the_failing_position() {
 
     let key = checkpoint_id(&projection).expect("a derivable id");
     assert_eq!(
-        models.checkpoint(&key).await.unwrap(),
+        models
+            .checkpoint(&key)
+            .await
+            .expect("the memory store reads its checkpoint"),
         Checkpoint::Live { through: committed }
     );
     assert_eq!(models.get("d7"), Some(1 + 2 + 3));

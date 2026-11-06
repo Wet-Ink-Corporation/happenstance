@@ -126,6 +126,17 @@ not the same as what a user needed to be told.
   `NoopProtectFixture`, the fixture that declares it and protects nothing, as
   failing `refused_reset_changes_nothing`. No conformance rule changes, and
   the testkit's published change is documentation only.
+- `happenstance` (behind `unstable-projection`), documentation: the bounds a
+  spawner generic over the projection writes to `tokio::spawn` a
+  `run_projection` (#110), each measured load-bearing:
+  `S: SendEventStore<Error: Send> + Sync + 'static`,
+  `P: SendProjection<Store = St, Event: Send, Error: Send> + 'static` and
+  `St: SendProjectionStore<Batch: Send> + Sync + 'static`. `St` is a type
+  parameter of the caller's own: written as `P::Store`, the store's futures
+  are not `Send` (`E0277`). The `Projection` page compiles both spellings,
+  and *Which flavour to implement* now says that `SendProjection` matters
+  only where code generic over the projection spawns the run. No code
+  changes.
 
 ## [0.4.6] — 2026-11-02
 
