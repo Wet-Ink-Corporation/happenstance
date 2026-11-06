@@ -149,7 +149,7 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// ) -> tokio::task::JoinHandle<(P, Result<Progressed, String>)>
 /// where
 ///     S: SendEventStore<Error: Send> + Sync + 'static,
-///     P: SendProjection<Store = St, Event: Send, Error: Send>
+///     P: SendProjection<Store = St, Event: Send, Error: Send + Sync>
 ///         + 'static,
 ///     St: SendProjectionStore<Batch: Send> + Sync + 'static,
 /// {
@@ -205,7 +205,7 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// ) -> tokio::task::JoinHandle<(P, Result<Progressed, String>)>
 /// where
 ///     S: SendEventStore<Error: Send> + Sync + 'static,
-///     P: SendProjection<Event: Send, Error: Send> + 'static,
+///     P: SendProjection<Event: Send, Error: Send + Sync> + 'static,
 ///     P::Store: SendProjectionStore<Batch: Send> + Sync + 'static,
 /// {
 ///     tokio::spawn(async move {
@@ -625,11 +625,14 @@ where
 ///   store: on a failure this runner holds the stop, which carries either,
 ///   across the port's `rollback` await, because one [`ProjectionError`]
 ///   needs the error *and* what the rollback said.
+/// - `P::Error: Sync`: the runner holds the [`ApplyFailure`] it hands
+///   [`on_error`](Projection::on_error), which borrows the error, across
+///   that await, and `&A` is `Send` only where `A` is `Sync`.
 /// - `Sync` on both stores, which are borrowed across awaits, and `'static`
 ///   on all three, for the spawn.
 ///
-/// `P: Send` comes with `SendProjection`, its supertrait. No `Error: Sync`
-/// is needed, and no store error crosses an await. `Error` has no `Send`
+/// `P: Send` comes with `SendProjection`, its supertrait. No store error
+/// crosses an await, so no store error needs `Sync`. `Error` has no `Send`
 /// bound by design, on the port's error and the projection's, so the bound
 /// is yours to add, or declare ADR-0009's marker trait and bound on that.
 /// [`Projection`]'s *Spawning a run from code generic over the projection*

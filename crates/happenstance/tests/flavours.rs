@@ -602,13 +602,15 @@ async fn run_projection_spawns_from_generic() {
 ///   holds the `Delivered<P::Event>` argument across that await.
 /// - `P::Error: Send` and `S::Error: Send`. The runner's private `Stopped`
 ///   holds either across the port's `rollback` await.
+/// - `P::Error: Sync`. The runner holds the `ApplyFailure` it hands
+///   `on_error`, which borrows the error, across that await (#101).
 /// - `Batch: Send`. The batch is held across every `apply` await.
 /// - `S: Sync`, `St: Sync`. The runner holds `&S` and `&St` across awaits.
 /// - `'static` on all three, for `tokio::spawn`.
 ///
 /// `P: Send` is not written: `SendProjection` has `Send` as a supertrait.
-/// Nor is any `Error: Sync`, nor `St::Error: Send`, because no store error
-/// crosses an await. A runner change that holds a new value across one fails
+/// Nor is a store's `Error: Sync`, nor `St::Error: Send`, because no store
+/// error crosses an await. A runner change that holds a new value across one fails
 /// here until this signature and the page both grow the bound.
 #[cfg(feature = "unstable-projection")]
 fn spawns_a_projection_generic_over_its_type<S, P, St>(
@@ -618,7 +620,7 @@ fn spawns_a_projection_generic_over_its_type<S, P, St>(
 ) -> tokio::task::JoinHandle<(P, usize)>
 where
     S: happenstance::SendEventStore<Error: Send> + Sync + 'static,
-    P: happenstance::SendProjection<Store = St, Event: Send, Error: Send> + 'static,
+    P: happenstance::SendProjection<Store = St, Event: Send, Error: Send + Sync> + 'static,
     St: happenstance::SendProjectionStore<Batch: Send> + Sync + 'static,
 {
     tokio::spawn(async move {
