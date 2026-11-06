@@ -135,6 +135,36 @@ not the same as what a user needed to be told.
   failing `refused_reset_changes_nothing`. No conformance rule changes, and
   the testkit's published change is documentation only.
 
+- `happenstance-testkit`: the rule
+  `store_accepts_the_guaranteed_minimum_tags_per_batch` (VT-36, #368). It
+  appends 128 events of 64 distinct tags each, 8,192 tags in one call, and
+  requires every tag of every event back. Neither VT-22's rule nor VT-24's
+  writes that product, so a store that meets each floor alone and not the two
+  together passed both. **A third-party adapter that passed `0.4.6`'s suite can
+  fail this one**, for example by binding every tag row of an append into one
+  statement and meeting its driver's parameter limit. That store did not meet
+  VT-22 and VT-24 jointly, which the contract already required. A fixture
+  whose `MAX_TAGS_PER_BATCH` is below 8,192 now fails the rule on the
+  declaration, before anything is written: declaring the smaller number is not
+  the fix. Every adapter in this workspace declares either no tags-per-batch
+  ceiling or one above the floor.
+- **`happenstance-sync-testkit`: `IngestFixture::MAX_TAGS_PER_BATCH`** and the
+  ingest rule **`ingest_holds_the_call_to_its_tags_per_batch_ceiling`** (VT-36,
+  SY-18; #370). A store that declares a tags-per-call ceiling is held to it over
+  the whole `ingest` call, every group and every compensation counted together: a
+  call exactly at the ceiling lands, and a call one tag over, spread across groups
+  or over only in its compensation, is refused as `IngestError::ExceedsStoreLimit
+  { limit: TagsPerBatch, .. }`, class `Split`, with nothing written. The const is
+  defaulted to `None`, so an existing fixture still compiles, and a fixture that
+  declares nothing reports the rule **skipped** with `NO_TAGS_PER_BATCH_LIMIT`
+  and `NO_TAGS_PER_BATCH_LIMIT_REASON`. `MAX_PROVOKED_TAGS_PER_BATCH` (524,288)
+  is the most tags the rule allocates in one call. Adding a rule can turn a
+  passing adapter's CI red, so pin this crate exactly. The rule does not check
+  that the over-ceiling call fits under an events-per-call ceiling:
+  `IngestFixture` declares none yet.
+  `happenstance-cloudflare`'s ingest fixture and the workerd harness declare
+  262,144 and run it, the harness also on the deployed object.
+
 ## [0.4.6] — 2026-11-02
 
 Additive in API, with one narrowing of published behaviour: `happenstance-cloudflare`

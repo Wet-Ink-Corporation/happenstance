@@ -108,6 +108,20 @@ enum Mistake {
     /// SY-18's third: refuse an event exactly at a ceiling, so the
     /// declaration is one larger than what the store takes.
     RefusesAtTheLimit,
+    /// VT-36's, the append path's check reused per group: hold each group's
+    /// foreign events and compensation to the tags-per-batch ceiling apart,
+    /// although the wall it guards is the call's one transaction.
+    CountsEachGroupApart,
+    /// VT-36's second, the one Cloudflare's unit test names: sum the foreign
+    /// events' tags and never the compensation the store writes itself.
+    LeavesCompensationUncounted,
+    /// VT-36's third: refuse a call exactly at the tags-per-batch ceiling, so
+    /// the declaration is one larger than what the store takes.
+    RefusesAtTheBatchLimit,
+    /// VT-36's fourth: the per-event arm pasted for the total with its limit
+    /// left alone, so the call is refused as `TagsPerEvent`, `Park`, and a
+    /// runner parks a call that would have landed halved.
+    RefusesTheTotalAsPerEvent,
     /// Not a mistake in the write: a store whose identity read fails, as a
     /// SQL store's does when its meta row is gone or its server is not
     /// reachable. Every rule that asks the store who it is must report the
@@ -121,6 +135,11 @@ enum Mistake {
 const WRONG_MAX_DATA_LEN: usize = 512;
 const WRONG_MAX_TAGS: usize = 8;
 const WRONG_MAX_METADATA_LEN: usize = 512;
+
+/// The tags-per-call ceiling every [`WrongIngestStore`] declares and enforces:
+/// at least [`WRONG_MAX_TAGS`], so it is coherent, and above every call any
+/// other rule makes, the largest of which is SY-18's control at 16.
+const WRONG_MAX_TAGS_PER_BATCH: usize = 64;
 
 /// The time this store stamps everything it writes itself.
 const ARRIVAL: RecordedAt = RecordedAt::from_millis(1_234_567_890_123);
@@ -275,7 +294,49 @@ impl WrongIngestStore {
                 self.within_ceilings(event)?;
             }
         }
-        Ok(())
+        self.within_the_batch_ceiling(groups)
+    }
+
+    /// The call's tags, every group and its compensation, are within the
+    /// tags-per-batch ceiling: after every per-event check, as Cloudflare
+    /// orders them, so a call over both is parked rather than split.
+    fn within_the_batch_ceiling(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<(), IngestError<WrongError>> {
+        let tags = |group: &IngestGroup<'_>| {
+            let foreign = group
+                .events
+                .iter()
+                .map(|shipped| shipped.event.tags().len());
+            let compensation = group.compensation.iter().map(|event| event.tags().len());
+            if self.mistake == Mistake::LeavesCompensationUncounted {
+                foreign.sum::<usize>()
+            } else {
+                foreign.chain(compensation).sum()
+            }
+        };
+        let totals: Vec<usize> = if self.mistake == Mistake::CountsEachGroupApart {
+            groups.iter().map(tags).collect()
+        } else {
+            vec![groups.iter().map(tags).sum()]
+        };
+        let over = |total: usize| {
+            if self.mistake == Mistake::RefusesAtTheBatchLimit {
+                total >= WRONG_MAX_TAGS_PER_BATCH
+            } else {
+                total > WRONG_MAX_TAGS_PER_BATCH
+            }
+        };
+        let limit = if self.mistake == Mistake::RefusesTheTotalAsPerEvent {
+            StoreLimit::TagsPerEvent
+        } else {
+            StoreLimit::TagsPerBatch
+        };
+        match totals.into_iter().find(|total| over(*total)) {
+            Some(total) => Err(IngestError::exceeds_store_limit(limit, total)),
+            None => Ok(()),
+        }
     }
 
     /// `event` is within every ceiling this store declares.
@@ -623,6 +684,8 @@ impl IngestFixture for WrongFixture {
     const MAX_EVENT_DATA_LEN: Option<usize> = Some(WRONG_MAX_DATA_LEN);
     const MAX_TAGS_PER_EVENT: Option<usize> = Some(WRONG_MAX_TAGS);
     const MAX_METADATA_LEN: Option<usize> = Some(WRONG_MAX_METADATA_LEN);
+    /// Mirrored too, so VT-36's ingest rule runs against every mistake here.
+    const MAX_TAGS_PER_BATCH: Option<usize> = Some(WRONG_MAX_TAGS_PER_BATCH);
 
     async fn connect(&self) -> Self::Store {
         WrongHandle(Arc::clone(&self.0))
@@ -766,6 +829,10 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
         ("an_unheld_own_identity_stops_the_ingest", "SY-38"),
         ("ingest_group_is_atomic_under_a_mid_group_fault", "SY-30"),
         ("ingest_validates_every_event_not_the_head", "SY-18"),
+        (
+            "ingest_holds_the_call_to_its_tags_per_batch_ceiling",
+            "VT-36",
+        ),
     ];
     assert_eq!(all.len(), clauses.len(), "a rule was added: {all:?}");
     for (name, verdict) in all {
@@ -970,5 +1037,65 @@ fn ingest_validates_every_event_not_the_head_fails_a_store_that_refuses_at_the_l
         &verdicts(async || WrongFixture::new(Mistake::RefusesAtTheLimit)),
         "ingest_validates_every_event_not_the_head",
         "SY-18",
+    );
+}
+
+/// The rule's arrangement A: two groups, each under the ceiling on its own.
+#[test]
+fn ingest_holds_the_call_to_its_tags_per_batch_ceiling_fails_a_store_that_counts_each_group_apart()
+{
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::CountsEachGroupApart)),
+        "ingest_holds_the_call_to_its_tags_per_batch_ceiling",
+        "VT-36",
+    );
+}
+
+/// The rule's arrangement B: the compensation alone takes the call over.
+#[test]
+fn ingest_holds_the_call_to_its_tags_per_batch_ceiling_fails_a_store_that_leaves_compensation_uncounted()
+ {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::LeavesCompensationUncounted)),
+        "ingest_holds_the_call_to_its_tags_per_batch_ceiling",
+        "VT-36",
+    );
+}
+
+/// The declaration off by one: only the rule's control sees it.
+#[test]
+fn ingest_holds_the_call_to_its_tags_per_batch_ceiling_fails_a_store_that_refuses_at_the_batch_limit()
+ {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::RefusesAtTheBatchLimit)),
+        "ingest_holds_the_call_to_its_tags_per_batch_ceiling",
+        "VT-36",
+    );
+}
+
+/// The refusal's limit, and with it its class: a call over the total is
+/// `Split`, never `Park`.
+#[test]
+fn ingest_holds_the_call_to_its_tags_per_batch_ceiling_fails_a_store_that_refuses_the_total_as_per_event()
+ {
+    let all = outcomes(async || WrongFixture::new(Mistake::RefusesTheTotalAsPerEvent));
+    fails_exactly(
+        &all.iter()
+            .map(|(name, outcome)| {
+                let clause = outcome.as_ref().copied().map_err(Violation::clause);
+                (*name, clause)
+            })
+            .collect::<Vec<_>>(),
+        "ingest_holds_the_call_to_its_tags_per_batch_ceiling",
+        "VT-36",
+    );
+    let message = all
+        .iter()
+        .find(|(name, _)| *name == "ingest_holds_the_call_to_its_tags_per_batch_ceiling")
+        .and_then(|(_, outcome)| outcome.as_ref().err())
+        .map(Violation::message);
+    assert!(
+        message.is_some_and(|message| message.contains("not as the tags per batch limit")),
+        "{message:?}"
     );
 }

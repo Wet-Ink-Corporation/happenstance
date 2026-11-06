@@ -45,6 +45,9 @@ use happenstance_sync::{
 ///   [`ingest_declensions_are_stated`] rejects a fixture that keeps them.
 /// * Three per-event ceilings, which SY-18's ingest rule holds to every event
 ///   an ingest writes. `None` by default: facts, not trades.
+/// * One per-call ceiling, [`MAX_TAGS_PER_BATCH`](Self::MAX_TAGS_PER_BATCH),
+///   which VT-36's ingest rule holds to the whole call, compensation
+///   included. `None` by default, for the same reason.
 pub trait IngestFixture {
     /// The store under test: an event store that also ingests.
     type Store: happenstance_core::EventStore + happenstance_sync::IngestStore;
@@ -80,6 +83,22 @@ pub trait IngestFixture {
     /// [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) is. Zero is a legal
     /// declaration, because the contract guarantees no metadata capacity.
     const MAX_METADATA_LEN: Option<usize> = None;
+
+    /// The most tags, summed over every foreign event and every compensation
+    /// event of one `ingest` call, the store accepts, or `None` for no ceiling
+    /// beyond what its per-event ceiling and its call length already imply.
+    ///
+    /// Mirrored from the adapter's own constant, as
+    /// [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) is. Stating a number
+    /// commits the store to landing a call that carries exactly that many and
+    /// to refusing one more as `IngestError::ExceedsStoreLimit { limit:
+    /// StoreLimit::TagsPerBatch, .. }`, class `Split`, with nothing written.
+    /// The call is the batch: its groups and their compensation count
+    /// together (VT-36, ADR-0100). It must be at least
+    /// [`MAX_TAGS_PER_EVENT`](Self::MAX_TAGS_PER_EVENT), or a call of one
+    /// event within its own ceiling is refused as a batch with nothing left
+    /// to split.
+    const MAX_TAGS_PER_BATCH: Option<usize> = None;
 
     /// A handle onto this fixture's one backing store.
     ///
