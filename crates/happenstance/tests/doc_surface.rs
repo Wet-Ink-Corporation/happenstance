@@ -244,6 +244,7 @@ fn new_identifiers_fit_the_item_table() {
         "Delivered",
         "ApplyFailure",
         "Policy",
+        "ConvergentProjection",
         "run_projection",
         "Progressed",
         "ProjectionError",
@@ -395,6 +396,19 @@ fn crate_root_renders_the_projection_surface() {
             "a crate-root doc line is {columns} columns; the budget is {budget}: {line}"
         );
     }
+}
+
+/// The convergence declaration (#123) is mounted at the root beside the
+/// runner's items, from its own module. Its own test because the one above
+/// is at clippy's length limit.
+#[test]
+fn crate_root_mounts_the_convergence_declaration() {
+    let root = read("lib.rs");
+    assert!(
+        root.contains("pub use convergence::ConvergentProjection;"),
+        "`ConvergentProjection`, the declaration a convergence check bounds \
+         on, is not re-exported at the root"
+    );
 }
 
 // ---------------------------------------------------------------------------
