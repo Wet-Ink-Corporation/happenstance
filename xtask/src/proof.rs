@@ -1,7 +1,7 @@
 //! Checks that each phase's proof artefact still holds the tests its clauses
 //! name, then runs them.
 //!
-//! [`ARTEFACTS`] carries nine targets today: the conformance suite's own
+//! [`ARTEFACTS`] carries, among its targets: the conformance suite's own
 //! `mutation_coverage` (CF-1 – CF-6, CF-18, and CF-22's model and concurrency
 //! families; [ADR-0010]), the two `wire` targets the wire format was frozen
 //! against ([ADR-0016]), the projection family's two — its mutant registry's
@@ -365,6 +365,24 @@ const REBUILDING_VIEWS_TESTS: &[&str] = &[
     "runs::the_poisoned_view_stops_and_the_others_advance",
 ];
 
+/// PS-16's composed half: a typed rebuild through `reset` on two tables (#129).
+///
+/// A second target in the same package, and not more names in `runs`, because
+/// these tests drive the stores directly rather than reading the binary's
+/// transcript. The first two are the names PS-16's `Rule:` line cites, so a
+/// rename has to meet the clause. `the_runbook_procedure_is_caught` is listed
+/// for the reason a mutant's meta-test is: it is the wrong implementation the
+/// first rule's predicate is shown to reject, and an `#[ignore]` on it would
+/// leave that predicate unproved while the rule it judges still passed. The
+/// last two are held so that no half of the target can be silenced alone.
+const REBUILD_THROUGH_RESET_TESTS: &[&str] = &[
+    "rebuild_through_reset::rebuild_through_reset_restores_every_table",
+    "rebuild_through_reset::protected_reset_is_refused_and_the_view_keeps_running",
+    "rebuild_through_reset::the_runbook_procedure_is_caught",
+    "rebuild_through_reset::failed_reset_leaves_every_table_and_the_checkpoint",
+    "rebuild_through_reset::allowed_reset_rebuilds_the_protected_view",
+];
+
 /// The two halves of `handles-and-quotas`: the boundaries, and the retry.
 ///
 /// `the_binary_takes_every_decision` checks that three *different* scopes are
@@ -473,6 +491,12 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         package: "rebuilding-read-models",
         target: "runs",
         tests: REBUILDING_VIEWS_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "rebuilding-read-models",
+        target: "rebuild_through_reset",
+        tests: REBUILD_THROUGH_RESET_TESTS,
         registry: None,
     },
     Artefact {
@@ -1203,7 +1227,7 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 ///   module that stopped compiling would leave that permission resting on
 ///   nothing;
 /// * the ingest store (#108, part F; behind `sync` since part E, which is why
-///   this row's selector passes `--features sync`): the six ingest rules and
+///   this row's selector passes `--features sync`): the seven ingest rules and
 ///   the fixture's capability check, mounted in a `--lib` module, so it has no
 ///   `WASM_TARGETS` row to be held to the enumeration by; the unit cases the
 ///   store's atomicity rests on — the settle table, the throw that takes the
@@ -1260,6 +1284,7 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::family::ingest_conformance::dedupe_reaches_identity_without_decoding",
     "event_store::ingest::tests::family::ingest_conformance::every_declined_capability_is_stated_by_this_fixture",
     "event_store::ingest::tests::family::ingest_conformance::ingest_group_is_atomic_under_a_mid_group_fault",
+    "event_store::ingest::tests::family::ingest_conformance::ingest_holds_the_call_to_its_tags_per_batch_ceiling",
     "event_store::ingest::tests::family::ingest_conformance::ingest_preserves_origin_identity",
     "event_store::ingest::tests::family::ingest_conformance::ingest_validates_every_event_not_the_head",
     "event_store::ingest::tests::family::ingest_conformance::ingested_events_land_above_the_local_head",

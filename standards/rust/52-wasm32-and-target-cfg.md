@@ -216,6 +216,6 @@ would then be held hostage by a version bump of the crate whose only job is to
 grade them, and the failure would read as a missing dependency in their crate.
 
 **Evidence.** `crates/happenstance-testkit/src/registry.rs:95 (captured as raw token trees)` ·
-`crates/happenstance-testkit/src/registry.rs:299 (macro_rules! emit_wasm {)` ·
+`crates/happenstance-testkit/src/registry.rs:300 (macro_rules! emit_wasm {)` ·
 `.github/workflows/ci.yml:278 (Install the wasm32 conformance runner)` ·
 [SPECIFICATION CF-23](../../spec/SPECIFICATION.md)
