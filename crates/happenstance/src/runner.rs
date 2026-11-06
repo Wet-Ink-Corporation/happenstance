@@ -315,9 +315,9 @@ pub trait Projection {
     /// The batch is handed over as `apply` left it; the runner cannot undo part
     /// of it without a generic write (PS-9), so a refused `apply`'s writes stay
     /// under `Skip`: an `apply` that may refuse should refuse before it writes.
-    /// On a live transaction a server refusal aborts the batch, and the chunk
-    /// commits nothing, `Skip` or not: see [`Policy::Skip`]. [`ApplyFailure`]
-    /// says which half failed and the event's identity, never its position.
+    /// On a live transaction a server refusal commits nothing unless `apply`
+    /// rolled back to its own savepoint ([`Policy::Skip`]). [`ApplyFailure`]
+    /// names the failed half and the event's identity, not its local position.
     ///
     /// The runner holds the borrowed failure across this await, so code
     /// generic over the projection that spawns the run adds `Error: Sync`.

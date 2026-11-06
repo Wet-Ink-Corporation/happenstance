@@ -102,7 +102,7 @@ impl LivePostgresBatch {
     /// The statement reaches the server now. If the server refuses it, the
     /// transaction is aborted and every later statement, the checkpoint upsert
     /// included, is refused, until a `ROLLBACK TO SAVEPOINT` for a `SAVEPOINT`
-    /// issued earlier through this method undoes it. Without one, hand the batch
+    /// issued earlier through this batch undoes it. Without one, hand the batch
     /// to [`rollback`](SendProjectionStore::rollback) or drop it.
     ///
     /// # Security

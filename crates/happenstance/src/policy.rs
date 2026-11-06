@@ -112,12 +112,13 @@ pub enum Policy {
     /// whatever `on_error` wrote.
     ///
     /// Not universal: it carries on only in a batch that is still usable. A
-    /// buffered batch, such as SQLite's, meets its server only at commit, so a
-    /// statement the server refuses fails the commit and no policy is asked. A
-    /// batch that *is* a live transaction, as `happenstance-postgres`'s
-    /// `LivePostgresBatch` is, sends each statement as `apply` runs, and one
-    /// the server refuses aborts the whole transaction: the record `on_error`
-    /// writes is refused with it, and the chunk commits nothing.
+    /// buffered batch, such as SQLite's, meets its database only at commit,
+    /// so a statement the database refuses fails the commit and no policy is
+    /// asked. A batch that *is* a live transaction, as the
+    /// `LivePostgresBatch` of `happenstance-postgres` is, sends each statement
+    /// as `apply` runs, and one the server refuses aborts the whole
+    /// transaction: the record `on_error` writes is refused with it, and the
+    /// chunk commits nothing.
     ///
     /// The runner sets no savepoint around `apply`, because that would be a
     /// write into a batch it knows nothing about, which PS-9 forbids (ADR-0074
