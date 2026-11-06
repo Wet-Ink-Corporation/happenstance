@@ -64,6 +64,27 @@ not the same as what a user needed to be told.
   with `Chunk::of(n)`. `Chunk` is `#[non_exhaustive]` and `Copy`, with a
   private representation and no `Default`; the runner stays exempt from semver
   while the feature gates it.
+- **Behaviour change, behind `unstable-projection`: `run_projection` reads and
+  commits a projection's checkpoint under `checkpoint_id(&projection)`**, not
+  under `projection.id()` (PS-25, ADR-0074 decision 9, #107). The id is the
+  name, `@`, and 16 lowercase hex digits of a 64-bit FNV-1a digest of the query
+  the runner derives from the projection's event types and scope. A projection
+  whose query changes now starts a new checkpoint and replays from the start,
+  instead of resuming past events its old query never nominated.
+  **A checkpoint written by `0.4.x` under the bare name reads `NeverRun` after
+  the upgrade, so the projection rebuilds from the start.** To keep its
+  position instead, adopt it — **only when the query did not change, and
+  before the new runner first runs**: read the old checkpoint under
+  `projection.id()`, and if it is `Live { through }` or
+  `Rebuilding { through }`, `begin()` an empty batch and
+  `commit(empty_batch, &checkpoint_id(&projection)?, through, authority)` with
+  `Authority::Live` or `Authority::Rebuilding` to match. Adopting across a
+  changed query re-creates the resume this change exists to prevent. The
+  orphaned bare-name row is harmless, and `reset` clears it. A name longer than
+  238 bytes is now refused with `ProjectionError::CheckpointId`, a new arm,
+  because the name and its digest must fit VT-35's 255. Code that read a
+  runner's checkpoint through `projection.id()` reads it through
+  `checkpoint_id` now.
 - `happenstance-sqlite` (behind `projection-store`): the projection schema
   gains a `projection_protection` table, created on every open, and
   `projection_store::SCHEMA_VERSION` is `2` (PS-18, #118). A file is still
@@ -86,6 +107,11 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance` (behind `unstable-projection`): `checkpoint_id`, the id the
+  runner keys a projection's checkpoint on, `InvalidCheckpointId`, why one
+  could not be derived, and `MAX_CHECKPOINT_NAME_LEN`, 238 (PS-25, #107). The
+  digest function, its encoding and the `@` separator are pinned by golden
+  values and documented on `checkpoint_id`.
 - `happenstance` (behind `unstable-projection`): `Delivered<E>`, the event
   `apply` is handed. It exposes `id()`, the origin's `EventId`, `event()` and
   `into_event()`, and a public `Delivered::new(id, event)` so an application can

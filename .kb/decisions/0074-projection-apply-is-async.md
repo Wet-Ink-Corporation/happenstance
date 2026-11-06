@@ -243,7 +243,7 @@ lifts the gate.
 9. **PS-25 takes the derived-id remedy.** The digest-in-checkpoint alternative changes the frozen
    `commit`, so it is refused here. The runner derives the `ProjectionId` it commits under from
    the projection's name and a digest of the `Query` it derives. The typed layer already holds
-   that query (`derive_query(P::Event::EVENT_TYPES, projection.scope())`, `runner.rs:627`).
+   that query (`derive_query(P::Event::EVENT_TYPES, projection.scope())`, `runner.rs:647`).
    - **The digest.** A hand-written 64-bit FNV-1a, rendered as 16 lowercase hex digits, over the
      query's items: each item encoded canonically, the encodings sorted and deduplicated, then
      hashed. The per-item encoding must be **injective**: length-prefixed fields with a marker

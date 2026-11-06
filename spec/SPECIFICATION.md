@@ -6324,9 +6324,9 @@ id is a `ProjectionId` and is bound by VT-35: [ADR-0082](../.kb/decisions/0082-p
 truncated or hashed, and requires a separator that occurs in no reserved prefix.
 **Rule:** the new `changed_query_starts_a_new_checkpoint` — commit under one
 query's derived id, then read the checkpoint under a second query's derived id and
-assert `NeverRun`. Contract-level only once `Query` has a canonical encoding;
-until then it is a typed-layer rule, and it is unwritten for that reason rather
-than by oversight.
+assert `NeverRun`. A typed-layer rule, written at phase 18 (#107) in
+`crates/happenstance/tests/projection_runner.rs`, with the `@` separator and US/RS/GS/FS
+terminators (VT-14) pinned by golden values; contract-level once `Query` has one.
 **Cases:** E2E-50.
 **Rejects:** every runner that keys a checkpoint on `ProjectionId` alone, which
 is every runner the port permits. ADR-0007 pins a projection's subscription to
@@ -6442,7 +6442,7 @@ new port surface and no store-side knowledge of what a skip means.
 **Evaluated at the typed layer's phase exit, and the count is zero — but not for
 the reason the falsifier anticipated.** The falsifier expected *"record"* to
 degrade into *"log a warning"*. It did not: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:610`) writes nothing anywhere, logs nothing,
+(`crates/happenstance/src/runner.rs:630`) writes nothing anywhere, logs nothing,
 and **halts** on the first failure it meets. There is no `on_error`, no
 `SkipPolicy` and no policy argument of any kind, and that absence is deliberate
 rather than unfinished — it is this clause's own *Rejects* read one layer up. A
@@ -6543,7 +6543,7 @@ and the obstacle is now stronger than *"nobody got round to it"*.** The port's
 shared between tasks at all — and moving one into a `tokio::spawn` would
 additionally require `Send`, which the flavour that exists for `wasm32` cannot
 promise. `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:610`) therefore drives exactly one
+(`crates/happenstance/src/runner.rs:630`) therefore drives exactly one
 projection per call, catches no unwind, and spawns nothing; N read models cost N
 independent reads.
 
@@ -6671,7 +6671,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:610`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:630`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 

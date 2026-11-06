@@ -85,7 +85,7 @@ renews them with the disposition phase 16 gave.
       not yet run; and a session-log line recording whether `LivePostgresBatch`
       gains an inherent savepoint helper (additive) or the pattern stays the
       application's.
-- [ ] #107 · **PS-25's derived id** (ADR-0074 decision 9). The runner commits under an id
+- [x] #107 · **PS-25's derived id** (ADR-0074 decision 9). The runner commits under an id
       derived from the projection's name and a digest of its derived `Query`: a
       hand-written 64-bit FNV-1a, in 16 lowercase hex digits, over each item's
       canonical encoding, the encodings sorted and **deduplicated**, then hashed.
@@ -126,7 +126,7 @@ renews them with the disposition phase 16 gave.
 - [ ] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
 - [ ] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
-      (`crates/happenstance/src/runner.rs:552`) becomes a named `Chunk`:
+      (`crates/happenstance/src/runner.rs:635`) becomes a named `Chunk`:
       `#[non_exhaustive]`, private representation, `Chunk::of(NonZeroUsize)` its
       first constructor — the shape `Retry` already has
       (`crates/happenstance/src/command.rs:43-62`). The fan-out runner above takes
@@ -247,3 +247,21 @@ PS-30 each with a rule and a mutant that fails it.
   and the spec's citations below them hold. `.kb/decisions/0074…:68` and `:331` still
   cite `live_projection_store.rs:38-47` as the *cannot be driven* paragraph; that
   text is the one replaced, so they stay as the record of what it said.
+- 2026-11-03 — #107: `run_projection` reads and commits under
+  `checkpoint_id(&projection)`, `name@` and 16 lowercase hex digits of a
+  hand-written 64-bit FNV-1a, and a changed query starts a new checkpoint
+  (`changed_query_starts_a_new_checkpoint`). The separator is `@` (D2). The
+  per-item encoding is injective by `Cc` terminators VT-14 keeps out of every
+  field — US after each type and tag, RS after the types, GS after the item,
+  FS alone for `Query::All` — not length prefixes, whose `usize` would hash
+  differently on `wasm32` (D1). Goldens were computed by two independent
+  models before the Rust ran. A name over 238 bytes is refused as
+  `InvalidCheckpointId::NameTooLong`, and a `sync/` watermark name as
+  `Refused(Reserved)`; the runner reports either as
+  `ProjectionError::CheckpointId`. Exposed as `checkpoint_id`,
+  `InvalidCheckpointId` and `MAX_CHECKPOINT_NAME_LEN` (D3). `Projection::id`
+  keeps its name and is documented as the name (D5); renaming it so a bare-id
+  read is a type error is a pre-#132 question. No `adopt` helper (D6): the
+  adoption procedure is a compiled fence on `checkpoint_id` and a CHANGELOG
+  entry (D7). Ten test sites moved onto `checkpoint_id` with no expected value
+  changed (D4). PS-25 stays `[PROVISIONAL]` for #127.
