@@ -42,9 +42,9 @@
 //! projection awaits [`LivePostgresBatch::execute`] inside the live transaction
 //! and `happenstance::run_projection` drives it (`tests/live_projection.rs`).
 //! Statements reach the server as `apply` runs, at a cost: a pooled connection
-//! held for a whole chunk, and a refused statement aborts the transaction at
-//! once, with no savepoint yet (#103). The batch exposes no query method, so
-//! `apply` cannot read its pending writes back; only the probe does (PS-12).
+//! held for a whole chunk, and a server refusal aborts the transaction unless
+//! `apply` rolls back to a `SAVEPOINT` it set (#103). The batch exposes no
+//! query method; only the probe reads pending writes back (PS-12).
 //! [`PostgresProjectionStore`](crate::projection_store::PostgresProjectionStore) stays the default.
 //!
 //! # The invariant
@@ -99,11 +99,11 @@ pub struct LivePostgresBatch {
 impl LivePostgresBatch {
     /// Issues one statement through the open transaction.
     ///
-    /// The statement reaches the server now. If it fails, the transaction is
-    /// aborted on the server side and every later statement — including the
-    /// checkpoint upsert — will be refused; the honest thing to do with the batch
-    /// after an `Err` here is to hand it to
-    /// [`rollback`](SendProjectionStore::rollback) or drop it.
+    /// The statement reaches the server now. If the server refuses it, the
+    /// transaction is aborted and every later statement, the checkpoint upsert
+    /// included, is refused, until a `ROLLBACK TO SAVEPOINT` for a `SAVEPOINT`
+    /// issued earlier through this method undoes it. Without one, hand the batch
+    /// to [`rollback`](SendProjectionStore::rollback) or drop it.
     ///
     /// # Security
     ///

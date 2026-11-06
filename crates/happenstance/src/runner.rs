@@ -303,8 +303,7 @@ pub trait Projection {
 
     /// Decides what happens to an event that could not be decoded or applied.
     ///
-    /// Provided, and the default answers [`Policy::Halt`]: a projection that
-    /// says nothing stops at the first such event, exactly as before.
+    /// Provided; by default it answers [`Policy::Halt`] and the run stops there.
     ///
     /// [`Policy::Skip`] leaves the event out. It still counts toward `chunk`,
     /// it is counted in [`Progressed::skipped`], and the checkpoint moves past
@@ -313,11 +312,12 @@ pub trait Projection {
     /// back, with anything written here, and the run reports
     /// [`ProjectionError::Decode`] or [`ProjectionError::Apply`].
     ///
-    /// The batch is handed over as `apply` left it: a refused `apply` that had
-    /// already written keeps those writes under `Skip`. The runner cannot undo
-    /// part of a batch without a generic write (PS-9), so an `apply` that may
-    /// refuse should refuse before it writes. [`ApplyFailure`] says which half
-    /// failed and the event's identity, never its local position.
+    /// The batch is handed over as `apply` left it, and the runner cannot undo
+    /// part of it without a generic write (PS-9): a refused `apply`'s writes stay
+    /// under `Skip`, so an `apply` that may refuse should refuse before it writes.
+    /// Where the batch is a live transaction, a server refusal aborts it and the
+    /// chunk commits nothing, `Skip` or not; [`Policy::Skip`] says how to recover.
+    /// [`ApplyFailure`] says which half failed and the event's identity only.
     ///
     /// The runner holds the borrowed failure across this await, so code
     /// generic over the projection that spawns the run adds `Error: Sync`.

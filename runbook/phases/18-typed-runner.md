@@ -74,7 +74,7 @@ renews them with the disposition phase 16 gave.
       (`crates/happenstance/tests/projection_clauses.rs`) is turned round in the
       same change. The Kestrel Motor shred case in
       `references/scenarios/README.md` §4 is the workload that needs it.
-- [ ] #103 · **The savepoint caveat on a live batch** (ADR-0074 decision 6, finding F5).
+- [x] #103 · **The savepoint caveat on a live batch** (ADR-0074 decision 6, finding F5).
       A server-refused statement aborts the live transaction, so a `Skip` after it
       writes nothing. The runner cannot issue a `SAVEPOINT` itself, because that
       is the generic write PS-9 forbids. Owed: `on_error`'s rustdoc states the
@@ -336,3 +336,27 @@ PS-30 each with a rule and a mutant that fails it.
   `reset` or `protect_from_reset` still type-checks and targets a row the runner
   never writes; the file's documentation says so and no API changes (D3). SQLite
   only: the `TRUNCATE` caveat is on #127's PS-16 line above (D4).
+- 2026-11-06 — #103: the savepoint caveat. `Policy::Skip`'s page carries it in full
+  (`policy.rs`, which has no line citations): a buffered batch meets its server only at
+  commit, so no policy is asked; a live transaction aborts on a statement the server
+  refuses, and the record `on_error` writes is refused with it, unless `apply` set a
+  `SAVEPOINT` and issued `ROLLBACK TO SAVEPOINT` before returning the refusal.
+  `on_error`'s rustdoc states the limit and links there in a line-neutral rewrite, as
+  are `live_projection_store.rs`'s two passages, the README's, #142's CHANGELOG line and
+  PS-27's prose, so no `runner.rs:N`, `live_projection_store.rs:N` or
+  `SPECIFICATION.md:N` citation moved. `tests/live_projection.rs` runs the pattern
+  through `run_projection` against PostgreSQL 17.10 with a `CHECK` cap the server
+  enforces after the event's journal row has landed:
+  `a_savepoint_in_apply_lets_skip_record_a_server_refusal` commits the writes either
+  side of the refusal, none of the refused event's, its skip record with SQLSTATE
+  `23514` and the checkpoint at the head; its control,
+  `a_server_side_failure_leaves_nothing_for_on_error_to_write_into` (ADR-0074's name),
+  runs the same `apply` with no savepoint and stops with `ProjectionError::Policy`,
+  whose source is `on_error`'s own write refused as `25P02`, having committed nothing.
+  An application-issued `SAVEPOINT` and `ROLLBACK TO SAVEPOINT` work through
+  `sqlx::query` on the live batch, so the plan's risk R1 did not arise. The decision
+  line, taken as recommended while the owner is asked (O1(a)): **`LivePostgresBatch`
+  gains no savepoint helper: three `execute` calls in `apply` suffice and are run live;
+  a helper stays an additive option.** PS-9 is `[FROZEN]` and its text is not edited
+  (O2(b)): its narrative still says the savepoint pattern "has not been run", and
+  updating that evidence to name the test above is left for #127's reconcile.

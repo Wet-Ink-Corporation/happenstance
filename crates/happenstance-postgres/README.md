@@ -168,7 +168,7 @@ statements reach the server as `apply` runs. The transaction does read through
 `LivePostgresBatch` has no query method yet, so `apply` cannot read its pending
 writes back on either store. The trade for the live store: a pooled connection
 held for a whole chunk, and a statement the server refuses aborts the
-transaction then and there, with no savepoint to recover it yet (#103). The
+transaction, unless `apply` rolled back to a savepoint it set (#103). The
 buffered store stays the default.
 
 ## Limits this store enforces

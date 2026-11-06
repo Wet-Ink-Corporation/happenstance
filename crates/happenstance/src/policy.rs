@@ -110,6 +110,23 @@ pub enum Policy {
     ///
     /// The checkpoint moves past it when the chunk commits, together with
     /// whatever `on_error` wrote.
+    ///
+    /// Not universal: it carries on only in a batch that is still usable. A
+    /// buffered batch, such as SQLite's, meets its server only at commit, so a
+    /// statement the server refuses fails the commit and no policy is asked. A
+    /// batch that *is* a live transaction, as `happenstance-postgres`'s
+    /// `LivePostgresBatch` is, sends each statement as `apply` runs, and one the
+    /// server refuses aborts the whole transaction: the record `on_error`
+    /// writes is refused with it, and the chunk commits nothing.
+    ///
+    /// The runner sets no savepoint around `apply`, because that would be a
+    /// write into a batch it knows nothing about, which PS-9 forbids (ADR-0074
+    /// decision 6). The savepoint is the application's. An `apply` that may
+    /// meet a server refusal issues `SAVEPOINT` before its statements,
+    /// `RELEASE SAVEPOINT` after them, and `ROLLBACK TO SAVEPOINT` before it
+    /// returns the refusal. `on_error` is then handed a usable batch holding
+    /// none of that event's writes, and its record commits with the
+    /// checkpoint. `happenstance-postgres`'s live tests run this pattern.
     Skip,
 }
 
