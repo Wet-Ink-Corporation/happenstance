@@ -5995,10 +5995,10 @@ expressed through the same batch that carries ordinary writes; a store whose
 watch. Owned by the projection-port phase (RUNBOOK phase 2).]`
 **Rule:** `reset_clears_rows_and_checkpoint_together` — commit probe rows and a
 checkpoint, then `reset` with a batch carrying `ProjectionProbe::probe_delete_all`;
-assert both gone. Paired with a failure-injecting variant asserting that a `reset`
-that errors leaves both halves as they were. (The probe method is qualified so
-that `spec-trace` reads it as the seam it is rather than as a second conformance
-rule — `references/evaluation/ps-clause-pairing-sweep.md:466-474`.)
+assert both gone, and that a failing `reset` leaves both (the probe is qualified as
+a seam — `references/evaluation/ps-clause-pairing-sweep.md:466-474`). Composed on two
+SQLite tables through the typed runner: `rebuild_through_reset_restores_every_table`,
+and, refused, `protected_reset_is_refused_and_the_view_keeps_running` (PS-18, CF-43).
 **Cases:** E2E-15, E2E-17.
 **Rejects:** the runbook procedure, which is two statements on two connections
 and is what Norvant's night desk executed: the truncate committed at 02:46:31,
@@ -10419,7 +10419,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-13 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-21, E2E-22 |
 | PS-14 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-22 |
 | PS-15 | FROZEN | `commit_rejects_a_foreign_batch` | E2E-19 |
-| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together` | E2E-15, E2E-17 |
+| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together`, `rebuild_through_reset_restores_e… | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` | E2E-18 |
 | PS-18 | DEFERRED | `refused_reset_changes_nothing` | E2E-18 |
 | PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-16 |
