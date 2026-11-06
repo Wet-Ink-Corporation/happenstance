@@ -126,7 +126,7 @@ renews them with the disposition phase 16 gave.
 - [ ] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
 - [ ] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
-      (`crates/happenstance/src/runner.rs:851`) becomes a named `Chunk`:
+      (`crates/happenstance/src/runner.rs:858`) becomes a named `Chunk`:
       `#[non_exhaustive]`, private representation, `Chunk::of(NonZeroUsize)` its
       first constructor — the shape `Retry` already has
       (`crates/happenstance/src/command.rs:43-62`). The fan-out runner above takes
@@ -290,3 +290,18 @@ PS-30 each with a rule and a mutant that fails it.
   replacement is `the_failure_policy_is_the_projections_and_halts_by_default`,
   which pins the seam's presence. PS-27 stays `[DEFERRED]` for #127; PS-26's rule
   stays #112's.
+- 2026-11-06 — #123: the convergence declaration is `happenstance::ConvergentProjection`,
+  `pub trait ConvergentProjection {}`, behind `unstable-projection`, in its own
+  `src/convergence.rs`. D7's letter, `ConvergentProjection: Projection`, compiled for
+  concrete projections but not for code generic over a `SendProjection` that also spawns
+  the run: the supertrait's where-clause shadows `trait_variant`'s blanket impl (`E0271`
+  on `P::Store`, `E0277` on `apply`'s future, `E0034` on `id()`), and return-type
+  notation is `E0658` at 1.97.1. The owner calls were taken **as recommended** while the
+  owner is asked: O1(B), one marker with no supertrait (the likeliest alternative, two
+  markers, is a swap inside `convergence.rs`); O2, non-convergence is declared by not
+  implementing it, recorded in SY-22's prose, so the SY-22 rule is a `compile_fail`
+  beside a control rather than a runtime filter. `tests/convergence.rs` holds both
+  flavours declaring it, two interleavings committing one read model (and diverging
+  over re-minted identities), and #110's spawner with `+ ConvergentProjection`, which
+  is `E0271` under D7's spelling. Phase 13's rule (#141) needs `happenstance` as a
+  dependency of `happenstance-sync-testkit`: a new inward edge, and phase 13's call.

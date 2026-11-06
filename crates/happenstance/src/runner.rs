@@ -94,6 +94,13 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 /// `!Send` batch, or built for `wasm32`. `#[async_trait]` is not used,
 /// because the `+ Send` it injects makes the `wasm32` target impossible.
 ///
+/// # Declaring convergence
+///
+/// A projection whose read model is the same in any ingest order says so
+/// by implementing [`ConvergentProjection`](crate::ConvergentProjection)
+/// beside this trait or [`SendProjection`]. An undeclared projection is
+/// non-convergent, and a convergence check leaves it out (SY-20, SY-22).
+///
 /// # Spawning a run from code generic over the projection
 ///
 /// The bounds are the caller's to write, and [`run_projection`]'s page says
@@ -828,7 +835,7 @@ where
 ///
 // The three sections above sit *after* the fence rather than beside the subject
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:846` as the location of this item and that
+// `crates/happenstance/src/runner.rs:853` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
 // above it pushes the item's declaration down and leaves the three citations
 // pointing at whatever line the item used to occupy.
