@@ -35,6 +35,46 @@ export function isPlatformMiss(status, body) {
   );
 }
 
+// The two reset throws the deployed leg recorded (#356, ADR-0100), exact, keyed
+// by cause. Each kills the object's isolate with the store inside it, so no
+// adapter error is ever built and the adapter's `Classify` never sees one; only
+// a stub caller does, as a rejected `stub.fetch()`, which worker.mjs returns as
+// `500 <message>`. The owner's reading (wi-021b4f, #369) is `Split`: in both
+// cases a smaller batch landed. The label commits no runner to anything. A
+// batch of one cannot be split, and a CPU reset can be caused by another
+// request on the same object; the crate's README says so.
+//
+// Not a platform miss: a reset is never retried away. In the strict leg a reset
+// on a call at or under the declared ceiling is ADR-0100's falsifier and stays
+// red. The code-update reset above is a deploy artefact a smaller batch does not
+// fix, so it is not here.
+export const OBJECT_RESETS = {
+  "storage-timeout": "Durable Object storage operation exceeded timeout which caused object to be reset.",
+  "cpu-limit": "Durable Object exceeded its CPU time limit and was reset.",
+};
+
+// "storage-timeout" | "cpu-limit" | null. An exact match on a trimmed 500 body,
+// as isPlatformMiss's, so an unrecognised text fails closed: it prints as a
+// plain `[500]` line, never as a false `Split`.
+export function objectReset(status, body) {
+  if (status !== 500) {
+    return null;
+  }
+  const text = body.trim();
+  for (const [cause, reset] of Object.entries(OBJECT_RESETS)) {
+    if (text === reset) {
+      return cause;
+    }
+  }
+  return null;
+}
+
+// What a recognised reset adds to the line that reports it.
+export function resetSuffix(status, body) {
+  const cause = objectReset(status, body);
+  return cause === null ? "" : `  (object reset: ${cause}, class=Split)`;
+}
+
 export const LISTING_ATTEMPTS = 6;
 export const LISTING_DELAY_MS = 10_000;
 
@@ -65,7 +105,8 @@ export async function callPastPropagation(call, object, route, { pause, log }) {
 // sent. PR #51's deployed run met one such 500 and printed only
 // `<!DOCTYPE html>`; this is what the next one prints. Naming a page does not
 // make it retryable: only `isPlatformMiss` decides that, so the strict failure
-// list stays strict.
+// list stays strict. A recognised object reset is labelled with its cause and
+// `class=Split` (objectReset), and is still a failure.
 export function failureLine(status, body) {
   if (body.trimStart().startsWith("<")) {
     const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(body);
@@ -74,5 +115,5 @@ export function failureLine(status, body) {
       return `[${status}] ${text}  (HTML page)`;
     }
   }
-  return `[${status}] ${body.split("\n")[0]}`;
+  return `[${status}] ${body.split("\n")[0]}${resetSuffix(status, body)}`;
 }

@@ -68,6 +68,11 @@ suite red: `happenstance-testkit` now writes VT-36's floor.
   `IngestFixture` declares none yet.
   `happenstance-cloudflare`'s ingest fixture and the workerd harness declare
   262,144 and run it, the harness also on the deployed object.
+- `happenstance-cloudflare` (documentation only): the README states how a caller
+  holding a stub to the object should read the two reset throws a call past the
+  platform's wall ends in, the storage-operation timeout and the CPU limit:
+  as `Split`, with the two cases where that reading is wrong (#369). Neither
+  throw reaches the store, so its `Classify` is unchanged.
 
 ## [0.4.6] — 2026-11-02
 

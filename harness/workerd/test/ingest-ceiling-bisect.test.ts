@@ -108,6 +108,17 @@ describe("readAttempt", () => {
     expect(readAttempt(404, "no route /ingest-ceiling/minimal").accepted).toBe(false);
   });
 
+  it("reads an object reset as a refusal and labels it Split", () => {
+    // Rejects: a reset read as acceptance, and the adapter's own
+    // `422 class=Split` relabelled as a reset (the 422 case above is unchanged).
+    expect(
+      readAttempt(500, "Durable Object storage operation exceeded timeout which caused object to be reset.\n"),
+    ).toEqual({
+      accepted: false,
+      text: "[500] Durable Object storage operation exceeded timeout which caused object to be reset.  (object reset: storage-timeout, class=Split)",
+    });
+  });
+
   it("refuses a 200 whose store appended fewer events than were sent", () => {
     // A store that skipped or dropped rows committed a smaller call than the
     // one asked for, so the size is not what the runtime took.

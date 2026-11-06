@@ -5,7 +5,17 @@
 // rejects: a matcher that also swallows the harness's own 404, one that misses
 // the HTML page a real run got, a loop that never gives up or gives up early.
 import { describe, expect, it } from "vitest";
-import { LISTING_ATTEMPTS, callPastPropagation, failureLine, isPlatformMiss } from "../platform-miss.mjs";
+// Read host-side by Vite when this file is transformed, not inside workerd:
+// workerd's `node:fs` is a virtual filesystem and cannot see the crate.
+import cloudflareReadme from "../../../crates/happenstance-cloudflare/README.md?raw";
+import {
+  LISTING_ATTEMPTS,
+  OBJECT_RESETS,
+  callPastPropagation,
+  failureLine,
+  isPlatformMiss,
+  objectReset,
+} from "../platform-miss.mjs";
 
 // An unclassified Cloudflare 500, in the shape of the error pages the edge
 // serves: one line of doctype, then markup whose first line says nothing. The
@@ -128,5 +138,70 @@ describe("failureLine", () => {
 
   it("does not make an unclassified page retryable", () => {
     expect(isPlatformMiss(500, UNCLASSIFIED_PAGE)).toBe(false);
+  });
+});
+
+// The two reset throws the deployed leg recorded (#356, ADR-0100), spelled out
+// here rather than read from OBJECT_RESETS, so a change to either text fails a
+// case by name instead of moving the expectation with it.
+const STORAGE_RESET = "Durable Object storage operation exceeded timeout which caused object to be reset.";
+const CPU_RESET = "Durable Object exceeded its CPU time limit and was reset.";
+
+describe("objectReset", () => {
+  it("names the storage-timeout reset, with or without a trailing newline", () => {
+    // Rejects: no matcher at all.
+    expect(objectReset(500, STORAGE_RESET)).toBe("storage-timeout");
+    expect(objectReset(500, `${STORAGE_RESET}\n`)).toBe("storage-timeout");
+  });
+
+  it("names the CPU-limit reset", () => {
+    // Rejects: a matcher that knows only the owner's original bullet, the
+    // storage timeout (wi-021b4f), and not the throw #369 adds.
+    expect(objectReset(500, CPU_RESET)).toBe("cpu-limit");
+  });
+
+  it("names nothing else: not the code-update reset, not another status, not a rule's own text", () => {
+    // Rejects: `body.includes("reset")`, which would take the deploy artefact
+    // a smaller batch does not fix.
+    expect(objectReset(500, "Durable Object reset because its code was updated.")).toBeNull();
+    // Rejects: a status-blind match.
+    expect(objectReset(404, STORAGE_RESET)).toBeNull();
+    expect(objectReset(200, CPU_RESET)).toBeNull();
+    // Rejects: a substring match, which reads a rule's own message as the
+    // platform's.
+    expect(
+      objectReset(500, "Rust panic: Durable Object exceeded its CPU time limit and was reset. (in suite.rs)"),
+    ).toBeNull();
+    // Rejects: relabelling the adapter's own classified refusal as a reset.
+    expect(objectReset(500, "refused class=Split\ningest exceeds the store's tags per batch limit: 262145\n")).toBeNull();
+  });
+
+  it("leaves both resets out of the retry set", () => {
+    // Rejects: folding the resets into isPlatformMiss, which would retry
+    // ADR-0100's falsifier until it went green.
+    expect(isPlatformMiss(500, STORAGE_RESET)).toBe(false);
+    expect(isPlatformMiss(500, CPU_RESET)).toBe(false);
+  });
+
+  it("labels a reset's failure line Split, and no other 500's", () => {
+    expect(failureLine(500, CPU_RESET)).toBe(
+      "[500] Durable Object exceeded its CPU time limit and was reset.  (object reset: cpu-limit, class=Split)",
+    );
+    // Rejects: a suffix on every 500.
+    expect(failureLine(500, "Rust panic: panicked at suite.rs:1:1\nstack...")).toBe(
+      "[500] Rust panic: panicked at suite.rs:1:1",
+    );
+  });
+
+  it("matches only texts the published README quotes verbatim", () => {
+    // Rejects: the README paraphrasing a throw the harness matches exactly, so
+    // the published statement and the instrument drift apart.
+    const readme = cloudflareReadme.replace(/\s+/g, " ");
+    // A README that did not load is not a README that quotes nothing.
+    expect(readme).toContain("# happenstance-cloudflare");
+    expect(Object.keys(OBJECT_RESETS).sort()).toEqual(["cpu-limit", "storage-timeout"]);
+    for (const text of Object.values(OBJECT_RESETS)) {
+      expect(readme.includes(text), `the README quotes "${text}"`).toBe(true);
+    }
   });
 });

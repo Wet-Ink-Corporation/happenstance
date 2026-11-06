@@ -303,3 +303,10 @@ a later run shows it: a `Thrown` whose identical retry lands on the same object
 marker for its text), or a reset or timeout text on the deployed leg whose
 retry lands. Each is a published-behaviour change in `happenstance-cloudflare`
 and a change of its own (D-E3-1), not this experiment's.
+
+D-E3-1 is answered for the two reset throws the deployed leg later recorded,
+the storage-operation timeout and the CPU limit (#356, #369): `Split`, to a
+caller holding a stub to the object, stated in `happenstance-cloudflare`'s
+README and labelled by the harness (`harness/workerd/platform-miss.mjs`,
+`objectReset`). D7 and the adapter's `Classify` do not change, because a reset
+kills the store with the object and the adapter never sees it.

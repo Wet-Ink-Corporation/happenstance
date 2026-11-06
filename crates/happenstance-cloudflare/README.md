@@ -237,6 +237,21 @@ An `ingest` call counts every foreign event and every compensation toward it, an
 sync runner reads the refusal as `Split`: the call is too big, and its events are
 not.
 
+That wall is not refused, because it is not reached from inside the object: it
+resets the object, and the store goes with it. A call that crosses it ends in
+one of two throws, which the deployed runs recorded word for word:
+`Durable Object storage operation exceeded timeout which caused object to be reset.`
+and `Durable Object exceeded its CPU time limit and was reset.` Neither becomes a
+`CloudflareEventStoreError`, so this crate's `Classify` never sees one. They
+reach only a caller that holds a stub to the object, as a rejected `fetch`, and
+such a caller should read either one as `Split`: in every recorded case a
+smaller batch landed. Two cautions come with that reading. A batch of one event
+cannot be split, and a CPU-limit reset can be caused by another request on the
+same object, where retrying is the remedy. Nothing in this workspace acts on the
+reading yet; it is how the `workerd` harness labels a reset. A reset on a call at
+or under the declared 262,144 tags is not expected at all: it falsifies
+ADR-0100, and is worth an issue.
+
 One more limit belongs beside them, because it is the store's and not the
 platform's: **positions are bounded by 2^53, not 2^64.** Workers SQL widens an
 integer through a JavaScript number on the way out, so a position above
