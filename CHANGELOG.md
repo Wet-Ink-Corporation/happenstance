@@ -165,6 +165,13 @@ not the same as what a user needed to be told.
   the checkpoint that moves past the event, or not at all, and the skipped
   event counts toward `chunk`. A failing `on_error` stops the run with
   `ProjectionError::Policy`.
+- `happenstance` (behind `unstable-projection`): `ConvergentProjection`, the
+  convergence declaration SY-20 needs (#123). A marker trait a projection of
+  either flavour implements to say that its read model does not depend on
+  ingest order; a projection that does not implement it is non-convergent
+  (SY-22). It has no supertrait, so a generic spawner's bound is #110's plus
+  `+ ConvergentProjection`. Nothing checks the claim yet; phase 13's sync
+  conformance rule will.
 
 - `happenstance-testkit`: the rule
   `store_accepts_the_guaranteed_minimum_tags_per_batch` (VT-36, #368). It

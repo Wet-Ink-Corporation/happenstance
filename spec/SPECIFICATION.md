@@ -6444,7 +6444,7 @@ new port surface and no store-side knowledge of what a skip means.
 
 **Count retaken at phase 18: one.** The falsifier expected *"record"* to
 degrade into *"log a warning"*, and it never did: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:846`) writes nothing anywhere, logs nothing,
+(`crates/happenstance/src/runner.rs:853`) writes nothing anywhere, logs nothing,
 and now offers the failure instead. `Projection` carries a provided
 `on_error`, defaulting to halt, so a projection that says nothing stops at the
 first failure as the alpha's runner did; one that answers `Policy::Skip` has its
@@ -6536,7 +6536,7 @@ and the obstacle is now stronger than *"nobody got round to it"*.** The port's
 shared between tasks at all — and moving one into a `tokio::spawn` would
 additionally require `Send`, which the flavour that exists for `wasm32` cannot
 promise. `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:846`) therefore drives exactly one
+(`crates/happenstance/src/runner.rs:853`) therefore drives exactly one
 projection per call, catches no unwind, and spawns nothing; N read models cost N
 independent reads.
 
@@ -6664,7 +6664,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:846`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:853`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 
@@ -7785,6 +7785,14 @@ nothing in it should be read as choosing one (`lib.rs:120-121`). What neither
 says is that the acceptance has a price, and that the price is paid by every
 fold downstream. This clause is where it is charged.
 
+The declaration is `happenstance::ConvergentProjection` (#123), behind the typed
+layer's `unstable-projection`: a marker trait with no supertrait and no items, one
+name for both flavours, so the rule bounds on a type rather than checking a flag. It
+is not spelled `ConvergentProjection: Projection`, because that supertrait shadows
+the blanket impl `SendProjection` gets, and code generic over a `SendProjection`
+could then not require the marker and spawn the run in one body; the trait's own
+page records the compile.
+
 ---
 
 **SY-21. A convergent projection MUST be handed an `EventId`, and MUST NOT be
@@ -7810,7 +7818,10 @@ the same store; that does not break convergence, since the value is reached thro
 `apply` is handed a `happenstance::Delivered<E>` with `id()` and no position accessor, and asking it for one is `E0599`,
 held by a `compile_fail` doctest beside a compiling control. `experiments/apply-shape` ran a restored log whose local and
 origin orders differ and saw the origin identities delivered; `crates/happenstance/tests/projection_runner.rs`'s
-`apply_is_handed_the_origin_identity_not_the_local_position` runs that case through the shipped runner. The freeze is #127's.
+`apply_is_handed_the_origin_identity_not_the_local_position` runs that case through the shipped runner, and
+`crates/happenstance/tests/convergence.rs`'s `a_convergent_projection_commits_one_read_model_for_two_interleavings`
+runs the declared case: two interleavings that agree per origin commit one read model, and the same fold over re-minted
+identities does not. The freeze is #127's.
 
 *Rejects:* ADR-0007's `apply` signature as it currently stands, which hands the
 projection `Sequenced<Self::Event>`
@@ -7840,6 +7851,15 @@ arrival order and declared authoritative by fiat, and that is the correct design
 for it. A convergence check with no exclusion mechanism forces such a projection
 either to lie or to be excluded by not being registered — which loses every other
 check at the same time.
+
+*Placement* (#123). The declaration lives on the typed layer, beside `Projection`,
+as SY-20's `happenstance::ConvergentProjection`, and non-convergence is declared by
+**not implementing it**. The exclusion is the rule's parameter type: a check bound
+on the marker cannot be handed an undeclared projection, while every other bound
+still takes it, so "excluded rather than failed" is a compile-time property, held
+by a `compile_fail` fence beside a compiling control rather than by a runtime
+filter. A heterogeneous registry cannot ask a projection whether it is convergent;
+a runtime-queryable form can be added beside the marker later without a break.
 
 ---
 

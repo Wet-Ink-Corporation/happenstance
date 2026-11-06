@@ -251,6 +251,13 @@ pub use runner::{Progressed, Projection, ProjectionError, SendProjection, run_pr
 #[cfg(feature = "unstable-projection")]
 #[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
 pub use policy::{ApplyFailure, Policy};
+// What a projection declares to enter a convergence check (SY-20, SY-22).
+// Declared here, below the cited lines above, so none of them moves.
+#[cfg(feature = "unstable-projection")]
+mod convergence;
+#[cfg(feature = "unstable-projection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
+pub use convergence::ConvergentProjection;
 // `Chunk` is the runner's vocabulary, not the runner: its own module, so the
 // fan-out runner (#112) takes it from the same place `run_projection` does.
 #[cfg(feature = "unstable-projection")]
