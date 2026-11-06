@@ -126,7 +126,7 @@ pub mod rules {
     // ---------------------------------------------------------------------
     use happenstance_core::{
         MIN_SUPPORTED_EVENT_DATA_LEN, MIN_SUPPORTED_EVENTS_PER_BATCH, MIN_SUPPORTED_QUERY_ITEMS,
-        MIN_SUPPORTED_TAGS_PER_EVENT,
+        MIN_SUPPORTED_TAGS_PER_BATCH, MIN_SUPPORTED_TAGS_PER_EVENT,
     };
 
     // ---------------------------------------------------------------------
@@ -4494,6 +4494,103 @@ pub mod rules {
             "and every event of the batch must come back, in the order it was \
              written: an adapter that splits the batch to fit its driver's \
              parameter limit loses a chunk rather than reporting one"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    /// A batch carrying the guaranteed minimum number of tags is accepted whole.
+    ///
+    /// VT-36: 128 events of 64 tags, 8,192 tags in one append, the product of
+    /// VT-22's and VT-24's floors. Neither floor's own rule writes it:
+    /// [`store_accepts_the_guaranteed_minimum_tag_count`] writes one event and
+    /// [`store_accepts_the_guaranteed_minimum_batch_size`] one tag to an event,
+    /// so a store that meets each floor alone and not the two together passed
+    /// both. No event here is over 64 tags and the batch is exactly 128 events,
+    /// so a store at VT-22's and VT-24's floors exactly accepts it.
+    ///
+    /// Every `(key, value)` pair is distinct across the batch, so a store that
+    /// shares one tag row between events cannot pass by writing fewer rows.
+    ///
+    /// # What it rejects
+    ///
+    /// * `TagRowParameterCeilingStore`: every tag row of the batch bound into
+    ///   one multi-row `INSERT` at four parameters a row, which meets
+    ///   `SQLITE_MAX_VARIABLE_NUMBER` (32,766) at 8,192 tags and is refused at
+    ///   write time. 8,191 tags fit, so nothing short of the floor finds it.
+    /// * `TagRowClampingStore`: that store's fix applied wrongly, clamping the
+    ///   tag rows to what one statement carries and answering `Ok`. The round
+    ///   trip below is what sees it.
+    /// * `TagsPerBatchBelowTheFloorStore`: a measured wall declared as
+    ///   [`MAX_TAGS_PER_BATCH`](crate::Fixture::MAX_TAGS_PER_BATCH) without being
+    ///   compared with the floor. The declaration is checked before anything
+    ///   opens, so the failure names the declaration rather than the store.
+    ///
+    /// There is deliberately no tag-query read-back, for the reason
+    /// [`store_accepts_the_guaranteed_minimum_tag_count`] gives: a query on one
+    /// tag is `query_item_tags_match_supersets`' assertion. What this rule owns
+    /// is that all 8,192 are *stored*. The order half of the final comparison
+    /// is an anchor that `read_defaults_to_ascending_order` owns, as in
+    /// [`store_accepts_the_guaranteed_minimum_batch_size`].
+    ///
+    /// **The clause is `[PROVISIONAL]`.**
+    pub async fn store_accepts_the_guaranteed_minimum_tags_per_batch<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // The declaration first, before anything opens, so that the failure
+        // names the number the fixture wrote down rather than the refusal the
+        // store would give for it.
+        if let Some(ceiling) = F::MAX_TAGS_PER_BATCH {
+            assert!(
+                ceiling >= MIN_SUPPORTED_TAGS_PER_BATCH,
+                "VT-36: this fixture states a tags-per-batch ceiling of {ceiling}, \
+                 below the floor of {MIN_SUPPORTED_TAGS_PER_BATCH} tags every store \
+                 MUST accept in one append. Declaring the smaller number is not the \
+                 fix: the store must clear the floor, so the answer is a chunked \
+                 insert, a narrower row, or a blocking finding"
+            );
+        }
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let keys: Vec<String> = (0..MIN_SUPPORTED_TAGS_PER_EVENT)
+            .map(|key| format!("k{key:02}"))
+            .collect();
+        let batch: Vec<Event> = (0..MIN_SUPPORTED_EVENTS_PER_BATCH)
+            .map(|n| {
+                let value = format!("{n:03}");
+                let pairs: Vec<(&str, &str)> = keys
+                    .iter()
+                    .map(|key| (key.as_str(), value.as_str()))
+                    .collect();
+                tagged_event("Bulk", &pairs)
+            })
+            .collect();
+        assert_eq!(
+            total_tags(&batch),
+            MIN_SUPPORTED_TAGS_PER_BATCH,
+            "the anchor: a batch that lost tags on construction would leave this \
+             rule testing a smaller number than it claims"
+        );
+        append_ok(&store, &batch).await;
+
+        settle!(fixture);
+        let all = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            all.len(),
+            MIN_SUPPORTED_EVENTS_PER_BATCH,
+            "VT-36 makes {MIN_SUPPORTED_TAGS_PER_BATCH} tags in one append a \
+             floor: the store must hold every event of it"
+        );
+
+        let stored: Vec<&Event> = all.iter().map(|event| &event.event).collect();
+        let written: Vec<&Event> = batch.iter().collect();
+        assert_eq!(
+            stored, written,
+            "and every tag of every event must come back: an adapter that binds \
+             tag rows into one statement and clamps to its driver's parameter \
+             limit drops the tail rather than reporting it"
         );
 
         RuleOutcome::Ran

@@ -33,10 +33,11 @@ use crate::mutants::Defect;
 
 /// The tags-per-batch ceiling the first six stores state.
 ///
-/// The floor itself, and the tightest legal value (VT-36). It is clear of every
-/// other rule's writes, the largest of which carry 128 tags in one append, so
-/// each store is wrong only at the boundary this branch writes and fails that
-/// rule alone.
+/// The floor itself, and the tightest legal value (VT-36). The largest of every
+/// other rule's writes is the floor rule's, exactly this many tags in one
+/// append, which a store refusing only *more* than this accepts. So each store
+/// is wrong only at the boundary this branch writes and fails that rule alone,
+/// except `OffByOneTagsPerBatchStore`, whose `>=` refuses the floor's batch too.
 pub(crate) const CEILING: usize = MIN_SUPPORTED_TAGS_PER_BATCH;
 
 /// The total number of tags across `events`.
