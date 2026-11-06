@@ -130,8 +130,8 @@ fn the_page_says_what_can_be_seen_while_it_runs() {
 
 /// Both new sections sit *below* the doctest, and that is load-bearing.
 ///
-/// `spec/SPECIFICATION.md` cites `run_projection` by the line of the call
-/// inside the fence, and `cargo xtask spec-trace` resolves a citation within a
+/// `spec/SPECIFICATION.md` cites `run_projection` by the line it is declared
+/// on, and `cargo xtask spec-trace` resolves a citation within a
 /// twelve-line window. Prose inserted *above* the fence pushes that call out of
 /// the window and fails the gate — with a message about an unresolved citation,
 /// which is a long way from "you added a paragraph in the wrong place".

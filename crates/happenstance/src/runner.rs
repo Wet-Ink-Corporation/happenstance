@@ -145,8 +145,8 @@ type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 ///     St: SendProjectionStore<Batch: Send> + Sync + 'static,
 /// {
 ///     tokio::spawn(async move {
-///         // Collapsed inside the task, so the handle's output asks
-///         // nothing more of the error types.
+///         // Reduced to its message: the handle asks no more bounds.
+///         // To keep the chain, return it and add `St::Error: Send`.
 ///         let run = run_projection(
 ///             &*events, &*models, &mut projection, &Json, chunk,
 ///         )
@@ -566,10 +566,10 @@ where
 /// - `Sync` on both stores, which are borrowed across awaits, and `'static`
 ///   on all three, for the spawn.
 ///
-/// Neither `P: Send` nor any `Error: Sync` is needed, and no store error
-/// crosses an await. `Error` carries no `Send` bound by design, on the
-/// port's error and on the projection's, so the bound is yours to add, or
-/// declare the marker trait ADR-0009 records and bound on that instead.
+/// `P: Send` comes with `SendProjection`, its supertrait. No `Error: Sync`
+/// is needed, and no store error crosses an await. `Error` has no `Send`
+/// bound by design, on the port's error and the projection's, so the bound
+/// is yours to add, or declare ADR-0009's marker trait and bound on that.
 /// [`Projection`]'s *Spawning a run from code generic over the projection*
 /// compiles the shape and the spelling that fails, and the test
 /// `run_projection_spawns_from_code_generic_over_the_projection` in
