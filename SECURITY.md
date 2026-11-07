@@ -85,20 +85,21 @@ backporting: a fix lands in the next release, and the release before it is not
 patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
 upgrade.
 
-`0.2.0` was the first stable release and `0.4.6` is current; what each promises
+`0.2.0` was the first stable release and `0.5.0` is current; what each promises
 is worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
 `0.2.0`. `ProjectionStore` was **not** at `0.2.0` — it shipped behind an
 off-by-default `unstable-projection` feature with a documented semver exemption
 — and **is from `0.3.0`**: adapters at both ends of its batch-shape axis passed
-its conformance suite and ADR-0063 lifted the gate. What remains exempt is the
-typed projection *runner* behind `happenstance`'s `unstable-projection`
-feature, for a reason that crate names; a breaking change there is not a
-violation of this table.
+its conformance suite and ADR-0063 lifted the gate. The typed projection
+*runner* was exempt behind `happenstance`'s feature of the same name through
+`0.4.x`, and **is not from `0.5.0`**, which removed that feature: a breaking
+change to the runner is now a violation of this table like any other.
 
 | Version | Supported |
 |---|---|
-| `0.4.6` | ✅ current |
+| `0.5.0` | ✅ current |
+| `0.4.6` | ❌ superseded by `0.5.0`, a breaking release: the typed projection runner leaves `happenstance`'s `unstable-projection` feature, which is removed, with an `async` `apply`, its own `type Error`, a `Chunk` and a derived checkpoint id; [`docs/upgrading-to-0-5.md`](docs/upgrading-to-0-5.md) is the way across |
 | `0.4.5` | ❌ superseded by `0.4.6`, an additive release with one narrowing: `happenstance-core` gains `StoreLimit::TagsPerBatch` and `MIN_SUPPORTED_TAGS_PER_BATCH`, `happenstance-testkit` gains `Fixture::settle_frontier` and `Fixture::MAX_TAGS_PER_BATCH`, and `happenstance-cloudflare` now refuses a call carrying more than 262,144 tags |
 | `0.4.4` | ❌ superseded by `0.4.5`, an additive release: `happenstance-sqlite` gains `SqliteEventStore::open_on` and `remint_identity_on` for a caller-configured connection, and an ingest that lands nothing no longer advances positions |
 | `0.4.3` | ❌ superseded by `0.4.4`, an additive release: the first of `happenstance-sync` and `happenstance-sync-testkit`, and a `sync` feature on every adapter |

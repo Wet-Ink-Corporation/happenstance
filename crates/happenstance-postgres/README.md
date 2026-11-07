@@ -11,7 +11,7 @@ with programs you can run.
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.4.6` release set.** **108 of 108** gated
+> **Status: conformant, and in the `0.5.0` release set.** **108 of 108** gated
 > tests in the event-store binary pass against a live PostgreSQL 17.10 — the 95
 > rules of the event-store family, the 6 of the concurrency family at 64
 > contenders, the generated model family, and this crate's own six. The
@@ -58,9 +58,9 @@ with programs you can run.
 ## Features
 
 ```toml
-happenstance-postgres = "0.4"                              # the event store
-happenstance-postgres = { version = "0.4", features = ["projection-store"] }
-happenstance-postgres = { version = "0.4", features = ["sync"] }   # + the ingest port
+happenstance-postgres = "0.5"                              # the event store
+happenstance-postgres = { version = "0.5", features = ["projection-store"] }
+happenstance-postgres = { version = "0.5", features = ["sync"] }   # + the ingest port
 
 sqlx = "0.8"                                               # only for queries of your own
 ```

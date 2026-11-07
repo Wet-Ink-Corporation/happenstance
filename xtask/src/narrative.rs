@@ -190,6 +190,15 @@ mod upgrading_to_0_4 {
     #![doc = include_str!("../../docs/upgrading-to-0-4.md")]
 }
 
+// The next upgrade guide. Its `rust` fences are a whole 0.5 projection, the
+// `Chunk` a run now takes, and the adoption of a checkpoint the 0.4 runner
+// wrote under the bare name, which asserts that it lands under the derived id
+// and only once. The 0.4 spellings and the manifests sit in `text` fences.
+#[cfg(doctest)]
+mod upgrading_to_0_5 {
+    #![doc = include_str!("../../docs/upgrading-to-0-5.md")]
+}
+
 // The first how-to. Three fences: a zero `Retry` refused at compile time
 // (E0080); the reply each exhausted or failed command gets; and two deliveries
 // of one request racing, where the loser is refused and its retry and a late
