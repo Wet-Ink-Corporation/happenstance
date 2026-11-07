@@ -66,8 +66,10 @@ step refusals cargo check --manifest-path "${MANIFEST}" --lib --features demonst
 # EXPECTED TO FAIL: E0658. Return-type notation, the one-trait alternative to
 # the `trait_variant` pair, is not stable on the pinned toolchain.
 # EXPECTED TO FAIL: the two weakened generic spawners of README §3 (nine and
-# five E0277s), and F1 on the SHIPPED `happenstance::Projection` (six E0277s).
+# five E0277s). F1 on the SHIPPED `happenstance::Projection` (six E0277s) is
+# recorded at e40a5e5 and is not re-run here: from 0.5.0 that trait no longer
+# compiles against the file, so re-running would overwrite its transcript.
 step spawn-minimal-bounds cargo test --manifest-path "${MANIFEST}" --features demonstrate-spawn-minimal-bounds --test spawn --no-run
 step spawn-store-as-projection cargo test --manifest-path "${MANIFEST}" --features demonstrate-spawn-store-as-projection --test spawn --no-run
-step spawn-shipped-store-as-projection cargo test --manifest-path "${MANIFEST}" --features demonstrate-shipped-f1 --test shipped_spawn --no-run
+echo "spawn-shipped-store-as-projection: skipped, recorded at e40a5e5 (see README)"
 step rtn-probe rustc --edition 2024 --crate-type lib --out-dir "${HERE}/target/rtn-probe" "${HERE}/probes/rtn.rs"

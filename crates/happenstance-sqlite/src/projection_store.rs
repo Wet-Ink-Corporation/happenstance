@@ -6,8 +6,8 @@
 //! unfrozen. It is not any more: ADR-0063 froze `ProjectionStore` for `0.3.0`,
 //! and everything here is semver-binding like the rest of `happenstance-sqlite`.
 //! It still sits behind the off-by-default `projection-store` feature, which has
-//! forwarded nothing to `happenstance-core` since that crate's
-//! `unstable-projection` was removed in `0.4.0`. The feature only keeps the
+//! forwarded nothing to `happenstance-core` since `0.3.0` (ADR-0063), and that
+//! crate's `unstable-projection` was removed in `0.4.0`. It only keeps the
 //! second role out of a build that wants the event store alone.
 //!
 //! On docs.rs the feature shows as a badge on this module. The badge says which

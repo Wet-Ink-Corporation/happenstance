@@ -177,10 +177,10 @@ pub enum NeonError<E> {
     /// [`CommitError::ForeignBatch`](happenstance_core::CommitError::ForeignBatch)
     /// and
     /// [`ResetError::ForeignBatch`](happenstance_core::ResetError::ForeignBatch)
-    /// spell has to be nameable here too. Both have been ungated since ADR-0063,
-    /// so they link. The batch is consumed either way; the
-    /// refusal is how a caller learns it was holding the wrong one, on the call
-    /// that was meant to be the cleanup.
+    /// spell has to be nameable here too. The batch is consumed either way, on
+    /// this error as on success. The refusal is how a caller learns it was
+    /// holding the wrong one, on the call that was meant to be the cleanup,
+    /// which is why it cannot be left unnamed.
     #[error("the batch was begun on a different store instance")]
     ForeignBatch,
 
