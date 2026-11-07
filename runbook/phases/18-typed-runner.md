@@ -268,6 +268,21 @@ PS-30 each with a rule and a mutant that fails it.
   adoption procedure is a compiled fence on `checkpoint_id` and a CHANGELOG
   entry (D7). Ten test sites moved onto `checkpoint_id` with no expected value
   changed (D4). PS-25 stays `[PROVISIONAL]` for #127.
+- 2026-11-06 — #129: PS-16's composed half, in
+  `examples/rebuilding-read-models/tests/rebuild_through_reset.rs`, a second target
+  in a package that already compiles the typed layer and `happenstance-sqlite`, so
+  no crate gains a dependency edge (D1). A typed `Projection` writes two tables, one
+  accumulating and one insert-only, is reset under `checkpoint_id(&view)` and
+  rebuilt to the same rows at two chunk sizes
+  (`rebuild_through_reset_restores_every_table`). The runbook procedure is written
+  down and shown to fail the same predicate, a reset whose third statement fails
+  leaves both tables and the checkpoint, and a protected reset through a handle
+  opened before the mark is refused while the view keeps running. PS-16's `Rule:`
+  line names the two rules in place, line for line, and `proof.rs` holds three of
+  the five names. PS-16 stays `[PROVISIONAL]` for #127 (D2). `view.id()` passed to
+  `reset` or `protect_from_reset` still type-checks and targets a row the runner
+  never writes; the file's documentation says so and no API changes (D3). SQLite
+  only: the `TRUNCATE` caveat is on #127's PS-16 line above (D4).
 - 2026-11-06 — #110: the bounds a spawner generic over the projection writes, measured
   on the shipped runner by removing each in turn (D1, the minimal set at merge):
   `S: SendEventStore<Error: Send> + Sync + 'static`,
@@ -321,18 +336,3 @@ PS-30 each with a rule and a mutant that fails it.
   over re-minted identities), and #110's spawner with `+ ConvergentProjection`, which
   is `E0271` under D7's spelling. Phase 13's rule (#141) needs `happenstance` as a
   dependency of `happenstance-sync-testkit`: a new inward edge, and phase 13's call.
-- 2026-11-06 — #129: PS-16's composed half, in
-  `examples/rebuilding-read-models/tests/rebuild_through_reset.rs`, a second target
-  in a package that already compiles the typed layer and `happenstance-sqlite`, so
-  no crate gains a dependency edge (D1). A typed `Projection` writes two tables, one
-  accumulating and one insert-only, is reset under `checkpoint_id(&view)` and
-  rebuilt to the same rows at two chunk sizes
-  (`rebuild_through_reset_restores_every_table`). The runbook procedure is written
-  down and shown to fail the same predicate, a reset whose third statement fails
-  leaves both tables and the checkpoint, and a protected reset through a handle
-  opened before the mark is refused while the view keeps running. PS-16's `Rule:`
-  line names the two rules in place, line for line, and `proof.rs` holds three of
-  the five names. PS-16 stays `[PROVISIONAL]` for #127 (D2). `view.id()` passed to
-  `reset` or `protect_from_reset` still type-checks and targets a row the runner
-  never writes; the file's documentation says so and no API changes (D3). SQLite
-  only: the `TRUNCATE` caveat is on #127's PS-16 line above (D4).
