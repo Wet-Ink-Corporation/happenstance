@@ -44,7 +44,11 @@
 //! and the chunk commits around it, and its control,
 //! `a_server_side_failure_leaves_nothing_for_on_error_to_write_into`, runs the
 //! same `apply` without one and commits nothing. The typed layer is a path-only
-//! dev-dependency for them alone.
+//! dev-dependency for them alone. Two more drive it for #401, PS-16's far end:
+//! `a_truncate_resets_a_runner_view_and_the_runner_replays_it` clears a view with
+//! `TRUNCATE` in the transaction `reset` commits, and
+//! `a_failed_reset_takes_its_truncate_back` shows the `TRUNCATE` rolls back
+//! with a reset that fails.
 
 #![cfg(all(
     feature = "projection-store",
@@ -1053,6 +1057,127 @@ async fn a_server_side_failure_leaves_nothing_for_on_error_to_write_into() {
             .unwrap(),
         Checkpoint::NeverRun,
         "and the checkpoint never moved"
+    );
+}
+
+// -------------------------------------------------------------------------
+// PS-16's far end: a reset that clears with `TRUNCATE` (#401)
+// -------------------------------------------------------------------------
+
+/// The deposits both `TRUNCATE` tests build the ledger from.
+const TRUNCATE_DEPOSITS: [(&str, i64); 3] = [("alice", 1), ("bob", 20), ("alice", 300)];
+
+/// The ledger those deposits fold to.
+fn truncate_ledger() -> Vec<(String, i64)> {
+    vec![("alice".to_owned(), 301), ("bob".to_owned(), 20)]
+}
+
+/// A reset whose batch clears the view with `TRUNCATE` empties the rows and the
+/// checkpoint together, and the runner then replays the view from the start.
+///
+/// Every other SQL store's probe clears with `DELETE`, and the typed rebuild
+/// test runs on SQLite only, so PS-16's record names no adapter that clears
+/// with `TRUNCATE`. Postgres runs it in the transaction `begin` opened and
+/// `reset` commits, under an `ACCESS EXCLUSIVE` lock: the other end of that
+/// axis. Rejects a `reset` that loses one half (the rows survive, or the
+/// checkpoint does), and a runner that resumes after a reset instead of
+/// starting over (the replayed sums double or miss the first deposit). A reset
+/// on a separate transaction is the next test's to reject.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn a_truncate_resets_a_runner_view_and_the_runner_replays_it() {
+    let fixture = LivePostgresProjectionFixture::new();
+    create_ledger(&fixture).await.unwrap();
+    let events = MemoryEventStore::new();
+    let positions = deposit(&events, &TRUNCATE_DEPOSITS).await.unwrap();
+    let models = fixture.connect().await;
+    let mut ledger = Ledger::new(None);
+    let key = checkpoint_id(&ledger).unwrap();
+    let built = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
+        .await
+        .unwrap();
+    assert_eq!(built.applied, 3);
+    assert_eq!(ledger_rows(&fixture).await.unwrap(), truncate_ledger());
+
+    let mut clear = models.begin().await.unwrap();
+    clear.execute("TRUNCATE ledger", []).await.unwrap();
+    models.reset(clear, &key).await.unwrap();
+
+    assert_eq!(
+        ledger_rows(&fixture).await.unwrap(),
+        Vec::<(String, i64)>::new(),
+        "the TRUNCATE committed with the reset"
+    );
+    assert_eq!(
+        fixture.connect().await.checkpoint(&key).await.unwrap(),
+        Checkpoint::NeverRun,
+        "and the checkpoint went with the rows"
+    );
+
+    let replayed = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
+        .await
+        .unwrap();
+    assert_eq!(
+        replayed.applied, 3,
+        "the replay starts from the first deposit"
+    );
+    assert_eq!(
+        ledger_rows(&fixture).await.unwrap(),
+        truncate_ledger(),
+        "the replayed view equals the one the reset cleared"
+    );
+    assert_eq!(
+        models.checkpoint(&key).await.unwrap(),
+        Checkpoint::Live {
+            through: *positions.last().expect("three deposits were appended")
+        }
+    );
+}
+
+/// A reset that fails after its `TRUNCATE` reached the server keeps the rows
+/// and the checkpoint.
+///
+/// The second statement names a table the server does not have, so the server
+/// aborts the transaction after the `TRUNCATE` ran in it. Rejects a store that
+/// runs a caller's statements outside the reset's transaction, or commits what
+/// came before a refusal: either way the ledger would be empty afterwards.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn a_failed_reset_takes_its_truncate_back() {
+    let fixture = LivePostgresProjectionFixture::new();
+    create_ledger(&fixture).await.unwrap();
+    let events = MemoryEventStore::new();
+    let positions = deposit(&events, &TRUNCATE_DEPOSITS).await.unwrap();
+    let models = fixture.connect().await;
+    let mut ledger = Ledger::new(None);
+    let key = checkpoint_id(&ledger).unwrap();
+    let built = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
+        .await
+        .unwrap();
+    assert_eq!(built.applied, 3);
+
+    let mut clear = models.begin().await.unwrap();
+    clear.execute("TRUNCATE ledger", []).await.unwrap();
+    clear
+        .execute("TRUNCATE no_such_table", [])
+        .await
+        .expect_err("the server refuses a table it does not have");
+    models
+        .reset(clear, &key)
+        .await
+        .expect_err("a reset over an aborted transaction cannot commit");
+
+    assert_eq!(
+        ledger_rows(&fixture).await.unwrap(),
+        truncate_ledger(),
+        "the TRUNCATE rolled back with the reset"
+    );
+    assert_eq!(
+        fixture.connect().await.checkpoint(&key).await.unwrap(),
+        Checkpoint::Live {
+            through: *positions.last().expect("three deposits were appended")
+        },
+        "and the checkpoint stayed where the run left it"
     );
 }
 
