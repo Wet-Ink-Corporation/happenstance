@@ -43,7 +43,7 @@ nameless = [cid for cid, body in bodies.items() if not CLAUSE_ID.search(body)]
 
 # The inverse relation: every case any clause's `Cases:` field claims.
 #
-# `field_line` (`spec_trace.rs:1503-1541`) joins the marker's own line with every
+# `field_line` (`spec_trace.rs:1503-1541` at the pinned `56ef6c5`) joins the marker's own line with every
 # following line until a blank one, another field head, a heading or a bold run,
 # so a `Cases:` list wrapped across two lines claims everything on both. A first
 # cut of this file read the marker line alone and reported four orphans that are
