@@ -25,7 +25,13 @@ fn main() -> ExitCode {
     // `polling` unless asked otherwise, so pass-001's command still measures
     // what pass-001 measured. Anything else is refused, not run as the default.
     let runner = match std::env::var("HS_RUNNER") {
-        Err(_) => Runner::Polling,
+        Err(std::env::VarError::NotPresent) => Runner::Polling,
+        Err(std::env::VarError::NotUnicode(value)) => {
+            progress::say(&format!(
+                "harness failed: HS_RUNNER={value:?} is not `polling` or `fan_out`"
+            ));
+            return ExitCode::FAILURE;
+        }
         Ok(value) => match Runner::parse(&value) {
             Some(runner) => runner,
             None => {

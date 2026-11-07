@@ -113,3 +113,43 @@ fn the_fan_out_runner_reads_once_per_poll() {
     let polling = run_cell(&cell(4, 128, Arm::Overlapping), Runner::Polling).expect("a number");
     assert_eq!(polling.runner, "polling");
 }
+
+/// The staleness phase's fan-out branch: one shared read per poll, after a
+/// catch-up whose reads are not counted. Four appends, each observed on its
+/// first poll, are four reads whatever the fan-out; the polling runner issues
+/// one per view per poll. Rejects a staleness loop that still calls
+/// `run_projection` per view under `Runner::FanOut`.
+#[test]
+fn the_fan_out_runner_reads_once_per_staleness_poll() {
+    let staleness = |runner| {
+        run_cell(
+            &Cell {
+                phase: Phase::Staleness,
+                fan_out: 4,
+                log_size: 64,
+                poll_interval_ms: 1,
+                chunk: polling_cost::CHUNK,
+                arm: Arm::Overlapping,
+                repeat: 0,
+                seed: polling_cost::SEED,
+            },
+            runner,
+        )
+        .expect("a number")
+    };
+
+    let fan_out = staleness(Runner::FanOut);
+    assert_eq!(fan_out.runner, "fan_out");
+    assert_eq!(
+        fan_out.reads_issued,
+        u64::try_from(polling_cost::STALENESS_APPENDS).expect("four fits"),
+        "one shared read per poll"
+    );
+
+    let polling = staleness(Runner::Polling);
+    assert_eq!(
+        polling.reads_issued,
+        fan_out.reads_issued * 4,
+        "one read per view per poll"
+    );
+}

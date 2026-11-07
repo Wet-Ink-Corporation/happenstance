@@ -535,42 +535,33 @@ pub fn run_cell(cell: &Cell, runner: Runner) -> Result<Record, HarnessError> {
     }
 }
 
-/// One poll of every view under `runner`, returning the events applied in it.
+/// One poll of every view through one `run_fan_out`, so one shared read,
+/// returning the events applied in it.
 ///
-/// [`Runner::Polling`] is one `run_projection` per view, so N reads;
-/// [`Runner::FanOut`] is one `run_fan_out` over all of them, so one read. The
-/// views, the store and the codec are the same either way, which is what lets
-/// a pass under each be compared cell for cell.
-fn poll_all(
+/// The polling runner's equivalent is one `run_once` per view, which the
+/// callers below loop over themselves. The views, the store and the codec are
+/// the same either way, which is what lets a pass under each be compared cell
+/// for cell.
+fn fan_out_once(
     events: &CountingStore,
     models: &MemoryProjectionStore,
     views: &mut [View],
     cell: &Cell,
-    runner: Runner,
 ) -> Result<u64, HarnessError> {
+    let outcome = block_on(happenstance::run_fan_out(
+        events,
+        models,
+        views,
+        &Json,
+        chunk_of(cell),
+    ));
+    if let Some(read) = outcome.read {
+        return Err(HarnessError::Run(read.to_string()));
+    }
     let mut applied = 0usize;
-    match runner {
-        Runner::Polling => {
-            for view in views.iter_mut() {
-                applied = applied.saturating_add(run_once(events, models, view, cell)?.applied);
-            }
-        }
-        Runner::FanOut => {
-            let outcome = block_on(happenstance::run_fan_out(
-                events,
-                models,
-                views,
-                &Json,
-                chunk_of(cell),
-            ));
-            if let Some(read) = outcome.read {
-                return Err(HarnessError::Run(read.to_string()));
-            }
-            for view in outcome.views {
-                let progressed = view.map_err(|e| HarnessError::Run(e.to_string()))?;
-                applied = applied.saturating_add(progressed.applied);
-            }
-        }
+    for view in outcome.views {
+        let progressed = view.map_err(|e| HarnessError::Run(e.to_string()))?;
+        applied = applied.saturating_add(progressed.applied);
     }
     Ok(u64::try_from(applied).unwrap_or(u64::MAX))
 }
@@ -637,7 +628,7 @@ fn amplification(cell: &Cell, runner: Runner) -> Result<Record, HarnessError> {
         // Every view together, one shared read per round, until a round
         // applies nothing.
         Runner::FanOut => loop {
-            let applied = poll_all(&events, &models, &mut views, cell, runner)?;
+            let applied = fan_out_once(&events, &models, &mut views, cell)?;
             if applied == 0 {
                 break;
             }
@@ -699,7 +690,7 @@ fn staleness(cell: &Cell, runner: Runner) -> Result<Record, HarnessError> {
                 while run_once(&events, &models, view, cell)?.applied > 0 {}
             }
         }
-        Runner::FanOut => while poll_all(&events, &models, &mut views, cell, runner)? > 0 {},
+        Runner::FanOut => while fan_out_once(&events, &models, &mut views, cell)? > 0 {},
     }
     events.reset();
 
@@ -743,7 +734,7 @@ fn staleness(cell: &Cell, runner: Runner) -> Result<Record, HarnessError> {
             // Under the fan-out runner one shared read serves every view this
             // poll; under polling each view reads for itself, below.
             if runner == Runner::FanOut {
-                poll_all(&events, &models, &mut views, cell, runner)?;
+                fan_out_once(&events, &models, &mut views, cell)?;
             }
             for (view, observer) in views.iter_mut().zip(observers.iter_mut()) {
                 if runner == Runner::Polling {

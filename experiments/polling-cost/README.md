@@ -136,18 +136,20 @@ predates it, and a record without one reads as `polling`.
 | 32 | 3 200 000 | 100 000 | 64 | 2 | 3 200 000 |
 
 `pass-002` reproduces `pass-001`'s ratios exactly on a different host and
-operating system. Under the fan-out runner the amplification is **1.00** at every
-fan-out in both arms, and the read count is **2** whatever N is: one read that
-delivers and one that confirms nothing is new. The read-model work does not
+operating system. Under the fan-out runner the overlapping arm's amplification is
+**1.00** at every fan-out and log size, and the read count is **2** whatever N is:
+one read that delivers and one that confirms nothing is new. The read-model work does not
 shrink: each view still applies every event it selects, which is the last column.
 What the fan-out runner buys back is the reads and the deliveries.
 
-The disjoint arm delivers N − 1 events more than the log under the fan-out runner
-(100 031 at 32 views). That is consistent with the confirming read starting at the
-slowest view's checkpoint: with the shards interleaved, each view's checkpoint is
-its own last event, the slowest is N − 1 events from the tail, and every view
-skips what it has already applied. The 1 000- and 10 000-event logs show the same
-pattern, and every row is in `results/pass-002/` and `results/pass-003/`.
+The disjoint arm delivers N − 1 events more than the log under the fan-out runner,
+so its amplification is (log + N − 1) / log: **1.031** at 32 views over 1 000
+events, 1.003 over 10 000 and 1.0003 over 100 000. The runner resumes each view
+just past its checkpoint and reads the union from the lowest of those starts.
+With the shards interleaved, each view's checkpoint is its own last event, so the
+slowest sits N − 1 positions behind the tail, and the confirming read re-delivers
+those N − 1 events for every view to skip. Every row is in `results/pass-002/`
+and `results/pass-003/`.
 
 In the staleness cells at 32 overlapping views, the fan-out runner issues 4 reads
 where the polling runner issues 128, and the median observation latency is the
@@ -209,8 +211,9 @@ written down cannot be met or missed. A reader who has a budget can compare it t
 counter and one row per commit — because the quantity under study is the
 redundant *read* fan-out and read-model work would dilute it; a deployment whose
 `apply` does real work will see a smaller amplification of *total* cost from the
-same amplification of deliveries. And the amplification figures in §2 are exact
-integers because the arms are exact: every overlapping view selects every event,
+same amplification of deliveries. And the polling passes' amplification figures in §2
+are exact integers because the arms are exact (the fan-out disjoint arm's are
+not, for the reason §2 gives): every overlapping view selects every event,
 every disjoint view selects a disjoint shard. A real deployment's views overlap
 partially, and this pass measures the two ends rather than the middle.
 
