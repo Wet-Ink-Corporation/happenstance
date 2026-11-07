@@ -43,7 +43,7 @@ last_reviewed: 2026-08-15
 
 `cargo xtask spec-trace`'s check 4 — does every conformance rule a clause cites actually exist —
 does not run against every clause family uniformly. It runs only against families `has_suite`
-admits (`xtask/src/spec_trace.rs:2692-2697`):
+admits (`xtask/src/spec_trace.rs:2718-2723`):
 
 ```rust
 fn has_suite(clause_id: &str) -> bool {
@@ -54,7 +54,7 @@ fn has_suite(clause_id: &str) -> bool {
 }
 ```
 
-The check's own loop (`:699-701`) skips a clause outright when `has_suite` returns `false`: "for a
+The check's own loop (`:831-834`) skips a clause outright when `has_suite` returns `false`: "for a
 `wire::`-qualified name … looked for in the wire test files rather than in a suite that could never
 define it." A family absent from `has_suite` is not partially checked — it is not checked at all,
 and check 4 reports nothing wrong, because abstaining and passing look identical in the printed
@@ -66,21 +66,21 @@ written — and `cargo xtask spec-trace` would report no problem, because `PS` s
 `has_suite` checked. The exclusion was written for a true reason: the projection suite
 (`crates/happenstance-testkit/src/projection.rs`) did not exist yet, and checking `PS` citations
 against a suite that could never define them would report every one of them as a false positive,
-"noise indistinguishable from a real typo" (`xtask/src/spec_trace.rs:2680-2682`). The suite was
+"noise indistinguishable from a real typo" (`xtask/src/spec_trace.rs:2706-2708`). The suite was
 then written, and the exclusion was not removed — it outlived its own justification by two slices
 before this workspace noticed.
 
 ## What holds the fix
 
 `spec_trace::tests::the_projection_family_is_checked_against_its_suite`
-(`xtask/src/spec_trace.rs:3754-3761`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
+(`xtask/src/spec_trace.rs:3780-3787`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
 directly, so a future regression — narrowing the prefix list back to exclude `PS` — fails the build
 rather than silently reopening the blind spot. The companion test,
-`the_replication_family_still_abstains_and_the_rest_do_not` (`:3617-3633`), asserts the reverse for
+`the_replication_family_still_abstains_and_the_rest_do_not` (`:3796-3812`), asserts the reverse for
 the one family still legitimately excluded: `has_suite("SY-1")` must stay `false`, because
 `happenstance-sync-testkit` carries only two of the family's rules (#111) and checking every `SY`
 rule name would report the unwritten rest as missing — exactly the false-positive noise the original
-`PS` exclusion was written to avoid (`:3630-3634`). It also pins `CF-1`'s abstention, on the different ground that `CF` clauses are about
+`PS` exclusion was written to avoid (`:3803-3807`). It also pins `CF-1`'s abstention, on the different ground that `CF` clauses are about
 the suite rather than checked by it. Widening `has_suite` to admit every family unconditionally is
 therefore a build failure today, not a judgement call left to the next editor.
 

@@ -93,7 +93,7 @@ def op_rename(path: str, fn: str, new: str) -> None:
 
 
 # The seven substrings `rules_of` tests for, keyed by the name this experiment
-# reports them under.  Transcribed from `xtask/src/spec_trace.rs:1628-1634`.
+# reports them under.  Transcribed from `xtask/src/spec_trace.rs:1628-1634` at the pinned `56ef6c5`.
 GUARD_TERMS = {
     "unit-test": 'text.contains("unit test")',
     "compile-test": 'text.contains("compile test")',
@@ -121,7 +121,7 @@ def rewrite_guard(text: str, drop: set[str]) -> str:
     **`elsewhere` is left computing exactly what it computed before, and that is
     the whole design of this edit.**  Three of the seven substrings reach
     `schedules_new` through `elsewhere`, but `elsewhere` is also read on its own
-    by check 7 and by the §7.2 renderer (`spec_trace.rs:1158`, `:1383`).
+    by check 7 and by the §7.2 renderer (`spec_trace.rs:1158`, `:1383`, at `56ef6c5`).
     Deleting a term from `elsewhere` would therefore change two checks at once,
     and the delta in the report could no longer be attributed to check 4 — which
     is the only check this experiment is asking about.  So the three are
