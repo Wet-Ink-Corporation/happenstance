@@ -99,9 +99,9 @@ cannot clear them for you.
 What you get in return is safety against a crash halfway through. The deletes
 and the checkpoint change commit together, so a crash cannot leave an empty
 table whose checkpoint says it is up to date
-([PS-16](../spec/SPECIFICATION.md#46-reset)). That rule is still provisional:
-it would have to change if a store turned up that cannot clear rows in the same
-transaction as its checkpoint.
+([PS-16](../spec/SPECIFICATION.md#46-reset)). That rule is frozen for 1.0:
+it would reopen only for a store that cannot clear rows in the same transaction as
+its checkpoint, and every projection adapter in this workspace can.
 
 A reset touches only the view you name. Every other view in the same store
 stays where it was, so you can rebuild one view without pausing the rest
