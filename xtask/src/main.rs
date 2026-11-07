@@ -997,6 +997,27 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
+        // The same step for the testkit, the crate an adapter author installs.
+        // `Fixture::READ_YOUR_OWN_WRITES` linked `crate::model`, which exists
+        // only behind `proptest`, and the workspace step's `--all-features`
+        // rendered it while the default build failed (#396). docs.rs renders
+        // all features too, so nothing else in the pipeline sees this
+        // configuration. Its own step for the reason given above: a second
+        // `-p` would unify features with whatever else is built.
+        name: "documentation (default features, happenstance-testkit)",
+        program: "cargo",
+        args: &[
+            "doc",
+            "--locked",
+            "-p",
+            "happenstance-testkit",
+            "--no-deps",
+            "--document-private-items",
+        ],
+        env: &[("RUSTDOCFLAGS", "-D warnings")],
+        probe: None,
+    },
+    Step {
         // D11. Manifest metadata promising two licences is not the same thing as
         // an artifact containing them, and only the second is what a consumer
         // unpacks. See `package`'s module docs.
