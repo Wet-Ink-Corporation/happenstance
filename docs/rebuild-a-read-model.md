@@ -45,9 +45,11 @@ Since `0.5.0`, `run_projection` needs no feature: it is in every build of
 method your projection implements is `async` and is handed a `Delivered` event
 ([ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) says why).
 
-The programs on this page call only the trait, using `MemoryProjectionStore`,
-because a rebuild is those two calls, `reset` and `commit`, and the runner is
-what makes them for you.
+The programs on this page run in memory, using `MemoryProjectionStore`. The
+first drives a real projection with `run_projection` and names its checkpoint
+with `checkpoint_id`, as an application does. The second calls the trait
+directly, because what it shows is a rule the store enforces whoever calls
+it.
 [The rebuilding example](../examples/rebuilding-read-models/src/main.rs) runs
 every step below with the runner, against SQLite. It is the program to read
 alongside this page.
@@ -109,6 +111,13 @@ stays where it was, so you can rebuild one view without pausing the rest
 name it by `checkpoint_id(&projection)`, not `projection.id()`: the runner
 never writes under the bare name.
 
+The same goes for protecting a view from a reset. On SQLite,
+`SqliteProjectionStore::protect_from_reset` takes the id to protect, and a
+view the runner maintains is protected only under `checkpoint_id(&projection)`.
+Protecting `projection.id()` marks a name the runner never writes, and the
+reset you meant to refuse goes through
+([PS-18](../spec/SPECIFICATION.md#46-reset)).
+
 ### Reset, not a commit at the first position
 
 After a reset, the checkpoint reads `Checkpoint::NeverRun`, so the next run
@@ -120,70 +129,113 @@ the first position. That records "applied up to position 1", so the next run
 starts *after* the first event and never applies it
 ([PS-19](../spec/SPECIFICATION.md#46-reset)).
 
-The program below does both, and counts how many events each replay would read.
-Its `replay_reads` function copies the rule the runner uses to decide where to
-resume, so it is a model of the runner rather than a call to it:
+The program below does both, with the runner. Its projection writes one row
+per order, keyed by the order, so it keeps nothing in its own fields:
 
 ```rust
-use happenstance::{Authority, Checkpoint, Event, EventStore, ProjectionId};
-use happenstance::{MemoryEventStore, MemoryProjectionStore, ProjectionStore};
-use happenstance::{Query, ReadOptions, SequencePosition, collect};
+use happenstance::{bytes::Bytes, Codec, CodecError, DomainEvent, EventType};
+use happenstance::{Authority, Checkpoint, Chunk, Delivered, Event, EventStore};
+use happenstance::{Json, MemoryEventStore, MemoryProjectionBatch, Tags};
+use happenstance::{MemoryProjectionStore, MemoryProjectionStoreError};
+use happenstance::{Projection, ProjectionId, ProjectionStore, SequencePosition};
+use happenstance::{checkpoint_id, run_projection};
 
 type Failure = Box<dyn core::error::Error>;
 
-const STOCK: ProjectionId = ProjectionId::from_static("stock_on_hand");
-const STATUS: ProjectionId = ProjectionId::from_static("order_status");
+#[derive(serde::Serialize, serde::Deserialize)]
+struct OrderPlaced {
+    order: String,
+}
+
+const ORDER_PLACED: EventType = EventType::from_static("OrderPlaced");
+
+impl DomainEvent for OrderPlaced {
+    const EVENT_TYPES: &'static [EventType] = &[ORDER_PLACED];
+    fn event_type(&self) -> EventType {
+        ORDER_PLACED
+    }
+    fn tags(&self) -> Tags {
+        Tags::empty()
+    }
+    fn encode<C: Codec>(&self, codec: &C) -> Result<Bytes, CodecError> {
+        codec.encode(self)
+    }
+    fn decode<C: Codec>(codec: &C, _: &EventType, data: &Bytes) -> Result<Self, CodecError> {
+        codec.decode(data)
+    }
+}
+
+/// One row per order. A replay writes the same rows whatever it replays from.
+struct Orders {
+    id: ProjectionId,
+    scope: Tags,
+}
+
+impl Projection for Orders {
+    type Event = OrderPlaced;
+    type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
+    fn id(&self) -> &ProjectionId {
+        &self.id
+    }
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+    async fn apply(
+        &mut self,
+        event: Delivered<OrderPlaced>,
+        batch: &mut MemoryProjectionBatch,
+    ) -> Result<(), MemoryProjectionStoreError> {
+        batch.write(event.into_event().order, 1);
+        Ok(())
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Failure> {
     let log = MemoryEventStore::new();
-    let placed = Event::new("OrderPlaced", &b"{}"[..])?;
-    log.append(&[placed.clone(), placed.clone(), placed], None).await?;
-    let head = log.snapshot().last().ok_or("the log is empty")?.position;
+    for order in ["o-1", "o-2", "o-3"] {
+        let placed = OrderPlaced { order: order.into() };
+        let event = Event::new("OrderPlaced", Json.encode(&placed)?)?;
+        log.append(&[event], None).await?;
+    }
+    let mut orders = Orders { id: ProjectionId::new("orders")?, scope: Tags::empty() };
+    // The id the runner keeps this view's checkpoint under.
+    let key = checkpoint_id(&orders)?;
+    let chunk = Chunk::of(2.try_into()?);
 
     // A view that has caught up with the log.
     let views = MemoryProjectionStore::new();
-    let mut rows = views.begin().await?;
-    rows.write("sku-1", 3);
-    views.commit(rows, &STOCK, head, Authority::Live).await?;
+    run_projection(&log, &views, &mut orders, &Json, chunk).await?;
+    assert_eq!(views.len(), 3);
 
     // The reset: your deletes and the checkpoint, as one unit.
     let mut deletes = views.begin().await?;
     deletes.delete_all();
-    views.reset(deletes, &STOCK).await?;
+    views.reset(deletes, &key).await?;
     assert!(views.is_empty(), "the rows went with the checkpoint");
-    assert_eq!(views.checkpoint(&STOCK).await?, Checkpoint::NeverRun);
+    assert_eq!(views.checkpoint(&key).await?, Checkpoint::NeverRun);
 
-    // WRONG - "start again" spelled as a commit at the first position.
-    let empty = views.begin().await?;
+    // The replay applies every event again, the first one included.
+    let replayed = run_projection(&log, &views, &mut orders, &Json, chunk).await?;
+    assert_eq!(replayed.applied, 3);
+    assert_eq!(views.get("o-1"), Some(1));
+
+    // WRONG - "start again" spelled as a commit at the first position, here
+    // on a second store standing in for an emptied view that never ran.
+    let shortcut = MemoryProjectionStore::new();
+    let empty = shortcut.begin().await?;
     let first = SequencePosition::FIRST;
-    views.commit(empty, &STATUS, first, Authority::Live).await?;
-    let wound = views.checkpoint(&STATUS).await?;
-    assert_ne!(wound, Checkpoint::NeverRun);
+    shortcut.commit(empty, &key, first, Authority::Live).await?;
     // END WRONG.
 
     // The count below assumes the log starts at the first position.
     let start = log.snapshot().first().ok_or("the log is empty")?.position;
-    assert_eq!(start, SequencePosition::FIRST);
-    assert_eq!(replay_reads(&log, Checkpoint::NeverRun).await?, 3);
-    assert_eq!(replay_reads(&log, wound).await?, 2, "the first event is lost");
+    assert_eq!(start, first);
+    let resumed = run_projection(&log, &shortcut, &mut orders, &Json, chunk).await?;
+    assert_eq!(resumed.applied, 2);
+    assert_eq!(shortcut.get("o-1"), None, "the first event is lost");
     Ok(())
-}
-
-/// How many events a run would read after `checkpoint`: from the start when
-/// it never ran, and strictly after the checkpoint otherwise. A model of the
-/// runner's rule, not a call to the runner.
-async fn replay_reads(
-    log: &MemoryEventStore,
-    checkpoint: Checkpoint,
-) -> Result<usize, Failure> {
-    let mut options = ReadOptions::new();
-    if let Checkpoint::Live { through } | Checkpoint::Rebuilding { through } =
-        checkpoint
-    {
-        options = options.from(through.next().ok_or("no position follows")?);
-    }
-    Ok(collect(log.read(&Query::all(), options)).await?.len())
 }
 ```
 

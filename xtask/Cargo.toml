@@ -20,7 +20,10 @@ anyhow.workspace = true
 # handful of examples. Atoms 23 and 24 model those drivers' *shapes* with a
 # stand-in and cite the real call site, and they say so where a reader will see it.
 [dev-dependencies]
-happenstance = { workspace = true, features = ["std", "memory"] }
+# `json` for the guide pages whose programs drive `run_projection`, which needs
+# a codec (docs/rebuild-a-read-model.md). `serde_json` is already in Cargo.lock,
+# so cargo deny's scope is unchanged.
+happenstance = { workspace = true, features = ["std", "memory", "json"] }
 happenstance-core = { workspace = true, features = ["std", "memory", "serde"] }
 happenstance-testkit = { workspace = true }
 bytes.workspace = true

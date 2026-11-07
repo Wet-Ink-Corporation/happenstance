@@ -209,12 +209,12 @@ mod retry_a_command {
     #![doc = include_str!("../../docs/retry-a-command.md")]
 }
 
-// The rebuild how-to. Two fences over the port, the two trait calls a rebuild
-// is made of (an example runs them through the runner). The first resets a
-// view and commits a second at the first position, and counts what each replay
-// reads; the second has a backwards commit refused and a reset take its place.
-// A reset that stopped clearing the checkpoint, or a store that accepted the
-// backwards commit or wrote the row it carried, turns this module red.
+// The rebuild how-to. The first fence drives `run_projection`, resets under
+// `checkpoint_id`, replays all three events, and shows a commit at FIRST losing
+// the first event; a runner that resumed inclusively, ignored the checkpoint or
+// keyed on the bare name turns it red. The second has a backwards commit
+// refused and a reset take its place, so a store that accepted that commit or
+// wrote the row it carried turns this module red.
 #[cfg(doctest)]
 mod rebuild_a_read_model {
     #![doc = include_str!("../../docs/rebuild-a-read-model.md")]
