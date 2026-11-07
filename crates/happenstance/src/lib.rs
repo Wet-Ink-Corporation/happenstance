@@ -111,7 +111,7 @@
 //!   is frozen since ADR-0063, but because the runner's own shape is settling
 //!   at phase 18: `apply` is `async` now (ADR-0074), so it can await a live
 //!   batch, and its error type and failure policy follow. One call drives one
-//!   projection, and it never buffers the replay.
+//!   projection, or N views over one read, and never buffers the replay.
 //!
 //! # Features
 //!

@@ -667,11 +667,11 @@ where
 ///
 /// # One projection per call
 ///
-/// There is no fan-out over N projections, because the write set is **owned**:
-/// it cannot be shared between tasks, and a runner that moved it into a
-/// `tokio::spawn` would need it to be `'static` and `Send`, neither of which an
-/// adapter holding a live transaction can promise. N read models therefore cost
-/// N independent reads.
+/// [`run_fan_out`](crate::run_fan_out) drives N views over one read; this
+/// drives one, and N of these cost N reads. Both hold one **owned** write set
+/// per view and spawn nothing: a set moved into a `tokio::spawn` would have to
+/// be `'static` and `Send`, which a live transaction cannot promise. One task
+/// per view through this call is what contains a panic in one of them.
 ///
 /// # Rebuilding
 ///
