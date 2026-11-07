@@ -168,3 +168,7 @@ policy into an adapter — is answered rather than adopted: the table holds a ma
 not a policy, so the division PS-18 draws stands. `happenstance-postgres` and `happenstance-neon`
 still decline with text that repeats that argument; bringing their reasons into line is a separate
 item. The default-reason-string question still rides along unanswered.
+
+**#381, 2026-11-07.** That separate item is done: both adapters now decline by scope. Their
+reasons say the store has no call that marks a projection protected, that this is a gap rather
+than a judgement on the mechanism, and that the same table there is tracked as #406.

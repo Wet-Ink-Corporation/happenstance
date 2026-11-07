@@ -914,29 +914,27 @@ impl happenstance_testkit::ProjectionFixture for PostgresProjectionFixture {
     /// the same schema, which is the pair of properties the rules need.
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
 
-    /// Declined, and the reason is the store's rather than the fixture's
-    /// convenience: `PostgresProjectionStore` holds **no protection policy**.
+    /// Declined, by scope: `PostgresProjectionStore` offers **no way to mark a
+    /// projection protected**.
     ///
     /// PS-18 makes refusal a mechanism the port supplies and leaves *what to
-    /// protect* to the domain. This adapter owns the checkpoint row and the
-    /// transaction that carries it, and knows nothing about which projection a
-    /// regulator already holds a hash chain for, so `reset` returns
-    /// `ResetError::Refused` on no path at all and a fixture claiming the
-    /// capability would fail `refused_reset_changes_nothing` at its first
-    /// assertion.
+    /// protect* to the domain. This adapter has no call a caller could make to
+    /// name a protected projection, so `reset` returns `ResetError::Refused` on
+    /// no path at all and a fixture claiming the capability would fail
+    /// `refused_reset_changes_nothing` at its first assertion.
     ///
-    /// The same alternative loses here as it does for `happenstance-sqlite`, and
-    /// for the same reason: a protected-projections table invented so that one
-    /// more rule reports `Ran` would put a domain policy inside an adapter
-    /// designed to keep the domain out.
+    /// The mechanism is not what is wrong. `happenstance-sqlite` supports this
+    /// capability through a `projection_protection` table that the caller writes
+    /// with `protect_from_reset` (#118), which keeps the choice with the domain.
+    /// The same table here is additive public API on a published adapter, so it
+    /// waits on its own issue (#406) rather than arriving in a fixture's reason.
     const RESET_REFUSAL: Capability = Capability::declined(
-        "PostgresProjectionStore holds no protection policy: the read model \
-         belongs to the caller and this adapter owns only the checkpoint row and \
-         the transaction that carries it, so there is no projection it could \
-         decline to reset and `reset` returns `Refused` on no path at all. The \
-         alternative — a protected-projections table invented here so that one \
-         more rule reports `Ran` — would put a domain policy into an adapter \
-         designed to keep the domain out",
+        "PostgresProjectionStore has no call that marks a projection protected, \
+         so there is no projection it could decline to reset and `reset` returns \
+         `Refused` on no path at all. This is a gap in scope, not a judgement on \
+         the mechanism: happenstance-sqlite refuses through a \
+         `projection_protection` table the caller writes with `protect_from_reset`, \
+         and the same table here is tracked as #406",
     );
 
     /// Supported, and armed for real: a `BEFORE INSERT OR UPDATE` trigger on
@@ -1047,10 +1045,15 @@ impl happenstance_testkit::ProjectionFixture for LivePostgresProjectionFixture {
     /// capability exists to expose.
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
 
-    /// Declined, for the buffered store's reason: the live store holds no
-    /// protection policy either.
+    /// Declined, for the buffered store's reason: the live store has no call
+    /// that marks a projection protected either (#406).
     const RESET_REFUSAL: Capability = Capability::declined(
-        "LivePostgresProjectionStore holds no protection policy: the read model          belongs to the caller and this adapter owns only the checkpoint row and          the transaction that carries it, so there is no projection it could          decline to reset and `reset` returns `Refused` on no path at all",
+        "LivePostgresProjectionStore has no call that marks a projection \
+         protected, so there is no projection it could decline to reset and \
+         `reset` returns `Refused` on no path at all. This is a gap in scope, not \
+         a judgement on the mechanism: happenstance-sqlite refuses through a \
+         `projection_protection` table the caller writes with `protect_from_reset`, \
+         and the same table here is tracked as #406",
     );
 
     /// Supported by the same trigger. What it exercises is sharper here: the

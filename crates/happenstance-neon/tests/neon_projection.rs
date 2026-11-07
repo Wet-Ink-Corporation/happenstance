@@ -25,13 +25,13 @@
 //!
 //! # What this adapter reports rather than passes
 //!
-//! **Three rules, all of them here, and none of them a gap.** This is the whole
+//! **Three rules, all of them here: one a gap in scope (#406), two forced.** This is the whole
 //! of the crate's capability skip list.
 //!
 //! * `refused_reset_changes_nothing`, because `RESET_REFUSAL` is declined — the
-//!   store holds no protection policy, and inventing one so that a rule reports
-//!   `Ran` would put a domain decision inside an adapter designed to keep the
-//!   domain out. The reason is written in this store's own words rather than
+//!   store has no call that marks a projection protected. That is scope, not a
+//!   verdict on the mechanism: `happenstance-sqlite` has one, and the same here
+//!   is #406. The reason is written in this store's own words rather than
 //!   copied from the adapter next door, which is CF-18's requirement.
 //! * `batch_reads_reflect_pending_writes` and `rebuild_is_chunk_size_invariant`,
 //!   because `READS_THROUGH_BATCH` is `false` — a `NeonWriteBatch` has been sent
@@ -203,6 +203,11 @@ fn capability_constants_are_answered_not_defaulted() {
         "a declension must be about THIS store. CF-18's finding is a reason inherited \
          from the testkit's own words, and a reason copied from the adapter next door is \
          the same defect with a different source: {reason}"
+    );
+    assert!(
+        !reason.contains("  ") && !reason.contains('\n'),
+        "a string literal that loses a `\\` continuation prints with a hole in it, which \
+         happened to the live Postgres fixture's reason: {reason:?}"
     );
     assert_ne!(
         Some(reason),
