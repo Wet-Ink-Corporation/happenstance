@@ -1668,8 +1668,9 @@ mod tests {
     /// The feature that gated the projection module and its re-exports from
     /// phase 6 until ADR-0063 lifted it. The contract crate carried it on,
     /// empty, so a `0.2.0` manifest kept resolving, and removed it in `0.4.0`
-    /// (ADR-0066 §5). The name still gates the typed layer's *runner*, whose
-    /// `Projection::apply` shape is the axis ADR-0062 named as the next one.
+    /// (ADR-0066 §5). The typed layer's feature of the same name gated its
+    /// *runner* until `0.5.0` removed it too (D6, #132), so both crates have
+    /// retired it.
     const GATE: &str = "unstable-projection";
 
     /// The warning policy, spelled once and compared everywhere it appears.
@@ -2029,14 +2030,6 @@ mod tests {
         assert!(out.is_empty(), "a success was reported");
     }
 
-    /// The `default` line of a `[features]` table, as written.
-    fn default_features(manifest: &str) -> &str {
-        manifest
-            .lines()
-            .find(|l| l.starts_with("default = "))
-            .unwrap_or("")
-    }
-
     /// Every file under `dir`, recursively, as workspace-relative paths.
     fn files_under(dir: &str) -> Vec<String> {
         let root = workspace_root().unwrap();
@@ -2143,56 +2136,150 @@ mod tests {
         }
     }
 
-    /// A semver promise rather than an oversight: the typed layer's feature
-    /// table and its public surface say the same thing.
+    /// The typed layer's feature of the same name is gone too, in `0.5.0`
+    /// (D6, AFK batch 9; ADR-0066 §5's "unless phase 18 lifts it").
     ///
-    /// This assertion used to read the other way — `happenstance` re-exported
-    /// no projection item, so a public feature there would have promised a
-    /// surface the crate did not expose. The typed projection runner made the
-    /// premise false rather than the rule wrong, so the rule is stated in the
-    /// direction that still has content: a passthrough **and** a surface, or
-    /// neither. What it still forbids is the pair coming apart — a feature
-    /// table advertising a runner nobody can name, or four `pub use`s a
-    /// consumer cannot turn on.
+    /// Removed, not declared empty: an empty `[]` would keep `0.4.x`
+    /// manifests resolving, and D6 chose the break over the shim. The second
+    /// half is the same teeth as the contract crate's rule above: a `cfg` on
+    /// a feature the manifest no longer declares is an `unexpected_cfgs`
+    /// error, or, with that lint allowed, an item that compiles to nothing.
     #[test]
-    fn the_typed_layer_makes_no_promise_it_does_not_keep() {
+    fn the_typed_layers_projection_feature_is_gone() {
         let manifest = read("crates/happenstance/Cargo.toml");
-        let lib = read("crates/happenstance/src/lib.rs");
+        let features = manifest
+            .split("\n[features]\n")
+            .nth(1)
+            .and_then(|rest| rest.split("\n[").next())
+            .expect("happenstance's manifest has a `[features]` table");
 
-        let cfg = format!("#[cfg(feature = \"{GATE}\")]");
-        let doc_cfg = format!("#[cfg_attr(docsrs, doc(cfg(feature = \"{GATE}\")))]");
-
-        let passthrough = manifest.contains(&format!("\n{GATE} = "));
-        // The badge is part of the surface, not an extra: an item that only
-        // exists behind a feature and renders no gate is anti-pattern 15.
-        let surface = lib.contains(&format!("{cfg}\n{doc_cfg}\npub use runner::{{"));
-
-        assert_eq!(
-            passthrough, surface,
-            "`happenstance`'s `{GATE}` passthrough and its projection surface \
-             disagree: the manifest declares it = {passthrough}, the crate root \
-             re-exports behind it = {surface}"
+        assert!(
+            !features
+                .lines()
+                .any(|line| line.trim_start().starts_with(&format!("{GATE} ="))),
+            "`{GATE}` is declared in happenstance's `[features]` again; `0.5.0` \
+             removed it (D6, CHANGELOG `### Removed`), and declaring it, even \
+             empty, re-opens a decision the owner closed"
         );
 
-        if passthrough {
+        let gated = format!("feature = \"{GATE}\"");
+        for dir in ["crates/happenstance/src", "crates/happenstance/tests"] {
+            for file in files_under(dir) {
+                assert!(
+                    !read(&file).contains(&gated),
+                    "{file} still names `{gated}`, a feature happenstance no longer \
+                     declares since `0.5.0` (D6): under `-D warnings` that is an \
+                     `unexpected_cfgs` error, and with the lint allowed the item it \
+                     gates silently compiles to nothing"
+                );
+            }
+        }
+    }
+
+    /// Every `Cargo.toml` under `dir`, recursively, skipping build output,
+    /// npm trees and dot-directories.
+    fn manifests_under(dir: &str) -> Vec<String> {
+        let root = workspace_root().unwrap();
+        let mut pending = vec![dir.to_owned()];
+        let mut found = Vec::new();
+        while let Some(rel) = pending.pop() {
+            for entry in fs::read_dir(root.join(&rel)).unwrap() {
+                let entry = entry.unwrap();
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let child = format!("{rel}/{name}");
+                if entry.file_type().unwrap().is_dir() {
+                    if !(name == "target" || name == "node_modules" || name.starts_with('.')) {
+                        pending.push(child);
+                    }
+                } else if name == "Cargo.toml" {
+                    found.push(child);
+                }
+            }
+        }
+        found
+    }
+
+    /// No manifest this repository builds still asks for the removed feature.
+    ///
+    /// Cargo already refuses a workspace member that names a feature its
+    /// dependency does not declare, so for members this is a second line
+    /// with a better message. It has teeth for the rest: `benchmarks/` and
+    /// `experiments/*` sit outside the workspace, nothing in `cargo xtask ci`
+    /// resolves them, and a removal that forgot them would be green here and
+    /// broken for the next person to run their `run.sh`. Comment lines are
+    /// skipped, because a comment saying the feature went is history.
+    #[test]
+    fn no_manifest_names_the_retired_projection_feature() {
+        let quoted = format!("\"{GATE}\"");
+        let declared = format!("{GATE} =");
+        let forwarded = format!("/{GATE}");
+        let mut offenders = Vec::new();
+        for dir in [
+            "crates",
+            "examples",
+            "harness",
+            "xtask",
+            "benchmarks",
+            "experiments",
+        ] {
+            for file in manifests_under(dir) {
+                for (n, line) in read(&file).lines().enumerate() {
+                    let named = line.contains(&quoted)
+                        || line.contains(&declared)
+                        || line.contains(&forwarded);
+                    if named && !line.trim_start().starts_with('#') {
+                        offenders.push(format!("{file}:{}: {line}", n + 1));
+                    }
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "these manifests still ask for `{GATE}`, which `happenstance` removed \
+             in `0.5.0` (D6) and `happenstance-core` in `0.4.0`; delete the entry, \
+             the runner needs no feature:\n{}",
+            offenders.join("\n")
+        );
+    }
+
+    /// The runner is unconditional: no `cfg` on its modules and none on their
+    /// re-exports. This replaced `the_typed_layer_makes_no_promise_it_does_not_keep`,
+    /// whose `passthrough == surface` became `false == false` once the
+    /// feature went, a rule no implementation could fail. The inverted form
+    /// fails the plausible wrong removal: deleting the gated modules with
+    /// their gate, or re-gating them on another feature.
+    #[test]
+    fn the_runner_is_mounted_unconditionally() {
+        let lib = read("crates/happenstance/src/lib.rs");
+        let cfg = format!("#[cfg(feature = \"{GATE}\")]");
+        let doc_cfg = format!("doc(cfg(feature = \"{GATE}\"))");
+
+        assert!(
+            !lib.contains(&cfg) && !lib.contains(&doc_cfg),
+            "`happenstance`'s `lib.rs` gates something on `{GATE}` again; `0.5.0` \
+             removed that feature (D6), and re-gating the runner is a decision, \
+             not a line edit"
+        );
+        for module in [
+            "runner",
+            "delivered",
+            "derivation",
+            "policy",
+            "convergence",
+            "chunk",
+            "checkpoint",
+            "fan_out",
+        ] {
             assert!(
-                !default_features(&manifest).contains(GATE),
-                "`{GATE}` joined the typed layer's defaults, which hands an \
-                 unfrozen port to every caller who never asked for it: {}",
-                default_features(&manifest)
-            );
-            assert!(
-                !manifest.contains(&format!("\"happenstance-core/{GATE}\"")),
-                "the typed layer forwards `{GATE}` to the contract crate, where \
-                 it has gated nothing since ADR-0063; the runner's gate is about \
-                 the runner"
-            );
-            assert!(
-                lib.contains(&format!("{cfg}\nmod runner;")),
-                "the runner's own module is not gated, so the feature table and \
-                 the compiler disagree about what `{GATE}` turns on"
+                lib.contains(&format!("\nmod {module};")),
+                "`mod {module};` is not mounted unconditionally at the crate root"
             );
         }
+        assert!(
+            lib.contains("\npub use runner::{"),
+            "the runner's re-exports are missing or gated, so the module is \
+             compiled and its items are not reachable"
+        );
     }
 
     // -----------------------------------------------------------------------
