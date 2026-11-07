@@ -28,10 +28,34 @@ not the same as what a user needed to be told.
   ADR-0063 lifted the gate on the evidence ADR-0062 produced. The feature
   survived on `happenstance-core` as an empty name, so that `0.2.0` manifests
   resolved, until `0.4.0` removed it. `happenstance`'s feature of the same name
-  gated the typed **runner** until `0.5.0` removed it too; see `[Unreleased]`
+  gated the typed **runner** until `0.5.0` removed it too; see `[0.5.0]`
   and [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
 ## [Unreleased]
+
+## [0.5.0] — 2026-11-07
+
+The typed projection runner leaves its gate. Phase 18 made `Projection::apply`
+`async`, gave a projection an error of its own, named the runner's chunk, keyed
+its checkpoint on the query it reads, and added skip-and-record, a fan-out
+runner and the convergence declaration. This release removes `happenstance`'s
+`unstable-projection` feature, so all of it is in every build and, from here,
+covered by semver like the rest of the crate.
+
+**This is a breaking release from `0.4.x`.** If you enabled
+`unstable-projection`, six changes reach your code, each an entry below:
+`apply` is `async` and is handed a `Delivered<E>`; `Projection` gains
+`type Error`; `run_projection` takes a `Chunk`; the runner keys its checkpoint
+on a derived id, so a checkpoint `0.4.x` wrote reads `NeverRun` unless you
+adopt it; code generic over the projection that spawns its run implements
+`SendProjection` and writes new bounds; and the feature itself is removed, so
+a manifest that names it no longer resolves. A seventh, `on_error`, needs no
+change. If you never enabled the feature, your application code does
+not change. An adapter author also takes a new rule in each testkit, and
+`happenstance-sqlite`'s projection schema moves to version 2. The
+[`0.5.0` trace](#050-trace) at the end of this section lists every break with
+the decision behind it, and [`docs/upgrading-to-0-5.md`](docs/upgrading-to-0-5.md)
+walks them. All nine crates move to `0.5.0` together.
 
 ### Changed
 
@@ -135,7 +159,7 @@ not the same as what a user needed to be told.
   or `commit` fails stops alone, with `run_projection`'s arm as
   `ViewError::Stopped`; a failed read stops every view still running as
   `ViewError::Interrupted` and is reported once, in `FanOut::read`. **A panic
-  is not caught** (ADR-0101, proposed; the owner's call): it unwinds out of
+  is not caught** (ADR-0101, accepted by the owner at #127): it unwinds out of
   the call, every open write set is dropped and rolled back, and nothing
   since any view's last commit survives. One view that panics stops all N;
   one task per view through `run_projection` is the containing alternative.
@@ -265,6 +289,44 @@ not the same as what a user needed to be told.
   *behind `unstable-projection`* were made while that feature gated the runner
   and exempted it, and they are what a `0.4.x` user who enabled it migrates
   across.
+
+### `0.5.0` trace
+
+Every break `0.5.0` carries, each with the decision that caused it, written on
+2026-11-07 against `phase-18` at `0f0e3c3`. It has **hand** rows only, and that
+is a finding about the tool rather than about the release. Every change to the
+typed runner was made behind `unstable-projection`, and cargo-semver-checks
+passes over `unstable-*` features, so measured against `0.4.6` the runner is
+new surface rather than changed surface. Each row below was found by reading
+every breaking entry above.
+
+**Not run here:** `cargo semver-checks` is not installed on the machine that
+wrote this table, and the CI registry step cannot stand in for it: it passes no
+`--release-type`, so `0.4.6` to `0.5.0` reads as major and no lint is required.
+Before tagging, run `cargo semver-checks check-release --workspace
+--baseline-version 0.4.6 --release-type minor`. Any lint it reports that no row
+below covers becomes a **T** row.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| H1 | `happenstance` | the `unstable-projection` feature is removed; the tool passes over `unstable-*` features | hand | D6 (AFK batch 9), [ADR-0066](.kb/decisions/0066-what-1-0-promises.md) §5 | Removed |
+| H2 | `happenstance` | `Projection::apply` is `async` and is handed a `Delivered<Self::Event>`, was a synchronous `fn` handed `Self::Event` | hand | [ADR-0074](.kb/decisions/0074-projection-apply-is-async.md) | Changed |
+| H3 | `happenstance` | `Projection` gains the required associated type `Error`, `apply` returns `Result<(), Self::Error>`, and `ProjectionError` gains a third type parameter with no default | hand | ADR-0074 decision 8 (PS-28) | Changed |
+| H4 | `happenstance` | `run_projection` takes `chunk: Chunk`, was `NonZeroUsize` | hand | [ADR-0070](.kb/decisions/0070-the-runner-takes-a-named-chunk.md) | Changed |
+| H5 | `happenstance` | the runner reads and commits its checkpoint under `checkpoint_id(&projection)`, was `projection.id()`, so a checkpoint `0.4.x` wrote reads `NeverRun` until adopted; a name over 238 bytes is refused (behaviour) | hand | ADR-0074 decision 9 (PS-25), frozen by [ADR-0102](.kb/decisions/0102-phase-18s-clauses-are-frozen.md) | Changed |
+| H6 | `happenstance` | `Projection` gains the provided method `on_error`; only a call site with another trait's `on_error` in scope can become ambiguous (`E0034`) | hand | ADR-0074 decision 5 (PS-27) | Changed |
+| H7 | `happenstance-sqlite` | `projection_store::SCHEMA_VERSION` is `2`, was `1`, and a build older than this one refuses a file holding a protected projection; the tool sees no changed value (behaviour) | hand | PS-18 (#118), frozen by ADR-0102 | Changed |
+| H8 | `happenstance-testkit` | a new conformance rule, `store_accepts_the_guaranteed_minimum_tags_per_batch` (VT-36), which a store that meets VT-22 and VT-24 only one at a time now fails (behaviour; CF-32) | hand | [ADR-0100](.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md) | Added |
+| H9 | `happenstance-sync-testkit` | a new ingest rule, `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (VT-36, SY-18), which a store that declares a tags-per-call ceiling and does not hold the whole call to it now fails (behaviour; CF-32) | hand | ADR-0100 | Added |
+| H10 | `happenstance` | code generic over the projection that spawns its run can no longer bound it `P: Projection<Store = St> + Send + 'static`, because `apply`'s future is not known to be `Send`; it implements `SendProjection`, new in this release, and writes `P: SendProjection<Store = St, Event: Send, Error: Send + Sync> + 'static` | hand | ADR-0074, #110 | Changed |
+
+**Not a break, recorded so the absence is a decision:** `Progressed::skipped`
+is an added field on a `#[non_exhaustive]` struct; `RecordingProjectionStore`
+and its types, `run_fan_out` and `ConvergentProjection` are new items; and
+`IngestFixture::MAX_TAGS_PER_BATCH` is an associated constant with a default, so
+an existing fixture compiles unchanged (Added).
+
+**Pending:** none. ADR-0101, which the fan-out entry cites, was accepted at #127.
 
 ## [0.4.6] — 2026-11-02
 
@@ -5272,7 +5334,8 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.3...v0.4.4

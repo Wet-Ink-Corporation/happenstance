@@ -163,7 +163,7 @@ removed. Cargo refuses to resolve a feature that does not exist.
 
 **What to change.** Delete it from your `Cargo.toml`. `happenstance`'s own
 `unstable-projection` feature, which gates the typed projection runner, is
-unchanged and stays.
+unchanged in 0.4. 0.5 removes it: see [`upgrading-to-0-5.md`](upgrading-to-0-5.md).
 
 ## Every adapter you use
 
