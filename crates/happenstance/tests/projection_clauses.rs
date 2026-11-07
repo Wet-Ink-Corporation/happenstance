@@ -16,7 +16,7 @@
 //! No conformance rule is added, and that is the correct answer: PS-33 is a
 //! phase gate no adapter can fail, and CF-36 forbids a clause backed only by
 //! integration-level cases from naming an adapter rule.
-#![cfg(all(feature = "unstable-projection", feature = "memory", feature = "json"))]
+#![cfg(all(feature = "memory", feature = "json"))]
 // A test target may unwrap; the library under test is held to
 // `unwrap_used = "deny"` regardless.
 #![allow(clippy::unwrap_used)]

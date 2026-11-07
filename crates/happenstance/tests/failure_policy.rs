@@ -10,7 +10,7 @@
 //!
 //! Positions always come from the store's own snapshot and never from a
 //! literal: the specification permits gaps.
-#![cfg(all(feature = "unstable-projection", feature = "memory", feature = "json"))]
+#![cfg(all(feature = "memory", feature = "json"))]
 
 use core::num::NonZeroUsize;
 

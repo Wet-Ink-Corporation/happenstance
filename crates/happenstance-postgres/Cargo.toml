@@ -101,12 +101,11 @@ happenstance-sync-testkit = { path = "../happenstance-sync-testkit" }
 # typed layer's. Dev-only, so no consumer links the typed layer through this
 # crate. `happenstance` is the typed layer and not an adapter, so "no adapter
 # depends on another adapter" is untouched. `memory` brings the event store
-# the test reads from, `json` the codec, `unstable-projection` the runner.
+# the test reads from, `json` the codec, and the runner needs no feature.
 happenstance = { path = "../happenstance", default-features = false, features = [
     "std",
     "memory",
     "json",
-    "unstable-projection",
 ] }
 
 [features]

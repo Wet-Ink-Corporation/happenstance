@@ -381,8 +381,8 @@ const REQUIRED: &[Step] = &[
         //
         // `std,json` and not more: that is the combination the design fixed, and
         // the rest of the feature space is compiled on this target by the
-        // `wasm32 feature powerset` step in OPTIONAL. Widening this one to chase
-        // `unstable-projection` would put a combination where a point belongs.
+        // `wasm32 feature powerset` step in OPTIONAL. The point compiles the
+        // runner too, which needs no feature since `0.5.0` (#132).
         name: "wasm32 build of the typed layer",
         program: "cargo",
         args: &[
@@ -973,11 +973,11 @@ const REQUIRED: &[Step] = &[
         probe: None,
     },
     Step {
-        // The step above, for the typed layer. `happenstance`'s crate page links
+        // The step above, for the typed layer. `happenstance`'s crate page linked
         // into items behind `unstable-projection`, and only the workspace step's
-        // `--all-features` rendered it, where every gate is open. So a link from
-        // the page to `Projection::apply` was a hard error on the feature set
-        // `cargo add happenstance` gives, and green here, until #216 (#91).
+        // `--all-features` rendered them. So a link from the page to
+        // `Projection::apply` was a hard error here and green there, until #216
+        // (#91). Since `0.5.0` this step renders the runner's pages itself.
         //
         // Its own step rather than a second `-p` on the one above: Cargo unifies
         // features across the packages it builds, so `happenstance`'s edge into
@@ -1074,8 +1074,8 @@ const OPTIONAL: &[Step] = &[
             "happenstance-testkit",
             // The typed layer, and it is where the *most* of this step's value
             // now sits: the mandatory step above compiles one point of its
-            // feature space, `std,json`, so it compiles neither the projection
-            // runner (off by default) nor `postcard` nor `cbor` for this target.
+            // feature space, `std,json`, so it compiles neither `postcard` nor
+            // `cbor` for this target, nor the combinations they make together.
             // A feature is not target-scoped, so those combinations are checked
             // here or nowhere. This is a widening **above** the mandatory guard
             // and never a replacement for it — the probe below is why.

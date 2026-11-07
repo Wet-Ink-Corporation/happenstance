@@ -803,9 +803,9 @@ where
 /// "850,000 of 1,000,000 applied" polls that and compares it against the
 /// log themselves.
 ///
-/// An observed entry point beside this one would be additive, and free —
-/// these items are behind `unstable-projection` and make no semver promise
-/// — so it is absent rather than foreclosed. It is a question about the
+/// An observed entry point beside this one would be additive — a new
+/// function is a minor change, under the semver this runner is covered by
+/// since `0.5.0` — so it is absent rather than foreclosed. It is about the
 /// port's surface and belongs with the projection-store freeze.
 ///
 /// # Exactly one runner per projection, and the caller owns that

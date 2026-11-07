@@ -29,7 +29,7 @@ fn manifest(tag: &str) -> Manifest {
         cpu: "test".to_owned(),
         logical_cpus: 1,
         ram_bytes: 0,
-        features: "unstable-projection,memory,json".to_owned(),
+        features: "memory,json".to_owned(),
         started_at: "2026-08-16T00:00:00Z".to_owned(),
         projection_store: polling_cost::PROJECTION_STORE.to_owned(),
     }

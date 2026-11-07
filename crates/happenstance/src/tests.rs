@@ -489,7 +489,6 @@ mod shadowing {
     /// silently — a breaking change to a facade whose whole promise is that
     /// the contract's paths still work — which is why the runner lives in
     /// `runner`. This body is what fails if it ever moves back.
-    #[cfg(feature = "unstable-projection")]
     fn same_projection_id(
         id: happenstance_core::projection::ProjectionId,
     ) -> crate::projection::ProjectionId {
@@ -501,11 +500,8 @@ mod shadowing {
         let _ = same_tags as fn(happenstance_core::Tags) -> crate::Tags;
         let _ = same_event as fn(happenstance_core::Event) -> crate::Event;
         let _ = facade_store_bound::<happenstance_core::MemoryEventStore> as fn();
-        #[cfg(feature = "unstable-projection")]
-        {
-            let id = happenstance_core::projection::ProjectionId::from_static("van_stock");
-            assert_eq!(same_projection_id(id).as_str(), "van_stock");
-        }
+        let id = happenstance_core::projection::ProjectionId::from_static("van_stock");
+        assert_eq!(same_projection_id(id).as_str(), "van_stock");
 
         assert!(same_query(happenstance_core::Query::all()).is_all());
     }
@@ -831,7 +827,6 @@ fn application_metadata_is_copied_through_untouched() {
 // through to `None` or to the default.
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "unstable-projection")]
 mod policy_arm {
     use happenstance_core::SequencePosition;
 

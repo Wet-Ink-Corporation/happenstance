@@ -314,7 +314,8 @@ fn crate_root_renders_the_projection_surface() {
     );
     let root = read("lib.rs");
     assert!(
-        !root.contains("[projection-runner]:") && !root.contains("feature = \"unstable-projection\""),
+        !root.contains("[projection-runner]:")
+            && !root.contains("feature = \"unstable-projection\""),
         "the crate root still spells the runner's link conditionally, or still \
          names the feature `0.5.0` removed"
     );
@@ -335,7 +336,9 @@ fn crate_root_renders_the_projection_surface() {
     assert!(features > vocabulary && features < adapters);
     let table = doc[features..adapters].join("\n");
     assert!(
-        !table.lines().any(|row| row.starts_with("| `unstable-projection`")),
+        !table
+            .lines()
+            .any(|row| row.starts_with("| `unstable-projection`")),
         "the Features table still lists `unstable-projection`, which `0.5.0` \
          removed: {table}"
     );

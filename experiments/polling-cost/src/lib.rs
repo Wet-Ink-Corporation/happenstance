@@ -796,7 +796,7 @@ pub fn environment(run_tag: &str, workspace: &Path) -> Manifest {
         cpu: cpu_model(),
         logical_cpus: std::thread::available_parallelism().map_or(0, std::num::NonZeroUsize::get),
         ram_bytes: total_ram_bytes(),
-        features: "unstable-projection,memory,json".to_owned(),
+        features: "memory,json".to_owned(),
         started_at: run_instant(),
         projection_store: PROJECTION_STORE.to_owned(),
     }
