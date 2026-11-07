@@ -49,7 +49,7 @@ use crate::spec_trace::workspace_root;
 /// to deploy it on, which is where the edge developer joins, then how to run
 /// the store inside a Durable Object, then the adapter author's entry point and
 /// how that author passes the conformance suite, and
-/// last the upgrade guide, which only a reader already on an older release
+/// last the upgrade guides, oldest first, which only a reader on an older release
 /// needs. It is written here rather than derived because an order is a
 /// decision, and [`check_coverage`] is what keeps the list from falling behind
 /// the tree.
@@ -70,6 +70,7 @@ const READING_ORDER: &[&str] = &[
     "adapter-reading-order.md",
     "pass-conformance-suite.md",
     "upgrading-to-0-4.md",
+    "upgrading-to-0-5.md",
 ];
 
 /// Pages under `docs/` the site deliberately does not render, each with why.

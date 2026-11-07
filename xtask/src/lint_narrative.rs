@@ -1374,7 +1374,7 @@ struct DocumentationMust {
 /// re-derivation is written down in
 /// `.bklg/docs-that-teach/checked-documentation-surface/frozen-documentation-must-pin/`.
 /// No count is written anywhere here: `UNCLAIMED_PENDING_ADR` already refused
-/// that trade (`xtask/src/spec_trace.rs:2985-2987`), because a comment naming a
+/// that trade (`xtask/src/spec_trace.rs:2999-3001`), because a comment naming a
 /// total above an array holding a different one is the defect this pin exists
 /// to prevent, one level up. The count is the array's length and nothing
 /// restates it.
@@ -1559,6 +1559,14 @@ const FROZEN_DOC_MUSTS: &[DocumentationMust] = &[
         clause: "CF-40",
         disposition: Disposition::Excluded {
             reason: "as CF-39: the ceilings a fixture states are the fixture's",
+        },
+    },
+    DocumentationMust {
+        clause: "CF-43",
+        disposition: Disposition::Excluded {
+            reason: "as CF-39, and the sentence is CF-39's verbatim — `The fixture MUST state \
+                     the mechanism` — for `RESET_REFUSAL`: the mechanism a fixture states is \
+                     its store's, not the contract's own documentation",
         },
     },
 ];
@@ -4118,7 +4126,7 @@ One writer at a time.
     }
 
     /// The trade `UNCLAIMED_PENDING_ADR` already made
-    /// (`xtask/src/spec_trace.rs:2985-2987`): a count written into a comment can
+    /// (`xtask/src/spec_trace.rs:2999-3001`): a count written into a comment can
     /// come to disagree with the array beneath it, which is the defect BR-10
     /// exists to prevent, one level up.
     #[test]

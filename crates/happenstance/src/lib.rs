@@ -105,13 +105,11 @@
 //!   or [`Busy`](happenstance_core::AppendError::Busy), bounded by a
 //!   [`Retry`] you pass in and re-deciding from a pristine model on every
 //!   attempt. Its own page carries the policy.
-//! * [**The typed projection runner**][projection-runner] — decoded events into
+//! * [**The typed projection runner**](run_projection) — decoded events into
 //!   a read model, in chunks, with the rows and the checkpoint moving in one
-//!   commit. Behind `unstable-projection` — not for the port beneath it, which
-//!   is frozen since ADR-0063, but for `Projection::apply` being synchronous:
-//!   a projection can push into a buffered batch and cannot issue a statement
-//!   into a live one, and whether that shape survives is the runner's own open
-//!   axis. One call drives one projection, and it never buffers the replay.
+//!   commit. `apply` is `async` (ADR-0074), so it can await a live batch.
+//!   One call drives one projection, or N views over one read, and never
+//!   buffers the replay.
 //!
 //! # Features
 //!
@@ -126,7 +124,6 @@
 //! | `std` *(default)* | the standard library, forwarded to the contract |
 //! | `memory` *(default)* | `MemoryEventStore`, forwarded to the contract |
 //! | `serde` | the contract's wire-format derives, for replication |
-//! | `unstable-projection` | the projection runner; `apply` is unproved |
 //!
 //! # Testing in memory
 //!
@@ -165,19 +162,6 @@
     not(all(feature = "memory", feature = "json")),
     doc = "[testing-module]: https://docs.rs/happenstance/latest/happenstance/testing/"
 )]
-// And once more for the runner, whose feature is the only one of the three that
-// is **off** by default — so the configuration where the local target does not
-// exist is the one a casual `cargo doc` builds. The bullet stays on the page
-// either way: a vocabulary that lost an entry when a feature went off would
-// leave a reader unable to tell what they turned off.
-#![cfg_attr(
-    feature = "unstable-projection",
-    doc = "[projection-runner]: run_projection"
-)]
-#![cfg_attr(
-    not(feature = "unstable-projection"),
-    doc = "[projection-runner]: https://docs.rs/happenstance/latest/happenstance/fn.run_projection.html"
-)]
 #![doc(html_no_source, /* one line: rustfmt keeps a commented list whole, and the lines below are cited by number */ html_logo_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg", html_favicon_url = "https://raw.githubusercontent.com/Wet-Ink-Corporation/happenstance/main/assets/brand/favicon.svg")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -187,13 +171,15 @@ mod composition;
 mod boundary;
 mod codec;
 mod command;
+mod delivered;
+mod derivation;
 mod domain;
+mod policy;
 // `runner`, not `projection`. The contract crate already publishes a
 // `projection` module, and this crate re-exports it as
 // `happenstance::projection`; a private module of the same name shadows it
 // silently, which is a breaking change to a facade whose whole promise is that
 // the contract's paths still work here.
-#[cfg(feature = "unstable-projection")]
 mod runner;
 mod sealed;
 
@@ -230,13 +216,26 @@ pub use codec::{Codec, CodecError};
 #[cfg_attr(docsrs, doc(cfg(feature = "json")))]
 pub use command::commit;
 pub use command::{CommandError, CommandOutcome, Committed, Retry, commit_with};
+pub use delivered::Delivered;
 pub use domain::{DecisionModel, DomainEvent};
-// Off by default, and the badge is what says so on the rendered page: an
-// item that only exists behind a feature and does not name it is the reader
-// finding out from a compiler error instead of from the documentation.
-#[cfg(feature = "unstable-projection")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable-projection")))]
-pub use runner::{Progressed, Projection, ProjectionError, run_projection};
+pub use runner::{Progressed, Projection, ProjectionError, SendProjection, run_projection};
+// What `on_error` is handed and what it answers (PS-27). Its own module, as
+// `Delivered` is, to keep `runner.rs` from growing above `run_projection`.
+pub use policy::{ApplyFailure, Policy};
+// What a projection declares to enter a convergence check (SY-20, SY-22).
+mod convergence;
+pub use convergence::ConvergentProjection;
+// `Chunk` is the runner's vocabulary, not the runner: its own module, so the
+// fan-out runner (#112) takes it from the same place `run_projection` does.
+mod chunk;
+pub use chunk::Chunk;
+// The id the runner keys a checkpoint on: the name and a digest of the derived
+// query (PS-25). Its own module, because the digest is its own concept.
+mod checkpoint;
+pub use checkpoint::{InvalidCheckpointId, MAX_CHECKPOINT_NAME_LEN, checkpoint_id};
+// N views over one read (PS-30). Its own module, because it is its own runner.
+mod fan_out;
+pub use fan_out::{FanOut, ViewError, run_fan_out};
 
 // The contract's surface, mounted here so a reader who installed the facade can
 // still type the paths the contract's own documentation uses.
@@ -289,9 +288,9 @@ pub use happenstance_core::{MemoryEventStore, MemoryStoreError};
 // The port, frozen since ADR-0063 and mounted unconditionally like the rest of
 // the contract. The module is on the list because a *module* is a name too, and
 // `src/tests.rs`'s `same_projection_id` is the witness that
-// `happenstance::projection` still resolves to the contract's. What stays
-// behind this crate's `unstable-projection` is the *runner* above, not the
-// port it runs over.
+// `happenstance::projection` still resolves to the contract's. Since `0.5.0`
+// neither the port nor the *runner* above it is behind a feature; the runner
+// sat behind this crate's `unstable-projection` until then.
 pub use happenstance_core::projection;
 pub use happenstance_core::{Authority, Checkpoint, CommitError, InvalidProjectionId};
 pub use happenstance_core::{MAX_PROJECTION_ID_LEN, ProjectionId};

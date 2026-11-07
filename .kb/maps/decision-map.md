@@ -929,6 +929,29 @@ ADR-0093 did, and supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0100 | [`kb-decision-0100`](../decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md) | happenstance-cloudflare declares a ceiling of 262,144 tags per call, refused as StoreLimit::TagsPerBatch | accepted | — | — |
 
+## 2026-11-07: the fan-out runner catches nothing (#112), accepted
+
+ADR-0101 is written straight here with no intake step, and is **accepted** (owner, 2026-11-07, #127's Q3): the owner chose it on
+the #112 panic card (2026-11-07, "Catch nothing") and flipped its status. `run_fan_out` lets a panic
+unwind, as `run_projection` does, and the dropped write sets roll back. ADR-0074 decision 11 is read
+as binding only a runner that catches. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0101 | [`kb-decision-0101`](../decisions/0101-the-fan-out-runner-does-not-catch-a-panic.md) | The fan-out runner does not catch a panic, and ADR-0074 decision 11 binds only a runner that does | accepted | 18 | — |
+
+## 2026-11-07: phase 18's clauses are frozen (#127), accepted
+
+ADR-0102 is written straight here with no intake step, and is **accepted** (owner, 2026-11-07
+06:32Z, "As recommended" on #127's Q1–Q8). PS-16, PS-18, PS-25, PS-27, PS-30, PS-38, SY-21 and
+CF-43 are `[FROZEN]`, each on a rule that runs and a wrong implementation it fails. PS-9's and
+PS-24's narratives are repaired under byte-identical MUSTs, and PS-16's evidence is corrected: no
+adapter clears with `TRUNCATE`. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0102 | [`kb-decision-0102`](../decisions/0102-phase-18s-clauses-are-frozen.md) | Phase 18's eight clauses are frozen, and PS-9's and PS-24's evidence is repaired | accepted | 18 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

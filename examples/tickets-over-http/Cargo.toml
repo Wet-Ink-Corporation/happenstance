@@ -31,16 +31,14 @@ path = "src/main.rs"
 doc-scrape-examples = true
 
 [dependencies]
-# `unstable-projection` because the runner is one, and the name is the promise:
-# `Projection::apply`'s shape is not yet proved at its far end. The port beneath
-# it is frozen since ADR-0063 and needs no feature.
+# The projection runner needs no feature since `0.5.0`, and the port beneath it
+# has needed none since ADR-0063, so nothing below asks for either.
 #
 # `default-features = false` drops `memory`: two processes cannot share a
 # `Vec` behind an `RwLock`, which is the whole reason this example exists.
-happenstance = { version = "0.4.6", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.5.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
-  "unstable-projection",
 ] }
 # Both roles, and here they are in *different processes* against one file. The
 # two schemas carry their versions in separate meta tables (`store_meta`,

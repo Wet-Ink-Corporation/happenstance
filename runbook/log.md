@@ -10,6 +10,83 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-07 — `0.5.0`, the typed runner leaves its gate
+
+*Committed on `claude/project-thread-u1dtdj-050`, cut from `origin/phase-18` at `0f0e3c3`.*
+D9 (the owner, AFK batch 9): `0.5.0` at phase 18's exit, with no `0.4.7`. `[Unreleased]`
+becomes `[0.5.0] — 2026-11-07`, under a summary that marks it breaking from `0.4.x`. The
+crate versions, the workspace requirements, `happenstance-sync-testkit`'s pin on
+`happenstance-testkit`, the testkit's recipe pin and the examples were already at `0.5.0`
+(#375), so the release moves only text. The per-PR entries are kept; the fan-out entry's
+ADR-0101 now reads accepted. A `0.5.0` trace follows the `0.4.0` one: ten hand rows (H1 is
+#132's row for the removed feature) and no tool rows, since cargo-semver-checks passes over
+`unstable-*` features. Install and status lines move to `0.5.0` and `"0.5"` in the root,
+core, sqlite, postgres, neon and cloudflare READMEs, and the README's counts follow the
+suite (122 rules, 97 in the event-store family). README, SECURITY and the site's roadmap card
+say the runner is shipped and covered by semver. SECURITY marks `0.4.6` superseded. The
+`0.3` → `0.4` guide had set a convention, so `docs/upgrading-to-0-5.md` follows it, one
+section per trace row with three compiled fences, and is registered in the narrative harness,
+the site's reading order and `docs/README.md`. The status table gains the `0.5.0` row. The
+owner merges this PR into `phase-18`, then #403, then tags.
+
+**Protected, not edited.** `CLAUDE.md:440-443` still says `unstable-projection` gates the
+runner, and `.github/ISSUE_TEMPLATE/bug_report.yml:32-33` still calls it exempt from semver.
+
+**Verified.** See the release PR body for the gate and the lint steps. `cargo-semver-checks`
+is not installed here and did not run. The CI job cannot stand in for it, since its registry
+step passes no `--release-type`; the owner runs `cargo semver-checks check-release --workspace
+--baseline-version 0.4.6 --release-type minor` before tagging.
+
+---
+
+## 2026-11-07 — phase 18's clauses frozen; phase 18 closes (#127)
+
+*Committed on `claude/project-thread-u1dtdj-127`, cut from `origin/phase-18` at `890c91a`.*
+[ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md), accepted on the owner's
+"As recommended" (Q1–Q8, 2026-11-07 06:32Z), freezes PS-16, PS-18, PS-25, PS-27, PS-30, PS-38,
+SY-21 and CF-43. ADR-0101 is accepted. PS-9's and PS-24's evidence is repaired under unchanged
+MUSTs, PS-16's TRUNCATE caveat is corrected, and the three tripwires turn round. The status row
+reads `done`. Detail in [phase 18's session log](phases/18-typed-runner.md).
+
+**Verified.** The temper gate against `origin/phase-18` (GREEN); `cargo xtask ci --fast`
+("all required checks passed", 5 optional steps not run); `cargo xtask spec-trace`, `lints`,
+`lint-constitution`, `proof-artefact`, and `lint-kb` against `origin/phase-18`; each tripwire
+red against its old marker, then green. Not run: `cargo xtask site` (no zola here).
+
+## 2026-11-06 — the savepoint caveat on a live batch (#103)
+
+*Committed on `claude/project-thread-u1dtdj-103`, stacked on #388, #391 and #393 and
+merged with `origin/phase-18` (#142, #129) in a commit of its own.* `Policy::Skip`'s
+rustdoc says it is not universal: over a batch that is a live transaction, a statement
+the server refuses aborts it, and only a savepoint `apply` itself sets recovers the
+batch for `on_error`'s record. `on_error`'s page states the limit, line-neutrally.
+`LivePostgresBatch` gains no helper (O1(a)); PS-9's text is untouched, and its "has not
+been run" is left for #127 (O2(b)). Detail in
+[phase 18's session log](phases/18-typed-runner.md).
+
+**Verified.** The temper gate against `origin/phase-18` on the merge commit and on the
+head; the live run, `cargo test -p happenstance-postgres --all-features --test
+live_projection -- --ignored --test-threads=1`, against PostgreSQL 17.10: `test result:
+ok. 28 passed; 0 failed`; `cargo xtask lints`, `spec-trace`, `lint-constitution`,
+`proof-artefact`, and `lint-kb` against `origin/phase-18`; `git diff --numstat` shows
+`runner.rs`, `live_projection_store.rs` and `SPECIFICATION.md` line-neutral.
+
+## 2026-11-02 — `Projection::apply` is `async` (#98, #135, #138)
+
+*Committed on `claude/project-thread-u1dtdj-98`, based on `phase-18`.* ADR-0074
+decisions 1–4 are built behind `unstable-projection`: `apply` is `async` and handed a
+`Delivered<E>` with `id()` and no arrival position, `SendProjection` is derived with
+`trait_variant` (now a direct dependency of `happenstance`, under the workspace
+caret), and the twelve impls and one doctest in the tree are rewritten. The error
+type is unchanged; #99 owns it. `happenstance-postgres`'s passages saying `apply` is
+synchronous are #142's, and SY-21's freeze is #127's. Detail in
+[phase 18's session log](phases/18-typed-runner.md).
+
+**Verified.** The temper gate, `cargo xtask lints`, `spec-trace`, `lint-kb` against
+`ac02857`, and `cargo check -p happenstance` for `wasm32-unknown-unknown` with
+`unstable-projection`; `benchmarks/` checked and `experiments/polling-cost` tested
+from their own workspaces.
+
 ## 2026-11-02 — `0.4.6`, Cloudflare's tags-per-call ceiling
 
 *Committed on `claude/project-thread-uikw3l-046`.* `[Unreleased]` becomes

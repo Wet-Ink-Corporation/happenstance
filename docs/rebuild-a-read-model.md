@@ -38,16 +38,16 @@ Both use two methods of the `ProjectionStore` trait, `reset` and `commit`, plus
 the projection runner, `run_projection`, which reads events from the log and
 feeds them to your projection in chunks.
 
-### Before you start: the runner is not yet stable
+### Before you start: what the programs below call
 
-`run_projection` sits behind the `unstable-projection` feature, and makes no
-promise of compatibility between releases. That is because the `apply` method
-your projection implements is going to change: it is due to become `async`
+Since `0.5.0`, `run_projection` needs no feature: it is in every build of
+`happenstance`, and covered by semver like the rest of the crate. The `apply`
+method your projection implements is `async` and is handed a `Delivered` event
 ([ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) says why).
-The `ProjectionStore` trait underneath it is stable.
 
-So the programs on this page call only the trait, using
-`MemoryProjectionStore`, and they compile without the feature.
+The programs on this page call only the trait, using `MemoryProjectionStore`,
+because a rebuild is those two calls, `reset` and `commit`, and the runner is
+what makes them for you.
 [The rebuilding example](../examples/rebuilding-read-models/src/main.rs) runs
 every step below with the runner, against SQLite. It is the program to read
 alongside this page.
@@ -70,17 +70,22 @@ while it replays sees a partial answer that claims to be current.
 So: if nobody reads the view during the replay, or a partial answer does no
 harm, reset it in place. If not, build under a second id.
 
-**Second: a changed fold always needs one of the two.** The checkpoint is
-stored under the `ProjectionId` and nothing else. Nothing notices when the
-events a projection asks for, or what it does with them, have changed.
+**Second: a changed fold always needs one of the two.** The runner stores the
+checkpoint under `checkpoint_id(&projection)`: the projection's name and a
+digest of the query it derives from its event types and scope
+([PS-25](../spec/SPECIFICATION.md#47-checkpoint-semantics)). When the query
+changes, so does the id, and the next run starts from the beginning. A
+projection that starts reading a new event type therefore sees every older
+event of that type.
 
-That has a sharp consequence. A projection that starts reading a new event type
-resumes from its old checkpoint, past every older event of that type, and never
-sees them. The planned fix is an id derived from the projection's query, which
-changes when the query does
-([PS-25](../spec/SPECIFICATION.md#47-checkpoint-semantics)). It is provisional,
-not built yet, and nothing tests it. Until it is, choosing a new id is up to
-you.
+Nothing notices when what a projection *does* with its events has changed,
+though. A changed fold over an unchanged query resumes from its old checkpoint,
+so choosing a new name, or resetting the view, is up to you.
+
+A checkpoint written before the id was derived sits under the bare name, so
+after upgrading every view rebuilds once. To keep a view's position instead,
+adopt its old checkpoint before the new runner first runs, and only if its
+query did not change. The documentation of `checkpoint_id` shows how.
 
 ## Reset the view
 
@@ -94,13 +99,15 @@ cannot clear them for you.
 What you get in return is safety against a crash halfway through. The deletes
 and the checkpoint change commit together, so a crash cannot leave an empty
 table whose checkpoint says it is up to date
-([PS-16](../spec/SPECIFICATION.md#46-reset)). That rule is still provisional:
-it would have to change if a store turned up that cannot clear rows in the same
-transaction as its checkpoint.
+([PS-16](../spec/SPECIFICATION.md#46-reset)). That rule is frozen for 1.0:
+it would reopen only for a store that cannot clear rows in the same transaction as
+its checkpoint, and every projection adapter in this workspace can.
 
 A reset touches only the view you name. Every other view in the same store
 stays where it was, so you can rebuild one view without pausing the rest
-([PS-17](../spec/SPECIFICATION.md#46-reset)).
+([PS-17](../spec/SPECIFICATION.md#46-reset)). For a view the runner maintains,
+name it by `checkpoint_id(&projection)`, not `projection.id()`: the runner
+never writes under the bare name.
 
 ### Reset, not a commit at the first position
 

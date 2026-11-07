@@ -11,8 +11,8 @@ with programs you can run.
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.4.6` release set.** **108 of 108** gated
-> tests in the event-store binary pass against a live PostgreSQL 17.10 — the 95
+> **Status: conformant, and in the `0.5.0` release set.** **108 of 108** gated
+> tests in the event-store binary passed against a live PostgreSQL 17.10, counted at `0.4.0` — the 95
 > rules of the event-store family, the 6 of the concurrency family at 64
 > contenders, the generated model family, and this crate's own six. The
 > projection suite clears its own target beside it.
@@ -58,9 +58,9 @@ with programs you can run.
 ## Features
 
 ```toml
-happenstance-postgres = "0.4"                              # the event store
-happenstance-postgres = { version = "0.4", features = ["projection-store"] }
-happenstance-postgres = { version = "0.4", features = ["sync"] }   # + the ingest port
+happenstance-postgres = "0.5"                              # the event store
+happenstance-postgres = { version = "0.5", features = ["projection-store"] }
+happenstance-postgres = { version = "0.5", features = ["sync"] }   # + the ingest port
 
 sqlx = "0.8"                                               # only for queries of your own
 ```
@@ -151,18 +151,25 @@ panicked `JoinError`. `PostgresEventStore::new` documents both under *Runtimes*.
 ## What the projection batch is, and what it costs you
 
 `PostgresProjectionBatch` is an **owned buffered write set**, not a live
-`sqlx::Transaction`, and that is the store an application uses: the typed
-layer's `Projection::apply` is synchronous and can push into a buffer. Its
-transaction is opened inside `commit`, which replays your statements and writes
-the checkpoint in one unit. `ProjectionStore::begin` has been `async` and
-fallible since ADR-0062, which is what lets `LivePostgresProjectionStore` open
-a real transaction *there* instead — the instrument for the port's freeze, not
-the store you build a projection on.
+`sqlx::Transaction`, and it is the default to reach for: it holds no connection
+while `apply` runs. Its transaction is opened inside `commit`, which replays
+your statements and writes the checkpoint in one unit.
 
 The consequence for you: **a projection whose `apply` must read what it has
-already written in the same batch cannot be written against this adapter.**
-`READS_THROUGH_BATCH` is `false` and the conformance suite reports it as a skip
-rather than passing quietly.
+already written in the same batch cannot be written against the buffered
+store.** `READS_THROUGH_BATCH` is `false` and the conformance suite reports it
+as a skip rather than passing quietly.
+
+`LivePostgresProjectionStore`'s batch is a real transaction opened at `begin`,
+and since the typed layer's `apply` became `async` (ADR-0074) a projection
+awaits `LivePostgresBatch::execute` inside it and `run_projection` drives it:
+statements reach the server as `apply` runs. The transaction does read through
+(PS-12's rule runs against it, through the conformance probe), but
+`LivePostgresBatch` has no query method yet, so `apply` cannot read its pending
+writes back on either store. The trade for the live store: a pooled connection
+held for a whole chunk, and a statement the server refuses aborts the
+transaction, unless `apply` rolled back to a savepoint it set (#103). The
+buffered store stays the default.
 
 ## Limits this store enforces
 

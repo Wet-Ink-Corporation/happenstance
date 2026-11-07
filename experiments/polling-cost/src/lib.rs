@@ -32,9 +32,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use happenstance::{
-    Codec, CodecError, DomainEvent, Event, EventStore, EventType, InvalidProjectionId, Json,
-    MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
-    Progressed, Projection, ProjectionId, ProjectionStore, SequencePosition, Tags,
+    Codec, CodecError, Delivered, DomainEvent, Event, EventStore, EventType, InvalidProjectionId,
+    Json, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
+    MemoryProjectionStoreError, Progressed, Projection, ProjectionId, ProjectionStore,
+    SequencePosition, Tags,
 };
 use serde::{Deserialize, Serialize};
 
@@ -283,6 +284,7 @@ impl View {
 impl Projection for View {
     type Event = Measured;
     type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
@@ -292,9 +294,9 @@ impl Projection for View {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        _: Measured,
+        _: Delivered<Measured>,
         batch: &mut MemoryProjectionBatch,
     ) -> Result<(), MemoryProjectionStoreError> {
         self.applied += 1;
@@ -632,7 +634,11 @@ fn staleness(cell: &Cell) -> Result<Record, HarnessError> {
             let mut outstanding = false;
             for (view, observer) in views.iter_mut().zip(observers.iter_mut()) {
                 let _ = run_once(&events, &models, view, cell)?;
-                let checkpoint = block_on(models.checkpoint(view.id()))
+                // Under the id the runner commits under (PS-25). The bare name
+                // reads `NeverRun` for ever and would corrupt the measurement.
+                let key = happenstance::checkpoint_id(&*view)
+                    .map_err(|e| HarnessError::Run(e.to_string()))?;
+                let checkpoint = block_on(models.checkpoint(&key))
                     .map_err(|e| HarnessError::Run(e.to_string()))?;
                 observer.observe(checkpoint, now);
                 let pending = observer.pending(checkpoint);
@@ -686,7 +692,9 @@ fn run_once(
     view: &mut View,
     cell: &Cell,
 ) -> Result<Progressed, HarnessError> {
-    let chunk = std::num::NonZeroUsize::new(cell.chunk).unwrap_or(std::num::NonZeroUsize::MIN);
+    let chunk = happenstance::Chunk::of(
+        std::num::NonZeroUsize::new(cell.chunk).unwrap_or(std::num::NonZeroUsize::MIN),
+    );
     block_on(happenstance::run_projection(
         events, models, view, &Json, chunk,
     ))
@@ -788,7 +796,7 @@ pub fn environment(run_tag: &str, workspace: &Path) -> Manifest {
         cpu: cpu_model(),
         logical_cpus: std::thread::available_parallelism().map_or(0, std::num::NonZeroUsize::get),
         ram_bytes: total_ram_bytes(),
-        features: "unstable-projection,memory,json".to_owned(),
+        features: "memory,json".to_owned(),
         started_at: run_instant(),
         projection_store: PROJECTION_STORE.to_owned(),
     }

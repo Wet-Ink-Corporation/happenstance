@@ -31,9 +31,9 @@ doc-scrape-examples = true
 # `json` is also what `commit` needs: the ungated entry point is `commit_with`,
 # and `commit` is that function with `Json` already chosen.
 #
-# `default-features = false` drops `memory`, and `unstable-projection` is absent:
-# nothing here derives a read model.
-happenstance = { version = "0.4.6", path = "../../crates/happenstance", default-features = false, features = [
+# `default-features = false` drops `memory`. Nothing here derives a read model,
+# so nothing here names the runner.
+happenstance = { version = "0.5.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
   "postcard",

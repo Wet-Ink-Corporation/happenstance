@@ -43,7 +43,7 @@ source_paths:
   - crates/happenstance-testkit/src/contract.rs
   - crates/happenstance-ladybug/tests/projection.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-09-30
+last_reviewed: 2026-11-02
 ---
 
 # RESET_REFUSAL can be declared and left un-mechanised, and nothing in the tree would notice
@@ -147,3 +147,24 @@ and all three still decline `RESET_REFUSAL`. Where the sections above say "four"
 Ladybug's decline "the pattern", read them as history: the finding is unchanged, the population
 that could be lying is still empty, and Ladybug's decline survives only as a cited argument, not
 as a running adapter.
+
+## Phase 18 — #118, 2026-11-02
+
+The clause is minted and the population is no longer empty. **CF-43**, `[PROVISIONAL]` and frozen
+with PS-18 by #127 or renewed with it, states the obligation this atom specified: a fixture
+declaring `RESET_REFUSAL` makes every later `reset` of a protected id answer `Refused` by a
+mechanism inside the store's own `reset`, and states that mechanism. `NoopProtectFixture` is
+registered in `crates/happenstance-testkit/tests/projection_mutation_coverage.rs` as failing
+`refused_reset_changes_nothing`, pinned at its first assertion. `happenstance-sqlite` is the first
+adapter to declare the capability (owner decision D4): `SqliteProjectionStore::protect_from_reset`
+writes a mark into `projection_protection`, and `reset` reads it inside its `BEGIN IMMEDIATE`.
+
+Two corrections to the sections above. The sentence that `refused_reset_changes_nothing` "still
+reports green" for an empty override was already false before this change: the rule's first
+assertion is a `match` on `Err(ResetError::Refused)`, and a store nobody protected answers `Ok`. The
+hole was the missing clause and the missing demonstration, not a missing assertion. And the
+argument this atom cites as "the pattern" — that a protected-projections table would put a domain
+policy into an adapter — is answered rather than adopted: the table holds a mark the domain sets,
+not a policy, so the division PS-18 draws stands. `happenstance-postgres` and `happenstance-neon`
+still decline with text that repeats that argument; bringing their reasons into line is a separate
+item. The default-reason-string question still rides along unanswered.

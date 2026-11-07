@@ -489,7 +489,6 @@ mod shadowing {
     /// silently — a breaking change to a facade whose whole promise is that
     /// the contract's paths still work — which is why the runner lives in
     /// `runner`. This body is what fails if it ever moves back.
-    #[cfg(feature = "unstable-projection")]
     fn same_projection_id(
         id: happenstance_core::projection::ProjectionId,
     ) -> crate::projection::ProjectionId {
@@ -501,11 +500,8 @@ mod shadowing {
         let _ = same_tags as fn(happenstance_core::Tags) -> crate::Tags;
         let _ = same_event as fn(happenstance_core::Event) -> crate::Event;
         let _ = facade_store_bound::<happenstance_core::MemoryEventStore> as fn();
-        #[cfg(feature = "unstable-projection")]
-        {
-            let id = happenstance_core::projection::ProjectionId::from_static("van_stock");
-            assert_eq!(same_projection_id(id).as_str(), "van_stock");
-        }
+        let id = happenstance_core::projection::ProjectionId::from_static("van_stock");
+        assert_eq!(same_projection_id(id).as_str(), "van_stock");
 
         assert!(same_query(happenstance_core::Query::all()).is_all());
     }
@@ -818,4 +814,55 @@ fn application_metadata_is_copied_through_untouched() {
     );
     // And nothing rewrote it: the region is a prefix, so the two lengths add up.
     assert_eq!(framed.len(), b"hpst\x01json\xFF".len() + application.len());
+}
+
+// ---------------------------------------------------------------------------
+// PS-28 — the failure-policy arm reports like the apply arm
+//
+// Crate-internal because nothing outside can build the variant: it is
+// `#[non_exhaustive]`. The runner builds it when `on_error` fails (#101), and
+// `tests/failure_policy.rs` drives that end to end; this pins the accessors
+// with a progress no run could fake. The wrong implementation this rejects
+// is a `position()` or `progress()` match that forgot the new arm and fell
+// through to `None` or to the default.
+// ---------------------------------------------------------------------------
+
+mod policy_arm {
+    use happenstance_core::SequencePosition;
+
+    use crate::{Progressed, ProjectionError};
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("the refusal record could not be written")]
+    struct Unrecorded;
+
+    #[test]
+    fn a_failing_policy_names_its_event_and_its_progress() {
+        let committed = SequencePosition::new(3).expect("a non-zero position");
+        let failed = SequencePosition::new(5).expect("a non-zero position");
+        let progress = Progressed {
+            through: Some(committed),
+            applied: 3,
+            skipped: 1,
+        };
+        let error: ProjectionError<core::fmt::Error, core::fmt::Error, Unrecorded> =
+            ProjectionError::Policy {
+                progress,
+                position: failed,
+                source: Unrecorded,
+                rollback: None,
+            };
+
+        assert_eq!(error.position(), Some(failed));
+        assert_eq!(error.progress(), progress);
+        assert_eq!(
+            error.to_string(),
+            format!("the failure policy for the event at position {failed} failed")
+        );
+        let source = core::error::Error::source(&error).expect("a typed source");
+        assert!(matches!(
+            source.downcast_ref::<Unrecorded>(),
+            Some(Unrecorded)
+        ));
+    }
 }

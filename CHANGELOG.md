@@ -27,17 +27,215 @@ not the same as what a user needed to be told.
   feature at `0.2.0`** and was exempt from semver. It is not, from `0.3.0`:
   ADR-0063 lifted the gate on the evidence ADR-0062 produced. The feature
   survived on `happenstance-core` as an empty name, so that `0.2.0` manifests
-  resolved, until `0.4.0` removed it. What `happenstance` still holds behind a feature
-  of the same name is the typed **runner**, whose `Projection::apply` shape is
-  not yet proved at its far end. See
-  [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
+  resolved, until `0.4.0` removed it. `happenstance`'s feature of the same name
+  gated the typed **runner** until `0.5.0` removed it too; see `[0.5.0]`
+  and [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
 ## [Unreleased]
 
-Additive in API, with one new conformance rule that can turn a passing adapter's
-suite red: `happenstance-testkit` now writes VT-36's floor.
+## [0.5.0] — 2026-11-07
+
+The typed projection runner leaves its gate. Phase 18 made `Projection::apply`
+`async`, gave a projection an error of its own, named the runner's chunk, keyed
+its checkpoint on the query it reads, and added skip-and-record, a fan-out
+runner and the convergence declaration. This release removes `happenstance`'s
+`unstable-projection` feature, so all of it is in every build and, from here,
+covered by semver like the rest of the crate.
+
+**This is a breaking release from `0.4.x`.** If you enabled
+`unstable-projection`, six changes reach your code, each an entry below:
+`apply` is `async` and is handed a `Delivered<E>`; `Projection` gains
+`type Error`; `run_projection` takes a `Chunk`; the runner keys its checkpoint
+on a derived id, so a checkpoint `0.4.x` wrote reads `NeverRun` unless you
+adopt it; code generic over the projection that spawns its run implements
+`SendProjection` and writes new bounds; and the feature itself is removed, so
+a manifest that names it no longer resolves. A seventh, `on_error`, needs no
+change. If you never enabled the feature, your application code does
+not change. An adapter author also takes a new rule in each testkit, and
+`happenstance-sqlite`'s projection schema moves to version 2. The
+[`0.5.0` trace](#050-trace) at the end of this section lists every break with
+the decision behind it, and [`docs/upgrading-to-0-5.md`](docs/upgrading-to-0-5.md)
+walks them. All nine crates move to `0.5.0` together.
+
+### Changed
+
+- **Breaking, behind `unstable-projection`: `happenstance::Projection::apply` is
+  `async` and is handed a `Delivered<Self::Event>`**
+  ([ADR-0074](.kb/decisions/0074-projection-apply-is-async.md), #98, #135, #138).
+  An implementation changes `fn apply(&mut self, event: E, batch: &mut B)` to
+  `async fn apply(&mut self, event: Delivered<E>, batch: &mut B)` with the same
+  return type, and reads the event with `event.into_event()` or `event.event()`.
+  A projection over a buffered batch never awaits: its run is ready at the
+  first poll and behaves as before. A projection over a live batch can now
+  await a statement through it. Its error type changed too, in the next
+  entry. `unstable-projection` makes no semver promise (ADR-0066).
+- **Breaking, behind `unstable-projection`: a projection fails with its own
+  error** (PS-28, ADR-0074 decision 8, #99). `Projection` gains
+  `type Error: core::error::Error + From<<Self::Store as ProjectionStore>::Error> + 'static`,
+  and `apply` returns `Result<(), Self::Error>`. A projection whose only
+  failure is the store's migrates with one line,
+  `type Error = <its store's error>;`, and `?` on a store call inside `apply`
+  still compiles. `ProjectionError` gains a third type parameter `A`, the
+  projection's error, which `Apply`'s `source` now carries, and there is no
+  default: `ProjectionError<R, W>` no longer compiles. It also gains a
+  `Policy` arm, for a failing `on_error` (below). A caller generic over `P` that
+  sends the error elsewhere, into `anyhow` for instance, adds
+  `P::Error: Send + Sync` to its own bounds.
+- `happenstance` (behind `unstable-projection`): `run_projection` takes
+  `chunk: Chunk` rather than a bare `NonZeroUsize` (ADR-0070, #120). Migrate
+  with `Chunk::of(n)`. `Chunk` is `#[non_exhaustive]` and `Copy`, with a
+  private representation and no `Default`; the runner stays exempt from semver
+  while the feature gates it.
+- **Behaviour change, behind `unstable-projection`: `run_projection` reads and
+  commits a projection's checkpoint under `checkpoint_id(&projection)`**, not
+  under `projection.id()` (PS-25, ADR-0074 decision 9, #107). The id is the
+  name, `@`, and 16 lowercase hex digits of a 64-bit FNV-1a digest of the query
+  the runner derives from the projection's event types and scope. A projection
+  whose query changes now starts a new checkpoint and replays from the start,
+  instead of resuming past events its old query never nominated.
+  **A checkpoint written by `0.4.x` under the bare name reads `NeverRun` after
+  the upgrade, so the projection rebuilds from the start.** To keep its
+  position instead, adopt it — **only when the query did not change, and
+  before the new runner first runs**: read the old checkpoint under
+  `projection.id()`, and if it is `Live { through }` or
+  `Rebuilding { through }`, `begin()` an empty batch and
+  `commit(empty_batch, &checkpoint_id(&projection)?, through, authority)` with
+  `Authority::Live` or `Authority::Rebuilding` to match. Adopting across a
+  changed query re-creates the resume this change exists to prevent. The
+  orphaned bare-name row is harmless, and `reset` clears it. A name longer than
+  238 bytes is now refused with `ProjectionError::CheckpointId`, a new arm,
+  because the name and its digest must fit VT-35's 255. Code that read a
+  runner's checkpoint through `projection.id()` reads it through
+  `checkpoint_id` now.
+- **Breaking, behind `unstable-projection`: `Projection` gains a provided
+  `on_error`** (PS-27, ADR-0074 decision 5, #101). No implementation has to
+  change: the default answers `Policy::Halt`, and a run halts on a decode or
+  apply failure exactly as before, with the same arm, position and checkpoint.
+  `Progressed`, `#[non_exhaustive]`, gains `skipped`: the events `on_error`
+  skipped and the run committed past, never counted in `applied`. Code generic
+  over the projection that spawns the run adds `P::Error: Sync` beside
+  `P::Error: Send`, because the runner holds the failure it hands `on_error`,
+  which borrows the error, across that await.
+- `happenstance-sqlite` (behind `projection-store`): the projection schema
+  gains a `projection_protection` table, created on every open, and
+  `projection_store::SCHEMA_VERSION` is `2` (PS-18, #118). A file is still
+  written at marker 1 and stays there until its first protection raises it to
+  2. So a build older than this one keeps opening files nothing has protected,
+  and refuses a file with a protected projection with `UnsupportedSchemaVersion`
+  rather than reset it blind. A handle that older build opened **before** the
+  first protection is not stopped: deploy this build everywhere before
+  protecting. A caller wrapping a connection with `SqliteProjectionStore::new`
+  over a file last migrated before this release opens it once through `open`
+  first, which adds the table.
+- `happenstance-postgres` (documentation, no API change):
+  `LivePostgresProjectionStore` is driven by `run_projection` since `apply`
+  became `async`, and its crate docs and README no longer say it cannot be
+  (#142). A projection awaits `LivePostgresBatch::execute` inside the live
+  transaction, and the crate's live tests now run one against a server. The
+  buffered `PostgresProjectionStore` stays the default: the live store holds a
+  pooled connection for each chunk, and one statement the server refuses
+  aborts its transaction unless `apply` rolls back to a savepoint it set (#103).
+- **Eight specification clauses are `[FROZEN]`** (#127,
+  [ADR-0102](.kb/decisions/0102-phase-18s-clauses-are-frozen.md)). No code
+  changed. PS-16 (a reset clears the read model and the checkpoint together),
+  PS-18 (a store can refuse a reset), PS-25 (a changed `Query` starts a new
+  checkpoint), PS-27 (skip and record in one batch), PS-30 (a fan-out runner
+  that catches a panic rolls back), PS-38 (a commit advances the checkpoint),
+  SY-21 (a convergent projection is handed an `EventId`, never the arrival
+  position) and CF-43 (what a fixture declaring `RESET_REFUSAL` promises). From
+  `1.0.0`, loosening any of them is a major release. PS-25's freeze covers the
+  derived id itself: the `@` separator, the item encoding and the FNV-1a digest
+  `checkpoint_id` computes cannot change in 1.x, because a changed id orphans
+  every stored checkpoint and rebuilds every view. PS-16's evidence is SQLite and `DELETE` only: no
+  adapter here clears a view with `TRUNCATE`.
 
 ### Added
+
+- `happenstance` (behind `unstable-projection`): `run_fan_out`, the fan-out
+  runner, with `FanOut` and `ViewError` (#112, PS-30). It drives N views of one
+  projection type from **one** read of the log, and each view ends with the
+  rows, checkpoint and `Progressed` that `run_projection` alone would give it,
+  under its own chunk window. A view whose decode, `apply`, `on_error`, `begin`
+  or `commit` fails stops alone, with `run_projection`'s arm as
+  `ViewError::Stopped`; a failed read stops every view still running as
+  `ViewError::Interrupted` and is reported once, in `FanOut::read`. **A panic
+  is not caught** (ADR-0101, accepted by the owner at #127): it unwinds out of
+  the call, every open write set is dropped and rolled back, and nothing
+  since any view's last commit survives. One view that panics stops all N;
+  one task per view through `run_projection` is the containing alternative.
+  Over a live batch, N views hold up to N pooled connections at once, so a
+  pool smaller than N stops a later view with `Begin` at its acquire timeout.
+  Spawning it from generic code asks `run_projection`'s bounds plus
+  `St::Error: Send`.
+- `happenstance-testkit` (behind `memory`, a default):
+  `RecordingProjectionStore`, a `MemoryProjectionStore` that logs each write
+  set's `begin`, `commit`, `reset`, `rollback` and bare drop as a
+  `BatchCall`, with `RecordingBatch`, its write set, and
+  `RecordingStoreError` (#112, the owner's choice on the card). It fails one
+  `begin`, or every commit under one checkpoint id, on request. It is the
+  instrument for a projection *runner's* tests, which have to tell a rollback
+  from a drop; the memory store cannot. Bare flavour only, since its log is
+  shared on one thread. Additive; it depends on nothing new.
+- `happenstance` (behind `unstable-projection`): `checkpoint_id`, the id the
+  runner keys a projection's checkpoint on, `InvalidCheckpointId`, why one
+  could not be derived, and `MAX_CHECKPOINT_NAME_LEN`, 238 (PS-25, #107). The
+  digest function, its encoding and the `@` separator are pinned by golden
+  values and documented on `checkpoint_id`.
+- `happenstance` (behind `unstable-projection`): `Delivered<E>`, the event
+  `apply` is handed. It exposes `id()`, the origin's `EventId`, `event()` and
+  `into_event()`, and a public `Delivered::new(id, event)` so an application can
+  unit-test its own `apply`. It has no accessor for the local arrival position
+  (SY-21).
+- `happenstance` (behind `unstable-projection`): `SendProjection`, the `Send`
+  flavour of `Projection`, derived with `trait_variant`. Implement exactly one
+  of the two. `trait-variant` is now a direct dependency of `happenstance`,
+  under the workspace's existing caret, and adds no crate to the graph.
+- `happenstance-sqlite` (behind `projection-store`): a refusable reset (PS-18,
+  #118). `SqliteProjectionStore::protect_from_reset` marks a projection
+  protected, in the file, for every handle onto it; `reset` of a protected
+  projection answers `ResetError::Refused` and runs none of its batch.
+  `allow_reset` lifts the mark and `is_protected_from_reset` reads it, since
+  `Refused` carries no context. `commit` is unaffected. The SQLite projection
+  fixture now declares `RESET_REFUSAL`, so `refused_reset_changes_nothing` runs
+  against it rather than reporting a skip.
+- Specification: CF-43, `[PROVISIONAL]`, states what a fixture declaring
+  `RESET_REFUSAL` commits to. `happenstance-testkit`'s own tests register
+  `NoopProtectFixture`, the fixture that declares it and protects nothing, as
+  failing `refused_reset_changes_nothing`. No conformance rule changes, and
+  the testkit's published change is documentation only.
+- `happenstance` (behind `unstable-projection`), documentation: the bounds a
+  spawner generic over the projection writes to `tokio::spawn` a
+  `run_projection` (#110), each measured load-bearing:
+  `S: SendEventStore<Error: Send> + Sync + 'static`,
+  `P: SendProjection<Store = St, Event: Send, Error: Send> + 'static` and
+  `St: SendProjectionStore<Batch: Send> + Sync + 'static`. `St` is a type
+  parameter of the caller's own: written as `P::Store`, the store's futures
+  are not `Send` (`E0277`). The `Projection` page compiles both spellings,
+  and *Which flavour to implement* now says that `SendProjection` matters
+  only where code generic over the projection spawns the run. No code
+  changes. Since #101 the projection's bound is
+  `Error: Send + Sync`; see `on_error` above.
+- `happenstance` (behind `unstable-projection`): skip-and-record (PS-27, #101).
+  `Projection::on_error` is handed an `ApplyFailure` and the open batch, and
+  answers a `Policy`. `Policy` is `Halt` or `Skip`, `#[non_exhaustive]`.
+  `ApplyFailure` is `Decode` or `Apply`, each carrying the event's `EventId`
+  and a borrowed source, with `id()` and the `const fn` constructors
+  `ApplyFailure::decode` and `ApplyFailure::apply`, so an application can
+  unit-test its own `on_error`; it has no accessor for the local position
+  (SY-21). Under `Skip`, a record `on_error` writes into the batch commits with
+  the checkpoint that moves past the event, or not at all, and the skipped
+  event counts toward `chunk`. A failing `on_error` stops the run with
+  `ProjectionError::Policy`. Over a batch that is a live transaction, a
+  statement the server refuses aborts it, so `Skip` needs a savepoint that
+  `apply` sets and rolls back to; the runner sets none, and `Policy::Skip`'s
+  page says how (#103).
+- `happenstance` (behind `unstable-projection`): `ConvergentProjection`, the
+  convergence declaration SY-20 needs (#123). A marker trait a projection of
+  either flavour implements to say that its read model does not depend on
+  ingest order; a projection that does not implement it is non-convergent
+  (SY-22). It has no supertrait, so a generic spawner's bound is #110's plus
+  `+ ConvergentProjection`. Nothing checks the claim yet; phase 13's sync
+  conformance rule will.
 
 - `happenstance-testkit`: the rule
   `store_accepts_the_guaranteed_minimum_tags_per_batch` (VT-36, #368). It
@@ -73,6 +271,67 @@ suite red: `happenstance-testkit` now writes VT-36's floor.
   platform's wall ends in, the storage-operation timeout and the CPU limit:
   as `Split`, with the two cases where that reading is wrong (#369). Neither
   throw reaches the store, so its `Classify` is unchanged.
+
+### Removed
+
+- **BREAKING (`happenstance`): the `unstable-projection` feature is gone, and
+  the typed projection runner needs no feature** (#132;
+  [ADR-0066](.kb/decisions/0066-what-1-0-promises.md) §5). `Projection`,
+  `SendProjection`, `Delivered`, `run_projection`, `Progressed`,
+  `ProjectionError`, `ApplyFailure`, `Policy`, `ConvergentProjection`, `Chunk`,
+  `checkpoint_id`, `InvalidCheckpointId`, `MAX_CHECKPOINT_NAME_LEN`,
+  `run_fan_out`, `FanOut` and `ViewError` are in every build of `happenstance`,
+  whatever features you choose. **If your manifest names
+  `happenstance/unstable-projection`, or puts `"unstable-projection"` in
+  `happenstance`'s `features`, delete it** — Cargo now refuses to resolve it,
+  and nothing you use changes when it goes. A script or CI job that passes
+  `--features unstable-projection` (or `happenstance/unstable-projection`) to
+  `cargo` fails the same way; drop the flag. If you relied on
+  `default-features = false` to keep the runner out of your build, it is in it
+  now. It adds no dependency: `futures-core`, the one crate it named, was
+  already in your graph through `happenstance-core`. From `0.5.0` the runner is
+  covered by semver like the rest of the crate. The entries above marked
+  *behind `unstable-projection`* were made while that feature gated the runner
+  and exempted it, and they are what a `0.4.x` user who enabled it migrates
+  across.
+
+### `0.5.0` trace
+
+Every break `0.5.0` carries, each with the decision that caused it, written on
+2026-11-07 against `phase-18` at `0f0e3c3`. It has **hand** rows only, and that
+is a finding about the tool rather than about the release. Every change to the
+typed runner was made behind `unstable-projection`, and cargo-semver-checks
+passes over `unstable-*` features, so measured against `0.4.6` the runner is
+new surface rather than changed surface. Each row below was found by reading
+every breaking entry above.
+
+**Not run here:** `cargo semver-checks` is not installed on the machine that
+wrote this table, and the CI registry step cannot stand in for it: it passes no
+`--release-type`, so `0.4.6` to `0.5.0` reads as major and no lint is required.
+Before tagging, run `cargo semver-checks check-release --workspace
+--baseline-version 0.4.6 --release-type minor`. Any lint it reports that no row
+below covers becomes a **T** row.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| H1 | `happenstance` | the `unstable-projection` feature is removed; the tool passes over `unstable-*` features | hand | D6 (AFK batch 9), [ADR-0066](.kb/decisions/0066-what-1-0-promises.md) §5 | Removed |
+| H2 | `happenstance` | `Projection::apply` is `async` and is handed a `Delivered<Self::Event>`, was a synchronous `fn` handed `Self::Event` | hand | [ADR-0074](.kb/decisions/0074-projection-apply-is-async.md) | Changed |
+| H3 | `happenstance` | `Projection` gains the required associated type `Error`, `apply` returns `Result<(), Self::Error>`, and `ProjectionError` gains a third type parameter with no default | hand | ADR-0074 decision 8 (PS-28) | Changed |
+| H4 | `happenstance` | `run_projection` takes `chunk: Chunk`, was `NonZeroUsize` | hand | [ADR-0070](.kb/decisions/0070-the-runner-takes-a-named-chunk.md) | Changed |
+| H5 | `happenstance` | the runner reads and commits its checkpoint under `checkpoint_id(&projection)`, was `projection.id()`, so a checkpoint `0.4.x` wrote reads `NeverRun` until adopted; a name over 238 bytes is refused (behaviour) | hand | ADR-0074 decision 9 (PS-25), frozen by [ADR-0102](.kb/decisions/0102-phase-18s-clauses-are-frozen.md) | Changed |
+| H6 | `happenstance` | `Projection` gains the provided method `on_error`; only a call site with another trait's `on_error` in scope can become ambiguous (`E0034`) | hand | ADR-0074 decision 5 (PS-27) | Changed |
+| H7 | `happenstance-sqlite` | `projection_store::SCHEMA_VERSION` is `2`, was `1`, and a build older than this one refuses a file holding a protected projection; the tool sees no changed value (behaviour) | hand | PS-18 (#118), frozen by ADR-0102 | Changed |
+| H8 | `happenstance-testkit` | a new conformance rule, `store_accepts_the_guaranteed_minimum_tags_per_batch` (VT-36), which a store that meets VT-22 and VT-24 only one at a time now fails (behaviour; CF-32) | hand | [ADR-0100](.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md) | Added |
+| H9 | `happenstance-sync-testkit` | a new ingest rule, `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (VT-36, SY-18), which a store that declares a tags-per-call ceiling and does not hold the whole call to it now fails (behaviour; CF-32) | hand | ADR-0100 | Added |
+| H10 | `happenstance` | code generic over the projection that spawns its run can no longer bound it `P: Projection<Store = St> + Send + 'static`, because `apply`'s future is not known to be `Send`; it implements `SendProjection`, new in this release, and writes `P: SendProjection<Store = St, Event: Send, Error: Send + Sync> + 'static` | hand | ADR-0074, #110 | Changed |
+
+**Not a break, recorded so the absence is a decision:** `Progressed::skipped`
+is an added field on a `#[non_exhaustive]` struct; `RecordingProjectionStore`
+and its types, `run_fan_out` and `ConvergentProjection` are new items; and
+`IngestFixture::MAX_TAGS_PER_BATCH` is an associated constant with a default, so
+an existing fixture compiles unchanged (Added).
+
+**Pending:** none. ADR-0101, which the fan-out entry cites, was accepted at #127.
 
 ## [0.4.6] — 2026-11-02
 
@@ -5080,7 +5339,8 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.3...v0.4.4

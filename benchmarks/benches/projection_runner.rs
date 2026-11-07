@@ -4,7 +4,7 @@
 //!
 //! `run_projection` does one read for the whole run and pulls the stream item
 //! by item, holding at most `chunk` events between `begin` and `commit`
-//! (`crates/happenstance/src/runner.rs:416`). That is its **only** throughput
+//! (`crates/happenstance/src/runner.rs:449`). That is its **only** throughput
 //! knob, and PS-13/PS-14 require the *result* to be identical at every value of
 //! it — `rebuild_is_chunk_size_invariant` is a conformance rule.
 //!
@@ -50,7 +50,7 @@ use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use happenstance::{DomainEvent, Json, Progressed, run_projection};
+use happenstance::{Chunk, DomainEvent, Json, Progressed, run_projection};
 use happenstance_benchmarks::domain::{MemoryTotals, Recorded, SqliteTotals};
 use happenstance_benchmarks::fixtures::memory::{MemoryFixture, MemoryHandle};
 use happenstance_benchmarks::fixtures::sqlite::SqliteFixture;
@@ -181,6 +181,7 @@ fn catch_up(criterion: &mut Criterion) {
 
     for chunk in CHUNK_SIZES {
         let chunk_size = NonZeroUsize::new(chunk).expect("every swept chunk size is non-zero");
+        let chunk_size = Chunk::of(chunk_size);
 
         group.bench_function(
             BenchmarkId::new("memory-events/memory-models", chunk),
@@ -265,6 +266,7 @@ fn idle_poll(criterion: &mut Criterion) {
     group.sample_size(SEEDED_SAMPLES);
 
     let chunk_size = NonZeroUsize::new(100).expect("100 is non-zero");
+    let chunk_size = Chunk::of(chunk_size);
     let memory_events = seeded_memory_events();
     let (_sqlite_fixture, sqlite_events) = seeded_sqlite_events();
 

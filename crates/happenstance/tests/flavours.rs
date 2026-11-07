@@ -15,12 +15,10 @@ use std::sync::Arc;
 
 use futures_core::Stream;
 use happenstance::bytes::Bytes;
-#[cfg(feature = "unstable-projection")]
-use happenstance::run_projection;
 use happenstance::{
     AppendCondition, AppendError, Codec, CodecError, DecisionModel, DomainEvent, Event, EventId,
     EventStore, EventType, Json, MemoryEventStore, MemoryStoreError, Query, ReadOptions, Retry,
-    SequencePosition, SequencedEvent, Tags, commit, commit_with,
+    SequencePosition, SequencedEvent, Tags, commit, commit_with, run_projection,
 };
 use serde::{Deserialize, Serialize};
 
@@ -362,11 +360,10 @@ async fn every_entry_point_binds_the_weak_flavour() {
 
     // `run_projection` — the entry point HS-S0027 landed, and the one a caller
     // is most likely to hand a store they hold through an `Rc`.
-    #[cfg(feature = "unstable-projection")]
     {
         use core::num::NonZeroUsize;
 
-        use happenstance::{MemoryProjectionStore, ProjectionId, run_projection};
+        use happenstance::{Chunk, MemoryProjectionStore, ProjectionId};
 
         let models = MemoryProjectionStore::new();
         let mut seen = Enrolments {
@@ -374,7 +371,7 @@ async fn every_entry_point_binds_the_weak_flavour() {
             scope: course_tags(),
             count: 0,
         };
-        let chunk = NonZeroUsize::new(64).expect("64 is not zero");
+        let chunk = Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
 
         let progressed = run_projection(&store, &models, &mut seen, &Json, chunk)
             .await
@@ -438,17 +435,22 @@ fn each_module_imports_one_flavour_name() {
 // ---------------------------------------------------------------------------
 
 /// A read model over the one domain event this file already has.
-#[cfg(feature = "unstable-projection")]
 struct Enrolments {
     id: happenstance::ProjectionId,
     scope: Tags,
     count: u64,
 }
 
-#[cfg(feature = "unstable-projection")]
-impl happenstance::Projection for Enrolments {
+// The `Send` flavour, `SendProjection`, reaching the bare `Projection` that
+// `run_projection` binds through the blanket impl `trait_variant` derives. It
+// is `SendProjection` because `spawns_a_projection_generic_over_its_type`
+// below is generic over the projection, and there only the `Send` flavour
+// promises a `Send` `apply` future. A concrete spawn of `Enrolments` would
+// compile through either flavour (`a_concrete_bare_projection_spawns`).
+impl happenstance::SendProjection for Enrolments {
     type Event = Subscribed;
     type Store = happenstance::MemoryProjectionStore;
+    type Error = happenstance::MemoryProjectionStoreError;
 
     fn id(&self) -> &happenstance::ProjectionId {
         &self.id
@@ -458,9 +460,9 @@ impl happenstance::Projection for Enrolments {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        _event: Self::Event,
+        _event: happenstance::Delivered<Self::Event>,
         batch: &mut happenstance::MemoryProjectionBatch,
     ) -> Result<(), happenstance::MemoryProjectionStoreError> {
         self.count += 1;
@@ -488,10 +490,8 @@ impl happenstance::Projection for Enrolments {
 /// and shipping this marker in `happenstance-core`, which is a surface question
 /// a later phase owns. A local trait with a blanket impl over a foreign one is
 /// ordinary coherence, so declaring it costs nothing.
-#[cfg(feature = "unstable-projection")]
 trait ThreadSafeEventStore: happenstance::SendEventStore<Error: Send + Sync> {}
 
-#[cfg(feature = "unstable-projection")]
 impl<S> ThreadSafeEventStore for S where S: happenstance::SendEventStore<Error: Send + Sync> {}
 
 /// Awaits the **runner** inside `tokio::spawn`, from generic code.
@@ -514,7 +514,6 @@ impl<S> ThreadSafeEventStore for S where S: happenstance::SendEventStore<Error: 
 ///
 /// It is also the one site in this crate's tests where `SendEventStore` is
 /// named, and it is reached by full path rather than imported (RS-20-3).
-#[cfg(feature = "unstable-projection")]
 fn spawns_the_projection_runner<S>(
     events: Arc<S>,
     models: Arc<happenstance::MemoryProjectionStore>,
@@ -524,12 +523,17 @@ where
     S: ThreadSafeEventStore + Send + Sync + 'static,
 {
     tokio::spawn(async move {
-        let chunk = core::num::NonZeroUsize::new(64).expect("64 is not zero");
+        let chunk =
+            happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
 
-        // `map_or` rather than `?`: the whole `ProjectionError<S::Error, _>` is
-        // collapsed to a `usize` here, so nothing of it is alive at the second
-        // await below. That is RS-25-4 applied at the one place this caller can
-        // apply it — the runner's *internal* hold is what the marker pays for.
+        // `map_or` rather than `?`: the whole `ProjectionError<S::Error, _, _>`
+        // is collapsed to a `usize` here, so nothing of it is alive at the
+        // second await below. That is RS-25-4 applied at the one place this
+        // caller can apply it — the runner's *internal* hold is what the marker
+        // pays for. The projection is concrete here, so its `Error` needs no
+        // bound; a spawner generic over `P: SendProjection` also writes
+        // `Error: Send` on it, for the same hold
+        // (`spawns_a_projection_generic_over_its_type`).
         let applied = run_projection(&*events, &*models, &mut projection, &Json, chunk)
             .await
             .map_or(0, |progressed| progressed.applied);
@@ -544,7 +548,6 @@ where
     })
 }
 
-#[cfg(feature = "unstable-projection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn run_projection_spawns_from_generic() {
     use happenstance::{MemoryProjectionStore, ProjectionId};
@@ -573,9 +576,246 @@ async fn run_projection_spawns_from_generic() {
     assert_eq!(models.get("enrolments"), Some(1));
 }
 
+/// Awaits the runner inside `tokio::spawn` from code generic over the
+/// projection **and** its store, with exactly the bounds `run_projection`'s
+/// page documents. A reviewer diffs the two `where` clauses.
+///
+/// The concrete [`spawns_the_projection_runner`] above cannot fail this way:
+/// its `Enrolments` is concrete, so its future is `Send` by auto-trait leakage
+/// whichever flavour it implements. Here only the bounds can supply it, and
+/// each one was measured load-bearing at #110 by removing it:
+///
+/// - `Store = St`, a fresh parameter. Written as `P::Store`, the store's
+///   futures are not `Send` (`E0277`): the associated type's own bound is the
+///   bare `ProjectionStore`, and it is the bound the compiler uses.
+/// - `Event: Send`. The blanket `Projection` impl `trait_variant` derives is
+///   an `async fn` that forwards to `SendProjection::apply`, and its state
+///   holds the `Delivered<P::Event>` argument across that await.
+/// - `P::Error: Send` and `S::Error: Send`. The runner's private `Stopped`
+///   holds either across the port's `rollback` await.
+/// - `P::Error: Sync`. The runner holds the `ApplyFailure` it hands
+///   `on_error`, which borrows the error, across that await (#101).
+/// - `Batch: Send`. The batch is held across every `apply` await.
+/// - `S: Sync`, `St: Sync`. The runner holds `&S` and `&St` across awaits.
+/// - `'static` on all three, for `tokio::spawn`.
+///
+/// `P: Send` is not written: `SendProjection` has `Send` as a supertrait.
+/// Nor is a store's `Error: Sync`, nor `St::Error: Send`, because no store
+/// error crosses an await. A runner change that holds a new value across one fails
+/// here until this signature and the page both grow the bound.
+fn spawns_a_projection_generic_over_its_type<S, P, St>(
+    events: Arc<S>,
+    models: Arc<St>,
+    mut projection: P,
+) -> tokio::task::JoinHandle<(P, usize)>
+where
+    S: happenstance::SendEventStore<Error: Send> + Sync + 'static,
+    P: happenstance::SendProjection<Store = St, Event: Send, Error: Send + Sync> + 'static,
+    St: happenstance::SendProjectionStore<Batch: Send> + Sync + 'static,
+{
+    tokio::spawn(async move {
+        let chunk =
+            happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
+        // Collapsed to a count inside the task, so the `JoinHandle`'s output
+        // asks nothing of the error types: every bound above is the runner's.
+        let applied = run_projection(&*events, &*models, &mut projection, &Json, chunk)
+            .await
+            .map_or(0, |progressed| progressed.applied);
+        (projection, applied)
+    })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_projection_spawns_from_code_generic_over_the_projection() {
+    use happenstance::{MemoryProjectionStore, ProjectionId};
+
+    let events = Arc::new(MemoryEventStore::new());
+    let _seeded = commit_with(&*events, seats(), &Json, Retry::once(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Subscribed {
+            student: "s1".to_owned(),
+        }])
+    })
+    .await
+    .expect("an uncontended commit");
+
+    let models = Arc::new(MemoryProjectionStore::new());
+    let seen = Enrolments {
+        id: ProjectionId::from_static("enrolments"),
+        scope: course_tags(),
+        count: 0,
+    };
+
+    let (returned, applied) =
+        spawns_a_projection_generic_over_its_type(Arc::clone(&events), Arc::clone(&models), seen)
+            .await
+            .expect("the spawned task did not panic");
+
+    assert_eq!(applied, 1);
+    assert_eq!(models.get("enrolments"), Some(1));
+    assert_eq!(returned.count, 1, "the projection came back with its state");
+}
+
+/// A bare-flavour projection whose fields are all `Send`.
+struct LocalCount {
+    id: happenstance::ProjectionId,
+    scope: Tags,
+    count: u64,
+}
+
+impl happenstance::Projection for LocalCount {
+    type Event = Subscribed;
+    type Store = happenstance::MemoryProjectionStore;
+    type Error = happenstance::MemoryProjectionStoreError;
+
+    fn id(&self) -> &happenstance::ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    async fn apply(
+        &mut self,
+        _event: happenstance::Delivered<Self::Event>,
+        batch: &mut happenstance::MemoryProjectionBatch,
+    ) -> Result<(), happenstance::MemoryProjectionStoreError> {
+        self.count += 1;
+        batch.write("count", self.count);
+        Ok(())
+    }
+}
+
+/// A **concrete** projection that implements only the bare `Projection`
+/// spawns onto a multi-threaded runtime: the compiler sees its `apply` future,
+/// and its `Send`-ness leaks as any `async fn`'s does.
+///
+/// This pins the *Which flavour to implement* section's claim. The wrong
+/// documentation it rejects is *"implement `SendProjection` whenever the run
+/// is spawned"*: `SendProjection` matters only where code generic over the
+/// projection spawns the run, which the test above holds.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_concrete_bare_projection_spawns() {
+    use happenstance::{MemoryProjectionStore, ProjectionId};
+
+    let events = Arc::new(MemoryEventStore::new());
+    let _seeded = commit_with(&*events, seats(), &Json, Retry::once(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Subscribed {
+            student: "s1".to_owned(),
+        }])
+    })
+    .await
+    .expect("an uncontended commit");
+
+    let models = Arc::new(MemoryProjectionStore::new());
+    let mut local = LocalCount {
+        id: ProjectionId::from_static("count"),
+        scope: course_tags(),
+        count: 0,
+    };
+
+    let task_events = Arc::clone(&events);
+    let task_models = Arc::clone(&models);
+    let applied = tokio::spawn(async move {
+        let chunk =
+            happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
+        run_projection(&*task_events, &*task_models, &mut local, &Json, chunk)
+            .await
+            .map_or(0, |progressed| progressed.applied)
+    })
+    .await
+    .expect("the spawned task did not panic");
+
+    assert_eq!(applied, 1);
+    assert_eq!(models.get("count"), Some(1));
+}
+
+/// A read model that is genuinely `!Send`: its count lives behind an `Rc`.
+///
+/// `Rc<Cell<_>>` rather than a plain field because the count is read back
+/// after the run through a second handle, which is exactly the sharing a
+/// single-threaded runtime allows and a `Send` bound would refuse.
+#[derive(Debug)]
+struct LocalEnrolments {
+    id: happenstance::ProjectionId,
+    scope: Tags,
+    count: Rc<core::cell::Cell<u64>>,
+}
+
+impl happenstance::Projection for LocalEnrolments {
+    type Event = Subscribed;
+    type Store = happenstance::MemoryProjectionStore;
+    type Error = happenstance::MemoryProjectionStoreError;
+
+    fn id(&self) -> &happenstance::ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    async fn apply(
+        &mut self,
+        _event: happenstance::Delivered<Self::Event>,
+        batch: &mut happenstance::MemoryProjectionBatch,
+    ) -> Result<(), happenstance::MemoryProjectionStoreError> {
+        self.count.set(self.count.get() + 1);
+        batch.write("enrolments", self.count.get());
+        Ok(())
+    }
+}
+
+/// `run_projection` binds the bare `Projection`, so a `!Send` projection runs.
+///
+/// The same guarantee `every_entry_point_binds_the_weak_flavour` holds for the
+/// store, one argument over: a runner that started binding `SendProjection`
+/// would refuse this call with `E0277`, and a `wasm32` projection holding an
+/// `Rc` would have no runner. The probe is the positive control that the
+/// projection really is `!Send`, so the call is not passing on a `Send` type.
+#[tokio::test]
+async fn a_not_send_projection_runs_through_the_bare_flavour() {
+    use core::marker::PhantomData;
+    use core::num::NonZeroUsize;
+
+    use happenstance::{MemoryProjectionStore, ProjectionId};
+    use send_probe::{NotSend as _, Probe};
+
+    assert!(
+        !Probe::<LocalEnrolments>(PhantomData).is_send(),
+        "the projection under test must not be `Send`, or this proves nothing"
+    );
+
+    let store = LocalStore::new();
+    let _seeded = commit_with(&store, seats(), &Json, Retry::once(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Subscribed {
+            student: "s1".to_owned(),
+        }])
+    })
+    .await
+    .expect("an uncontended commit against a !Send store");
+
+    let count = Rc::new(core::cell::Cell::new(0));
+    let mut local = LocalEnrolments {
+        id: ProjectionId::from_static("enrolments"),
+        scope: course_tags(),
+        count: Rc::clone(&count),
+    };
+    let models = MemoryProjectionStore::new();
+    let chunk = happenstance::Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
+
+    let progressed = run_projection(&store, &models, &mut local, &Json, chunk)
+        .await
+        .expect("a replay of a !Send projection against a !Send store");
+
+    assert_eq!(progressed.applied, 1);
+    assert_eq!(count.get(), 1);
+    assert_eq!(models.get("enrolments"), Some(1));
+}
+
 /// F1-05: the comment hoisting `chunk` inside [`spawns_the_projection_runner`]
 /// invokes RS-22-3 (`impl Trait` capturing a *borrowed* parameter's lifetime),
-/// but `run_projection` is a free `pub async fn` and `chunk: NonZeroUsize` is a
+/// but `run_projection` is a free `pub async fn` and `chunk: Chunk` is a
 /// `Copy` scalar taken by value — no RPITIT, no borrow, nothing to capture.
 ///
 /// `_accepts_inline_chunk` is the check the entry names as decisive: inlining
@@ -586,8 +826,10 @@ async fn run_projection_spawns_from_generic() {
 #[test]
 fn chunk_argument_inlines_without_hoisting() {
     fn _accepts_inline_chunk() {
-        fn takes(_: core::num::NonZeroUsize) {}
-        takes(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
+        fn takes(_: happenstance::Chunk) {}
+        takes(happenstance::Chunk::of(
+            core::num::NonZeroUsize::new(64).expect("64 is not zero"),
+        ));
     }
 
     // Built from two literals rather than one: `include_str!` below reads this
@@ -601,4 +843,132 @@ fn chunk_argument_inlines_without_hoisting() {
          RS-22-3 governs `impl Trait` returns capturing a *borrowed* parameter's \
          lifetime, not this construct (F1-05)"
     );
+}
+
+/// ADR-0070 §4: a fan-out runner hands one `Chunk` to every view, possibly
+/// from a spawned task. That needs a plain value — `Copy`, `Send`, `Sync`
+/// and owning no borrow.
+///
+/// The wrong implementation this rejects is a representation that holds an
+/// `Rc` or a `RefCell` (a shared adaptive policy, say): it would still pass
+/// every single-view test, and make the spawned fan-out impossible to write.
+#[test]
+fn chunk_is_a_plain_value_a_spawned_runner_can_own() {
+    fn assert_plain<T: Copy + Send + Sync + 'static>() {}
+    assert_plain::<happenstance::Chunk>();
+}
+
+/// `run_fan_out` inside `tokio::spawn`, from code generic over the
+/// projection and its store, with exactly the bounds `run_fan_out`'s page
+/// documents (#112). A reviewer diffs this `where` clause against that page
+/// and against [`spawns_a_projection_generic_over_its_type`]'s.
+///
+/// The list is `run_projection`'s plus `St::Error: Send`: a stopped view's
+/// `ViewError` holds the store's error while the other views' awaits run.
+/// At #112 each of `S::Error: Send`, `Event: Send`, `P::Error: Sync`,
+/// `Batch: Send`, `St::Error: Send`, `S: Sync` and `St: Sync` was removed
+/// once, and each removal is `E0277`. `Store = St` is `run_projection`'s,
+/// for the reason given above. `P: Sync` is not asked: the runner derives
+/// every view's key before its first await, so no `&P` crosses one.
+fn spawns_a_fan_out_generic_over_its_type<S, P, St>(
+    events: Arc<S>,
+    models: Arc<St>,
+    mut views: Vec<P>,
+) -> tokio::task::JoinHandle<(Vec<P>, usize)>
+where
+    S: happenstance::SendEventStore<Error: Send> + Sync + 'static,
+    P: happenstance::SendProjection<Store = St, Event: Send, Error: Send + Sync> + 'static,
+    St: happenstance::SendProjectionStore<Batch: Send, Error: Send> + Sync + 'static,
+{
+    tokio::spawn(async move {
+        let chunk =
+            happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
+        let ran = happenstance::run_fan_out(&*events, &*models, &mut views, &Json, chunk).await;
+        // Collapsed to a count inside the task, as above, so every bound is
+        // the runner's and none is the `JoinHandle`'s.
+        let applied = ran
+            .views
+            .iter()
+            .map(|outcome| outcome.as_ref().map_or(0, |progressed| progressed.applied))
+            .sum();
+        (views, applied)
+    })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_fan_out_spawns_from_code_generic_over_the_projection() {
+    use happenstance::{MemoryProjectionStore, ProjectionId};
+
+    let events = Arc::new(MemoryEventStore::new());
+    let _seeded = commit_with(&*events, seats(), &Json, Retry::once(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Subscribed {
+            student: "s1".to_owned(),
+        }])
+    })
+    .await
+    .expect("an uncontended commit");
+
+    let models = Arc::new(MemoryProjectionStore::new());
+    let view = |name: &'static str| Enrolments {
+        id: ProjectionId::from_static(name),
+        scope: course_tags(),
+        count: 0,
+    };
+
+    let (returned, applied) = spawns_a_fan_out_generic_over_its_type(
+        Arc::clone(&events),
+        Arc::clone(&models),
+        vec![view("enrolments"), view("roster")],
+    )
+    .await
+    .expect("the spawned task did not panic");
+
+    assert_eq!(applied, 2, "one event, two views");
+    assert!(
+        returned.iter().all(|view| view.count == 1),
+        "the views came back with their state"
+    );
+}
+
+/// `run_fan_out` binds the bare flavours, so a `!Send` projection over a
+/// `!Send` store fans out on one thread: the same guarantee
+/// [`a_not_send_projection_runs_through_the_bare_flavour`] holds for
+/// `run_projection`.
+#[tokio::test]
+async fn run_fan_out_binds_the_weak_flavour() {
+    use core::marker::PhantomData;
+    use core::num::NonZeroUsize;
+
+    use happenstance::{MemoryProjectionStore, ProjectionId};
+    use send_probe::{NotSend as _, Probe};
+
+    assert!(
+        !Probe::<LocalEnrolments>(PhantomData).is_send(),
+        "the projection under test must not be `Send`, or this proves nothing"
+    );
+
+    let store = LocalStore::new();
+    let _seeded = commit_with(&store, seats(), &Json, Retry::once(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Subscribed {
+            student: "s1".to_owned(),
+        }])
+    })
+    .await
+    .expect("an uncontended commit against a !Send store");
+
+    let count = Rc::new(core::cell::Cell::new(0));
+    let view = |name: &'static str| LocalEnrolments {
+        id: ProjectionId::from_static(name),
+        scope: course_tags(),
+        count: Rc::clone(&count),
+    };
+    let mut views = [view("enrolments"), view("roster")];
+    let models = MemoryProjectionStore::new();
+    let chunk = happenstance::Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
+
+    let ran = happenstance::run_fan_out(&store, &models, &mut views, &Json, chunk).await;
+
+    assert!(ran.read.is_none(), "the !Send store's read did not fail");
+    assert!(ran.views.iter().all(Result::is_ok), "{:?}", ran.views);
+    assert_eq!(count.get(), 2, "one event, two views sharing one count");
 }

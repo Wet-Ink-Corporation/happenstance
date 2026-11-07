@@ -240,9 +240,21 @@ fn new_identifiers_fit_the_item_table() {
         "Postcard",
         "Cbor",
         "Projection",
+        "SendProjection",
+        "Delivered",
+        "ApplyFailure",
+        "Policy",
+        "ConvergentProjection",
         "run_projection",
         "Progressed",
         "ProjectionError",
+        "Chunk",
+        "checkpoint_id",
+        "InvalidCheckpointId",
+        "MAX_CHECKPOINT_NAME_LEN",
+        "run_fan_out",
+        "FanOut",
+        "ViewError",
     ] {
         assert!(
             name.len() <= 24,
@@ -288,26 +300,24 @@ fn crate_root_renders_the_projection_surface() {
         .cloned()
         .collect::<Vec<_>>()
         .join(" ");
+    // Inline, since `0.5.0`. The runner used to sit behind
+    // `unstable-projection`, and RS-70-2 forced a conditional reference-style
+    // target: a plain `](run_projection)` was an unresolved link, a *hard*
+    // rustdoc error, in every build without the feature. The feature is gone
+    // (D6), the item exists in every build, and the reason for the indirection
+    // went with it. A leftover reference definition or docs.rs fallback would
+    // be a second target for one link, kept for a configuration that no longer
+    // exists.
     assert!(
-        region.contains("[**The typed projection runner**]"),
-        "the projection bullet is not a link: {region}"
+        region.contains("[**The typed projection runner**](run_projection)"),
+        "the projection bullet does not link `run_projection` inline: {region}"
     );
-
-    // Reference-style, with the target spelled **conditionally**, because a
-    // plain `](run_projection)` is an unresolved link — a *hard* rustdoc error,
-    // not a warning — in every build without `unstable-projection`, which is
-    // the default one. This is RS-70-2, and it is the whole reason a gated item
-    // cannot be linked inline from an ungated page.
     let root = read("lib.rs");
     assert!(
-        root.contains(r#"doc = "[projection-runner]: run_projection""#),
-        "the projection reference does not resolve to `run_projection` with the \
-         feature on"
-    );
-    assert!(
-        root.contains("feature = \"unstable-projection\"")
-            && root.contains(r"[projection-runner]: https://docs.rs/happenstance"),
-        "the projection reference resolves to nothing when the feature is off"
+        !root.contains("[projection-runner]:")
+            && !root.contains("feature = \"unstable-projection\""),
+        "the crate root still spells the runner's link conditionally, or still \
+         names the feature `0.5.0` removed"
     );
 
     // No roadmap survives anywhere on the page: this was the last of the five.
@@ -317,19 +327,24 @@ fn crate_root_renders_the_projection_surface() {
         "the crate-root page still carries a roadmap"
     );
 
-    // Region 5 gains one recessive row, below the vocabulary, above the
-    // adapter-author pointer, which stays last.
+    // Region 5 sits below the vocabulary, above the adapter-author pointer,
+    // which stays last. It describes the switches that exist, so the row the
+    // runner's feature had went with the feature; the migration note is the
+    // CHANGELOG's.
     let features = position_of(&doc, "# Features");
     let adapters = position_of(&doc, "Adapter authors should depend on");
     assert!(features > vocabulary && features < adapters);
     let table = doc[features..adapters].join("\n");
     assert!(
-        table.contains("`unstable-projection`"),
-        "the Features table says nothing about `unstable-projection`: {table}"
+        !table
+            .lines()
+            .any(|row| row.starts_with("| `unstable-projection`")),
+        "the Features table still lists `unstable-projection`, which `0.5.0` \
+         removed: {table}"
     );
 
     // The mount: every item is re-exported at the root beside the contract's
-    // own projection surface, which arrives behind the same feature.
+    // own projection surface, and neither is behind a feature.
     //
     // The glob this line used to require is gone; see
     // `crate_root_renders_the_codec_surface` above, and
@@ -337,6 +352,7 @@ fn crate_root_renders_the_projection_surface() {
     assert!(root.contains("pub use happenstance_core::projection;"));
     for item in [
         "Projection",
+        "SendProjection",
         "run_projection",
         "Progressed",
         "ProjectionError",
@@ -348,7 +364,16 @@ fn crate_root_renders_the_projection_surface() {
     }
     assert!(
         root.contains("pub use runner::{"),
-        "the four items are not re-exported from the crate's own module"
+        "the runner's items are not re-exported from the crate's own module"
+    );
+    assert!(
+        root.contains("pub use delivered::Delivered;"),
+        "`Delivered`, the argument of `apply`, is not re-exported at the root"
+    );
+    assert!(
+        root.contains("pub use policy::{ApplyFailure, Policy};"),
+        "`ApplyFailure` and `Policy`, what `on_error` is handed and answers, \
+         are not re-exported at the root"
     );
 
     // The density budget, in the units the design fixed; 132 since #193's
@@ -377,6 +402,30 @@ fn crate_root_renders_the_projection_surface() {
             "a crate-root doc line is {columns} columns; the budget is {budget}: {line}"
         );
     }
+}
+
+/// The convergence declaration (#123) is mounted at the root beside the
+/// runner's items, from its own module. Its own test because the one above
+/// is at clippy's length limit.
+#[test]
+fn crate_root_mounts_the_convergence_declaration() {
+    let root = read("lib.rs");
+    assert!(
+        root.contains("pub use convergence::ConvergentProjection;"),
+        "`ConvergentProjection`, the declaration a convergence check bounds \
+         on, is not re-exported at the root"
+    );
+}
+
+/// The fan-out runner (#112) is mounted at the root from its own module,
+/// behind the runner's feature, so `runner.rs` keeps its cited lines.
+#[test]
+fn crate_root_mounts_the_fan_out_runner() {
+    let root = read("lib.rs");
+    assert!(
+        root.contains("pub use fan_out::{FanOut, ViewError, run_fan_out};"),
+        "`run_fan_out`, `FanOut` and `ViewError` are not re-exported at the root"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -505,13 +554,15 @@ fn entry_points_state_their_flavour() {
     // Every generic entry point this crate exposes over a caller's store. The
     // DSL is deliberately absent: `given` builds its own `MemoryEventStore` and
     // takes no store parameter, so it has no flavour to bind.
-    let mut entry_points: Vec<(&str, &str)> = vec![
+    //
+    // `run_projection` is held unconditionally. It sat behind a `cfg!` guard
+    // while the runner was gated, which only ever silenced the check: this
+    // reads the source as text and compiles nothing (RS-81).
+    let entry_points = [
         ("command.rs", "pub async fn commit<"),
         ("command.rs", "pub async fn commit_with<"),
+        ("runner.rs", "pub async fn run_projection<"),
     ];
-    if cfg!(feature = "unstable-projection") {
-        entry_points.push(("runner.rs", "pub async fn run_projection<"));
-    }
 
     for (file, declaration) in entry_points {
         let source = read(file);
@@ -641,7 +692,7 @@ fn doc_sections(doc: &[String]) -> Vec<(String, String)> {
 #[test]
 fn run_projection_states_the_single_writer_obligation() {
     // No feature guard, deliberately. This test reads `runner.rs` as TEXT and
-    // compiles nothing behind `unstable-projection`, so a `cfg!` here gates the
+    // compiles nothing behind a feature, so a `cfg!` here would gate the
     // assertion on a feature it does not depend on — and gates it in the one
     // direction that lets a bare `cargo test` report `ok` without ever reading
     // the page. A guard that can only ever silence its own check is exactly the
@@ -685,4 +736,58 @@ fn run_projection_states_the_single_writer_obligation() {
         "`{heading}` states the obligation without saying that \
          `CheckpointRegression` guards only the backwards half: {body}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// #138 — no page in this crate still says `apply` is synchronous
+// ---------------------------------------------------------------------------
+
+/// Prose with its comment markers stripped and its whitespace collapsed, so a
+/// sentence broken across lines reads as one.
+fn prose(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            ["//!", "///", "//", "#"]
+                .iter()
+                .find_map(|marker| trimmed.strip_prefix(marker))
+                .unwrap_or(trimmed)
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// ADR-0074 made `apply` `async`, and the pages a reader meets first say so.
+///
+/// The trait page carries the section that explains the keyword, and neither
+/// it, the crate root nor the README still describes `apply` as synchronous:
+/// the shape every one of them used to explain was the one this replaced. A
+/// text read, so it runs in every feature configuration (RS-81).
+#[test]
+fn the_trait_page_says_why_apply_is_async() {
+    let runner = read("runner.rs");
+    let doc = item_doc(&runner, "pub trait Projection");
+    assert!(
+        doc.iter().any(|line| line == "# Why `apply` is `async`"),
+        "the `Projection` page has no `# Why `apply` is `async`` section"
+    );
+
+    let readme = std::fs::read_to_string(src().join("../README.md"))
+        .expect("the crate's README is readable");
+    for (page, text) in [
+        ("the `Projection` page", doc.join(" ")),
+        ("lib.rs", read("lib.rs")),
+        ("README.md", readme),
+    ] {
+        let text = prose(&text);
+        for stale in ["is synchronous", "being synchronous"] {
+            assert!(
+                !text.contains(stale),
+                "{page} still says `apply` {stale}: ADR-0074 made it `async`"
+            );
+        }
+    }
 }

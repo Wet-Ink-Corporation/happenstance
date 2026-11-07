@@ -1013,7 +1013,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 69] = [
     // ---- VT: value types -------------------------------------------------
     (
         "VT-6",
@@ -1305,34 +1305,74 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
         Unresolvable::Elsewhere("crates/happenstance-core/tests/projection_memory.rs"),
     ),
     (
+        // The composed half of PS-16: a typed `Projection` over two SQLite
+        // tables, reset and rebuilt through `run_projection`. It needs the typed
+        // layer and an adapter in one test graph, and the example package is
+        // the one place both already are, so no crate gains a dependency edge.
+        "PS-16",
+        "rebuild_through_reset_restores_every_table",
+        Unresolvable::Elsewhere("examples/rebuilding-read-models/tests/rebuild_through_reset.rs"),
+    ),
+    (
+        "PS-16",
+        "protected_reset_is_refused_and_the_view_keeps_running",
+        Unresolvable::Elsewhere("examples/rebuilding-read-models/tests/rebuild_through_reset.rs"),
+    ),
+    (
         "PS-25",
         "changed_query_starts_a_new_checkpoint",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
     ),
     (
         "PS-26",
         "failure_policy_is_per_projection",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/rules.rs"),
     ),
     (
         "PS-27",
         "skip_and_record_is_atomic",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/failure_policy.rs"),
     ),
     (
         "PS-28",
         "pump_reports_the_failing_position",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
     ),
     (
         "PS-29",
         "one_poisoned_projection_does_not_stall_the_others",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/rules.rs"),
     ),
     (
         "PS-30",
         "panicking_apply_rolls_back",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/rules.rs"),
+    ),
+    (
+        // PS-38's settlement against the fan-out runner (#112): N ids on one
+        // handle, each resumed from its own checkpoint. It needs the typed
+        // runner, so it lives beside it rather than in the adapter suite.
+        "PS-38",
+        "fan_out_resumes_each_view_from_its_own_checkpoint",
+        Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/runs.rs"),
+    ),
+    // ---- SY: replication -------------------------------------------------
+    //
+    // Check 4 does not demand these, because `SY` has no suite it reads. They
+    // are declared for the other half: SY-21 is `[FROZEN]` on the first, and
+    // deleting it must fail the gate; the second is phase 13's, and the entry
+    // goes stale, as a reminder, the day it is written into the sync suite.
+    (
+        "SY-21",
+        "apply_is_handed_the_origin_identity_not_the_local_position",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
+    ),
+    (
+        "SY-21",
+        "convergent_projection_cannot_observe_local_position",
+        Unresolvable::Scheduled(
+            "phase 13: the same surface through replication, in happenstance-sync-testkit",
+        ),
     ),
 ];
 
@@ -1529,9 +1569,9 @@ const CF36_UNDISCHARGED: [(&str, &str); 13] = [
     (
         "PS-29",
         "names `one_poisoned_projection_does_not_stall_the_others` against E2E-28, which is \
-         the integration-level case of the same name. The rule is unwritten \
-         (`UNRESOLVABLE_RULE_NAMES`), so whether it can be single-store is open until the \
-         projection runner lands",
+         the integration-level case of the same name. The rule exists since #112, beside \
+         the fan-out runner in `crates/happenstance/tests/fan_out/rules.rs`, and needs a \
+         runner, so no contract-level case can carry it",
     ),
     ("PS-30", "the same shape as PS-29, against the same case"),
     (

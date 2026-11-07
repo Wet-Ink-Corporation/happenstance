@@ -180,7 +180,7 @@ later.
 **Question 1: 1B.** `chunk` becomes a named `Chunk`. It is `#[non_exhaustive]`, has a private
 representation, and is built through named constructors, starting with `Chunk::of(NonZeroUsize)`.
 That is the shape `Retry` already has in the same crate. The parameter sits in `run_projection`'s
-signature (`crates/happenstance/src/runner.rs:514-520`, `chunk` at `:519`), and that signature
+signature (`crates/happenstance/src/runner.rs:853-859`, `chunk` at `:858`), and that signature
 becomes published surface the moment phase 18 lifts `unstable-projection`. So the type is decided
 now, and phase 18 builds it before the lift. The fan-out runner phase 18 also builds (PS-30) takes
 the same `Chunk`. Whether the parameter is `Chunk` or `impl Into<Chunk>` is left to phase 18's

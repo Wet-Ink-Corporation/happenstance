@@ -47,14 +47,13 @@ demonstrate-spawn-store-as-projection = []
 
 [dependencies]
 # The typed layer, by path, for `DomainEvent`, `Codec`, `Json` and the port
-# re-exports. `unstable-projection` is on so the SHIPPED runner's items are in
-# the graph beside the proposed ones — the experiment names neither, but a
+# re-exports. The SHIPPED runner's items are in the graph beside the proposed
+# ones, with no feature since `0.5.0` — the experiment names neither, but a
 # reader diffing the two traits should be able to build both from one manifest.
 happenstance = { path = "../../crates/happenstance", default-features = false, features = [
     "std",
     "memory",
     "json",
-    "unstable-projection",
 ] }
 happenstance-core = { path = "../../crates/happenstance-core", default-features = false, features = [
     "std",

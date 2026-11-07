@@ -12,8 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/project-thread-uikw3l-046`, on `0c257a8` (`main`, where PR #373
-merged). 2026-11-02.
+`claude/project-thread-u1dtdj-050`, cut from `phase-18` at `0f0e3c3`. 2026-11-07.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -21,53 +20,49 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.4.6` is prepared, not yet tagged.** Its release PR moves `[Unreleased]` to
-`[0.4.6] — 2026-11-02` and all nine crates to `0.4.6`. It is additive in API and
-narrows one published behaviour: `StoreLimit::TagsPerBatch`,
-`MIN_SUPPORTED_TAGS_PER_BATCH` and `Fixture::MAX_TAGS_PER_BATCH` (VT-36, CF-40,
-#356, PRs #367 and #372), with `happenstance-cloudflare` refusing a call over 262,144
-tags in total, as ADR-0093's metadata ceiling narrowed `0.4.2`; and
-`Fixture::settle_frontier` (CF-42, ADR-0099, #338, PR #363). ADR-0100 is
-accepted (owner, 2026-11-02, PR #373).
+**`0.5.0` is prepared, not yet tagged** (D9, the owner, AFK batch 9: `0.5.0` at phase
+18's exit, and no `0.4.7`). Its release PR, for `phase-18`, moves `[Unreleased]` to
+`[0.5.0] — 2026-11-07`; all nine crates were already at `0.5.0` (#375). It is breaking
+from `0.4.x`: the typed runner leaves `unstable-projection`, which is removed (#132),
+with an async `apply` handed a `Delivered<E>` (ADR-0074), a projection's own
+`type Error` (PS-28), a `Chunk` (ADR-0070) and a derived checkpoint id (PS-25). The
+CHANGELOG's `0.5.0` trace has ten hand rows and no tool rows, and
+[`docs/upgrading-to-0-5.md`](../docs/upgrading-to-0-5.md) walks each row.
 
-**`0.4.5` is released** (2026-10-31; tag `v0.4.5` at `3ccca03`, published by
-`release.yml`; all nine crates on crates.io). Its release PR (#362) moved
-`[Unreleased]` to `[0.4.5] — 2026-10-31` and all nine crates to `0.4.5`. It was
-additive, cut so Redkiln Core can pin a caller-configured SQLite store:
-`SqliteEventStore::open_on` and `remint_identity_on` (#359, PR #361), and an ingest
-that lands nothing no longer advances positions.
+**Phase 18 is done** on `phase-18`. [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md)
+froze PS-16, PS-18, PS-25, PS-27, PS-30, PS-38, SY-21 and CF-43. The specification
+counts 168 `[FROZEN]`, 29 `[PROVISIONAL]`, 7 `[DEFERRED]` and 7 `[NON-NORMATIVE]`
+(`cargo xtask spec-trace` is the authority).
 
-**`0.4.4` is released** (2026-10-31; tag `v0.4.4` at `5487546`, published by
-`release.yml`; all nine crates on crates.io and docs.rs). Its release PR (#358) moved `[Unreleased]` to
-`[0.4.4] — 2026-10-31` and all nine crates to `0.4.4`. It was the first release of
-`happenstance-sync` and `happenstance-sync-testkit`, replacing their `0.0.0`
-placeholders, and it shipped the ingest port behind a `sync` feature on all four
-adapters (#108 parts B–F), the `workerd` ingest evidence (#354, #357), and the
-trailing model for fixtures that decline `READ_YOUR_OWN_WRITES` (#79).
+**`0.4.6` is released** (2026-11-02; all nine crates on crates.io). Phases 0–12, 15–17b
+and 18 are done. What remains is sequenced in [`roadmap.md`](roadmap.md): sync (13)
+and retention (14), then `1.0.0` (21).
 
-**Phase 13's owner calls are answered** (2026-10-14). `happenstance-sync` and
-`happenstance-sync-testkit` were claimed on crates.io at `0.0.0` (#102) and are published from `0.4.4`.
-`SyncPeer::Error` is classified (`wi-cbaec7`, for ADR-0026), replication is
-whole-log at 1.0 (`wi-53c544`, for ADR-0027), and SY-7, SY-10, SY-14 and SY-23 are
-ratified with three edits (`wi-0fbcac`). Phases 0–12 and 15–17b are done. What
-remains is sequenced in [`roadmap.md`](roadmap.md): the typed runner (18), sync (13)
-and retention (14), and `1.0.0` (21) last.
-
-**A tag is cut from its release PR's merge commit, not from a later `main`.** Cloud
-sessions cannot push tags; the owner pushes them.
+**This release is tagged on `main`, at #403's merge commit**, not at its release PR's
+merge commit as earlier releases were: that PR merges into `phase-18`, which is not on
+`main` until #403 lands, and `release.yml` publishes only a tag on `main`. Tag that
+merge commit, not a later `main`. Cloud sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-The `0.4.6` release PR. The owner merges it and tags its merge commit
-(`git tag -a v0.4.6 <merge-sha> -m "0.4.6"`, then push the tag); `release.yml`
-publishes from the tag.
+The `0.5.0` release PR, from `claude/project-thread-u1dtdj-050` into `phase-18`, and
+then PR #403, `phase-18` into `main`. No release PR is open yet.
 
 ## Next action
 
-1. Phase 18 (#63), the typed runner. Its breaking chains open as `door:one-way` PRs,
-   and it needs the owner present.
-2. #356 is still open with ADR-0100 accepted (PR #373); closing it is the owner's.
-   #338 and #352 are closed, by PRs #363 and #371.
+1. The owner merges the `0.5.0` release PR into `phase-18`, then merges #403
+   (`phase-18` → `main`). Before tagging, run `cargo semver-checks check-release
+   --workspace --baseline-version 0.4.6 --release-type minor` on that merge commit;
+   any lint it reports that no hand row covers becomes a **T** row in the `0.5.0`
+   trace. The CI semver job does not stand in for it: its registry step passes no
+   `--release-type`, so `0.4.6` → `0.5.0` reads as major and requires nothing. Then
+   tag #403's merge commit (`git tag -a v0.5.0 <merge-sha> -m "0.5.0"`, then push the
+   tag); `release.yml` publishes from the tag.
+2. The two follow-ups #127 named are filed: #400, the `experiments/polling-cost` fan-out
+   passes 002/003, and #401, optional, a live-Postgres reset through `TRUNCATE`.
+3. Phase 13 (#64). It inherits SY-21's `convergent_projection_cannot_observe_local_position`,
+   declared `Scheduled` in `UNRESOLVABLE_RULE_NAMES`; write it beside #141, and the entry
+   goes stale on purpose.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
@@ -75,10 +70,16 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- **Phase 18** needs the owner present. **#118** gates phase 18's checkpoint-id chain.
-- Defaults in force (the owner's, from the previous handover): `trait-variant`
-  keeps its caret (ADR-0092); PS-25's digest is a hand-written FNV-1a; new CI jobs
-  are not required checks.
+- The `0.5.0` release PR, #403, and the `v0.5.0` tag.
+- Two protected files still describe `unstable-projection` or `0.4.x` as current, and
+  agent sessions may not edit them: `CLAUDE.md` and
+  `.github/ISSUE_TEMPLATE/bug_report.yml`. The release PR's body lists the lines.
+- Calls taken *as recommended* while the owner was asked, still unconfirmed: #101 O1–O3,
+  #103 O1(a), #118's schema call, and #123 O1(B)/O2. No freeze depends on them (ADR-0102).
+- #123 left phase 13 a crate-boundary call: `happenstance-sync-testkit` depending on
+  `happenstance` for #141.
+- Defaults in force: `trait-variant` keeps its caret (ADR-0092); new CI jobs are not
+  required checks.
 
 ## Do not re-open
 
@@ -99,6 +100,8 @@ record, and the owner.
 - Unattended sessions self-merge on green unless `door:one-way` — `wi-1fde8c`.
 - Ingest is unconditional, with compensation — SY-1 – SY-7.
 - The projection port is frozen — ADR-0063.
+- Phase 18's eight clauses are frozen, and the fan-out runner catches nothing —
+  ADR-0102, ADR-0101.
 - `happenstance-macros` is out of scope — ADR-0033.
 - `[Unreleased]` ships in `0.4.0`; there is no `0.3.3` — `wi-052920`.
 - An accepted decision's body is checked by `cargo xtask lint-kb` —
