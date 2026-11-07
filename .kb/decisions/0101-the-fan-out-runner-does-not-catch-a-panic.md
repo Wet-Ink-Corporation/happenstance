@@ -2,7 +2,7 @@
 id: kb-decision-0101
 title: The fan-out runner does not catch a panic, and ADR-0074 decision 11 binds only a runner that does
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0101
 reversibility: high

@@ -111,6 +111,19 @@ not the same as what a user needed to be told.
   buffered `PostgresProjectionStore` stays the default: the live store holds a
   pooled connection for each chunk, and one statement the server refuses
   aborts its transaction unless `apply` rolls back to a savepoint it set (#103).
+- **Eight specification clauses are `[FROZEN]`** (#127,
+  [ADR-0102](.kb/decisions/0102-phase-18s-clauses-are-frozen.md)). No code
+  changed. PS-16 (a reset clears the read model and the checkpoint together),
+  PS-18 (a store can refuse a reset), PS-25 (a changed `Query` starts a new
+  checkpoint), PS-27 (skip and record in one batch), PS-30 (a fan-out runner
+  that catches a panic rolls back), PS-38 (a commit advances the checkpoint),
+  SY-21 (a convergent projection is handed an `EventId`, never the arrival
+  position) and CF-43 (what a fixture declaring `RESET_REFUSAL` promises). From
+  `1.0.0`, loosening any of them is a major release. PS-25's freeze covers the
+  derived id itself: the `@` separator, the item encoding and the FNV-1a digest
+  `checkpoint_id` computes cannot change in 1.x, because a changed id orphans
+  every stored checkpoint and rebuilds every view. PS-16's evidence is SQLite and `DELETE` only: no
+  adapter here clears a view with `TRUNCATE`.
 
 ### Added
 

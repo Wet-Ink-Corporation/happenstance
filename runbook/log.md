@@ -10,6 +10,20 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-07 — phase 18's clauses frozen; phase 18 closes (#127)
+
+*Committed on `claude/project-thread-u1dtdj-127`, cut from `origin/phase-18` at `890c91a`.*
+[ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md), accepted on the owner's
+"As recommended" (Q1–Q8, 2026-11-07 06:32Z), freezes PS-16, PS-18, PS-25, PS-27, PS-30, PS-38,
+SY-21 and CF-43. ADR-0101 is accepted. PS-9's and PS-24's evidence is repaired under unchanged
+MUSTs, PS-16's TRUNCATE caveat is corrected, and the three tripwires turn round. The status row
+reads `done`. Detail in [phase 18's session log](phases/18-typed-runner.md).
+
+**Verified.** The temper gate against `origin/phase-18` (GREEN); `cargo xtask ci --fast`
+("all required checks passed", 5 optional steps not run); `cargo xtask spec-trace`, `lints`,
+`lint-constitution`, `proof-artefact`, and `lint-kb` against `origin/phase-18`; each tripwire
+red against its old marker, then green. Not run: `cargo xtask site` (no zola here).
+
 ## 2026-11-06 — the savepoint caveat on a live batch (#103)
 
 *Committed on `claude/project-thread-u1dtdj-103`, stacked on #388, #391 and #393 and

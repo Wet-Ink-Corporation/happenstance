@@ -1013,7 +1013,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 66] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 69] = [
     // ---- VT: value types -------------------------------------------------
     (
         "VT-6",
@@ -1347,6 +1347,32 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 66] = [
         "PS-30",
         "panicking_apply_rolls_back",
         Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/rules.rs"),
+    ),
+    (
+        // PS-38's settlement against the fan-out runner (#112): N ids on one
+        // handle, each resumed from its own checkpoint. It needs the typed
+        // runner, so it lives beside it rather than in the adapter suite.
+        "PS-38",
+        "fan_out_resumes_each_view_from_its_own_checkpoint",
+        Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/runs.rs"),
+    ),
+    // ---- SY: replication -------------------------------------------------
+    //
+    // Check 4 does not demand these, because `SY` has no suite it reads. They
+    // are declared for the other half: SY-21 is `[FROZEN]` on the first, and
+    // deleting it must fail the gate; the second is phase 13's, and the entry
+    // goes stale, as a reminder, the day it is written into the sync suite.
+    (
+        "SY-21",
+        "apply_is_handed_the_origin_identity_not_the_local_position",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
+    ),
+    (
+        "SY-21",
+        "convergent_projection_cannot_observe_local_position",
+        Unresolvable::Scheduled(
+            "phase 13: the same surface through replication, in happenstance-sync-testkit",
+        ),
     ),
 ];
 
