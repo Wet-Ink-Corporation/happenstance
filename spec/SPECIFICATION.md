@@ -6514,9 +6514,9 @@ batch before continuing.**
 `[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18,
 on the fan-out runner built at #112: its rule passes against `run_fan_out` and fails three
 catching runners. The shipped runner catches no panic (ADR-0101), so the MUST binds a
-catching runner, which 1.x may add. `experiments/polling-cost` stays outside the gate under
-CF-34; its fan-out pass measures ES-32's falsifier, not this MUST. Reopened by a target on
-which a caught unwind leaves a write set that cannot be rolled back before another view commits.
+catching runner, which 1.x may add. The benchmark `experiments/polling-cost` stays outside the
+gate under CF-34; its fan-out pass measures ES-32's falsifier, not this MUST. Reopened by a
+target on which a caught unwind leaves a write set that cannot be rolled back before another view commits.
 **Rule:** the new `panicking_apply_rolls_back` — in `crates/happenstance/tests/fan_out/`;
 a view panics; assert no partial rows survive and the checkpoint did not move.
 **Cases:** E2E-28.
