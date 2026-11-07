@@ -294,7 +294,7 @@ pub trait Fixture {
     /// given here.
     ///
     /// **A prefix-only weakening does not reach far enough; a larger one does.**
-    /// The [model family](crate::model) *predicts* whether the store will
+    /// The model family (`model`, unlinked: it needs `proptest`) *predicts* whether the store will
     /// reject a conditional append. ES-25 evaluates a condition over what the
     /// store **holds**, ES-10 and ES-11 govern what a read **shows**, and a
     /// frontier store keeps the two apart, so a prediction made from a read

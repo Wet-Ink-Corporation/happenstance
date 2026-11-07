@@ -33,6 +33,15 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Fixed
+
+- `happenstance-testkit` (documentation only): the crate's rustdoc builds
+  under its default features again (#396). `Fixture::READ_YOUR_OWN_WRITES`
+  linked the `model` module, which exists only behind `proptest`, so
+  `RUSTDOCFLAGS="-D warnings" cargo doc -p happenstance-testkit` failed with
+  an unresolved link. The page now names the module without linking it.
+  docs.rs builds with every feature and was not affected.
+
 ## [0.5.0] — 2026-11-07
 
 The typed projection runner leaves its gate. Phase 18 made `Projection::apply`
