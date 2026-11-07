@@ -38,17 +38,16 @@ Both use two methods of the `ProjectionStore` trait, `reset` and `commit`, plus
 the projection runner, `run_projection`, which reads events from the log and
 feeds them to your projection in chunks.
 
-### Before you start: the runner is not yet stable
+### Before you start: what the programs below call
 
-`run_projection` sits behind the `unstable-projection` feature, and makes no
-promise of compatibility between releases. The `apply` method your projection
-implements has just become `async` and is handed a `Delivered` event
-([ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) says why), and
-the rest of the runner's shape is still settling.
-The `ProjectionStore` trait underneath it is stable.
+Since `0.5.0`, `run_projection` needs no feature: it is in every build of
+`happenstance`, and covered by semver like the rest of the crate. The `apply`
+method your projection implements is `async` and is handed a `Delivered` event
+([ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) says why).
 
-So the programs on this page call only the trait, using
-`MemoryProjectionStore`, and they compile without the feature.
+The programs on this page call only the trait, using `MemoryProjectionStore`,
+because a rebuild is those two calls, `reset` and `commit`, and the runner is
+what makes them for you.
 [The rebuilding example](../examples/rebuilding-read-models/src/main.rs) runs
 every step below with the runner, against SQLite. It is the program to read
 alongside this page.

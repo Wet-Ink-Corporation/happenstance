@@ -192,11 +192,11 @@ the difference is deliberate rather than an inconsistency:
   port's public surface stayed movable, which is what let §4 answer eighteen
   questions before an adapter at the far end existed. Both parts of PS-2's bar
   are now met (its `Rule` records how), ADR-0063 lifted the gate, and a
-  `[FROZEN]` `PS` clause is semver-binding exactly as an `ES` one is. What the
-  typed layer still holds behind `happenstance`'s own `unstable-projection` is
-  the *runner*, for a reason of its own — phase 18 is building ADR-0074's
-  shape: `Projection::apply` is `async` and handed a `Delivered` event, and the
-  error type and failure-policy seam follow — and that is not this port's.
+  `[FROZEN]` `PS` clause is semver-binding exactly as an `ES` one is. The
+  typed layer held its *runner* behind `happenstance`'s own `unstable-projection`
+  until `0.5.0` removed it (#132), for a reason of its own — ADR-0074's shape,
+  now built: `Projection::apply` is `async` and handed a `Delivered` event, with
+  its error type and failure-policy seam — and that was never this port's.
 - `happenstance-sync` publishes unfinished (#108 part E) and with no semver
   exemption, so a `[FROZEN]` `SY` clause is semver-binding as an `ES` one is.
 
@@ -476,12 +476,12 @@ answer.
   that evidence. What that pass found and left open is one layer up:
   `Projection::apply` was synchronous, so an application could push into a
   buffered batch and could not issue a statement into a batch that is a live
-  transaction. The runner stays behind `happenstance`'s `unstable-projection`
-  until that shape is proved at its far end or deliberately kept. **Decided at
+  transaction. The runner stayed behind `happenstance`'s `unstable-projection`
+  until that shape was proved at its far end or deliberately kept. **Decided at
   phase 17** by ADR-0074 (`.kb/decisions/0074-projection-apply-is-async.md`),
   on a spike that drove a live transaction: `apply` becomes `async`, handed a
-  position-free `Delivered` event and the batch. **Built at phase 18** (#98); the runner
-  stays behind `unstable-projection` until the rest of phase 18 lands (#132).
+  position-free `Delivered` event and the batch. **Built at phase 18** (#98), and
+  the `unstable-projection` feature came off the runner in `0.5.0` (#132).
 - **Retention, deletion and completeness** (ES-39, CF-27). A store that has been
   deleted from is currently indistinguishable from a young one at every value in
   §2, and four of the six scenarios reach that from unrelated doors. ADR-0028
@@ -5181,7 +5181,7 @@ it was never on. This section's job was to state precisely what would remove
 the marker and to settle enough of the shape that an adapter could be built
 against something other than a guess. Both happened. What it does now is hold
 the settled shape: every clause below is what an adapter is built against, and
-the only `unstable-projection` surface left is the typed runner one crate up.
+no `unstable-projection` surface is left: the typed runner's came off at `0.5.0`.
 
 **`[FROZEN]` meant something narrower here than in §3 from `0.2.0` until
 ADR-0063, and §1.3 records the difference.** A frozen `PS` clause bound the
@@ -5503,8 +5503,8 @@ is mounted unconditionally, `the_port_is_mounted_unconditionally` refuses any
 `cfg` on it, and the feature name stayed in the manifest as an empty no-op —
 removing a feature is a breaking change, and a `0.2.0` manifest named it — until
 `0.4.0` removed it; `the_retired_projection_feature_is_gone` holds that. The typed
-layer still gates the runner behind its own `unstable-projection`, and that is
-PS-33's territory rather than this clause's.
+layer gated the runner behind its own `unstable-projection` until `0.5.0` (#132),
+and that was PS-33's territory rather than this clause's.
 
 ---
 
@@ -7785,8 +7785,8 @@ nothing in it should be read as choosing one (`lib.rs:120-121`). What neither
 says is that the acceptance has a price, and that the price is paid by every
 fold downstream. This clause is where it is charged.
 
-The declaration is `happenstance::ConvergentProjection` (#123), behind the typed
-layer's `unstable-projection`: a marker trait with no supertrait and no items, one
+The declaration is `happenstance::ConvergentProjection` (#123), ungated since
+`0.5.0` (#132): a marker trait with no supertrait and no items, one
 name for both flavours, so the rule bounds on a type rather than checking a flag. It
 is not spelled `ConvergentProjection: Projection`, because that supertrait shadows
 the blanket impl `SendProjection` gets, and code generic over a `SendProjection`

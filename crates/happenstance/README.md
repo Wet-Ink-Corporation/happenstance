@@ -37,11 +37,11 @@ and works up to dynamic consistency boundaries. Its source is `docs/`.
   adapter stores clear its suite — SQLite's, Postgres's buffered and live
   ones, and Neon's — at both ends of the batch-shape axis its freeze
   condition names; the contract crate's `projection` module carries the
-  account. What this crate still holds behind its off-by-default
-  `unstable-projection` feature is the typed **runner** — `Projection`,
-  `run_projection` and their companions — because its shape is still settling
-  at phase 18: `apply` is `async` now, and its error type and failure policy
-  follow. The port needs no feature; the runner still needs the word `unstable`.
+  account. From `0.5.0` the typed **runner** — `Projection`, `run_projection`
+  and their companions — needs no feature either, and is covered by semver
+  like the rest of this crate. Its `apply` is `async`, so it can await a
+  statement on a live batch, and a failure goes through the projection's own
+  error type and the failure policy it declares. Neither layer is gated.
 - **Pin [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)
   exactly** if you depend on it. It carries its own version, and adding a
   conformance rule is a semver-*minor* change there that can turn a passing
@@ -126,11 +126,11 @@ assert_eq!(done.committed().expect("a seat was taken").attempts, 1);
 
 - `#![forbid(unsafe_code)]`, workspace-wide.
 - Three switches `happenstance-core` has are re-declared here and forward to it
-  unchanged in meaning — `std`, `serde`, `memory`. Four are this crate's own
+  unchanged in meaning — `std`, `serde`, `memory`. Three are this crate's own
   and forward nothing: the `json`, `postcard` and `cbor` codecs, one optional
-  dependency each (`serde_json`, `postcard`, `ciborium`), and
-  `unstable-projection`, which gates the runner and forwards nothing since
-  ADR-0063 lifted the contract crate's gate of the same name.
+  dependency each (`serde_json`, `postcard`, `ciborium`). The projection
+  runner is behind none of them: it is in every build, as the port beneath it
+  has been since ADR-0063 lifted the contract crate's gate.
   Encoding is what the typed layer is for, so that is where they belong. It does
   mean `default-features = false` is not the same act on both crates: `json` is
   in these defaults, so it drops a codec and a type here and nothing of the kind

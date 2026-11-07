@@ -692,7 +692,7 @@ fn doc_sections(doc: &[String]) -> Vec<(String, String)> {
 #[test]
 fn run_projection_states_the_single_writer_obligation() {
     // No feature guard, deliberately. This test reads `runner.rs` as TEXT and
-    // compiles nothing behind `unstable-projection`, so a `cfg!` here gates the
+    // compiles nothing behind a feature, so a `cfg!` here would gate the
     // assertion on a feature it does not depend on — and gates it in the one
     // direction that lets a bare `cargo test` report `ok` without ever reading
     // the page. A guard that can only ever silence its own check is exactly the

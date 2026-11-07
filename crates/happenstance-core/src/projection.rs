@@ -33,11 +33,11 @@
 //! nothing the port had to move for. That is the measurement PS-2 asked for,
 //! and ADR-0063 is the freeze taken on it.
 //!
-//! **What is frozen is this port.** The typed layer's `Projection::apply` is
-//! synchronous, so an application can push into a buffered batch and cannot
-//! issue a statement into a live one; the runner built over this port stays
-//! behind `happenstance`'s own `unstable-projection` for that reason, and it is
-//! the typed layer's axis rather than this port's.
+//! **What is frozen is this port.** The runner over it has its own axis: the
+//! typed layer's `Projection::apply` is `async` since ADR-0074 was built, so it
+//! can issue a statement into a live batch, and the runner sat behind
+//! `happenstance`'s own `unstable-projection` until `0.5.0` removed it. Neither
+//! fact moved this port.
 //!
 //! Changing a signature here is now a breaking change with a decision record
 //! behind it, which is what *frozen* means in this workspace.

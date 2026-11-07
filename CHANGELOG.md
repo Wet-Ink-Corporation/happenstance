@@ -27,10 +27,9 @@ not the same as what a user needed to be told.
   feature at `0.2.0`** and was exempt from semver. It is not, from `0.3.0`:
   ADR-0063 lifted the gate on the evidence ADR-0062 produced. The feature
   survived on `happenstance-core` as an empty name, so that `0.2.0` manifests
-  resolved, until `0.4.0` removed it. What `happenstance` still holds behind a feature
-  of the same name is the typed **runner**, whose shape phase 18 is still
-  settling. See
-  [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
+  resolved, until `0.4.0` removed it. `happenstance`'s feature of the same name
+  gated the typed **runner** until `0.5.0` removed it too; see `[Unreleased]`
+  and [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
 ## [Unreleased]
 
@@ -230,6 +229,27 @@ not the same as what a user needed to be told.
   `IngestFixture` declares none yet.
   `happenstance-cloudflare`'s ingest fixture and the workerd harness declare
   262,144 and run it, the harness also on the deployed object.
+
+### Removed
+
+- **BREAKING (`happenstance`): the `unstable-projection` feature is gone, and
+  the typed projection runner needs no feature** (#132;
+  [ADR-0066](.kb/decisions/0066-what-1-0-promises.md) §5). `Projection`,
+  `SendProjection`, `Delivered`, `run_projection`, `Progressed`,
+  `ProjectionError`, `ApplyFailure`, `Policy`, `ConvergentProjection`, `Chunk`,
+  `checkpoint_id`, `InvalidCheckpointId`, `MAX_CHECKPOINT_NAME_LEN`,
+  `run_fan_out`, `FanOut` and `ViewError` are in every build of `happenstance`,
+  whatever features you choose. **If your manifest names
+  `happenstance/unstable-projection`, or puts `"unstable-projection"` in
+  `happenstance`'s `features`, delete it** — Cargo now refuses to resolve it,
+  and nothing you use changes when it goes. If you relied on
+  `default-features = false` to keep the runner out of your build, it is in it
+  now. It adds no dependency: `futures-core`, the one crate it named, was
+  already in your graph through `happenstance-core`. From `0.5.0` the runner is
+  covered by semver like the rest of the crate. The entries above marked
+  *behind `unstable-projection`* were made while that feature gated the runner
+  and exempted it, and they are what a `0.4.x` user who enabled it migrates
+  across.
 
 ## [0.4.6] — 2026-11-02
 
