@@ -2242,12 +2242,6 @@ mod tests {
         );
     }
 
-    /// The runner is unconditional: no `cfg` on its modules and none on their
-    /// re-exports. This replaced `the_typed_layer_makes_no_promise_it_does_not_keep`,
-    /// whose `passthrough == surface` became `false == false` once the
-    /// feature went, a rule no implementation could fail. The inverted form
-    /// fails the plausible wrong removal: deleting the gated modules with
-    /// their gate, or re-gating them on another feature.
     /// For every line of `source` that starts with `item`, the nearest line
     /// above it that is neither blank nor a `//` comment: where an attribute
     /// on that item would sit.
@@ -2268,6 +2262,12 @@ mod tests {
             .collect()
     }
 
+    /// The runner is unconditional: no `cfg` on its modules and none on their
+    /// re-exports. This replaced `the_typed_layer_makes_no_promise_it_does_not_keep`,
+    /// whose `passthrough == surface` became `false == false` once the
+    /// feature went, a rule no implementation could fail. The inverted form
+    /// fails the plausible wrong removal: deleting the gated modules with
+    /// their gate, or re-gating them on another feature.
     #[test]
     fn the_runner_is_mounted_unconditionally() {
         let lib = read("crates/happenstance/src/lib.rs");
