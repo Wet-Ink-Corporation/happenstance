@@ -929,6 +929,17 @@ ADR-0093 did, and supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0100 | [`kb-decision-0100`](../decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md) | happenstance-cloudflare declares a ceiling of 262,144 tags per call, refused as StoreLimit::TagsPerBatch | accepted | — | — |
 
+## 2026-11-07: the fan-out runner catches nothing (#112), proposed
+
+ADR-0101 is written straight here with no intake step, and is **proposed**: the owner chose it on
+the #112 panic card (2026-11-07, "Catch nothing") and flips its status. `run_fan_out` lets a panic
+unwind, as `run_projection` does, and the dropped write sets roll back. ADR-0074 decision 11 is read
+as binding only a runner that catches. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0101 | [`kb-decision-0101`](../decisions/0101-the-fan-out-runner-does-not-catch-a-panic.md) | The fan-out runner does not catch a panic, and ADR-0074 decision 11 binds only a runner that does | proposed | 18 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
