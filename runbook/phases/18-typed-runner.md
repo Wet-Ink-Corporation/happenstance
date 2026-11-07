@@ -113,22 +113,22 @@ renews them with the disposition phase 16 gave.
       bounds, `Store = St` first
       (`experiments/apply-shape/tests/common/mod.rs:22-25`), with a compiled
       example.
-- [ ] #112 · A fan-out runner holding N views over one log (PS-30, E2E-32), measured with
+- [x] #112 · A fan-out runner holding N views over one log (PS-30, E2E-32), measured with
       `experiments/polling-cost` — a benchmark, not a conformance rule (CF-34).
       Over an async `apply`, `panicking_apply_rolls_back` needs `catch_unwind`
       around **each poll**, not around the call — a hand-written `poll_fn`
       wrapper, since the runner avoids `futures-util` (ADR-0074 decision 11).
       **Built 2026-11-07** as `happenstance::run_fan_out`, catching nothing by the
-      owner's call (ADR-0101, proposed), with PS-26/29/30's rules. Still open: the
-      `experiments/polling-cost` fan-out pass, so the box stays unticked.
+      owner's call (ADR-0101, accepted at #127), with PS-26/29/30's rules. The polling-cost
+      fan-out passes 002/003 are a follow-up issue, not a freeze condition (#127, Q4).
 - [ ] #115 · **Optional: a foreign-`rollback` clause.** ADR-0075 left `rollback` outside
       PS-15's MUST, and the specification's sentence about it is non-normative. If
       this phase makes it normative, it does so as a new clause with its rule
       (begin on one store, `rollback` on another, assert both unchanged) and a
       mutant that mutates a store on a foreign rollback, in the same change.
-- [ ] #118 · A refusable reset implemented by at least one adapter (PS-18,
+- [x] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
-- [ ] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
+- [x] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`
       (`crates/happenstance/src/runner.rs:858`) becomes a named `Chunk`:
       `#[non_exhaustive]`, private representation, `Chunk::of(NonZeroUsize)` its
       first constructor — the shape `Retry` already has
@@ -138,12 +138,12 @@ renews them with the disposition phase 16 gave.
       `Chunk` or `impl Into<Chunk>` is this phase's compile to settle, and the
       session log records which. If `Chunk` cannot serve both runners without a
       second type, say so before the gate lifts — that is ADR-0070's falsifier.
-- [ ] #123 · **The convergence declaration SY-20 needs.** The way a projection declares
+- [x] #123 · **The convergence declaration SY-20 needs.** The way a projection declares
       itself convergent, attached to the `Projection` trait ADR-0074 fixes, with
       SY-22's placement for it. Phase 13's
       `convergent_projection_is_interleaving_independent` consumes it, and phase
       13 runs after this phase for that reason — it is in 13's dependency row.
-- [ ] #127 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-18` row
+- [x] #127 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-18` row
       in [the 1.0 dispositions](../ledgers.md), and what freezes it:
       - **PS-16** — a typed-runner rebuild through `reset` against a multi-table
         or graph read model, with the `RESET_REFUSAL` clause composed in. Built
@@ -187,16 +187,16 @@ PS-30 each with a rule and a mutant that fails it.
 **Exit criteria**
 
 - [x] No `unstable-projection` feature in `happenstance`.
-- [ ] PS-18, PS-27 and PS-30 are out of `[DEFERRED]`, or renewed per phase 16.
-- [ ] A projection can write into a live batch, demonstrated against a real
+- [x] PS-18, PS-27 and PS-30 are out of `[DEFERRED]`, or renewed per phase 16.
+- [x] A projection can write into a live batch, demonstrated against a real
       database rather than a buffer.
-- [ ] `run_projection` takes ADR-0070's `Chunk`, and so does the fan-out runner.
-- [ ] Every `freeze-by-18` clause in [`ledgers.md`](../ledgers.md)'s 1.0
+- [x] `run_projection` takes ADR-0070's `Chunk`, and so does the fan-out runner.
+- [x] Every `freeze-by-18` clause in [`ledgers.md`](../ledgers.md)'s 1.0
       dispositions — PS-16, PS-18, PS-25, PS-27, PS-30, PS-38 and SY-21 — is
       `[FROZEN]`, or re-dispositioned by a record that says why. PS-30's
       outside-1.0 fallback needs only the session-log line and the ledger edit,
       since ADR-0066 already records it.
-- [ ] The specification is reconciled against this phase's changes (session
+- [x] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
 
 **Estimate.** 5–8 days.
@@ -416,3 +416,31 @@ PS-30 each with a rule and a mutant that fails it.
   #98/#101), and the three out-of-workspace lockfiles are stale (crate versions and
   `trait-variant`, neither from this change), so `--locked` refuses them; they were
   built unlocked and the lockfiles restored untouched.
+- 2026-11-07 — #127: the phase's clauses frozen and the specification reconciled; **phase 18
+  closes**. The owner answered #127's Q1–Q8 himself (Ryan, 06:32Z, "As recommended").
+  [ADR-0102](../../.kb/decisions/0102-phase-18s-clauses-are-frozen.md), written accepted (Q1),
+  freezes PS-16, PS-18, PS-25, PS-27, PS-30, PS-38 and SY-21, the seven `freeze-by-18` rows, and
+  CF-43 with PS-18 (Q2). Each marker moved line for line and restates what reopens it.
+  ADR-0101 is accepted (Q3), its `status` alone flipped, so PS-30 cites it plainly. PS-30
+  freezes without the `experiments/polling-cost` fan-out passes 002/003, which measure ES-32's
+  falsifier rather than PS-30's MUST and are a follow-up issue (Q4); the #112 box is ticked on
+  that. **PS-16's caveat above (#129, D4) is wrong and is corrected here (Q5):** no adapter
+  clears with `TRUNCATE` (every SQL `probe_delete_all` is a `DELETE`, and the memory store
+  clears its map), and `happenstance-cloudflare` has no projection store, so nothing in the
+  workspace sits at the far end of that axis, and the typed rebuild is SQLite only. ADR-0102
+  states it as accepted risk; a live-Postgres reset through `TRUNCATE` is an optional
+  follow-up. Two evidence repairs under byte-identical MUSTs, recorded in ADR-0102: PS-9's
+  narrative names `a_savepoint_in_apply_lets_skip_record_a_server_refusal` (#103), and PS-24's
+  question is answered, since neither typed runner emits `Rebuilding`. The three tripwires in
+  `projection_clauses.rs` that pinned `[DEFERRED` now pin `[FROZEN` and the accepted record
+  through one helper, and PS-30's pins ADR-0101 accepted too (Q6). PS-38's `Rule:` line names
+  `fan_out_resumes_each_view_from_its_own_checkpoint`, and SY-21's names
+  `apply_is_handed_the_origin_identity_not_the_local_position` and the `E0599` fences, so
+  `UNRESOLVABLE_RULE_NAMES` grows from 66 to 69. SY-21's sync-testkit rule,
+  `convergent_projection_cannot_observe_local_position`, is declared `Scheduled` for phase 13,
+  which should carry it beside #141 (Q8). §4.1a's rows 3 and 4 and §4.11's integration-rule
+  paragraph are reconciled, the ledgers' rows are struck in place, and every spec and ledger
+  hunk is line-neutral. Left as found: `.kb/decisions/0070…:101` and two open-question
+  citations of PS-27's *"writes nothing anywhere"* were already off by nine lines before this
+  change, which moved nothing under them. #115, the optional foreign-`rollback` clause, was not
+  taken, and its box stays open as the record of that.
