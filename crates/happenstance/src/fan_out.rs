@@ -178,7 +178,18 @@ where
 /// a `Send` store does too, through the blanket impl.
 ///
 /// Spawning the returned future from code generic over the projection asks
-/// for `run_projection`'s bounds, each for the same reason. MEASURED
+/// for `run_projection`'s bounds, each for the same reason, and one more:
+///
+/// ```text
+/// S:  SendEventStore<Error: Send> + Sync + 'static,
+/// P:  SendProjection<Store = St, Event: Send, Error: Send + Sync>
+///         + 'static,
+/// St: SendProjectionStore<Batch: Send, Error: Send> + Sync + 'static,
+/// ```
+///
+/// The one more is `St::Error: Send`: a view stopped by its store holds
+/// that error while the other views' awaits run. `P: Sync` is not asked,
+/// because every view's key is derived before the first await.
 ///
 /// # Exactly one runner per view
 ///
@@ -289,9 +300,16 @@ where
     // As in `run_projection`: reading the `const` is what evaluates it.
     let () = AtLeastOneType::<P::Event>::CHECKED;
 
-    let mut slots = Vec::with_capacity(views.len());
-    for view in views.iter() {
-        slots.push(match prepare(view, models).await {
+    // Derived before the first await, so no `&P` is held across one: a
+    // spawned fan-out then asks `P: Send` of the caller and never `P: Sync`.
+    let derived: Vec<_> = views.iter().map(derive::<P>).collect();
+    let mut slots = Vec::with_capacity(derived.len());
+    for keyed in derived {
+        let lane = match keyed {
+            Ok((query, key)) => resume(models, query, key).await,
+            Err(stop) => Err(stop),
+        };
+        slots.push(match lane {
             Ok(lane) => Slot::Running(lane),
             Err(stop) => Slot::Done(ViewError::Stopped(stop)),
         });
@@ -372,12 +390,19 @@ impl<P: Projection> Lane<P> {
     }
 }
 
-/// Derives one view's query and key, and reads where it had got to.
-///
-/// The same three steps, and the same arms on failure, as `run_projection`.
-async fn prepare<P: Projection>(view: &P, models: &P::Store) -> Result<Lane<P>, Stop<P>> {
+/// Derives one view's query and checkpoint key, with `run_projection`'s arms.
+fn derive<P: Projection>(view: &P) -> Result<(Query, ProjectionId), Stop<P>> {
     let query = derive_query(P::Event::EVENT_TYPES, view.scope())?;
     let key = checkpoint::derive(view.id(), &query).map_err(ProjectionError::CheckpointId)?;
+    Ok((query, key))
+}
+
+/// Reads where one view had got to, with `run_projection`'s arms.
+async fn resume<P: Projection>(
+    models: &P::Store,
+    query: Query,
+    key: ProjectionId,
+) -> Result<Lane<P>, Stop<P>> {
     let checkpoint = models
         .checkpoint(&key)
         .await
