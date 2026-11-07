@@ -94,7 +94,7 @@ fn clause(id: &str) -> String {
 fn assert_frozen_by(id: &str, body: &str, atom: &str) {
     assert!(
         body.contains("`[FROZEN]`"),
-        "{id}'s marker is not `[FROZEN]`; ADR-0102 froze it at phase 18: {body}"
+        "{id}'s marker is not `[FROZEN]`; {atom} froze it: {body}"
     );
     for unevaluated in ["[DEFERRED", "[PROVISIONAL —"] {
         assert!(

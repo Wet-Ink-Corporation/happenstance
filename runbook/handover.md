@@ -45,9 +45,9 @@ sessions cannot push tags; the owner pushes them.
 
 ## Next action
 
-1. File the two follow-ups #127 named: the `experiments/polling-cost` fan-out passes
-   002/003 (two-way, outside the gate under CF-34, ES-32's measurement), and, optionally,
-   a live-Postgres reset through `TRUNCATE` on the live batch (PS-16's far end).
+1. The two follow-ups #127 named are filed: #400, the `experiments/polling-cost` fan-out
+   passes 002/003 (two-way, outside the gate under CF-34, ES-32's measurement), and #401,
+   optional, a live-Postgres reset through `TRUNCATE` on the live batch (PS-16's far end).
 2. Merge `phase-18` into `main`, then cut `0.5.0`.
 3. Phase 13 (#64). It inherits SY-21's `convergent_projection_cannot_observe_local_position`,
    declared `Scheduled` in `UNRESOLVABLE_RULE_NAMES`; write it beside #141, and the entry
