@@ -437,7 +437,8 @@ fn no_fan_out_runner_catches_a_panic() {
         ps30.contains("[DEFERRED"),
         "PS-30 still reads as provisional after its evaluation exit: {ps30}"
     );
-    for required in ["polling-cost", "CF-34"] {
+    // `#112` is the build that left the MUST binding only a catching runner.
+    for required in ["polling-cost", "CF-34", "#112"] {
         assert!(
             ps30.contains(required),
             "PS-30's verdict does not name `{required}` as its contingency: {ps30}"

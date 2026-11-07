@@ -6399,8 +6399,8 @@ is permanent and *intended*.
 **Rule:** the new `failure_policy_is_per_projection` — two projections in one
 runner declaring `Halt` and `SkipAndRecord`; feed both a failing event; assert the
 first stops at that position and the second advances past it. Integration-level;
-it needs a runner, so it belongs in the workspace e2e crate rather than the
-adapter suite, and it is unwritten because that crate is the typed-layer phase's.
+it needs a runner, so it lives beside the fan-out runner, in
+`crates/happenstance/tests/fan_out/rules.rs`, and asking one view's policy for all fails it.
 **Cases:** E2E-27.
 **Rejects:** a runner-level `on_error: SkipPolicy` configuration. It is the
 obvious design, it is what a builder API invites, and it forces one wrong answer
@@ -6488,7 +6488,7 @@ state MUST be observable through the API.**
 **Rule:** the new `one_poisoned_projection_does_not_stall_the_others` — twenty
 projections over one log, one failing; assert the other nineteen advance *and*
 that the supervisor reports the failure without being polled for it.
-Integration-level, and unwritten because the runner is the typed-layer phase's.
+Integration-level, in `crates/happenstance/tests/fan_out/rules.rs` (#112).
 
 **Recorded pairing finding.** The rule's second assertion — *without being polled
 for it* — reaches past this MUST, which requires only that the terminal state be
@@ -6497,9 +6497,9 @@ for it* — reaches past this MUST, which requires only that the terminal state 
 polling, and fails the rule; a query method is the obvious API and is precisely
 what the *Rejects* field below describes losing. The gap is
 `independent` — no other `PS` MUST rejects that supervisor — and it is recorded
-here rather than repaired here: the rule does not exist yet, and the observability
-design ADR-0019 defers to the typed-layer phase is where the two sentences get
-reconciled (`references/evaluation/ps-clause-pairing-sweep.md:286`).
+here rather than repaired here. Since #112 the rule exists and reads *without being
+polled* as *in the `#[must_use]` value `run_fan_out` returns*, which has no query
+method to call (`references/evaluation/ps-clause-pairing-sweep.md:286`).
 **Cases:** E2E-28.
 **Rejects:** the half of this that already fails. Isolation itself works, and it
 works structurally: `Projection::Store` is an associated type and checkpoints are
@@ -6511,14 +6511,14 @@ handle is a supervisor that reports nothing.
 
 **PS-30 — A fan-out runner that catches a panic in `apply` MUST `rollback` the
 batch before continuing.**
-`[DEFERRED — evaluated at the typed layer's phase exit and the fan-out runner is
-not built, so the MUST binds nothing today. Its contingency is a benchmark
-rather than an assertion and is deliberately outside the gate under CF-34; the
-harness now exists as `experiments/polling-cost`, which is the artefact that
-reopens this clause. Owned by `projection-store-freeze` (HS-P0010) once a
-fan-out runner is buildable at all.]`
-**Rule:** the new `panicking_apply_rolls_back` — integration-level; a projection
-that panics; assert no partial rows survive and the checkpoint did not move.
+`[DEFERRED — the fan-out runner was built at phase 18 (#112), and its rule passes
+against it and fails three catching runners; freezing it is that phase's exit
+(#127). Its benchmark stays outside the gate under CF-34, in the harness
+`experiments/polling-cost`. Owned by `projection-store-freeze` (HS-P0010). The
+shipped runner catches no panic (ADR-0101, proposed), so the MUST binds only a
+catching runner, should one be built.]`
+**Rule:** the new `panicking_apply_rolls_back` — in `crates/happenstance/tests/fan_out/`;
+a view panics; assert no partial rows survive and the checkpoint did not move.
 **Cases:** E2E-28.
 **Rejects:** a fan-out runner that wraps `&mut P::Batch` in `AssertUnwindSafe`
 and carries on. The assertion is defensible *only* because `rollback` exists:
@@ -6529,26 +6529,26 @@ that the release profile does not set `panic = "abort"`, and that the cheap
 runner (one read, one decode, twenty applies) and the safe runner (twenty
 `tokio::spawn`s) are opposites the port adjudicates neither way.
 
-**Evaluated at the typed layer's phase exit: the fan-out runner is not built,
-and the obstacle is now stronger than *"nobody got round to it"*.** The port's
-`Batch` stopped being a generic associated type and became a plain **owned** one
-(`crates/happenstance-core/src/projection.rs:759`), so a write set cannot be
-shared between tasks at all — and moving one into a `tokio::spawn` would
-additionally require `Send`, which the flavour that exists for `wasm32` cannot
-promise. `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:853`) therefore drives exactly one
-projection per call, catches no unwind, and spawns nothing; N read models cost N
-independent reads.
+**Built at phase 18 (#112): `happenstance::run_fan_out`**
+(`crates/happenstance/src/fan_out.rs:288`) drives N views of one projection type
+over one read. The owned-batch obstacle is met without sharing anything: each view
+holds its own owned write set (`crates/happenstance-core/src/projection.rs:759`),
+all in one task, and nothing is spawned, so no batch is asked to be `'static` or
+`Send`. It catches no panic, by the owner's call (ADR-0101, proposed): an unwind
+leaves the call, every open write set is dropped, and the port rolls a dropped
+batch back, so no row since a view's last commit survives and no checkpoint moves.
+`happenstance::run_projection` (`crates/happenstance/src/runner.rs:853`) still
+drives one projection per call, catches no unwind, and spawns nothing.
 
-**The contingency is named rather than left implicit.** This clause was made
-conditional on a benchmark the workspace did not have. It has one now —
-`experiments/polling-cost`, which records the delivery amplification N
-independent reads impose — and CF-34 keeps it outside the gate by construction,
-so a number moving does not turn a measurement into a build failure. That
-harness is the artefact that reopens this clause: if its figure makes fan-out
-worth building, the runner that results owes this MUST a rollback and
-`projection-store-freeze` (HS-P0010) owns the rule. Until then the absence is
-held by an executed test rather than by recollection
+**The rule holds the observable, and three catching runners fail it.** The MUST
+binds a runner that catches, so the shipped runner meets it by unwinding, and
+`panicking_apply_rolls_back` holds any runner to what both owe: no row the
+panicking view wrote since its last commit and its checkpoint unmoved (legs A, B),
+and its write set ended before anything else commits (C), by a rollback if the run
+returned (D). A runner that catches and carries on fails all four; one that drops
+the write set bare fails D; one that rolls back after the others commit fails C.
+The benchmark stays outside the gate under CF-34, in `experiments/polling-cost`.
+The absence of a catch is held by an executed test rather than by recollection
 (`crates/happenstance/tests/projection_clauses.rs`), which fails the moment the
 typed layer grows a `catch_unwind` or a spawn.
 
