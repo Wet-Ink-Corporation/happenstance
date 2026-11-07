@@ -20,7 +20,7 @@ use happenstance::{
     EventId, EventStore, EventType, Json, MemoryEventStore, MemoryProjectionBatch,
     MemoryProjectionStore, MemoryProjectionStoreError, Policy, Projection, ProjectionError,
     ProjectionId, ProjectionStore, Query, ReadOptions, SequencePosition, Tags, checkpoint_id,
-    collect, run_projection,
+    collect, run_fan_out, run_projection,
 };
 use happenstance_testkit::block_on;
 
@@ -567,6 +567,26 @@ impl Runner for Shipped {
     }
 }
 
+/// The fan-out runner over one view (#112): the same rule, through
+/// `run_fan_out`, so its per-view chunk window is held to leg B unchanged.
+struct FanOutOfOne;
+
+impl Runner for FanOutOfOne {
+    async fn run(
+        &self,
+        events: &MemoryEventStore,
+        models: &MemoryProjectionStore,
+        projection: &mut Recorder,
+        size: NonZeroUsize,
+    ) -> Result<(), Option<SequencePosition>> {
+        let views = core::slice::from_mut(projection);
+        let ran = run_fan_out(events, models, views, &Json, Chunk::of(size)).await;
+        assert!(ran.read.is_none(), "the memory read failed");
+        let [outcome] = <[_; 1]>::try_from(ran.views).expect("one outcome per view");
+        outcome.map(|_| ()).map_err(|error| error.position())
+    }
+}
+
 /// PS-27's rule, against any runner. `Err` names every leg that failed.
 ///
 /// It reads *"after a crash injected between them"* as: after a skip, the
@@ -576,7 +596,7 @@ impl Runner for Shipped {
 ///
 /// Leg B is chunk-scoped: it also rejects a runner that commits at each skip
 /// and opens a fresh batch, which is atomic in PS-27's sense but breaks the
-/// chunk window. A runner with another window (#112's fan-out) reads it so.
+/// chunk window. #112's fan-out keeps a window per view, and runs it as is.
 async fn skip_and_record_holds(runner: &impl Runner) -> Result<(), String> {
     let mut failed = Vec::new();
 
@@ -643,6 +663,11 @@ async fn skip_and_record_holds(runner: &impl Runner) -> Result<(), String> {
 #[test]
 fn skip_and_record_is_atomic() {
     assert_eq!(block_on(skip_and_record_holds(&Shipped)), Ok(()));
+}
+
+#[test]
+fn skip_and_record_is_atomic_through_the_fan_out() {
+    assert_eq!(block_on(skip_and_record_holds(&FanOutOfOne)), Ok(()));
 }
 
 /// One wrong runner per defect, otherwise the shipped loop (CF-3).
