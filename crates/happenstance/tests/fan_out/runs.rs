@@ -532,6 +532,10 @@ fn a_panic_unwinds_out_and_nothing_commits_after_it() {
             Shard::new("c"),
         ];
 
+        // The observation, not control flow: the test asserts the panic
+        // escapes, so something outside the runner must stop it. Unwind-safe
+        // because only the stores are read afterwards, and each iteration
+        // builds them fresh.
         let unwound = std::panic::catch_unwind(AssertUnwindSafe(|| {
             block_on(async {
                 let _ran = run_fan_out(&events, &models, &mut views, &Json, chunk(size)).await;

@@ -487,26 +487,6 @@ fn panicking_apply_rolls_back() {
 }
 
 #[test]
-fn zz_record_red_runs() {
-    for d in [
-        Defect::CarriesOn,
-        Defect::DropsInsteadOfRollingBack,
-        Defect::RollsBackAtTheEnd,
-    ] {
-        eprintln!("RED {d:?}: {:?}", panicking_apply_holds(&MiniFan(d)));
-    }
-    eprintln!(
-        "RED AsksTheFirst: {:?}",
-        per_projection_policy_holds(&MiniFan(Defect::AsksTheFirstViewForEveryone))
-    );
-    eprintln!(
-        "RED StopsEvery: {:?}",
-        one_poisoned_view_holds(&MiniFan(Defect::StopsEveryView))
-            .map_err(|m| m.chars().take(400).collect::<String>())
-    );
-}
-
-#[test]
 fn every_rule_accepts_a_correct_catching_runner() {
     assert_eq!(panicking_apply_holds(&MiniFan(Defect::Absent)), Ok(()));
     assert_eq!(

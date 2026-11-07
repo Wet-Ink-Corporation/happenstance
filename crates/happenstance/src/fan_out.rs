@@ -34,9 +34,11 @@ use crate::runner::{
 #[derive(Debug)]
 #[must_use = "a FanOut is where each view's failure is reported, and nowhere else"]
 #[non_exhaustive]
+// `R` is unbounded (API-21). `W` and `A` carry the bounds only because the
+// field names `ViewError<W, A>`, whose `ProjectionError` field requires them:
+// a type is well-formed only where its fields' types are.
 pub struct FanOut<R, W, A>
 where
-    R: core::error::Error + 'static,
     W: core::error::Error + 'static,
     A: core::error::Error + 'static,
 {
@@ -55,6 +57,8 @@ where
 /// [`Interrupted`](Self::Interrupted).
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
+// Bounded on the definition because `Stopped`'s field is a `ProjectionError`,
+// which is (API-21's forced case), and `thiserror`'s `source` needs them.
 pub enum ViewError<W, A>
 where
     W: core::error::Error + 'static,
@@ -193,8 +197,8 @@ where
 /// use happenstance::{Checkpoint, Event, EventStore, EventType, Json};
 /// use happenstance::{MemoryEventStore, MemoryProjectionBatch, Tag, Tags};
 /// use happenstance::{MemoryProjectionStore, MemoryProjectionStoreError};
-/// use happenstance::{Delivered, Projection, ProjectionId, ProjectionStore};
-/// use happenstance::{Chunk, checkpoint_id, run_fan_out};
+/// use happenstance::{Delivered, Projection, ProjectionId};
+/// use happenstance::{Chunk, ProjectionStore, checkpoint_id, run_fan_out};
 /// # use std::error::Error;
 /// # #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {
 ///
@@ -314,6 +318,8 @@ where
 type Stop<P> = ProjectionError<Infallible, StoreError<P>, <P as Projection>::Error>;
 
 /// One view's place in the run: still taking events, or stopped.
+// Bounded because `Done` names `P::Error` and `P::Store`'s error (API-21's
+// stated exception).
 enum Slot<P: Projection> {
     Running(Lane<P>),
     Done(ViewError<StoreError<P>, P::Error>),
@@ -324,6 +330,8 @@ enum Slot<P: Projection> {
 /// `resume` is the first position this view has not considered, or `None`
 /// for a view that never ran. The shared read may start below it, for
 /// another view, so every event is checked against it.
+// `P: Projection` on the definition because a field names its associated
+// types, through `Open<P>` (API-21's stated exception).
 struct Lane<P: Projection> {
     query: Query,
     key: ProjectionId,
@@ -335,6 +343,8 @@ struct Lane<P: Projection> {
 /// A write set holding at least one event this view took.
 ///
 /// Built only after a take succeeded, so `last` always names a real event.
+// `P: Projection` on the definition because `batch` names `P::Store::Batch`
+// (API-21's stated exception).
 struct Open<P: Projection> {
     batch: StoreBatch<P>,
     tally: Tally,
