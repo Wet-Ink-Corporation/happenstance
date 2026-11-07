@@ -6020,12 +6020,12 @@ the file — Kestrel Cold Chain's `van_stock` must reset several times a day and
 **PS-18 — An adapter MUST be able to refuse a reset, through
 `ResetError::Refused`. A refusal MUST leave both the read model and the
 checkpoint unchanged, and MUST NOT be reported as success.**
-`[DEFERRED — evaluated at the typed layer's phase exit and the count came back
-unavailable rather than zero: the mechanism and its rule both exist now, and no
-projection adapter has shipped to implement protection. Owned by
-`projection-store-freeze` (HS-P0010), which takes the count when the first
-adapter over storage this workspace does not control clears the projection
-suite.]`
+`[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18,
+on the count the marker waited for, taken at one: `happenstance-sqlite` refuses through
+`protect_from_reset`, `refused_reset_changes_nothing` runs against it, and
+`NoopProtectFixture` fails it (CF-43). The memory, Postgres and Neon stores decline.
+HS-P0010's count is closed. Reopened by an adapter that must refuse and cannot read its mark
+inside the reset's own transaction; it declines the capability, and the port is unchanged.
 **Rule:** `refused_reset_changes_nothing` — run against a fixture store
 configured to protect one id: `happenstance-sqlite`'s, through
 `SqliteProjectionStore::protect_from_reset`, and the testkit's `MutantFixture`;
@@ -6072,8 +6072,8 @@ skip. CF-43 now states what declaring the capability commits a fixture to, and
 domain sets, not a policy the adapter holds, so the division of labour above
 stands. `MemoryProjectionStore`, `happenstance-postgres` and `happenstance-neon`
 still decline. The two paragraphs above are kept as the phase-exit record, and
-so is the marker's *"no projection adapter has shipped"*: retiring it is #127's
-freeze, or a renewal.
+so was the marker's *"no projection adapter has shipped"*, until ADR-0102 retired it at
+phase 18; the marker above records the count.
 
 **PS-19 — After a successful `reset`, `checkpoint(id)` MUST return
 `Checkpoint::NeverRun`, and this MUST be distinguishable from
@@ -6408,10 +6408,10 @@ onto one of Wattline's two projections.
 
 **PS-27 — The policy MUST offer skip-and-record, and the record MUST be written
 into the same batch that advances the checkpoint past the poisoned position.**
-`[DEFERRED — the seam was built at phase 18 (#101) and its rule passes; freezing
-it is that phase's exit (#127). Not withdrawn at any point — the Kestrel Motor
-shred case needs it. Owned by `projection-store-freeze` (HS-P0010), which owns
-both the rule and the port surface a skip record is written through.]` The seam's shape is fixed by
+`[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18:
+the seam was built at #101 and its rule fails three wrong runners. Not withdrawn at any
+point; the Kestrel Motor shred case needs it, and HS-P0010's count is taken. Reopened by a
+skip whose record cannot ride the batch that advances the checkpoint. The seam's shape is fixed by
 [ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md) at phase 17 and
 built at phase 18: a provided `on_error` on `Projection`, defaulting to halt,
 handed the failure — a decode failure or an apply failure, each carrying the
@@ -6511,12 +6511,12 @@ handle is a supervisor that reports nothing.
 
 **PS-30 — A fan-out runner that catches a panic in `apply` MUST `rollback` the
 batch before continuing.**
-`[DEFERRED — the fan-out runner was built at phase 18 (#112), and its rule passes
-against it and fails three catching runners; freezing it is that phase's exit
-(#127). The polling runner's benchmark, `experiments/polling-cost`, stays outside
-the gate under CF-34; its fan-out pass is owed. Owned by `projection-store-freeze`
-(HS-P0010). The shipped runner catches no panic (ADR-0101, proposed), so the MUST
-binds only a catching runner, should one be built.]`
+`[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18,
+on the fan-out runner built at #112: its rule passes against `run_fan_out` and fails three
+catching runners. The shipped runner catches no panic (ADR-0101), so the MUST binds a
+catching runner, which 1.x may add. `experiments/polling-cost` stays outside the gate under
+CF-34; its fan-out pass measures ES-32's falsifier, not this MUST. Reopened by a target on
+which a caught unwind leaves a write set that cannot be rolled back before another view commits.
 **Rule:** the new `panicking_apply_rolls_back` — in `crates/happenstance/tests/fan_out/`;
 a view panics; assert no partial rows survive and the checkpoint did not move.
 **Cases:** E2E-28.
@@ -6534,7 +6534,7 @@ runner (one read, one decode, twenty applies) and the safe runner (twenty
 over one read. The owned-batch obstacle is met without sharing anything: each view
 holds its own owned write set (`crates/happenstance-core/src/projection.rs:759`),
 all in one task, and nothing is spawned, so no batch is asked to be `'static` or
-`Send`. It catches no panic, by the owner's call (ADR-0101, proposed): an unwind
+`Send`. It catches no panic, by the owner's call (ADR-0101): an unwind
 leaves the call, every open write set is dropped, and the port rolls a dropped
 batch back, so no row since a view's last commit survives and no checkpoint moves.
 `happenstance::run_projection` (`crates/happenstance/src/runner.rs:853`) still
@@ -6547,7 +6547,7 @@ panicking view wrote since its last commit and its checkpoint unmoved (legs A, B
 and its write set ended before anything else commits (C), by a rollback if the run
 returned (D). A runner that catches and carries on fails all four; one that drops
 the write set bare fails D; one that rolls back after the others commit fails C.
-`experiments/polling-cost` stays outside the gate (CF-34); its fan-out pass is owed.
+`experiments/polling-cost` stays outside the gate (CF-34); its fan-out pass is ES-32's.
 The absence of a catch is held by an executed test rather than by recollection
 (`crates/happenstance/tests/projection_clauses.rs`), which fails the moment the
 typed layer grows a `catch_unwind` or a spawn.

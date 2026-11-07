@@ -84,6 +84,43 @@ fn clause(id: &str) -> String {
     format!("**{body}")
 }
 
+/// Assert that the clause `id`, whose body is `body`, is `[FROZEN]` by the
+/// decision atom `atom`, and that the atom is in `.kb/decisions/` and accepted.
+///
+/// PS-33's precedent, below, made general: a frozen verdict pins the marker
+/// word **and** the signed record behind it, so a marker reverted by hand and a
+/// record left unsigned both go red. The clause must also carry no unevaluated
+/// marker word, because a body that says both is one a reader cannot trust.
+fn assert_frozen_by(id: &str, body: &str, atom: &str) {
+    assert!(
+        body.contains("`[FROZEN]`"),
+        "{id}'s marker is not `[FROZEN]`; ADR-0102 froze it at phase 18: {body}"
+    );
+    for unevaluated in ["[DEFERRED", "[PROVISIONAL —"] {
+        assert!(
+            !body.contains(unevaluated),
+            "{id} still carries `{unevaluated}` beside its freeze: {body}"
+        );
+    }
+    assert!(
+        body.contains(atom),
+        "{id}'s freeze cites no record, or not `{atom}`: {body}"
+    );
+    let rel = format!(".kb/decisions/{atom}.md");
+    assert!(
+        workspace().join(&rel).is_file(),
+        "{id}'s freeze cites `{rel}`, which is not in `.kb/decisions/`"
+    );
+    assert!(
+        read(&rel).contains("\nstatus: accepted\n"),
+        "{id}'s freeze cites `{rel}`, which is not accepted, so the marker is \
+         recorded against a decision nobody has signed"
+    );
+}
+
+/// The record that froze PS-18, PS-27 and PS-30 at phase 18.
+const PHASE_18_FREEZE: &str = "0102-phase-18s-clauses-are-frozen";
+
 /// Every module-level `pub` free function in the contract crate.
 ///
 /// Module level matters: a `pub fn` inside an `impl` is a method and cannot be
@@ -351,13 +388,10 @@ fn the_failure_policy_is_the_projections_and_halts_by_default() {
         assert_eq!(models.get("VIN2"), None);
     });
 
-    // The clause says the seam exists and names its rule. Freezing it is
-    // #127's, so the marker word stays.
+    // The clause says the seam exists, names its rule, and is frozen by the
+    // record #127 wrote. It read `[DEFERRED` until then.
     let ps27 = clause("PS-27");
-    assert!(
-        ps27.contains("[DEFERRED"),
-        "PS-27's marker moved; freezing it is #127's, with its ledger row: {ps27}"
-    );
+    assert_frozen_by("PS-27", &ps27, PHASE_18_FREEZE);
     for required in ["on_error", "skip_and_record_is_atomic", "halt", "HS-P0010"] {
         assert!(
             ps27.contains(required),
@@ -432,10 +466,19 @@ fn no_fan_out_runner_catches_a_panic() {
 
     fan_out_does_not_catch_a_panic_either();
 
+    // Frozen at phase 18, and the absence of a catch the MUST rests on is the
+    // owner's accepted call, not a draft.
     let ps30 = clause("PS-30");
+    assert_frozen_by("PS-30", &ps30, PHASE_18_FREEZE);
     assert!(
-        ps30.contains("[DEFERRED"),
-        "PS-30 still reads as provisional after its evaluation exit: {ps30}"
+        ps30.contains("ADR-0101") && !ps30.contains("ADR-0101, proposed"),
+        "PS-30 does not cite ADR-0101, or still cites it as proposed: {ps30}"
+    );
+    assert!(
+        read(".kb/decisions/0101-the-fan-out-runner-does-not-catch-a-panic.md")
+            .contains("\nstatus: accepted\n"),
+        "ADR-0101, the call that the shipped fan-out runner catches nothing, \
+         is not accepted, so PS-30 is frozen on an unsigned reading"
     );
     // `#112` is the build that left the MUST binding only a catching runner.
     for required in ["polling-cost", "CF-34", "#112"] {
@@ -541,13 +584,10 @@ fn reset_refusal_has_a_mechanism_and_an_adapter() {
         ps18.contains("happenstance-sqlite"),
         "PS-18 does not name the adapter that implements it: {ps18}"
     );
-    assert!(
-        ps18.contains("[DEFERRED"),
-        "PS-18 still reads as provisional after its evaluation exit: {ps18}"
-    );
+    assert_frozen_by("PS-18", &ps18, PHASE_18_FREEZE);
     assert!(
         ps18.contains("HS-P0010"),
-        "PS-18's exclusion names no owner for the eventual count: {ps18}"
+        "PS-18 no longer names the item whose count its freeze took: {ps18}"
     );
 }
 
