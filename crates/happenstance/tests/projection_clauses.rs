@@ -483,7 +483,10 @@ fn fan_out_does_not_catch_a_panic_either() {
         );
         for key in &keys {
             assert_eq!(
-                models.checkpoint(key).await.unwrap(),
+                models
+                    .checkpoint(key)
+                    .await
+                    .expect("the memory store reads its checkpoint"),
                 Checkpoint::NeverRun,
                 "a fan-out panic moved {key:?}'s checkpoint"
             );

@@ -429,6 +429,9 @@ async fn resume<P: Projection>(
 /// them has not considered. Identical items are kept once, so N views of
 /// one scope ask a store for one item rather than N.
 fn plan_read<P: Projection>(slots: &[Slot<P>]) -> Option<(Query, ReadOptions)> {
+    if !slots.iter().any(|slot| matches!(slot, Slot::Running(_))) {
+        return None;
+    }
     let mut items: Vec<QueryItem> = Vec::new();
     let mut everything = false;
     let mut from: Option<SequencePosition> = None;
@@ -452,12 +455,13 @@ fn plan_read<P: Projection>(slots: &[Slot<P>]) -> Option<(Query, ReadOptions)> {
             Some(resume) => from = Some(from.map_or(resume, |at| at.min(resume))),
         }
     }
-    // `from_items` refuses only an empty list, which is no view running:
-    // there is nothing to read, and that is what `None` says.
+    // A view runs, so `items` is empty only if `everything` is set. Should
+    // `from_items` still refuse, reading everything is the safe superset:
+    // each view filters the union by its own query either way.
     let query = if everything {
         Query::all()
     } else {
-        Query::from_items(items).ok()?
+        Query::from_items(items).unwrap_or_else(|_| Query::all())
     };
     let options = match from {
         Some(from) if !from_start => ReadOptions::new().from(from),

@@ -6513,10 +6513,10 @@ handle is a supervisor that reports nothing.
 batch before continuing.**
 `[DEFERRED — the fan-out runner was built at phase 18 (#112), and its rule passes
 against it and fails three catching runners; freezing it is that phase's exit
-(#127). Its benchmark stays outside the gate under CF-34, in the harness
-`experiments/polling-cost`. Owned by `projection-store-freeze` (HS-P0010). The
-shipped runner catches no panic (ADR-0101, proposed), so the MUST binds only a
-catching runner, should one be built.]`
+(#127). The polling runner's benchmark, `experiments/polling-cost`, stays outside
+the gate under CF-34; its fan-out pass is owed. Owned by `projection-store-freeze`
+(HS-P0010). The shipped runner catches no panic (ADR-0101, proposed), so the MUST
+binds only a catching runner, should one be built.]`
 **Rule:** the new `panicking_apply_rolls_back` — in `crates/happenstance/tests/fan_out/`;
 a view panics; assert no partial rows survive and the checkpoint did not move.
 **Cases:** E2E-28.
@@ -6547,7 +6547,7 @@ panicking view wrote since its last commit and its checkpoint unmoved (legs A, B
 and its write set ended before anything else commits (C), by a rollback if the run
 returned (D). A runner that catches and carries on fails all four; one that drops
 the write set bare fails D; one that rolls back after the others commit fails C.
-The benchmark stays outside the gate under CF-34, in `experiments/polling-cost`.
+`experiments/polling-cost` stays outside the gate (CF-34); its fan-out pass is owed.
 The absence of a catch is held by an executed test rather than by recollection
 (`crates/happenstance/tests/projection_clauses.rs`), which fails the moment the
 typed layer grows a `catch_unwind` or a spawn.
