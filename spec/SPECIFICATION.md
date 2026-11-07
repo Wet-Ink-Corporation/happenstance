@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 211 clause IDs, of which 204 are normative:
-**160 `[FROZEN]`**, **34 `[PROVISIONAL]`**, **10 `[DEFERRED]`** and **seven
+**168 `[FROZEN]`**, **29 `[PROVISIONAL]`**, **7 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -5527,8 +5527,8 @@ against a narrower adapter than the one that fired it.
 |---|---|---|---|---|
 | 1 | Does any adapter need a live handle acquired **before** the first write? | PS-6 (PS-4, PS-5, PS-12 and PS-34 closed by ADR-0063) | Answered from both ends: Ladybug's deferred write set at phase 11, and `LivePostgresProjectionStore` under ADR-0062, which *does* acquire a handle before the first write and needed no lifetime on `Batch` to do it. What is left is PS-6's narrower question — an adapter that must reserve something from its server *and* cannot afford the round trip `begin` now permits | 2, confirmed at 11, closed at 12 |
 | 2 | Does generic code need a **write vocabulary** on `Batch`? | PS-9, PS-11 | A second generic consumer — any library code happenstance itself ships that must write into an unknown adapter's batch. One consumer (the suite) is served by PS-11's probe; two is a bound | 6, evaluated at 7 |
-| 3 | What does a **rebuild** actually do? | PS-16, PS-22, PS-24, PS-25 | The first real rebuild, against a store whose read model is not a single table. In-place versus into-a-second-`ProjectionId`-and-swap is the fork | 6 |
-| 4 | Does anyone **call** these? | PS-18, PS-27, PS-30 | Counting callers at the typed layer's phase exit. This is ADR-0007's own falsifier pattern, and it is the one that most needs an owner, because "nobody ever needed it" is not something you can observe by waiting | 7 |
+| 3 | What does a **rebuild** actually do? | PS-16, PS-22, PS-24, PS-25 | The first real rebuild, against a store whose read model is not a single table. In-place versus into-a-second-`ProjectionId`-and-swap is the fork | 6; answered at 18 (ADR-0102): a typed rebuild in place through `reset` on two tables, and PS-16 and PS-25 frozen |
+| 4 | Does anyone **call** these? | PS-18, PS-27, PS-30 | Counting callers at the typed layer's phase exit. This is ADR-0007's own falsifier pattern, and it is the one that most needs an owner, because "nobody ever needed it" is not something you can observe by waiting | 7; answered at 18 (ADR-0102): each has a caller and a rule a wrong runner fails, and all three are frozen |
 | 5 | Can the **foreign-batch** hazard be made unrepresentable? | PS-15 | A zero-cost type-level construction naming an instance, which composes with `async fn` and permits a batch in a collection. Compiled and refuted once already: lifetimes name regions, not instances, so `b.commit(a.begin())` still builds | 6 |
 | 6 | Must two views in one store be **mutually consistent**? | PS-23 | Norvant's control tower, which reads two views on one dashboard. If they must, one transaction must be able to advance two `ProjectionId`s | 6, from 11 |
 
@@ -5705,8 +5705,8 @@ vocabulary. One candidate second consumer was declined by design rather than
 measured away: a runner-issued `SAVEPOINT` around each `apply`, which would let
 `Policy::Skip` survive a server-refused statement on a live batch. ADR-0074 instead
 states that `Skip` is not universal and leaves the savepoint to the application,
-through `LivePostgresBatch::execute`; that pattern has not been run, and phase 18's
-live-batch savepoint test is what confirms the freeze on this leg. The falsifier is
+through `LivePostgresBatch::execute`; phase 18 ran that pattern against PostgreSQL 17.10, in
+`a_savepoint_in_apply_lets_skip_record_a_server_refusal` (#103). The falsifier is
 restated: a bound on `Batch` that carries a write vocabulary, in any crate this
 workspace publishes.
 **Rule:** none checks the absence of a bound. This is a port-shape clause; the
@@ -5989,10 +5989,10 @@ transaction, same atomicity, no new knowledge required of the adapter.
 
 **PS-16 — `reset(batch, id)` MUST apply the batch and return `id`'s checkpoint
 to `NeverRun` as one unit of work.**
-`[PROVISIONAL — falsified by an adapter whose read-model clearing cannot be
-expressed through the same batch that carries ordinary writes; a store whose
-`TRUNCATE` cannot participate in the checkpoint transaction is the shape to
-watch. Owned by the projection-port phase (RUNBOOK phase 2).]`
+`[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18.
+Every SQL adapter clears through the reset's own batch with `DELETE`, none with `TRUNCATE`,
+and the typed rebuild runs on SQLite. Reopened by a store whose only bulk clear cannot join
+the checkpoint's transaction and whose batch cannot carry a `DELETE` that clears instead.
 **Rule:** `reset_clears_rows_and_checkpoint_together` — commit probe rows and a
 checkpoint, then `reset` with a batch carrying `ProjectionProbe::probe_delete_all`;
 assert both gone, and that a failing `reset` leaves both (the probe is qualified as
@@ -6246,7 +6246,7 @@ always wrong*, with a swap protocol replacing it. Even then `Rebuilding` would
 become unused rather than removed: removing a variant from a published enum is a
 major, and a swap into a second `ProjectionId` needs nothing new from the port. The
 falsifier is restated: a store that must refuse a `Rebuilding` commit to stay
-correct. Whether the typed runner ever emits the variant is phase 18's.
+correct. Neither typed runner emits it (phase 18): both commit `Authority::Live`.
 **Rule:** `rebuilding_is_distinguishable_from_live` — reset, commit two chunks
 with `Authority::Rebuilding`, assert `checkpoint` reports `Rebuilding` after
 each; commit a third with `Authority::Live`, assert `Live`.
@@ -6264,12 +6264,12 @@ the same.
 **PS-38 — A successful `commit(batch, id, position, authority)` MUST advance
 `id`'s checkpoint to `position`, and a `ProjectionId` no successful `commit` has
 named MUST read as `Checkpoint::NeverRun`.**
-`[PROVISIONAL — falsified by a store that answers `checkpoint` from a replica
-that may lag its own `commit`, which is the shape a projection store over an
-eventually-consistent read model has. If that is real the obligation narrows to
-"a subsequent read through the same handle" and every rule downstream of it gains
-a handle constraint. Owned by the first projection adapter over storage this
-workspace does not control (RUNBOOK phase 7).]` The obligation is documented, not
+`[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18,
+settled against the fan-out runner: N views resume from N checkpoints on one handle.
+Reopened by a deployment that must answer `checkpoint` from a replica that may lag its own
+`commit`; the obligation then narrows to "a subsequent read through the same handle" and
+every rule downstream of it gains a handle constraint. No store here sits there, and Neon's
+docs forbid a replica endpoint. The obligation is documented, not
 checked: [ADR-0075](../.kb/decisions/0075-the-projection-ports-1-0-clauses.md)
 wrote it into `ProjectionStore::checkpoint`'s rustdoc — the checkpoint reflects
 every commit the store has acknowledged, through any handle onto it, and an
@@ -6278,10 +6278,10 @@ adapter over replicated storage answers from the primary — and into
 store at a primary endpoint and never a read replica. No in-process rule can
 observe a lagging replica, so this is an operator obligation, not a conformance
 property.
-**Rule:** `commit_advances_the_checkpoint` — the baseline the rest of §4.11's
-suite is differential against; and `fresh_projection_has_no_checkpoint` for the
-second sentence, which asks a store for an id no `commit` has named and asserts
-the `NeverRun` variant, comparing no position anywhere.
+**Rule:** `commit_advances_the_checkpoint`, the baseline the rest of §4.11's suite is
+differential against; `fresh_projection_has_no_checkpoint` for the second sentence, asking a
+store for an id no `commit` has named and asserting the `NeverRun` variant, comparing no
+position; and `fan_out_resumes_each_view_from_its_own_checkpoint`, N ids on one handle.
 **Cases:** E2E-15, E2E-17, E2E-23.
 **Rejects:** a store whose backing state lives per **handle** rather than per
 store — one whose `connect()` mints a fresh map instead of a fresh handle onto a
@@ -6308,10 +6308,10 @@ changed is that the obligation their rules assume is now written down.
 **PS-25 — A checkpoint MUST NOT survive a change to the `Query` that produced
 it. The `ProjectionId` a runner uses MUST be derived from the projection's name
 and a digest of its `Query`.**
-`[PROVISIONAL — falsified by a projection whose query is *narrowed*, where no
-rebuild is needed and the derived id forces an expensive one anyway. If that
-case is common, the digest moves into the checkpoint record as a separate
-field and `commit` rejects a mismatch instead. Owned by the typed-layer phase.]`
+`[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18,
+on ADR-0074's remedy as built at #107: the `@` separator, the `Cc`-terminated items and the
+FNV-1a goldens are a 1.0 promise. Reopened by a narrowed query common enough that adoption
+through `begin` and an empty `commit` is a burden; an additive adoption helper answers it.
 **The remedy is chosen**, by [ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md)
 at phase 17: the derived id, because the digest-in-checkpoint alternative changes
 the frozen `commit`. The narrowed-query case is served by explicit adoption through
@@ -6852,15 +6852,15 @@ from `MemoryProjectionStore` that passes everything — and the obvious one is t
 buffering adapter PS-4 permits, which doubles as the far end of §6's batch-shape
 axis.
 
-Six further rules are integration-level and belong in the workspace e2e crate
-rather than the adapter suite, because they need a runner and a domain:
+Seven further rules are integration-level and live beside the typed runners, in
+`crates/happenstance/tests/`, rather than in the adapter suite, because they need a runner
+and a domain (PS-16's typed half is in `examples/rebuilding-read-models/tests/`):
 `failure_policy_is_per_projection`, `skip_and_record_is_atomic`,
-`pump_reports_the_failing_position`,
-`one_poisoned_projection_does_not_stall_the_others`,
-`panicking_apply_rolls_back`, and `checkpoint_lag_is_not_a_position_difference`
-— the last belongs to ES-31, which states it from the event-store side and names
-this suite as its home. CF-36 is why they are listed apart: a clause backed only
-by integration-level cases must not name an adapter conformance rule.
+`pump_reports_the_failing_position`, `one_poisoned_projection_does_not_stall_the_others`,
+`panicking_apply_rolls_back`, `changed_query_starts_a_new_checkpoint`, and
+`checkpoint_lag_is_not_a_position_difference` — the last unwritten, and ES-31's, which states
+it from the event-store side and names this suite as its home. CF-36 is why they are listed
+apart: a clause backed only by integration-level cases must not name an adapter conformance rule.
 
 ### 4.12 What this section does not settle
 
@@ -7799,12 +7799,12 @@ page records the compile.
 handed the arrival position, `SequencedEvent::position`, in the value it folds
 over.**
 
-`[PROVISIONAL — falsified if a convergent projection needs the local position for
-a reason other than ordering. Falsification test: name one and show the need
-survives being given `EventId` plus the store's own checkpoint.]`
-Rule: `convergent_projection_cannot_observe_local_position` (new,
-`happenstance-sync-testkit`) — enforced by the type handed to `apply`, so the
-rejection is a compile error rather than an assertion.
+`[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18,
+on `Delivered` as built at #98. Reopened if a convergent projection needs the local position
+for a reason other than ordering: name one that survives being given `EventId` plus the store's own checkpoint.
+Rule: `apply_is_handed_the_origin_identity_not_the_local_position`, and the `compile_fail,E0599`
+fences on `Delivered` and `ApplyFailure` beside their compiling controls; phase 13 adds
+`convergent_projection_cannot_observe_local_position` (`happenstance-sync-testkit`).
 Cases: E2E-41.
 
 *Local*, because the other reading is false on its face.
@@ -7821,7 +7821,7 @@ origin orders differ and saw the origin identities delivered; `crates/happenstan
 `apply_is_handed_the_origin_identity_not_the_local_position` runs that case through the shipped runner, and
 `crates/happenstance/tests/convergence.rs`'s `a_convergent_projection_commits_one_read_model_for_two_interleavings`
 runs the declared case: two interleavings that agree per origin commit one read model, and the same fold over re-minted
-identities does not. The freeze is #127's.
+identities does not. ADR-0102 froze it at phase 18.
 
 *Rejects:* ADR-0007's `apply` signature as it currently stands, which hands the
 projection `Sequenced<Self::Event>`
@@ -9367,11 +9367,11 @@ any handle onto its store, including a handle opened before the call, to answer
 that every other holder of the store meets too. The fixture MUST state the
 mechanism. A fixture whose store refuses no reset MUST decline the capability
 with that as its stated reason.
-`[PROVISIONAL — falsified by an adapter whose protection mark cannot be read
-inside the transaction that carries the reset's deletes, so that a protection
-and a reset race. The instrument is `happenstance-sqlite`, which reads
-`projection_protection` inside its `BEGIN IMMEDIATE` (#118). Frozen with PS-18
-by #127, or renewed with it.]`
+`[FROZEN]` — by [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md) at phase 18,
+with PS-18. The instrument is `happenstance-sqlite`, which reads `projection_protection`
+inside its `BEGIN IMMEDIATE` (#118). Reopened by an adapter whose protection mark cannot be
+read inside the transaction that carries the reset's deletes, so that a protection and a
+reset race; such an adapter declines `RESET_REFUSAL` instead.
 Rule: `refused_reset_changes_nothing`.
 Cases: none; this constrains the fixture, not an adapter.
 Rejects: `NoopProtectFixture` in the testkit's own `tests/`, which declares the
@@ -10300,10 +10300,10 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 36 | 28 | 7 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
-| §4 `ProjectionStore` | `PS` | 39 | 27 | 4 | 3 | 5 |
-| §5 `SyncPeer` | `SY` | 38 | 21 | 14 | 3 | 0 |
-| §6 conformance | `CF` | 43 | 35 | 5 | 2 | 1 |
-| **Total** | | **211** | **160** | **34** | **10** | **7** |
+| §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
+| §5 `SyncPeer` | `SY` | 38 | 22 | 13 | 3 | 0 |
+| §6 conformance | `CF` | 43 | 36 | 4 | 2 | 1 |
+| **Total** | | **211** | **168** | **29** | **7** | **7** |
 
 ### 7.2 The table
 
@@ -10432,21 +10432,21 @@ between them because its *shape* does not wait on a transport but its
 | PS-13 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-21, E2E-22 |
 | PS-14 | FROZEN | `rebuild_is_chunk_size_invariant` | E2E-22 |
 | PS-15 | FROZEN | `commit_rejects_a_foreign_batch` | E2E-19 |
-| PS-16 | PROVISIONAL | `reset_clears_rows_and_checkpoint_together`, `rebuild_through_reset_restores_e… | E2E-15, E2E-17 |
+| PS-16 | FROZEN | `reset_clears_rows_and_checkpoint_together`, `rebuild_through_reset_restores_e… | E2E-15, E2E-17 |
 | PS-17 | FROZEN | `reset_is_scoped_to_one_projection` | E2E-18 |
-| PS-18 | DEFERRED | `refused_reset_changes_nothing` | E2E-18 |
+| PS-18 | FROZEN | `refused_reset_changes_nothing` | E2E-18 |
 | PS-19 | FROZEN | `reset_is_not_commit_at_first`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-16 |
 | PS-20 | FROZEN | `reset_is_not_commit_at_first` | E2E-16, E2E-23 |
 | PS-21 | FROZEN | `commit_accepts_a_position_the_batch_did_not_write` | E2E-23 |
 | PS-22 | FROZEN | `commit_rejects_a_regressing_position` | E2E-23, E2E-25 |
 | PS-23 | FROZEN | `distinct_projections_advance_independently` | E2E-28, E2E-32 |
 | PS-24 | FROZEN | `rebuilding_is_distinguishable_from_live` | E2E-25 |
-| PS-25 | PROVISIONAL | `changed_query_starts_a_new_checkpoint` † | E2E-50 |
+| PS-25 | FROZEN | `changed_query_starts_a_new_checkpoint` † | E2E-50 |
 | PS-26 | FROZEN | `failure_policy_is_per_projection` † | E2E-27 |
-| PS-27 | DEFERRED | `skip_and_record_is_atomic` † | E2E-26, E2E-27 |
+| PS-27 | FROZEN | `skip_and_record_is_atomic` † | E2E-26, E2E-27 |
 | PS-28 | FROZEN | `pump_reports_the_failing_position` † | E2E-26 |
 | PS-29 | FROZEN | `one_poisoned_projection_does_not_stall_the_others` † | E2E-28 |
-| PS-30 | DEFERRED | `panicking_apply_rolls_back` † | E2E-28 |
+| PS-30 | FROZEN | `panicking_apply_rolls_back` † | E2E-28 |
 | PS-31 | FROZEN | *(none — see clause)* | E2E-31 |
 | PS-32 | NON-NORMATIVE | *(none — see clause)* | E2E-20 |
 | PS-33 | NON-NORMATIVE | *(none — see clause)* | *(none directly; cites E2E-26, E2E-28)* |
@@ -10454,7 +10454,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-35 | NON-NORMATIVE | *(none — see clause)* | E2E-30, E2E-52, E2E-53 |
 | PS-36 | FROZEN | *(none — see clause)* | E2E-30 |
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
-| PS-38 | PROVISIONAL | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint` | E2E-15, E2E-17, E2E-23 |
+| PS-38 | FROZEN | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint`, `fan_o… | E2E-15, E2E-17, E2E-23 |
 | PS-39 | FROZEN | `projection_ids_round_trip_by_bytes` | E2E-18 |
 
 #### `SY` — the `SyncPeer` port (§5)
@@ -10481,7 +10481,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-18 | DEFERRED | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head`, `… | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
 | SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-22 |
-| SY-21 | PROVISIONAL | `convergent_projection_cannot_observe_local_position` † | E2E-41 |
+| SY-21 | FROZEN | `apply_is_handed_the_origin_identity_not_the_local_position` †, `convergent_pr… | E2E-41 |
 | SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` † | E2E-41 |
 | SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` † | E2E-41, E2E-43 |
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
@@ -10546,7 +10546,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-40 | PROVISIONAL | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
 | CF-41 | FROZEN | `the_promised_emitters_are_exactly_the_pinned_list`, a meta-test in `crates/ha… | *(none — see clause)* |
 | CF-42 | PROVISIONAL | `an_unsettling_lag_skips_exactly_the_read_back_rules` and `the_read_back_inven… | *(none — see clause)* |
-| CF-43 | PROVISIONAL | `refused_reset_changes_nothing` | *(none — see clause)* |
+| CF-43 | FROZEN | `refused_reset_changes_nothing` | *(none — see clause)* |
 
 <!-- END GENERATED -->
 
