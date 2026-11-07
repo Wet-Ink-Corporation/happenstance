@@ -31,7 +31,7 @@ use happenstance::{
     Checkpoint, Chunk, Codec, CodecError, Delivered, DomainEvent, Event, EventStore, EventType,
     Json, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
     MemoryProjectionStoreError, Projection, ProjectionId, ProjectionStore, ResetError, Tags,
-    checkpoint_id, run_projection,
+    checkpoint_id, run_fan_out, run_projection,
 };
 use happenstance_testkit::block_on;
 
@@ -380,6 +380,8 @@ fn no_fan_out_runner_catches_a_panic() {
     for file in [
         "crates/happenstance/src/runner.rs",
         "crates/happenstance/src/lib.rs",
+        // #112's fan-out runner, which catches nothing either (O1, option B).
+        "crates/happenstance/src/fan_out.rs",
     ] {
         let source = code(file);
         for absent in ["catch_unwind", "AssertUnwindSafe", "spawn("] {
@@ -428,6 +430,8 @@ fn no_fan_out_runner_catches_a_panic() {
         );
     });
 
+    fan_out_does_not_catch_a_panic_either();
+
     let ps30 = clause("PS-30");
     assert!(
         ps30.contains("[DEFERRED"),
@@ -439,6 +443,51 @@ fn no_fan_out_runner_catches_a_panic() {
             "PS-30's verdict does not name `{required}` as its contingency: {ps30}"
         );
     }
+}
+
+/// The same two-event fixture through `run_fan_out`, over a quiet view and
+/// the panicking one: the unwind escapes, and neither view keeps a row or a
+/// moved checkpoint, because both write sets were open when it began.
+fn fan_out_does_not_catch_a_panic_either() {
+    let events = MemoryEventStore::new();
+    let models = MemoryProjectionStore::new();
+    block_on(async {
+        EventStore::append(&events, &[shredded("VIN1"), shredded("BOOM")], None)
+            .await
+            .expect("the fixture seeds");
+    });
+    let quiet = || Shreds {
+        id: ProjectionId::from_static("quiet"),
+        ..Shreds::new(None)
+    };
+    let mut views = [quiet(), Shreds::new(Some("BOOM"))];
+
+    // Test-only: the assertion is that the panic escapes, so it is stopped
+    // here, outside the runner. Only the fresh stores are read afterwards.
+    let unwound = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        block_on(async {
+            let _ran = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
+        });
+    }));
+    assert!(
+        unwound.is_err(),
+        "the fan-out runner caught the panic; PS-30's verdict is now wrong"
+    );
+    let keys = [quiet(), Shreds::new(Some("BOOM"))]
+        .map(|view| checkpoint_id(&view).expect("a derivable id"));
+    block_on(async {
+        assert!(
+            models.is_empty(),
+            "a panicking view left rows behind in a fan-out run"
+        );
+        for key in &keys {
+            assert_eq!(
+                models.checkpoint(key).await.unwrap(),
+                Checkpoint::NeverRun,
+                "a fan-out panic moved {key:?}'s checkpoint"
+            );
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
