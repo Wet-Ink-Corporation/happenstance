@@ -252,6 +252,9 @@ fn new_identifiers_fit_the_item_table() {
         "checkpoint_id",
         "InvalidCheckpointId",
         "MAX_CHECKPOINT_NAME_LEN",
+        "run_fan_out",
+        "FanOut",
+        "ViewError",
     ] {
         assert!(
             name.len() <= 24,
@@ -408,6 +411,17 @@ fn crate_root_mounts_the_convergence_declaration() {
         root.contains("pub use convergence::ConvergentProjection;"),
         "`ConvergentProjection`, the declaration a convergence check bounds \
          on, is not re-exported at the root"
+    );
+}
+
+/// The fan-out runner (#112) is mounted at the root from its own module,
+/// behind the runner's feature, so `runner.rs` keeps its cited lines.
+#[test]
+fn crate_root_mounts_the_fan_out_runner() {
+    let root = read("lib.rs");
+    assert!(
+        root.contains("pub use fan_out::{FanOut, ViewError, run_fan_out};"),
+        "`run_fan_out`, `FanOut` and `ViewError` are not re-exported at the root"
     );
 }
 

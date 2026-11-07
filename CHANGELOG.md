@@ -115,6 +115,22 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance` (behind `unstable-projection`): `run_fan_out`, the fan-out
+  runner, with `FanOut` and `ViewError` (#112, PS-30). It drives N views of one
+  projection type from **one** read of the log, and each view ends with the
+  rows, checkpoint and `Progressed` that `run_projection` alone would give it,
+  under its own chunk window. A view whose decode, `apply`, `on_error`, `begin`
+  or `commit` fails stops alone, with `run_projection`'s arm as
+  `ViewError::Stopped`; a failed read stops every view still running as
+  `ViewError::Interrupted` and is reported once, in `FanOut::read`. **A panic
+  is not caught** (ADR-0101, proposed; the owner's call): it unwinds out of
+  the call, every open write set is dropped and rolled back, and nothing
+  since any view's last commit survives. One view that panics stops all N;
+  one task per view through `run_projection` is the containing alternative.
+  Over a live batch, N views hold up to N pooled connections at once, so a
+  pool smaller than N stops a later view with `Begin` at its acquire timeout.
+  Spawning it from generic code asks `run_projection`'s bounds plus
+  `St::Error: Send`.
 - `happenstance` (behind `unstable-projection`): `checkpoint_id`, the id the
   runner keys a projection's checkpoint on, `InvalidCheckpointId`, why one
   could not be derived, and `MAX_CHECKPOINT_NAME_LEN`, 238 (PS-25, #107). The

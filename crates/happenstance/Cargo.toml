@@ -136,7 +136,8 @@ postcard = ["dep:postcard"]
 cbor = ["dep:ciborium"]
 # The typed projection runner: `Projection`, `SendProjection`, `Delivered`,
 # `run_projection`, `Progressed`, `ProjectionError`, `Chunk` and `checkpoint_id`
-# with its `InvalidCheckpointId` and `MAX_CHECKPOINT_NAME_LEN`. **Off by default**, and
+# with its `InvalidCheckpointId` and `MAX_CHECKPOINT_NAME_LEN`, and the fan-out
+# runner `run_fan_out` with its `FanOut` and `ViewError`. **Off by default**, and
 # the name is still the promise — but the subject of the instability moved. Until ADR-0063 it was the port
 # beneath the runner, `happenstance-core`'s `ProjectionStore`, which is frozen
 # now and reachable here without any feature. What is moving is the runner's
