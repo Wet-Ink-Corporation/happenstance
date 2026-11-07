@@ -6,7 +6,7 @@
 //! field is dimensionless: a ratio of two observed counts, with the timings
 //! recorded beside it and named as secondary.
 
-use polling_cost::{Arm, Cell, Phase, run_cell};
+use polling_cost::{Arm, Cell, Phase, Runner, run_cell};
 
 fn cell(fan_out: usize, log_size: usize, arm: Arm) -> Cell {
     Cell {
@@ -26,7 +26,7 @@ fn the_headline_is_delivery_amplification_and_not_a_duration() {
     // A hand-built cell with known counts: 8 views, 128 events, every view
     // selecting the whole log. Deliveries are 8 × 128; the distinct events those
     // deliveries carried are 128.
-    let record = run_cell(&cell(8, 128, Arm::Overlapping)).expect("a number");
+    let record = run_cell(&cell(8, 128, Arm::Overlapping), Runner::Polling).expect("a number");
 
     assert_eq!(record.events_delivered, 8 * 128);
     assert_eq!(record.events_applied_distinct, 128);
@@ -56,8 +56,8 @@ fn the_headline_is_delivery_amplification_and_not_a_duration() {
 
 #[test]
 fn the_two_arms_differ_and_that_is_what_makes_the_ratio_mean_anything() {
-    let overlapping = run_cell(&cell(8, 128, Arm::Overlapping)).expect("a number");
-    let disjoint = run_cell(&cell(8, 128, Arm::Disjoint)).expect("a number");
+    let overlapping = run_cell(&cell(8, 128, Arm::Overlapping), Runner::Polling).expect("a number");
+    let disjoint = run_cell(&cell(8, 128, Arm::Disjoint), Runner::Polling).expect("a number");
 
     // ES-32's worst case: the same events, delivered once per view.
     assert!(overlapping.delivery_amplification > 7.5);
@@ -72,11 +72,84 @@ fn the_two_arms_differ_and_that_is_what_makes_the_ratio_mean_anything() {
 fn amplification_grows_with_fan_out_in_the_overlapping_arm() {
     let mut previous = 0.0;
     for fan_out in [1usize, 2, 4, 8] {
-        let record = run_cell(&cell(fan_out, 64, Arm::Overlapping)).expect("a number");
+        let record =
+            run_cell(&cell(fan_out, 64, Arm::Overlapping), Runner::Polling).expect("a number");
         assert!(
             record.delivery_amplification > previous,
             "amplification did not grow from {previous} at fan-out {fan_out}"
         );
         previous = record.delivery_amplification;
     }
+}
+
+/// The fan-out runner serves every view from one read per poll.
+///
+/// Four views over one log, every one selecting all of it. Under polling that
+/// is four reads to the end and a delivery amplification of 4; under
+/// `run_fan_out` it is one read that delivers each event once, then one more
+/// read that finds nothing and ends the loop. Rejects a harness whose `FanOut`
+/// arm still loops `run_projection` per view (eight reads, amplification 4),
+/// and a runner that reads once per view behind a fan-out signature.
+#[test]
+fn the_fan_out_runner_reads_once_per_poll() {
+    let record = run_cell(&cell(4, 128, Arm::Overlapping), Runner::FanOut).expect("a number");
+
+    assert_eq!(record.runner, "fan_out");
+    assert_eq!(
+        record.reads_issued, 2,
+        "one read that delivers, one that finds nothing"
+    );
+    assert_eq!(record.events_delivered, 128);
+    assert_eq!(
+        record.events_applied_total,
+        4 * 128,
+        "every view still applies every event"
+    );
+    assert!(
+        (record.delivery_amplification - 1.0).abs() < f64::EPSILON,
+        "the headline is {}, not the 1.0 one shared read gives",
+        record.delivery_amplification
+    );
+    let polling = run_cell(&cell(4, 128, Arm::Overlapping), Runner::Polling).expect("a number");
+    assert_eq!(polling.runner, "polling");
+}
+
+/// The staleness phase's fan-out branch: one shared read per poll, after a
+/// catch-up whose reads are not counted. Four appends, each observed on its
+/// first poll, are four reads whatever the fan-out; the polling runner issues
+/// one per view per poll. Rejects a staleness loop that still calls
+/// `run_projection` per view under `Runner::FanOut`.
+#[test]
+fn the_fan_out_runner_reads_once_per_staleness_poll() {
+    let staleness = |runner| {
+        run_cell(
+            &Cell {
+                phase: Phase::Staleness,
+                fan_out: 4,
+                log_size: 64,
+                poll_interval_ms: 1,
+                chunk: polling_cost::CHUNK,
+                arm: Arm::Overlapping,
+                repeat: 0,
+                seed: polling_cost::SEED,
+            },
+            runner,
+        )
+        .expect("a number")
+    };
+
+    let fan_out = staleness(Runner::FanOut);
+    assert_eq!(fan_out.runner, "fan_out");
+    assert_eq!(
+        fan_out.reads_issued,
+        u64::try_from(polling_cost::STALENESS_APPENDS).expect("four fits"),
+        "one shared read per poll"
+    );
+
+    let polling = staleness(Runner::Polling);
+    assert_eq!(
+        polling.reads_issued,
+        fan_out.reads_issued * 4,
+        "one read per view per poll"
+    );
 }

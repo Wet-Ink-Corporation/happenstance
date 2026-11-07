@@ -5,6 +5,7 @@
 #   bash experiments/polling-cost/run.sh            # the whole sweep
 #   HS_TAG=pass-002 bash .../run.sh                 # a second pass, beside the first
 #   HS_CELLS=6 bash .../run.sh                      # a smoke run of the first six cells
+#   HS_RUNNER=fan_out bash .../run.sh               # run_fan_out instead of run_projection
 #
 # Nothing here touches the workspace: no crate, no root Cargo.toml, no gate step.
 # `cargo xtask ci` must stay runnable whether or not this has ever been run, and
@@ -19,8 +20,9 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TAG=${HS_TAG:-pass-001}
+RUNNER=${HS_RUNNER:-polling}
 
-echo "polling-cost: tag ${TAG}"
+echo "polling-cost: tag ${TAG}, runner ${RUNNER}"
 
 # The environment, captured where a reader will look for it rather than only
 # inside the JSON. The manifest line in the pass carries the machine-readable
@@ -38,7 +40,7 @@ uname -a 2>/dev/null || echo "uname unavailable"
 # records the profile so a reader can tell.
 cargo build --release --manifest-path "${HERE}/Cargo.toml"
 
-HS_TAG="${TAG}" cargo run --release --manifest-path "${HERE}/Cargo.toml"
+HS_TAG="${TAG}" HS_RUNNER="${RUNNER}" cargo run --release --manifest-path "${HERE}/Cargo.toml"
 
 echo "--- written ---"
 ls -1 "${HERE}/results/${TAG}"

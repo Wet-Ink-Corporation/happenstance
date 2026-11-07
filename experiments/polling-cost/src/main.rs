@@ -1,6 +1,7 @@
 //! The sweep driver.
 //!
-//! One binary, no arguments beyond the environment: `HS_TAG` names the pass and
+//! One binary, no arguments beyond the environment: `HS_TAG` names the pass,
+//! `HS_RUNNER` picks the runner (`polling`, the default, or `fan_out`), and
 //! `HS_CELLS` trims it for a smoke run. It writes one newline-delimited JSON
 //! file per pass under `results/<tag>/` and refuses to overwrite a pass that is
 //! already there.
@@ -13,7 +14,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use polling_cost::{Cell, Record, environment, progress, run_cell, sweep, write_pass};
+use polling_cost::{Cell, Record, Runner, environment, progress, run_cell, sweep, write_pass};
 
 fn main() -> ExitCode {
     let here = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -21,6 +22,26 @@ fn main() -> ExitCode {
     let results = here.join("results");
 
     let tag = std::env::var("HS_TAG").unwrap_or_else(|_| "pass-001".to_owned());
+    // `polling` unless asked otherwise, so pass-001's command still measures
+    // what pass-001 measured. Anything else is refused, not run as the default.
+    let runner = match std::env::var("HS_RUNNER") {
+        Err(std::env::VarError::NotPresent) => Runner::Polling,
+        Err(std::env::VarError::NotUnicode(value)) => {
+            progress::say(&format!(
+                "harness failed: HS_RUNNER={value:?} is not `polling` or `fan_out`"
+            ));
+            return ExitCode::FAILURE;
+        }
+        Ok(value) => match Runner::parse(&value) {
+            Some(runner) => runner,
+            None => {
+                progress::say(&format!(
+                    "harness failed: HS_RUNNER={value:?} is not `polling` or `fan_out`"
+                ));
+                return ExitCode::FAILURE;
+            }
+        },
+    };
     let limit = std::env::var("HS_CELLS")
         .ok()
         .and_then(|value| value.parse::<usize>().ok());
@@ -30,7 +51,11 @@ fn main() -> ExitCode {
         None => sweep(),
     };
 
-    progress::say(&format!("polling-cost: {} cells, tag {tag}", cells.len()));
+    progress::say(&format!(
+        "polling-cost: {} cells, tag {tag}, runner {}",
+        cells.len(),
+        runner.as_str()
+    ));
     let manifest = environment(&tag, &workspace);
     progress::say(&format!(
         "measured tree {} dirty={}",
@@ -52,7 +77,7 @@ fn main() -> ExitCode {
                 cell.arm.as_str()
             ),
         ));
-        match run_cell(cell) {
+        match run_cell(cell, runner) {
             Ok(record) => records.push(record),
             Err(why) => {
                 progress::say(&format!("harness failed: {why}"));

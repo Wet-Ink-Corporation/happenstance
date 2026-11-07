@@ -115,6 +115,48 @@ overlapping cell — 3.2 million deliveries — took a mean of **1.18 s**, again
 and to nothing else; they are recorded because they bound the shape of the
 experiment, not because they are the result.
 
+### The fan-out runner (passes 002 and 003)
+
+Two more passes were recorded on 2026-11-07, on a Linux host (a 4-core Xeon at
+2.30 GHz), against the library at `0d924b4`, the `0.5.0` merge. `pass-002` drives
+the polling runner, as `pass-001` did. `pass-003` drives `happenstance::run_fan_out`
+(#400), which reads the union of the views' queries once per poll and hands each
+view the events it selects. Every record now carries a `runner` field; `pass-001`
+predates it, and a record without one reads as `polling`.
+
+*Overlapping arm, 100 000 events — the polling runner beside the fan-out runner.*
+
+| fan-out | delivered, polling | delivered, fan-out | reads, polling | reads, fan-out | applied, both |
+|---|---|---|---|---|---|
+| 1 | 100 000 | 100 000 | 2 | 2 | 100 000 |
+| 2 | 200 000 | 100 000 | 4 | 2 | 200 000 |
+| 4 | 400 000 | 100 000 | 8 | 2 | 400 000 |
+| 8 | 800 000 | 100 000 | 16 | 2 | 800 000 |
+| 16 | 1 600 000 | 100 000 | 32 | 2 | 1 600 000 |
+| 32 | 3 200 000 | 100 000 | 64 | 2 | 3 200 000 |
+
+`pass-002` reproduces `pass-001`'s ratios exactly on a different host and
+operating system. Under the fan-out runner the overlapping arm's amplification is
+**1.00** at every fan-out and log size, and the read count is **2** whatever N is:
+one read that delivers and one that confirms nothing is new. The read-model work does not
+shrink: each view still applies every event it selects, which is the last column.
+What the fan-out runner buys back is the reads and the deliveries.
+
+The disjoint arm delivers N − 1 events more than the log under the fan-out runner,
+so its amplification is (log + N − 1) / log: **1.031** at 32 views over 1 000
+events, 1.003 over 10 000 and 1.0003 over 100 000. The runner resumes each view
+just past its checkpoint and reads the union from the lowest of those starts.
+With the shards interleaved, each view's checkpoint is its own last event, so the
+slowest sits N − 1 positions behind the tail, and the confirming read re-delivers
+those N − 1 events for every view to skip. Every row is in `results/pass-002/`
+and `results/pass-003/`.
+
+In the staleness cells at 32 overlapping views, the fan-out runner issues 4 reads
+where the polling runner issues 128, and the median observation latency is the
+poll interval under both. The 32-view, 100 000-event overlapping cell took a mean
+of 1.07 s under the polling runner and 335 ms under the fan-out runner, on this
+host only.
+
 ## 3. Staleness
 
 Reported as two observed quantities, and **never** as `head() - checkpoint`.
@@ -169,8 +211,9 @@ written down cannot be met or missed. A reader who has a budget can compare it t
 counter and one row per commit — because the quantity under study is the
 redundant *read* fan-out and read-model work would dilute it; a deployment whose
 `apply` does real work will see a smaller amplification of *total* cost from the
-same amplification of deliveries. And the amplification figures in §2 are exact
-integers because the arms are exact: every overlapping view selects every event,
+same amplification of deliveries. And the polling passes' amplification figures in §2
+are exact integers because the arms are exact (the fan-out disjoint arm's are
+not, for the reason §2 gives): every overlapping view selects every event,
 every disjoint view selects a disjoint shard. A real deployment's views overlap
 partially, and this pass measures the two ends rather than the middle.
 
@@ -180,6 +223,10 @@ At 32 views over one log, where every view wants every event, the polling runner
 delivers each event **32 times** and issues **64 reads** where a tail seam would
 deliver it once. Where the views do not overlap, the amplification is **1.00**
 and the read count is still 2N. Observation latency is the poll interval.
+
+Under the fan-out runner (`pass-003`), the same 32 overlapping views take one
+delivery per event and 2 reads per catch-up, and each view still applies all
+100 000 events. Observation latency is still the poll interval.
 
 That is the measurement. What it bears on is ES-32's `[PROVISIONAL]` marker,
 whose falsifier this pass supplies evidence toward and does not settle: the
@@ -201,6 +248,9 @@ one line per cell-repeat, conforming to `schema/`.
   tag that already exists is refused by name; nothing is ever edited in place, so
   undoing a re-run is deleting one directory.
 - `HS_CELLS=6 bash …/run.sh` runs the first six cells, for a smoke check.
+- `HS_RUNNER=fan_out bash …/run.sh` drives `run_fan_out` instead of the polling
+  runner. The default is `polling`, and any other value is refused before a cell
+  runs.
 
 The whole sweep takes a few minutes, most of it paid by the 1 000 ms staleness
 cells in real seconds and by the 32-view 100 000-event overlapping cell in
