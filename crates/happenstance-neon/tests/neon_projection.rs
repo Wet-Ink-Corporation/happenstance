@@ -29,9 +29,9 @@
 //! of the crate's capability skip list.
 //!
 //! * `refused_reset_changes_nothing`, because `RESET_REFUSAL` is declined — the
-//!   store holds no protection policy, and inventing one so that a rule reports
-//!   `Ran` would put a domain decision inside an adapter designed to keep the
-//!   domain out. The reason is written in this store's own words rather than
+//!   store has no call that marks a projection protected. That is scope, not a
+//!   verdict on the mechanism: `happenstance-sqlite` has one, and the same here
+//!   is #406. The reason is written in this store's own words rather than
 //!   copied from the adapter next door, which is CF-18's requirement.
 //! * `batch_reads_reflect_pending_writes` and `rebuild_is_chunk_size_invariant`,
 //!   because `READS_THROUGH_BATCH` is `false` — a `NeonWriteBatch` has been sent

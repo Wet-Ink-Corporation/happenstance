@@ -474,15 +474,17 @@ impl happenstance_testkit::ProjectionFixture for NeonProjectionFixture {
     /// clone: `NeonProjectionStore::new` mints a fresh identity.
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
 
-    /// Declined, and the reason is the store's rather than the fixture's
-    /// convenience: `NeonProjectionStore` holds **no protection policy**.
+    /// Declined, by scope: `NeonProjectionStore` offers **no way to mark a
+    /// projection protected**.
     ///
     /// PS-18 makes refusal a mechanism the port supplies and leaves *what to
-    /// protect* to the domain. This adapter owns the checkpoint row and the batch
-    /// that carries it, and knows nothing about which projection a regulator
-    /// already holds a hash chain for, so `reset` returns `ResetError::Refused`
-    /// on no path at all and a fixture claiming the capability would fail
-    /// `refused_reset_changes_nothing` at its first assertion.
+    /// protect* to the domain. This adapter has no call a caller could make to
+    /// name a protected projection, so `reset` returns `ResetError::Refused` on
+    /// no path at all and a fixture claiming the capability would fail
+    /// `refused_reset_changes_nothing` at its first assertion. The mechanism is
+    /// not what is wrong: `happenstance-sqlite` supports the capability through
+    /// a `projection_protection` table its caller writes (#118), and the same
+    /// table here is additive public API that waits on its own issue (#406).
     ///
     /// The reason is written here in this store's own words rather than inherited
     /// from the testkit's default, which is what CF-18 asks for — and it is this
@@ -490,12 +492,12 @@ impl happenstance_testkit::ProjectionFixture for NeonProjectionFixture {
     /// same way, and a declension copied because it landed the same way is the
     /// declension-by-inheritance CF-18 forbids.
     const RESET_REFUSAL: Capability = Capability::declined(
-        "NeonProjectionStore holds no protection policy: the read model belongs to \
-         the caller and this adapter owns only the checkpoint row and the batch that \
-         carries it, so there is no projection it could decline to reset and `reset` \
-         returns `Refused` on no path at all. The alternative — a protected-projections \
-         table invented here so that one more rule reports `Ran` — would put a domain \
-         policy into an adapter designed to keep the domain out",
+        "NeonProjectionStore has no call that marks a projection protected, so \
+         there is no projection it could decline to reset and `reset` returns \
+         `Refused` on no path at all. This is a gap in scope, not a judgement on the \
+         mechanism: happenstance-sqlite refuses through a `projection_protection` \
+         table the caller writes with `protect_from_reset`, and the same table over \
+         Neon's one-shot HTTP is tracked as #406",
     );
 
     /// Supported, and armed for real: a `BEFORE INSERT OR UPDATE` trigger on the

@@ -38,9 +38,9 @@
 //! Two rules are **reported skips**, and neither is a gap:
 //!
 //! * `refused_reset_changes_nothing`, because `RESET_REFUSAL` is declined — the
-//!   store holds no protection policy, and inventing one so that a rule reports
-//!   `Ran` would put a domain decision inside an adapter designed to keep the
-//!   domain out.
+//!   store has no call that marks a projection protected. That is scope, not a
+//!   verdict on the mechanism: `happenstance-sqlite` has one, and the same here
+//!   is #406.
 //! * `batch_reads_reflect_pending_writes`, because `READS_THROUGH_BATCH` is
 //!   `false` — a `PostgresProjectionBatch` has been sent to the server exactly
 //!   never, and answering from committed state is what PS-12 forbids by name.
@@ -510,5 +510,48 @@ async fn the_placeholder_scan_agrees_with_the_server() {
             "{sql:?}: the server counts {expected}: {refused:?}"
         );
         store.rollback(batch).await.unwrap();
+    }
+}
+
+/// Both projection fixtures decline `RESET_REFUSAL` in their own store's words,
+/// and the words read as one sentence each.
+///
+/// The live store's reason once lost the `\` line continuations of its string
+/// literal, so `--show-output` printed it with ten-space holes in the middle.
+/// The compiler accepts that, so only reading the constant finds it. The store
+/// names are CF-18's half: a reason copied between two stores is the
+/// declension-by-inheritance that clause forbids. Opens no connection, so it is
+/// not `#[ignore]`d.
+#[test]
+fn reset_refusal_reasons_name_their_store_and_hold_no_whitespace_runs() {
+    use happenstance_testkit::ProjectionFixture;
+    use support::LivePostgresProjectionFixture;
+
+    let reasons = [
+        (
+            "PostgresProjectionStore",
+            <PostgresProjectionFixture as ProjectionFixture>::RESET_REFUSAL,
+        ),
+        (
+            "LivePostgresProjectionStore",
+            <LivePostgresProjectionFixture as ProjectionFixture>::RESET_REFUSAL,
+        ),
+    ];
+    for (store, capability) in reasons {
+        assert!(
+            !capability.is_supported(),
+            "{store}: RESET_REFUSAL is declined"
+        );
+        let reason = capability
+            .reason()
+            .expect("a declined capability states a reason");
+        assert!(
+            reason.starts_with(&format!("{store} ")),
+            "{store}: the reason is about this store: {reason}"
+        );
+        assert!(
+            !reason.contains("  ") && !reason.contains('\n'),
+            "{store}: the reason is one single-spaced sentence: {reason:?}"
+        );
     }
 }
