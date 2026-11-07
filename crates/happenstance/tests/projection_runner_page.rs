@@ -15,20 +15,20 @@
 //! a million applications into one write set, and the page's bounded-window
 //! claim stays true the whole time — bounded by a number the caller invented.
 //!
-//! **Neither repair is taken here, and both are free.** `run_projection`,
-//! `Progressed` and `ProjectionError` are behind `unstable-projection`, off by
-//! default, and ADR-0036 records the semver exemption in terms —
-//! *"`cargo-semver-checks` will not police the surface"* — so giving `chunk` a
-//! named type, or adding an observed entry point, costs the same after `0.2.0`
-//! as before it. Both belong to the projection-store freeze.
+//! **Neither repair was taken here.** When this file was written, the runner
+//! sat behind `unstable-projection` under ADR-0036's semver exemption, so
+//! both were free. `chunk` has had its named type since #120 (ADR-0070). An
+//! observed entry point would be additive, which is a minor change, so it is
+//! still open and belongs to the projection-store freeze. From `0.5.0` the
+//! feature is gone (#132), and the runner is covered by semver like the rest
+//! of the crate.
 //!
-//! What the exemption does **not** buy is silence. A page is not semver-gated
-//! at all: it is read by whoever runs the thing today, and the operator above
-//! is harmed now rather than at `0.2.0`. So what this file holds is the part
-//! that is free *and* due: the page says what the number trades and what can be
-//! seen while the run is going.
-
-#![cfg(feature = "unstable-projection")]
+//! What semver does **not** cover is the page. It is read by whoever runs
+//! the thing today, and the operator above is harmed now rather than at a
+//! release. So what this file holds is the part that is due whatever the
+//! version says: the page says what the number trades and what can be seen
+//! while the run is going, and it says so in every build, with no feature
+//! between a reader and the test that holds it.
 
 use std::path::{Path, PathBuf};
 

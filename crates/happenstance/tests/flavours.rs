@@ -15,12 +15,10 @@ use std::sync::Arc;
 
 use futures_core::Stream;
 use happenstance::bytes::Bytes;
-#[cfg(feature = "unstable-projection")]
-use happenstance::run_projection;
 use happenstance::{
     AppendCondition, AppendError, Codec, CodecError, DecisionModel, DomainEvent, Event, EventId,
     EventStore, EventType, Json, MemoryEventStore, MemoryStoreError, Query, ReadOptions, Retry,
-    SequencePosition, SequencedEvent, Tags, commit, commit_with,
+    SequencePosition, SequencedEvent, Tags, commit, commit_with, run_projection,
 };
 use serde::{Deserialize, Serialize};
 
@@ -362,11 +360,10 @@ async fn every_entry_point_binds_the_weak_flavour() {
 
     // `run_projection` — the entry point HS-S0027 landed, and the one a caller
     // is most likely to hand a store they hold through an `Rc`.
-    #[cfg(feature = "unstable-projection")]
     {
         use core::num::NonZeroUsize;
 
-        use happenstance::{Chunk, MemoryProjectionStore, ProjectionId, run_projection};
+        use happenstance::{Chunk, MemoryProjectionStore, ProjectionId};
 
         let models = MemoryProjectionStore::new();
         let mut seen = Enrolments {
@@ -438,7 +435,6 @@ fn each_module_imports_one_flavour_name() {
 // ---------------------------------------------------------------------------
 
 /// A read model over the one domain event this file already has.
-#[cfg(feature = "unstable-projection")]
 struct Enrolments {
     id: happenstance::ProjectionId,
     scope: Tags,
@@ -451,7 +447,6 @@ struct Enrolments {
 // below is generic over the projection, and there only the `Send` flavour
 // promises a `Send` `apply` future. A concrete spawn of `Enrolments` would
 // compile through either flavour (`a_concrete_bare_projection_spawns`).
-#[cfg(feature = "unstable-projection")]
 impl happenstance::SendProjection for Enrolments {
     type Event = Subscribed;
     type Store = happenstance::MemoryProjectionStore;
@@ -495,10 +490,8 @@ impl happenstance::SendProjection for Enrolments {
 /// and shipping this marker in `happenstance-core`, which is a surface question
 /// a later phase owns. A local trait with a blanket impl over a foreign one is
 /// ordinary coherence, so declaring it costs nothing.
-#[cfg(feature = "unstable-projection")]
 trait ThreadSafeEventStore: happenstance::SendEventStore<Error: Send + Sync> {}
 
-#[cfg(feature = "unstable-projection")]
 impl<S> ThreadSafeEventStore for S where S: happenstance::SendEventStore<Error: Send + Sync> {}
 
 /// Awaits the **runner** inside `tokio::spawn`, from generic code.
@@ -521,7 +514,6 @@ impl<S> ThreadSafeEventStore for S where S: happenstance::SendEventStore<Error: 
 ///
 /// It is also the one site in this crate's tests where `SendEventStore` is
 /// named, and it is reached by full path rather than imported (RS-20-3).
-#[cfg(feature = "unstable-projection")]
 fn spawns_the_projection_runner<S>(
     events: Arc<S>,
     models: Arc<happenstance::MemoryProjectionStore>,
@@ -556,7 +548,6 @@ where
     })
 }
 
-#[cfg(feature = "unstable-projection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn run_projection_spawns_from_generic() {
     use happenstance::{MemoryProjectionStore, ProjectionId};
@@ -612,7 +603,6 @@ async fn run_projection_spawns_from_generic() {
 /// Nor is a store's `Error: Sync`, nor `St::Error: Send`, because no store
 /// error crosses an await. A runner change that holds a new value across one fails
 /// here until this signature and the page both grow the bound.
-#[cfg(feature = "unstable-projection")]
 fn spawns_a_projection_generic_over_its_type<S, P, St>(
     events: Arc<S>,
     models: Arc<St>,
@@ -635,7 +625,6 @@ where
     })
 }
 
-#[cfg(feature = "unstable-projection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn run_projection_spawns_from_code_generic_over_the_projection() {
     use happenstance::{MemoryProjectionStore, ProjectionId};
@@ -667,14 +656,12 @@ async fn run_projection_spawns_from_code_generic_over_the_projection() {
 }
 
 /// A bare-flavour projection whose fields are all `Send`.
-#[cfg(feature = "unstable-projection")]
 struct LocalCount {
     id: happenstance::ProjectionId,
     scope: Tags,
     count: u64,
 }
 
-#[cfg(feature = "unstable-projection")]
 impl happenstance::Projection for LocalCount {
     type Event = Subscribed;
     type Store = happenstance::MemoryProjectionStore;
@@ -707,7 +694,6 @@ impl happenstance::Projection for LocalCount {
 /// documentation it rejects is *"implement `SendProjection` whenever the run
 /// is spawned"*: `SendProjection` matters only where code generic over the
 /// projection spawns the run, which the test above holds.
-#[cfg(feature = "unstable-projection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_concrete_bare_projection_spawns() {
     use happenstance::{MemoryProjectionStore, ProjectionId};
@@ -749,7 +735,6 @@ async fn a_concrete_bare_projection_spawns() {
 /// `Rc<Cell<_>>` rather than a plain field because the count is read back
 /// after the run through a second handle, which is exactly the sharing a
 /// single-threaded runtime allows and a `Send` bound would refuse.
-#[cfg(feature = "unstable-projection")]
 #[derive(Debug)]
 struct LocalEnrolments {
     id: happenstance::ProjectionId,
@@ -757,7 +742,6 @@ struct LocalEnrolments {
     count: Rc<core::cell::Cell<u64>>,
 }
 
-#[cfg(feature = "unstable-projection")]
 impl happenstance::Projection for LocalEnrolments {
     type Event = Subscribed;
     type Store = happenstance::MemoryProjectionStore;
@@ -789,7 +773,6 @@ impl happenstance::Projection for LocalEnrolments {
 /// would refuse this call with `E0277`, and a `wasm32` projection holding an
 /// `Rc` would have no runner. The probe is the positive control that the
 /// projection really is `!Send`, so the call is not passing on a `Send` type.
-#[cfg(feature = "unstable-projection")]
 #[tokio::test]
 async fn a_not_send_projection_runs_through_the_bare_flavour() {
     use core::marker::PhantomData;
@@ -842,7 +825,6 @@ async fn a_not_send_projection_runs_through_the_bare_flavour() {
 /// `chunk` binding.
 #[test]
 fn chunk_argument_inlines_without_hoisting() {
-    #[cfg(feature = "unstable-projection")]
     fn _accepts_inline_chunk() {
         fn takes(_: happenstance::Chunk) {}
         takes(happenstance::Chunk::of(
@@ -870,7 +852,6 @@ fn chunk_argument_inlines_without_hoisting() {
 /// The wrong implementation this rejects is a representation that holds an
 /// `Rc` or a `RefCell` (a shared adaptive policy, say): it would still pass
 /// every single-view test, and make the spawned fan-out impossible to write.
-#[cfg(feature = "unstable-projection")]
 #[test]
 fn chunk_is_a_plain_value_a_spawned_runner_can_own() {
     fn assert_plain<T: Copy + Send + Sync + 'static>() {}
@@ -889,7 +870,6 @@ fn chunk_is_a_plain_value_a_spawned_runner_can_own() {
 /// once, and each removal is `E0277`. `Store = St` is `run_projection`'s,
 /// for the reason given above. `P: Sync` is not asked: the runner derives
 /// every view's key before its first await, so no `&P` crosses one.
-#[cfg(feature = "unstable-projection")]
 fn spawns_a_fan_out_generic_over_its_type<S, P, St>(
     events: Arc<S>,
     models: Arc<St>,
@@ -915,7 +895,6 @@ where
     })
 }
 
-#[cfg(feature = "unstable-projection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn run_fan_out_spawns_from_code_generic_over_the_projection() {
     use happenstance::{MemoryProjectionStore, ProjectionId};
@@ -955,7 +934,6 @@ async fn run_fan_out_spawns_from_code_generic_over_the_projection() {
 /// `!Send` store fans out on one thread: the same guarantee
 /// [`a_not_send_projection_runs_through_the_bare_flavour`] holds for
 /// `run_projection`.
-#[cfg(feature = "unstable-projection")]
 #[tokio::test]
 async fn run_fan_out_binds_the_weak_flavour() {
     use core::marker::PhantomData;

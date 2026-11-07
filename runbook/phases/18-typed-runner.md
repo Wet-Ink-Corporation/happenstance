@@ -171,14 +171,14 @@ renews them with the disposition phase 16 gave.
         (`EventId::position()` is the origin's, and is allowed) — and a
         typed-layer test that holds it. Phase 13 runs after this phase, and its
         sync rule exercises the same surface through replication.
-- [ ] #132 · `unstable-projection` removed from `happenstance`, and every example that
+- [x] #132 · `unstable-projection` removed from `happenstance`, and every example that
       enabled it compiled without it. Removing a Cargo feature is itself a break
       (`references/adr/0063-the-projection-port-is-frozen.md:48-56`), and this
       phase runs after `0.4.0`'s window has closed, so the removal ships in the
       next breaking release — `1.0.0`, if nothing comes between — or the name
       stays declared and empty, as `happenstance-core`'s did until phase 17. The
       session log says which. If the gate cannot lift at all, ADR-0066 declares
-      the runner exempt from semver at 1.0.
+      the runner exempt from semver at 1.0. Removed in `0.5.0` (D6), not declared empty.
 
 **Proof artefact.** `examples/rebuilding-read-models` compiled and run with no
 `unstable-projection` anywhere in its dependency graph, and PS-18, PS-27 and
@@ -186,7 +186,7 @@ PS-30 each with a rule and a mutant that fails it.
 
 **Exit criteria**
 
-- [ ] No `unstable-projection` feature in `happenstance`.
+- [x] No `unstable-projection` feature in `happenstance`.
 - [ ] PS-18, PS-27 and PS-30 are out of `[DEFERRED]`, or renewed per phase 16.
 - [ ] A projection can write into a live batch, demonstrated against a real
       database rather than a buffer.
@@ -385,3 +385,34 @@ PS-30 each with a rule and a mutant that fails it.
   #127. PS-38 is exercised by `fan_out_resumes_each_view_from_its_own_checkpoint`
   (N ids on one handle). Not done: the `experiments/polling-cost` fan-out passes
   002/003, left for a follow-up.
+- 2026-11-07 — #132: `unstable-projection` is **removed** from `happenstance` in `0.5.0`,
+  not declared empty (D6, Ryan, AFK batch 9), and #142's dev-dependency line on
+  `happenstance-postgres` goes with it. The runner's eight modules and their re-exports
+  lose their `cfg`; `futures-core` is an unconditional dependency (its dev duplicate
+  went); the crate root links `run_projection` inline. Manifests that asked for the
+  feature and no longer do: `happenstance-postgres` (dev), `examples/{tickets-over-http,
+  transfers-on-sqlite,rebuilding-read-models}`, `benchmarks/`,
+  `experiments/{polling-cost,apply-shape}`. Held by `the_typed_layers_projection_feature_is_gone`,
+  `no_manifest_names_the_retired_projection_feature` (walks the out-of-workspace
+  manifests too) and `the_runner_is_mounted_unconditionally` in xtask, and
+  `the_runner_needs_no_feature` in `manifest_contract.rs`; the three feature-on tests
+  were inverted in place (D-A). Proof: `cargo tree --locked -p <ex> -e features | grep
+  -ci unstable` prints `0` for all three examples (before: `happenstance feature
+  "unstable-projection"` for `rebuilding-read-models`), `cargo run --locked -p
+  rebuilding-read-models` exits 0, the three examples' tests pass, and `cargo tree -p
+  happenstance -e normal` has the same node set. Under default features `cargo test -p
+  happenstance -- --list` goes from 164 to 270 tests (`projection_runner` 0 → 18,
+  `fan_out` 0 → 22, `convergence` 0 → 3, `projection_runner_page` 0 → 3). semver-checks
+  passes over `unstable-*` features, so 0.5.0's trace table needs a hand row: `H? |
+  happenstance | the unstable-projection feature is removed; the tool passes over
+  unstable-* features | hand | D6 (AFK batch 9), ADR-0066 §5 | Removed`. D-B: the
+  `[Unreleased]` "behind `unstable-projection`" qualifiers stay, and a `### Removed`
+  entry carries the migration. D-C: README, SECURITY, site and roadmap release text is
+  the release PR's. D-D: no new ADR. D-E: apply-shape's entry dropped. D-F: only
+  "Before you start" in `docs/rebuild-a-read-model.md` is rewritten. D-G: ADR-0083's
+  `lib.rs:236` repointed to `:218`. Spec hunks are line-neutral and no marker moved.
+  Found and not fixed: `experiments/apply-shape/tests/shipped_spawn.rs` no longer
+  compiles against the shipped runner (sync `apply`, no `Error`; pre-existing since
+  #98/#101), and the three out-of-workspace lockfiles are stale (crate versions and
+  `trait-variant`, neither from this change), so `--locked` refuses them; they were
+  built unlocked and the lockfiles restored untouched.

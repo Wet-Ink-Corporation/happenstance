@@ -194,62 +194,42 @@ fn docs_rs_metadata_is_declared() {
 }
 
 // ---------------------------------------------------------------------------
-// AC-008 — the instability is something a reader typed, not something they hit
+// AC-008, inverted at `0.5.0` (D6) — the runner is in every build
 // ---------------------------------------------------------------------------
 
+/// This was `unstable_projection_is_declared_off_by_default`, which held
+/// the feature *on* and *off by default*. `0.5.0` removed the feature (D6,
+/// #132), so the test now holds the removal in the same place.
 #[test]
-fn unstable_projection_is_declared_off_by_default() {
-    let value = feature_or_panic("unstable-projection");
-
-    // Off by default. The whole point of the name is that a reader performs an
-    // act that spells the instability before the item is in their build.
-    let default = feature_or_panic("default");
+fn the_runner_needs_no_feature() {
+    // Removed, not declared empty: an empty `[]` would keep a `0.4.x`
+    // manifest resolving, and D6 chose the break over that shim.
     assert!(
-        !default.contains("unstable-projection"),
-        "`unstable-projection` joined the defaults: {default}"
+        feature("unstable-projection").is_none(),
+        "`unstable-projection` is declared again; `0.5.0` removed it (D6), and \
+         the typed runner is in every build of this crate"
     );
 
-    // It does not forward to the contract crate's feature of the same name —
-    // that one gated nothing from ADR-0063 until `0.4.0` removed it, and a
-    // forward would now fail to resolve at all — and the manifest says so in a
-    // comment, where the next reader looks for it.
-    let forwards = value.contains("happenstance-core/unstable-projection");
+    // The one dependency the feature turned on is unconditional now. Left
+    // optional with no feature reaching it, the runner would fail to compile
+    // rather than pass quietly, but this says why in one line.
+    let futures_core = section(MANIFEST, "[dependencies]")
+        .into_iter()
+        .find(|line| line.starts_with("futures-core"))
+        .expect("`futures-core` is a normal dependency: the runner names `Stream`");
     assert!(
-        !forwards,
-        "`unstable-projection` forwards to the contract crate, which has not \
-         declared it since `0.4.0`: {value}"
+        !futures_core.contains("optional"),
+        "`futures-core` is still optional, and no feature turns it on: \
+         {futures_core}"
     );
 
-    // The comment block immediately above the declaration, and only that
-    // block. The `[dependencies]` comment names the feature too, so scanning
-    // every comment in the manifest would keep passing after the explanation
-    // beside the declaration was deleted — which is the deletion this guards.
-    let adjacent = comment_block_above(MANIFEST, "unstable-projection = ");
+    // The comment beside it says what it is for, in the place a reader of
+    // the line looks, and does not still point at the gone feature.
+    let adjacent = comment_block_above(MANIFEST, "futures-core = ");
     assert!(
-        adjacent.contains("runner") && adjacent.contains("apply"),
-        "the comment above `unstable-projection` does not say what the feature \
-         gates — the runner, for `apply`'s sake: {adjacent:?}"
-    );
-    assert!(
-        adjacent.contains("no longer forwards") || adjacent.contains("forwards nothing"),
-        "the comment above `unstable-projection` does not say why it no longer \
-         forwards to the contract crate: {adjacent:?}"
-    );
-
-    // It only adds. A feature that names a removal is one `--all-features`
-    // always turns on.
-    assert!(
-        !value.contains("no-") && !value.contains("without"),
-        "`unstable-projection` reads as a subtractive feature: {value}"
-    );
-
-    // And the crate really gates something on it — a feature in the manifest
-    // that gates no item is a promise nothing keeps.
-    let root = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"))
-        .expect("the crate root is readable");
-    assert!(
-        root.contains("#[cfg(feature = \"unstable-projection\")]"),
-        "no item at the crate root is gated on `unstable-projection`"
+        adjacent.contains("runner") && !adjacent.contains("unstable-projection"),
+        "the comment above `futures-core` does not say the runner needs it, or \
+         still names the removed feature: {adjacent:?}"
     );
 }
 

@@ -21,12 +21,11 @@ edition = "2024"
 publish = false
 
 [dependencies]
-# The **real** runner, by path, with the feature that gates it. A harness that
+# The **real** runner, by path, with no feature since `0.5.0`. A harness that
 # re-implemented the poll loop would measure the harness; this is also the first
 # time `run_projection` is held from outside the workspace, which makes it an
 # unplanned usability check on a signature nobody had consumed yet.
 happenstance = { path = "../../crates/happenstance", features = [
-    "unstable-projection",
     "memory",
     "json",
 ] }

@@ -31,10 +31,8 @@ doc-scrape-examples = true
 # through `happenstance-core` directly. The `EventType`, `Tags` and `Query`
 # names still resolve, through the facade's `pub use happenstance_core::*`.
 #
-# `unstable-projection` is spelled here rather than defaulted, and the name is
-# the promise: the *runner*'s `apply` shape is not yet proved at its far end.
-# The port beneath it is frozen since ADR-0063. An application that only wants
-# the command loop does not write this line.
+# The runner needs no feature since `0.5.0`, so an application that derives a
+# read model writes the same line as one that only wants the command loop.
 #
 # `default-features = false` and the three named explicitly, because the default
 # set carries `memory` and an application that has chosen a durable store has no
@@ -43,7 +41,6 @@ doc-scrape-examples = true
 happenstance = { version = "0.5.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
-  "unstable-projection",
 ] }
 # The adapter. Both of its roles are on: `event-store` and `projection-store`
 # are its defaults, and this example uses both — against the *same file*, which

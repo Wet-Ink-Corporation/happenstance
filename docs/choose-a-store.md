@@ -189,9 +189,9 @@ lives in. Each projection writes to exactly one projection store
 ([PS-10](../spec/SPECIFICATION.md#43-the-write-seam)).
 
 The event log can be in a different database from the read model, but not in a
-different process. The typed layer's `run_projection` (behind its
-`unstable-projection` feature) takes the event store and the projection store
-as two arguments to one call, so the process that runs it has to hold both.
+different process. The typed layer's `run_projection` takes the event store
+and the projection store as two arguments to one call, so the process that
+runs it has to hold both.
 
 | Event store | Projection store in the same crate | Feature |
 | --- | --- | --- |

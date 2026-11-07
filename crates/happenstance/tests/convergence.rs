@@ -10,7 +10,7 @@
 //!
 //! One flavour name is imported here, [`Projection`], and the other is reached
 //! by full path (RS-20-3).
-#![cfg(feature = "unstable-projection")]
+#![cfg(all(feature = "memory", feature = "json"))]
 
 use std::collections::BTreeMap;
 use std::rc::Rc;

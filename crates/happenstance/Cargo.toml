@@ -59,9 +59,9 @@ thiserror = { workspace = true }
 # its ports' flavours. The requirement is the workspace's caret, which ADR-0092
 # keeps and answers with the derivation contract in `src/derivation.rs`.
 #
-# Unconditional rather than optional behind `unstable-projection`: it adds no
-# node to any dependency graph, because `happenstance-core` already depends on
-# it unconditionally, so a `dep:` switch would gate nothing.
+# Unconditional, as the runner it derives a flavour for is since `0.5.0`: it
+# adds no node to any dependency graph, because `happenstance-core` already
+# depends on it unconditionally.
 trait-variant = { workspace = true }
 # One optional crate per codec, each reached only through the feature that names
 # it with `dep:` below. A bare `serde_json/std` inside a feature would enable the
@@ -72,14 +72,17 @@ postcard = { workspace = true, optional = true }
 ciborium = { workspace = true, optional = true }
 # Naming `Stream` is unavoidable for a runner that pulls a replay item by item
 # instead of buffering it, and `EventStore::read` returns the stream at the top
-# level precisely so it can be pulled. Optional and reached only through
-# `unstable-projection`, so the crate links it exactly where it is used.
+# level precisely so it can be pulled. Unconditional since `0.5.0`, because the
+# runner is: it is in every build of this crate.
 #
 # It adds no node to any dependency graph: `happenstance-core` already depends on
 # it unconditionally, and this crate already depends on `happenstance-core`
 # unconditionally, so `cargo tree` is unchanged by this line (RS-50-1 counts
-# nodes, not manifest entries).
-futures-core = { workspace = true, optional = true }
+# nodes, not manifest entries). The test targets use it too: `tests/flavours.rs`
+# and the command loop's recording/violating wrapper are hand-written
+# `impl EventStore`s, which name `Stream`, so no dev-dependency line repeats
+# this one.
+futures-core = { workspace = true }
 
 [dev-dependencies]
 # Also a real dependency below, behind `json`. Declared here as well so this
@@ -92,9 +95,6 @@ serde_json = { workspace = true }
 # command loop onto a real work-stealing runtime, which is the only place the
 # `Send` flavour's bounds are actually tested rather than asserted.
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
-# Naming `Stream` is unavoidable in a hand-written `impl EventStore`, and the
-# command loop's recording/violating wrapper is one. Dev-only.
-futures-core = { workspace = true }
 # `FaultyStore`, for the retry demonstration that needs no database.
 #
 # Deliberately **not** `{ workspace = true }`, and this is NF-006 rather than an
@@ -134,30 +134,6 @@ postcard = ["dep:postcard"]
 # alpha would have shipped `json` + `postcard` and this line would be the reason
 # it did not.
 cbor = ["dep:ciborium"]
-# The typed projection runner: `Projection`, `SendProjection`, `Delivered`,
-# `run_projection`, `Progressed`, `ProjectionError`, `Chunk` and `checkpoint_id`
-# with its `InvalidCheckpointId` and `MAX_CHECKPOINT_NAME_LEN`, and the fan-out
-# runner `run_fan_out` with its `FanOut` and `ViewError`. **Off by default**, and
-# the name is still the promise — but the subject of the instability moved. Until ADR-0063 it was the port
-# beneath the runner, `happenstance-core`'s `ProjectionStore`, which is frozen
-# now and reachable here without any feature. What is moving is the runner's
-# own shape. `Projection::apply` is `async` and handed a `Delivered` event since
-# ADR-0074 was built, so a projection can await a statement on a live batch;
-# phase 18 is still settling the rest (the error type, the failure policy,
-# `Chunk`). These items make no semver promise until that is settled (#132), and
-# a reader still has to type the word `unstable` before any of them is in their
-# build.
-#
-# It no longer forwards to the contract crate: `happenstance-core`'s
-# `unstable-projection` gated nothing from ADR-0063 and was removed in `0.4.0`,
-# so a forward would not resolve — and before that it would have told a reader
-# the port is gated. `MemoryProjectionStore` needs `memory`, which
-# stays a separate switch here for the same reason it is one there — a fixture
-# is not a port.
-#
-# `dep:futures-core` is the one dependency this feature turns on. See the
-# `[dependencies]` comment above for why it adds no node to the graph.
-unstable-projection = ["dep:futures-core"]
 
 [package.metadata.docs.rs]
 all-features = true

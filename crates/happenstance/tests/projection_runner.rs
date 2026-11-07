@@ -1,16 +1,16 @@
 //! The typed projection runner, driven from **outside** the crate.
 //!
-//! Every test here runs under `--features unstable-projection,memory`: with the
-//! feature off there is nothing to test, which is AC-008's point rather than a
-//! gap. The whole target is gated at the top so a default-feature
-//! `cargo test -p happenstance` compiles it away instead of failing to build.
+//! Every test here needs `memory`, for the store, and `json`, for the codec,
+//! and both are default features: a bare `cargo test -p happenstance` runs
+//! them. The target is gated at the top on those two, as its siblings are, so
+//! a `--no-default-features` build compiles it away instead of failing.
 //!
 //! The projection store is **HS-P0010's** `MemoryProjectionStore`, reached
 //! through the facade's glob re-export. Nothing in this file implements
 //! `ProjectionStore`: writing a throwaway one here would freeze a fixture shape
 //! this project does not own (EC-009, AC-012), and `doc_surface.rs` asserts the
 //! absence.
-#![cfg(all(feature = "unstable-projection", feature = "memory", feature = "json"))]
+#![cfg(all(feature = "memory", feature = "json"))]
 // A test target may unwrap; the house style permits the local override and the
 // library code under test is held to `unwrap_used = "deny"` regardless.
 #![allow(clippy::unwrap_used)]
