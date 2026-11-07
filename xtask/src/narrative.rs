@@ -200,8 +200,8 @@ mod retry_a_command {
     #![doc = include_str!("../../docs/retry-a-command.md")]
 }
 
-// The rebuild how-to. Two fences over the port, because the runner is behind
-// `unstable-projection` and this target does not enable it. The first resets a
+// The rebuild how-to. Two fences over the port, the two trait calls a rebuild
+// is made of (an example runs them through the runner). The first resets a
 // view and commits a second at the first position, and counts what each replay
 // reads; the second has a backwards commit refused and a reset take its place.
 // A reset that stopped clearing the checkpoint, or a store that accepted the

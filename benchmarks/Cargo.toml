@@ -50,7 +50,6 @@ happenstance = { path = "../crates/happenstance", features = [
     "json",
     "cbor",
     "postcard",
-    "unstable-projection",
 ] }
 # **The real adapter, in the graph.** Every SQLite figure calls the shipped
 # `SqliteEventStore` and `SqliteProjectionStore` rather than anything written

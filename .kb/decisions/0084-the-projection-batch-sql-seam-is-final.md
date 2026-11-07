@@ -91,7 +91,7 @@ The published seam has eight entry points, not the three that phase 16 named:
 
 | Entry point | Signature today | Where |
 |---|---|---|
-| `SqliteBatch::push` | `(sql: &'static str, params: impl IntoIterator<Item = Value>)` | `crates/happenstance-sqlite/src/projection_store.rs:511-513` |
+| `SqliteBatch::push` | `(sql: &'static str, params: impl IntoIterator<Item = Value>)` | `crates/happenstance-sqlite/src/projection_store.rs:552-554` |
 | `SqliteBatch::push_raw_sql` | `(sql: impl Into<String>, params: impl IntoIterator<Item = Value>)` | `:513-522` |
 | `PendingStatement::sql` | `-> &str`, over a private `Box<str>` | `:383-393` |
 | `PostgresProjectionBatch::push` | `(sql: &'static str, params: impl IntoIterator<Item = PgParam>)` | `crates/happenstance-postgres/src/projection_store.rs:252-257` |
@@ -222,7 +222,7 @@ closes the question that ADR-0066 left inside the promise. `projection-store` is
 - **SQLite and Postgres:** no signature changes. On Postgres, a statement with a surplus value,
   which today sometimes commits, is always refused once the count check lands. Every in-tree caller already passes a literal or a `const`, in
   `examples/rebuilding-read-models/src/main.rs:1100-1123`, `:1218`, `:1356`,
-  `examples/tickets-over-http/src/lib.rs:622-630` and `examples/transfers-on-sqlite/src/main.rs:562-567`.
+  `examples/tickets-over-http/src/lib.rs:622-630` and `examples/transfers-on-sqlite/src/main.rs:564-569`.
 - **Neon:** the change is breaking.
   - `push(SqlStatement::with_params(lit, v))` becomes `push(lit, v)`.
   - A computed statement becomes `push_raw_sql(SqlStatement::…)`.

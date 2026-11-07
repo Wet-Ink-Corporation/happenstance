@@ -223,7 +223,7 @@ lifts the gate.
 
 8. **PS-28 is met at phase 18, and this record commits the shape.** PS-28 is `[FROZEN]` and was
    unmet by the typed runner at 0.3.x. `apply` returns `StoreError<Self>`, and
-   `ProjectionError::Apply` carries the store's error (`runner.rs:130`, *"two type parameters, not
+   `ProjectionError::Apply` carries the store's error (`runner.rs:158`, *"two type parameters, not
    three"*), so an application refusal has to be forged into the adapter's `#[non_exhaustive]`
    error, which is PS-28's own *Rejects*. Phase 18 builds four things:
    - `type Error` on `Projection`, bounded `From<<Self::Store as ProjectionStore>::Error>` so `batch.execute(..).await?`
@@ -243,7 +243,7 @@ lifts the gate.
 9. **PS-25 takes the derived-id remedy.** The digest-in-checkpoint alternative changes the frozen
    `commit`, so it is refused here. The runner derives the `ProjectionId` it commits under from
    the projection's name and a digest of the `Query` it derives. The typed layer already holds
-   that query (`derive_query(P::Event::EVENT_TYPES, projection.scope())`, `runner.rs:531`).
+   that query (`derive_query(P::Event::EVENT_TYPES, projection.scope())`, `runner.rs:870`).
    - **The digest.** A hand-written 64-bit FNV-1a, rendered as 16 lowercase hex digits, over the
      query's items: each item encoded canonically, the encodings sorted and deduplicated, then
      hashed. The per-item encoding must be **injective**: length-prefixed fields with a marker

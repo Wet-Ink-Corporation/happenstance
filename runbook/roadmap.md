@@ -22,9 +22,9 @@ What is not finished:
   preserves a foreign `EventId`. Phase 13.
 - **Retention** has no answer: ES-39, CF-27 and SY-32 are `[DEFERRED]`, and one
   of ADR-0028's two answers adds a method to `EventStore`. Phase 14.
-- **The typed layer's runner** is still behind `unstable-projection`:
-  `Projection::apply` is synchronous and nothing owns that question; there is no
-  failure-policy seam (PS-27) and no fan-out runner (PS-30).
+- **The typed layer's runner** was still behind `unstable-projection`, with a synchronous
+  `apply`, no failure-policy seam (PS-27) and no fan-out runner (PS-30). *Since phase 18 all
+  four are answered: no gate (#132), an async `apply` (ADR-0074), `on_error` and `run_fan_out`.*
 - **`happenstance-ladybug`** is finished and cannot publish until `lbug` builds
   on docs.rs. *Since phase 17 it is retired (ADR-0078): excluded from the
   workspace and kept as a frozen record.*

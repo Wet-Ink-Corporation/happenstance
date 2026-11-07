@@ -15,9 +15,9 @@ use std::path::Path;
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Checkpoint, Codec, CodecError, CommandError, CommandOutcome, DecisionModel, DomainEvent,
-    EventType, InvalidTag, Projection, ProjectionId, ProjectionStore, Retry, SequencePosition, Tag,
-    Tags, commit,
+    Checkpoint, Codec, CodecError, CommandError, CommandOutcome, DecisionModel, Delivered,
+    DomainEvent, EventType, InvalidTag, Projection, ProjectionId, ProjectionStore, Retry,
+    SequencePosition, Tag, Tags, commit,
 };
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
@@ -48,9 +48,9 @@ pub const ATTEMPTS: u32 = 8;
 /// How many events one projection chunk commits at a time.
 pub const CHUNK: usize = 16;
 
-/// The read model the runner maintains and the API serves, validated by the
-/// compiler: a free `const` built by `ProjectionId::from_static` is checked at
-/// `cargo check`, so an invalid id here is a build error rather than a crash.
+/// The read model's name, not its checkpoint key: the runner commits under
+/// `checkpoint_id(&SeatHolders::new())`. A `const` built by `from_static` is
+/// checked at `cargo check`, so an invalid name is a build error, not a crash.
 pub const PROJECTION: ProjectionId = ProjectionId::from_static("seat_holder");
 
 /// The read-model table this application owns.
@@ -606,6 +606,7 @@ impl SeatHolders {
 impl Projection for SeatHolders {
     type Event = Ticketing;
     type Store = SqliteProjectionStore;
+    type Error = SqliteProjectionStoreError;
 
     fn id(&self) -> &ProjectionId {
         &self.id
@@ -615,12 +616,12 @@ impl Projection for SeatHolders {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Ticketing,
+        event: Delivered<Ticketing>,
         batch: &mut SqliteBatch,
     ) -> Result<(), SqliteProjectionStoreError> {
-        match event {
+        match event.into_event() {
             Ticketing::SeatReserved { seat, patron, .. } => batch.push(
                 "INSERT INTO seat_holder (seat, patron) VALUES (?1, ?2) \
                  ON CONFLICT(seat) DO UPDATE SET patron = excluded.patron",
@@ -660,15 +661,19 @@ pub fn seat_rows(app: &Connection) -> rusqlite::Result<Vec<(String, String)>> {
 /// authoritative, so the honest answer for it is the same as for a view that
 /// has never run.
 ///
+/// `key` is the id the runner commits under,
+/// `checkpoint_id(&SeatHolders::new())`, derived once by the caller. Not
+/// [`PROJECTION`]: that is the view's name, and its row reads `NeverRun`
+/// whatever the runner did.
+///
 /// # Errors
 ///
 /// Returns the projection store's error if the checkpoint cannot be read.
 pub async fn checkpoint_through(
     models: &SqliteProjectionStore,
+    key: &ProjectionId,
 ) -> Result<Option<u64>, SqliteProjectionStoreError> {
-    let id = PROJECTION;
-
-    Ok(match models.checkpoint(&id).await? {
+    Ok(match models.checkpoint(key).await? {
         Checkpoint::Live { through } => Some(through.get()),
         // `NeverRun`, `Rebuilding`, and — `Checkpoint` being
         // `#[non_exhaustive]` — anything added upstream. Every one of them

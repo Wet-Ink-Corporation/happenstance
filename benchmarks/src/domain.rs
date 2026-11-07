@@ -38,8 +38,8 @@
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Codec, CodecError, DecisionModel, DomainEvent, EventType, InvalidTag, Projection, ProjectionId,
-    ProjectionStore, Tag, Tags,
+    Codec, CodecError, DecisionModel, Delivered, DomainEvent, EventType, InvalidTag, Projection,
+    ProjectionId, ProjectionStore, Tag, Tags,
 };
 use happenstance_core::MemoryProjectionBatch;
 use happenstance_sqlite::projection_store::SqliteProjectionStore;
@@ -201,7 +201,7 @@ static BENCH_PROJECTION: ProjectionId = ProjectionId::from_static("benchmark-tot
 /// A read model over one account, into `happenstance-sqlite`'s deferred batch.
 ///
 /// The `apply` body is one upsert, copied in shape from
-/// `examples/transfers-on-sqlite/src/main.rs:562` — a projection that did less
+/// `examples/transfers-on-sqlite/src/main.rs:564` — a projection that did less
 /// would price the runner's loop without the write it exists to perform, and
 /// one that did more would be measuring an application's SQL rather than the
 /// port's.
@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS account_total (
 impl Projection for SqliteTotals {
     type Event = Recorded;
     type Store = SqliteProjectionStore;
+    type Error = <Self::Store as ProjectionStore>::Error;
 
     fn id(&self) -> &ProjectionId {
         &BENCH_PROJECTION
@@ -247,14 +248,14 @@ impl Projection for SqliteTotals {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Self::Event,
+        event: Delivered<Self::Event>,
         batch: &mut <Self::Store as ProjectionStore>::Batch,
     ) -> Result<(), <Self::Store as ProjectionStore>::Error> {
         let Recorded::Happened {
             account, amount, ..
-        } = event;
+        } = event.into_event();
         batch.push(
             "INSERT INTO account_total (account, total) VALUES (?1, ?2) \
              ON CONFLICT(account) DO UPDATE SET total = account_total.total + excluded.total",
@@ -295,6 +296,7 @@ impl MemoryTotals {
 impl Projection for MemoryTotals {
     type Event = Recorded;
     type Store = happenstance_core::MemoryProjectionStore;
+    type Error = <Self::Store as ProjectionStore>::Error;
 
     fn id(&self) -> &ProjectionId {
         &BENCH_PROJECTION
@@ -304,14 +306,14 @@ impl Projection for MemoryTotals {
         &self.scope
     }
 
-    fn apply(
+    async fn apply(
         &mut self,
-        event: Self::Event,
+        event: Delivered<Self::Event>,
         batch: &mut MemoryProjectionBatch,
     ) -> Result<(), <Self::Store as ProjectionStore>::Error> {
         let Recorded::Happened {
             account, amount, ..
-        } = event;
+        } = event.into_event();
         batch.write(account.as_str().to_owned(), u64::from(amount));
         Ok(())
     }

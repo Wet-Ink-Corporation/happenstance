@@ -291,6 +291,9 @@ struct Declared {
 ///   `NoopFaultFixture` and this binary does not. The rule's first assertion
 ///   rejects it, so the hole is in the *demonstration* rather than in the suite,
 ///   and it is named here rather than left to be inferred from an absence.
+///   `RESET_REFUSAL`'s analogue *is* registered, as `NoopProtectFixture`
+///   (CF-43, #118): the same kind of hole, closed for that capability first
+///   because a real adapter now declares it.
 /// * **A store with a medium outside the process.** Every store here is a
 ///   `BTreeMap` behind an `Rc`, so nothing in this binary can model a defect
 ///   whose observation needs a real restart, a real connection pool or a real
@@ -733,6 +736,26 @@ const REGISTRY: &[Declared] = &[
         )],
     },
     Declared {
+        name: "NoopProtectFixture",
+        kind: Kind::Mutant,
+        fails: &["refused_reset_changes_nothing"],
+        provenance: "a fixture whose store has a protection API, which declares \
+                     `RESET_REFUSAL` supported and writes `protect_from_reset` as an EMPTY BODY \
+                     meaning to fill it in, or protects through a cache local to one handle that \
+                     the rule's writer never reads. The store is correct. Not a forgotten \
+                     override — that reaches the trait's provided body, which panics. The \
+                     rule's first assertion is what rejects it: a store nobody protected answers \
+                     `Ok`. CF-43 names it",
+        mode: FailureMode::Assertion,
+        // Pinned at the first assertion, for `RefusalAsSuccessStore`'s reason:
+        // an unprotected store is caught by answering `Ok`, and a failure at a
+        // state assertion would certify something this provenance does not say.
+        expect: &[(
+            "refused_reset_changes_nothing",
+            "must answer `Err(ResetError::Refused)`",
+        )],
+    },
+    Declared {
         name: "PresumedLiveCheckpointStore",
         kind: Kind::Mutant,
         // Two rules from one `unwrap_or` argument, and the second is not
@@ -1015,6 +1038,7 @@ macro_rules! for_each_projection_mutant {
             crate::correct::MutantFixture<crate::mutants::CommitAtFirstResetStore>,
             crate::correct::MutantFixture<crate::mutants::RefusalAsSuccessStore>,
             crate::correct::MutantFixture<crate::mutants::RefusalAfterTheFactStore>,
+            crate::mutants::NoopProtectFixture,
             crate::correct::MutantFixture<crate::mutants::PresumedLiveCheckpointStore>,
 
             crate::correct::MutantFixture<crate::mutants::CommittedReadBatchStore>,
