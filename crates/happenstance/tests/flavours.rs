@@ -876,3 +876,121 @@ fn chunk_is_a_plain_value_a_spawned_runner_can_own() {
     fn assert_plain<T: Copy + Send + Sync + 'static>() {}
     assert_plain::<happenstance::Chunk>();
 }
+
+/// `run_fan_out` inside `tokio::spawn`, from code generic over the
+/// projection and its store, with exactly the bounds `run_fan_out`'s page
+/// documents (#112). A reviewer diffs this `where` clause against that page
+/// and against [`spawns_a_projection_generic_over_its_type`]'s.
+///
+/// The list is `run_projection`'s plus `St::Error: Send`: a stopped view's
+/// `ViewError` holds the store's error while the other views' awaits run.
+/// At #112 each of `S::Error: Send`, `Event: Send`, `P::Error: Sync`,
+/// `Batch: Send`, `St::Error: Send`, `S: Sync` and `St: Sync` was removed
+/// once, and each removal is `E0277`. `Store = St` is `run_projection`'s,
+/// for the reason given above. `P: Sync` is not asked: the runner derives
+/// every view's key before its first await, so no `&P` crosses one.
+#[cfg(feature = "unstable-projection")]
+fn spawns_a_fan_out_generic_over_its_type<S, P, St>(
+    events: Arc<S>,
+    models: Arc<St>,
+    mut views: Vec<P>,
+) -> tokio::task::JoinHandle<(Vec<P>, usize)>
+where
+    S: happenstance::SendEventStore<Error: Send> + Sync + 'static,
+    P: happenstance::SendProjection<Store = St, Event: Send, Error: Send + Sync> + 'static,
+    St: happenstance::SendProjectionStore<Batch: Send, Error: Send> + Sync + 'static,
+{
+    tokio::spawn(async move {
+        let chunk =
+            happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
+        let ran = happenstance::run_fan_out(&*events, &*models, &mut views, &Json, chunk).await;
+        // Collapsed to a count inside the task, as above, so every bound is
+        // the runner's and none is the `JoinHandle`'s.
+        let applied = ran
+            .views
+            .iter()
+            .map(|outcome| outcome.as_ref().map_or(0, |progressed| progressed.applied))
+            .sum();
+        (views, applied)
+    })
+}
+
+#[cfg(feature = "unstable-projection")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_fan_out_spawns_from_code_generic_over_the_projection() {
+    use happenstance::{MemoryProjectionStore, ProjectionId};
+
+    let events = Arc::new(MemoryEventStore::new());
+    let _seeded = commit_with(&*events, seats(), &Json, Retry::once(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Subscribed {
+            student: "s1".to_owned(),
+        }])
+    })
+    .await
+    .expect("an uncontended commit");
+
+    let models = Arc::new(MemoryProjectionStore::new());
+    let view = |name: &'static str| Enrolments {
+        id: ProjectionId::from_static(name),
+        scope: course_tags(),
+        count: 0,
+    };
+
+    let (returned, applied) = spawns_a_fan_out_generic_over_its_type(
+        Arc::clone(&events),
+        Arc::clone(&models),
+        vec![view("enrolments"), view("roster")],
+    )
+    .await
+    .expect("the spawned task did not panic");
+
+    assert_eq!(applied, 2, "one event, two views");
+    assert!(
+        returned.iter().all(|view| view.count == 1),
+        "the views came back with their state"
+    );
+}
+
+/// `run_fan_out` binds the bare flavours, so a `!Send` projection over a
+/// `!Send` store fans out on one thread: the same guarantee
+/// [`a_not_send_projection_runs_through_the_bare_flavour`] holds for
+/// `run_projection`.
+#[cfg(feature = "unstable-projection")]
+#[tokio::test]
+async fn run_fan_out_binds_the_weak_flavour() {
+    use core::marker::PhantomData;
+    use core::num::NonZeroUsize;
+
+    use happenstance::{MemoryProjectionStore, ProjectionId};
+    use send_probe::{NotSend as _, Probe};
+
+    assert!(
+        !Probe::<LocalEnrolments>(PhantomData).is_send(),
+        "the projection under test must not be `Send`, or this proves nothing"
+    );
+
+    let store = LocalStore::new();
+    let _seeded = commit_with(&store, seats(), &Json, Retry::once(), |_: &Seats| {
+        Ok::<_, Infallible>(vec![Subscribed {
+            student: "s1".to_owned(),
+        }])
+    })
+    .await
+    .expect("an uncontended commit against a !Send store");
+
+    let count = Rc::new(core::cell::Cell::new(0));
+    let view = |name: &'static str| LocalEnrolments {
+        id: ProjectionId::from_static(name),
+        scope: course_tags(),
+        count: Rc::clone(&count),
+    };
+    let mut views = [view("enrolments"), view("roster")];
+    let models = MemoryProjectionStore::new();
+    let chunk = happenstance::Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
+
+    let ran = happenstance::run_fan_out(&store, &models, &mut views, &Json, chunk).await;
+
+    assert!(ran.read.is_none(), "the !Send store's read did not fail");
+    assert!(ran.views.iter().all(Result::is_ok), "{:?}", ran.views);
+    assert_eq!(count.get(), 2, "one event, two views sharing one count");
+}

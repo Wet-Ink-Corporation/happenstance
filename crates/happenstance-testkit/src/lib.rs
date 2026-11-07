@@ -393,29 +393,29 @@
 //!
 //! # Stores that misbehave on purpose
 //!
-//! The suite above checks an adapter. These three check the **caller**, and
+//! The suite above checks an adapter. These four check the **caller**, and
 //! they exist because every store an application author can reach today
 //! behaves perfectly: the reference store names the conflicting event on every
-//! violation and assigns dense positions from 1, so two whole classes of caller
-//! bug are not merely hard to test — the input that separates a correct caller
-//! from an incorrect one never occurs in-process at all.
+//! violation and assigns dense positions from 1, and never tells a rollback
+//! from a drop, so whole classes of caller bug are not merely hard to test —
+//! the input that separates a correct caller from an incorrect one never occurs.
 //!
 //! | Instrument | Produces | Rejects |
 //! |---|---|---|
 //! | [`FaultyStore`] / [`SendFaultyStore`] | a violated append naming **no** conflicting event, and a read that fails at its first polled item | a retry loop that branches on `conflicting_position` being `Some` |
 //! | `GappyMemoryStore` (`memory`) | positions with a caller-chosen stride | a read-model handler that computes its next position by adding one |
+//! | `RecordingProjectionStore` (`memory`) | a log that tells a rollback from a bare drop, and injected `begin` and commit failures | a projection runner that drops a write set bare, or ends it after another view commits |
 //!
-//! Both wrappers come in two flavours and are two *types* rather than one, for
-//! the coherence reason [`Fixture`]'s own page records. Both new stores run the
-//! conformance suite themselves — the wrapper unarmed, so a disarmed fixture is
-//! proved not to be lying about ordering or positions, and the gapped store
-//! with its stride, so its gaps are proved to be the freedom the specification
-//! grants rather than a defect.
+//! The faulty wrapper comes in two flavours, two *types* rather than one, for
+//! the coherence reason [`Fixture`]'s own page records; the recording store is
+//! bare only, its page says why. All three run their port's conformance suite
+//! themselves — the faulty and recording wrappers unarmed, so a disarmed one is
+//! proved not to be lying, and the gapped store with its stride, so its gaps
+//! are proved to be the freedom the specification grants rather than a defect.
 //!
-//! `GappyMemoryStore` is named in plain text here rather than linked because
-//! it is gated on the `memory` feature, and an intra-doc link that resolves in
-//! only some configurations is a hard rustdoc error. Its own page carries the
-//! `doc_cfg` badge that says so.
+//! The two `memory` stores are named in plain text, not linked: a link to an
+//! item behind a feature resolves in only some configurations, a hard rustdoc
+//! error. Each page carries the `doc_cfg` badge that says so.
 //!
 //! # Which flavour to test
 //!
@@ -828,3 +828,12 @@ pub mod __private {
     pub use crate::model::rules as model_rules;
     pub use crate::projection::rules as projection_rules;
 }
+
+// The runner-test instrument (#112), gated on `memory` like `gappy` because it
+// wraps the memory projection store. Declared here, at the end, rather than
+// beside `faulty`, so that no `lib.rs:N` citation above it moves.
+#[cfg(feature = "memory")]
+mod recording;
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+pub use recording::{BatchCall, RecordingBatch, RecordingProjectionStore, RecordingStoreError};

@@ -21,9 +21,9 @@ use crate::domain::DomainEvent;
 use crate::policy::{ApplyFailure, Policy};
 
 /// The adapter error of whatever store a projection writes into.
-type StoreError<P> = <<P as Projection>::Store as ProjectionStore>::Error;
+pub(crate) type StoreError<P> = <<P as Projection>::Store as ProjectionStore>::Error;
 /// The write set a projection's `apply` writes into.
-type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
+pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
 
 /// A read model an application builds from its own decoded events.
 ///
@@ -667,11 +667,11 @@ where
 ///
 /// # One projection per call
 ///
-/// There is no fan-out over N projections, because the write set is **owned**:
-/// it cannot be shared between tasks, and a runner that moved it into a
-/// `tokio::spawn` would need it to be `'static` and `Send`, neither of which an
-/// adapter holding a live transaction can promise. N read models therefore cost
-/// N independent reads.
+/// [`run_fan_out`](crate::run_fan_out) drives N views over one read; this
+/// drives one, and N of these cost N reads. Both hold one **owned** write set
+/// per view and spawn nothing: a set moved into a `tokio::spawn` would have to
+/// be `'static` and `Send`, which a live transaction cannot promise. One task
+/// per view through this call is what contains a panic in one of them.
 ///
 /// # Rebuilding
 ///
@@ -974,9 +974,7 @@ where
             .commit(batch, &key, last, Authority::Live)
             .await
             .map_err(|source| ProjectionError::Commit { progress, source })?;
-        progress.through = Some(last);
-        progress.applied += tally.applied;
-        progress.skipped += tally.skipped;
+        tally.credit(&mut progress, last);
 
         if exhausted {
             return Ok(progress);
@@ -986,7 +984,7 @@ where
 
 /// What became of one event the chunk took.
 #[derive(Clone, Copy)]
-enum Took {
+pub(crate) enum Took {
     Applied,
     Skipped,
 }
@@ -996,13 +994,13 @@ enum Took {
 /// Both counts are bounded by `chunk`, a `usize`, so `+= 1` cannot overflow
 /// before the window closes.
 #[derive(Default)]
-struct Tally {
+pub(crate) struct Tally {
     applied: usize,
     skipped: usize,
 }
 
 impl Tally {
-    fn took(&mut self, took: Took) {
+    pub(crate) fn took(&mut self, took: Took) {
         match took {
             Took::Applied => self.applied += 1,
             Took::Skipped => self.skipped += 1,
@@ -1010,8 +1008,18 @@ impl Tally {
     }
 
     /// The window: every event the chunk took, applied or skipped.
-    const fn len(&self) -> usize {
+    pub(crate) const fn len(&self) -> usize {
         self.applied + self.skipped
+    }
+
+    /// Moves `progress` past a committed chunk whose last event is `last`.
+    ///
+    /// Called only once the commit succeeded: events in a chunk that did not
+    /// commit are not counted, because no reader can observe them.
+    pub(crate) fn credit(&self, progress: &mut Progressed, last: SequencePosition) {
+        progress.through = Some(last);
+        progress.applied += self.applied;
+        progress.skipped += self.skipped;
     }
 }
 
@@ -1020,7 +1028,7 @@ impl Tally {
 /// Split out so the chunk loop reads as a loop. A decode or apply failure is
 /// offered to [`Projection::on_error`] with the same batch, before anything
 /// is rolled back; its answer decides whether the chunk carries on.
-async fn apply_one<P, C, R>(
+pub(crate) async fn apply_one<P, C, R>(
     projection: &mut P,
     codec: &C,
     event: &SequencedEvent,
@@ -1087,7 +1095,7 @@ fn settle<R, A>(
 /// `A` is the projection's error; the store's `W` appears only on `into_error`,
 /// because no stop ever holds one and a type parameter would put it in the
 /// runner's state machine for nothing.
-enum Stopped<R, A> {
+pub(crate) enum Stopped<R, A> {
     Read(R),
     Decode {
         position: SequencePosition,
@@ -1109,7 +1117,11 @@ where
     A: core::error::Error + 'static,
 {
     /// Attaches the run's partial progress and whatever the rollback said.
-    fn into_error<W>(self, progress: Progressed, rollback: Option<W>) -> ProjectionError<R, W, A>
+    pub(crate) fn into_error<W>(
+        self,
+        progress: Progressed,
+        rollback: Option<W>,
+    ) -> ProjectionError<R, W, A>
     where
         W: core::error::Error + 'static,
     {
@@ -1146,7 +1158,7 @@ where
 /// Hand-written rather than pulling in `futures-util` for its `next`: one
 /// `poll_fn` is the whole of it, and a crate's dependency graph is part of its
 /// semver surface.
-async fn next_event<S, T, E>(mut stream: Pin<&mut S>) -> Option<Result<T, E>>
+pub(crate) async fn next_event<S, T, E>(mut stream: Pin<&mut S>) -> Option<Result<T, E>>
 where
     S: Stream<Item = Result<T, E>>,
 {
@@ -1159,7 +1171,7 @@ where
 /// means the replay starts at the beginning of what the query selects. A
 /// rebuild in flight resumes exactly like a live projection — this runner does
 /// not serve rows, so it has no reason to treat the two differently.
-const fn considered_through(checkpoint: Checkpoint) -> Option<SequencePosition> {
+pub(crate) const fn considered_through(checkpoint: Checkpoint) -> Option<SequencePosition> {
     match checkpoint {
         Checkpoint::Live { through } | Checkpoint::Rebuilding { through } => Some(through),
         // `NeverRun`, and whatever `#[non_exhaustive]` adds later: a state this

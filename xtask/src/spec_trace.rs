@@ -1326,7 +1326,7 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 66] = [
     (
         "PS-26",
         "failure_policy_is_per_projection",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/rules.rs"),
     ),
     (
         "PS-27",
@@ -1341,12 +1341,12 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 66] = [
     (
         "PS-29",
         "one_poisoned_projection_does_not_stall_the_others",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/rules.rs"),
     ),
     (
         "PS-30",
         "panicking_apply_rolls_back",
-        Unresolvable::Scheduled("the projection runner's own rules"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/rules.rs"),
     ),
 ];
 
@@ -1543,9 +1543,9 @@ const CF36_UNDISCHARGED: [(&str, &str); 13] = [
     (
         "PS-29",
         "names `one_poisoned_projection_does_not_stall_the_others` against E2E-28, which is \
-         the integration-level case of the same name. The rule is unwritten \
-         (`UNRESOLVABLE_RULE_NAMES`), so whether it can be single-store is open until the \
-         projection runner lands",
+         the integration-level case of the same name. The rule exists since #112, beside \
+         the fan-out runner in `crates/happenstance/tests/fan_out/rules.rs`, and needs a \
+         runner, so no contract-level case can carry it",
     ),
     ("PS-30", "the same shape as PS-29, against the same case"),
     (

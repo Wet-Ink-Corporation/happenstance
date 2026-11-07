@@ -118,6 +118,9 @@ renews them with the disposition phase 16 gave.
       Over an async `apply`, `panicking_apply_rolls_back` needs `catch_unwind`
       around **each poll**, not around the call — a hand-written `poll_fn`
       wrapper, since the runner avoids `futures-util` (ADR-0074 decision 11).
+      **Built 2026-11-07** as `happenstance::run_fan_out`, catching nothing by the
+      owner's call (ADR-0101, proposed), with PS-26/29/30's rules. Still open: the
+      `experiments/polling-cost` fan-out pass, so the box stays unticked.
 - [ ] #115 · **Optional: a foreign-`rollback` clause.** ADR-0075 left `rollback` outside
       PS-15's MUST, and the specification's sentence about it is non-normative. If
       this phase makes it normative, it does so as a new clause with its rule
@@ -360,3 +363,25 @@ PS-30 each with a rule and a mutant that fails it.
   a helper stays an additive option.** PS-9 is `[FROZEN]` and its text is not edited
   (O2(b)): its narrative still says the savepoint pattern "has not been run", and
   updating that evidence to name the test above is left for #127's reconcile.
+- 2026-11-07 — #112: `happenstance::run_fan_out`, with `FanOut` and `ViewError`, drives
+  N views of one projection type from one read. Each view keeps its own chunk window,
+  opens its write set lazily and decodes for itself, so it ends with the rows,
+  checkpoint and `Progressed` `run_projection` alone would give it; an exhaustive
+  sweep (chunk 1–5 × poison position × policy, three views) holds that, and
+  `skip_and_record_holds`' leg B runs unchanged through a one-view fan-out. A view's
+  failure stops it alone, as `ViewError::Stopped`, and a failed read stops every
+  running view once, in `FanOut::read`. Two calls are **the owner's**, each made on a
+  card: **O1 = B, "Catch nothing"** (Ryan, 2026-11-07 04:38Z), so a panic unwinds out
+  of the call and the dropped write sets roll back; ADR-0101 records it as
+  `proposed` and reads ADR-0074 decision 11 as binding only a catching runner. And
+  **(A) for AC-012** (Ryan, 04:58Z): `no_local_projection_store` refused a local
+  recording store, so the instrument is `happenstance-testkit`'s new
+  `RecordingProjectionStore`, a public fixture beside `FaultyStore`, and the test is
+  unchanged. PS-30's rule fails three catching runners; PS-26's fails one that asks
+  the first view's policy for all; PS-29's (O3) fails one that stops every view.
+  A spawned fan-out asks `run_projection`'s bounds plus `St::Error: Send`, measured;
+  setup derives every key before its first await, so `P: Sync` is not asked. Spec
+  hunks are line-neutral, no FROZEN MUST moved, and PS-30 stays `[DEFERRED]` for
+  #127. PS-38 is exercised by `fan_out_resumes_each_view_from_its_own_checkpoint`
+  (N ids on one handle). Not done: the `experiments/polling-cost` fan-out passes
+  002/003, left for a follow-up.
