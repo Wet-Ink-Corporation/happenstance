@@ -2248,6 +2248,26 @@ mod tests {
     /// feature went, a rule no implementation could fail. The inverted form
     /// fails the plausible wrong removal: deleting the gated modules with
     /// their gate, or re-gating them on another feature.
+    /// For every line of `source` that starts with `item`, the nearest line
+    /// above it that is neither blank nor a `//` comment: where an attribute
+    /// on that item would sit.
+    fn attributes_above(source: &str, item: &str) -> Vec<String> {
+        let lines: Vec<&str> = source.lines().collect();
+        lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line.starts_with(item))
+            .filter_map(|(at, _)| {
+                lines[..at]
+                    .iter()
+                    .rev()
+                    .map(|line| line.trim())
+                    .find(|line| !line.is_empty() && !line.starts_with("//"))
+                    .map(str::to_owned)
+            })
+            .collect()
+    }
+
     #[test]
     fn the_runner_is_mounted_unconditionally() {
         let lib = read("crates/happenstance/src/lib.rs");
@@ -2274,6 +2294,18 @@ mod tests {
                 lib.contains(&format!("\nmod {module};")),
                 "`mod {module};` is not mounted unconditionally at the crate root"
             );
+            // Any feature, not only the removed one: `#[cfg(feature =
+            // "memory")]` above `mod runner;` passes every check above.
+            for item in [format!("mod {module};"), format!("pub use {module}::")] {
+                for attribute in attributes_above(&lib, &item) {
+                    assert!(
+                        !attribute.starts_with("#[cfg"),
+                        "`{item}` is gated by `{attribute}`; the runner has been in \
+                         every build since `0.5.0` (D6), and re-gating it on any \
+                         feature is a decision, not a line edit"
+                    );
+                }
+            }
         }
         assert!(
             lib.contains("\npub use runner::{"),

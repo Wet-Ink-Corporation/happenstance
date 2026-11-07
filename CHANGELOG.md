@@ -242,7 +242,9 @@ not the same as what a user needed to be told.
   whatever features you choose. **If your manifest names
   `happenstance/unstable-projection`, or puts `"unstable-projection"` in
   `happenstance`'s `features`, delete it** — Cargo now refuses to resolve it,
-  and nothing you use changes when it goes. If you relied on
+  and nothing you use changes when it goes. A script or CI job that passes
+  `--features unstable-projection` (or `happenstance/unstable-projection`) to
+  `cargo` fails the same way; drop the flag. If you relied on
   `default-features = false` to keep the runner out of your build, it is in it
   now. It adds no dependency: `futures-core`, the one crate it named, was
   already in your graph through `happenstance-core`. From `0.5.0` the runner is
