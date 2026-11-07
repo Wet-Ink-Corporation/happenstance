@@ -11,9 +11,9 @@
 //!
 //! # Why only the bare flavour
 //!
-//! The store and every write set it opens append to one log, so the log is
-//! shared and mutated from several owners. `Rc<RefCell<_>>` is that sharing
-//! on one thread, which is all a runner's test needs. A `Send` twin would
+//! Every handle onto the store and every write set it opens append to one
+//! log, so the log is shared and mutated from several owners. An `Rc` over
+//! cells is that sharing on one thread, which is all a runner's test needs. A `Send` twin would
 //! need a lock for a log no two threads ever write, so there is none: the
 //! store implements `ProjectionStore` and not `SendProjectionStore`.
 
@@ -23,7 +23,8 @@ use std::rc::Rc;
 
 use happenstance_core::{
     Authority, Checkpoint, CommitError, MemoryProjectionBatch, MemoryProjectionStore,
-    MemoryProjectionStoreError, ProjectionId, ProjectionStore, ResetError, SequencePosition,
+    MemoryProjectionStoreError, ProjectionId, ProjectionProbe, ProjectionStore, ResetError,
+    SequencePosition,
 };
 
 /// One thing that happened to a write set, by the serial `begin` gave it.
@@ -129,6 +130,13 @@ impl From<MemoryProjectionStoreError> for RecordingStoreError {
 /// [`BatchCall::Commit`] and discards its write set, as a store whose commit
 /// failed would.
 ///
+/// # Handles
+///
+/// A clone is a second handle onto the **same** rows, checkpoints and log,
+/// as two connections onto one database are, with the same injected
+/// failures. That is what lets the projection suite run over it, unarmed
+/// (`tests/recording_store_conformance.rs`).
+///
 /// # Example
 ///
 /// ```
@@ -161,16 +169,29 @@ impl From<MemoryProjectionStoreError> for RecordingStoreError {
 /// );
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RecordingProjectionStore {
-    inner: MemoryProjectionStore,
-    // Shared with every write set this store opens, each of which appends
-    // its own end to it; one thread, so `Rc<RefCell<_>>` (module docs).
-    log: Rc<RefCell<Vec<BatchCall>>>,
-    serials: Cell<u64>,
-    begins: Cell<usize>,
+    // Shared by every handle and every write set they open: each appends to
+    // the one log, and handles count `begin`s together. One thread, so `Rc`
+    // and cells rather than an `Arc` and a lock (module docs).
+    shared: Rc<Shared>,
     fail_begin: Option<usize>,
     fail_commit: Option<ProjectionId>,
+}
+
+/// What every handle onto one recording store shares.
+#[derive(Debug, Default)]
+struct Shared {
+    inner: MemoryProjectionStore,
+    log: RefCell<Vec<BatchCall>>,
+    serials: Cell<u64>,
+    begins: Cell<usize>,
+}
+
+impl Shared {
+    fn record(&self, call: BatchCall) {
+        self.log.borrow_mut().push(call);
+    }
 }
 
 impl RecordingProjectionStore {
@@ -207,29 +228,25 @@ impl RecordingProjectionStore {
     #[must_use]
     pub fn calls(&self) -> Vec<BatchCall> {
         // A real duplicate, for the reason above; each item is `Copy`.
-        self.log.borrow().clone()
+        self.shared.log.borrow().clone()
     }
 
     /// The committed value under `key`, if any.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<u64> {
-        self.inner.get(key)
+        self.shared.inner.get(key)
     }
 
     /// Every committed row.
     #[must_use]
     pub fn snapshot(&self) -> BTreeMap<String, u64> {
-        self.inner.snapshot()
+        self.shared.inner.snapshot()
     }
 
     /// Whether no row is committed.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-
-    fn record(&self, call: BatchCall) {
-        self.log.borrow_mut().push(call);
+        self.shared.inner.is_empty()
     }
 }
 
@@ -261,9 +278,8 @@ impl RecordingBatch {
     /// write set open", so it can assert what happened after it.
     pub fn mark(&self) {
         self.guard
-            .log
-            .borrow_mut()
-            .push(BatchCall::Marked(self.guard.serial));
+            .shared
+            .record(BatchCall::Marked(self.guard.serial));
     }
 
     /// Logs `call` and hands back the memory write set it ended.
@@ -281,14 +297,14 @@ impl RecordingBatch {
 #[derive(Debug)]
 struct EndGuard {
     serial: u64,
-    // The store's log, shared so this guard can append from `Drop`.
-    log: Rc<RefCell<Vec<BatchCall>>>,
+    // The opening store's state, shared so this guard can log from `Drop`.
+    shared: Rc<Shared>,
     armed: bool,
 }
 
 impl EndGuard {
     fn disarm(&mut self, call: BatchCall) {
-        self.log.borrow_mut().push(call);
+        self.shared.record(call);
         self.armed = false;
     }
 }
@@ -296,7 +312,7 @@ impl EndGuard {
 impl Drop for EndGuard {
     fn drop(&mut self) {
         if self.armed {
-            self.log.borrow_mut().push(BatchCall::Dropped(self.serial));
+            self.shared.record(BatchCall::Dropped(self.serial));
         }
     }
 }
@@ -306,28 +322,29 @@ impl ProjectionStore for RecordingProjectionStore {
     type Batch = RecordingBatch;
 
     async fn begin(&self) -> Result<RecordingBatch, RecordingStoreError> {
-        let nth = self.begins.get();
-        self.begins.set(nth.saturating_add(1));
+        let shared = &self.shared;
+        let nth = shared.begins.get();
+        shared.begins.set(nth.saturating_add(1));
         if self.fail_begin == Some(nth) {
             return Err(RecordingStoreError::Injected);
         }
-        let serial = self.serials.get();
-        self.serials.set(serial.saturating_add(1));
-        let inner = ProjectionStore::begin(&self.inner).await?;
-        self.record(BatchCall::Begin(serial));
+        let serial = shared.serials.get();
+        shared.serials.set(serial.saturating_add(1));
+        let inner = ProjectionStore::begin(&shared.inner).await?;
+        shared.record(BatchCall::Begin(serial));
         Ok(RecordingBatch {
             inner,
             guard: EndGuard {
                 serial,
-                // A second handle onto the one log, not a copy of it.
-                log: Rc::clone(&self.log),
+                // A second handle onto the one state, not a copy of it.
+                shared: Rc::clone(shared),
                 armed: true,
             },
         })
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, RecordingStoreError> {
-        Ok(ProjectionStore::checkpoint(&self.inner, id).await?)
+        Ok(ProjectionStore::checkpoint(&self.shared.inner, id).await?)
     }
 
     async fn commit(
@@ -343,7 +360,7 @@ impl ProjectionStore for RecordingProjectionStore {
             drop(inner);
             return Err(CommitError::Store(RecordingStoreError::Injected));
         }
-        ProjectionStore::commit(&self.inner, inner, id, position, authority)
+        ProjectionStore::commit(&self.shared.inner, inner, id, position, authority)
             .await
             .map_err(|error| match error {
                 CommitError::ForeignBatch => CommitError::ForeignBatch,
@@ -361,7 +378,7 @@ impl ProjectionStore for RecordingProjectionStore {
     ) -> Result<(), ResetError<RecordingStoreError>> {
         let serial = batch.serial();
         let inner = batch.end(BatchCall::Reset(serial));
-        ProjectionStore::reset(&self.inner, inner, id)
+        ProjectionStore::reset(&self.shared.inner, inner, id)
             .await
             .map_err(|error| match error {
                 ResetError::ForeignBatch => ResetError::ForeignBatch,
@@ -373,6 +390,41 @@ impl ProjectionStore for RecordingProjectionStore {
     async fn rollback(&self, batch: RecordingBatch) -> Result<(), RecordingStoreError> {
         let serial = batch.serial();
         let inner = batch.end(BatchCall::Rollback(serial));
-        Ok(ProjectionStore::rollback(&self.inner, inner).await?)
+        Ok(ProjectionStore::rollback(&self.shared.inner, inner).await?)
+    }
+}
+
+/// The probe the projection suite drives, delegated to the memory store
+/// beneath, so the suite can run over an unarmed recording store.
+impl ProjectionProbe for RecordingProjectionStore {
+    /// `true`, as for the memory store this wraps: it applies on write.
+    const READS_THROUGH_BATCH: bool = true;
+
+    async fn probe_write(
+        &self,
+        batch: &mut RecordingBatch,
+        key: &str,
+        value: u64,
+    ) -> Result<(), RecordingStoreError> {
+        Ok(ProjectionProbe::probe_write(&self.shared.inner, &mut batch.inner, key, value).await?)
+    }
+
+    async fn probe_delete_all(
+        &self,
+        batch: &mut RecordingBatch,
+    ) -> Result<(), RecordingStoreError> {
+        Ok(ProjectionProbe::probe_delete_all(&self.shared.inner, &mut batch.inner).await?)
+    }
+
+    async fn probe_read(&self, key: &str) -> Result<Option<u64>, RecordingStoreError> {
+        Ok(ProjectionProbe::probe_read(&self.shared.inner, key).await?)
+    }
+
+    async fn probe_read_through(
+        &self,
+        batch: &mut RecordingBatch,
+        key: &str,
+    ) -> Result<Option<u64>, RecordingStoreError> {
+        Ok(ProjectionProbe::probe_read_through(&self.shared.inner, &mut batch.inner, key).await?)
     }
 }

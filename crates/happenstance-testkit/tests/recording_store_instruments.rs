@@ -39,6 +39,28 @@ fn a_rollback_and_a_bare_drop_are_logged_apart() {
 }
 
 #[test]
+fn a_clone_is_a_second_handle_onto_one_store_and_log() {
+    let store = RecordingProjectionStore::new();
+    // The subject: a clone is a handle, so it must share, not copy.
+    let handle = store.clone();
+    let id = ProjectionId::from_static("shared");
+    block_on(async {
+        let mut batch = handle.begin().await.expect("the memory store opens");
+        batch.write("shared", 1);
+        handle
+            .commit(batch, &id, at(1), Authority::Live)
+            .await
+            .expect("the memory store commits");
+    });
+    assert_eq!(
+        store.get("shared"),
+        Some(1),
+        "the clone's commit is the store's"
+    );
+    assert_eq!(store.calls(), [BatchCall::Begin(0), BatchCall::Commit(0)]);
+}
+
+#[test]
 fn a_mark_lands_between_the_calls_around_it() {
     let store = RecordingProjectionStore::new();
     let id = ProjectionId::from_static("marked");
