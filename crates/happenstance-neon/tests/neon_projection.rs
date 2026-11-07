@@ -25,7 +25,7 @@
 //!
 //! # What this adapter reports rather than passes
 //!
-//! **Three rules, all of them here, and none of them a gap.** This is the whole
+//! **Three rules, all of them here: one a gap in scope (#406), two forced.** This is the whole
 //! of the crate's capability skip list.
 //!
 //! * `refused_reset_changes_nothing`, because `RESET_REFUSAL` is declined — the
@@ -203,6 +203,11 @@ fn capability_constants_are_answered_not_defaulted() {
         "a declension must be about THIS store. CF-18's finding is a reason inherited \
          from the testkit's own words, and a reason copied from the adapter next door is \
          the same defect with a different source: {reason}"
+    );
+    assert!(
+        !reason.contains("  ") && !reason.contains('\n'),
+        "a string literal that loses a `\\` continuation prints with a hole in it, which \
+         happened to the live Postgres fixture's reason: {reason:?}"
     );
     assert_ne!(
         Some(reason),

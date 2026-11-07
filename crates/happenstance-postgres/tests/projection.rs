@@ -35,7 +35,7 @@
 //!
 //! # What this adapter reports rather than passes
 //!
-//! Two rules are **reported skips**, and neither is a gap:
+//! Two rules are **reported skips**: one is a gap in scope (#406), and one is forced:
 //!
 //! * `refused_reset_changes_nothing`, because `RESET_REFUSAL` is declined — the
 //!   store has no call that marks a projection protected. That is scope, not a
@@ -518,10 +518,10 @@ async fn the_placeholder_scan_agrees_with_the_server() {
 ///
 /// The live store's reason once lost the `\` line continuations of its string
 /// literal, so `--show-output` printed it with ten-space holes in the middle.
-/// The compiler accepts that, so only reading the constant finds it. The store
-/// names are CF-18's half: a reason copied between two stores is the
-/// declension-by-inheritance that clause forbids. Opens no connection, so it is
-/// not `#[ignore]`d.
+/// The compiler accepts that, so only reading the constant finds it. Each
+/// reason must also open with its own store's name, so that a reason moved to
+/// the wrong fixture fails here. Opens no connection, so it is not
+/// `#[ignore]`d.
 #[test]
 fn reset_refusal_reasons_name_their_store_and_hold_no_whitespace_runs() {
     use happenstance_testkit::ProjectionFixture;
