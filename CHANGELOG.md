@@ -111,7 +111,7 @@ not the same as what a user needed to be told.
   transaction, and the crate's live tests now run one against a server. The
   buffered `PostgresProjectionStore` stays the default: the live store holds a
   pooled connection for each chunk, and one statement the server refuses
-  aborts its transaction at once, with no savepoint to recover it yet (#103).
+  aborts its transaction unless `apply` rolls back to a savepoint it set (#103).
 
 ### Added
 
@@ -164,7 +164,10 @@ not the same as what a user needed to be told.
   (SY-21). Under `Skip`, a record `on_error` writes into the batch commits with
   the checkpoint that moves past the event, or not at all, and the skipped
   event counts toward `chunk`. A failing `on_error` stops the run with
-  `ProjectionError::Policy`.
+  `ProjectionError::Policy`. Over a batch that is a live transaction, a
+  statement the server refuses aborts it, so `Skip` needs a savepoint that
+  `apply` sets and rolls back to; the runner sets none, and `Policy::Skip`'s
+  page says how (#103).
 - `happenstance` (behind `unstable-projection`): `ConvergentProjection`, the
   convergence declaration SY-20 needs (#123). A marker trait a projection of
   either flavour implements to say that its read model does not depend on
