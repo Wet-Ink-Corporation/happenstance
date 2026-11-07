@@ -30,7 +30,7 @@
 //! connection too. ES-11 is about the transport; this is about the server.
 //!
 //! **What a dropped `append` future does here is answered in
-//! [`event_store`]'s `# Cancellation` section**, which ES-23 obliges this
+//! `event_store`'s `# Cancellation` section** (unlinked: it needs `event-store`), which ES-23 obliges this
 //! adapter to carry. The short version: it MAY already have committed, and this
 //! crate owns no client that could tell you.
 //!
