@@ -369,8 +369,11 @@ calls it when an event fails to decode or to apply, and it answers a `Policy`:
 `Halt`, so a run stops on a failure exactly as it did in 0.4, at the same
 position, with the same checkpoint and the same `ProjectionError` arm. `Progressed` gains a `skipped` count.
 
-**What to change.** Nothing, unless your projection already has a method named
-`on_error`, which now collides with the provided one. Rename yours.
+**What to change.** Nothing. An inherent method named `on_error` on your type
+does not collide, and the runner never calls it. If another trait in scope also
+provides an `on_error`, a call `x.on_error(..)` in your own code becomes
+ambiguous (`E0034`); spell it `Projection::on_error(&mut x, ..)` or name the
+other trait.
 
 ### Code that spawns a generic projection's run implements `SendProjection` **[H10]**
 
