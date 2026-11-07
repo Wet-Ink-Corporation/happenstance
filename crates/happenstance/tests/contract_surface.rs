@@ -5,12 +5,12 @@
 //! line and pays for it twice. It re-exports whatever the *compiled* contract
 //! crate happens to expose, so an item `happenstance-core` gates on one of
 //! **its own** features arrives at `happenstance::` whenever anything else in
-//! the build graph turns that feature on; `happenstance-testkit` is a
-//! dev-dependency of this crate and turns `unstable-projection` on
-//! unconditionally, so under `cargo test` the whole unfrozen projection port
-//! was reachable at `happenstance::` with this crate's `unstable-projection`
-//! off — the opposite of what the manifest promises ("A reader has to type the
-//! word `unstable` before any of them is in their build"). And it makes every
+//! the build graph turns that feature on. That happened: until `0.4.0` removed
+//! it, `happenstance-testkit` (a dev-dependency here) turned the contract
+//! crate's `unstable-projection` on unconditionally, so under `cargo test` the
+//! then-unfrozen projection port was reachable at `happenstance::` with this
+//! crate's feature of the same name off, against what its manifest promised at
+//! the time. And it makes every
 //! future addition to the contract crate an addition to this crate's surface
 //! with nobody reviewing it.
 //!
@@ -242,10 +242,10 @@ fn the_contract_crate_is_not_glob_re_exported() {
         !ROOT.contains("pub use happenstance_core::*;"),
         "`crates/happenstance/src/lib.rs` glob re-exports the contract crate. \
          A glob mounts whatever the *compiled* contract crate exposes, which \
-         is gated on **its** features and not on this crate's: with \
-         `happenstance-testkit` in the dev-dependency graph that puts the \
-         whole unfrozen projection port at `happenstance::` with \
-         `unstable-projection` off. Write the list out."
+         is gated on **its** features and not on this crate's: a feature the \
+         dev-dependency graph turns on there puts its items at \
+         `happenstance::` unreviewed, which is how the projection port leaked \
+         while it was gated on `unstable-projection`. Write the list out."
     );
 }
 

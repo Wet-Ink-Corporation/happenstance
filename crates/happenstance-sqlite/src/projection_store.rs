@@ -1,18 +1,18 @@
 //! SQLite-backed [`SendProjectionStore`].
 //!
-//! # Stability: this module is not covered by the crate's version
+//! # Stability: covered by the crate's version, behind a feature
 //!
-//! Everything else `happenstance-sqlite` publishes is semver-binding at
-//! `0.2.0`. This module is not, and the exemption is written down rather than
-//! implied: it sits behind the off-by-default `projection-store` feature, which
-//! forwards `happenstance-core`'s `unstable-projection`, and that port stays
-//! exempt until two adapters at **opposite ends of the batch-shape axis** have
-//! passed its conformance suite. Today the two shapes that clear the suite are
-//! both testkit-side instruments, which is one shape wearing two hats.
+//! This module was exempt from semver while the projection port beneath it was
+//! unfrozen. It is not any more: ADR-0063 froze `ProjectionStore` for `0.3.0`,
+//! and everything here is semver-binding like the rest of `happenstance-sqlite`.
+//! It still sits behind the off-by-default `projection-store` feature, which has
+//! forwarded nothing to `happenstance-core` since that crate's
+//! `unstable-projection` was removed in `0.4.0`. The feature only keeps the
+//! second role out of a build that wants the event store alone.
 //!
 //! On docs.rs the feature shows as a badge on this module. The badge says which
-//! flag; this paragraph says what the flag costs, because a reader who takes a
-//! dependency on a page cannot see a semver exemption in a feature name.
+//! flag; this paragraph says that the flag no longer carries a semver exemption,
+//! because a reader cannot tell that from a feature name.
 //!
 //! # Status: a projection store that has run the suite it did not write
 //!
@@ -24,11 +24,11 @@
 //! file, and every rule in the family either runs against this store or is
 //! reported as a skip carrying the fixture's own stated reason.
 //!
-//! What a green run here does **not** buy is PS-2. That clause wants the suite
-//! green against two adapters at opposite ends of the batch-shape axis, and this
-//! is a *third* replay-at-commit shape beside `MemoryProjectionStore` and the
-//! testkit's buffering variant — see [`SqliteBatch`] for why no `rusqlite`
-//! adapter can supply the other end.
+//! A green run here does not, on its own, buy PS-2. That clause wants the suite
+//! green at both ends of the batch-shape axis, and this is a replay-at-commit
+//! shape like `MemoryProjectionStore`. The other end is `happenstance-postgres`'s
+//! `LivePostgresProjectionStore`, whose batch is a live transaction; see
+//! [`SqliteBatch`] for why no `rusqlite` adapter can supply it.
 //!
 //! # Why the batch is a buffer and not a `rusqlite::Transaction`
 //!

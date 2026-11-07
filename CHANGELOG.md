@@ -33,6 +33,17 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Fixed
+
+- `happenstance-sqlite` (documentation only): the `projection_store` module's
+  rustdoc no longer says the module is exempt from semver or that it forwards
+  `happenstance-core`'s `unstable-projection`. Neither has been true since
+  `0.3.0` and `0.4.0` respectively (#398).
+- `happenstance-neon` (documentation only): `NeonError::ForeignBatch`
+  links `CommitError::ForeignBatch` and `ResetError::ForeignBatch` instead of
+  explaining that they could not be linked behind a feature that no longer
+  exists (#398).
+
 ## [0.5.0] — 2026-11-07
 
 The typed projection runner leaves its gate. Phase 18 made `Projection::apply`
