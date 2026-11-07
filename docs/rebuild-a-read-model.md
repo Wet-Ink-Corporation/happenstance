@@ -48,8 +48,8 @@ method your projection implements is `async` and is handed a `Delivered` event
 The programs on this page run in memory, using `MemoryProjectionStore`. The
 first drives a real projection with `run_projection` and names its checkpoint
 with `checkpoint_id`, as an application does. The second calls the trait
-directly, because what it shows is a rule of the store, which the runner never
-breaks.
+directly, because what it shows is a rule the store enforces whoever calls
+it.
 [The rebuilding example](../examples/rebuilding-read-models/src/main.rs) runs
 every step below with the runner, against SQLite. It is the program to read
 alongside this page.
