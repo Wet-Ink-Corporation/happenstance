@@ -48,6 +48,7 @@ fn record(amplification: f64) -> Record {
         repeat: 0,
         seed: 1,
         projection_store: polling_cost::PROJECTION_STORE.to_owned(),
+        runner: polling_cost::Runner::Polling.as_str().to_owned(),
         reads_issued: 1,
         events_delivered: 1,
         events_applied_total: 1,

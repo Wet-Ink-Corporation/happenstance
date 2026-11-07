@@ -145,6 +145,49 @@ impl Phase {
     }
 }
 
+/// Which runner drives the views.
+///
+/// Not an axis of [`Cell`]: a pass runs every cell under one runner, chosen by
+/// `HS_RUNNER`, so the grid and `sweep_shape` stay as they were and two passes
+/// on one host compare cell for cell. `pass-001` predates the choice and
+/// carries no `runner` field; it means [`Runner::Polling`] (#400).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Runner {
+    /// One `run_projection` per view per poll: N reads of the log. ES-32's
+    /// cost as an application pays it with one runner per view.
+    Polling,
+    /// One `run_fan_out` per poll over every view: one shared read.
+    FanOut,
+}
+
+impl Runner {
+    /// The spelling that goes into a record and into `HS_RUNNER`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Polling => "polling",
+            Self::FanOut => "fan_out",
+        }
+    }
+
+    /// Reads an `HS_RUNNER` value: `None` for anything that is not one of the
+    /// two spellings, so a typo is refused rather than run as the default.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "polling" => Some(Self::Polling),
+            "fan_out" => Some(Self::FanOut),
+            _ => None,
+        }
+    }
+}
+
+/// What a record written before `runner` existed means.
+fn polling() -> String {
+    Runner::Polling.as_str().to_owned()
+}
+
 /// One swept cell: every condition that varies, fixed to a value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
@@ -336,6 +379,11 @@ pub struct Record {
     pub seed: u64,
     /// Which projection store held the read models.
     pub projection_store: String,
+    /// Which runner drove the views: `polling` or `fan_out`. Always written;
+    /// optional in the schema, because `pass-001` predates it and means
+    /// `polling`, so `schema_version` stays 1.
+    #[serde(default = "polling")]
+    pub runner: String,
     /// How many `read` calls the views issued between them.
     pub reads_issued: u64,
     /// How many events the store yielded, summed across every view and poll.
@@ -480,11 +528,51 @@ impl std::error::Error for HarnessError {}
 ///
 /// Returns [`HarnessError`] when the harness itself fails — never because a
 /// measured number was large.
-pub fn run_cell(cell: &Cell) -> Result<Record, HarnessError> {
+pub fn run_cell(cell: &Cell, runner: Runner) -> Result<Record, HarnessError> {
     match cell.phase {
-        Phase::Amplification => amplification(cell),
-        Phase::Staleness => staleness(cell),
+        Phase::Amplification => amplification(cell, runner),
+        Phase::Staleness => staleness(cell, runner),
     }
+}
+
+/// One poll of every view under `runner`, returning the events applied in it.
+///
+/// [`Runner::Polling`] is one `run_projection` per view, so N reads;
+/// [`Runner::FanOut`] is one `run_fan_out` over all of them, so one read. The
+/// views, the store and the codec are the same either way, which is what lets
+/// a pass under each be compared cell for cell.
+fn poll_all(
+    events: &CountingStore,
+    models: &MemoryProjectionStore,
+    views: &mut [View],
+    cell: &Cell,
+    runner: Runner,
+) -> Result<u64, HarnessError> {
+    let mut applied = 0usize;
+    match runner {
+        Runner::Polling => {
+            for view in views.iter_mut() {
+                applied = applied.saturating_add(run_once(events, models, view, cell)?.applied);
+            }
+        }
+        Runner::FanOut => {
+            let outcome = block_on(happenstance::run_fan_out(
+                events,
+                models,
+                views,
+                &Json,
+                chunk_of(cell),
+            ));
+            if let Some(read) = outcome.read {
+                return Err(HarnessError::Run(read.to_string()));
+            }
+            for view in outcome.views {
+                let progressed = view.map_err(|e| HarnessError::Run(e.to_string()))?;
+                applied = applied.saturating_add(progressed.applied);
+            }
+        }
+    }
+    Ok(u64::try_from(applied).unwrap_or(u64::MAX))
 }
 
 fn seed_log(events: &MemoryEventStore, cell: &Cell) -> Result<(), HarnessError> {
@@ -519,7 +607,7 @@ fn append(events: &MemoryEventStore, batch: &[Event]) -> Result<SequencePosition
 }
 
 /// Drives every view to the end of the seeded log and counts the deliveries.
-fn amplification(cell: &Cell) -> Result<Record, HarnessError> {
+fn amplification(cell: &Cell, runner: Runner) -> Result<Record, HarnessError> {
     let inner = MemoryEventStore::new();
     seed_log(&inner, cell)?;
     let events = CountingStore::new(inner);
@@ -533,14 +621,28 @@ fn amplification(cell: &Cell) -> Result<Record, HarnessError> {
     let started = Instant::now();
     let mut applied_total = 0u64;
 
-    for view in &mut views {
-        loop {
-            let progress = run_once(&events, &models, view, cell)?;
-            if progress.applied == 0 {
+    match runner {
+        // One view at a time to the end of the log, as pass-001 ran it.
+        Runner::Polling => {
+            for view in &mut views {
+                loop {
+                    let progress = run_once(&events, &models, view, cell)?;
+                    if progress.applied == 0 {
+                        break;
+                    }
+                    applied_total += u64::try_from(progress.applied).unwrap_or(u64::MAX);
+                }
+            }
+        }
+        // Every view together, one shared read per round, until a round
+        // applies nothing.
+        Runner::FanOut => loop {
+            let applied = poll_all(&events, &models, &mut views, cell, runner)?;
+            if applied == 0 {
                 break;
             }
-            applied_total += u64::try_from(progress.applied).unwrap_or(u64::MAX);
-        }
+            applied_total = applied_total.saturating_add(applied);
+        },
     }
     let elapsed = started.elapsed();
 
@@ -562,6 +664,7 @@ fn amplification(cell: &Cell) -> Result<Record, HarnessError> {
         repeat: cell.repeat,
         seed: cell.seed,
         projection_store: PROJECTION_STORE.to_owned(),
+        runner: runner.as_str().to_owned(),
         reads_issued: events.reads(),
         events_delivered: delivered,
         events_applied_total: applied_total,
@@ -575,7 +678,7 @@ fn amplification(cell: &Cell) -> Result<Record, HarnessError> {
 }
 
 /// Appends into a caught-up deployment and times what the views observe.
-fn staleness(cell: &Cell) -> Result<Record, HarnessError> {
+fn staleness(cell: &Cell, runner: Runner) -> Result<Record, HarnessError> {
     let inner = MemoryEventStore::new();
     seed_log(&inner, cell)?;
     let events = CountingStore::new(inner);
@@ -590,8 +693,13 @@ fn staleness(cell: &Cell) -> Result<Record, HarnessError> {
     // deployment sees, not about a cold replay. The counters are then reset, so
     // the steady-state figures are not inflated by the replay that preceded
     // them.
-    for view in &mut views {
-        while run_once(&events, &models, view, cell)?.applied > 0 {}
+    match runner {
+        Runner::Polling => {
+            for view in &mut views {
+                while run_once(&events, &models, view, cell)?.applied > 0 {}
+            }
+        }
+        Runner::FanOut => while poll_all(&events, &models, &mut views, cell, runner)? > 0 {},
     }
     events.reset();
 
@@ -632,8 +740,15 @@ fn staleness(cell: &Cell) -> Result<Record, HarnessError> {
             std::thread::sleep(interval);
             let now = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
             let mut outstanding = false;
+            // Under the fan-out runner one shared read serves every view this
+            // poll; under polling each view reads for itself, below.
+            if runner == Runner::FanOut {
+                poll_all(&events, &models, &mut views, cell, runner)?;
+            }
             for (view, observer) in views.iter_mut().zip(observers.iter_mut()) {
-                let _ = run_once(&events, &models, view, cell)?;
+                if runner == Runner::Polling {
+                    let _ = run_once(&events, &models, view, cell)?;
+                }
                 // Under the id the runner commits under (PS-25). The bare name
                 // reads `NeverRun` for ever and would corrupt the measurement.
                 let key = happenstance::checkpoint_id(&*view)
@@ -673,6 +788,7 @@ fn staleness(cell: &Cell) -> Result<Record, HarnessError> {
         repeat: cell.repeat,
         seed: cell.seed,
         projection_store: PROJECTION_STORE.to_owned(),
+        runner: runner.as_str().to_owned(),
         reads_issued: events.reads(),
         events_delivered: delivered,
         events_applied_total: views.iter().map(|view| view.applied).sum(),
@@ -692,13 +808,22 @@ fn run_once(
     view: &mut View,
     cell: &Cell,
 ) -> Result<Progressed, HarnessError> {
-    let chunk = happenstance::Chunk::of(
-        std::num::NonZeroUsize::new(cell.chunk).unwrap_or(std::num::NonZeroUsize::MIN),
-    );
     block_on(happenstance::run_projection(
-        events, models, view, &Json, chunk,
+        events,
+        models,
+        view,
+        &Json,
+        chunk_of(cell),
     ))
     .map_err(|e| HarnessError::Run(e.to_string()))
+}
+
+/// The cell's chunk as the runners take it; a zero in a hand-built cell reads
+/// as one rather than failing the harness.
+fn chunk_of(cell: &Cell) -> happenstance::Chunk {
+    happenstance::Chunk::of(
+        std::num::NonZeroUsize::new(cell.chunk).unwrap_or(std::num::NonZeroUsize::MIN),
+    )
 }
 
 /// Whether a view's derived query selects this event.

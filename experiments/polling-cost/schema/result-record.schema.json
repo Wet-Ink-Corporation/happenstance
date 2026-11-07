@@ -75,6 +75,11 @@
       ],
       "description": "Which projection store held the read models. Exactly two values are admissible and the field is never free text."
     },
+    "runner": {
+      "type": "string",
+      "enum": ["polling", "fan_out"],
+      "description": "Which runner drove the views: polling (one run_projection per view per poll) or fan_out (one run_fan_out over every view per poll). Optional because pass-001 predates it; a record without it means polling, so schema_version stays 1."
+    },
     "reads_issued": {
       "type": "integer",
       "description": "How many EventStore::read calls the views issued between them. The N-independent-reads number, observed."
