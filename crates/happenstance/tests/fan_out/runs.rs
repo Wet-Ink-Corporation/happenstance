@@ -11,10 +11,10 @@ use happenstance::{
     Checkpoint, Event, EventStore, Json, Progressed, ProjectionError, SequencePosition, ViewError,
     checkpoint_id, run_fan_out, run_projection,
 };
-use happenstance_testkit::block_on;
+use happenstance_testkit::{BatchCall, RecordingProjectionStore, block_on};
 
 use crate::support::{
-    Answers, Call, Instrumented, ReadFault, Shard, Watched, chunk, part, part_in, poisoned,
+    Answers, Instrumented, ReadFault, Shard, checkpoint_of, chunk, part, part_in, poisoned,
     poisoned_in,
 };
 
@@ -31,10 +31,10 @@ struct Observed {
     state: Vec<u64>,
 }
 
-async fn checkpoints(models: &Watched, views: &[Shard]) -> Vec<Checkpoint> {
+async fn checkpoints(models: &RecordingProjectionStore, views: &[Shard]) -> Vec<Checkpoint> {
     let mut out = Vec::with_capacity(views.len());
     for view in views {
-        out.push(models.checkpoint_of(view).await);
+        out.push(checkpoint_of(models, view).await);
     }
     out
 }
@@ -44,7 +44,7 @@ async fn checkpoints(models: &Watched, views: &[Shard]) -> Vec<Checkpoint> {
 /// Over the same event store as the subject, so the identities a skip
 /// record is keyed on agree, and into a fresh projection store.
 async fn sequentially(events: &Instrumented, views: &[Shard], size: usize) -> Observed {
-    let models = Watched::new();
+    let models = RecordingProjectionStore::new();
     let mut ran: Vec<Shard> = views.iter().map(Shard::fresh).collect();
     let mut outcomes = Vec::with_capacity(ran.len());
     for view in &mut ran {
@@ -60,8 +60,12 @@ async fn sequentially(events: &Instrumented, views: &[Shard], size: usize) -> Ob
 }
 
 /// The subject: every view through one `run_fan_out`.
-async fn fanned(events: &Instrumented, views: &[Shard], size: usize) -> (Observed, Watched) {
-    let models = Watched::new();
+async fn fanned(
+    events: &Instrumented,
+    views: &[Shard],
+    size: usize,
+) -> (Observed, RecordingProjectionStore) {
+    let models = RecordingProjectionStore::new();
     let mut ran: Vec<Shard> = views.iter().map(Shard::fresh).collect();
     let fan = run_fan_out(events, &models, &mut ran, &Json, chunk(size)).await;
     assert_eq!(fan.read, None, "the memory read failed");
@@ -91,7 +95,7 @@ fn live(at: SequencePosition) -> Checkpoint {
 fn an_empty_fan_out_reads_nothing() {
     block_on(async {
         let events = Instrumented::seeded(&[part("VIN1")]).await;
-        let models = Watched::new();
+        let models = RecordingProjectionStore::new();
         let mut views: Vec<Shard> = Vec::new();
 
         let ran = run_fan_out(&events, &models, &mut views, &Json, chunk(4)).await;
@@ -174,7 +178,7 @@ fn fan_out_resumes_each_view_from_its_own_checkpoint() {
         // view resumes past its own checkpoint, and a commit under one id
         // moves no other.
         let events = Instrumented::seeded(&[part("VIN1"), part("VIN2")]).await;
-        let models = Watched::new();
+        let models = RecordingProjectionStore::new();
         let mut ahead = Shard::new("ahead");
         let pre = run_projection(&events, &models, &mut ahead, &Json, chunk(8))
             .await
@@ -199,7 +203,7 @@ fn fan_out_resumes_each_view_from_its_own_checkpoint() {
         assert_eq!(models.get("ahead:VIN1"), Some(1), "the pre-run's row moved");
         assert_eq!(models.get("ahead:VIN4"), Some(4));
         for view in &views {
-            assert_eq!(models.checkpoint_of(view).await, live(log[3].position));
+            assert_eq!(checkpoint_of(&models, view).await, live(log[3].position));
         }
 
         // Both behind, at different places: the one read starts at the lower.
@@ -255,10 +259,10 @@ fn a_commit_for_one_view_moves_no_other_views_checkpoint() {
         assert_eq!(
             models.calls(),
             [
-                Call::Begin(0),
-                Call::Commit(0),
-                Call::Begin(1),
-                Call::Commit(1)
+                BatchCall::Begin(0),
+                BatchCall::Commit(0),
+                BatchCall::Begin(1),
+                BatchCall::Commit(1)
             ]
         );
     });
@@ -274,7 +278,7 @@ fn a_halting_view_stops_alone() {
         let events = Instrumented::seeded(&[part("VIN1"), poisoned(), part("VIN2")]).await;
         let views = [Shard::new("halts"), Shard::new("skips").skipping()];
         let read = events.snapshot();
-        let models = Watched::new();
+        let models = RecordingProjectionStore::new();
         let mut ran: Vec<Shard> = views.iter().map(Shard::fresh).collect();
         let fan = run_fan_out(&events, &models, &mut ran, &Json, chunk(1)).await;
 
@@ -289,8 +293,14 @@ fn a_halting_view_stops_alone() {
         );
         let skipped = fan.views[1].as_ref().expect("the skipping view carries on");
         assert_eq!((skipped.applied, skipped.skipped), (2, 1));
-        assert_eq!(models.checkpoint_of(&ran[0]).await, live(read[0].position));
-        assert_eq!(models.checkpoint_of(&ran[1]).await, live(read[2].position));
+        assert_eq!(
+            checkpoint_of(&models, &ran[0]).await,
+            live(read[0].position)
+        );
+        assert_eq!(
+            checkpoint_of(&models, &ran[1]).await,
+            live(read[2].position)
+        );
         assert_eq!(models.get(&ran[1].skip_row(read[1].id)), Some(1));
         assert_eq!(models.get("halts:VIN2"), None);
     });
@@ -303,7 +313,7 @@ fn a_failing_begin_or_commit_stops_only_its_view() {
         let events = Instrumented::seeded(&log).await;
 
         // The second `begin` of the run is the middle view's first.
-        let models = Watched::failing_begin(1);
+        let models = RecordingProjectionStore::failing_begin(1);
         let mut views = [Shard::new("a"), Shard::new("b"), Shard::new("c")];
         let fan = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
         assert!(
@@ -322,7 +332,9 @@ fn a_failing_begin_or_commit_stops_only_its_view() {
         assert_eq!(views[1].applied, 0, "a view with no write set applied");
 
         let mut views = [Shard::new("a"), Shard::new("b"), Shard::new("c")];
-        let models = Watched::failing_commit(checkpoint_id(&views[1]).expect("a derivable id"));
+        let models = RecordingProjectionStore::failing_commits_under(
+            checkpoint_id(&views[1]).expect("a derivable id"),
+        );
         let fan = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
         assert!(
             matches!(
@@ -337,7 +349,10 @@ fn a_failing_begin_or_commit_stops_only_its_view() {
             "{:?}",
             fan.views
         );
-        assert_eq!(models.checkpoint_of(&views[1]).await, Checkpoint::NeverRun);
+        assert_eq!(
+            checkpoint_of(&models, &views[1]).await,
+            Checkpoint::NeverRun
+        );
         assert_eq!(models.get("b:VIN1"), None, "a failed commit left rows");
         assert_eq!(models.get("c:VIN2"), Some(2));
     });
@@ -349,7 +364,7 @@ fn a_read_failure_interrupts_every_running_view() {
         let log = [part("VIN1"), part("VIN2"), part("VIN3")];
         let mut events = Instrumented::seeded(&log).await;
         events.fail_after = Some(2);
-        let models = Watched::new();
+        let models = RecordingProjectionStore::new();
         let mut views = [
             Shard::new("a"),
             Shard::new("refuses").refusing("VIN1"),
@@ -385,9 +400,9 @@ fn a_read_failure_interrupts_every_running_view() {
         assert!(models.snapshot().is_empty(), "{:?}", models.snapshot());
         let calls = models.calls();
         for call in &calls {
-            if let Call::Begin(serial) = call {
+            if let BatchCall::Begin(serial) = call {
                 assert!(
-                    calls.contains(&Call::Rollback(*serial)),
+                    calls.contains(&BatchCall::Rollback(*serial)),
                     "write set {serial} was not rolled back: {calls:?}"
                 );
             }
@@ -400,7 +415,7 @@ fn the_fan_out_stops_reading_once_every_view_has_stopped() {
     block_on(async {
         let log = [part("VIN1"), part("VIN2"), part("VIN3")];
         let events = Instrumented::seeded(&log).await;
-        let models = Watched::new();
+        let models = RecordingProjectionStore::new();
         let mut views = [
             Shard::new("a").refusing("VIN1"),
             Shard::new("b").refusing("VIN1"),
@@ -465,7 +480,7 @@ fn sweep_case(fault: Fault, answers: [Answers; 2]) -> (Vec<Event>, Vec<Shard>) {
 }
 
 /// Every case of the sweep, handed to `check` with its fan-out run.
-fn sweep(mut check: impl FnMut(&str, &Observed, &Observed, &Watched)) {
+fn sweep(mut check: impl FnMut(&str, &Observed, &Observed, &RecordingProjectionStore)) {
     use Answers::{Halt, Skip};
 
     let mut cases = 0;
@@ -499,13 +514,15 @@ fn every_write_set_is_committed_or_rolled_back() {
     sweep(|case, _, _, models| {
         let calls = models.calls();
         for call in &calls {
-            let Call::Begin(serial) = *call else { continue };
-            let ends: Vec<&Call> = calls
+            let BatchCall::Begin(serial) = *call else {
+                continue;
+            };
+            let ends: Vec<&BatchCall> = calls
                 .iter()
                 .filter(|c| c.serial() == serial && c.ends())
                 .collect();
             assert!(
-                matches!(ends[..], [Call::Commit(_) | Call::Rollback(_)]),
+                matches!(ends[..], [BatchCall::Commit(_) | BatchCall::Rollback(_)]),
                 "{case}: write set {serial} ended as {ends:?}: {calls:?}"
             );
         }
@@ -525,7 +542,7 @@ fn a_panic_unwinds_out_and_nothing_commits_after_it() {
             part("VIN2"),
         ]));
         let read = events.snapshot();
-        let models = Watched::new();
+        let models = RecordingProjectionStore::new();
         let mut views = [
             Shard::new("a"),
             Shard::new("boom").panicking_on("BOOM"),
@@ -549,17 +566,17 @@ fn a_panic_unwinds_out_and_nothing_commits_after_it() {
         let calls = models.calls();
         let panicked = calls
             .iter()
-            .position(|call| matches!(call, Call::Panicking(_)))
+            .position(|call| matches!(call, BatchCall::Marked(_)))
             .expect("the view panicked inside apply");
         assert!(
             !calls[panicked..]
                 .iter()
-                .any(|call| matches!(call, Call::Commit(_))),
+                .any(|call| matches!(call, BatchCall::Commit(_))),
             "chunk {size}: a commit after the panic: {calls:?}"
         );
         assert_eq!(models.get("boom:BOOM"), None, "chunk {size}");
         block_on(async {
-            let boom = models.checkpoint_of(&views[1]).await;
+            let boom = checkpoint_of(&models, &views[1]).await;
             let want = if size == 1 {
                 live(read[0].position)
             } else {

@@ -26,9 +26,9 @@ use happenstance::{
     MemoryEventStore, Policy, Projection, ProjectionStore, Query, QueryItem, ReadOptions,
     SequencePosition, SequencedEvent, ViewError, checkpoint_id, collect, run_fan_out,
 };
-use happenstance_testkit::block_on;
+use happenstance_testkit::{BatchCall, RecordingBatch, RecordingProjectionStore, block_on};
 
-use crate::support::{Call, Part, Shard, ShardError, Watched, WatchedBatch, part, poisoned};
+use crate::support::{Part, Shard, ShardError, checkpoint_of, part, poisoned};
 
 /// One view's outcome as the rule reads it: `Err` names the position the
 /// view stopped at, where it names one.
@@ -43,12 +43,12 @@ enum Ran {
     Unwound,
 }
 
-/// A fan-out runner over the memory event store and [`Watched`].
+/// A fan-out runner over the memory event store and [`RecordingProjectionStore`].
 trait FanRunner {
     fn run(
         &self,
         events: &MemoryEventStore,
-        models: &Watched,
+        models: &RecordingProjectionStore,
         views: &mut [Shard],
         size: NonZeroUsize,
     ) -> Ran;
@@ -65,7 +65,7 @@ impl FanRunner for Shipped {
     fn run(
         &self,
         events: &MemoryEventStore,
-        models: &Watched,
+        models: &RecordingProjectionStore,
         views: &mut [Shard],
         size: NonZeroUsize,
     ) -> Ran {
@@ -121,7 +121,7 @@ enum Lane {
 
 /// A view's open write set, and the last position it took.
 struct Open {
-    batch: WatchedBatch,
+    batch: RecordingBatch,
     taken: usize,
     last: SequencePosition,
 }
@@ -146,7 +146,7 @@ impl MiniFan {
         view: &mut Shard,
         ask: Option<&mut Shard>,
         event: &SequencedEvent,
-        batch: &mut WatchedBatch,
+        batch: &mut RecordingBatch,
     ) -> Took {
         let id = event.id;
         // Catching is this mutant's subject: PS-30 binds a runner that
@@ -179,7 +179,7 @@ impl MiniFan {
         view: &mut Shard,
         ask: Option<&mut Shard>,
         failure: &ApplyFailure<'_, ShardError>,
-        batch: &mut WatchedBatch,
+        batch: &mut RecordingBatch,
     ) -> Took {
         let policy = match ask {
             Some(first) => first.on_error(failure, batch).await,
@@ -192,7 +192,7 @@ impl MiniFan {
         }
     }
 
-    fn commit(models: &Watched, view: &Shard, open: Open) {
+    fn commit(models: &RecordingProjectionStore, view: &Shard, open: Open) {
         let key = checkpoint_id(view).expect("a derivable id");
         block_on(models.commit(open.batch, &key, open.last, Authority::Live))
             .expect("the watched store commits");
@@ -203,7 +203,7 @@ impl FanRunner for MiniFan {
     fn run(
         &self,
         events: &MemoryEventStore,
-        models: &Watched,
+        models: &RecordingProjectionStore,
         views: &mut [Shard],
         size: NonZeroUsize,
     ) -> Ran {
@@ -216,7 +216,7 @@ impl FanRunner for MiniFan {
             })
             .collect();
         for view in views.iter() {
-            let at = block_on(models.checkpoint_of(view));
+            let at = block_on(checkpoint_of(models, view));
             assert_eq!(at, Checkpoint::NeverRun, "the rule's fixtures start fresh");
         }
         let log = block_on(collect(EventStore::read(
@@ -249,12 +249,12 @@ impl FanRunner for MiniFan {
 struct Fan {
     lanes: Vec<Lane>,
     open: Vec<Option<Open>>,
-    parked: Vec<WatchedBatch>,
+    parked: Vec<RecordingBatch>,
 }
 
 impl Fan {
     /// Commits every open write set, then ends the parked ones.
-    fn finish(mut self, models: &Watched, views: &[Shard]) -> Ran {
+    fn finish(mut self, models: &RecordingProjectionStore, views: &[Shard]) -> Ran {
         for (held, view) in self.open.iter_mut().zip(views) {
             if let Some(held) = held.take() {
                 MiniFan::commit(models, view, held);
@@ -280,7 +280,7 @@ impl MiniFan {
     fn step(
         &self,
         fan: &mut Fan,
-        models: &Watched,
+        models: &RecordingProjectionStore,
         views: &mut [Shard],
         at: usize,
         event: &SequencedEvent,
@@ -311,7 +311,7 @@ impl MiniFan {
         views: &mut [Shard],
         at: usize,
         event: &SequencedEvent,
-        batch: &mut WatchedBatch,
+        batch: &mut RecordingBatch,
     ) -> Took {
         let (first, rest) = views.split_first_mut().expect("at least one view");
         match at.checked_sub(1) {
@@ -325,7 +325,7 @@ impl MiniFan {
 
     /// View `at` halted on `held.last`: it stops, and under
     /// [`Defect::StopsEveryView`] every other view stops with it.
-    fn halt(&self, fan: &mut Fan, models: &Watched, at: usize, held: Open) {
+    fn halt(&self, fan: &mut Fan, models: &RecordingProjectionStore, at: usize, held: Open) {
         let stop = Lane::Stopped(Some(held.last));
         block_on(models.rollback(held.batch)).expect("a buffer drops");
         fan.lanes[at] = stop;
@@ -340,7 +340,7 @@ impl MiniFan {
     }
 
     /// View `at` panicked on `held.last`, and this runner caught it.
-    fn unwound(&self, fan: &mut Fan, models: &Watched, at: usize, held: Open) {
+    fn unwound(&self, fan: &mut Fan, models: &RecordingProjectionStore, at: usize, held: Open) {
         let stop = Lane::Stopped(Some(held.last));
         match self.0 {
             Defect::CarriesOn => fan.open[at] = Some(held),
@@ -387,7 +387,7 @@ fn chunk_of(n: usize) -> NonZeroUsize {
 /// every leg that failed, at every chunk it failed at.
 ///
 /// Views `a`, `boom` and `c` over `[VIN1, BOOM, VIN2]`; `boom` writes its
-/// row for `BOOM`, logs `Panicking` with its write set open, and panics.
+/// row for `BOOM`, logs a `Marked` with its write set open, and panics.
 ///
 /// - **A**: no row `boom` wrote since its last commit survives.
 /// - **B**: `boom`'s checkpoint is its last commit before the panic.
@@ -406,7 +406,7 @@ fn panicking_apply_holds(runner: &impl FanRunner) -> Result<(), String> {
         ))
         .expect("the fixture seeds");
         let read = events.snapshot();
-        let models = Watched::new();
+        let models = RecordingProjectionStore::new();
         let mut views = [
             Shard::new("a"),
             Shard::new("boom").panicking_on("BOOM"),
@@ -431,7 +431,7 @@ fn panicking_apply_holds(runner: &impl FanRunner) -> Result<(), String> {
             ));
         }
 
-        let at = block_on(models.checkpoint_of(&views[1]));
+        let at = block_on(checkpoint_of(&models, &views[1]));
         let want =
             committed_before.map_or(Checkpoint::NeverRun, |through| Checkpoint::Live { through });
         if at != want {
@@ -441,7 +441,7 @@ fn panicking_apply_holds(runner: &impl FanRunner) -> Result<(), String> {
         }
 
         let calls = models.calls();
-        let Some(panicked) = calls.iter().position(|c| matches!(c, Call::Panicking(_))) else {
+        let Some(panicked) = calls.iter().position(|c| matches!(c, BatchCall::Marked(_))) else {
             failed.push(format!(
                 "leg A at chunk {size}: boom never panicked: {calls:?}"
             ));
@@ -450,12 +450,12 @@ fn panicking_apply_holds(runner: &impl FanRunner) -> Result<(), String> {
         let serial = calls[panicked].serial();
         let after = &calls[panicked..];
         let ended = after.iter().position(|c| c.serial() == serial && c.ends());
-        let commit = after.iter().position(|c| matches!(c, Call::Commit(_)));
+        let commit = after.iter().position(|c| matches!(c, BatchCall::Commit(_)));
         let in_time = match (ended, commit) {
             (Some(ended), Some(commit)) => {
-                ended < commit && !matches!(after[ended], Call::Commit(_))
+                ended < commit && !matches!(after[ended], BatchCall::Commit(_))
             }
-            (Some(ended), None) => !matches!(after[ended], Call::Commit(_)),
+            (Some(ended), None) => !matches!(after[ended], BatchCall::Commit(_)),
             (None, _) => false,
         };
         if !in_time {
@@ -466,7 +466,7 @@ fn panicking_apply_holds(runner: &impl FanRunner) -> Result<(), String> {
         }
 
         if matches!(ran, Ran::Returned(_))
-            && ended.map(|ended| after[ended]) != Some(Call::Rollback(serial))
+            && ended.map(|ended| after[ended]) != Some(BatchCall::Rollback(serial))
         {
             failed.push(format!(
                 "leg D at chunk {size}: the run returned and write set {serial} was not \
@@ -543,7 +543,7 @@ fn per_projection_policy_holds(runner: &impl FanRunner) -> Result<(), String> {
     ))
     .expect("the fixture seeds");
     let read = events.snapshot();
-    let models = Watched::new();
+    let models = RecordingProjectionStore::new();
     let mut views = [Shard::new("ledger"), Shard::new("board").skipping()];
 
     let ran = runner.run(&events, &models, &mut views, chunk_of(1));
@@ -553,8 +553,8 @@ fn per_projection_policy_holds(runner: &impl FanRunner) -> Result<(), String> {
     if ran != want {
         failed.push(format!("leg A: the run was {ran:?}; expected {want:?}"));
     }
-    let ledger = block_on(models.checkpoint_of(&views[0]));
-    let board = block_on(models.checkpoint_of(&views[1]));
+    let ledger = block_on(checkpoint_of(&models, &views[0]));
+    let board = block_on(checkpoint_of(&models, &views[1]));
     let record = models.get(&views[1].skip_row(read[1].id));
     let at = |n: usize| Checkpoint::Live {
         through: read[n].position,
@@ -609,7 +609,7 @@ fn one_poisoned_view_holds(runner: &impl FanRunner) -> Result<(), String> {
     ))
     .expect("the fixture seeds");
     let read = events.snapshot();
-    let models = Watched::new();
+    let models = RecordingProjectionStore::new();
     let mut views: Vec<Shard> = NAMES
         .iter()
         .enumerate()
@@ -646,7 +646,7 @@ fn one_poisoned_view_holds(runner: &impl FanRunner) -> Result<(), String> {
     let stalled: Vec<&str> = views
         .iter()
         .enumerate()
-        .filter(|(at, view)| *at != POISONED && block_on(models.checkpoint_of(view)) != end)
+        .filter(|(at, view)| *at != POISONED && block_on(checkpoint_of(&models, view)) != end)
         .map(|(_, view)| view.name)
         .collect();
     if !stalled.is_empty() {

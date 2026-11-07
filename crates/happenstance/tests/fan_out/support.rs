@@ -2,29 +2,29 @@
 //!
 //! `Shard` is the only projection type: a fan-out runner drives N views of
 //! one type, and each test builds its views from it with a different name,
-//! scope, policy and fault. `Watched` and `Instrumented` wrap the memory
-//! stores and record what the runner did to them, so a test asserts on the
-//! runner's calls and not only on what they left behind.
+//! scope, policy and fault. The testkit's `RecordingProjectionStore` and this
+//! file's `Instrumented` wrap the memory stores and record what the runner
+//! did to them, so a test asserts on the runner's calls and not only on what
+//! they left behind. The projection store is the testkit's, not a local one:
+//! `doc_surface.rs`'s `no_local_projection_store` holds that absence.
 //!
 //! Positions always come from the store's own snapshot and never from a
 //! literal: the specification permits gaps.
 
-use core::cell::{Cell, RefCell};
+use core::cell::Cell;
 use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::task::{Context, Poll};
-use std::collections::BTreeMap;
-use std::rc::Rc;
 
 use happenstance::bytes::Bytes;
 use happenstance::futures_core::Stream;
 use happenstance::{
-    AppendCondition, AppendError, ApplyFailure, Authority, Checkpoint, Chunk, Codec, CodecError,
-    CommitError, Delivered, DomainEvent, Event, EventId, EventStore, EventType, Json,
-    MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError,
-    MemoryStoreError, Policy, Projection, ProjectionId, ProjectionStore, Query, ReadOptions,
-    ResetError, SequencePosition, SequencedEvent, Tags, checkpoint_id,
+    AppendCondition, AppendError, ApplyFailure, Checkpoint, Chunk, Codec, CodecError, Delivered,
+    DomainEvent, Event, EventId, EventStore, EventType, Json, MemoryEventStore, MemoryStoreError,
+    Policy, Projection, ProjectionId, ProjectionStore, Query, ReadOptions, SequencePosition,
+    SequencedEvent, Tags, checkpoint_id,
 };
+use happenstance_testkit::{RecordingBatch, RecordingProjectionStore, RecordingStoreError};
 
 // ---------------------------------------------------------------------------
 // The domain
@@ -115,7 +115,7 @@ pub(crate) enum ShardError {
     #[error("refused the part")]
     Refused,
     #[error(transparent)]
-    Store(#[from] WatchedError),
+    Store(#[from] RecordingStoreError),
 }
 
 /// One view: rows keyed `<name>:<vin>`, valued by how many it had applied.
@@ -193,7 +193,7 @@ impl Shard {
 
 impl Projection for Shard {
     type Event = Part;
-    type Store = Watched;
+    type Store = RecordingProjectionStore;
     type Error = ShardError;
 
     fn id(&self) -> &ProjectionId {
@@ -207,7 +207,7 @@ impl Projection for Shard {
     async fn apply(
         &mut self,
         event: Delivered<Part>,
-        batch: &mut WatchedBatch,
+        batch: &mut RecordingBatch,
     ) -> Result<(), ShardError> {
         let Part::Shredded { vin, .. } = event.into_event();
         if self.refuse_on == Some(vin.as_str()) {
@@ -216,7 +216,8 @@ impl Projection for Shard {
         self.applied += 1;
         batch.write(self.row(&vin), self.applied);
         if self.panic_on == Some(vin.as_str()) {
-            batch.mark_panicking();
+            // The rules read "about to panic" off the log as this mark.
+            batch.mark();
             panic!("`{}` panics inside apply on `{vin}`", self.name);
         }
         Ok(())
@@ -225,7 +226,7 @@ impl Projection for Shard {
     async fn on_error(
         &mut self,
         failure: &ApplyFailure<'_, ShardError>,
-        batch: &mut WatchedBatch,
+        batch: &mut RecordingBatch,
     ) -> Result<Policy, ShardError> {
         match self.answers {
             Answers::Halt => Ok(Policy::Halt),
@@ -238,213 +239,15 @@ impl Projection for Shard {
 }
 
 // ---------------------------------------------------------------------------
-// `Watched`: a projection store that logs every write set's life
+// The projection store's instrument is the testkit's
 // ---------------------------------------------------------------------------
 
-/// One thing the runner did to a write set, by its serial.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Call {
-    Begin(u32),
-    Commit(u32),
-    Rollback(u32),
-    /// Dropped without a commit or a rollback.
-    Dropped(u32),
-    /// The projection is about to panic with this write set open.
-    Panicking(u32),
-}
-
-impl Call {
-    pub(crate) const fn serial(self) -> u32 {
-        match self {
-            Self::Begin(s)
-            | Self::Commit(s)
-            | Self::Rollback(s)
-            | Self::Dropped(s)
-            | Self::Panicking(s) => s,
-        }
-    }
-
-    /// Whether this call ends the write set it names.
-    pub(crate) const fn ends(self) -> bool {
-        matches!(self, Self::Commit(_) | Self::Rollback(_) | Self::Dropped(_))
-    }
-}
-
-/// The instrument's own failure, injected on request.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum WatchedError {
-    #[error("an injected failure")]
-    Injected,
-    #[error(transparent)]
-    Store(#[from] MemoryProjectionStoreError),
-}
-
-/// A `MemoryProjectionStore` that logs every `begin`, `commit`, `rollback`
-/// and bare drop, and fails one `begin` or one view's commits on request.
-#[derive(Debug, Default)]
-pub(crate) struct Watched {
-    inner: MemoryProjectionStore,
-    log: Rc<RefCell<Vec<Call>>>,
-    serials: Cell<u32>,
-    /// The zero-based `begin` that fails, counted across every view.
-    pub(crate) fail_begin: Option<usize>,
-    begins: Cell<usize>,
-    /// The checkpoint id whose commits fail.
-    pub(crate) fail_commit: Option<ProjectionId>,
-}
-
-impl Watched {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
-    /// A store whose zero-based `nth` `begin`, across every view, fails.
-    pub(crate) fn failing_begin(nth: usize) -> Self {
-        Self {
-            fail_begin: Some(nth),
-            ..Self::default()
-        }
-    }
-
-    /// A store whose commits under `id` fail.
-    pub(crate) fn failing_commit(id: ProjectionId) -> Self {
-        Self {
-            fail_commit: Some(id),
-            ..Self::default()
-        }
-    }
-
-    pub(crate) fn calls(&self) -> Vec<Call> {
-        self.log.borrow().clone()
-    }
-
-    pub(crate) fn snapshot(&self) -> BTreeMap<String, u64> {
-        self.inner.snapshot()
-    }
-
-    pub(crate) fn get(&self, key: &str) -> Option<u64> {
-        self.inner.get(key)
-    }
-
-    pub(crate) async fn checkpoint_of(&self, view: &Shard) -> Checkpoint {
-        self.checkpoint(&checkpoint_id(view).expect("a derivable id"))
-            .await
-            .expect("the memory store reads its checkpoint")
-    }
-
-    fn record(&self, call: Call) {
-        self.log.borrow_mut().push(call);
-    }
-}
-
-/// A memory write set that says when it ends, and when it is dropped bare.
-#[derive(Debug)]
-pub(crate) struct WatchedBatch {
-    serial: u32,
-    inner: Option<MemoryProjectionBatch>,
-    log: Rc<RefCell<Vec<Call>>>,
-}
-
-impl WatchedBatch {
-    pub(crate) fn write(&mut self, key: impl Into<String>, value: u64) {
-        self.inner
-            .as_mut()
-            .expect("a write set is written only while open")
-            .write(key, value);
-    }
-
-    pub(crate) fn mark_panicking(&self) {
-        self.log.borrow_mut().push(Call::Panicking(self.serial));
-    }
-
-    fn end(mut self, call: Call) -> MemoryProjectionBatch {
-        self.log.borrow_mut().push(call);
-        self.inner.take().expect("a write set ends once")
-    }
-}
-
-impl Drop for WatchedBatch {
-    fn drop(&mut self) {
-        if self.inner.is_some() {
-            self.log.borrow_mut().push(Call::Dropped(self.serial));
-        }
-    }
-}
-
-impl ProjectionStore for Watched {
-    type Error = WatchedError;
-    type Batch = WatchedBatch;
-
-    async fn begin(&self) -> Result<WatchedBatch, WatchedError> {
-        let nth = self.begins.get();
-        self.begins.set(nth + 1);
-        if self.fail_begin == Some(nth) {
-            return Err(WatchedError::Injected);
-        }
-        let serial = self.serials.get();
-        self.serials.set(serial + 1);
-        let inner = self.inner.begin().await?;
-        self.record(Call::Begin(serial));
-        Ok(WatchedBatch {
-            serial,
-            inner: Some(inner),
-            log: Rc::clone(&self.log),
-        })
-    }
-
-    async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, WatchedError> {
-        Ok(self.inner.checkpoint(id).await?)
-    }
-
-    async fn commit(
-        &self,
-        batch: WatchedBatch,
-        id: &ProjectionId,
-        position: SequencePosition,
-        authority: Authority,
-    ) -> Result<(), CommitError<WatchedError>> {
-        let serial = batch.serial;
-        let inner = batch.end(Call::Commit(serial));
-        if self.fail_commit.as_ref() == Some(id) {
-            drop(inner);
-            return Err(CommitError::Store(WatchedError::Injected));
-        }
-        self.inner
-            .commit(inner, id, position, authority)
-            .await
-            .map_err(|error| match error {
-                CommitError::ForeignBatch => CommitError::ForeignBatch,
-                CommitError::CheckpointRegression { current, attempted } => {
-                    CommitError::CheckpointRegression { current, attempted }
-                }
-                CommitError::Store(never) => match never {},
-                other => panic!("an outcome this instrument does not know: {other:?}"),
-            })
-    }
-
-    async fn reset(
-        &self,
-        batch: WatchedBatch,
-        id: &ProjectionId,
-    ) -> Result<(), ResetError<WatchedError>> {
-        let serial = batch.serial;
-        let inner = batch.end(Call::Commit(serial));
-        self.inner
-            .reset(inner, id)
-            .await
-            .map_err(|error| match error {
-                ResetError::ForeignBatch => ResetError::ForeignBatch,
-                ResetError::Refused => ResetError::Refused,
-                ResetError::Store(never) => match never {},
-                other => panic!("an outcome this instrument does not know: {other:?}"),
-            })
-    }
-
-    async fn rollback(&self, batch: WatchedBatch) -> Result<(), WatchedError> {
-        let serial = batch.serial;
-        let inner = batch.end(Call::Rollback(serial));
-        Ok(self.inner.rollback(inner).await?)
-    }
+/// Where `view` has got to in `models`, read under its derived checkpoint id.
+pub(crate) async fn checkpoint_of(models: &RecordingProjectionStore, view: &Shard) -> Checkpoint {
+    models
+        .checkpoint(&checkpoint_id(view).expect("a derivable id"))
+        .await
+        .expect("the memory store reads its checkpoint")
 }
 
 // ---------------------------------------------------------------------------

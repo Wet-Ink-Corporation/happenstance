@@ -828,3 +828,12 @@ pub mod __private {
     pub use crate::model::rules as model_rules;
     pub use crate::projection::rules as projection_rules;
 }
+
+// The runner-test instrument (#112), gated on `memory` like `gappy` because it
+// wraps the memory projection store. Declared here, at the end, rather than
+// beside `faulty`, so that no `lib.rs:N` citation above it moves.
+#[cfg(feature = "memory")]
+mod recording;
+#[cfg(feature = "memory")]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
+pub use recording::{BatchCall, RecordingBatch, RecordingProjectionStore, RecordingStoreError};
