@@ -46,7 +46,7 @@
 //! same `apply` without one and commits nothing. The typed layer is a path-only
 //! dev-dependency for them alone. Two more drive it for #401, PS-16's far end:
 //! `a_truncate_resets_a_runner_view_and_the_runner_replays_it` clears a view with
-//! `TRUNCATE` inside `reset`'s transaction, and
+//! `TRUNCATE` in the transaction `reset` commits, and
 //! `a_failed_reset_takes_its_truncate_back` shows the `TRUNCATE` rolls back
 //! with a reset that fails.
 
@@ -1077,12 +1077,12 @@ fn truncate_ledger() -> Vec<(String, i64)> {
 ///
 /// Every other SQL store's probe clears with `DELETE`, and the typed rebuild
 /// test runs on SQLite only, so PS-16's record names no adapter that clears
-/// with `TRUNCATE`. Postgres runs it inside the transaction `reset` opens,
-/// under an `ACCESS EXCLUSIVE` lock, which is the other end of that axis.
-/// Rejects a `reset` that commits the checkpoint delete on a different
-/// transaction from the caller's statements (the rows survive, or the
+/// with `TRUNCATE`. Postgres runs it in the transaction `begin` opened and
+/// `reset` commits, under an `ACCESS EXCLUSIVE` lock: the other end of that
+/// axis. Rejects a `reset` that loses one half (the rows survive, or the
 /// checkpoint does), and a runner that resumes after a reset instead of
-/// starting over (the replayed sums double or miss the first deposit).
+/// starting over (the replayed sums double or miss the first deposit). A reset
+/// on a separate transaction is the next test's to reject.
 #[tokio::test]
 #[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
 async fn a_truncate_resets_a_runner_view_and_the_runner_replays_it() {
