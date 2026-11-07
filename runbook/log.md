@@ -10,6 +10,34 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-07 — `0.5.0`, the typed runner leaves its gate
+
+*Committed on `claude/project-thread-u1dtdj-050`, cut from `origin/phase-18` at `0f0e3c3`.*
+D9 (the owner, AFK batch 9): `0.5.0` at phase 18's exit, with no `0.4.7`. `[Unreleased]`
+becomes `[0.5.0] — 2026-11-07`, under a summary that marks it breaking from `0.4.x`. The
+crate versions, the workspace requirements, `happenstance-sync-testkit`'s pin on
+`happenstance-testkit`, the testkit's recipe pin and the examples were already at `0.5.0`
+(#375), so the release moves only text. The per-PR entries are kept; the fan-out entry's
+ADR-0101 now reads accepted. A `0.5.0` trace follows the `0.4.0` one: nine hand rows (H1 is
+#132's row for the removed feature) and no tool rows, since cargo-semver-checks passes over
+`unstable-*` features. Install and status lines move to `0.5.0` and `"0.5"` in the root,
+core, sqlite, postgres, neon and cloudflare READMEs, and the README's counts follow the
+suite (122 rules, 97 in the event-store family). README, SECURITY and the site's roadmap card
+say the runner is shipped and covered by semver. SECURITY marks `0.4.6` superseded. The
+`0.3` → `0.4` guide had set a convention, so `docs/upgrading-to-0-5.md` follows it, one
+section per trace row with three compiled fences, and is registered in the narrative harness,
+the site's reading order and `docs/README.md`. The status table gains the `0.5.0` row. The
+owner merges this PR into `phase-18`, then #403, then tags.
+
+**Protected, not edited.** `CLAUDE.md:440-443` still says `unstable-projection` gates the
+runner, and `.github/ISSUE_TEMPLATE/bug_report.yml:32-33` still calls it exempt from semver.
+
+**Verified.** See the release PR body for the gate and the lint steps. `cargo-semver-checks`
+is not installed here, so the release PR's `semver compatibility` job runs it against the
+published `0.4.6`.
+
+---
+
 ## 2026-11-07 — phase 18's clauses frozen; phase 18 closes (#127)
 
 *Committed on `claude/project-thread-u1dtdj-127`, cut from `origin/phase-18` at `890c91a`.*
