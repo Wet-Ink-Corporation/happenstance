@@ -43,12 +43,14 @@ runner and the convergence declaration. This release removes `happenstance`'s
 covered by semver like the rest of the crate.
 
 **This is a breaking release from `0.4.x`.** If you enabled
-`unstable-projection`, five changes reach your code, each an entry below:
+`unstable-projection`, six changes reach your code, each an entry below:
 `apply` is `async` and is handed a `Delivered<E>`; `Projection` gains
 `type Error`; `run_projection` takes a `Chunk`; the runner keys its checkpoint
 on a derived id, so a checkpoint `0.4.x` wrote reads `NeverRun` unless you
-adopt it; and the feature itself is removed, so a manifest that names it no
-longer resolves. If you never enabled the feature, your application code does
+adopt it; code generic over the projection that spawns its run implements
+`SendProjection` and writes new bounds; and the feature itself is removed, so
+a manifest that names it no longer resolves. A seventh, `on_error`, needs no
+change. If you never enabled the feature, your application code does
 not change. An adapter author also takes a new rule in each testkit, and
 `happenstance-sqlite`'s projection schema moves to version 2. The
 [`0.5.0` trace](#050-trace) at the end of this section lists every break with
@@ -299,9 +301,11 @@ new surface rather than changed surface. Each row below was found by reading
 every breaking entry above.
 
 **Not run here:** `cargo semver-checks` is not installed on the machine that
-wrote this table. The release PR's `semver compatibility` job runs it against
-the published `0.4.6`. Any lint it reports that no row below covers becomes a
-**T** row before the tag.
+wrote this table, and the CI registry step cannot stand in for it: it passes no
+`--release-type`, so `0.4.6` to `0.5.0` reads as major and no lint is required.
+Before tagging, run `cargo semver-checks check-release --workspace
+--baseline-version 0.4.6 --release-type minor`. Any lint it reports that no row
+below covers becomes a **T** row.
 
 | # | Crate | Break | Source | Decided by | Entry above |
 |---|---|---|---|---|---|
@@ -310,10 +314,11 @@ the published `0.4.6`. Any lint it reports that no row below covers becomes a
 | H3 | `happenstance` | `Projection` gains the required associated type `Error`, `apply` returns `Result<(), Self::Error>`, and `ProjectionError` gains a third type parameter with no default | hand | ADR-0074 decision 8 (PS-28) | Changed |
 | H4 | `happenstance` | `run_projection` takes `chunk: Chunk`, was `NonZeroUsize` | hand | [ADR-0070](.kb/decisions/0070-the-runner-takes-a-named-chunk.md) | Changed |
 | H5 | `happenstance` | the runner reads and commits its checkpoint under `checkpoint_id(&projection)`, was `projection.id()`, so a checkpoint `0.4.x` wrote reads `NeverRun` until adopted; a name over 238 bytes is refused (behaviour) | hand | ADR-0074 decision 9 (PS-25), frozen by [ADR-0102](.kb/decisions/0102-phase-18s-clauses-are-frozen.md) | Changed |
-| H6 | `happenstance` | `Projection` gains the provided method `on_error`, and a spawner generic over the projection adds `P::Error: Sync` beside `P::Error: Send` | hand | ADR-0074 decision 5 (PS-27) | Changed |
+| H6 | `happenstance` | `Projection` gains the provided method `on_error`; an implementation that already has a method of that name now collides with it | hand | ADR-0074 decision 5 (PS-27) | Changed |
 | H7 | `happenstance-sqlite` | `projection_store::SCHEMA_VERSION` is `2`, was `1`, and a build older than this one refuses a file holding a protected projection; the tool sees no changed value (behaviour) | hand | PS-18 (#118), frozen by ADR-0102 | Changed |
 | H8 | `happenstance-testkit` | a new conformance rule, `store_accepts_the_guaranteed_minimum_tags_per_batch` (VT-36), which a store that meets VT-22 and VT-24 only one at a time now fails (behaviour; CF-32) | hand | [ADR-0100](.kb/decisions/0100-cloudflare-declares-a-tags-per-call-ceiling.md) | Added |
 | H9 | `happenstance-sync-testkit` | a new ingest rule, `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (VT-36, SY-18), which a store that declares a tags-per-call ceiling and does not hold the whole call to it now fails (behaviour; CF-32) | hand | ADR-0100 | Added |
+| H10 | `happenstance` | code generic over the projection that spawns its run can no longer bound it `P: Projection<Store = St> + Send + 'static`, because `apply`'s future is not known to be `Send`; it implements `SendProjection`, new in this release, and writes `P: SendProjection<Store = St, Event: Send, Error: Send + Sync> + 'static` | hand | ADR-0074, #110 | Changed |
 
 **Not a break, recorded so the absence is a decision:** `Progressed::skipped`
 is an added field on a `#[non_exhaustive]` struct; `RecordingProjectionStore`

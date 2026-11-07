@@ -92,7 +92,7 @@ program in the next section is a whole 0.5 projection.
 `Delivered` has no accessor for the local position the event arrived at, on
 purpose: a replicated event arrives at a different position on every store
 ([SY-21](../spec/SPECIFICATION.md#55-convergence-and-the-merge-rule)).
-If your 0.4 `apply` keyed anything on a position, key it on `event.id()`.
+If a row must mean the same on every store, key it on `event.id()`.
 
 ### A projection has its own error type **[H3]**
 
@@ -353,8 +353,10 @@ async fn main() -> Result<(), Failure> {
 }
 ```
 
-The old checkpoint under the bare name is left behind. It is harmless, and a
-`reset` of that id clears it. Anything else that read a runner's checkpoint
+The old checkpoint under the bare name is left behind, and it is harmless. To
+clear it, `reset` that id with an **empty** batch: `begin()` one and write
+nothing into it. A reset applies its batch, and the view's rows are the ones the
+derived id now owns, so a batch that deletes them deletes the adopted view's. Anything else that read a runner's checkpoint
 through `projection.id()`, such as a health check or a reset script, reads it
 through `checkpoint_id(&projection)` now.
 
@@ -364,23 +366,44 @@ through `checkpoint_id(&projection)` now.
 calls it when an event fails to decode or to apply, and it answers a `Policy`:
 `Halt` or `Skip`
 ([PS-27](../spec/SPECIFICATION.md#48-failure-policy)). The default answers
-`Halt`, so a run stops on a failure exactly as it did in 0.4, with the same
-error, position and checkpoint. `Progressed` gains a `skipped` count.
+`Halt`, so a run stops on a failure exactly as it did in 0.4, at the same
+position, with the same checkpoint and the same `ProjectionError` arm. `Progressed` gains a `skipped` count.
 
-**What to change.** Nothing in a projection. If your own code is generic over
-the projection and spawns its run, for example with `tokio::spawn`, add
-`Error: Sync` beside `Error: Send` in the projection's bound, because the runner
-holds the failure it hands `on_error` across an await. In 0.4, not compiled:
+**What to change.** Nothing, unless your projection already has a method named
+`on_error`, which now collides with the provided one. Rename yours.
+
+### Code that spawns a generic projection's run implements `SendProjection` **[H10]**
+
+**What changed.** In 0.4, `apply` was a plain `fn`, so code generic over the
+projection could spawn its run, for example with `tokio::spawn`, with a bound on
+the projection alone. In 0.4, not compiled:
 
 ```text
-P: SendProjection<Store = St, Event: Send, Error: Send> + 'static,
+P: Projection<Store = St> + Send + 'static,
 ```
 
-In 0.5, the bound `run_projection`'s own page compiles:
+In 0.5, `apply` returns a future, and `P: Projection` says nothing about whether
+that future is `Send`. So that bound no longer lets the run be spawned.
+`SendProjection`, new in 0.5, is the flavour of `Projection` whose futures are
+`Send`, and it is the one such code bounds on. The runner also holds the failure
+it hands `on_error` across an await, so the projection's error must be `Sync` as
+well as `Send`. The decision is
+[ADR-0074](../.kb/decisions/0074-projection-apply-is-async.md).
+
+**What to change.** Implement `SendProjection` instead of `Projection` for a
+projection handed to such code, with the same items: every `SendProjection` is
+a `Projection` too. Implement exactly one of the two. Then write the bound as
+`Projection`'s own page compiles it, under *Spawning a run from code generic
+over the projection*:
 
 ```text
 P: SendProjection<Store = St, Event: Send, Error: Send + Sync> + 'static,
 ```
+
+`St` is a type parameter of your own, bounded
+`St: SendProjectionStore<Batch: Send> + Sync + 'static`. Written as `P::Store`,
+the store's futures are not `Send`, and the spawn does not compile. A projection
+whose concrete type is spawned, rather than a generic `P`, needs none of this.
 
 ## `happenstance-sqlite`
 

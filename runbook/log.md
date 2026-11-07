@@ -18,7 +18,7 @@ becomes `[0.5.0] — 2026-11-07`, under a summary that marks it breaking from `0
 crate versions, the workspace requirements, `happenstance-sync-testkit`'s pin on
 `happenstance-testkit`, the testkit's recipe pin and the examples were already at `0.5.0`
 (#375), so the release moves only text. The per-PR entries are kept; the fan-out entry's
-ADR-0101 now reads accepted. A `0.5.0` trace follows the `0.4.0` one: nine hand rows (H1 is
+ADR-0101 now reads accepted. A `0.5.0` trace follows the `0.4.0` one: ten hand rows (H1 is
 #132's row for the removed feature) and no tool rows, since cargo-semver-checks passes over
 `unstable-*` features. Install and status lines move to `0.5.0` and `"0.5"` in the root,
 core, sqlite, postgres, neon and cloudflare READMEs, and the README's counts follow the
@@ -33,8 +33,9 @@ owner merges this PR into `phase-18`, then #403, then tags.
 runner, and `.github/ISSUE_TEMPLATE/bug_report.yml:32-33` still calls it exempt from semver.
 
 **Verified.** See the release PR body for the gate and the lint steps. `cargo-semver-checks`
-is not installed here, so the release PR's `semver compatibility` job runs it against the
-published `0.4.6`.
+is not installed here and did not run. The CI job cannot stand in for it, since its registry
+step passes no `--release-type`; the owner runs `cargo semver-checks check-release --workspace
+--baseline-version 0.4.6 --release-type minor` before tagging.
 
 ---
 

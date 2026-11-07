@@ -26,7 +26,7 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 from `0.4.x`: the typed runner leaves `unstable-projection`, which is removed (#132),
 with an async `apply` handed a `Delivered<E>` (ADR-0074), a projection's own
 `type Error` (PS-28), a `Chunk` (ADR-0070) and a derived checkpoint id (PS-25). The
-CHANGELOG's `0.5.0` trace has nine hand rows and no tool rows, and
+CHANGELOG's `0.5.0` trace has ten hand rows and no tool rows, and
 [`docs/upgrading-to-0-5.md`](../docs/upgrading-to-0-5.md) walks each row.
 
 **Phase 18 is done** on `phase-18`. [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md)
@@ -38,8 +38,10 @@ counts 168 `[FROZEN]`, 29 `[PROVISIONAL]`, 7 `[DEFERRED]` and 7 `[NON-NORMATIVE]
 and 18 are done. What remains is sequenced in [`roadmap.md`](roadmap.md): sync (13)
 and retention (14), then `1.0.0` (21).
 
-**A tag is cut from its release PR's merge commit, not from a later `main`.** Cloud
-sessions cannot push tags; the owner pushes them.
+**This release is tagged on `main`, at #403's merge commit**, not at its release PR's
+merge commit as earlier releases were: that PR merges into `phase-18`, which is not on
+`main` until #403 lands, and `release.yml` publishes only a tag on `main`. Tag that
+merge commit, not a later `main`. Cloud sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
@@ -49,11 +51,13 @@ then PR #403, `phase-18` into `main`. No release PR is open yet.
 ## Next action
 
 1. The owner merges the `0.5.0` release PR into `phase-18`, then merges #403
-   (`phase-18` → `main`), then tags the merge commit on `main`
-   (`git tag -a v0.5.0 <merge-sha> -m "0.5.0"`, then push the tag); `release.yml`
-   publishes from the tag. Before tagging, read the release PR's `semver
-   compatibility` job: any lint it reports that no hand row covers becomes a **T** row
-   in the `0.5.0` trace.
+   (`phase-18` → `main`). Before tagging, run `cargo semver-checks check-release
+   --workspace --baseline-version 0.4.6 --release-type minor` on that merge commit;
+   any lint it reports that no hand row covers becomes a **T** row in the `0.5.0`
+   trace. The CI semver job does not stand in for it: its registry step passes no
+   `--release-type`, so `0.4.6` → `0.5.0` reads as major and requires nothing. Then
+   tag #403's merge commit (`git tag -a v0.5.0 <merge-sha> -m "0.5.0"`, then push the
+   tag); `release.yml` publishes from the tag.
 2. The two follow-ups #127 named are filed: #400, the `experiments/polling-cost` fan-out
    passes 002/003, and #401, optional, a live-Postgres reset through `TRUNCATE`.
 3. Phase 13 (#64). It inherits SY-21's `convergent_projection_cannot_observe_local_position`,
