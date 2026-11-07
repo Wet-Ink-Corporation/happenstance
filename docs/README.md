@@ -30,6 +30,7 @@ stopped working would fail the build before it reached a reader.
 | What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
 | Passing the conformance suite with your adapter | [`pass-conformance-suite.md`](pass-conformance-suite.md) |
 | Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
+| Moving your code from 0.4 to 0.5 | [`upgrading-to-0-5.md`](upgrading-to-0-5.md) |
 | Fences the compiler never sees (a fixture for the build, not a guide page) | [`text-fences.md`](text-fences.md) |
 
 ## For contributors

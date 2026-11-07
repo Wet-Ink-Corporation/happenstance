@@ -51,8 +51,8 @@ records comes from that one sentence.
 ## The transport is yours
 
 ```toml
-happenstance-neon = "0.4"
-happenstance-neon = { version = "0.4", features = ["projection-store"] }
+happenstance-neon = "0.5"
+happenstance-neon = { version = "0.5", features = ["projection-store"] }
 ```
 
 **This crate owns no socket.** `SqlTransport` takes the whole request by value,
@@ -130,7 +130,7 @@ than tested.
 ## Replication: the `sync` feature
 
 ```toml
-happenstance-neon = { version = "0.4", features = ["sync"] }
+happenstance-neon = { version = "0.5", features = ["sync"] }
 ```
 
 `sync` is off by default and is the store's half of replication: it
