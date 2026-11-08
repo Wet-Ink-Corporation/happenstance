@@ -106,6 +106,26 @@ not the same as what a user needed to be told.
   `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
   is `#[non_exhaustive]`).
 
+### Changed
+
+- **`happenstance-sync`: every pull and push answer names its responder, and
+  the wire format is version 3** (#244, ADR-0104). **Breaking, for `0.6.0`.**
+  `Pulled` and `Ack` gain a last field, `responder: Option<StoreId>`: the
+  store incarnation that answered, so a runner can tell that a peer was
+  restored or re-minted under a new `StoreId` (VT-6). `Pulled::new` and
+  `Ack::default()` say `None`; `Pulled::with_responder` and
+  `Ack::with_responder` say more. Code that builds either type through its
+  constructor compiles unchanged; both were already `#[non_exhaustive]`.
+  `StoreSyncPeer` stamps its store's `store_id()` on every answer, read on each
+  call and never cached, which costs one more store read per pull and per push
+  (on Neon, one more read-only round trip to the database; none on the sync
+  wire). `StorePeerError` gains `Identity`, for an identity that could not be
+  read, classed by the store's error. `serve_sync` and `RemoteSyncPeer` carry
+  the field through the envelope. The field is a shape change, so
+  `wire::FORMAT_VERSION` is now 3, and a version-2 buffer is refused as
+  `WireError::UnsupportedFormatVersion`: **every peer in a deployment upgrades
+  together**.
+
 ## [0.5.1] — 2026-11-08
 
 Documentation and tooling only: no public API changes, and nothing a `0.5.0`

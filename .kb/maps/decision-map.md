@@ -952,6 +952,18 @@ adapter clears with `TRUNCATE`. It supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0102 | [`kb-decision-0102`](../decisions/0102-phase-18s-clauses-are-frozen.md) | Phase 18's eight clauses are frozen, and PS-9's and PS-24's evidence is repaired | accepted | 18 | — |
 
+## 2026-11-08: every answer names its responder, wire format 3 (#244), proposed
+
+ADR-0104 is written straight here with no intake step, and is **proposed**: the owner chose the
+mechanism on the 2026-11-08 project-thread card, and acceptance flips its status. `Pulled` and `Ack`
+gain a last `responder: Option<StoreId>`, `StoreSyncPeer` stamps its store's identity on every
+answer, and `wire::FORMAT_VERSION` goes from 2 to 3. It amends ADR-0097's message set and supersedes
+nothing. ADR-0103 is taken on another branch.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0104 | [`kb-decision-0104`](../decisions/0104-every-pull-and-ack-names-its-responder.md) | Every pulled and ack message names the store that answered, and the wire format is version 3 | proposed | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

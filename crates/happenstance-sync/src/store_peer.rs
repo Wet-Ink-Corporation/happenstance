@@ -13,7 +13,7 @@
 //! # The token is the far store's own position
 //!
 //! [`StoreResume`] carries the last
-//! [`SequencePosition`](happenstance_core::SequencePosition) a pull forwarded,
+//! [`SequencePosition`] a pull forwarded,
 //! and the next pull reads above it. A position is meaningful only inside the
 //! store that assigned it, which is exactly where it goes: a token is handed
 //! back only to the peer that minted it (SY-15), and that peer reads the store
@@ -51,13 +51,29 @@
 //! [`Waiting::Nothing`] only when the read ended with every event sent, and
 //! [`Waiting::Unknown`] otherwise. It never counts: an exact count is a scan of
 //! the rest of the log on every pull.
+//!
+//! # The responder
+//!
+//! Every [`Pulled`] and every [`Ack`] names the store that answered
+//! (ADR-0104): the ingest half's [`store_id`](IngestStore::store_id), read
+//! after the page or after the watermark. A runner that sees it change between
+//! two answers knows the far store was restored or re-minted (VT-6).
+//!
+//! **It is read on every call, and never cached.** A cached identity is the
+//! one a re-mint does not reach, which is the change the field exists to
+//! report. The cost is one more read of the store per pull and per push. On a
+//! store that keeps its identity in memory that is a field load; on a SQL
+//! store it is one indexed read of a one-row table; on Neon, whose store reads
+//! its meta row on every call (ADR-0086), it is one more read-only HTTP round
+//! trip **to the database**. It adds none on the sync wire: a remote pull or
+//! push is still one exchange, and the identity travels in its reply.
 
 use alloc::vec;
 use alloc::vec::Vec;
 use core::pin::Pin;
 
 use happenstance_core::futures_core::Stream;
-use happenstance_core::{EventId, EventStore, Query, ReadOptions};
+use happenstance_core::{EventId, EventStore, Query, ReadOptions, SequencePosition, StoreId};
 
 use crate::classify::{Classify, FailureClass};
 use crate::identity::ReplicatedEvent;
@@ -243,31 +259,17 @@ where
         }
         Ok(())
     }
-}
 
-impl<S, I> SyncPeer for StoreSyncPeer<S, I>
-where
-    S: EventStore,
-    S::Error: Classify,
-    I: IngestStore,
-{
-    type Error = StorePeerError<S::Error, I::Error>;
-    type Resume = StoreResume;
-
-    /// Reads the far store above `from`, one event at a time, until the
-    /// declared budget is spent or the log ends.
+    /// Reads one page of the far log from `start`, the position after `from`.
     ///
-    /// # Errors
-    ///
-    /// [`StorePeerError::Read`] if the store's read fails.
-    async fn pull(&self, from: Option<&StoreResume>) -> Result<Pulled<StoreResume>, Self::Error> {
-        let from = from.copied().unwrap_or_default();
-        let Some(start) = from.next_position() else {
-            // The token names the last position a store can number, so nothing
-            // can lie above it.
-            return Ok(Pulled::new(PushBatch::empty(), from).with_waiting(Waiting::Nothing));
-        };
-
+    /// A method of its own so the read's stream is dropped when it returns,
+    /// before [`responder`](Self::responder) reads again: a store whose stream
+    /// holds a connection has given it back by then.
+    async fn read_page(
+        &self,
+        from: StoreResume,
+        start: SequencePosition,
+    ) -> Result<Page, StorePeerError<S::Error, I::Error>> {
         // One past the most events a page can carry: the event that does not
         // fit is the proof the log goes on, read in the same call (SY-37).
         let probe = self.limits.max_batch_events.saturating_add(1);
@@ -277,7 +279,7 @@ where
                 .read(&query, ReadOptions::new().from(start).limit(probe))
         );
         let mut budget = PullBatchLimit::from(&self.limits);
-        let mut page = Vec::new();
+        let mut events = Vec::new();
         let mut resume = from;
 
         let waiting = loop {
@@ -298,16 +300,78 @@ where
                 break Waiting::Unknown;
             }
             budget.charge(&single);
-            page.extend(single.events);
+            events.extend(single.events);
             resume = StoreResume::after(position);
         };
+        Ok(Page {
+            events,
+            resume,
+            waiting,
+        })
+    }
+
+    /// The ingest half's identity, read now and never cached, so a re-mint
+    /// shows on the next answer (ADR-0104).
+    async fn responder(&self) -> Result<StoreId, StorePeerError<S::Error, I::Error>> {
+        self.ingest
+            .store_id()
+            .await
+            .map_err(StorePeerError::Identity)
+    }
+}
+
+/// What [`StoreSyncPeer::read_page`] read: the events, the token after the
+/// last of them, and whether the log went on past the page.
+struct Page {
+    events: Vec<ReplicatedEvent>,
+    resume: StoreResume,
+    waiting: Waiting,
+}
+
+impl<S, I> SyncPeer for StoreSyncPeer<S, I>
+where
+    S: EventStore,
+    S::Error: Classify,
+    I: IngestStore,
+{
+    type Error = StorePeerError<S::Error, I::Error>;
+    type Resume = StoreResume;
+
+    /// Reads the far store above `from`, one event at a time, until the
+    /// declared budget is spent or the log ends, and names the store that
+    /// answered.
+    ///
+    /// # Errors
+    ///
+    /// [`StorePeerError::Read`] if the store's read fails, and
+    /// [`StorePeerError::Identity`] if its identity cannot be read; either way
+    /// nothing was forwarded, and the same pull can be retried.
+    async fn pull(&self, from: Option<&StoreResume>) -> Result<Pulled<StoreResume>, Self::Error> {
+        let from = from.copied().unwrap_or_default();
+        let Some(start) = from.next_position() else {
+            // The token names the last position a store can number, so nothing
+            // can lie above it.
+            let responder = self.responder().await?;
+            return Ok(Pulled::new(PushBatch::empty(), from)
+                .with_waiting(Waiting::Nothing)
+                .with_responder(responder));
+        };
+
+        let Page {
+            events: page,
+            resume,
+            waiting,
+        } = self.read_page(from, start).await?;
+        let responder = self.responder().await?;
 
         let groups = if page.is_empty() {
             Vec::new()
         } else {
             vec![EventGroup::new(None, page)]
         };
-        Ok(Pulled::new(PushBatch::new(groups), resume).with_waiting(waiting))
+        Ok(Pulled::new(PushBatch::new(groups), resume)
+            .with_waiting(waiting)
+            .with_responder(responder))
     }
 
     /// Ingests each pushed group as one atomic group with no compensation, and
@@ -324,8 +388,10 @@ where
     /// or [`BatchTooLarge`](StorePeerError::BatchTooLarge) for a push the
     /// declared limits do not admit, with nothing written;
     /// [`StorePeerError::Ingest`] if the store refuses or fails the write; and
-    /// [`StorePeerError::Watermark`] if the write landed and the confirmation
-    /// could not be read, in which case re-delivery is a skip.
+    /// [`StorePeerError::Watermark`] or [`StorePeerError::Identity`] if the
+    /// write landed and the confirmation, or the identity that names the
+    /// store which took it, could not be read; in either case re-delivery is a
+    /// skip.
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
         self.admit(batch)?;
         let groups: Vec<IngestGroup<'_>> = batch
@@ -343,10 +409,12 @@ where
             .watermark()
             .await
             .map_err(StorePeerError::Watermark)?;
+        let responder = self.responder().await?;
         Ok(Ack {
             appended: saturating_u64(ingested.appended),
             skipped: saturating_u64(ingested.skipped),
             confirmed,
+            responder: Some(responder),
         })
     }
 
@@ -391,6 +459,13 @@ pub enum StorePeerError<R, W> {
     /// Re-delivering the push converges: every event in it is now a skip.
     #[error("the far store's watermark could not be read after the ingest")]
     Watermark(#[source] W),
+
+    /// The far store's identity, which every answer names (ADR-0104), could
+    /// not be read. After a push the ingest has landed, and re-delivering it
+    /// converges as for [`Watermark`](Self::Watermark); after a pull nothing
+    /// was forwarded.
+    #[error("the far store's identity could not be read")]
+    Identity(#[source] W),
 
     /// One event is larger than the declared
     /// [`max_event_bytes`](PeerLimits::max_event_bytes), so no split can carry
@@ -443,9 +518,42 @@ impl<R: Classify, W: Classify> Classify for StorePeerError<R, W> {
         match self {
             Self::Read(error) => error.class(),
             Self::Ingest(error) => error.class(),
-            Self::Watermark(error) => error.class(),
+            Self::Watermark(error) | Self::Identity(error) => error.class(),
             Self::EventTooLarge { .. } => FailureClass::Park,
             Self::TooManyEvents { .. } | Self::BatchTooLarge { .. } => FailureClass::Split,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StorePeerError;
+    use crate::{Classify, FailureClass};
+
+    /// A store error that answers whatever class it was built with.
+    #[derive(Debug)]
+    struct Answers(FailureClass);
+
+    impl Classify for Answers {
+        fn class(&self) -> FailureClass {
+            self.0
+        }
+    }
+
+    /// An identity the store could not read is classed by the store (SY-36).
+    /// Rejects an `Identity` arm fixed at one class: a dropped connection is
+    /// `Transient`, a missing meta row is not.
+    #[test]
+    fn an_unread_identity_states_the_store_errors_class() {
+        for class in [
+            FailureClass::Transient,
+            FailureClass::Split,
+            FailureClass::Park,
+            FailureClass::Stop,
+        ] {
+            let error = StorePeerError::<Answers, Answers>::Identity(Answers(class));
+
+            assert_eq!(error.class(), class);
         }
     }
 }

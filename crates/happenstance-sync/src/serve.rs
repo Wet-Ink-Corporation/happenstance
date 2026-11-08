@@ -68,8 +68,14 @@ where
                 .map(StoreResume::try_from)
                 .transpose()?;
             let pulled = peer.pull(from.as_ref()).await.map_err(ServeError::Peer)?;
-            let reply = Pulled::new(pulled.batch, ResumeToken::from(pulled.resume))
-                .with_waiting(pulled.waiting);
+            // A literal, not `new` and builders: a field added to `Pulled` is a
+            // compile error here until this carries it onto the wire.
+            let reply = Pulled {
+                batch: pulled.batch,
+                resume: ResumeToken::from(pulled.resume),
+                waiting: pulled.waiting,
+                responder: pulled.responder,
+            };
             Ok(encode(route, &reply)?)
         }
         Route::Push => {

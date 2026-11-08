@@ -17,8 +17,8 @@ use happenstance_core::{
 };
 use happenstance_sync::wire::ResumeToken;
 use happenstance_sync::{
-    Classify, EventGroup, FailureClass, PeerLimits, PushBatch, ReplicatedEvent, StorePeerError,
-    StoreResume, StoreSyncPeer, SyncPeer, Waiting,
+    Classify, EventGroup, FailureClass, IngestStore, PeerLimits, PushBatch, ReplicatedEvent,
+    StorePeerError, StoreResume, StoreSyncPeer, SyncPeer, Waiting,
 };
 use happenstance_sync_testkit::{
     IngestFixture, MemoryIngestFixture, MemoryIngestHandle, RefusalsOf, SyncFixture,
@@ -101,6 +101,48 @@ async fn pushing_the_same_batch_twice_is_a_skip_and_the_log_is_unchanged() {
 
     assert_eq!((again.appended, again.skipped), (0, 3));
     assert_eq!(log(&store).await, before);
+}
+
+/// Every answer names the far store's own identity (ADR-0104): an ack, a
+/// page, an empty pull, and a pull from the last position a store can number,
+/// which answers without reading the log. A second store's peer names the
+/// second store, so the name is the store's and not a constant.
+///
+/// **Wrong implementations it rejects:** a peer that answers through
+/// `Pulled::new` or `Ack::default` and names nobody, and one that stamps the
+/// identity on one path and forgets another — the early return included.
+#[tokio::test]
+async fn every_answer_names_the_far_store_as_its_responder() {
+    let (peer, store) = peer_over(PeerLimits::minimum()).await;
+    let (other_peer, other_store) = peer_over(PeerLimits::minimum()).await;
+    let named = IngestStore::store_id(&store)
+        .await
+        .expect("the in-memory store's error is uninhabited");
+    let other = IngestStore::store_id(&other_store)
+        .await
+        .expect("the in-memory store's error is uninhabited");
+    assert_ne!(named, other, "two fixtures are two stores");
+
+    let ack = peer.push(&singles(2)).await.expect("a push");
+    let page = peer.pull(None).await.expect("a pull");
+    let empty = peer.pull(Some(&page.resume)).await.expect("an empty pull");
+    let at_the_end = StoreResume::after(
+        SequencePosition::new(u64::MAX).expect("the largest position is not zero"),
+    );
+    let past = peer
+        .pull(Some(&at_the_end))
+        .await
+        .expect("a pull past the end");
+    let elsewhere = other_peer
+        .pull(None)
+        .await
+        .expect("a pull from the other store");
+
+    assert_eq!(ack.responder, Some(named), "the ack");
+    assert_eq!(page.responder, Some(named), "the page");
+    assert_eq!(empty.responder, Some(named), "the empty pull");
+    assert_eq!(past.responder, Some(named), "the pull past the end");
+    assert_eq!(elsewhere.responder, Some(other), "the other store's pull");
 }
 
 #[tokio::test]
