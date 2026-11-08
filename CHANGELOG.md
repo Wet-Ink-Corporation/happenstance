@@ -191,6 +191,15 @@ not the same as what a user needed to be told.
   codec cannot write or read back, and `SqliteEventStoreError::GroupOrder`,
   behind `sync`, a stored `write_group` naming a group the read had already
   passed, which only a damaged file holds; both are classed `Stop`.
+- `happenstance-cloudflare`: `CloudflareIngestStore` implements
+  `WriteGroupStore` behind `sync`, the bare flavour, over the two columns
+  `migrate` now adds, and stores an ingested group's guard on the group's
+  first landed row. `CloudflareEventStoreError::StoredGuard` and
+  `CloudflareEventStoreError::GroupOrder`, both behind `sync` and classed
+  `Stop`, are SQLite's two (additive; the enum is `#[non_exhaustive]`). The
+  write-group family runs on the Node shim in the gate and, through
+  `harness/workerd`'s `/write-group-rule/<name>`, under local `workerd` warm
+  and cold and on a deployed object.
 - `happenstance-sync-testkit`: SY-30's rule, `push_envelope_preserves_group_boundaries`,
   in the peer family. It pushes three groups in one batch, two events under
   one guard, one event with no guard, and two events under a second guard, and
@@ -215,7 +224,9 @@ not the same as what a user needed to be told.
   above a row position; and `pages_chain_on_first_and_end_with_nothing`, which
   fails a page its budget cut that says nothing is waiting. Each is pinned
   against its wrong stores in `tests/wrong_write_group_stores.rs`.
-  `MemoryIngestFixture` and `happenstance-sqlite` mount it.
+  `MemoryIngestFixture`, `happenstance-sqlite` and `happenstance-cloudflare`
+  mount it; `emit_write_group_wasm!` is the Durable Object's emitter, the twin
+  of `emit_ingest_wasm!`.
 - `happenstance-sync-testkit`: a sync conformance rule,
   **`round_trip_preserves_the_whole_log`** (SY-28, SY-27, #140). The defect it
   detects is a peer that replicates a slice: it stores and acknowledges every
@@ -332,6 +343,17 @@ not the same as what a user needed to be told.
   wrap the file and fail its first append with `no such column`: a caller that
   wraps its own connection with `new` opens the file once through `open_on`
   first.
+- `happenstance-cloudflare`: write groups (#420). `migrate` asks `PRAGMA
+  table_info` for the log's event table and adds `write_group INTEGER` and
+  `group_guard BLOB` where they are missing, each on its own, per namespace;
+  a second `migrate` adds nothing. The append's identity stamp now also names
+  the batch's first position as its write group, and ingest's foreign stamp
+  names the group's first landed row and puts the guard on it, so no row is
+  written twice for it. A row written before the columns existed reads as a
+  group of its own; there is no backfill. **Upgrading:** there is no schema
+  marker, so a build before this one keeps opening an object this one has
+  migrated, and the rows it writes read as groups of one. Deploy this build
+  to every writer and peer of an object before it serves replication.
 
 ## [0.5.1] — 2026-11-08
 

@@ -196,9 +196,20 @@ built from the object's raw `DurableObjectState` rather than from `SqlStorage`:
 `CloudflareEventStore` first, as before the first append. The identity an ingest
 checks claims against is read from `store_meta` on every call. It turns on
 `happenstance-core`'s `serde` feature through `happenstance-sync`. The ingest
-family runs on `wasm32` under the gate's Node host, not yet under `workerd`.
+family runs on `wasm32` under the gate's Node host and under `workerd`.
 There is no runner (issue #244) and no network peer yet, so this is the port,
 not replication.
+
+`CloudflareIngestStore` also implements `WriteGroupStore` (#420, SY-39): it
+reads the log back in the writes that made it, one group per append and per
+ingested group with its compensation, each with the guard it arrived under,
+which is what a runner pushes and a store peer serves. `migrate` records them
+in two columns it adds to the event table where they are missing,
+`write_group` and `group_guard`; a row written before them reads as a group of
+its own. There is no schema marker, so an older build keeps opening a migrated
+object and writes rows that read as groups of one: deploy this build to every
+writer and peer of an object before it serves replication. The write-group
+family runs where the ingest family does.
 
 ## The limits this store declares
 

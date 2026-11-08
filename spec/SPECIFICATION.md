@@ -2955,7 +2955,7 @@ impls now do, and one of them is the proof rather than the breadth: `LocalMemory
 (`crates/happenstance-testkit/tests/local_conformance.rs:198`) is a direct `impl
 EventStore for` in a genuinely downstream crate, beside the blanket impl without
 `error[E0119]`, passing every rule natively and on `wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:1267`) and `happenstance-neon`'s two
+(`crates/happenstance-cloudflare/src/event_store.rs:1324`) and `happenstance-neon`'s two
 (`crates/happenstance-neon/src/event_store.rs:884`, `:1593`) widen the evidence without
 adding to it. ADR-0001's marker was lifted on that basis at phase 1 (`references/adr/0001-async-port-flavours.md:5-6`).
 
@@ -4495,7 +4495,7 @@ today, four of them skeletons — `happenstance-sqlite` was the fifth until phas
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
 `crates/happenstance-sqlite/src/event_store.rs:2057`,
 `crates/happenstance-postgres/src/event_store.rs:513`,
-`crates/happenstance-cloudflare/src/event_store.rs:1267` and
+`crates/happenstance-cloudflare/src/event_store.rs:1324` and
 `crates/happenstance-neon/src/event_store.rs:884`, `:1593`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
@@ -7484,7 +7484,7 @@ already page-bounded (SY-15), so *one ingest round trip per pulled batch* is a
 number a rule can count. ADR-0027 found the mechanism already in the tree. The
 unique `(origin_store, origin_position)` index VT-8 requires is in all four
 adapters (`crates/happenstance-sqlite/src/event_store.rs:309`,
-`crates/happenstance-cloudflare/src/event_store.rs:210`,
+`crates/happenstance-cloudflare/src/event_store.rs:227`,
 `crates/happenstance-postgres/migrations/0001_event_log.sql:92`,
 `crates/happenstance-neon/migrations/0001_neon_log.sql:117`), so what an
 already-written adapter pays to add it is nothing. The SQLite ingest spike skips

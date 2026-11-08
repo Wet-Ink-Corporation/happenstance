@@ -1,9 +1,10 @@
-//! The ingest conformance family, mounted on the Durable Object.
+//! The ingest and write-group conformance families, mounted on the Durable
+//! Object.
 //!
 //! Executed on `wasm32-unknown-unknown` under the gate's Node shim, through
 //! `xtask/src/proof.rs`'s `--lib` row for this crate, whose transcribed names
-//! include every rule below. The mount is exhaustive by construction: the macro
-//! expands `for_each_ingest_store_rule!`.
+//! include every rule below. Each mount is exhaustive by construction: the
+//! macros expand `for_each_ingest_store_rule!` and `for_each_write_group_rule!`.
 
 use core::future::Future;
 
@@ -126,5 +127,13 @@ impl CloudflareIngestFixture {
 happenstance_sync_testkit::ingest_store_conformance!(
     mod_name = ingest_conformance,
     emit = happenstance_sync_testkit::emit_ingest_wasm,
+    fixture = super::CloudflareIngestFixture::new()
+);
+
+// The write-group family (SY-39, #420) on the same fixture: the store a runner
+// pushes from and a `StoreSyncPeer` pulls from.
+happenstance_sync_testkit::write_group_store_conformance!(
+    mod_name = write_group_conformance,
+    emit = happenstance_sync_testkit::emit_write_group_wasm,
     fixture = super::CloudflareIngestFixture::new()
 );

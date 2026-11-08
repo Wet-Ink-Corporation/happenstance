@@ -15,7 +15,9 @@
 //!
 //! * the foreign stamp, [`stamp_foreign_sql`], an `UPDATE OR IGNORE` whose
 //!   `RETURNING` row says whether the stamp landed: `UNIQUE (origin_store,
-//!   origin_position)` refuses a held identity, and SQLite skips the row;
+//!   origin_position)` refuses a held identity, and SQLite skips the row. It
+//!   also names the row's write group, the group's first landed row, and puts
+//!   the group's guard on that row (#420, SY-39);
 //! * the discard of a skipped event's staged row, [`discard_staged_sql`];
 //! * the own-identity check (SY-38), decided by the stamp's outcome and the
 //!   head read once as the call's first read, with no lookup ahead of it;
@@ -74,7 +76,8 @@
 //! On `wasm32-unknown-unknown` under the gate's Node shim, whose
 //! `transactionSync` is this module's `model` over `SAVEPOINT`, and under
 //! `workerd`, local and deployed: `harness/workerd` runs the ingest family
-//! through `namespaced_from_object_state` over a real object (#108 part E3).
+//! through `namespaced_from_object_state` over a real object (#108 part E3),
+//! and the write-group family on the same fixtures (#420).
 //! The primitive itself is probed there by `/transaction-probe` routes. The
 //! 1,024-event ceiling is the declared policy; below it, local `workerd`
 //! commits every call at 1,024 events of 1 or of 1,024 tags (about two
@@ -90,6 +93,7 @@
 //! compiles none of this. It was `cfg(test)` until part E published
 //! `happenstance-sync`.
 
+use core::num::NonZeroUsize;
 use core::slice;
 
 use futures_core::Stream;
@@ -98,8 +102,8 @@ use happenstance_core::{
     SequencePosition, SequencedEvent, StoreId,
 };
 use happenstance_sync::{
-    Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested, ReplicatedEvent,
-    Watermark,
+    Classify, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
+    ReplicatedEvent, Watermark, WriteGroupStore,
 };
 
 use super::{
@@ -121,9 +125,15 @@ use transaction::{Settled, Transactions};
 /// for a stamp that landed (`harness/workerd`'s `update-or-ignore-returning`
 /// probe measures it on the runtime). The `IS NULL` guard makes it
 /// impossible to restamp an event.
+///
+/// The same statement names the row's write group and, on the group's first
+/// landed row, stores the guard the group arrived under (#420), so a landed
+/// row is never written twice: a Durable Object bills every row an `UPDATE`
+/// writes. A stamp that does not land writes neither.
 fn stamp_foreign_sql(tables: &Tables) -> String {
     format!(
-        "UPDATE OR IGNORE {} SET origin_store = ?, origin_position = ? \
+        "UPDATE OR IGNORE {} SET origin_store = ?, origin_position = ?, \
+         write_group = ?, group_guard = ? \
          WHERE position = ? AND origin_position IS NULL RETURNING position",
         tables.event
     )
@@ -333,76 +343,122 @@ impl CloudflareIngestStore {
         // stamp use the identity current when the call runs.
         let own = self.store.store_id()?;
         // The head, read as the call's first read, and only when the call
-        // carries a claim. A claim is judged only inside `if let Some(head)`,
-        // so none is ever judged without it; the inner `None` is an empty
-        // store, which holds no own identity.
-        let held_through = if plan.iter().any(|group| group.claims(own)) {
-            Some(max_position(&self.store.sql, &self.store.tables)?)
+        // carries a claim. A claim is judged only against `ClaimCheck::Against`,
+        // so none is ever judged without it; its `None` is an empty store,
+        // which holds no own identity.
+        let claims = if plan.iter().any(|group| group.claims(own)) {
+            ClaimCheck::Against(max_position(&self.store.sql, &self.store.tables)?)
         } else {
-            None
+            ClaimCheck::NoClaim
         };
 
-        let insert = insert_statement(&self.store.tables);
+        let call = Call {
+            own,
+            claims,
+            insert: insert_statement(&self.store.tables),
+            recorded_at,
+        };
         let mut ingested = Ingested::default();
         for group in plan {
-            let mut landed = false;
-            for (event, origin) in &group.events {
-                let position = self
-                    .store
-                    .insert_row(&insert, &event.event, event.recorded_at)?;
-                if self.stamp_foreign(position, *origin)? {
-                    self.store
-                        .write_tag_rows(slice::from_ref(&event.event), &[position])?;
-                    ingested.appended = ingested.appended.saturating_add(1);
-                    landed = true;
-                    // It landed, so this store did not hold it.
-                    if origin.store == own {
-                        return Err(Refusal::Unheld(event.id));
-                    }
-                } else {
-                    self.discard_staged(position)?;
-                    ingested.skipped = ingested.skipped.saturating_add(1);
-                    // Skipped above the head: the row it met is this call's own
-                    // compensation, so this store did not hold it either. Every
-                    // own-identity row has `origin_position = position`, and an
-                    // unheld claim never lands, so at or below the head it is a
-                    // held echo.
-                    if let Some(head) = held_through
-                        && origin.store == own
-                        && head.is_none_or(|head| origin.position > position_as_i64(head))
-                    {
-                        return Err(Refusal::Unheld(event.id));
-                    }
-                }
-            }
-            if landed && !group.compensation.is_empty() {
-                // Append's writer, which stamps `(own, position)` through its own
-                // `IS NULL` marker. A collision there would mean an own identity
-                // already sits at a fresh position, which this adapter cannot
-                // produce, so it raises rather than skips.
-                let mut positions = Vec::with_capacity(group.compensation.len());
-                self.store
-                    .write_rows(own, group.compensation, recorded_at, &mut positions)?;
-                ingested.compensated = ingested
-                    .compensated
-                    .saturating_add(group.compensation.len());
-            }
+            self.write_group(&call, group, &mut ingested)?;
         }
         Ok(ingested)
     }
 
-    /// Stamps the staged row at `position` with `origin`, and says whether the
-    /// stamp landed.
+    /// Writes one group of the call: each foreign event, then, if any landed,
+    /// its compensation, all as one write group (#420).
+    ///
+    /// The group is named by the first of its rows that lands, which is not
+    /// known until a stamp lands: a re-delivered head is skipped and its staged
+    /// row discarded (I-2). Until then each candidate names itself and carries
+    /// the guard, so whichever lands first holds both, and every row after it
+    /// names it. The compensation joins it through append's writer.
+    fn write_group(
+        &self,
+        call: &Call,
+        group: &GroupPlan<'_>,
+        ingested: &mut Ingested,
+    ) -> Result<(), Refusal> {
+        let mut first: Option<SequencePosition> = None;
+        // Encoded once, at the first candidate, and only if there is a guard.
+        let mut stored_guard: Option<Vec<u8>> = None;
+        for (event, origin) in &group.events {
+            let position = self
+                .store
+                .insert_row(&call.insert, &event.event, event.recorded_at)?;
+            let (names, guard) = if let Some(first) = first {
+                (first, None)
+            } else {
+                if stored_guard.is_none() {
+                    stored_guard = store_guard(group.guard, position)?;
+                }
+                (position, stored_guard.as_deref())
+            };
+            if self.stamp_foreign(position, *origin, names, guard)? {
+                self.store
+                    .write_tag_rows(slice::from_ref(&event.event), &[position])?;
+                ingested.appended = ingested.appended.saturating_add(1);
+                first.get_or_insert(position);
+                // It landed, so this store did not hold it.
+                if origin.store == call.own {
+                    return Err(Refusal::Unheld(event.id));
+                }
+            } else {
+                self.discard_staged(position)?;
+                ingested.skipped = ingested.skipped.saturating_add(1);
+                // Skipped above the head: the row it met is this call's own
+                // compensation, so this store did not hold it either. Every
+                // own-identity row has `origin_position = position`, and an
+                // unheld claim never lands, so at or below the head it is a
+                // held echo.
+                if let ClaimCheck::Against(head) = call.claims
+                    && origin.store == call.own
+                    && head.is_none_or(|head| origin.position > position_as_i64(head))
+                {
+                    return Err(Refusal::Unheld(event.id));
+                }
+            }
+        }
+        if let Some(first) = first
+            && !group.compensation.is_empty()
+        {
+            // Append's writer, which stamps `(own, position)` through its own
+            // `IS NULL` marker, and names `first` as the rows' write group. A
+            // collision there would mean an own identity already sits at a
+            // fresh position, which this adapter cannot produce, so it raises
+            // rather than skips.
+            let mut positions = Vec::with_capacity(group.compensation.len());
+            self.store.write_rows(
+                call.own,
+                group.compensation,
+                call.recorded_at,
+                Some(first),
+                &mut positions,
+            )?;
+            ingested.compensated = ingested
+                .compensated
+                .saturating_add(group.compensation.len());
+        }
+        Ok(())
+    }
+
+    /// Stamps the staged row at `position` with `origin`, names `group` as its
+    /// write group and stores `guard` on it, and says whether the stamp landed.
     fn stamp_foreign(
         &self,
         position: SequencePosition,
         origin: StoredOrigin,
+        group: SequencePosition,
+        guard: Option<&[u8]>,
     ) -> Result<bool, CloudflareEventStoreError> {
         let mut cursor = self.store.sql.exec(
             &stamp_foreign_sql(&self.store.tables),
             &[
                 SqlValue::Blob(origin.store.to_bytes().to_vec()),
                 SqlValue::Integer(origin.position),
+                SqlValue::Integer(position_as_i64(group)),
+                // `worker`'s binding owns what it binds, as `insert_row`'s do.
+                guard.map_or(SqlValue::Null, |guard| SqlValue::Blob(guard.to_vec())),
                 SqlValue::Integer(position_as_i64(position)),
             ],
         )?;
@@ -511,6 +567,23 @@ impl IngestStore for CloudflareIngestStore {
     }
 }
 
+/// The log in the writes that made it (SY-39), from the two columns `migrate`
+/// adds: what a runner pushes from and a `StoreSyncPeer` serves a pull from.
+/// On this wrapper rather than on [`CloudflareEventStore`] because both of
+/// those bind it beside [`IngestStore`]. The bare flavour, as the others here.
+/// Synchronous inside, so a dropped future has already read or failed.
+impl WriteGroupStore for CloudflareIngestStore {
+    type Error = CloudflareEventStoreError;
+
+    async fn read_groups(
+        &self,
+        after: Option<SequencePosition>,
+        max_events: NonZeroUsize,
+    ) -> Result<GroupPage, Self::Error> {
+        self.store.read_write_groups(after, max_events)
+    }
+}
+
 /// An ingested event's origin, in the shape this runtime binds exactly: parse,
 /// don't validate (API-03).
 ///
@@ -556,6 +629,8 @@ struct GroupPlan<'a> {
     events: Vec<(&'a ReplicatedEvent, StoredOrigin)>,
     /// The group's compensation.
     compensation: &'a [Event],
+    /// The condition the group arrived under, stored on its first landed row.
+    guard: Option<&'a AppendCondition>,
 }
 
 impl GroupPlan<'_> {
@@ -578,8 +653,48 @@ impl<'a> TryFrom<&IngestGroup<'a>> for GroupPlan<'a> {
         Ok(Self {
             events,
             compensation: group.compensation,
+            guard: group.guard,
         })
     }
+}
+
+/// What every group of one call is written against.
+struct Call {
+    /// This store's identity, read inside the transaction.
+    own: StoreId,
+    /// Whether, and against what, a claim of `own` is judged.
+    claims: ClaimCheck,
+    /// Append's `INSERT`, rendered once per call.
+    insert: String,
+    /// The compensation's one recorded time.
+    recorded_at: RecordedAt,
+}
+
+/// What a call knows of the head when it judges a claim of its own identity.
+#[derive(Debug, Clone, Copy)]
+enum ClaimCheck {
+    /// The call carries no claim, so the head was not read.
+    NoClaim,
+    /// The head, read as the call's first read; `None` is an empty store,
+    /// which holds no own identity.
+    Against(Option<SequencePosition>),
+}
+
+/// `guard` in `happenstance-sync`'s stored form, for the group whose first
+/// landed row would be `first`.
+///
+/// # Errors
+///
+/// [`StoredGuard`](CloudflareEventStoreError::StoredGuard) if the codec
+/// refuses it, which rolls the call back.
+fn store_guard(
+    guard: Option<&AppendCondition>,
+    first: SequencePosition,
+) -> Result<Option<Vec<u8>>, CloudflareEventStoreError> {
+    guard
+        .map(happenstance_sync::write_group::encode_guard)
+        .transpose()
+        .map_err(|source| CloudflareEventStoreError::StoredGuard { first, source })
 }
 
 /// Why a call rolled back.
@@ -637,7 +752,12 @@ impl Classify for CloudflareEventStoreError {
             | Self::StoredTag(_)
             | Self::CorruptTags
             | Self::UnstampedEvent { .. }
-            | Self::StoredPosition { .. } => FailureClass::Stop,
+            | Self::StoredPosition { .. }
+            // The write-group read (#420): a guard column no build of the
+            // codec wrote, or groups stored out of order. Both are what the
+            // object holds, so the same read fails the same way again.
+            | Self::StoredGuard { .. }
+            | Self::GroupOrder(_) => FailureClass::Stop,
         }
     }
 }
