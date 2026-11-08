@@ -20,8 +20,8 @@ with programs you can run.
 > The version moves in lockstep with the rest of the workspace until 1.0. Each
 > rule names the clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
-> it checks; several of those are still `[PROVISIONAL]` (SY-7, SY-10, SY-27 –
-> SY-31, SY-36 – SY-38 among the ones a rule here checks), and a rule over a
+> it checks; several of those are still `[PROVISIONAL]` (SY-7, SY-10, SY-23,
+> SY-27 – SY-31, SY-36 – SY-38 among the ones a rule here checks), and a rule over a
 > provisional clause moves when its clause does. There is no runner yet (issue
 > #244), so nothing here checks one.
 >
@@ -31,7 +31,9 @@ with programs you can run.
 ## Use
 
 A store adapter that implements `IngestStore` mounts the ingest family beside
-the event-store suite, over a fixture that builds one isolated store per call:
+the event-store suite, over a fixture that builds one isolated store, with a
+fresh incarnation, per call (SY-7's rule opens two and fails a fixture that
+hands it one store twice):
 
 ```rust,ignore
 happenstance_sync_testkit::ingest_store_conformance!(MyIngestFixture::new());

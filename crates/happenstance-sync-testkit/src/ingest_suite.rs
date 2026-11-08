@@ -127,6 +127,9 @@ pub mod ingest_rules {
     // enough. A child module, so it reaches the helpers below through `super`
     // without widening any of them.
     mod batch_scope;
+    // SY-7's arrangement and the runner the rule plays, beside VT-36's for the
+    // same reason.
+    mod adjudication;
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -1173,6 +1176,57 @@ pub mod ingest_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-7: a compensation is written only by the store the assignment names
+    /// the fact family's adjudicator, and filed under that store's own
+    /// identity, which is how a log records who authored it.
+    ///
+    /// Two stores each take the same pair of conflicting claims on one seat,
+    /// from two foreign origins, in opposite orders. The rule plays the runner
+    /// above them and holds the assignment: the first store adjudicates the
+    /// seat family and the second does not. Where the runner finds the pulled
+    /// claim's guard matched by what the store holds (SY-6's evidence), it
+    /// hands the adjudicator a reversal to write with the claim, in one group,
+    /// and hands the other store the claim alone. Read back, the adjudicator's
+    /// log holds one reversal, carrying the adjudicator's identity, and the
+    /// other store's holds none. Reversals are found by type, never decoded.
+    ///
+    /// # Rejects
+    ///
+    /// A store that mints a compensation under an incarnation it never read,
+    /// a placeholder, rather than its own identity: its log then says a store
+    /// nobody assigned authored the reversal, and every such store files every
+    /// compensation under that one identity, so two stores' reversals at one
+    /// position collapse into one when they meet, which is SY-7's marker's
+    /// escape reached by losing an event. `tests/wrong_ingest_stores.rs`
+    /// carries it, and asserts SY-38's rule reports its compensation-hidden
+    /// half skipped against it, since the compensation is not where its own
+    /// identity would put it.
+    ///
+    /// # Does not reject
+    ///
+    /// **Every peer adjudicating**, the wrong implementation SY-7 names. That
+    /// is a runner configuration, and no runner in `happenstance-sync` authors
+    /// a compensation yet, so the rule plays the runner and always honours the
+    /// assignment. The configuration SY-7 forbids is run by the clause's
+    /// falsification test, in this crate's own tests, where two adjudicators
+    /// answer one conflict twice and reverse opposite claims.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-7 if the fixture gives both stores one identity,
+    /// if a store refuses or miscounts an ingest, or if either log holds a
+    /// reversal its store was not assigned, lacks the one it was, or files it
+    /// under another identity.
+    pub async fn only_the_adjudicator_compensates<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let conflict =
+            adjudication::take_the_conflicting_pair(&open, adjudication::Assignment::Adjudicator)
+                .await?;
+        adjudication::judge(&conflict).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What a refused or skipped ingest must leave as it found it.
     #[derive(Debug, PartialEq)]
     struct Observed {
@@ -1467,6 +1521,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- A call is held to its tags-per-batch ceiling (VT-36, SY-18) -
             ingest_holds_the_call_to_its_tags_per_batch_ceiling,
+
+            // --- Only the assigned adjudicator compensates (SY-7) ------------
+            only_the_adjudicator_compensates,
         }
     };
 }

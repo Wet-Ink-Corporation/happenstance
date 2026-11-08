@@ -17,6 +17,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use happenstance_core::bytes::Bytes;
@@ -122,6 +123,14 @@ enum Mistake {
     /// left alone, so the call is refused as `TagsPerEvent`, `Park`, and a
     /// runner parks a call that would have landed halved.
     RefusesTheTotalAsPerEvent,
+    /// SY-7's: a compensation minted under an incarnation the store never
+    /// read, a placeholder (the nil `StoreId`), because its compensation path
+    /// was written before the store kept its identity. The log then says a
+    /// store nobody assigned authored the reversal, and every such store files
+    /// every compensation under that one identity, so two stores' reversals at
+    /// one position collapse into one when they meet: the convergence SY-7's
+    /// marker asks about, reached by losing an event.
+    FilesCompensationUnderAPlaceholder,
     /// Not a mistake in the write: a store whose identity read fails, as a
     /// SQL store's does when its meta row is gone or its server is not
     /// reachable. Every rule that asks the store who it is must report the
@@ -140,6 +149,10 @@ const WRONG_MAX_METADATA_LEN: usize = 512;
 /// at least [`WRONG_MAX_TAGS`], so it is coherent, and above every call any
 /// other rule makes, the largest of which is SY-18's control at 16.
 const WRONG_MAX_TAGS_PER_BATCH: usize = 64;
+
+/// The incarnation [`Mistake::FilesCompensationUnderAPlaceholder`] files
+/// every compensation under: one no store was given, and no rule's origin.
+const PLACEHOLDER: StoreId = StoreId::from_bytes([0; 16]);
 
 /// The time this store stamps everything it writes itself.
 const ARRIVAL: RecordedAt = RecordedAt::from_millis(1_234_567_890_123);
@@ -480,12 +493,17 @@ impl WrongIngestStore {
 
     /// Mints `compensation` here, and says how many it wrote.
     fn compensate(&self, working: &mut Vec<Row>, compensation: &[Event]) -> usize {
+        let author = if self.mistake == Mistake::FilesCompensationUnderAPlaceholder {
+            PLACEHOLDER
+        } else {
+            self.own
+        };
         for event in compensation {
             let mut position = next_position(working);
             if self.mistake == Mistake::LeavesAGap {
                 position = position.next().unwrap_or(position);
             }
-            let id = EventId::new(self.own, position);
+            let id = EventId::new(author, position);
             working.push(Row {
                 stored: SequencedEvent::new(position, id, ARRIVAL, event.clone()),
                 origin: id,
@@ -655,10 +673,23 @@ impl Stream for Owned {
 #[derive(Debug, Clone)]
 struct WrongFixture(Arc<WrongIngestStore>);
 
+/// The next wrong store's incarnation, counted so every fixture's store is a
+/// fresh one: SY-7's rule opens two stores and refuses a fixture that hands it
+/// one incarnation twice. `Relaxed`, because the count only has to be unique,
+/// and a read-modify-write is that under any ordering.
+static INCARNATIONS: AtomicU64 = AtomicU64::new(0);
+
+/// A fresh incarnation, `0xE1` in every byte but the counted low ones, so it
+/// is never one of the foreign origins a rule uses.
+fn fresh_incarnation() -> StoreId {
+    let counted = u128::from(INCARNATIONS.fetch_add(1, Ordering::Relaxed));
+    StoreId::from_bytes((u128::from_be_bytes([0xE1; 16]) ^ counted).to_be_bytes())
+}
+
 impl WrongFixture {
     fn new(mistake: Mistake) -> Self {
         Self(Arc::new(WrongIngestStore {
-            own: StoreId::from_bytes([0xE1; 16]),
+            own: fresh_incarnation(),
             rows: Mutex::new(Vec::new()),
             fault: Mutex::new(None),
             mistake,
@@ -833,6 +864,7 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
             "ingest_holds_the_call_to_its_tags_per_batch_ceiling",
             "VT-36",
         ),
+        ("only_the_adjudicator_compensates", "SY-7"),
     ];
     assert_eq!(all.len(), clauses.len(), "a rule was added: {all:?}");
     for (name, verdict) in all {
@@ -1098,4 +1130,28 @@ fn ingest_holds_the_call_to_its_tags_per_batch_ceiling_fails_a_store_that_refuse
         message.is_some_and(|message| message.contains("not as the tags per batch limit")),
         "{message:?}"
     );
+}
+
+/// SY-7's rule fails it, and one other rule notices without failing it:
+/// SY-38's compensation-hidden half arranges a claim on the identity the
+/// compensation should take, finds the compensation elsewhere, and says so as
+/// a skip rather than a pass. Every other rule passes.
+#[test]
+fn only_the_adjudicator_compensates_fails_a_store_that_files_compensation_under_a_placeholder() {
+    let all = verdicts(async || WrongFixture::new(Mistake::FilesCompensationUnderAPlaceholder));
+    let (noticed, rest): (Vec<_>, Vec<_>) = all
+        .into_iter()
+        .partition(|(name, _)| *name == "an_unheld_own_identity_stops_the_ingest");
+    let hidden_claim_unarranged = RuleOutcome::Skipped {
+        capability: NO_HIDDEN_CLAIM,
+        reason: NO_HIDDEN_CLAIM_REASON,
+    };
+    assert_eq!(
+        noticed,
+        [(
+            "an_unheld_own_identity_stops_the_ingest",
+            Ok(hidden_claim_unarranged)
+        )]
+    );
+    fails_exactly(&rest, "only_the_adjudicator_compensates", "SY-7");
 }

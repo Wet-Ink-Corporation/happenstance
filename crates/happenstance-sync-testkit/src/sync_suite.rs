@@ -165,6 +165,12 @@ pub mod rules {
     const DURABLE_ORIGIN: StoreId = StoreId::from_bytes([0x81; 16]);
     const DURABLE_TWIN: StoreId = StoreId::from_bytes([0x82; 16]);
 
+    /// SY-23's three origins, in `EventId` order: the derive sorts a
+    /// [`StoreId`] by its bytes.
+    const ORDER_LOW: StoreId = StoreId::from_bytes([0xA1; 16]);
+    const ORDER_MID: StoreId = StoreId::from_bytes([0xA2; 16]);
+    const ORDER_HIGH: StoreId = StoreId::from_bytes([0xA3; 16]);
+
     /// The type of every event SY-18's batch rule pushes.
     const BATCH_FILLED: EventType = EventType::from_static("BatchFilled");
 
@@ -1002,6 +1008,93 @@ pub mod rules {
         ))
     }
 
+    /// SY-23: the order a deployment may rely on peer-independently,
+    /// [`EventId`] order, is the same on this peer as on every other, whatever
+    /// order the events arrived in.
+    ///
+    /// The rule plays the other peer, which holds the events as their origins
+    /// wrote them. Three origins number their events with gaps, which the
+    /// contract allows, and the rule pushes them one to a push in an arrival
+    /// order unlike their `EventId` order, in which an origin's higher position
+    /// arrives before its lower one, as a delayed page lands after a later one.
+    /// It then pulls the peer's whole log, sorts it by `EventId` and compares
+    /// it with its own copy, sorted the same way, event by event and byte for
+    /// byte. Nothing is decoded (SY-35), and the rule never asks the peer for
+    /// an order: where it hands events back in arrival order, SY-25's subject,
+    /// the sort makes that irrelevant.
+    ///
+    /// # Rejects
+    ///
+    /// A peer that dedupes by the highest origin position it has seen from
+    /// each origin rather than by identity: the cheap shortcut its own
+    /// [`Ack::confirmed`] watermark invites. It drops an origin's lower event
+    /// when it arrives after a higher one, so its `EventId` order is missing
+    /// an event every other peer's has, and a deployment sorting by it
+    /// produces different output there. `tests/wrong_orders.rs` carries it,
+    /// beside its faithful control.
+    ///
+    /// # Does not reject
+    ///
+    /// An `Ord` on [`EventId`] other than `(origin, origin_position)`, sorted
+    /// with the origin first, which is the other half of SY-23. That order is
+    /// `happenstance-core`'s derive (`identity.rs`, VT-5), and no peer can
+    /// supply its own. The rule sorts with it, so a change there would move
+    /// the order on every peer together, which this rule cannot see.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-23 if the peer refuses a push or a pull, or if
+    /// its log, sorted by `EventId`, is not the pushed events sorted the same
+    /// way.
+    pub async fn event_id_order_is_identical_on_every_peer<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-23";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+        let arriving = arrival_order(CLAUSE)?;
+        for event in &arriving {
+            peer.push(&one_event(event.clone()))
+                .await
+                .map_err(|error| {
+                    Violation::new(
+                        CLAUSE,
+                        format!("the peer refused a one-event push of {}: {error}", event.id),
+                    )
+                })?;
+        }
+
+        let mut held: Vec<ReplicatedEvent> = pull_everything(&peer, CLAUSE)
+            .await?
+            .into_iter()
+            .flat_map(|group| group.events)
+            .collect();
+        held.sort_by_key(|event| event.id);
+        let mut origins = arriving;
+        origins.sort_by_key(|event| event.id);
+        let ids = |events: &[ReplicatedEvent]| -> Vec<EventId> {
+            events.iter().map(|event| event.id).collect()
+        };
+        ensure(ids(&held) == ids(&origins), CLAUSE, || {
+            format!(
+                "sorted by EventId, the peer holds {:?} and its origins wrote {:?}; a \
+                 deployment that sorts by EventId gets different output on this peer",
+                ids(&held),
+                ids(&origins)
+            )
+        })?;
+        for (kept, written) in held.iter().zip(&origins) {
+            ensure(kept == written, CLAUSE, || {
+                format!(
+                    "{} is held with a recorded time or bytes other than its origin's; sorted \
+                     by EventId, the two logs agree on identities and not on content",
+                    kept.id
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// Pushes `fill.groups` single-event groups from [`ORIGIN_A`], at most
     /// `fill.per_push` to a push. Answers whether the peer took them all.
     async fn fill_with_readings<P: SyncPeer>(
@@ -1089,6 +1182,28 @@ pub mod rules {
             clause,
             format!("the peer was still handing back groups after {max_pulls} pulls"),
         ))
+    }
+
+    /// SY-23's log, in the order it arrives: three origins, each numbering
+    /// its events with gaps, interleaved unlike their `EventId` order, and the
+    /// low origin's and the high origin's higher position each arriving before
+    /// its lower one. The positions are what the origins chose to send, never
+    /// a claim about what a peer assigns.
+    fn arrival_order(clause: &'static str) -> Result<Vec<ReplicatedEvent>, Violation> {
+        [
+            (ORDER_LOW, 5),
+            (ORDER_MID, 3),
+            (ORDER_HIGH, 4),
+            (ORDER_LOW, 2),
+            (ORDER_HIGH, 1),
+            (ORDER_MID, 8),
+        ]
+        .into_iter()
+        .map(|(origin, position)| {
+            let data = format!("sy23 {origin} {position}");
+            durable_reading(origin, position, data.as_bytes(), clause)
+        })
+        .collect()
     }
 
     /// `event` as a batch of one group.
@@ -1452,6 +1567,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A group travels whole (SY-2) -------------------------------
             compensation_is_atomic_with_the_losing_event,
+
+            // --- EventId order is the same on every peer (SY-23) ------------
+            event_id_order_is_identical_on_every_peer,
 
             // --- A peer declares its own limits (SY-18) ---------------------
             peer_declares_its_own_limits,

@@ -108,6 +108,27 @@ not the same as what a user needed to be told.
   written against `0.5.1` states `REOPEN` — declined with its own reason, or
   supported with an override of `reopen` that answers `Reopened::Discarded`.
 
+- `happenstance-sync-testkit`: two rules (#136). `only_the_adjudicator_compensates`
+  (SY-7) joins the ingest family: two stores take one conflicting pair in
+  opposite orders, the rule plays the runner and holds a one-adjudicator
+  assignment, and the adjudicator's log must hold one reversal filed under its
+  own identity and the other store's none. It fails a store that mints a
+  compensation under an incarnation it never read. It opens **two** stores, so
+  **this can turn a passing adapter's CI red without a code change in the
+  adapter**: an `IngestFixture` must give every store it opens a fresh
+  incarnation, and the rule fails one that hands it the same store twice.
+  `event_id_order_is_identical_on_every_peer` (SY-23) joins the peer family:
+  events from three origins, numbered with gaps and arriving out of `EventId`
+  order, must come back from the peer in the same `EventId` order, byte for
+  byte, as their origins wrote them. It fails a peer that dedupes by the highest
+  origin position it has seen from each origin. SY-7's falsification test runs
+  beside the rule with two adjudicator configurations and records the
+  divergence ADR-0027 predicted: after two adjudicators meet, their logs hold
+  the same events, two reversals with two identities for one conflict,
+  reversing opposite claims. No runner in `happenstance-sync` authors a
+  compensation yet, so the rule cannot be handed one; the configuration SY-7
+  forbids is that test's, not a mount's.
+
 ### Changed
 
 - `happenstance-postgres`: a handle no longer caches the store's identity

@@ -7216,7 +7216,17 @@ able to adjudicate the same fact family and their compensations can be made
 convergent. Falsification test: two adjudicators for one family, disconnected
 from each other, each ingesting the same conflicting pair; assert the two logs
 converge after they meet.]`
-Rule: `only_the_adjudicator_compensates` (new, `happenstance-sync-testkit`).
+Rule: `only_the_adjudicator_compensates` (`happenstance-sync-testkit`, #136), in the
+ingest family: two stores take one conflicting pair in opposite orders, the rule plays
+the runner and holds a one-adjudicator assignment, and the adjudicator's log must hold
+one reversal, filed under its own identity, and the other store's none. It fails the
+wrong store `FilesCompensationUnderAPlaceholder`, which mints a compensation under an
+incarnation it never read. Every peer adjudicating is a runner configuration, and no
+runner in `happenstance-sync` authors a compensation yet, so the rule cannot be handed
+one; the falsification test runs it beside the rule instead, on `MemoryIngestStore`
+with two adjudicator configurations, and records the divergence: after the two stores
+meet they hold the same events, and under two adjudicators that is two reversals with
+two identities, reversing opposite claims, so no claim to the seat stands.
 Cases: E2E-39, E2E-42, E2E-45.
 
 *Rejects:* every-peer-adjudicates, which is the reading SY-1 through SY-3 invite
@@ -7872,8 +7882,14 @@ order MUST be `EventId` order — the `(origin, origin_position)` pair, sorted.*
 `[PROVISIONAL — falsified if a domain needs a peer-independent order that also
 reflects real-world time or causality. Falsification test: name a requirement
 that `EventId` order fails and a store-assigned timestamp satisfies.]`
-Rule: `event_id_order_is_identical_on_every_peer` (new,
-`happenstance-sync-testkit`).
+Rule: `event_id_order_is_identical_on_every_peer` (`happenstance-sync-testkit`, #136),
+in the peer family: three origins' events, numbered with gaps, are pushed one to a push
+in an order unlike their `EventId` order, an origin's higher position arriving before
+its lower one; the peer's whole log, sorted by `EventId`, must be the pushed events
+sorted the same way, byte for byte. It fails a peer that dedupes by the highest origin
+position it has seen from each origin. The order itself is `happenstance-core`'s derived
+`Ord` on `EventId`, which no peer supplies, so a change to it would move every peer
+together, and no conformance rule can see that half.
 Cases: E2E-41, E2E-43.
 
 *Rejects:* the hybrid-logical-clock proposal, and it rejects it using the
@@ -10478,7 +10494,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
 | SY-6 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56, E2E-14 |
-| SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` † | E2E-39, E2E-42, E2E-45 |
+| SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` | E2E-39, E2E-42, E2E-45 |
 | SY-8 | FROZEN | the whole of `happenstance-sync-testkit` — every rule in it takes exactly one … | E2E-33, E2E-35, E2E-36, E2E-42 |
 | SY-9 | FROZEN | `one_adapter_serves_both_roles` † | E2E-42, E2E-45 |
 | SY-10 | PROVISIONAL | `directional_merge_rules_compose` † | E2E-42, E2E-44, E2E-45 |
@@ -10494,7 +10510,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-22 |
 | SY-21 | FROZEN | `apply_is_handed_the_origin_identity_not_the_local_position` †, `convergent_pr… | E2E-41 |
 | SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` † | E2E-41 |
-| SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` † | E2E-41, E2E-43 |
+| SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` | E2E-41, E2E-43 |
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-25 | FROZEN | `forwarding_order_is_arrival_order` | E2E-42 |
 | SY-26 | FROZEN | `causality_is_expressible_without_a_contract_change` † | E2E-42, E2E-41 |
