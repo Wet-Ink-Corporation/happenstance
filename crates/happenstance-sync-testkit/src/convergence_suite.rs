@@ -323,10 +323,11 @@ pub mod convergence_rules {
     /// any_case(&CostLayersFixture::new());
     /// ```
     ///
-    /// The check is not one of them. Rustdoc 1.97.1 does not check the code on
-    /// a `compile_fail` fence (RS-62-1), so the `E0277` is a statement of
-    /// intent, and the control above, which names the same fixture, is what
-    /// keeps the fence from passing on a typo:
+    /// The check is not one of them. Rustdoc 1.97.1 does not check the error
+    /// code on a `compile_fail` fence (RS-62-1), so the `E0277` is a statement
+    /// of intent. Two controls keep the fence from passing on a typo: the
+    /// `any_case` control above, which names the same fixture, and the SY-20
+    /// rule's own example, which makes the same call in the same shape:
     ///
     /// ```compile_fail,E0277
     /// use happenstance_sync_testkit::{CostLayersFixture, convergence_rules};

@@ -156,10 +156,11 @@
 //! | [`non_convergent_projections_are_excluded_not_failed`](convergence_rules::non_convergent_projections_are_excluded_not_failed) | SY-22 | a check with no exclusion, which fails FIFO cost layers, and a check that does not really reorder |
 //!
 //! A payload is decoded here, and only by the projection under test: a fold
-//! reads its events, which is what makes it a fold. What the check itself
-//! reasons about is SY-35's whole list for a convergence check — each event's
-//! `EventId`, its type and its tags — and the bytes of the read model it
-//! compares. The wrong projections live in `tests/wrong_projections.rs`.
+//! reads its events, which is what makes it a fold. The check itself reads no
+//! event at all: it compares the bytes of two read models. What the runner
+//! reads to select and route events is their type and the projection's scope
+//! tags, which is what SY-35 requires. The wrong projections live in
+//! `tests/wrong_projections.rs`.
 //! [`StockOnHandFixture`] and [`CostLayersFixture`] are the reference cases:
 //! one domain, a sum that converges and a FIFO queue that cannot.
 //!

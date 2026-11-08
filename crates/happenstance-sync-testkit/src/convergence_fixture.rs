@@ -144,15 +144,16 @@ impl DomainEvent for Stock {
         event_type: &EventType,
         data: &Bytes,
     ) -> Result<Self, CodecError> {
+        if event_type != &RECEIVED && event_type != &ISSUED {
+            return Err(CodecError::UnknownEventType {
+                event_type: event_type.clone(),
+            });
+        }
         let (units, unit_cost): (u64, u64) = codec.decode(data)?;
         if event_type == &RECEIVED {
             Ok(Self::Received { units, unit_cost })
-        } else if event_type == &ISSUED {
-            Ok(Self::Issued { units })
         } else {
-            Err(CodecError::UnknownEventType {
-                event_type: event_type.clone(),
-            })
+            Ok(Self::Issued { units })
         }
     }
 }
