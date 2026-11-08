@@ -105,7 +105,7 @@ enables the feature — in a crate they did not write, naming a crate they never
 asked for.
 
 **Evidence.** `crates/happenstance-testkit/Cargo.toml:115 (optional = true)` ·
-`crates/happenstance-testkit/src/fixtures.rs:543 (feature is not target-scoped)` ·
+`crates/happenstance-testkit/src/fixtures.rs:557 (feature is not target-scoped)` ·
 `xtask/src/main.rs:1087 (feature is not target-scoped)`
 
 ## RS-52-3. A `cfg` covers the probe *and* its caller, or the probe is dead code on the other target.

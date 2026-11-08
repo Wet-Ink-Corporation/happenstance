@@ -32,7 +32,7 @@ use core::future::Future;
 use happenstance_core::{
     Authority, Checkpoint, CommitError, ProjectionId, ResetError, SequencePosition,
 };
-use happenstance_testkit::{Capability, ProjectionFixture};
+use happenstance_testkit::{Capability, ProjectionFixture, Reopened};
 
 use crate::correct::{Defect, MutantBatch, MutantError, MutantFixture, MutantStore, State, apply};
 use crate::harness::ProjectionSubject;
@@ -676,6 +676,48 @@ impl Defect for CanonicalEquivalenceKeyStore {
 }
 
 // =====================================================================
+// Durability: what a reopen finds
+// =====================================================================
+
+/// Keeps every committed row and every checkpoint in process memory.
+///
+/// An adapter over an in-memory database shared behind one handle — SQLite's
+/// `open_in_memory` held in an `Arc` so a second `connect` sees the first's
+/// writes, or a write-back cache acknowledged on insert and never flushed. Every
+/// handle is a handle onto the same live process, so it passes every rule that
+/// reads back through a fresh one, and a reopen finds nothing at all.
+pub(crate) struct InMemoryDatabaseStore;
+
+impl Defect for InMemoryDatabaseStore {
+    const NAME: &'static str = "InMemoryDatabaseStore";
+
+    fn survive_reopen(state: &mut State) {
+        // The whole defect: nothing was ever on the medium.
+        *state = State::default();
+    }
+}
+
+/// A durable checkpoint over a read model held in process memory.
+///
+/// An adapter whose checkpoint table is in Postgres and whose read model is a
+/// process-local map or cache filled at commit time, because the read model is
+/// "cheap to rebuild". Before a restart both halves are present, so it passes
+/// `commit_is_atomic_with_the_read_model`; after one, the checkpoint claims rows
+/// the read model no longer has, and a runner resuming from it never rewrites
+/// them.
+pub(crate) struct VolatileReadModelStore;
+
+impl Defect for VolatileReadModelStore {
+    const NAME: &'static str = "VolatileReadModelStore";
+
+    fn survive_reopen(state: &mut State) {
+        // The whole defect: the rows were never on the medium; the
+        // checkpoints were.
+        state.rows.clear();
+    }
+}
+
+// =====================================================================
 // The wrong fixture
 // =====================================================================
 
@@ -721,15 +763,20 @@ pub(crate) struct NoopProtectFixture(MutantFixture<UnmutatedCore>);
 impl ProjectionFixture for NoopProtectFixture {
     type Store = MutantStore<UnmutatedCore>;
 
-    // `MutantFixture`'s three answers, for its reasons: every rule here must
+    // `MutantFixture`'s four answers, for its reasons: every rule here must
     // run, so that the only rule this subject fails is the one its defect is in.
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
     // THE DEFECT, first half: the claim.
     const RESET_REFUSAL: Capability = Capability::SUPPORTED;
     const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::SUPPORTED;
 
     fn arm_commit_fault(&self) -> impl Future<Output = ()> {
         self.0.arm_commit_fault()
+    }
+
+    fn reopen(&self) -> impl Future<Output = Reopened> {
+        self.0.reopen()
     }
 
     // THE DEFECT, second half: an override with an empty body. Not a forgotten

@@ -30,6 +30,11 @@ impl ProjectionFixture for RecordingFixture {
          one checkpoint id, not armed per call, and this run is the unarmed \
          store's: arming it is what its own instrument tests do",
     );
+    const REOPEN: Capability = Capability::declined(
+        "RecordingProjectionStore wraps MemoryProjectionStore, whose rows and \
+         checkpoints live in process memory alone, so there is no medium a \
+         reopen could read them back from",
+    );
 
     fn connect(&self) -> impl Future<Output = RecordingProjectionStore> {
         // A clone is a second handle onto the same rows and log (its page).

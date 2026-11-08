@@ -57,7 +57,7 @@
 //! rule cites that clause rather than the one it was filed under
 //! ([ADR-0030](../../../.kb/decisions/0030-the-checkpoint-reports-the-commits-that-happened.md)).
 //!
-//! # Two rules here are answered by a skip against the reference fixture
+//! # Three rules here are answered by a skip against the reference fixture
 //!
 //! [`failed_commit_leaves_both_unchanged`](rules::failed_commit_leaves_both_unchanged)
 //! is PS-1's second conjunct — the arm about a commit that *reported failure* —
@@ -73,6 +73,16 @@
 //! there is no projection it could decline to reset. A run against the oracle
 //! therefore prints two `SKIP` lines, and an adapter that wants either conjunct
 //! checked has to supply what its own store can do.
+//!
+//! The third is
+//! [`committed_rows_and_checkpoint_survive_a_reopen`](rules::committed_rows_and_checkpoint_survive_a_reopen),
+//! PS-1's *durable* read across a reopen, gated on
+//! [`REOPEN`](crate::ProjectionFixture::REOPEN). The reference store has no
+//! medium outside the process, so `MemoryProjectionFixture` declines it, as
+//! CF-17 requires, and the oracle run prints a third `SKIP` line.
+//! `InMemoryDatabaseStore` and `VolatileReadModelStore` fail it by name in
+//! `tests/projection_mutation_coverage.rs`, against a fixture whose reopen
+//! keeps a modelled medium and discards the process state around it.
 //!
 //! A third switch can produce a skip and is not on the fixture at all:
 //! [`READS_THROUGH_BATCH`](happenstance_core::ProjectionProbe::READS_THROUGH_BATCH)
@@ -249,7 +259,7 @@ pub mod rules {
         ProjectionStore, ResetError, SequencePosition,
     };
 
-    use crate::{ProjectionFixture, RuleOutcome};
+    use crate::{ProjectionFixture, Reopened, RuleOutcome};
 
     /// The probe key every rule writes through.
     ///
@@ -728,6 +738,104 @@ pub mod rules {
             before,
             "a commit that reported failure must leave the checkpoint exactly \
              as the last successful commit left it"
+        );
+
+        RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // PS-1 across a reopen
+    //
+    // Every rule above reads back through a fresh handle onto the same live
+    // process, so a store that keeps a committed half in process memory passes
+    // all of them. This one reads back after every handle is gone and the
+    // fixture has reopened its storage — the port's durability axis, gated on
+    // the capability that reaches it.
+    // ---------------------------------------------------------------------
+
+    /// A committed read-model row and its checkpoint are both still there after
+    /// every handle is dropped and the fixture reopens its storage.
+    ///
+    /// PS-1's *durable*, read across a reopen. Every other rule in this family
+    /// observes a commit through a second handle onto the same running store,
+    /// which is what PS-1's coupling needs and is exactly what a store that
+    /// never reaches its medium survives: the process still holds the rows and
+    /// the checkpoint, so every fresh handle sees them. This rule is the one that
+    /// looks after the process's hold has been let go.
+    ///
+    /// **Rejects:** `InMemoryDatabaseStore` — an adapter whose committed state
+    /// lives in process memory, an in-memory database shared behind one handle
+    /// or a write-back cache never flushed, so a reopen finds the checkpoint
+    /// `NeverRun` — and `VolatileReadModelStore`, whose checkpoint is durable and
+    /// whose read model sits in a process-local cache, so a reopen finds a
+    /// checkpoint that claims rows the read model no longer has. The second is
+    /// the sharper of the two: it is PS-1's coupling broken by a restart, and it
+    /// passes [`commit_is_atomic_with_the_read_model`], because before the reopen
+    /// both halves are present.
+    ///
+    /// # Why it is capability-gated
+    ///
+    /// A reopen needs the fixture's co-operation — which file to close, which
+    /// pool to drain — and a store with no medium outside the process has
+    /// nothing a reopen could read back. So the rule is gated on
+    /// [`REOPEN`](crate::ProjectionFixture::REOPEN), which CF-17 governs, and a
+    /// fixture that declines it gets this rule as a reported skip carrying its
+    /// own reason. `MemoryProjectionFixture` declines it, so a reference run
+    /// prints that skip.
+    ///
+    /// The writer is dropped **before** the reopen, on purpose: a handle that
+    /// carried the state across would make the rule pass for the wrong reason.
+    /// The checkpoint is compared against the position the commit was given,
+    /// held in a binding, never a literal (CF-6).
+    pub async fn committed_rows_and_checkpoint_survive_a_reopen<F: ProjectionFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        // `must!` first, for `failed_commit_leaves_both_unchanged`'s reason: a
+        // fixture declining both is failing the contract, and a skip under
+        // `REOPEN` would hide that behind a trade it is entitled to make.
+        must!(F: SECOND_HANDLE);
+        require!(F: REOPEN);
+
+        let fixture = open().await;
+        let id = ProjectionId::from_static("committed_rows_and_checkpoint_survive_a_reopen");
+        let position = SequencePosition::FIRST;
+
+        {
+            let writer = fixture.connect().await;
+            let mut batch = begin_ok(&writer).await;
+            probe_write_ok(&writer, &mut batch, PROBE_KEY, PROBE_VALUE).await;
+            commit_ok(&writer, batch, &id, position, Authority::Live).await;
+        }
+
+        let reopened = fixture.reopen().await;
+        assert_eq!(
+            reopened,
+            Reopened::Discarded,
+            "this fixture declares `REOPEN` supported and its \
+             `ProjectionFixture::reopen` reopened nothing: the provided body \
+             answers `Reopened::Nothing`, so the override is missing. Override \
+             it to discard every handle's process-level state over the store's \
+             medium, or decline `REOPEN` with the reason this store cannot"
+        );
+
+        let observer = fixture.connect().await;
+        assert_eq!(
+            checkpoint_ok(&observer, &id).await,
+            Checkpoint::Live { through: position },
+            "a committed checkpoint must survive a reopen: after every handle \
+             was dropped and the fixture reopened its storage, a fresh handle \
+             did not find the position the commit was given. A store that keeps \
+             its committed state in process memory passes every rule that reads \
+             back through a handle onto the same process, and loses it here"
+        );
+        assert_eq!(
+            probe_read_ok(&observer, PROBE_KEY).await,
+            Some(PROBE_VALUE),
+            "a committed read-model row must survive a reopen together with its \
+             checkpoint, and a fresh handle found the checkpoint without the row. \
+             A store whose read model lives in a process-local cache and whose \
+             checkpoint is durable comes back claiming rows it no longer has, \
+             and a runner resuming from that checkpoint never rewrites them"
         );
 
         RuleOutcome::Ran
@@ -2111,6 +2219,9 @@ macro_rules! for_each_projection_store_rule {
             // --- PS-1's second conjunct ------------------------------------
             failed_commit_leaves_both_unchanged,
 
+            // --- PS-1 across a reopen --------------------------------------
+            committed_rows_and_checkpoint_survive_a_reopen,
+
             // --- The commit path, differentially ---------------------------
             rollback_leaves_both_unchanged,
             dropped_batch_leaves_store_usable,
@@ -2297,14 +2408,16 @@ fn no_orphan_projection_rules() {
 /// A declined `RESET_REFUSAL` reaches the author as a **reported skip carrying
 /// the fixture's own reason**, not as a pass and not as an absence.
 ///
-/// CF-18 on real values for one of the two capabilities the reference fixture
+/// CF-18 on real values for one of the capabilities the reference fixture
 /// declines: `MemoryProjectionFixture` supports `SECOND_HANDLE`, declines
-/// `RESET_REFUSAL` because the store holds no protection policy, and declines
+/// `RESET_REFUSAL` because the store holds no protection policy, declines
 /// `COMMIT_FAULT` because it applies both halves of a commit under one write
-/// lock. So a reference run answers **two** rules with a skip —
-/// `failed_commit_leaves_both_unchanged` (`COMMIT_FAULT`) and
+/// lock, and declines `REOPEN` because it has no medium outside the process.
+/// So a reference run answers **three** rules with a skip —
+/// `failed_commit_leaves_both_unchanged` (`COMMIT_FAULT`),
+/// `committed_rows_and_checkpoint_survive_a_reopen` (`REOPEN`) and
 /// `refused_reset_changes_nothing` (`RESET_REFUSAL`) — and this test owns the
-/// second of them.
+/// last of them.
 ///
 /// **The set itself is pinned elsewhere, and that is deliberate.**
 /// `assert_reference_projection_declensions`
@@ -2319,7 +2432,7 @@ fn no_orphan_projection_rules() {
 /// [`RuleOutcome::report`](crate::RuleOutcome::report) writes to stdout, which
 /// libtest suppresses for a *passing* test unless `--show-output` is passed, and
 /// which does not exist at all on `wasm32-unknown-unknown`
-/// (`crates/happenstance-testkit/src/contract.rs:1433-1444`). A test that scraped
+/// (`crates/happenstance-testkit/src/contract.rs:1500-1511`). A test that scraped
 /// the printed line would therefore assert nothing on the one target the
 /// two-flavour design exists for. The machine-checked half is this equality; the
 /// human-facing half is the line `skip_line` renders from the same two fields.

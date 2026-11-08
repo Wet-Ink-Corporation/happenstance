@@ -62,6 +62,8 @@ use happenstance_postgres::migration;
 use happenstance_postgres::projection_store::PostgresProjectionStore;
 use happenstance_postgres::sqlx::postgres::PgPoolOptions;
 use happenstance_postgres::sqlx::{Executor, PgPool};
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+use happenstance_testkit::Reopened;
 use happenstance_testkit::concurrency::CONTENDERS;
 use happenstance_testkit::{Armed, Capability, Fixture, Settled};
 use testcontainers::ReuseDirective;
@@ -828,7 +830,14 @@ pub(crate) struct PostgresProjectionFixture {
     schema: String,
     /// This instance's one pool, built on first use. See [`PostgresFixture`]'s
     /// field of the same name for why it is one pool and not one per `connect`.
-    pool: OnceCell<PgPool>,
+    ///
+    /// A `Mutex<Option<_>>` rather than that fixture's `OnceCell`, because this
+    /// one is **replaced** on [`reopen`](happenstance_testkit::ProjectionFixture::reopen):
+    /// a closed `PgPool` refuses every later acquire, so the reopen takes the
+    /// pool out, closes it, and the next `connect` builds a new one. Tokio's
+    /// mutex because the build awaits the server while holding the lock, which
+    /// is what keeps two concurrent first `connect`s from building two pools.
+    pool: tokio::sync::Mutex<Option<PgPool>>,
 }
 
 #[cfg(all(feature = "projection-store", feature = "conformance"))]
@@ -849,7 +858,7 @@ impl PostgresProjectionFixture {
         let ordinal = NEXT.fetch_add(1, Ordering::Relaxed);
         Self {
             schema: format!("hsp_{}_{ordinal}", std::process::id()),
-            pool: OnceCell::new(),
+            pool: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -865,7 +874,28 @@ impl PostgresProjectionFixture {
     }
 
     async fn pool(&self) -> PgPool {
-        self.pool.get_or_init(|| self.build_pool()).await.clone()
+        let mut slot = self.pool.lock().await;
+        if let Some(pool) = slot.as_ref() {
+            return pool.clone();
+        }
+        let pool = self.build_pool().await;
+        *slot = Some(pool.clone());
+        pool
+    }
+
+    /// Closes this instance's pool and forgets it, leaving the schema alone.
+    ///
+    /// `PgPool::close` waits for every checked-out connection to come back and
+    /// closes them all, so afterwards no backend session holds anything this
+    /// fixture handed out. The schema — the medium — is dropped only when the
+    /// container stops, so the next `connect` builds a new pool onto exactly
+    /// what was committed. What this must *not* do is drop and recreate the
+    /// schema, which would make a reopen rule fail for the wrong reason.
+    async fn close_pool(&self) {
+        let taken = self.pool.lock().await.take();
+        if let Some(pool) = taken {
+            pool.close().await;
+        }
     }
 
     /// Builds this instance's pool and applies the projection schema.
@@ -946,6 +976,14 @@ impl happenstance_testkit::ProjectionFixture for PostgresProjectionFixture {
     /// mechanism `PostgresFixture::arm_mid_batch_fault` uses one layer down.
     const COMMIT_FAULT: Capability = Capability::SUPPORTED;
 
+    /// Supported, over a medium that outlives the process's hold on it: the
+    /// schema lives on the server and is dropped only when the container stops.
+    /// The mechanism CF-17 asks for is [`close_pool`](Self::close_pool) — the
+    /// pool every handle shares is closed, so no backend session this fixture
+    /// opened survives, and the next `connect` builds a new one onto the same
+    /// schema.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
     /// One more store over this fixture's pool.
     ///
     /// A distinct instance rather than a clone, so it mints its own stamp: a
@@ -954,6 +992,11 @@ impl happenstance_testkit::ProjectionFixture for PostgresProjectionFixture {
     /// suite ever narrowed to one fixture instance.
     async fn connect(&self) -> Self::Store {
         PostgresProjectionStore::new(self.pool().await)
+    }
+
+    async fn reopen(&self) -> Reopened {
+        self.close_pool().await;
+        Reopened::Discarded
     }
 
     /// Arms a trigger that aborts the checkpoint half of the next commit.
@@ -1062,8 +1105,18 @@ impl happenstance_testkit::ProjectionFixture for LivePostgresProjectionFixture {
     /// adapter really does roll those back rather than leave them committed.
     const COMMIT_FAULT: Capability = Capability::SUPPORTED;
 
+    /// Supported by the same mechanism over the same schema: the shared pool
+    /// is closed, which here also ends every backend session a live batch
+    /// could have held, and the next `connect` opens a new one.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
     async fn connect(&self) -> Self::Store {
         LivePostgresProjectionStore::new(self.0.pool_for_test().await)
+    }
+
+    async fn reopen(&self) -> Reopened {
+        self.0.close_pool().await;
+        Reopened::Discarded
     }
 
     async fn arm_commit_fault(&self) {

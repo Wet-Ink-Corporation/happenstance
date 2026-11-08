@@ -40,6 +40,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use happenstance_neon::event_store::NeonEventStore;
 use happenstance_neon::{NeonConfig, SqlRequest, SqlStatement, SqlTransport, migration};
+#[cfg(all(feature = "projection-store", feature = "conformance"))]
+use happenstance_testkit::Reopened;
 use happenstance_testkit::{Armed, Capability, Fixture, Settled};
 use tokio::sync::OnceCell;
 
@@ -510,9 +512,25 @@ impl happenstance_testkit::ProjectionFixture for NeonProjectionFixture {
     /// with it. That is exactly what the rule then reads back and finds unchanged.
     const COMMIT_FAULT: Capability = Capability::SUPPORTED;
 
+    /// Supported, for [`NeonFixture`]'s `REOPEN` reason: the schema lives on the
+    /// server and outlives every handle, and this adapter holds no connection,
+    /// no session and no cache on the client — every request authenticates and
+    /// routes on its own. So the mechanism CF-17 asks the fixture to state is
+    /// that there is nothing on the client a new handle would not discard by
+    /// construction; what `reopen` must not do is drop and recreate the schema.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
     async fn connect(&self) -> Self::Store {
         self.migrate().await;
         happenstance_neon::NeonProjectionStore::new(HyperTransport::shared(), self.config.clone())
+    }
+
+    async fn reopen(&self) -> Reopened {
+        // Nothing to discard, and that is the honest implementation rather than
+        // a convenient one: a `NeonProjectionStore` carries a transport handle,
+        // a configuration and a stamp, and the rule has dropped every one it
+        // held. The next `connect` mints a new store over the same schema.
+        Reopened::Discarded
     }
 
     async fn arm_commit_fault(&self) {

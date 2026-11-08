@@ -511,8 +511,8 @@ impl ProjectionFixture for MemoryProjectionFixture {
     // against this fixture prints a `SKIP` line for
     // `failed_commit_leaves_both_unchanged`, which is CF-18's whole point — the
     // oracle cannot demonstrate PS-1's second conjunct, and the run says so. It
-    // is not the only one; `RESET_REFUSAL` above is declined too, so a reference
-    // run prints two. The set is pinned by equality, in enumeration order and
+    // is not the only one; `RESET_REFUSAL` above and `REOPEN` below are declined
+    // too, so a reference run prints three. The set is pinned by equality, in enumeration order and
     // with each stated reason, at `assert_reference_projection_declensions`
     // (`crates/happenstance-testkit/tests/mutation_coverage.rs:5338`) — read that
     // assertion for how many and which, rather than a count written here that
@@ -522,6 +522,20 @@ impl ProjectionFixture for MemoryProjectionFixture {
          under one write lock, so it has no write that can be made to fail and \
          no moment between the two halves to fail in; arming a fault would mean \
          building fault injection into a shipped store to satisfy a test",
+    );
+
+    // Declined, as CF-17 requires of a store with no medium outside the
+    // process: the reference store is two maps behind an `RwLock`, and a reopen
+    // that discarded process-level state would discard the store with it. A
+    // fixture that declared the capability and kept the `Arc` would turn
+    // `committed_rows_and_checkpoint_survive_a_reopen` into a pass about a
+    // store nothing ever reopened, which is `NoopReopenFixture`'s over-claim on
+    // the event-store side.
+    const REOPEN: Capability = Capability::declined(
+        "MemoryProjectionStore keeps its read model and its checkpoints in \
+         process memory and nowhere else, so there is no medium a reopen could \
+         read them back from: discarding the process's state discards the \
+         store",
     );
 
     fn connect(&self) -> impl Future<Output = Self::Store> {

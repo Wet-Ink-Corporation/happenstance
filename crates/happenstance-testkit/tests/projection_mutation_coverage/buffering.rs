@@ -48,7 +48,7 @@
 //! Every fixture capability is **supported**, for the reason
 //! [`MutantFixture`](crate::correct::MutantFixture) supports them: this is an
 //! instrument rather than a shipped adapter, and a fixture that declined
-//! `COMMIT_FAULT` or `RESET_REFUSAL` would make the two rules gated on them skip
+//! `COMMIT_FAULT`, `RESET_REFUSAL` or `REOPEN` would make the rules gated on them skip
 //! against every variant — which is the same hole one level down.
 //!
 //! # What a green run against this store does *not* prove
@@ -76,7 +76,7 @@ use happenstance_core::{
     Authority, Checkpoint, CommitError, ProjectionId, ProjectionProbe, ProjectionStore, ResetError,
     SequencePosition,
 };
-use happenstance_testkit::{Capability, ProjectionFixture};
+use happenstance_testkit::{Capability, ProjectionFixture, Reopened};
 
 // =====================================================================
 // The journal
@@ -501,6 +501,20 @@ impl ProjectionFixture for BufferingProjectionFixture {
     // Supported, for `RESET_REFUSAL`'s reason, and the fault it arms is the one
     // this shape actually meets: the queued request refused whole by the server.
     const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+
+    // Supported, for `RESET_REFUSAL`'s reason: declining it would leave
+    // `committed_rows_and_checkpoint_survive_a_reopen` unexecuted against this
+    // variant. CF-17's mechanism, stated: the `committed` cell is this
+    // instrument's medium and every reopen leaves it in place; what is
+    // discarded is the process-level state around it, the armed fault, which a
+    // restart disarms. The journal needs no discarding — it lives in a batch,
+    // and the rule drops every batch and handle before it reopens.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    fn reopen(&self) -> impl Future<Output = Reopened> {
+        self.0.fault.set(false);
+        core::future::ready(Reopened::Discarded)
+    }
 
     fn arm_commit_fault(&self) -> impl Future<Output = ()> {
         self.0.fault.set(true);

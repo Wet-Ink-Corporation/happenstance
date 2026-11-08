@@ -453,6 +453,7 @@ fn declines<S: ProjectionSubject>() -> Vec<(&'static str, &'static str)> {
         S::COMMIT_FAULT
             .reason()
             .map(|reason| ("COMMIT_FAULT", reason)),
+        S::REOPEN.reason().map(|reason| ("REOPEN", reason)),
         no_read_path,
     ]
     .into_iter()
