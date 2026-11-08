@@ -1072,14 +1072,6 @@ async fn evaluate(
 /// The batch ceiling is 256 events at nine columns — 2,304 bound parameters,
 /// comfortably inside the extended protocol's `int16` limit of 65,535, and one
 /// round trip instead of 256.
-///
-/// # The write group
-///
-/// Every row binds the batch's lowest position as its `write_group` (#420,
-/// I-2). An append has no conflict clause, so every position it drew is a
-/// row it wrote, and the lowest is the group's name. The lowest rather than
-/// the first drawn, though the sequence draws them in order: the name is
-/// defined as a minimum, so it is computed as one.
 async fn insert_batch(
     transaction: &mut Transaction<'static, Postgres>,
     events: &[Event],
@@ -1092,8 +1084,7 @@ async fn insert_batch(
         origin: Origin::Local,
         recorded_at,
     });
-    let group = positions.iter().copied().min();
-    insert_statement(store_id, rows, &positions, group)
+    insert_statement(store_id, rows, &positions, positions.iter().copied().min())
         .build()
         .execute(&mut **transaction)
         .await?;
@@ -1173,19 +1164,12 @@ async fn allocate_positions(
     Ok(positions)
 }
 
-/// Binds per row in [`insert_statement`].
-const ROW_PARAMETERS: usize = 9;
-
 /// The one multi-row `INSERT INTO event` that append and ingest both send.
 ///
-/// Nine binds per row. A [`Origin::Local`] row binds `store_id` and its own
-/// position as its origin; a foreign row binds the origin it carries. Rows are
-/// paired with `positions` in order. Every row binds `group` as its
-/// `write_group` (#420): an append's lowest position, an ingested group's
-/// first landed row for its compensation, and `None` for foreign rows, whose
-/// group is known only once the conflict clause has said which landed, and is
-/// stamped then. No I/O, so the text is testable without a server. The builder
-/// owns its binds (ADR-0080 (b)), which is why it is `'static`.
+/// Nine binds per row. A [`Origin::Local`] row binds `store_id` and its own position as its
+/// origin; a foreign row binds the origin it carries. Rows pair with `positions` in order, and
+/// each binds `group` as `write_group` (#420; the `write_group` module says which). No I/O, so
+/// the text is testable. The builder owns its binds (ADR-0080 (b)), hence `'static`.
 fn insert_statement<'r>(
     store_id: StoreId,
     rows: impl IntoIterator<Item = NewRow<'r>>,
@@ -1193,9 +1177,8 @@ fn insert_statement<'r>(
     group: Option<i64>,
 ) -> sqlx::QueryBuilder<'static, Postgres> {
     let mut builder = sqlx::QueryBuilder::<Postgres>::new(
-        "INSERT INTO event \
-         (position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at, \
-         write_group) ",
+        "INSERT INTO event (position, event_type, data, metadata, tags, origin_store, \
+         origin_position, recorded_at, write_group) ",
     );
     builder.push_values(
         rows.into_iter().zip(positions),
@@ -1502,3 +1485,8 @@ mod ingest;
 // written unconditionally, by `insert_statement`.
 #[cfg(feature = "sync")]
 mod write_group;
+
+/// Binds per row in [`insert_statement`]: eight columns before migration 3,
+/// and `write_group`. Declared down here, after the tests, so the lines above
+/// keep the numbers the decision records cite them by.
+const ROW_PARAMETERS: usize = 9;

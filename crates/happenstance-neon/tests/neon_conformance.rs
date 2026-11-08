@@ -162,8 +162,8 @@ happenstance_testkit::event_store_model_conformance!(
 // ---------------------------------------------------------------------------
 
 /// The columns migrations 1 and 3 are allowed to give `event`, and their shapes,
-/// as data so the "exactly these" check below is a set comparison: a column
-/// added in passing must fail a test rather than pass review.
+/// as data so the check below, which keeps its name but covers migration 3 since
+/// #420, is a set comparison: a column added in passing must fail a test.
 const SETTLED_COLUMNS: &[(&str, &str, bool)] = &[
     // (name, data_type, is_nullable)
     ("position", "bigint", false),

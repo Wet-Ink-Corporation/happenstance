@@ -42,24 +42,6 @@ pub const MIGRATION_1: &str = include_str!("../migrations/0001_neon_log.sql");
 /// The projection checkpoint, before its identifiers are filled in.
 pub const MIGRATION_2: &str = include_str!("../migrations/0002_projection_checkpoint.sql");
 
-/// The event log's write-group columns and their index (#420), before their
-/// identifiers are filled in.
-///
-/// `write_group`, on every row, the lowest position the write that put the
-/// row in gave out, and `group_guard`, on that first row only, the guard an
-/// ingested group arrived under. A runner and a store peer read the log back
-/// in whole writes through them (SY-39). Both nullable with no default, so
-/// adding them rewrites no row, and a row from before this migration reads as
-/// a group of its own.
-///
-/// **Apply it after [`MIGRATION_1`], before deploying this build**, with
-/// [`request`]: every `INSERT` this build sends names `write_group`, and fails
-/// against a table without it. Idempotent, as [`MIGRATION_1`] is, so applying
-/// both to any schema, fresh or migrated by an older build, brings it to what
-/// this build expects. Numbered 3 because that is the directory's sequence;
-/// [`MIGRATION_2`] belongs to the projection store.
-pub const MIGRATION_3: &str = include_str!("../migrations/0003_write_group.sql");
-
 /// Renders `template` against `config` and splits it into statements.
 ///
 /// The placeholders are `@schema@`, `@event@`, `@sequence@`, `@meta@`,
@@ -88,9 +70,8 @@ pub fn render(template: &str, config: &NeonConfig) -> Vec<String> {
 /// `CREATE INDEX` rejects a schema-qualified index name — the index is created in
 /// the table's schema and Postgres says so — which is the one place in this
 /// module where qualifying everything would be wrong. Derived from the event
-/// table's name so that two configurations in one schema do not collide, and
-/// unique per schema is all that is needed because the fixture's isolation is
-/// per schema.
+/// table's name so that two configurations in one schema do not collide; unique
+/// per schema is enough, because the fixture isolates per schema.
 fn index_name(config: &NeonConfig, suffix: &str) -> String {
     quote_ident(&format!("{}_{suffix}", config.event_table))
 }
@@ -111,6 +92,25 @@ pub fn request(template: &str, config: &NeonConfig) -> SqlRequest {
         IsolationLevel::ReadCommitted,
     )
 }
+
+/// The event log's write-group columns and their index (#420), before their
+/// identifiers are filled in.
+///
+/// `write_group`, on every row, the lowest position the write that put the
+/// row in gave out, and `group_guard`, on that first row only, the guard an
+/// ingested group arrived under. A runner and a store peer read the log back
+/// in whole writes through them (SY-39). Both nullable with no default, so
+/// adding them rewrites no row, and a row from before this migration reads as
+/// a group of its own.
+///
+/// **Apply it after [`MIGRATION_1`], before deploying this build**, with
+/// [`request`]: every `INSERT` this build sends names `write_group`, and fails
+/// against a table without it. Idempotent, as [`MIGRATION_1`] is, so applying
+/// both to any schema, fresh or migrated by an older build, brings it to what
+/// this build expects. Numbered 3 because that is the directory's sequence;
+/// [`MIGRATION_2`] belongs to the projection store. Declared below [`request`]
+/// so the lines above keep the numbers the decision records cite.
+pub const MIGRATION_3: &str = include_str!("../migrations/0003_write_group.sql");
 
 /// The re-mint, against `config`'s meta table: the one statement that replaces
 /// this store's identity with a freshly minted one, and reads the new value

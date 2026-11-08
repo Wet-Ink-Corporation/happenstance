@@ -3,13 +3,10 @@
 //! # Why a file rather than a `sqlx::migrate!`
 //!
 //! The manifest carries the argument in full. The short form: a migrator's
-//! `_sqlx_migrations` bookkeeping table is *per schema*, so one per fixture
-//! instance, about a history this crate keeps idempotent instead. Every
-//! migration here is `IF NOT EXISTS` throughout, so `apply` brings any schema,
-//! fresh or migrated by an older build, to what this build expects by running
-//! them all, and needs no record of which already ran. The event log has two
-//! since #420: `MIGRATION_1` and `MIGRATION_3`. (Named rather than linked: both
-//! are behind `event-store`, and this module is not.)
+//! `_sqlx_migrations` table is *per schema*, one per fixture instance, about a
+//! history this crate makes moot: every migration is `IF NOT EXISTS`, so `apply`
+//! runs them all against any schema, fresh or migrated by an older build. Since
+//! #420 the log has two, `MIGRATION_1` and `MIGRATION_3` (named: `event-store`).
 //!
 //! # Why the SQL is `include_str!`d rather than written inline
 //!
@@ -27,18 +24,14 @@ use sqlx::PgExecutor;
 #[cfg(feature = "event-store")]
 use crate::error::PostgresEventStoreError;
 
-/// The event log's first migration, as SQL: the table, its sequence and
-/// indexes, and the store's identity.
+/// The event log's first migration, as SQL; [`MIGRATION_3`] follows it.
 ///
 /// Exposed rather than private because a consumer running their own migration
 /// tooling needs the text, and the alternative is that they copy it out of the
-/// repository and it drifts. It is not the whole schema this build expects:
-/// [`MIGRATION_3`] follows it. Applying both is [`apply`].
+/// repository and it drifts. Applying both is [`apply`].
 ///
-/// It is idempotent: every object is created `IF NOT EXISTS`, so applying it to
-/// a schema that already has it is a no-op rather than an error. Its text is
-/// frozen since this crate's first publish; a change to the log is a new
-/// migration.
+/// Idempotent: every object is created `IF NOT EXISTS`, so applying it to a
+/// schema that has it is a no-op. Frozen since first publish: a change is a new one.
 #[cfg(feature = "event-store")]
 pub const MIGRATION_1: &str = include_str!("../migrations/0001_event_log.sql");
 

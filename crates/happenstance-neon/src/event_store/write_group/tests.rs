@@ -17,7 +17,7 @@ use happenstance_core::{
 use happenstance_sync::write_group::{GuardCodecError, decode_guard, encode_guard};
 use happenstance_sync::{IngestGroup, ReplicatedEvent, Waiting, WriteGroup, WriteGroupStore};
 
-use super::PROVISIONAL_GROUP;
+use super::{FOREIGN_ORIGIN, PROVISIONAL_GROUP};
 use crate::config::NeonConfig;
 use crate::error::NeonError;
 use crate::event_store::{APPEND_GROUP, BASE64, FRONTIER, NeonEventStore, ingest};
@@ -136,6 +136,13 @@ fn every_ingested_row_is_written_under_a_provisional_tag() {
     assert!(write.contains("u.tags, u.grp FROM"), "{write}");
 }
 
+/// The foreign rows' origin spells the same provisional tag the compensation
+/// takes, so the stamp's `GROUP BY write_group` sees one tag per group.
+#[test]
+fn the_foreign_origin_ends_with_the_provisional_group() {
+    assert!(FOREIGN_ORIGIN.ends_with(&format!(", {PROVISIONAL_GROUP}")));
+}
+
 /// An append names its group in the statement that writes it: the ninth
 /// column, the lowest position the statement gives out.
 #[test]
@@ -152,9 +159,15 @@ fn an_append_writes_its_lowest_position_as_its_group() {
     assert!(sql.contains(&format!(", {APPEND_GROUP} FROM")), "{sql}");
 }
 
-/// The group read is one read-only statement, carries the frontier in the
-/// scan that names the groups and in the read of their rows, and orders the
-/// rows by group, never by position.
+/// The group read is one read-only statement. It carries the frontier in the
+/// scan that names the groups and in both arms that read their rows, scans
+/// one row past the budget but names groups from the budget's rows only,
+/// reads the rows by key, and orders them by group, never by position.
+///
+/// **Named wrong statement:** the one outer read
+/// `write_group IN (…) OR (write_group IS NULL AND position IN (…))` this
+/// adapter sent first, which Postgres runs as a filter over every row of the
+/// table; the `OR` and join assertions fail on it.
 #[test]
 fn the_group_read_is_one_read_only_statement_ordered_by_group() {
     let request = store().groups_request(7, 4);
@@ -163,24 +176,27 @@ fn the_group_read_is_one_read_only_statement_ordered_by_group() {
     let [statement] = request.statements.as_slice() else {
         panic!("one statement: {:?}", request.statements);
     };
+    let sql = &statement.query;
     assert!(
         statement.params.is_empty(),
         "the bounds are interpolated integers"
     );
-    assert_eq!(
-        statement.query.matches(FRONTIER).count(),
-        2,
-        "{}",
-        statement.query
-    );
-    assert!(statement.query.contains("LIMIT 4)"), "{}", statement.query);
+    assert_eq!(sql.matches(FRONTIER).count(), 3, "{sql}");
     assert!(
-        statement
-            .query
-            .ends_with("ORDER BY coalesce(e.write_group, e.position), e.position"),
-        "{}",
-        statement.query
+        sql.contains("ORDER BY position LIMIT 5)"),
+        "the probe: {sql}"
     );
+    assert!(sql.contains("ORDER BY p LIMIT 4)"), "the budget: {sql}");
+    let event = store().config.qualified_event();
+    assert!(
+        sql.contains(&format!(
+            "FROM ids JOIN {event} AS e ON e.write_group = ids.g"
+        )) && sql.contains(&format!("FROM ids JOIN {event} AS e ON e.position = ids.g"))
+            && sql.contains(" UNION ALL "),
+        "{sql}"
+    );
+    assert!(!sql.contains(" OR "), "{sql}");
+    assert!(sql.ends_with("ORDER BY sort_group, sort_position"), "{sql}");
 }
 
 /// A transport that answers every request with one body.

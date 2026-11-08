@@ -53,6 +53,22 @@ use crate::transport::{SqlRequest, SqlStatement, SqlTransport};
 /// position. Read off `b`, the rows subquery `insert_rows` joins.
 pub(super) const PROVISIONAL_GROUP: &str = "-(b.grp + 1)";
 
+/// What fills a foreign row's last four columns: the origin the peer sent,
+/// and [`PROVISIONAL_GROUP`], spelled out because `concat!` takes literals
+/// only. `the_foreign_origin_ends_with_the_provisional_group` keeps the two
+/// spellings one.
+pub(super) const FOREIGN_ORIGIN: &str =
+    "b.origin_store, b.origin_position, b.recorded_at, -(b.grp + 1)";
+
+impl<T: SqlTransport> NeonEventStore<T> {
+    /// What fills a compensation's last four columns: the origin an append
+    /// stamps, [`local_origin`](Self::local_origin)'s, and its group's
+    /// [`PROVISIONAL_GROUP`], so the stamp names it with its losing event.
+    pub(super) fn compensation_origin(&self) -> String {
+        format!("{}, {PROVISIONAL_GROUP}", self.local_origin())
+    }
+}
+
 impl<T> NeonEventStore<T> {
     /// The ingest request's third statement: each provisional tag this
     /// transaction wrote replaced by the lowest position its group landed, and
@@ -108,34 +124,48 @@ impl<T> NeonEventStore<T> {
     /// The group read: every row of the lowest groups above `after`, ordered
     /// by group, as one read-only statement.
     ///
-    /// `scan` takes the first `max_events + 1` rows above `after` in position
-    /// order, each with its group. A group's lowest row is its name and sits
-    /// below the rest of it, so the groups `scan` names are the lowest above
-    /// `after`, a prefix in order. The outer `SELECT` reads all their rows, by
-    /// `write_group` through the partial index or, for a row from before
-    /// migration 3, by position through the key. `scanned` is how many rows
-    /// `scan` found: fewer than it asked for means it reached the end of the
-    /// log, the only case a page may say [`Waiting::Nothing`].
+    /// * `scan` takes the first `max + 1` rows above `after` in position order,
+    ///   each with its group. A group's lowest row is its name and sits below
+    ///   the rest of it, so the groups `scan` names are the lowest above
+    ///   `after`, a prefix in order.
+    /// * `ids` keeps the groups named by the first `max` of those rows only.
+    ///   Those rows' groups hold at least `max` events between them, so a group
+    ///   named first by the probe row could never fit the page, and leaving it
+    ///   out changes no page while bounding the answer to `max` groups' rows.
+    /// * Two arms read those groups' rows by key: by `write_group` through the
+    ///   partial index, and, for a row from before migration 3, by position
+    ///   through the primary key. One `IN (…) OR …` over both would be a filter
+    ///   over every row of the table. No row is in both arms.
+    /// * `scanned` is how many rows `scan` found: fewer than it asked for means
+    ///   it reached the end of the log, the only case a page may say
+    ///   [`Waiting::Nothing`], and then `ids` left nothing out.
     ///
     /// The bounds are interpolated `i64`s, as `read_request`'s are, so no
-    /// caller string reaches the SQL. `ORDER BY` names qualified columns, for
-    /// the reason `read_request` gives: `position` is also a text alias here.
-    fn groups_request(&self, after: i64, probe: i64) -> SqlRequest {
+    /// caller string reaches the SQL. The order is by two `bigint` columns of
+    /// its own, `sort_group` and `sort_position`, because a `UNION`'s `ORDER BY`
+    /// names output columns and `position` is a text alias here.
+    fn groups_request(&self, after: i64, max: i64) -> SqlRequest {
         let event = self.config.qualified_event();
+        let probe = max.saturating_add(1);
+        let columns = format!(
+            "{SELECTED_COLUMNS}, ids.g::text AS write_group_first, \
+             encode(e.group_guard, 'base64') AS group_guard, \
+             (SELECT n FROM counted) AS scanned, \
+             ids.g AS sort_group, e.position AS sort_position"
+        );
         let sql = format!(
-            "WITH scan AS (SELECT coalesce(write_group, position) AS g FROM {event} \
+            "WITH scan AS (SELECT position AS p, coalesce(write_group, position) AS g \
+             FROM {event} \
              WHERE position > {after} AND coalesce(write_group, position) > {after} \
              AND {FRONTIER} ORDER BY position LIMIT {probe}), \
-             ids AS (SELECT DISTINCT g FROM scan) \
-             SELECT {SELECTED_COLUMNS}, \
-             coalesce(e.write_group, e.position)::text AS write_group_first, \
-             encode(e.group_guard, 'base64') AS group_guard, \
-             (SELECT count(*) FROM scan)::text AS scanned \
-             FROM {event} AS e \
-             WHERE (e.write_group IN (SELECT g FROM ids) \
-             OR (e.write_group IS NULL AND e.position IN (SELECT g FROM ids))) \
-             AND {FRONTIER} \
-             ORDER BY coalesce(e.write_group, e.position), e.position"
+             ids AS (SELECT DISTINCT g FROM (SELECT g FROM scan ORDER BY p LIMIT {max}) AS head), \
+             counted AS (SELECT count(*)::text AS n FROM scan) \
+             SELECT {columns} FROM ids JOIN {event} AS e ON e.write_group = ids.g \
+             WHERE {FRONTIER} \
+             UNION ALL \
+             SELECT {columns} FROM ids JOIN {event} AS e ON e.position = ids.g \
+             WHERE e.write_group IS NULL AND {FRONTIER} \
+             ORDER BY sort_group, sort_position"
         );
         SqlRequest::single(SqlStatement::new(sql)).read_only()
     }
@@ -145,20 +175,21 @@ impl<T: SqlTransport> NeonEventStore<T> {
     /// Up to `max_events` events of whole write groups above `after`, in one
     /// round trip.
     ///
-    /// The answer holds every row of up to `max_events + 1` groups, each
-    /// bounded by this store's batch ceiling, and the response by
+    /// The answer holds every row of up to `max_events` groups, each bounded
+    /// by this store's batch ceiling, and the response by
     /// `max_response_bytes`; the page builder keeps what the budget allows.
     async fn read_write_groups(
         &self,
         after: Option<SequencePosition>,
         max_events: NonZeroUsize,
     ) -> Result<GroupPage, NeonError<T::Error>> {
+        // A budget past `i64::MAX` saturates, which no log can tell apart: it
+        // holds fewer positions than that.
+        let max = i64::try_from(max_events.get()).unwrap_or(i64::MAX);
         // One more than the budget, so a scan that fills it is told apart
         // from one that reached the end of the log.
-        let probe = i64::try_from(max_events.get())
-            .unwrap_or(i64::MAX)
-            .saturating_add(1);
-        let request = self.groups_request(after.map_or(0, as_i64), probe);
+        let probe = max.saturating_add(1);
+        let request = self.groups_request(after.map_or(0, as_i64), max);
         let response = self
             .transport
             .round_trip(request)

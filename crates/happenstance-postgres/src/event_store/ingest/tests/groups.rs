@@ -14,10 +14,10 @@ use core::num::NonZeroUsize;
 
 use happenstance_core::{AppendCondition, Query, QueryItem, RecordedAt, SequencePosition};
 use happenstance_sync::{GroupPage, IngestGroup, Waiting, WriteGroup, WriteGroupStore};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row as _};
 
 use super::{append, event, id, ingest, live_store, own, peer, server, shipped};
-use crate::event_store::{NewRow, Origin, PostgresEventStore, insert_statement};
+use crate::event_store::{NewRow, Origin, PostgresEventStore, insert_statement, write_group};
 use crate::migration;
 
 /// A page large enough for every arrangement here.
@@ -296,4 +296,52 @@ async fn rows_from_before_migration_3_read_as_groups_of_one() {
         "the group is named by its first row"
     );
     assert_eq!(page.waiting, Waiting::Nothing);
+}
+
+/// The group read finds a page's rows by key, never by scanning the table:
+/// its plan, over 20,000 rows in groups of four with planner statistics,
+/// names `event_write_group_idx` and holds no sequential scan. The text form
+/// of the plan, read as lines, because this crate builds `sqlx` without its
+/// JSON types.
+///
+/// **Named wrong statement:** the outer read written as
+/// `write_group IN (…) OR (write_group IS NULL AND position IN (…))`, which
+/// the planner can only run as a filter over every row (measured at 29.9 ms
+/// on 200,000 rows, against 0.09 ms for the two keyed joins).
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container, or set HAPPENSTANCE_POSTGRES_URL)"]
+async fn the_group_read_seeks_on_the_write_group_index() {
+    let store = live_store().await;
+    sqlx::raw_sql(
+        "INSERT INTO event (position, event_type, data, metadata, tags, origin_store, \
+         origin_position, recorded_at, write_group) \
+         SELECT p, 'Bulk', '\\x00'::bytea, NULL, '{}', \
+         (SELECT v FROM store_meta WHERE k = 'store_id'), p, 1, \
+         min(p) OVER (PARTITION BY (n - 1) / 4) \
+         FROM (SELECT n, nextval('event_position_seq') AS p \
+         FROM generate_series(1, 20000) AS n) s; \
+         ANALYZE event;",
+    )
+    .execute(store.pool())
+    .await
+    .expect("20,000 rows in groups of four, and their statistics");
+    let middle: i64 =
+        sqlx::query_scalar("SELECT write_group FROM event ORDER BY position OFFSET 10000 LIMIT 1")
+            .fetch_one(store.pool())
+            .await
+            .expect("a group in the middle of the log");
+
+    let sql = format!("EXPLAIN {}", write_group::groups_sql(store.visibility));
+    let plan: Vec<String> =
+        write_group::groups_query(&sql, middle, NonZeroUsize::new(3).expect("non-zero"))
+            .fetch_all(store.pool())
+            .await
+            .expect("the group read explains")
+            .iter()
+            .map(|row| row.get::<String, _>(0))
+            .collect();
+
+    let plan = plan.join("\n");
+    assert!(plan.contains("event_write_group_idx"), "{plan}");
+    assert!(!plan.contains("Seq Scan"), "{plan}");
 }

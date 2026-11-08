@@ -159,8 +159,8 @@ happenstance_testkit::event_store_model_conformance!(
 
 /// The columns migrations 1 and 3 are allowed to give `event`, and their shapes.
 ///
-/// Held as data so the "exactly these" check below can be a set comparison: a
-/// column added in passing must fail a test rather than pass review.
+/// Held as data so the check below, which keeps its name but covers migration 3
+/// since #420, is a set comparison: a column added in passing must fail a test.
 const SETTLED_COLUMNS: &[(&str, &str, bool)] = &[
     // (name, data_type, is_nullable)
     ("position", "bigint", false),
@@ -195,7 +195,7 @@ async fn migration_1_creates_the_settled_column_set() {
     .bind(fixture.schema())
     .fetch_all(store.pool())
     .await
-    .expect("the event table should exist after migration 1");
+    .expect("the event table should exist after migrations 1 and 3");
 
     let found: Vec<(String, String, bool)> = rows
         .iter()

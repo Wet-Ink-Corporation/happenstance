@@ -13,8 +13,9 @@
 -- reads as a group of its own, named by its position; nothing recorded which
 -- rows one earlier call wrote, so there is no backfill to run.
 --
--- Apply it before deploying a build that writes these columns: such a build
--- names them in every `INSERT`, and fails against a table without them.
+-- Apply it before deploying a build that writes these columns: such a build's
+-- `INSERT` names `write_group` on every row, and fails against a table without
+-- it.
 --
 -- The index serves the group read, which looks rows up by their group. Partial,
 -- because a row from before this migration is found by its position through

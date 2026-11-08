@@ -3,8 +3,9 @@
 //!
 //! That the provisional tags an ingest writes never survive its commit, read
 //! raw; that a guard round-trips through a real `bytea` on the group's first
-//! row only; and a schema an older build left, with rows from before migration
-//! 3. No literal local position: every one compared was read back.
+//! row only; a schema an older build left, with rows from before migration 3;
+//! and two groups whose positions interleave, which one handle never writes.
+//! No literal local position: every one compared was read back.
 //!
 //! Every test reads right after it writes, so it relies on a quiet endpoint and
 //! `--test-threads=1`, as CI's `live-neon` job runs this module.
@@ -14,7 +15,7 @@ use core::num::NonZeroUsize;
 use happenstance_core::{AppendCondition, Query, QueryItem};
 use happenstance_sync::{GroupPage, IngestGroup, Waiting, WriteGroup, WriteGroupStore};
 
-use super::endpoint::{empty_schema, execute, live_store};
+use super::endpoint::{empty_schema, execute, fresh_schema, live_store};
 use super::{append, event, id, ingest, peer, select, shipped};
 use crate::event_store::NeonEventStore;
 use crate::migration;
@@ -249,4 +250,88 @@ async fn rows_from_before_migration_3_read_as_groups_of_one() {
         "the group is named by its first row"
     );
     assert_eq!(page.waiting, Waiting::Nothing);
+}
+
+/// Two groups whose positions interleave, G = {p1, p3, p5} and H = {p2, p4,
+/// p6}, as two concurrent appends can leave them, written in one raw `INSERT`
+/// because one handle on this endpoint never produces them: read whole, in
+/// first order, and paged three events at a time on `first`, each group
+/// exactly once.
+///
+/// Rejects a read ordered by position, which meets G's rows on both sides of
+/// H's first and is refused as `GroupOrder`, and one that pages by row
+/// position, which re-reads or skips half a group.
+#[tokio::test]
+#[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
+async fn interleaved_groups_read_back_whole_and_page_on_first() {
+    let (config, transport) = fresh_schema().await;
+    let insert = format!(
+        "INSERT INTO {table} (position, event_type, data, metadata, tags, origin_store, \
+         origin_position, recorded_at, write_group) \
+         SELECT p, 'Interleaved', '\\x00'::bytea, NULL, '{{}}', \
+         (SELECT v FROM {meta} WHERE k = 'store_id'), p, 1, min(p) OVER (PARTITION BY n % 2) \
+         FROM (SELECT n, nextval({sequence}) AS p FROM generate_series(1, 6) AS n) s",
+        table = config.qualified_event(),
+        meta = config.qualified_meta(),
+        sequence = config.sequence_literal(),
+    );
+    execute(
+        &transport,
+        SqlRequest::single(SqlStatement::new(insert)),
+        "two interleaved groups of three",
+    )
+    .await;
+    let store = NeonEventStore::new(transport, config);
+    let rows = stored(&store).await;
+    let named: Vec<Option<i64>> = rows.iter().map(|&(_, group, _)| group).collect();
+    let [Some(g), Some(h), ..] = named[..] else {
+        panic!("six grouped rows: {rows:?}");
+    };
+    assert_eq!(
+        named,
+        [Some(g), Some(h), Some(g), Some(h), Some(g), Some(h)],
+        "the arrangement interleaves"
+    );
+
+    let whole = read(&store).await;
+    let shape: Vec<(i64, usize)> = whole
+        .groups
+        .iter()
+        .map(|group| {
+            (
+                i64::try_from(group.first().get()).expect("a stored position"),
+                group.events().len(),
+            )
+        })
+        .collect();
+    assert_eq!(shape, [(g, 3), (h, 3)]);
+    assert_eq!(whole.waiting, Waiting::Nothing);
+
+    let three = NonZeroUsize::new(3).expect("non-zero");
+    let first = store
+        .read_groups(None, three)
+        .await
+        .expect("the first page");
+    let [ref only_g] = first.groups[..] else {
+        panic!("G alone fills the first page: {:?}", first.groups);
+    };
+    assert_eq!(
+        (only_g.first(), first.waiting),
+        (whole.groups[0].first(), Waiting::Unknown)
+    );
+    let second = store
+        .read_groups(Some(only_g.first()), three)
+        .await
+        .expect("the second page");
+    let [ref only_h] = second.groups[..] else {
+        panic!("H alone is the second page: {:?}", second.groups);
+    };
+    assert_eq!(only_h.first(), whole.groups[1].first());
+    assert_eq!(only_h.events().len(), 3);
+    let past = store
+        .read_groups(Some(only_h.first()), three)
+        .await
+        .expect("the page past the end");
+    assert!(past.groups.is_empty());
+    assert_eq!(past.waiting, Waiting::Nothing);
 }

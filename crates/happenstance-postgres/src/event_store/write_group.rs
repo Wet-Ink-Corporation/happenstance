@@ -32,13 +32,15 @@
 //! Behind `sync`, through its declaration in `event_store.rs`, as the ingest
 //! module is.
 
+use core::future::poll_fn;
 use core::num::NonZeroUsize;
 
 use happenstance_core::{AppendCondition, SequencePosition};
 use happenstance_sync::write_group::{GroupPageBuilder, decode_guard, encode_guard};
 use happenstance_sync::{GroupPage, ReplicatedEvent, SendWriteGroupStore, Waiting};
-use sqlx::postgres::PgRow;
-use sqlx::{Postgres, Row as _, Transaction};
+use sqlx::postgres::{PgArguments, PgRow};
+use sqlx::query::Query;
+use sqlx::{PgPool, Postgres, Row as _, Transaction};
 
 use super::{PostgresEventStore, Visibility, as_i64, position_from_row};
 use crate::error::PostgresEventStoreError;
@@ -57,40 +59,80 @@ pub(super) const STAMP_SQL: &str = "UPDATE event \
 
 /// The group read, before the frontier predicate is spliced in at `{frontier}`.
 ///
-/// `$1` is `after`, or 0 for the start of the log; `$2` is one more than the
-/// page's event budget.
+/// `$1` is `after`, or 0 for the start of the log; `$2` is the page's event
+/// budget and `$3` one more.
 ///
-/// * `scan` takes the first `$2` rows above `after` in position order, each
+/// * `scan` takes the first `$3` rows above `after` in position order, each
 ///   with its group. A group's lowest row is its name and sits below the rest
 ///   of it, so every group named here has its name in the scan, and the
 ///   groups it names are the lowest above `after`: a prefix of the groups in
 ///   order. `position > $1` lets the planner seek on the primary key; the
 ///   `coalesce` then drops the tail of the group `after` names.
-/// * The outer `SELECT` reads every row of those groups, ordered by group and
-///   then position: by `write_group` through `event_write_group_idx`, or, for
-///   a row from before migration 3, by its own position through the key.
-/// * `scanned` is how many rows `scan` found. Fewer than `$2` means it reached
+/// * `ids` keeps the groups named by the first `$2` of those rows only. The
+///   groups those rows belong to hold at least `$2` events between them, so a
+///   group named first by the probe row could never fit the page, and leaving
+///   it out changes no page; it bounds what the read returns to the rows of
+///   `$2` groups.
+/// * The two arms read every row of those groups by key, each a join the
+///   planner runs as an index lookup per group: by `write_group` through
+///   `event_write_group_idx`, and, for a row from before migration 3, whose
+///   `write_group` is `NULL`, by its own position through the primary key. One
+///   `IN (…) OR …` over both would be a filter over every row of the table.
+///   No row is in both arms: a row with a group is not `NULL`, and a legacy
+///   row's position names no group but its own.
+/// * `scanned` is how many rows `scan` found. Fewer than `$3` means it reached
 ///   the end of the log, which is the only case the page may say
-///   [`Waiting::Nothing`].
+///   [`Waiting::Nothing`]; `ids`' cap cannot change that, because a scan that
+///   short has no probe row to leave out.
 ///
 /// `scan` is referenced twice, so Postgres materialises it once and both uses
 /// agree.
 const GROUPS_SQL: &str = "WITH scan AS (\
-     SELECT coalesce(write_group, position) AS g FROM event \
+     SELECT position AS p, coalesce(write_group, position) AS g FROM event \
      WHERE position > $1 AND coalesce(write_group, position) > $1 AND {frontier} \
-     ORDER BY position LIMIT $2), \
-     ids AS (SELECT DISTINCT g FROM scan) \
-     SELECT position, event_type, data, metadata, tags, origin_store, origin_position, \
-     recorded_at, coalesce(write_group, position) AS write_group_first, group_guard, \
-     (SELECT count(*) FROM scan) AS scanned \
-     FROM event \
-     WHERE (write_group IN (SELECT g FROM ids) \
-     OR (write_group IS NULL AND position IN (SELECT g FROM ids))) \
-     AND {frontier} \
-     ORDER BY coalesce(write_group, position), position";
+     ORDER BY position LIMIT $3), \
+     ids AS (SELECT DISTINCT g FROM (SELECT g FROM scan ORDER BY p LIMIT $2) AS head), \
+     counted AS (SELECT count(*) AS n FROM scan) \
+     SELECT e.position, e.event_type, e.data, e.metadata, e.tags, e.origin_store, \
+     e.origin_position, e.recorded_at, ids.g AS write_group_first, e.group_guard, \
+     (SELECT n FROM counted) AS scanned \
+     FROM ids JOIN event AS e ON e.write_group = ids.g \
+     WHERE {frontier} \
+     UNION ALL \
+     SELECT e.position, e.event_type, e.data, e.metadata, e.tags, e.origin_store, \
+     e.origin_position, e.recorded_at, ids.g AS write_group_first, e.group_guard, \
+     (SELECT n FROM counted) AS scanned \
+     FROM ids JOIN event AS e ON e.position = ids.g \
+     WHERE e.write_group IS NULL AND {frontier} \
+     ORDER BY write_group_first, position";
+
+/// [`GROUPS_SQL`] with its binds: `after` (0 for the start of the log), the
+/// page's budget, and the probe.
+pub(super) fn groups_query(
+    sql: &str,
+    after: i64,
+    max_events: NonZeroUsize,
+) -> Query<'_, Postgres, PgArguments> {
+    sqlx::query(sql)
+        .bind(after)
+        .bind(budget(max_events))
+        .bind(probe(max_events))
+}
+
+/// The budget as the `bigint` a `LIMIT` takes. A budget past `i64::MAX`
+/// saturates, which no log can tell apart: it holds fewer positions than that.
+fn budget(max_events: NonZeroUsize) -> i64 {
+    i64::try_from(max_events.get()).unwrap_or(i64::MAX)
+}
+
+/// One more than the budget, so a scan that fills it is told apart from one
+/// that reached the end of the log.
+fn probe(max_events: NonZeroUsize) -> i64 {
+    budget(max_events).saturating_add(1)
+}
 
 /// [`GROUPS_SQL`] under `visibility`'s predicate.
-fn groups_sql(visibility: Visibility) -> String {
+pub(super) fn groups_sql(visibility: Visibility) -> String {
     GROUPS_SQL.replace("{frontier}", visibility.predicate())
 }
 
@@ -130,9 +172,9 @@ impl PostgresEventStore {
     /// Up to `max_events` events of whole write groups above `after`, in one
     /// statement on the store's runtime.
     ///
-    /// The statement returns every row of up to `max_events + 1` groups, each
-    /// bounded by this store's batch ceiling, so the rows held are bounded
-    /// (H-13); the page builder then keeps what the budget allows.
+    /// The rows are streamed into the page builder and the stream dropped as
+    /// soon as it breaks, so only the page's own rows are held, never the
+    /// whole answer (H-13).
     async fn read_write_groups(
         &self,
         after: Option<SequencePosition>,
@@ -143,40 +185,42 @@ impl PostgresEventStore {
         let pool = self.pool.clone();
         let sql = groups_sql(self.visibility);
         let after = after.map_or(0, as_i64);
-        // One more than the budget, so a scan that fills it is told apart
-        // from one that reached the end of the log.
-        let probe = i64::try_from(max_events.get())
-            .unwrap_or(i64::MAX)
-            .saturating_add(1);
-        let rows: Vec<PgRow> = self
-            .on_runtime(async move {
-                sqlx::query(&sql)
-                    .bind(after)
-                    .bind(probe)
-                    .fetch_all(&pool)
-                    .await
-                    .map_err(PostgresEventStoreError::from)
-            })
-            .await?;
-
-        let scanned = match rows.first() {
-            Some(row) => row.try_get::<i64, _>("scanned")?,
-            None => 0,
-        };
-        let mut page = GroupPageBuilder::new(max_events);
-        for row in &rows {
-            let (first, guard, event) = decode_group_row(row)?;
-            if page.offer(first, guard, event).is_break() {
-                return Ok(page.finish(Waiting::Unknown)?);
-            }
-        }
-        let past = if scanned < probe {
-            Waiting::Nothing
-        } else {
-            Waiting::Unknown
-        };
-        Ok(page.finish(past)?)
+        self.on_runtime(async move { page_of_groups(&pool, &sql, after, max_events).await })
+            .await
     }
+}
+
+/// Streams [`GROUPS_SQL`]'s rows into a page of at most `max_events` events.
+///
+/// # Errors
+///
+/// The driver's error, what [`decode_group_row`] refuses, and
+/// [`GroupOrder`](PostgresEventStoreError::GroupOrder) for rows out of group
+/// order.
+async fn page_of_groups(
+    pool: &PgPool,
+    sql: &str,
+    after: i64,
+    max_events: NonZeroUsize,
+) -> Result<GroupPage, PostgresEventStoreError> {
+    let mut rows = groups_query(sql, after, max_events).fetch(pool);
+    let mut page = GroupPageBuilder::new(max_events);
+    let mut scanned = 0;
+    while let Some(row) = poll_fn(|cx| rows.as_mut().poll_next(cx)).await {
+        let row = row?;
+        // Every row carries the same count; the first is as good as any.
+        scanned = row.try_get::<i64, _>("scanned")?;
+        let (first, guard, event) = decode_group_row(&row)?;
+        if page.offer(first, guard, event).is_break() {
+            return Ok(page.finish(Waiting::Unknown)?);
+        }
+    }
+    let past = if scanned < probe(max_events) {
+        Waiting::Nothing
+    } else {
+        Waiting::Unknown
+    };
+    Ok(page.finish(past)?)
 }
 
 /// One row of [`GROUPS_SQL`]: its group, the group's guard if this is the
@@ -224,17 +268,17 @@ mod tests {
     use super::{GROUPS_SQL, STAMP_SQL, groups_sql};
     use crate::event_store::Visibility;
 
-    /// The read carries the frontier in both halves: the scan that names the
-    /// groups and the read of their rows. Without it in the scan, a group
-    /// above the frontier is named and its rows filtered out, and the page
-    /// says it read a group it did not; without it in the read, a legacy row
-    /// above the frontier is read beside a group that is not.
+    /// The read carries the frontier in all three of its reads of the table:
+    /// the scan that names the groups and both arms that read their rows.
+    /// Without it in the scan, a group above the frontier is named and its rows
+    /// filtered out, and the page says it read a group it did not; without it
+    /// in an arm, a row above the frontier is read beside groups that are not.
     #[test]
-    fn the_group_read_carries_the_frontier_twice() {
+    fn the_group_read_carries_the_frontier_in_every_read_of_the_table() {
         let sql = groups_sql(Visibility::Frontier);
         assert_eq!(
             sql.matches(Visibility::Frontier.predicate()).count(),
-            2,
+            3,
             "{sql}"
         );
         assert!(!sql.contains("{frontier}"), "a placeholder survived: {sql}");
@@ -242,12 +286,20 @@ mod tests {
 
     /// The rows are ordered by group, then position; a scan by position is the
     /// read that tears interleaved groups, and the page builder refuses it.
+    /// The rows are read by key in two arms, never by a filter over the table.
     #[test]
-    fn the_group_read_orders_by_group_first() {
+    fn the_group_read_joins_by_key_and_orders_by_group_first() {
         assert!(
-            GROUPS_SQL.ends_with("ORDER BY coalesce(write_group, position), position"),
+            GROUPS_SQL.ends_with("ORDER BY write_group_first, position"),
             "{GROUPS_SQL}"
         );
+        assert!(
+            GROUPS_SQL.contains("JOIN event AS e ON e.write_group = ids.g")
+                && GROUPS_SQL.contains("JOIN event AS e ON e.position = ids.g")
+                && GROUPS_SQL.contains(" UNION ALL "),
+            "{GROUPS_SQL}"
+        );
+        assert!(!GROUPS_SQL.contains(" OR "), "{GROUPS_SQL}");
     }
 
     /// The stamp names the landed rows by key, never a range: another
