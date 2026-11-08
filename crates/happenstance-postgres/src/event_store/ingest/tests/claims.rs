@@ -371,8 +371,8 @@ async fn local_appends_are_not_wedged_after_a_refused_claim() {
     assert!(holds(&store, claimed.claim).await);
 }
 
-/// The remedy SY-38 names converges, by the manual re-mint ADR-0098 says is
-/// the only recovery here until #104 decides the procedure: after the
+/// The remedy SY-38 names converges, by a manual re-mint, the raw `UPDATE`
+/// that `remint_identity` also runs: after the
 /// identity row is replaced and a fresh handle opened, the same groups land
 /// whole, the claim as the foreign event it now is, and earlier local rows
 /// keep the identity they were minted under.
@@ -389,9 +389,8 @@ async fn a_claim_lands_as_foreign_after_a_manual_remint() {
         .execute(&pool)
         .await
         .expect("the identity row is replaced");
-    // A new handle, as before #104, when a handle cached the identity it read
-    // first. Since #104 `store` itself would see the re-mint too, which
-    // `tests/remint.rs` holds; this test is about the claim, not the handle.
+    // A new handle, though `store` itself sees the re-mint too, which
+    // `tests/remint.rs` holds: this test is about the claim, not the handle.
     let reminted = PostgresEventStore::new(pool);
     assert_ne!(own(&reminted).await, old);
 

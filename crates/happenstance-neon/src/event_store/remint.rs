@@ -87,16 +87,22 @@ impl<T: SqlTransport> NeonEventStore<T> {
 ///
 /// # Errors
 ///
-/// `MissingIdentity` when the update matched no row; the decoders' errors
+/// `MissingIdentity` when the update matched no row; `MissingColumn` when it
+/// matched one but the answer does not carry it as text; the decoders' errors
 /// otherwise.
 fn decode_reminted<E>(
     response: &HttpResponse,
     max_response_bytes: usize,
 ) -> Result<StoreId, NeonError<E>> {
     let body = decode_body::<E>(response, max_response_bytes)?;
-    let stored = first_result_set::<E>(&body)?
-        .text(0, "store_id")
-        .ok_or(NeonError::MissingIdentity)?;
+    let [row, ..] = first_result_set::<E>(&body)?.rows.as_slice() else {
+        return Err(NeonError::MissingIdentity);
+    };
+    let column = "store_id";
+    let stored = row
+        .get(column)
+        .and_then(serde_json::Value::as_str)
+        .ok_or(NeonError::MissingColumn { column })?;
     stored_store_id(stored)
 }
 

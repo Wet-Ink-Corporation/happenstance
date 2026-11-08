@@ -98,7 +98,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 
 use super::{
     IDENTITY_SQL, NewRow, Origin, PostgresEventStore, StoredOrigin, allocate_positions, exceeded,
-    identity_from_row, insert_statement, now, position_from_row,
+    identity_from_row, insert_statement, now, position_from_row, stored_store_id,
 };
 use crate::error::PostgresEventStoreError;
 
@@ -119,8 +119,12 @@ const CONFLICT_CLAUSE: &str = " ON CONFLICT (origin_store, origin_position) \
 /// identity read costs no round trip of its own. The snapshot is taken on
 /// every call, though only a call that carries a claim reads it: in the same
 /// statement it is free.
-const IDENTITY_AND_SNAPSHOT_SQL: &str =
-    "SELECT v, pg_current_snapshot()::text FROM store_meta WHERE k = 'store_id'";
+///
+/// Always exactly one row: the identity is a scalar subquery, NULL when the
+/// meta row is gone, so it decodes through the one decoder an append and the
+/// port's `store_id` use.
+const IDENTITY_AND_SNAPSHOT_SQL: &str = "SELECT (SELECT v FROM store_meta WHERE k = 'store_id'), \
+     pg_current_snapshot()::text";
 
 /// Of the claimed own positions the insert skipped, those whose row the begin
 /// snapshot could not see: written by this call, or committed by another
@@ -390,11 +394,10 @@ async fn ingest_in_transaction(
     // First, so the snapshot is the call's begin snapshot, and so a store with
     // no identity refuses before anything is written. The transaction is
     // dropped uncommitted on that `?`.
-    let (stored, snapshot): (Vec<u8>, String) = sqlx::query_as(IDENTITY_AND_SNAPSHOT_SQL)
-        .fetch_optional(&mut *transaction)
-        .await?
-        .ok_or(PostgresEventStoreError::MissingIdentity)?;
-    let own = stored_store_id(&stored)?;
+    let (stored, snapshot): (Option<Vec<u8>>, String) = sqlx::query_as(IDENTITY_AND_SNAPSHOT_SQL)
+        .fetch_one(&mut *transaction)
+        .await?;
+    let own = identity_from_row(stored)?;
 
     // Only a call that carries a claim runs the claim check, and it is never
     // run without the begin snapshot.
@@ -534,18 +537,6 @@ async fn unheld_claim(
         .filter(|foreign| foreign.id.store() == own)
         .find(|foreign| landed.contains(&foreign.id) || hidden.contains(&foreign.origin.position))
         .map(|foreign| foreign.id))
-}
-
-/// Decodes a stored `origin_store`.
-///
-/// # Errors
-///
-/// `MalformedIdentity` when it is not sixteen bytes.
-fn stored_store_id(stored: &[u8]) -> Result<StoreId, PostgresEventStoreError> {
-    let bytes: [u8; 16] = stored
-        .try_into()
-        .map_err(|_| PostgresEventStoreError::MalformedIdentity { len: stored.len() })?;
-    Ok(StoreId::from_bytes(bytes))
 }
 
 // The whole file is behind `sync`, through its declaration in

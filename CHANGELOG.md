@@ -60,8 +60,11 @@ not the same as what a user needed to be told.
 - `happenstance-neon`: an append on a schema whose identity row is gone
   inserts nothing and refuses with `NeonError::MissingIdentity` (#104), where
   it used to commit rows with a NULL origin that every later read refused as
-  `UnstampedEvent`. `NeonError::MissingIdentity` is no longer behind `sync`
-  (additive: the enum is `#[non_exhaustive]`).
+  `UnstampedEvent`. An ingest on such a schema now writes nothing and
+  refuses with `IngestError::Store(NeonError::MissingIdentity)`, where its
+  compensation used to commit with a NULL origin.
+  `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
+  is `#[non_exhaustive]`).
 
 ## [0.5.1] — 2026-11-08
 

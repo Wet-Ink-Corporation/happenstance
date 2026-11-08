@@ -309,7 +309,12 @@ of E2E-07 (ES-24).
   and `migration::remint_statement` on Neon for branch tooling. Postgres drops
   its per-handle `OnceLock` identity cache and reads `store_meta` inside every
   append's and every ingest's transaction, so a re-mint needs no restart; Neon
-  inserts nothing and refuses with `MissingIdentity` when the row is gone. No
+  inserts nothing and refuses with `MissingIdentity` when the row is gone, an
+  ingest included (its compensation is gated on the row and its refusal
+  statement raises `HS086`). A deviation from ADR-0086 §7.2, which proposed a
+  join in `local_origin`: Neon guards each writer with an `EXISTS` on the meta
+  row instead, because `local_origin` also stamps ingest compensation, where a
+  join would silently drop the compensation and commit its losing event. No
   migration. `tests/remint.rs` in each crate holds it with a no-re-mint
   negative control; CI's live jobs run both. Verified against a live Postgres
   17.10; the Neon target is compiled locally and runs in `live-neon`.

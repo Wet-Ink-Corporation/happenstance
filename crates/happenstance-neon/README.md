@@ -159,7 +159,8 @@ UPDATE "public"."store_meta" SET v = uuid_send(gen_random_uuid()) WHERE k = 'sto
 ```
 
 No restart is needed: every append reads the identity row inside its own statement, and refuses
-with `NeonError::MissingIdentity`, writing nothing, if the row is absent. The platform creates
+with `NeonError::MissingIdentity`, writing nothing, if the row is absent; an ingest refuses the
+same way. The platform creates
 branches, not this crate, so put the statement in the tooling that does.
 
 ## Limits this store enforces

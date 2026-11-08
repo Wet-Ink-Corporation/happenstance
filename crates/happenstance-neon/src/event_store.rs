@@ -705,11 +705,17 @@ impl<T: SqlTransport> NeonEventStore<T> {
     ///   which reads `won`, a `DISTINCT` over all of `ins`. So every foreign row
     ///   has met the origin index before the first compensation position is
     ///   drawn, and a claim on a position a compensation would take lands rather
-    ///   than hiding behind it.
+    ///   than hiding behind it. `c` is empty, too, when `own` is: the stamp
+    ///   reads the meta row, and a compensation with no row to read would
+    ///   commit with a NULL origin that no read can turn back into an event
+    ///   (ADR-0086).
     ///
     /// The final `SELECT` reports the three counts `Ingested` carries, and leaves
-    /// the first landed claim's 1-based index in `$1` (or nothing) in a
-    /// **transaction-local** setting the request's second statement reads. Every
+    /// two **transaction-local** settings the request's second statement reads:
+    /// the first landed claim's 1-based index in `$1` (or nothing), and whether
+    /// `own` was empty. The second statement refuses the whole call on either,
+    /// so the gate on `c` is a second line rather than the only one: a store
+    /// with no identity row lands neither half of an ingest. Every
     /// row, foreign or local, takes the one `xact_id` its transaction stamps, so
     /// ES-10's frontier treats the batch as one write.
     ///
@@ -751,15 +757,20 @@ impl<T: SqlTransport> NeonEventStore<T> {
              WHERE f.origin_store = (SELECT v FROM own)), \
              c AS (SELECT row_number() OVER (ORDER BY u.ord) AS ord, \
              u.event_type, u.data, u.metadata, u.tags FROM ({u}) u \
-             WHERE u.grp IN (SELECT grp FROM won) AND (SELECT count(*) FROM claimed) = 0), \
+             WHERE u.grp IN (SELECT grp FROM won) AND (SELECT count(*) FROM claimed) = 0 \
+             AND EXISTS (SELECT 1 FROM own)), \
              comp AS ({comp}) \
              SELECT (SELECT count(*) FROM ins)::text AS appended, \
              (jsonb_array_length($1::jsonb) - (SELECT count(*) FROM ins))::text AS skipped, \
              (SELECT count(*) FROM comp)::text AS compensated, \
              set_config('{guc}', coalesce((SELECT min(ord) FROM claimed)::text, ''), true) \
-             AS unheld",
+             AS unheld, \
+             set_config('{unidentified}', \
+             CASE WHEN EXISTS (SELECT 1 FROM own) THEN '' ELSE 'absent' END, true) \
+             AS unidentified",
             meta = self.config.qualified_meta(),
             guc = ingest::UNHELD_GUC,
+            unidentified = ingest::UNIDENTIFIED_GUC,
             f = unpacked(
                 "$1",
                 ", (e->>'k')::bigint AS grp, decode(e->>'s', 'base64') AS origin_store, \

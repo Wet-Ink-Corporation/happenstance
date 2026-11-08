@@ -171,7 +171,7 @@ fast path if the single-tag guard stops being cheaper than the multi-tag chain i
 §9's falsifier asks that *"a deployment shows"* the captured `Handle` costing something
 (`0022:609-612`). The capture is unconditional in the three places it is written:
 `crates/happenstance-sqlite/src/event_store.rs:515`, `projection_store.rs:234` and
-`crates/happenstance-postgres/src/event_store.rs:333`. What the open question describes is a store
+`crates/happenstance-postgres/src/event_store.rs:332`. What the open question describes is a store
 that outlives its runtime and whose reads hang, or yield a `Worker(cancelled)` item, but never
 `NoRuntime`. That outcome was reasoned from tokio's semantics. Nothing in the tree reproduces it:
 `tests/read.rs:157-180` and `tests/concurrency.rs:146-176` cover a store with *no* runtime, and
@@ -201,7 +201,7 @@ its own (`crates/happenstance-postgres/src/read_stream.rs:458-480`).
 - **§6's falsifier has not fired.** No deployment's dominant read is broad.
 - **§10 has no falsifier in §16**; its own re-open trigger (`0022:452-455`), Postgres or Neon
   independently needing the same per-item decomposition, has not fired. `happenstance-neon`'s
-  probe unions per guard, not per query item (`crates/happenstance-neon/src/event_store.rs:467-497`),
+  probe unions per guard, not per query item (`crates/happenstance-neon/src/event_store.rs:467-502`),
   and stays adapter-private. The merged read path (`b3c8d84`) is the decomposition staying
   adapter-private in SQLite too, which is §10's verdict.
 - **§12** supplied a number. `CONTENDERS` is now 64 (`crates/happenstance-testkit/src/concurrency.rs:271`),

@@ -147,6 +147,33 @@ async fn remint_identity_without_an_identity_row_is_missing_identity() {
     assert!(matches!(refused, NeonError::MissingIdentity), "{refused:?}");
 }
 
+/// A row that came back without the `store_id` column, or with it NULL, is a
+/// shape error naming the column, not a missing identity row: the update
+/// matched a row, so the store has one.
+///
+/// Rejects folding every unreadable answer into `MissingIdentity`, which would
+/// send an operator to migration 1 for a decoder fault.
+#[tokio::test]
+async fn remint_identity_with_a_row_lacking_the_column_is_missing_column() {
+    const ANSWERS: [&[u8]; 2] = [
+        br#"{"fields":[],"command":"UPDATE","rowCount":1,"rows":[{"v":"AQIDBAUGBwgJCgsMDQ4PEA=="}]}"#,
+        br#"{"fields":[],"command":"UPDATE","rowCount":1,"rows":[{"store_id":null}]}"#,
+    ];
+    for body in ANSWERS {
+        let transport = Scripted::answering(200, body);
+        let store = NeonEventStore::new(&transport, config());
+
+        let refused = store
+            .remint_identity()
+            .await
+            .expect_err("the answer carries no identity to decode");
+        assert!(
+            matches!(refused, NeonError::MissingColumn { column: "store_id" }),
+            "{refused:?}"
+        );
+    }
+}
+
 /// Both append shapes insert only where the identity row exists, so a store
 /// without one inserts nothing rather than rows with a NULL origin, and the
 /// conditional probe reports whether the row was there.
@@ -180,8 +207,8 @@ fn both_append_shapes_insert_only_where_the_identity_row_exists() {
 /// An unconditional append that inserted nothing found no identity row, and
 /// refuses as that.
 ///
-/// Rejects the old answer, `MissingColumn { column: "position" }`, which names
-/// this crate's decoder as the culprit.
+/// Rejects answering `MissingColumn { column: "position" }`, which names this
+/// crate's decoder as the culprit.
 #[tokio::test]
 async fn an_unconditional_append_that_inserts_nothing_is_missing_identity() {
     let transport = Scripted::answering(

@@ -204,13 +204,12 @@ pub enum NeonError<E> {
     /// to stamp an event, ingest or re-mint under. Migration 1 inserts it; its
     /// absence is a schema that was never migrated.
     ///
-    /// An append refuses with it, and writes nothing, rather than committing
-    /// rows with a NULL origin that no read could turn back into events
-    /// ([`UnstampedEvent`](Self::UnstampedEvent)), and
-    /// `NeonEventStore::remint_identity` refuses with
-    /// it rather than creating the row. Behind `sync` until #104, when the
-    /// append and the re-mint began producing it; additive either way, for
-    /// the reason the variant above gives.
+    /// An append and an ingest refuse with it, and write nothing, rather than
+    /// committing rows with a NULL origin that no read could turn back into
+    /// events ([`UnstampedEvent`](Self::UnstampedEvent)), and
+    /// `NeonEventStore::remint_identity` refuses with it rather than creating
+    /// the row. Not behind `sync`, because an append produces it in every
+    /// build.
     #[error("the store's meta table holds no store_id row; was migration 1 applied?")]
     MissingIdentity,
 }

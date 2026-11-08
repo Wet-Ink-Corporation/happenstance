@@ -17,6 +17,10 @@
 //!   lookup ahead of it: the statement reads which claims **landed** out of its
 //!   own `RETURNING`, and [`refusal_statement`] raises [`UNHELD_SQLSTATE`] when
 //!   one did, which aborts the request's one transaction;
+//! * the identity guard (ADR-0086): the compensation is gated on the meta row
+//!   it stamps from, and [`refusal_statement`] raises
+//!   [`UNIDENTIFIED_SQLSTATE`] when that row is gone, so a store with no
+//!   identity ingests nothing rather than committing rows with a NULL origin;
 //! * [`WATERMARK_SQL`], one `GROUP BY` over the origin index.
 //!
 //! No append condition is evaluated (SY-1).
@@ -96,6 +100,18 @@ pub(super) const UNHELD_GUC: &str = "happenstance.unheld_own_identity";
 /// and a `DETAIL`, so nothing here parses a message.
 pub(super) const UNHELD_SQLSTATE: &str = "HS038";
 
+/// The transaction-local setting the ingest statement leaves `absent` in when
+/// the meta row it stamps compensations from is gone, or the empty string.
+///
+/// Transaction-local for [`UNHELD_GUC`]'s reason.
+pub(super) const UNIDENTIFIED_GUC: &str = "happenstance.unidentified";
+
+/// The SQLSTATE this adapter raises an ingest into a store with no identity
+/// row with, which [`refused`] maps to [`NeonError::MissingIdentity`].
+///
+/// Chosen by [`UNHELD_SQLSTATE`]'s rules, numbered for ADR-0086.
+pub(super) const UNIDENTIFIED_SQLSTATE: &str = "HS086";
+
 /// The highest origin position held per origin store, with the event table's
 /// qualified name where the placeholder stands.
 ///
@@ -108,14 +124,24 @@ const WATERMARK_SQL: &str = "SELECT encode(origin_store, 'base64') AS s, \
      WHERE origin_store IS NOT NULL AND origin_position IS NOT NULL GROUP BY origin_store";
 
 /// The request's second statement: aborts the batch, and with it everything
-/// the first statement wrote, when the first left a claim in [`UNHELD_GUC`].
+/// the first statement wrote, when the first found no identity row
+/// ([`UNIDENTIFIED_GUC`]) or left a claim in [`UNHELD_GUC`].
+///
+/// The identity is checked first: a store with no identity row holds no claim
+/// to name, and its refusal must not depend on what the batch carried.
 ///
 /// A `DO` block, which takes no bind parameters and needs none: it reads only
-/// the setting. It names no relation, so it has no schema to qualify. `DETAIL`
-/// carries the claim's index; the message is for a human reading a log.
+/// the two settings. It names no relation, so it has no schema to qualify.
+/// `DETAIL` carries the claim's index; the messages are for a human reading a
+/// log.
 pub(super) fn refusal_statement() -> SqlStatement {
     SqlStatement::new(format!(
         "DO $sy38$ BEGIN \
+         IF current_setting('{UNIDENTIFIED_GUC}', true) <> '' THEN \
+         RAISE EXCEPTION USING ERRCODE = '{UNIDENTIFIED_SQLSTATE}', \
+         MESSAGE = 'this store''s meta table holds no store_id row; was migration 1 \
+         applied? (ADR-0086)'; \
+         END IF; \
          IF current_setting('{UNHELD_GUC}', true) <> '' THEN \
          RAISE EXCEPTION USING ERRCODE = '{UNHELD_SQLSTATE}', \
          MESSAGE = 'an ingested event claims this store''s own identity at a position it \
@@ -315,10 +341,13 @@ fn decode_ingest_answer<E>(
 /// The refusal names the event the peer **sent** at the index the server
 /// reported, never one rebuilt from the store's identity. A refusal whose index
 /// is missing or names no event stays the SQL error it is: still `Stop`, and
-/// never a guess. A serialisation failure or a deadlock is `Busy`: the
-/// endpoint answered, so it ran the batch and aborted it whole.
+/// never a guess. A store with no identity row is `MissingIdentity`, the error
+/// an append and [`store_id`](IngestStore::store_id) give for it. A
+/// serialisation failure or a deadlock is `Busy`: the endpoint answered, so it
+/// ran the batch and aborted it whole.
 fn refused<E>(sql: NeonSqlError, groups: &[IngestGroup<'_>]) -> IngestError<NeonError<E>> {
     match sql.code.as_deref() {
+        Some(UNIDENTIFIED_SQLSTATE) => IngestError::Store(NeonError::MissingIdentity),
         Some(UNHELD_SQLSTATE) => match claimed(sql.detail.as_deref(), groups) {
             Some(id) => IngestError::unheld_own_identity(id),
             None => IngestError::Store(NeonError::Sql(sql)),

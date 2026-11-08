@@ -336,6 +336,40 @@ async fn a_compensation_that_fails_in_the_transaction_takes_the_losing_event_wit
     assert_eq!(rows(&store).await, 0);
 }
 
+/// ADR-0086 against the endpoint: with the meta row gone, an ingest carrying
+/// a compensation is `MissingIdentity` and writes nothing, neither the
+/// foreign event nor a compensation stamped with a NULL origin.
+///
+/// Rejects an ungated compensation, which commits a row no read can turn back
+/// into an event, and a foreign batch landing in a store with no identity.
+#[tokio::test]
+#[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
+async fn an_ingest_into_a_store_without_an_identity_row_is_refused_and_writes_nothing() {
+    let store = live_store().await;
+    let deleted = send(
+        &store,
+        vec![SqlStatement::new(format!(
+            "DELETE FROM {} WHERE k = 'store_id'",
+            store.config().qualified_meta()
+        ))],
+    )
+    .await;
+    assert!(deleted.is_success(), "the identity row deletes");
+
+    let losing = [shipped(id(peer(0xE6), 1), 1, event("Reserved", "seat"))];
+    let compensation = [event("ReservationCompensated", "seat")];
+    let refused = ingest(&store, &[IngestGroup::new(&losing, &compensation)])
+        .await
+        .expect_err("a store with no identity row ingests nothing");
+
+    assert!(
+        matches!(refused, IngestError::Store(NeonError::MissingIdentity)),
+        "{refused:?}"
+    );
+    assert_eq!(refused.class(), FailureClass::Stop);
+    assert_eq!(rows(&store).await, 0, "the refused call wrote a row");
+}
+
 /// The largest origin position a `bigint` holds lands and reads back. With
 /// `an_origin_position_past_bigint_is_refused_not_saturated` it brackets the
 /// conversion; rejects an off-by-one bound.

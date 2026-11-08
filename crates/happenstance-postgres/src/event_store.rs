@@ -171,13 +171,12 @@ use crate::read_stream::PgReadStream;
 #[non_exhaustive]
 pub struct PostgresEventStore {
     pool: PgPool,
-    // There is deliberately no identity field. Until #104 this held an
-    // `Arc<OnceLock<StoreId>>`, filled on first use and shared by every clone,
-    // and a `OnceLock` cannot be reset through `&self`: a handle open across a
-    // re-mint went on stamping the retired identity onto positions a restore
-    // hands out again, the pair VT-6 forbids. Every append now reads the row
-    // inside its own transaction (ADR-0086 §7.1), so the persisted row is the
-    // only copy and there is nothing stale to guard.
+    // There is deliberately no identity field. A cached copy cannot be reset
+    // through `&self`, so a handle open across a re-mint would go on stamping
+    // the retired identity onto positions a restore hands out again, the pair
+    // VT-6 forbids. Every append reads the row inside its own transaction
+    // (ADR-0086 §7.1), so the persisted row is the only copy and there is
+    // nothing stale to guard.
     /// The runtime an operation hops onto when its caller is executing on none.
     ///
     /// # Why a store needs this at all
@@ -429,9 +428,15 @@ impl PostgresEventStore {
     /// No handle holds a copy of the identity: every append reads the row
     /// inside its own transaction. So a handle built or cloned before this call,
     /// in this process or another, stamps the new identity on its next append,
-    /// and nothing has to be restarted. An append racing this call may stamp the
-    /// retired identity, which is harmless: the re-mint does not rewind the
-    /// sequence, so that row still takes a fresh position and no pair repeats.
+    /// and nothing has to be restarted.
+    ///
+    /// An append racing this call may stamp the retired identity. Where no
+    /// restore happened that is harmless: the re-mint does not rewind the
+    /// sequence, so the row still takes a position the retired identity never
+    /// stamped. After a restore it is not, because the restore rewound the
+    /// sequence, and such a row pairs the retired identity with a position the
+    /// original store has already issued under it. That is why every writer
+    /// must be stopped before this call, not merely before the next append.
     ///
     /// # What it does not change
     ///
@@ -948,10 +953,14 @@ fn is_serialisation_failure(error: &PostgresEventStoreError) -> bool {
 /// it evaluates anything, and the transaction is dropped uncommitted: nothing
 /// is written, and no row with a NULL origin can be.
 ///
-/// A plain `SELECT`, not `FOR SHARE`. A re-mint racing this append is harmless,
-/// because the re-mint does not rewind the sequence: a row stamped with the
-/// retired identity still takes a fresh position, so no pair repeats. A row lock
-/// would make every append write to the one `store_meta` tuple to buy nothing.
+/// A plain `SELECT`, not `FOR SHARE`. A re-mint racing this append is harmless
+/// where no restore happened, because the re-mint does not rewind the
+/// sequence: a row stamped with the retired identity still takes a fresh
+/// position, so no pair repeats. After a restore the sequence has been rewound,
+/// and such a row would repeat a pair; the procedure prevents that by stopping
+/// every writer before the re-mint, which no lock here could enforce on a
+/// writer the operator left running. So a row lock would make every append
+/// write to the one `store_meta` tuple to buy nothing.
 /// Under `SERIALIZABLE` the read adds one predicate lock on a row no append
 /// writes, so appends do not conflict with each other through it.
 ///
@@ -1259,12 +1268,19 @@ const REMINT_SQL: &str =
 /// sixteen bytes. Neither is spelled as a driver error, because "the schema is
 /// not there" and "the server refused the query" send a reader to different
 /// places.
-pub(crate) fn identity_from_row(
-    stored: Option<Vec<u8>>,
-) -> Result<StoreId, PostgresEventStoreError> {
-    let stored = stored.ok_or(PostgresEventStoreError::MissingIdentity)?;
+fn identity_from_row(stored: Option<Vec<u8>>) -> Result<StoreId, PostgresEventStoreError> {
+    stored_store_id(&stored.ok_or(PostgresEventStoreError::MissingIdentity)?)
+}
+
+/// Decodes sixteen stored bytes as a [`StoreId`]: this store's own identity
+/// through [`identity_from_row`], and a stored `origin_store` on the ingest
+/// path. The one place a `StoreId` is read back from this schema.
+///
+/// # Errors
+///
+/// [`PostgresEventStoreError::MalformedIdentity`] when it is not sixteen bytes.
+fn stored_store_id(stored: &[u8]) -> Result<StoreId, PostgresEventStoreError> {
     let bytes: [u8; 16] = stored
-        .as_slice()
         .try_into()
         .map_err(|_| PostgresEventStoreError::MalformedIdentity { len: stored.len() })?;
     Ok(StoreId::from_bytes(bytes))

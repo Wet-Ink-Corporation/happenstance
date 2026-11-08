@@ -136,7 +136,17 @@
 //!
 //! Then resume appends. No restart is needed: every append reads the row inside
 //! its own statement, and inserts nothing, refusing with
-//! [`NeonError::MissingIdentity`], when the row is absent. A branch is made by
+//! [`NeonError::MissingIdentity`], when the row is absent. An ingest refuses the
+//! same way and writes neither the foreign events nor their compensation.
+//!
+//! ADR-0086 §7.2 proposed a join against the meta row inside the shared stamp,
+//! so that an absent row yields zero rows. That stamp also writes an ingest's
+//! compensation, where a join would drop the compensation silently and leave
+//! the foreign event it answers committed alone. So the stamp stays a scalar
+//! subquery, and each writer that uses it is guarded by an `EXISTS` on the same
+//! row in the same statement instead: an append inserts nothing without it, and
+//! an ingest gates its compensation on it and is refused whole by its second
+//! statement. A branch is made by
 //! the platform's control plane rather than by this crate, so put the statement
 //! in whatever tooling makes branches. Minting afresh on every open was
 //! considered and declined (ADR-0086): a Workers deployment builds a store per
