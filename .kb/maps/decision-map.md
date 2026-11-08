@@ -976,6 +976,18 @@ supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0105 | [`kb-decision-0105`](../decisions/0105-write-groups-are-recorded-per-row.md) | A store records each write's group on its rows, and a peer reads and pushes in those groups | proposed | 13 | — |
 
+## 2026-11-08: ADR-0003 is no longer provisional (#126), proposed
+
+ADR-0106 is written straight here with no intake step, and is **proposed** until the owner
+accepts it. ADR-0003's lift condition is met: a native SQLite store round-trips every payload
+byte for byte through two unlike real peers (the Durable Object over HTTP, `NeonSyncPeer`) and
+through Postgres, on CI. It supersedes nothing; ADR-0003's decision stands and its body is
+unchanged.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0106 | [`kb-decision-0106`](../decisions/0106-adr-0003-is-no-longer-provisional.md) | ADR-0003 is no longer provisional, because two unlike peers round-trip a payload byte for byte | proposed | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
