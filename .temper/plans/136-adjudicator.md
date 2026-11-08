@@ -34,7 +34,7 @@ test with two adjudicator configurations, divergence recorded. No marker moves (
 
 ## Test list
 - [x] SY-7 rule green on MemoryIngestFixture and every existing ingest mount
-- [x] SY-7 rule fails FilesCompensationUnderTheOrigin, exactly
+- [x] SY-7 rule fails FilesCompensationUnderAPlaceholder, exactly (FilesCompensationUnderTheOrigin was dropped: it also failed SY-30 and SY-18)
 - [x] falsification: one adjudicator -> one compensation, logs converge after meeting
 - [x] falsification: two adjudicators -> two compensations, two identities, both claims reversed
 - [x] SY-23 rule green on memory, store, remote, local, kv-capped peers and every wrong peer

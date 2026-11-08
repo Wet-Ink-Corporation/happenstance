@@ -48,7 +48,8 @@
 //! Each rule names a wrong implementation, and that implementation lives in
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
 //! over [`KvCappedFixture`], its batch rule's in `tests/wrong_peers.rs`, and
-//! SY-23's in `tests/wrong_orders.rs` — where the rule is shown to fail it. A rule no peer can fail is decorative.
+//! SY-23's in `tests/wrong_orders.rs` — where the rule is shown to fail it.
+//! A rule no peer can fail is decorative.
 //!
 //! **No rule decodes a payload** (SY-35), and **no rule in [`rules`] holds two
 //! peers** (SY-8). [`rules`] says how the rules keep both. The model family

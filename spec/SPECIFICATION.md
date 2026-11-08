@@ -7226,7 +7226,10 @@ runner in `happenstance-sync` authors a compensation yet, so the rule cannot be 
 one; the falsification test runs it beside the rule instead, on `MemoryIngestStore`
 with two adjudicator configurations, and records the divergence: after the two stores
 meet they hold the same events, and under two adjudicators that is two reversals with
-two identities, reversing opposite claims, so no claim to the seat stands.
+two identities, reversing opposite claims, so no claim to the seat stands. The
+rule's teeth are the store half (a compensation is minted under the identity the store
+holds); the runner half, that a non-adjudicator writes none, binds the adjudication hook
+when it is built, and the marker stays provisional until that hook mounts the rule.
 Cases: E2E-39, E2E-42, E2E-45.
 
 *Rejects:* every-peer-adjudicates, which is the reading SY-1 through SY-3 invite
