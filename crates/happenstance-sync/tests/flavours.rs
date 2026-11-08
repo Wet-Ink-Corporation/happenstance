@@ -545,3 +545,71 @@ async fn the_send_flavour_spawns_from_generic_code() {
         "the spawned ingest did not reach the shared store"
     );
 }
+
+/// What [`edge_spawns_from_generic`]'s task saw: the step's error rendered
+/// before the task ends, for the reason [`Spawned`] renders its errors.
+type EdgeSpawned = Result<(usize, Option<SequencePosition>), String>;
+
+/// [`Edge::step`] inside `tokio::spawn`, from a function that knows the peer
+/// and the store only by their `Send` flavours.
+///
+/// `step` is written against the bare flavours, so whether its future is
+/// `Send` for a `Send`-flavour peer and store is a question about how the
+/// bare methods' futures resolve through `trait_variant`'s blanket impls in
+/// generic code. This answers it at the definition, before any concrete type
+/// can leak `Send` from a hidden future. **The wrong implementation it
+/// rejects** is a step that holds a `!Send` value across an `.await` (an
+/// `Rc`, a `RefCell` borrow), which compiles for the bare flavour and would
+/// make the runner impossible to spawn on a multi-threaded runtime.
+///
+/// `P::Resume: Send + Sync` is the one bound beyond the flavours': the edge
+/// holds the token across every await, and lends `&Resume` to `pull` across
+/// that call's await, so the compiler asks for both (`error[E0277]`, "cannot
+/// be shared between threads safely", without `Sync`). The port leaves
+/// `Resume` without either on purpose (see [`SyncPeer::Resume`]).
+///
+/// [`Edge::step`]: happenstance_sync::runner::Edge::step
+fn edge_spawns_from_generic<P, S>(
+    peer: Arc<P>,
+    store: Arc<S>,
+) -> tokio::task::JoinHandle<EdgeSpawned>
+where
+    P: happenstance_sync::SendSyncPeer + Send + Sync + 'static,
+    P::Resume: Send + Sync,
+    S: happenstance_core::SendEventStore
+        + happenstance_sync::SendIngestStore
+        + Send
+        + Sync
+        + 'static,
+    <S as happenstance_core::SendEventStore>::Error: Classify,
+{
+    tokio::spawn(async move {
+        let mut edge = happenstance_sync::runner::Edge::new();
+        let stepped = edge
+            .step(&*peer, &*store)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok((stepped.pushed, edge.status().confirmed))
+    })
+}
+
+#[tokio::test]
+async fn a_spawned_edge_steps_from_generic_code() {
+    let peer = Arc::new(MemorySyncPeer::new(StoreId::from_bytes([7; 16])));
+    let store = Arc::new(MemoryIngestStore::with_store_id(StoreId::from_bytes(
+        [9; 16],
+    )));
+    let local = EventStore::append(
+        &*store,
+        &[Event::new("CourseCapacityChanged", "{}").expect("a valid event type")],
+        None,
+    )
+    .await
+    .expect("an in-memory append does not fail");
+
+    let spawned = edge_spawns_from_generic(Arc::clone(&peer), Arc::clone(&store))
+        .await
+        .expect("the spawned task does not panic");
+
+    assert_eq!(spawned, Ok((1, Some(local))), "the step ran in the task");
+}

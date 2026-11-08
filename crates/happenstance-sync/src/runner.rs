@@ -10,26 +10,36 @@
 //! which [`Edge::status`] hands back without a round trip.
 //!
 //! **Part 1 of #244.** The edge reacts to a failure's class minimally: it
-//! records the class, and a [`Stop`](FailureClass::Stop) stops the edge. What
+//! records the class, and a [`Stop`](crate::FailureClass::Stop) stops the edge. What
 //! the other classes call for — jittered, capped backoff for
-//! [`Transient`](FailureClass::Transient), halving for
-//! [`Split`](FailureClass::Split), holding an event back for
-//! [`Park`](FailureClass::Park) — a bounded outbound buffer, and tasks the
-//! runner owns are part 2's. So is the incarnation check, which needs the far
-//! side's own `StoreId` and the port does not carry it.
+//! [`Transient`](crate::FailureClass::Transient), halving for
+//! [`Split`](crate::FailureClass::Split), holding an event back for
+//! [`Park`](crate::FailureClass::Park) — a bounded outbound buffer, and tasks the
+//! runner owns are part 2's.
+//!
+//! # A known gap: the push does not keep the origin's append groups
+//!
+//! A push sends the batch it read as **one** [`EventGroup`], because
+//! [`EventStore::read`] does not say which events one append wrote together.
+//! That merges independent local appends into one atomic unit on the far side,
+//! which is safe, and it can cut one multi-event append across two pushes at a
+//! batch boundary, which is not: between the two, the far side holds half of a
+//! decision the origin made whole, a state the origin never had (SY-30).
+//! Tracked by #420.
 //!
 //! # Caller-driven, and nothing spawned
 //!
 //! `step` borrows the peer and the store for the length of one exchange and
 //! keeps neither. The edge owns only what is *about the link*: the far side's
 //! resume token and the status. That is what lets the same edge be driven by a
-//! test, by a Durable Object's alarm, or by a task part 2 spawns and owns, and
-//! it is why nothing here needs `Send`.
+//! test, by a Durable Object's alarm, or by a task part 2 spawns and owns.
 //!
 //! The bounds are the bare flavours ([`SyncPeer`], [`EventStore`],
 //! [`IngestStore`]), the weaker requirement both flavours meet, so the Durable
-//! Object's `!Send` store and peer drive an edge unchanged (SY-17;
-//! `tests/flavours.rs` instantiates it with both).
+//! Object's `!Send` store and peer drive an edge unchanged (SY-17). For a peer
+//! and store of the `Send` flavours the step's future is `Send` too, given a
+//! `Send + Sync` resume token; `tests/flavours.rs` proves both, the second in
+//! generic code under `tokio::spawn`.
 //!
 //! # Where the watermark lives is not decided here
 //!
@@ -42,21 +52,34 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use core::fmt;
-
 use happenstance_core::futures_core::Stream;
 use happenstance_core::{EventStore, Query, ReadOptions, SequencePosition, SequencedEvent};
 
-use crate::classify::{Classify, FailureClass};
-use crate::identity::{ReplicatedEvent, Watermark};
-use crate::ingest::{IngestError, IngestGroup, IngestStore, Ingested};
-use crate::peer::{EventGroup, PeerLimits, PushBatch, SyncPeer, Waiting};
+use crate::classify::Classify;
+use crate::identity::ReplicatedEvent;
+use crate::ingest::{IngestGroup, IngestStore, Ingested};
+use crate::peer::{EventGroup, PeerLimits, PushBatch, SyncPeer};
+
+mod error;
+mod status;
+
+pub use error::{Failure, Phase, StepError, StepFailure};
+pub use status::{EdgeState, Pending, Stepped, SyncStatus};
 
 /// One replication edge: the local side's view of one peer relationship.
 ///
 /// Generic over the far side's resume token `R` rather than over the peer, so
 /// the struct carries no bound and the peer is borrowed per
 /// [`step`](Self::step) rather than owned.
+///
+/// # One edge, one peer, for its whole life
+///
+/// The token is the peer's, and the watermark says what *that* peer
+/// acknowledged. Stepped against a different peer, the edge would hand the
+/// second peer a token it never minted and skip every local event the first
+/// one confirmed. Nothing in the type stops that, because the port carries no
+/// peer identity to check, so it is the caller's to keep: build one edge per
+/// peer, and a new edge when a peer is replaced.
 ///
 /// # Examples
 ///
@@ -70,7 +93,7 @@ use crate::peer::{EventGroup, PeerLimits, PushBatch, SyncPeer, Waiting};
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn core::error::Error>> {
 /// use happenstance_core::{Event, EventStore, StoreId};
-/// use happenstance_sync::runner::{Edge, EdgeState};
+/// use happenstance_sync::runner::{Edge, EdgeState, Pending};
 /// use happenstance_sync::{MemoryIngestStore, MemorySyncPeer};
 ///
 /// let hub = MemorySyncPeer::new(StoreId::from_bytes([2; 16]));
@@ -86,7 +109,7 @@ use crate::peer::{EventGroup, PeerLimits, PushBatch, SyncPeer, Waiting};
 /// let status = edge.status();
 /// assert_eq!(status.state, EdgeState::Running);
 /// assert_eq!(status.confirmed, Some(taken));
-/// assert_eq!(status.pending, Some(0));
+/// assert_eq!(status.pending, Pending::Exactly(0));
 /// assert!(status.is_synced());
 /// # Ok(())
 /// # }
@@ -140,23 +163,29 @@ impl<R> Edge<R> {
 
     /// One exchange: pull and ingest, then read and push.
     ///
-    /// The pull token advances only once the pulled batch has been ingested,
-    /// and the watermark only once the far side has acknowledged a push, so a
-    /// failure anywhere re-offers the same events on the next step and loses
-    /// none. The only local write is the ingest: a refused push leaves the
-    /// local log as it was (SY-34).
+    /// The pull token, and [`SyncStatus::waiting`], advance only once the
+    /// pulled batch has been ingested, and the watermark only once the far
+    /// side has acknowledged a push, so a failure anywhere re-offers the same
+    /// events on the next step and loses none. The only local write is the
+    /// ingest: a refused push leaves the local log as it was (SY-34).
     ///
-    /// Local events are pushed from the position after
-    /// [`SyncStatus::confirmed`], as many as the peer's
-    /// [`limits`](SyncPeer::limits) admit, as one atomic group. If not even the
-    /// first fits, it is offered alone, and the peer's refusal states its class:
-    /// the runner reads a class and never infers one (SY-36).
+    /// Local events are read from the position after
+    /// [`SyncStatus::confirmed`], at most one more than the peer's
+    /// [`limits`](SyncPeer::limits) let a batch carry. The contiguous run the
+    /// limits admit is pushed; the run stops at the first event that does not
+    /// fit rather than skipping it, because the watermark is a prefix. If not
+    /// even the first fits, it is offered alone, and the peer's refusal states
+    /// its class: the runner reads a class and never infers one (SY-36).
+    ///
+    /// The run goes as **one** atomic group, which can tear a multi-event
+    /// local append across two pushes; see the module's known gap (SY-30,
+    /// #420).
     ///
     /// # Errors
     ///
     /// A [`StepError`] naming the phase that failed and carrying the failure.
     /// Its class is recorded in [`SyncStatus::last_failure`]; a
-    /// [`Stop`](FailureClass::Stop) stops the edge, and every later step on it
+    /// [`Stop`](crate::FailureClass::Stop) stops the edge, and every later step on it
     /// returns [`StepError::Stopped`] without any I/O.
     pub async fn step<P, S>(&mut self, peer: &P, store: &S) -> Result<Stepped, StepFailure<P, S>>
     where
@@ -178,7 +207,6 @@ impl<R> Edge<R> {
     where
         P: SyncPeer<Resume = R>,
         S: EventStore + IngestStore,
-        <S as EventStore>::Error: Classify,
     {
         let ingested = self.pull_and_ingest(peer, store).await?;
         let pushed = self.push_local(peer, store).await?;
@@ -223,55 +251,52 @@ impl<R> Edge<R> {
         P: SyncPeer<Resume = R>,
         S: EventStore + IngestStore,
     {
+        let limits = peer.limits();
+        // One past a full batch: enough to tell "this is all of it" from
+        // "there is more", without reading the whole unconfirmed tail.
+        let limit = limits.max_batch_events.saturating_add(1);
         let options = match self.status.confirmed.map(SequencePosition::next) {
             None => ReadOptions::new(),
             Some(Some(next)) => ReadOptions::new().from(next),
             // The far side confirmed the last position there is.
             Some(None) => {
-                self.status.pending = Some(0);
+                self.status.pending = Pending::Exactly(0);
                 return Ok(0);
             }
-        };
-        let tail = Tail::gather(
-            EventStore::read(store, &Query::all(), options),
-            &peer.limits(),
-        )
-        .await
-        .map_err(StepError::Read)?;
-        self.status.pending = Some(tail.in_batch.saturating_add(tail.beyond));
+        }
+        .limit(limit);
+        let tail = Tail::gather(EventStore::read(store, &Query::all(), options), &limits)
+            .await
+            .map_err(StepError::Read)?;
+        self.status.pending = tail.pending(tail.events.len().saturating_add(tail.beyond), limit);
         let Some(last) = tail.last else {
             return Ok(0);
         };
 
         let pushed = tail.events.len();
+        let left_after_push = tail.pending(tail.beyond, limit);
         let batch = PushBatch::new(vec![EventGroup::new(None, tail.events)]);
         let ack = peer.push(&batch).await.map_err(StepError::Push)?;
         self.status.confirmed = Some(last);
-        self.status.pending = Some(tail.beyond);
+        self.status.pending = left_after_push;
         self.status.far_side = ack.confirmed;
         Ok(pushed)
     }
 }
 
-/// The error [`Edge::step`] returns for a peer `P` and a store `S`.
-pub type StepFailure<P, S> =
-    StepError<<P as SyncPeer>::Error, <S as EventStore>::Error, <S as IngestStore>::Error>;
-
-/// The local events one step offers, and how many it left behind.
+/// The local events one step offers, and how many it read past them.
 struct Tail {
     /// The contiguous run from the read's start that the peer's limits admit.
     events: Vec<ReplicatedEvent>,
     /// The local position of the last event in `events`.
     last: Option<SequencePosition>,
-    /// How many events are in `events`, counted as `u64`.
-    in_batch: u64,
     /// How many events the read yielded past `events`.
-    beyond: u64,
+    beyond: usize,
 }
 
 impl Tail {
-    /// Reads the whole stream once: the admitted prefix is kept, the rest is
-    /// counted and dropped, so the memory a step holds is one batch.
+    /// Reads the (limited) stream once: the admitted prefix is kept, the rest
+    /// is counted and dropped.
     ///
     /// The run stops at the first event that does not fit rather than skipping
     /// it, because the watermark is a prefix: an event left behind with a later
@@ -285,7 +310,6 @@ impl Tail {
         let mut tail = Self {
             events: Vec::new(),
             last: None,
-            in_batch: 0,
             beyond: 0,
         };
         let mut bytes = 0_usize;
@@ -301,7 +325,6 @@ impl Tail {
                 bytes = bytes.saturating_add(size);
                 tail.last = Some(row.position);
                 tail.events.push(event);
-                tail.in_batch = tail.in_batch.saturating_add(1);
                 open = fits;
             } else {
                 open = false;
@@ -310,194 +333,18 @@ impl Tail {
         }
         Ok(tail)
     }
-}
 
-/// What [`Edge::step`] moved.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct Stepped {
-    /// What the local store did with the pulled batch.
-    pub ingested: Ingested,
-    /// How many local events the far side acknowledged.
-    pub pushed: usize,
-}
+    /// Whether the read stopped at `limit` rather than at the end of the log.
+    fn truncated(&self, limit: usize) -> bool {
+        self.events.len().saturating_add(self.beyond) >= limit
+    }
 
-/// One edge's status, as of its last step.
-///
-/// Held by the edge and updated by every step, so reading it costs no round
-/// trip. `#[non_exhaustive]`: part 2 of #244 adds to it (a retention-gap flag
-/// for SY-32, the far side's incarnation), and a field added then must not
-/// break a reader.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct SyncStatus {
-    /// Running, or stopped and why.
-    pub state: EdgeState,
-    /// The local position the far side has acknowledged everything up to.
-    ///
-    /// A local [`SequencePosition`], meaningful only in the local store: it is
-    /// the watermark SY-31 says is kept through the projection port, and it is
-    /// never sent to the far side.
-    pub confirmed: Option<SequencePosition>,
-    /// How many local events sit above [`confirmed`](Self::confirmed), counted
-    /// at the last step's read; `None` before the first.
-    ///
-    /// Every local event counts, including ones this edge ingested from the far
-    /// side, which a push hands back and the far side skips.
-    pub pending: Option<u64>,
-    /// What the far side said it still holds past the last pull's token.
-    pub waiting: Waiting,
-    /// What the far side last acknowledged holding, per origin store: its
-    /// [`Ack::confirmed`](crate::Ack::confirmed), a high-water mark per origin
-    /// rather than a contiguous prefix.
-    pub far_side: Watermark,
-    /// The phase and class of the most recent failed step, kept after later
-    /// steps succeed; `None` if no step has failed.
-    pub last_failure: Option<Failure>,
-}
-
-impl SyncStatus {
-    const fn resuming(confirmed: Option<SequencePosition>) -> Self {
-        Self {
-            state: EdgeState::Running,
-            confirmed,
-            pending: None,
-            waiting: Waiting::Unknown,
-            far_side: Watermark::new(),
-            last_failure: None,
+    /// `count` as exact, or as a lower bound when the read was cut at `limit`.
+    fn pending(&self, count: usize, limit: usize) -> Pending {
+        if self.truncated(limit) {
+            Pending::AtLeast(count)
+        } else {
+            Pending::Exactly(count)
         }
-    }
-
-    /// Running, with no local event unconfirmed and the far side saying nothing
-    /// is waiting, as of the last step.
-    #[must_use]
-    pub fn is_synced(&self) -> bool {
-        self.state == EdgeState::Running
-            && self.pending == Some(0)
-            && self.waiting == Waiting::Nothing
-    }
-
-    fn record(&mut self, failure: Failure) {
-        self.last_failure = Some(failure);
-        if failure.class == FailureClass::Stop {
-            self.state = EdgeState::Stopped(failure);
-        }
-    }
-}
-
-/// Whether an edge still exchanges.
-///
-/// `#[non_exhaustive]`: part 2's backoff may add a state between the two.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum EdgeState {
-    /// The next step exchanges.
-    Running,
-    /// A failure of class [`Stop`](FailureClass::Stop) halted the edge. It does
-    /// no more I/O; an operator fixes the cause and builds a new edge.
-    Stopped(Failure),
-}
-
-/// Which part of a step failed, and the class the failure stated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub struct Failure {
-    /// Where the step failed.
-    pub phase: Phase,
-    /// What the failure said to do next (SY-36).
-    pub class: FailureClass,
-}
-
-impl Failure {
-    /// A failure in `phase` of class `class`.
-    #[must_use]
-    pub const fn new(phase: Phase, class: FailureClass) -> Self {
-        Self { phase, class }
-    }
-}
-
-impl fmt::Display for Failure {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let class = match self.class {
-            FailureClass::Transient => "transient",
-            FailureClass::Split => "split",
-            FailureClass::Park => "park",
-            FailureClass::Stop => "stop",
-        };
-        write!(f, "a {class}-class failure in the {} phase", self.phase)
-    }
-}
-
-/// The four parts of a step, in the order a step runs them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum Phase {
-    /// Pulling from the far side.
-    Pull,
-    /// Ingesting the pulled batch into the local store.
-    Ingest,
-    /// Reading the local log above the watermark.
-    Read,
-    /// Pushing to the far side.
-    Push,
-}
-
-impl fmt::Display for Phase {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Pull => "pull",
-            Self::Ingest => "ingest",
-            Self::Read => "read",
-            Self::Push => "push",
-        })
-    }
-}
-
-/// Why [`Edge::step`] failed: the phase, and the failure it met.
-///
-/// `P` is the peer's error, `R` the local store's read error and `I` its
-/// ingest error. They are separate because a store may implement
-/// [`EventStore`] and [`IngestStore`] with different error types. No bounds sit
-/// on the enum, so it is `Send` exactly when the three are, and a `!Send`
-/// adapter's error stays legal (ADR-0009).
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum StepError<P, R, I> {
-    /// The edge was already stopped, by the failure named; nothing was done.
-    #[error("the edge is stopped by {0}")]
-    Stopped(Failure),
-    /// The pull failed.
-    #[error("the pull from the far side failed")]
-    Pull(#[source] P),
-    /// The pulled batch did not land locally; nothing in it was written.
-    #[error("the pulled batch did not land in the local store")]
-    Ingest(#[source] IngestError<I>),
-    /// Reading the local log failed.
-    #[error("reading the local log failed")]
-    Read(#[source] R),
-    /// The far side refused or failed the push; the local log is unchanged.
-    #[error("the push to the far side failed")]
-    Push(#[source] P),
-}
-
-impl<P: Classify, R: Classify, I: Classify> StepError<P, R, I> {
-    /// The phase that failed and the class its failure stated.
-    #[must_use]
-    pub fn failure(&self) -> Failure {
-        match self {
-            Self::Stopped(cause) => *cause,
-            Self::Pull(error) => Failure::new(Phase::Pull, error.class()),
-            Self::Ingest(error) => Failure::new(Phase::Ingest, error.class()),
-            Self::Read(error) => Failure::new(Phase::Read, error.class()),
-            Self::Push(error) => Failure::new(Phase::Push, error.class()),
-        }
-    }
-}
-
-/// The class of the failure inside, so a step's error is handled like a peer's
-/// (ADR-0026 §2.4). A stopped edge answers [`Stop`](FailureClass::Stop).
-impl<P: Classify, R: Classify, I: Classify> Classify for StepError<P, R, I> {
-    fn class(&self) -> FailureClass {
-        self.failure().class
     }
 }
