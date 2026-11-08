@@ -324,6 +324,26 @@ not the same as what a user needed to be told.
   reversing opposite claims. No runner in `happenstance-sync` authors a
   compensation yet, so the rule cannot be handed one; the configuration SY-7
   forbids is that test's, not a mount's.
+- `happenstance-sync-testkit`: `directional_merge_rules_compose` (SY-10, #137)
+  joins the ingest family. It walks one edge as hub and spoke and one as peer
+  to peer, two stores each, and plays a runner that holds a merge rule per
+  direction. The hub adjudicates what the spoke pushes. The spoke takes what
+  the hub sends unjudged, after the hub has refused its push once, and keeps
+  its own claim. Both peers of the symmetric edge take each other's claim
+  unjudged. Every count must be what the runner handed the store, and both
+  logs must end holding the same facts. It fails a **store with the merge rule
+  built in**: one that answers a group whose travelling guard its log breaks
+  with a reversal of its own, and so, as a spoke, judges what the hub sends.
+  Like SY-7's rule it opens two stores per walk, so **this can turn a passing
+  adapter's CI red without a code change in the adapter**: a store that
+  evaluates the guard it is sent, or a fixture that hands one store out twice,
+  fails it. SY-10's falsification test runs beside it: with the hub's rule run
+  on the spoke too, the spoke reverses the claim that reached the hub first,
+  the hub reverses the spoke's, and once the logs meet no claim to the seat
+  stands. `happenstance-sync`'s runner tests drive the shipped `Edge` over both
+  topologies: its pull never compensates, and a hub's push handler
+  adjudicates. The crate documentation now describes both topologies by the
+  merge rule each direction takes.
 - `happenstance-sync`: `SendPeer`, the `Send` flavour of the network peer's
   two halves (#421). `StoreSyncPeer` and `RemoteSyncPeer` implement only the
   bare `SyncPeer`, so a `!Send` store or transport stays a valid half, and

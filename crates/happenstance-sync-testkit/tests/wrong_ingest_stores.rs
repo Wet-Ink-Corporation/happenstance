@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use happenstance_core::bytes::Bytes;
 use happenstance_core::futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventId, Query, ReadOptions,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventType, Query, ReadOptions,
     RecordedAt, SendEventStore, SequencePosition, SequencedEvent, StoreId, StoreLimit,
 };
 use happenstance_sync::{
@@ -148,6 +148,14 @@ enum Mistake {
     /// one position collapse into one when they meet: the convergence SY-7's
     /// marker asks about, reached by losing an event.
     FilesCompensationUnderAPlaceholder,
+    /// SY-10's: the merge rule built into the store. A group whose travelling
+    /// guard the log already breaks is answered with a reversal the store
+    /// writes itself, in the same write. That is the hub's rule, and a store
+    /// that carries it runs it in every direction of every edge it sits on: as
+    /// a spoke it judges what the hub sends, which is SY-10's falsifier
+    /// written into an adapter, and its peers lose the per-direction rule the
+    /// runner is required to permit.
+    AdjudicatesOnIngest,
     /// Not a mistake in the write: a store whose identity read fails, as a
     /// SQL store's does when its meta row is gone or its server is not
     /// reachable. Every rule that asks the store who it is must report the
@@ -450,6 +458,9 @@ impl WrongIngestStore {
             if counts.appended > landed_before || self.mistake == Mistake::RecompensatesOnRedelivery
             {
                 counts.compensated += self.compensate(&mut working, group.compensation);
+                if self.mistake == Mistake::AdjudicatesOnIngest {
+                    counts.compensated += self.adjudicate(&mut working, rows, group);
+                }
             }
             marks.push(working.len());
         }
@@ -560,6 +571,36 @@ impl WrongIngestStore {
             });
         }
         compensation.len()
+    }
+
+    /// [`Mistake::AdjudicatesOnIngest`]'s judgement: when the log as the call
+    /// found it breaks `group`'s guard, write one reversal of the store's own,
+    /// tagged as the group's first event is, and say how many it wrote.
+    fn adjudicate(&self, working: &mut Vec<Row>, found: &[Row], group: &IngestGroup<'_>) -> usize {
+        let broken = group.guard.is_some_and(|guard| {
+            found.iter().any(|row| {
+                guard.is_violated_by(
+                    row.stored.position,
+                    row.stored.event_type(),
+                    row.stored.tags(),
+                )
+            })
+        });
+        let Some(head) = group.events.first().filter(|_| broken) else {
+            return 0;
+        };
+        let reversal = Event::new(EventType::from_static("ReversedOnIngest"), Bytes::new())
+            .map(|event| event.with_tags(head.event.tags().clone()));
+        let Ok(reversal) = reversal else {
+            return 0;
+        };
+        let position = next_position(working);
+        let id = EventId::new(self.own, position);
+        working.push(Row {
+            stored: SequencedEvent::new(position, id, ARRIVAL, reversal),
+            origin: id,
+        });
+        1
     }
 }
 
@@ -916,6 +957,7 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
             "VT-36",
         ),
         ("only_the_adjudicator_compensates", "SY-7"),
+        ("directional_merge_rules_compose", "SY-10"),
     ];
     assert_eq!(all.len(), clauses.len(), "a rule was added: {all:?}");
     for (name, verdict) in all {
@@ -1257,4 +1299,23 @@ fn only_the_adjudicator_compensates_fails_a_store_that_files_compensation_under_
         )]
     );
     fails_exactly(&rest, "only_the_adjudicator_compensates", "SY-7");
+}
+
+/// SY-10's rule fails it, and nothing else does. SY-7's rule sends no guard,
+/// so the merge rule this store carries never fires there. The two stores in
+/// SY-10's arrangement each take a claim under a guard their own log breaks,
+/// and a spoke that judges it writes the reversal the hub alone was to write.
+#[test]
+fn directional_merge_rules_compose_fails_a_store_that_adjudicates_on_ingest() {
+    let open = async || WrongFixture::new(Mistake::AdjudicatesOnIngest);
+    fails_exactly(&verdicts(open), "directional_merge_rules_compose", "SY-10");
+    // For the reason the clause names: the spoke judged what it pulled.
+    let violation = block_on(ingest_rules::directional_merge_rules_compose(open))
+        .expect_err("the rule rejects the store");
+    assert!(
+        violation
+            .message()
+            .starts_with("a claim pulled from the far end was counted as"),
+        "the rule failed for another reason: {violation}"
+    );
 }

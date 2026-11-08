@@ -7313,7 +7313,7 @@ permit a different merge rule in each direction of one edge.**
 merge rule in a deployment where the hub holds every log and the spoke holds
 one. Falsification test: implement the hub's rule on a spoke and show the spoke's
 projections stay correct.]`
-Rule: `directional_merge_rules_compose` (new, `happenstance-sync-testkit`).
+Rule: `directional_merge_rules_compose` (`happenstance-sync-testkit`, #137, ingest family).
 Cases: E2E-42, E2E-44, E2E-45.
 
 *Rejects:* treating hub-and-spoke as peer-to-peer with one side declining to
@@ -7330,9 +7330,9 @@ The rationale changed at [ADR-0027](../.kb/decisions/0027-whole-log-replication-
 be Kestrel Cold Chain's edge tier, strictly hub-and-spoke for a *commercial*
 reason: a spoke's slice was a confidentiality boundary, and Scottish
 subcontractors must not hold Yorkshire's parts pricing. Under SY-27's whole-log
-answer that slice is its own store rather than a filtered replica, so
-confidentiality no longer argues for the topology, and adjudication carries the
-clause alone. The marker moves when `directional_merge_rules_compose` lands.
+answer that slice is its own store rather than a filtered replica, so confidentiality
+no longer argues for the topology, and adjudication carries the clause alone. The marker
+moves when the runner's adjudication hook mounts `directional_merge_rules_compose`.
 
 ---
 
@@ -10571,7 +10571,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` | E2E-39, E2E-42, E2E-45 |
 | SY-8 | FROZEN | the whole of `happenstance-sync-testkit` — every rule in it takes exactly one … | E2E-33, E2E-35, E2E-36, E2E-42 |
 | SY-9 | FROZEN | `one_adapter_serves_both_roles` † | E2E-42, E2E-45 |
-| SY-10 | PROVISIONAL | `directional_merge_rules_compose` † | E2E-42, E2E-44, E2E-45 |
+| SY-10 | PROVISIONAL | `directional_merge_rules_compose` | E2E-42, E2E-44, E2E-45 |
 | SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` | E2E-33, E2E-34, E2E-36 |
 | SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-34, E2E-36 |
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
