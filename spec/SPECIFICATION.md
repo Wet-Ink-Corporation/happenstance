@@ -9798,9 +9798,9 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | Axis | Near end — what exists | Far end | Far end exists? | Kind of instrument needed |
 |---|---|---|---|---|
 | **Position allocation** | Assigned under the lock held until commit — `memory.rs:370-403`, and every planned adapter | Allocated outside the transaction; visibility order ≠ position order (`nextval()`) | **Fixture yes, adapter no.** `PreCommitPositionStore` in the testkit's own `tests/` takes its position before commit and publishes after, and `nothing_below_an_observed_position_appears_later` (CF-13) fails it deterministically on one thread. This cell added *"`happenstance-postgres` is still a phase-2 skeleton, which falsifies a signature and is not a far end"* and said so until ADR-0061; since phase 10b that adapter is real and conformant, 101 of 101 including the concurrency family at 64 contenders, and ADR-0024 records the arm it buys ES-10 with. **Both ends of this axis are occupied and both pass** | Fixture (CF-13) — **done**; the Postgres adapter proved it passable, and ADR-0024 states the cost |
-| **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **Yes, since phase 10b, and the far end answered.** This cell read *"**No.** `happenstance-neon` is a phase-2 skeleton, which falsifies a signature and is not a far end"* until ADR-0061. `happenstance-neon` is now a real adapter run against a live endpoint — no connection, no interactive transaction, no cursor — and it was the only far end in this portfolio to have **failed** a clause rather than passed one: `read_result_is_stable_under_concurrent_append` went red intermittently, and ADR-0061 carried the finding. ADR-0087's read-settlement fence is what it passes with since, for operations sharing one transport, and ES-11 and ES-12 are frozen on that record. That is the axis doing its job, twice. A skeleton could not have produced it, which is the difference this column exists to record | Adapter — **done** |
+| **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **Adapter yes, since phase 10b, and the far end answered.** This cell read *"**No.** `happenstance-neon` is a phase-2 skeleton, which falsifies a signature and is not a far end"* until ADR-0061. `happenstance-neon` is now a real adapter run against a live endpoint — no connection, no interactive transaction, no cursor — and it was the only far end in this portfolio to have **failed** a clause rather than passed one: `read_result_is_stable_under_concurrent_append` went red intermittently, and ADR-0061 carried the finding. ADR-0087's read-settlement fence is what it passes with since, for operations sharing one transport, and ES-11 and ES-12 are frozen on that record. That is the axis doing its job, twice. A skeleton could not have produced it, which is the difference this column exists to record | Adapter — **done** |
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter no.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008); no real `!Send` adapter until phase 9 | Fixture (CF-28) — **done**; then the Cloudflare adapter |
-| **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` (the last retired with its crate at phase 17, ADR-0078) | **Far end yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:707-870`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
+| **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` (the last retired with its crate at phase 17, ADR-0078) | **Far end adapter yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:707-870`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
 | **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **No. Planned for phase 14** (CF-27; ADR-0027's whole-log answer took SY-27 off it). ADR-0028 fixed its report as instrument-local, not a port surface | Fixture first; a device adapter second |
 | **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1349`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
@@ -9876,39 +9876,51 @@ ES-10 stays `[PROVISIONAL]` against exactly that measurement, and CF-26's
 #### The freeze ledger
 
 `cargo xtask spec-trace` checks CF-25 and CF-26 against this table and the one
-above (#125). What it checks is the narrowest reading of CF-25's own words that a
-machine can perform, and it is written down here because a check that does not
-say what it reads is taken to cover more than it does.
+above (#125). It reads CF-25's `Rule:` line literally, and the reading is written
+down here because a check that does not say what it reads is taken to cover more
+than it does.
 
-- **A port is frozen when §1.6 declares it**: its `Maturity` cell opens with
-  **Frozen** in bold. A count of `[FROZEN]` clauses is not the trigger, because
-  §1.3 says a port whose gating clause is unsatisfied is not frozen no matter how
-  many of its clauses are. That is why `SyncPeer`, whose cell reads *shape
-  specified*, owes no row yet. Declaring it frozen with no row here fails the gate.
+- **A port is frozen when it carries a `[FROZEN]` clause.** That is the `Rule:`
+  line's trigger: a `[FROZEN]` port clause with an axis that has no far-end row
+  and no named risk acceptance. A port's clauses are found by its §1.4 prefix.
+  §1.6 is held to the same bar: a port whose `Maturity` cell opens with **Frozen**
+  is walked even with no frozen clause, and a lead outside **Frozen**,
+  **Provisional**, **Deferred** and **Shape specified** fails the gate.
 - **The axes a port sits on are its rows here.** Every axis in the portfolio must
   have at least one row, so a new axis cannot land with no port named. A port with
   no row for an axis is recorded as not sitting on it. The checker cannot verify
   that claim.
-- **Each row of a frozen port is discharged in one of three ways.** `far end`
-  means the axis's `Far end exists?` verdict, the bold words that open the cell,
-  names an adapter; by CF-26 a fixture-only verdict does not count. `ADR-NNNN`
-  means a record that exists, reads `status: accepted` and names the axis in its
-  atom or its long-form record, which is CF-25's second route. `carried by`
-  names a clause of that port that is `[PROVISIONAL]` or `[DEFERRED]`, which is
-  ADR-0013 §7's partition. That row fails as soon as the clause is frozen.
+- **Each row of a frozen port is discharged in one of three ways, or says it is
+  not.** `far end` means the axis's `Far end exists?` verdict, the bold words that
+  open the cell, says *adapter yes*; by CF-26 a fixture, or a bare *yes*, does not
+  count. `ADR-NNNN` means a record that exists, reads `status: accepted` and names
+  both the axis and the port in its atom or its long-form record, which is
+  CF-25's second route; an acceptance that never names the port is pro forma for
+  it. `carried by` names a clause of that port that is `[PROVISIONAL]` or
+  `[DEFERRED]`, which is ADR-0013 §7's partition, and that row fails as soon as
+  the clause is frozen. `undischarged` records a gap where a reader meets it, and
+  fails the gate.
 - **What it does not read**: the near end, whether a port really does not sit on
   an axis it has no row for, and what an accepting record says beyond naming the
-  axis. Its summary line repeats this on every green run.
+  axis and the port. Its summary line repeats this on every run.
 
 | Axis | Port | Discharged by | Why |
 |---|---|---|---|
 | Position allocation | `EventStore` | ADR-0013 | Accepted by name at phase 4's freeze. The verdict still opens *fixture yes, adapter no*, although the cell records `happenstance-postgres` passing at the far end since phase 10b |
+| Position allocation | `SyncPeer` | undischarged | Ingest assigns the receiver's positions (SY-5, SY-19). No ingest or peer adapter at the far end has run the sync suites, the verdict reads fixture-only, and no open `SY` clause or record carries it |
 | Transport | `EventStore` | far end | `happenstance-neon` over one-shot HTTP since phase 10b; ES-11 and ES-12 are frozen on ADR-0087 |
-| Async flavour | `EventStore` | ADR-0013 | Accepted by name at phase 4's freeze. The verdict still reads fixture-only |
+| Transport | `ProjectionStore` | far end | `NeonProjectionStore` passes the projection suite over one-shot HTTP against a live endpoint |
+| Transport | `SyncPeer` | carried by SY-14 | SY-14 is `[DEFERRED]` on the one-shot-HTTP peer this phase builds. No network peer exists yet |
+| Async flavour | `EventStore` | ADR-0013 | Accepted by name at phase 4's freeze. The verdict is stale: since phase 9 a real `!Send` adapter, `happenstance-cloudflare`, runs the event-store suite under `workerd` |
+| Async flavour | `ProjectionStore` | undischarged | `trait_variant` derives `SendProjectionStore`, so the port has both flavours. No `!Send` projection adapter has run the suite, ADR-0063 names no axis, and no open `PS` clause carries it |
+| Async flavour | `SyncPeer` | undischarged | Both ports in `happenstance-sync` have both flavours, and only the memory and stand-in peers implement `SyncPeer`. No record or open `SY` clause carries it |
 | Batch shape | `ProjectionStore` | far end | The replay-at-commit adapters pass. The live-transaction end is `LivePostgresProjectionStore` (ADR-0062); the verdict's *near end no* predates it, and the check does not read the near end |
 | Completeness | `EventStore` | carried by ES-40 | Carried, not accepted: ADR-0013 left this axis to ES-40's marker. Freezing ES-40 fails this row |
+| Completeness | `SyncPeer` | carried by SY-32 | SY-32 is `[DEFERRED]` to phase 14, which builds CF-27's completeness instrument |
 | Handle multiplicity | `EventStore` | far end | `SqliteFixture` opens a second `rusqlite::Connection` onto one file. A pool is still unbuilt |
 | Durability | `EventStore` | far end | `SqliteFixture` reopens a real file. The fault half is ES-35's, which is `[PROVISIONAL]` for it |
+| Durability | `ProjectionStore` | undischarged | PS-1 requires a durable commit, and the projection suite has no reopen rule, so no adapter has been shown to survive one at this port |
+| Durability | `SyncPeer` | undischarged | No durable peer adapter exists. The sync suite's durability rule passes a peer that buffers in fixture-wide memory until the fixture contract gains a reopen capability |
 
 ---
 

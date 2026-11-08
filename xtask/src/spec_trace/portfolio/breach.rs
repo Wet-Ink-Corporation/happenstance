@@ -34,6 +34,26 @@ impl Verdict {
     }
 }
 
+/// Why a port is walked: what froze it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::spec_trace) enum Cause {
+    /// At least one `[FROZEN]` clause under the port's prefix: CF-25's trigger.
+    Clauses { first: String, count: usize },
+    /// No frozen clause, but §1.6 declares the port **Frozen**.
+    Declared,
+}
+
+impl fmt::Display for Cause {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Clauses { first, count } => {
+                write!(f, "carries {count} [FROZEN] clause(s), the first {first},")
+            }
+            Self::Declared => write!(f, "is declared frozen in §1.6"),
+        }
+    }
+}
+
 /// One way a port freeze fails CF-25 or CF-26.
 #[derive(Debug, PartialEq, Eq)]
 pub(in crate::spec_trace) enum Breach {
@@ -41,65 +61,52 @@ pub(in crate::spec_trace) enum Breach {
     MissingTable { what: &'static str },
     /// A portfolio verdict outside the vocabulary [`super::verdict`] reads.
     UnreadableVerdict { axis: String, verdict: String },
+    /// A portfolio axis named by two rows; the second would silently win.
+    DuplicateAxis { axis: String },
+    /// A §1.6 `Maturity` lead outside the vocabulary [`super::maturity`] reads.
+    UnreadableMaturity { port: String, maturity: String },
     /// A portfolio axis with no ledger row for any port.
     UnattributedAxis { axis: String },
     /// A ledger row naming an axis the portfolio does not carry.
     UnknownAxis { axis: String },
-    /// A ledger row naming a port §1.6 does not list.
+    /// A ledger row naming a port neither §1.4 nor §1.6 lists.
     UnknownPort { port: String },
     /// Two ledger rows for one port and one axis.
     DuplicateRow { axis: String, port: String },
-    /// A port §1.6 declares frozen with no ledger row at all.
-    UnwalkedFreeze { port: String },
-    /// A frozen port's row whose `Discharged by` cell is none of the three forms.
-    UnrecognisedDischarge {
+    /// A frozen port with no ledger row at all.
+    UnwalkedFreeze { port: String, cause: Cause },
+    /// A frozen port's row on one axis that its discharge does not discharge.
+    Row {
         axis: String,
         port: String,
-        cell: String,
+        problem: RowProblem,
     },
+}
+
+/// Why one frozen port's ledger row does not discharge its axis.
+#[derive(Debug, PartialEq, Eq)]
+pub(in crate::spec_trace) enum RowProblem {
+    /// The row says, out loud, nothing discharges it.
+    Undischarged,
+    /// The `Discharged by` cell is none of the forms.
+    Unrecognised { cell: String },
     /// `far end`, over a verdict that names no adapter.
-    NoAdapterAtFarEnd {
-        axis: String,
-        port: String,
-        verdict: Verdict,
-    },
+    NoAdapterAtFarEnd { verdict: Verdict },
     /// An `ADR-NNNN` with no decision atom of that number.
-    RecordMissing {
-        axis: String,
-        port: String,
-        adr: String,
-    },
+    RecordMissing { adr: String },
     /// An `ADR-NNNN` whose atom is no longer `status: accepted`.
-    RecordNotAccepted {
-        axis: String,
-        port: String,
-        adr: String,
-    },
+    RecordNotAccepted { adr: String },
     /// An `ADR-NNNN` that never names the axis it is cited as accepting.
-    RecordSilentOnAxis {
-        axis: String,
-        port: String,
-        adr: String,
-    },
+    RecordSilentOnAxis { adr: String },
+    /// An `ADR-NNNN` that names the axis but never the port, so it accepts the
+    /// risk for some other port's freeze (CF-25's *pro forma* sentence).
+    RecordSilentOnPort { adr: String },
     /// `carried by` a clause the document does not declare.
-    CarrierMissing {
-        axis: String,
-        port: String,
-        clause: String,
-    },
+    CarrierMissing { clause: String },
     /// `carried by` a clause of some other port.
-    CarrierOnAnotherPort {
-        axis: String,
-        port: String,
-        clause: String,
-    },
+    CarrierOnAnotherPort { clause: String },
     /// `carried by` a clause that is no longer open.
-    CarrierNotOpen {
-        axis: String,
-        port: String,
-        clause: String,
-        maturity: String,
-    },
+    CarrierNotOpen { clause: String, maturity: String },
 }
 
 /// A [`Breach`] and the specification line it is reported against.
@@ -119,6 +126,10 @@ impl fmt::Display for Finding {
     }
 }
 
+/// The remedy every undischarged-row message ends with.
+const REMEDY: &str = "Put an adapter at the far end, cite an accepted ADR naming the axis and \
+                      the port, or carry it by an open clause of the port";
+
 impl fmt::Display for Breach {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -130,8 +141,19 @@ impl fmt::Display for Breach {
             Self::UnreadableVerdict { axis, verdict } => write!(
                 f,
                 "CF-26: the portfolio's `Far end exists?` verdict for {axis} opens with \
-                 `{verdict}`, which names neither an adapter, a fixture only, nor nothing. Open \
-                 the cell with **Yes**, **Fixture yes, adapter yes/no** or **No**"
+                 `{verdict}`, which this check cannot classify. Open the cell with words that \
+                 say **adapter yes**, **Fixture yes, adapter no**, or **No**"
+            ),
+            Self::DuplicateAxis { axis } => write!(
+                f,
+                "CF-25: the portfolio carries the axis {axis} twice. Merge the rows; the check \
+                 will not guess which verdict holds"
+            ),
+            Self::UnreadableMaturity { port, maturity } => write!(
+                f,
+                "CF-25: §1.6's `Maturity` cell for `{port}` opens with `{maturity}`, which this \
+                 check cannot classify. Open it with **Frozen**, **Provisional**, **Deferred** \
+                 or **Shape specified**"
             ),
             Self::UnattributedAxis { axis } => write!(
                 f,
@@ -145,72 +167,87 @@ impl fmt::Display for Breach {
             ),
             Self::UnknownPort { port } => write!(
                 f,
-                "CF-25: the freeze ledger names the port `{port}`, which §1.6 does not list"
+                "CF-25: the freeze ledger names the port `{port}`, which neither §1.4 nor §1.6 \
+                 lists"
             ),
             Self::DuplicateRow { axis, port } => write!(
                 f,
                 "CF-25: the freeze ledger has two rows for `{port}` on {axis}. Keep one: a \
                  port discharges an axis one way"
             ),
-            Self::UnwalkedFreeze { port } => write!(
+            Self::UnwalkedFreeze { port, cause } => write!(
                 f,
-                "CF-25: §1.6 declares `{port}` frozen and §6.5's freeze ledger has no row for \
-                 it. Add a row for every portfolio axis it sits on, each discharged by `far \
-                 end`, an accepting `ADR-NNNN`, or `carried by` an open clause of the port"
+                "CF-25: `{port}` {cause} and §6.5's freeze ledger has no row for it. Add a row \
+                 for every portfolio axis it sits on, each discharged by `far end`, an \
+                 accepting `ADR-NNNN`, or `carried by` an open clause of the port"
             ),
-            Self::UnrecognisedDischarge { axis, port, cell } => write!(
-                f,
-                "CF-25: `{port}` on {axis} is discharged by `{cell}`, which is none of `far \
-                 end`, `ADR-NNNN` or `carried by <clause>`"
-            ),
-            Self::NoAdapterAtFarEnd {
+            Self::Row {
                 axis,
                 port,
-                verdict,
-            } => write!(
+                problem,
+            } => {
+                write!(
+                    f,
+                    "CF-25: `{port}` is frozen and its ledger row for {axis} "
+                )?;
+                problem.describe(f, axis, port)
+            }
+        }
+    }
+}
+
+impl RowProblem {
+    /// The rest of a [`Breach::Row`] message, after "its ledger row for X".
+    fn describe(&self, f: &mut fmt::Formatter<'_>, axis: &str, port: &str) -> fmt::Result {
+        match self {
+            Self::Undischarged => write!(
                 f,
-                "CF-25: `{port}` is frozen and its ledger row for {axis} says `far end`, but \
-                 the portfolio's verdict for that axis reads {}. A fixture proves a rule can \
-                 fail and not that a real implementation can pass (CF-26). Build an adapter \
-                 at the far end, or cite the ADR accepting the risk on {axis}",
+                "is undischarged: no adapter at the far end, no accepting record, no open \
+                 clause. {REMEDY}"
+            ),
+            Self::Unrecognised { cell } => write!(
+                f,
+                "is discharged by `{cell}`, which is none of `far end`, `ADR-NNNN`, `carried \
+                 by <clause>` or `undischarged`"
+            ),
+            Self::NoAdapterAtFarEnd { verdict } => write!(
+                f,
+                "says `far end`, but the portfolio's verdict for that axis reads {}. A fixture \
+                 proves a rule can fail and not that a real implementation can pass (CF-26). \
+                 {REMEDY}",
                 verdict.describe()
             ),
-            Self::RecordMissing { axis, port, adr } => write!(
+            Self::RecordMissing { adr } => {
+                write!(f, "cites ADR-{adr}, and no .kb/decisions/{adr}-*.md exists")
+            }
+            Self::RecordNotAccepted { adr } => write!(
                 f,
-                "CF-25: `{port}`'s ledger row for {axis} cites ADR-{adr}, and no \
-                 .kb/decisions/{adr}-*.md exists"
+                "cites ADR-{adr}, which is no longer `status: accepted`. Cite the record that \
+                 superseded it, if it still accepts the risk"
             ),
-            Self::RecordNotAccepted { axis, port, adr } => write!(
+            Self::RecordSilentOnAxis { adr } => write!(
                 f,
-                "CF-25: `{port}`'s ledger row for {axis} cites ADR-{adr}, which is no longer \
-                 `status: accepted`. Cite the record that superseded it, if it still accepts \
-                 the risk"
+                "cites ADR-{adr}, which never names {axis}. CF-25's second route needs the \
+                 record to name the axis it accepts"
             ),
-            Self::RecordSilentOnAxis { axis, port, adr } => write!(
+            Self::RecordSilentOnPort { adr } => write!(
                 f,
-                "CF-25: `{port}`'s ledger row for {axis} cites ADR-{adr}, which never names \
-                 {axis}. CF-25's second route needs the record to name the axis it accepts"
+                "cites ADR-{adr}, which never names `{port}`. An acceptance for another port \
+                 is pro forma for this one (CF-25)"
             ),
-            Self::CarrierMissing { axis, port, clause } => write!(
+            Self::CarrierMissing { clause } => write!(
                 f,
-                "CF-25: `{port}`'s ledger row for {axis} is carried by {clause}, which the \
-                 specification does not declare"
+                "is carried by {clause}, which the specification does not declare"
             ),
-            Self::CarrierOnAnotherPort { axis, port, clause } => write!(
+            Self::CarrierOnAnotherPort { clause } => write!(
                 f,
-                "CF-25: `{port}`'s ledger row for {axis} is carried by {clause}, which is not \
-                 a `{port}` clause. Only the port's own open clause can carry its exposure"
+                "is carried by {clause}, which is not a `{port}` clause. Only the port's own \
+                 open clause can carry its exposure"
             ),
-            Self::CarrierNotOpen {
-                axis,
-                port,
-                clause,
-                maturity,
-            } => write!(
+            Self::CarrierNotOpen { clause, maturity } => write!(
                 f,
-                "CF-25: `{port}`'s ledger row for {axis} is carried by {clause}, which is now \
-                 [{maturity}]. Freezing it removed the disclosure; put an adapter at the far \
-                 end of {axis}, or cite the ADR accepting the risk"
+                "is carried by {clause}, which is now [{maturity}]. Freezing it removed the \
+                 disclosure. {REMEDY}"
             ),
         }
     }

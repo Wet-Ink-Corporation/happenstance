@@ -17,11 +17,13 @@ summary: >-
   far end built, and which would otherwise pass a green spec-trace that claims a check the file
   does not contain.
   Resolved 2026-11-08 (#125), on the owner's route: the check is built, not the Rule line repaired.
-  cargo xtask spec-trace now walks every port section 1.6 declares frozen against the portfolio and
-  a new machine-readable freeze ledger in section 6.5, and fails a row discharged neither by an
-  adapter at the far end, nor by an accepted record naming the axis, nor by an open clause of the
-  port. Sub-question 1: a ledger table, not a column. Sub-question 2: CF-26 lands with CF-25, not
-  alone, and the summary line names what the walk does not read. Sub-question 3 stays moot.
+  cargo xtask spec-trace walks every port that carries a FROZEN clause, or that section 1.6
+  declares frozen, against the portfolio and a new machine-readable freeze ledger in section 6.5.
+  It fails a row discharged neither by an adapter at the far end, nor by an accepted record naming
+  the axis and the port, nor by an open clause of the port. Sub-question 1: a ledger table, not a
+  column. Sub-question 2: CF-26 lands with CF-25, not alone, and the summary line names what the
+  walk does not read. Sub-question 3 stays moot. The check does not pass yet: five rows of
+  ProjectionStore and SyncPeer have no honest discharge and are recorded as undischarged.
 depends_on:
   - kb-decision-0039
 related:
@@ -123,8 +125,8 @@ and phase 21's clause audit holds whichever route was taken.
 ## Closed — 2026-11-08
 
 **Route: build the check** (the owner's call on #125, 2026-11-08). CF-25's `Rule:` line is not
-repaired; it is now true. `xtask/src/spec_trace/portfolio.rs` is the check, and `spec-trace`
-prints its summary on every run.
+repaired. `xtask/src/spec_trace/portfolio.rs` performs what it names, and `spec-trace` prints the
+walk's summary on every run. The line is not yet *satisfied*: see the last section.
 
 **Sub-question 1 — a machine-readable table, and a ledger rather than a column.** §6.5 gains
 *The freeze ledger*: one row per axis a port sits on, naming how that port's freeze discharges
@@ -132,24 +134,28 @@ it. A port column on the portfolio table was the other shape and lost, because C
 *pro forma* sentence makes the discharge per port: an axis two ports sit on can be covered for
 one and accepted for the other, and one cell cannot say both. The check reads the portfolio for
 two things only, each axis's name and the bold verdict opening its `Far end exists?` cell, so
-it does not re-read prose a person already wrote. Which ports are frozen comes from §1.6's
-`Maturity` column, which already said so. A port is frozen when that cell opens with **Frozen**,
-not when it has `[FROZEN]` clauses, because §1.3 says a port whose gating clause is unsatisfied
-is not frozen no matter how many of its clauses are.
+it does not re-read prose a person already wrote. Which ports are frozen comes from the clauses
+themselves, as the `Rule:` line says: a port with a `[FROZEN]` clause under its §1.4 prefix is
+walked. §1.6's `Maturity` column is held to the same bar against a closed vocabulary, so a port it
+declares **Frozen** is walked too, and a lead the check cannot classify fails.
 
-**Sub-question 2 — CF-26 did not land alone.** It landed with CF-25, as the rule that a
-fixture-only verdict never discharges a `far end` row, and that a verdict outside the checker's
-vocabulary is a failure rather than a pass. The summary line names what the walk does not read
-on every green run: the near end, whether a port really does not sit on an axis it has no row
-for, and what an accepting record says beyond naming the axis.
+**Sub-question 2 — CF-26 did not land alone.** It landed with CF-25, as the rule that only a
+verdict saying *adapter yes* discharges a `far end` row: a fixture-only verdict and a bare *yes*
+do not, and a verdict outside the vocabulary is a failure rather than a pass. The summary line
+names what the walk does not read on every run: the near end, whether a port really does not sit
+on an axis it has no row for, and what an accepting record says beyond naming the axis and the
+port.
 
 **Sub-question 3 stays moot.** `ProjectionStore`'s batch-shape row is discharged by `far end`
 on the verdict as written. Because the check does not read the near end, the stale *near end
 no* in that cell does not decide anything. ADR-0062 built that end.
 
-**What the check found today.** It passes. `EventStore` sits on six of the seven axes and discharges
-them three ways: an adapter at the far end of transport, handle multiplicity and durability;
-ADR-0013 for position allocation and async flavour; and ES-40's `[PROVISIONAL]` marker for
-completeness. Freezing ES-40 fails the gate. `ProjectionStore` sits on
-batch shape alone as the portfolio reads it. `SyncPeer` owes no row until §1.6 declares it
-frozen, and declaring it frozen with no row fails the gate.
+**What the check finds today: five gaps, recorded rather than hidden.** `EventStore`'s six rows
+discharge: an adapter at the far end of transport, handle multiplicity and durability; ADR-0013 for
+position allocation and async flavour; ES-40's `[PROVISIONAL]` marker for completeness.
+`SyncPeer`'s transport row is carried by SY-14 and its completeness row by SY-32. Five rows have no
+adapter, no accepting record and no open clause, and are written `undischarged`, so `spec-trace`
+fails on exactly them: `ProjectionStore` on async flavour and durability, and `SyncPeer` on async
+flavour, durability and position allocation. Discharging them is the owner's call: an ADR
+accepting each risk by axis and port, an adapter at the far end, or a reclassification of which
+axes the port sits on.
