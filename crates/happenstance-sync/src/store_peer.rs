@@ -163,7 +163,7 @@ use crate::write_group::WriteGroupStore;
 /// #     use happenstance_core::*;
 /// #     use happenstance_sync::*;
 /// #     impl SendWriteGroupStore for super::Shared {
-/// #         type Error = MemoryStoreError;
+/// #         type Error = write_group::GroupOrderError;
 /// #         async fn read_groups(&self, after: Option<SequencePosition>,
 /// #             max_events: core::num::NonZeroUsize) -> Result<GroupPage, Self::Error> {
 /// #             SendWriteGroupStore::read_groups(&*self.0, after, max_events).await

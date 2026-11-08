@@ -14,6 +14,7 @@ use core::ops::ControlFlow;
 use happenstance_core::{AppendCondition, SequencePosition};
 
 use super::{GroupPage, WriteGroup};
+use crate::classify::{Classify, FailureClass};
 use crate::identity::ReplicatedEvent;
 use crate::peer::Waiting;
 
@@ -23,6 +24,14 @@ use crate::peer::Waiting;
 /// offered together, in local position order, and groups in ascending
 /// [`first`](WriteGroup::first) order: a store that serialises its writers gets
 /// that from a scan by position, and one that does not orders by group.
+///
+/// The order is checked, not trusted. A row that names a group at or below
+/// one already passed is refused: [`offer`](Self::offer) breaks, the builder
+/// takes nothing more, and [`finish`](Self::finish) returns a
+/// [`GroupOrderError`]. That is the mistake a store that does not serialise its
+/// writers makes by scanning in position order, where G = {5, 7} and H = {6}
+/// arrive as 5, 6, 7: without the refusal the page would carry G torn in two,
+/// under one name twice.
 ///
 /// # Examples
 ///
@@ -50,7 +59,7 @@ use crate::peer::Waiting;
 /// assert!(page.offer(a, None, a2).is_continue());
 /// assert!(page.offer(b, None, b1).is_break(), "the second group would overflow");
 ///
-/// let page = page.finish(Waiting::Nothing);
+/// let page = page.finish(Waiting::Nothing)?;
 /// assert_eq!(page.groups.len(), 1);
 /// assert_eq!(page.waiting, Waiting::Unknown);
 /// # Ok::<(), Box<dyn core::error::Error>>(())
@@ -62,6 +71,7 @@ pub struct GroupPageBuilder {
     groups: Vec<WriteGroup>,
     open: Option<WriteGroup>,
     full: bool,
+    misordered: Option<GroupOrderError>,
 }
 
 impl GroupPageBuilder {
@@ -75,6 +85,7 @@ impl GroupPageBuilder {
             groups: Vec::new(),
             open: None,
             full: false,
+            misordered: None,
         }
     }
 
@@ -84,18 +95,34 @@ impl GroupPageBuilder {
     /// at `first`; pass `None` for the rest. Returns
     /// [`ControlFlow::Break`] once the page is full, and the caller stops
     /// reading: the row that broke it is not on the page.
+    ///
+    /// Also breaks, for good, on a row whose `first` is at or below the
+    /// `first` of a group already offered and left: the builder is then
+    /// refused, takes nothing more, and [`finish`](Self::finish) says why.
     pub fn offer(
         &mut self,
         first: SequencePosition,
         guard: Option<AppendCondition>,
         event: ReplicatedEvent,
     ) -> ControlFlow<()> {
-        if self.full {
+        if self.full || self.misordered.is_some() {
             return ControlFlow::Break(());
         }
         match &mut self.open {
             Some(open) if open.first() == first => open.push(event),
             _ => {
+                // The group being left is the open one, or, once the page has
+                // closed it, the last on the page: a new group must name a
+                // position above it.
+                let passed = self
+                    .open
+                    .as_ref()
+                    .or(self.groups.last())
+                    .map(WriteGroup::first);
+                if let Some(after) = passed.filter(|&after| first <= after) {
+                    self.misordered = Some(GroupOrderError { first, after });
+                    return ControlFlow::Break(());
+                }
                 if self.close().is_break() {
                     return ControlFlow::Break(());
                 }
@@ -119,14 +146,22 @@ impl GroupPageBuilder {
     ///
     /// A page that stopped before a group always says
     /// [`Waiting::Unknown`].
-    #[must_use]
-    pub fn finish(mut self, past_rows: Waiting) -> GroupPage {
+    ///
+    /// # Errors
+    ///
+    /// [`GroupOrderError`] if a row was offered out of group order, in which
+    /// case no page is returned: what the builder held is not known to be
+    /// whole groups.
+    pub fn finish(mut self, past_rows: Waiting) -> Result<GroupPage, GroupOrderError> {
+        if let Some(misordered) = self.misordered {
+            return Err(misordered);
+        }
         let waiting = if self.close().is_break() {
             Waiting::Unknown
         } else {
             past_rows
         };
-        GroupPage::new(self.groups, waiting)
+        Ok(GroupPage::new(self.groups, waiting))
     }
 
     /// Whether `group` fits in what the budget has left.
@@ -154,6 +189,33 @@ impl GroupPageBuilder {
     }
 }
 
+/// A [`GroupPageBuilder`] was offered a row out of group order: one naming the
+/// group `first`, after the group `after` had been offered and left, where
+/// `first` is not above `after`.
+///
+/// It is the store's read that is wrong, not the log: a store that does not
+/// serialise its writers has to read in group order, not position order. The
+/// same read fails the same way again, so it is
+/// [`Stop`](FailureClass::Stop).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "write group {first} was offered after write group {after}; groups must be offered in \
+     ascending order of their first position"
+)]
+#[non_exhaustive]
+pub struct GroupOrderError {
+    /// The group the refused row named.
+    pub first: SequencePosition,
+    /// The group already offered and left, at or above `first`.
+    pub after: SequencePosition,
+}
+
+impl Classify for GroupOrderError {
+    fn class(&self) -> FailureClass {
+        FailureClass::Stop
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;
@@ -161,7 +223,7 @@ mod tests {
 
     use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
 
-    use super::GroupPageBuilder;
+    use super::{GroupOrderError, GroupPageBuilder};
     use crate::identity::ReplicatedEvent;
     use crate::peer::Waiting;
     use crate::write_group::{GroupPage, WriteGroup};
@@ -178,7 +240,8 @@ mod tests {
         )
     }
 
-    /// Offers `rows` as `(group, position)` pairs until the builder breaks.
+    /// Offers `rows` as `(group, position)` pairs, in group order, until the
+    /// builder breaks.
     fn fill(max: usize, rows: &[(u64, u64)], past: Waiting) -> GroupPage {
         let mut builder = GroupPageBuilder::new(NonZeroUsize::new(max).expect("a non-zero budget"));
         for &(group, at) in rows {
@@ -186,7 +249,9 @@ mod tests {
                 break;
             }
         }
-        builder.finish(past)
+        builder
+            .finish(past)
+            .expect("every arrangement here is offered in group order")
     }
 
     fn firsts(page: &GroupPage) -> Vec<u64> {
@@ -228,7 +293,9 @@ mod tests {
         assert!(builder.offer(position(2), None, row(2)).is_continue());
         assert!(builder.offer(position(2), None, row(3)).is_break());
 
-        let page = builder.finish(Waiting::Nothing);
+        let page = builder
+            .finish(Waiting::Nothing)
+            .expect("offered in group order");
 
         assert_eq!(firsts(&page), [1]);
         assert_eq!(page.waiting, Waiting::Unknown);
@@ -250,5 +317,35 @@ mod tests {
         assert_eq!(firsts(&page), [5, 6]);
         let lens: Vec<usize> = page.groups.iter().map(|g| g.events().len()).collect();
         assert_eq!(lens, [2, 2]);
+    }
+
+    /// The same two groups offered by position, as a store that does not
+    /// serialise its writers would meet them in a scan by position: G5 opens,
+    /// H6 closes it, and G's second row then names a group H already passed.
+    /// Without the refusal the page reads `[G5 = {5}, H6 = {6}, G5 = {7}]`,
+    /// tearing G in two and naming two groups 5.
+    #[test]
+    fn a_group_offered_after_a_later_one_closed_is_refused() {
+        let mut builder = GroupPageBuilder::new(NonZeroUsize::new(8).expect("a non-zero budget"));
+        assert!(builder.offer(position(5), None, row(5)).is_continue());
+        assert!(builder.offer(position(6), None, row(6)).is_continue());
+        assert!(
+            builder.offer(position(5), None, row(7)).is_break(),
+            "an out-of-order offer stops the read"
+        );
+        assert!(
+            builder.offer(position(8), None, row(8)).is_break(),
+            "a refused builder takes nothing more"
+        );
+
+        let refused = builder.finish(Waiting::Nothing);
+
+        assert_eq!(
+            refused,
+            Err(GroupOrderError {
+                first: position(5),
+                after: position(6),
+            })
+        );
     }
 }

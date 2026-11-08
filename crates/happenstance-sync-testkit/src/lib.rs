@@ -163,6 +163,7 @@
 //! | [`an_append_reads_back_as_one_group`](write_group_rules::an_append_reads_back_as_one_group) | SY-39 | a store that records no groups, and one that merges adjacent appends |
 //! | [`an_ingested_group_keeps_its_boundary_and_guard`](write_group_rules::an_ingested_group_keeps_its_boundary_and_guard) | SY-39, SY-30 | a store that drops an ingested group's guard, or merges what one call ingested |
 //! | [`compensation_joins_its_group`](write_group_rules::compensation_joins_its_group) | SY-39, SY-2 | a store that records a compensation as a group of its own |
+//! | [`a_group_after_a_redelivery_is_named_by_its_first_landed_row`](write_group_rules::a_group_after_a_redelivery_is_named_by_its_first_landed_row) | SY-39, SY-11 | a store that names a group by the first position it allocated, not the first row it wrote |
 //! | [`a_read_never_cuts_a_group`](write_group_rules::a_read_never_cuts_a_group) | SY-39 | a page filled by event, a first group skipped for being too large, and a resume above a row position |
 //! | [`pages_chain_on_first_and_end_with_nothing`](write_group_rules::pages_chain_on_first_and_end_with_nothing) | SY-39, SY-37 | a page its budget cut that says nothing is waiting |
 //!

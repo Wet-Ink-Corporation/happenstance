@@ -38,8 +38,10 @@ impl SqliteEventStore {
     /// # Errors
     ///
     /// The connection was poisoned, the driver failed, a stored row does not
-    /// decode, or a stored guard does not
-    /// ([`StoredGuard`](SqliteEventStoreError::StoredGuard)).
+    /// decode, a stored guard does not
+    /// ([`StoredGuard`](SqliteEventStoreError::StoredGuard)), or a stored
+    /// `write_group` names a group the scan had already passed, which only a
+    /// damaged file holds ([`GroupOrder`](SqliteEventStoreError::GroupOrder)).
     pub(crate) fn read_write_groups(
         &self,
         after: Option<SequencePosition>,
@@ -64,10 +66,10 @@ impl SqliteEventStore {
             };
             let event = ReplicatedEvent::new(stored.id, stored.recorded_at, stored.event);
             if page.offer(first, guard, event).is_break() {
-                return Ok(page.finish(Waiting::Unknown));
+                return Ok(page.finish(Waiting::Unknown)?);
             }
         }
-        Ok(page.finish(Waiting::Nothing))
+        Ok(page.finish(Waiting::Nothing)?)
     }
 }
 
@@ -83,7 +85,7 @@ mod tests {
         AppendCondition, Event, EventId, Query, QueryItem, RecordedAt, SendEventStore,
         SequencePosition, StoreId,
     };
-    use happenstance_sync::write_group::GuardCodecError;
+    use happenstance_sync::write_group::{GroupOrderError, GuardCodecError};
     use happenstance_sync::{
         IngestGroup, ReplicatedEvent, SendIngestStore, SendWriteGroupStore, WriteGroup,
     };
@@ -201,6 +203,39 @@ mod tests {
                     first: named,
                     source: GuardCodecError::UnknownFormat { found: 9, .. },
                 }) if named == first
+            ),
+            "got {refused:?}"
+        );
+    }
+
+    /// A `write_group` that names a group the scan already passed is refused
+    /// with the two groups, rather than paged as a group torn in two under one
+    /// name. No build writes one; a damaged or hand-edited file can.
+    #[tokio::test]
+    async fn a_row_naming_a_group_already_passed_stops_the_group_read() {
+        let store = SqliteEventStore::open_in_memory().expect("an in-memory store");
+        let a = store.append(&[event("a")], None).await.expect("an append");
+        let b = store.append(&[event("b")], None).await.expect("an append");
+        let c = store.append(&[event("c")], None).await.expect("an append");
+        raw(
+            &store,
+            &format!(
+                "UPDATE event SET write_group = {} WHERE position = {}",
+                a.get(),
+                c.get()
+            ),
+        );
+
+        let refused = SendWriteGroupStore::read_groups(&store, None, WHOLE_LOG).await;
+
+        assert!(
+            matches!(
+                refused,
+                Err(SqliteEventStoreError::GroupOrder(GroupOrderError {
+                    first,
+                    after,
+                    ..
+                })) if first == a && after == b
             ),
             "got {refused:?}"
         );

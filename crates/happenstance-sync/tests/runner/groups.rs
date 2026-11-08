@@ -32,8 +32,11 @@ async fn append_groups(store: &MemoryIngestStore, sizes: &[usize]) {
 
 /// Every write group the store holds, read in one page.
 async fn local_groups(store: &MemoryIngestStore) -> Vec<WriteGroup> {
-    let Ok(page) = store.read_groups(None, NonZeroUsize::MAX).await;
-    page.groups
+    store
+        .read_groups(None, NonZeroUsize::MAX)
+        .await
+        .expect("the reference store's scan is in group order")
+        .groups
 }
 
 /// Every group the far side holds, pulled until it hands back an empty batch.

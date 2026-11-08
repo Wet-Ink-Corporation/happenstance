@@ -40,7 +40,7 @@ use happenstance_core::{
     AppendCondition, AppendError, Event, EventId, EventStore, MemoryEventStore, MemoryStoreError,
     Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
-use happenstance_sync::write_group::GroupPageBuilder;
+use happenstance_sync::write_group::{GroupOrderError, GroupPageBuilder};
 use happenstance_sync::{
     Classify, EventGroup, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
     MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
@@ -257,7 +257,7 @@ impl IngestStore for LocalStore {
 /// it recorded groups (#420). Its foreign rows hold no local position, so a
 /// push never forwards them, which is all the runner tests here need.
 impl WriteGroupStore for LocalStore {
-    type Error = MemoryStoreError;
+    type Error = GroupOrderError;
 
     async fn read_groups(
         &self,
@@ -269,16 +269,17 @@ impl WriteGroupStore for LocalStore {
             Some(Some(next)) => ReadOptions::new().from(next),
             Some(None) => return Ok(GroupPage::new(Vec::new(), Waiting::Nothing)),
         };
-        let rows =
-            happenstance_core::collect(EventStore::read(self, &Query::all(), options)).await?;
+        let rows = happenstance_core::collect(EventStore::read(self, &Query::all(), options))
+            .await
+            .map_err(|never: MemoryStoreError| match never {})?;
         let mut page = GroupPageBuilder::new(max_events);
         for row in rows {
             let event = ReplicatedEvent::new(row.id, row.recorded_at, row.event);
             if page.offer(row.position, None, event).is_break() {
-                return Ok(page.finish(Waiting::Unknown));
+                return page.finish(Waiting::Unknown);
             }
         }
-        Ok(page.finish(Waiting::Nothing))
+        page.finish(Waiting::Nothing)
     }
 }
 

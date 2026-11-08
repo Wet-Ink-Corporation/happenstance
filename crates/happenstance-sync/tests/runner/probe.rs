@@ -10,6 +10,7 @@ use core::cell::Cell;
 use core::num::NonZeroUsize;
 
 use happenstance_core::{MemoryStoreError, SequencePosition, StoreId};
+use happenstance_sync::write_group::GroupOrderError;
 use happenstance_sync::{
     Ack, Classify, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
     MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
@@ -85,12 +86,16 @@ pub(crate) enum ProbeStoreError {
     /// A read a test asked to fail, transiently.
     #[error("the probe store's read failed")]
     ReadFailed,
+    /// The reference store's own refusal, passed through with its class.
+    #[error(transparent)]
+    Order(#[from] GroupOrderError),
 }
 
 impl Classify for ProbeStoreError {
     fn class(&self) -> FailureClass {
         match self {
             Self::ReadFailed => FailureClass::Transient,
+            Self::Order(error) => error.class(),
         }
     }
 }
@@ -134,9 +139,7 @@ impl WriteGroupStore for ProbeStore {
         if self.fail_read.get() {
             return Err(ProbeStoreError::ReadFailed);
         }
-        WriteGroupStore::read_groups(&self.inner, after, max_events)
-            .await
-            .map_err(|never| match never {})
+        Ok(WriteGroupStore::read_groups(&self.inner, after, max_events).await?)
     }
 }
 

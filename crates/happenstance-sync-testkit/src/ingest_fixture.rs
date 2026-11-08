@@ -289,7 +289,7 @@ impl SendIngestStore for MemoryIngestHandle {
 }
 
 impl SendWriteGroupStore for MemoryIngestHandle {
-    type Error = MemoryStoreError;
+    type Error = happenstance_sync::write_group::GroupOrderError;
 
     async fn read_groups(
         &self,

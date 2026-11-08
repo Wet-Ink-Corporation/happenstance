@@ -88,7 +88,7 @@ The owner approved A on 2026-11-08.
 6. SQLite: migration 2 adds `write_group INTEGER` and `group_guard BLOB` and raises the marker to
    2, so an older build refuses the file.
 7. SY-30's rule `push_envelope_preserves_group_boundaries` is written, and SY-39 `[PROVISIONAL]`
-   states the store's half with five rules in a new family, `write_group_store_conformance!`.
+   states the store's half with six rules in a new family, `write_group_store_conformance!`.
 
 ## Costs
 

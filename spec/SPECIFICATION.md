@@ -1038,7 +1038,7 @@ adapter is the instrument* — was run on that instrument and did not fire.
 `sync` feature since #108 part E) goes through the same private `write_batch` that
 `append` calls — one `INSERT` statement for a local row and a foreign one — and
 what is ingest-only is a transaction frame, a watermark query and the values a
-foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1590`). Neon,
+foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1593`). Neon,
 at the far end of the transport axis, builds a whole ingest batch as one
 statement from the builders its `append` uses; that half is structural and was
 not executed. So **the write path is the adapter's**, and `happenstance-core`
@@ -1733,9 +1733,9 @@ its actual limit; until phase 8 no store in this workspace had one to document,
 and a MUST nothing can fail is a MUST nothing has met. `happenstance-sqlite`
 states all three as public constants — `MAX_EVENT_DATA_LEN` = 1,048,576 bytes,
 `MAX_TAGS_PER_EVENT` = 128 and `MAX_EVENTS_PER_BATCH` = 256
-(`crates/happenstance-sqlite/src/event_store.rs:299`, `:291`, `:300`) — enforces
-them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:558`,
-`:565`, `:571`), and mirrors them onto its fixture so
+(`crates/happenstance-sqlite/src/event_store.rs:342`, `:349`, `:358`) — enforces
+them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:767`,
+`:773`, `:760`), and mirrors them onto its fixture so
 `append_reports_exceeded_store_limits` reads them rather than a literal. All
 three clear their floors with room, VT-23's 128-item floor is evaluated by the
 same adapter through chunked statements rather than refused, and each number is
@@ -2748,7 +2748,7 @@ never call the method.
   with `error[E0277]: cannot be shared between threads safely`. That leg carries
   the clause on its own, which is as well, because the second leg this bullet used
   to offer is false: it said `memory.rs:154` and
-  `crates/happenstance-sqlite/src/event_store.rs:1174` "both write `+ Send` and
+  `crates/happenstance-sqlite/src/event_store.rs:1177` "both write `+ Send` and
   would both need `+ Send + Sync`", and they would not. Flipping the attribute and
   running `cargo check --workspace --all-features` produced *zero* errors and
   touched neither impl — an RPITIT impl need not restate the trait's auto-trait
@@ -2839,7 +2839,7 @@ could: `MemoryStoreError` is uninhabited (`memory.rs:284-291`) and
 that can, and phase 8 built the rest of them: `SqliteEventStoreError` is now
 fourteen real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
 the crate's own decode and identity failures
-(`crates/happenstance-sqlite/src/event_store.rs:1846-2010`), and
+(`crates/happenstance-sqlite/src/event_store.rs:1863-2055`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
 `SqlError::Thrown` carries a `JsThrow`, whose payload is an `Rc<worker::Error>`
 (`crates/happenstance-cloudflare/src/js.rs:168-173`).
@@ -2882,7 +2882,7 @@ payloads in scope, by crate:
 
 - **`happenstance-sqlite`** — `Sqlite(rusqlite::Error)` on both
   `SqliteEventStoreError` and `SqliteProjectionStoreError`
-  (`crates/happenstance-sqlite/src/event_store.rs:1855`,
+  (`crates/happenstance-sqlite/src/event_store.rs:1872`,
   `crates/happenstance-sqlite/src/projection_store.rs:617`), with
   `pub use rusqlite` (`crates/happenstance-sqlite/src/lib.rs:148`).
 - **`happenstance-postgres`** — `Driver(sqlx::Error)` on both
@@ -2913,10 +2913,10 @@ One more consequence follows mechanically from the same reasoning, and it is
 stated as that rather than as a separate promise. A payload from a crate this
 workspace does **not** re-export is in the public signature just the same:
 `tokio::task::JoinError` (`crates/happenstance-postgres/src/error.rs:106`,
-`crates/happenstance-sqlite/src/event_store.rs:1869`,
+`crates/happenstance-sqlite/src/event_store.rs:1886`,
 `crates/happenstance-sqlite/src/projection_store.rs:629`) and
 `tokio::runtime::TryCurrentError`
-(`crates/happenstance-sqlite/src/event_store.rs:1877`,
+(`crates/happenstance-sqlite/src/event_store.rs:1894`,
 `crates/happenstance-sqlite/src/projection_store.rs:633`) sit in public variants,
 so a `tokio` release that changed either would force an adapter major too.
 `tokio` is `1.x`, so that happens only at its own major.
@@ -3200,7 +3200,7 @@ orders and truncates under the read lock at call time) and `happenstance-sqlite`
 (which does not: `read` is not `async` and may legally be called with no runtime
 in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
 its ceiling is sampled there — `Ceiling::Unsampled` at
-`crates/happenstance-sqlite/src/event_store.rs:2247` is the state the first poll
+`crates/happenstance-sqlite/src/event_store.rs:2292` is the state the first poll
 resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
 to the call site, and ADR-0081 (proposed) reorders it: `Handle::try_current` first, then
 a `tokio::runtime::Handle` captured at construction, so the lazy spawn prefers
@@ -4493,7 +4493,7 @@ is a method the port does not have. The cost of "required" is seven impls
 today, four of them skeletons — `happenstance-sqlite` was the fifth until phase
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
-`crates/happenstance-sqlite/src/event_store.rs:2012`,
+`crates/happenstance-sqlite/src/event_store.rs:2057`,
 `crates/happenstance-postgres/src/event_store.rs:513`,
 `crates/happenstance-cloudflare/src/event_store.rs:1267` and
 `crates/happenstance-neon/src/event_store.rs:884`, `:1593`. The blanket impl
@@ -8182,9 +8182,10 @@ writers on a store that does not serialise them and show a read chained on
 later page. Recorded in
 [ADR-0105](../.kb/decisions/0105-write-groups-are-recorded-per-row.md), proposed.]`
 Rule: `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and_guard`,
-`compensation_joins_its_group`, `a_read_never_cuts_a_group` and
-`pages_chain_on_first_and_end_with_nothing` (`happenstance-sync-testkit`, #420), each pinned
-against named wrong stores in `tests/wrong_write_group_stores.rs`.
+`compensation_joins_its_group`, `a_group_after_a_redelivery_is_named_by_its_first_landed_row`,
+`a_read_never_cuts_a_group` and `pages_chain_on_first_and_end_with_nothing`
+(`happenstance-sync-testkit`, #420), each pinned against named wrong stores in
+`tests/wrong_write_group_stores.rs`.
 Cases: E2E-35, E2E-39.
 
 *Rejects:* the store that reads its log back by row, which is what every
@@ -8193,9 +8194,11 @@ every event-store rule, because `EventStore::read` promises rows, and it makes
 SY-30 unsatisfiable one layer up: a runner pushing from it cuts a write at its
 batch limit, and a relay forwarding from it merges what it ingested into one
 unguarded group. It also rejects a store that fills a page by event and cuts the
-group crossing its budget, one that skips a group larger than the page, and one
+group crossing its budget, one that skips a group larger than the page, one
 that resumes above a row position and hands back a group's tail as if it were a
-group.
+group, and one that names a group by the first position it allocated rather than
+the first row it wrote, which a sequence that burns a value per skipped
+re-delivery makes a position no row of the group holds.
 
 ---
 
@@ -9360,7 +9363,7 @@ would be asserting a number the store cannot honour. The first named instrument
 has landed and answered the **constant-ceiling** half: `happenstance-sqlite`
 states the first three of the four, each mirrored from the adapter's own `pub const` rather than
 restated (`crates/happenstance-sqlite/tests/support/mod.rs:212-218`, mirroring
-`crates/happenstance-sqlite/src/event_store.rs:342`, `:334` and `:343`), and
+`crates/happenstance-sqlite/src/event_store.rs:342`, `:349` and `:358`), and
 `append_reports_exceeded_store_limits` runs there rather than skipping. On a
 store whose ceilings *are* constants, an `Option<usize>` says exactly where the
 boundary is and the rule asserts a number the store honours. What is still live

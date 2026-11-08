@@ -874,6 +874,40 @@ fn migration_2_adds_write_groups_to_a_version_1_file() {
     );
 }
 
+/// #420 — `new` never migrates, so on a version-1 file it refuses with a
+/// typed error naming both versions, rather than wrapping the file and failing
+/// the first append with `no such column: write_group`. The file is left as it
+/// was, and `open_on`, the documented remedy, then migrates it.
+///
+/// The wrong implementation it rejects is the check `new` had: only
+/// `version > SCHEMA_VERSION`, which accepts every older file.
+#[test]
+fn new_refuses_a_version_1_file_until_it_is_migrated() {
+    let db = TempDb::new("new-v1");
+    version_1_file(db.path());
+
+    let refused = SqliteEventStore::new(raw(db.path()))
+        .expect_err("`new` must refuse a file migration 2 has not reached");
+    assert!(
+        matches!(
+            refused,
+            SqliteEventStoreError::SchemaNeedsMigration {
+                found: 1,
+                required: SCHEMA_VERSION,
+                ..
+            }
+        ),
+        "expected SchemaNeedsMigration {{ found: 1, required: {SCHEMA_VERSION} }}, got {refused:?}"
+    );
+    assert_eq!(marker(db.path()), 1, "`new` must not migrate the file");
+
+    let migrated = SqliteEventStore::open_on(raw(db.path()))
+        .expect("`open_on` migrates the file `new` refused");
+    drop(migrated);
+    assert_eq!(marker(db.path()), 2);
+    SqliteEventStore::new(raw(db.path())).expect("`new` accepts the migrated file");
+}
+
 /// #420 — a fresh file takes the same path as an old one and lands at 2.
 #[test]
 fn a_fresh_file_is_created_at_version_2_with_write_groups() {

@@ -204,6 +204,83 @@ pub mod write_group_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-39, with SY-11: a group whose first event is a re-delivery is named
+    /// by the first row it **landed**, and keeps its guard.
+    ///
+    /// `[held]` is ingested alone, then a local append of two, then `[held,
+    /// new1, new2]` under a position-free guard. The re-delivered `held` is
+    /// skipped, so the third write lands two rows: three groups,
+    /// `[held]`, `[local1, local2]` and `[new1, new2]`, the last carrying the
+    /// guard, with `first` equal to the position the store gave `new1`.
+    ///
+    /// # Rejects
+    ///
+    /// A store that names a group by the first position it **allocated** for
+    /// it rather than the first row it wrote. On a store whose sequence burns
+    /// a value for each skipped re-delivery, as a Postgres sequence does, that
+    /// position belongs to no row of the group. SQLite and the in-memory
+    /// stores burn nothing and cannot make the mistake; this rule is for the
+    /// stores that can. The wrong store is in
+    /// `tests/wrong_write_group_stores.rs`.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-39 if the store refuses a write or a read, reads
+    /// back other groups, names the guarded group by another position, or
+    /// drops its guard.
+    pub async fn a_group_after_a_redelivery_is_named_by_its_first_landed_row<F>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation>
+    where
+        F: IngestFixture,
+        F::Store: WriteGroupStore,
+    {
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        ensure_foreign(&store).await?;
+        let guard = guard()?;
+        let held = [shipped(21, "redelivered-held")?];
+        let redelivered = [
+            shipped(21, "redelivered-held")?,
+            shipped(22, "redelivered-new1")?,
+            shipped(23, "redelivered-new2")?,
+        ];
+
+        ingest(&store, &[IngestGroup::new(&held, &[])]).await?;
+        append(&store, &["redelivered-local1", "redelivered-local2"]).await?;
+        ingest(
+            &store,
+            &[IngestGroup::new(&redelivered, &[]).with_guard(Some(&guard))],
+        )
+        .await?;
+        let page = read(&store, None, WHOLE_LOG).await?;
+
+        expect_shape(
+            &page,
+            &[
+                &["redelivered-held"],
+                &["redelivered-local1", "redelivered-local2"],
+                &["redelivered-new1", "redelivered-new2"],
+            ],
+        )?;
+        let landed = position_of(&store, "redelivered-new1").await?;
+        let named = page.groups.last().map(WriteGroup::first);
+        ensure(named == Some(landed), CLAUSE, || {
+            format!(
+                "the store named the group that landed after a re-delivery {named:?}; the first \
+                 row it wrote is at {landed}"
+            )
+        })?;
+        let kept = page.groups.last().and_then(WriteGroup::guard);
+        ensure(kept == Some(&guard), CLAUSE, || {
+            format!(
+                "the group that landed after a re-delivery read back with the guard {kept:?}; \
+                 it arrived under {guard:?}"
+            )
+        })?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// SY-39: a read never returns part of a group. It stops before the group
     /// that would take the page past `max_events`, and returns a first group
     /// whole however large it is.
@@ -481,6 +558,7 @@ macro_rules! for_each_write_group_rule {
             an_append_reads_back_as_one_group,
             an_ingested_group_keeps_its_boundary_and_guard,
             compensation_joins_its_group,
+            a_group_after_a_redelivery_is_named_by_its_first_landed_row,
 
             // --- A page never cuts a group, and pages chain (SY-39) ---------
             a_read_never_cuts_a_group,

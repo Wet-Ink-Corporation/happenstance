@@ -14,6 +14,7 @@ use happenstance_core::{
     SequencedEvent, StoreId, collect,
 };
 use happenstance_sync::wire::{CodecError, FORMAT_VERSION, ResumeToken, Route, WireError};
+use happenstance_sync::write_group::GroupOrderError;
 use happenstance_sync::{
     Classify, EventGroup, FailureClass, IngestStore, PeerLimits, PushBatch, RemoteError,
     RemoteSyncPeer, ReplicatedEvent, SendExchange, ServeError, StoreSyncPeer, SyncPeer, serve_sync,
@@ -35,7 +36,7 @@ struct Loopback {
 }
 
 impl SendExchange for Loopback {
-    type Error = ServeError<MemoryStoreError, MemoryStoreError>;
+    type Error = ServeError<GroupOrderError, MemoryStoreError>;
 
     async fn exchange(&self, route: Route, request: Vec<u8>) -> Result<Vec<u8>, Self::Error> {
         serve_sync(&self.far, route, &request).await

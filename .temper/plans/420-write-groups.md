@@ -678,13 +678,18 @@ SQLite (`happenstance-sqlite`):
 | # | Decision | Options | Recommendation | Decided by | Outcome |
 |---|---|---|---|---|---|
 | D-0 | Shape: per-row write-group id, additive migrations, additive trait in `happenstance-sync` | A / others | A | Ryan, 2026-11-08 | **Approved** |
-| D-1 | Compatibility of a migrated store with an **older build** | (a) SQLite raises its marker to 2 on first open by this build, so older builds refuse the file (`UnsupportedSchemaVersion`); DO and Postgres/Neon have no marker and keep accepting old builds, which write `NULL` groups (singletons). (b) SQLite adds the columns without raising the marker, so older builds keep running everywhere. (c) (a) plus a new `schema_version` row in the DO's `store_meta` | **(a)**. An older build running a *runner or pull* against a store a newer build writes groups into can tear a new group exactly as today; refusing the file is the cheap guarantee where a marker exists. Old **writers** are harmless everywhere (singletons). Document "deploy this build to every writer and peer of a store before it serves sync" | — | open |
-| D-2 | A head group larger than a `StoreSyncPeer`'s declared page budget | (a) documented stall: empty page, `Waiting::Unknown`, same token (the port's existing rule for an oversized event, extended to a group). (b) a new `StorePeerError::GroupTooLarge` (`Park`) returned by `pull` — loud, but makes a lone oversized event loud too, changing a documented behaviour and an existing test | **(a)** now, with a follow-up issue to make both loud together | — | open |
-| D-3 | Postgres/Neon rollout: a **new** build against a schema without migration 3 fails its first append with an undefined-column driver error | (a) document "apply migration 3 (re-run `migration::apply`) before deploying"; CHANGELOG **Upgrading** entry; index may be pre-built `CONCURRENTLY`. (b) a store_meta schema row checked on first use with a typed error. (c) runtime column probe with a legacy fallback | **(a)**. (c) silently disables grouping; (b) adds a connect-time round trip to a crate with no connect step. Also confirm the non-concurrent index build inside `apply` is acceptable for existing deployments | — | open |
-| D-4 | Class of a **single** group over a peer's batch limits on push | (a) unchanged: peers say `Split`; what part 2 does with an unsplittable `Split` is #244's. (b) add `GroupTooLarge` (`Park`) to `StorePeerError::admit` and `MemorySyncPeer` — changes `oversized_push_refusal`'s declared class for its one-group batch and two runner test expectations | **(a)**; note the interaction on #244 | — | open |
-| D-5 | Spec: a new provisional clause SY-39 for the store-side obligation, vs folding it into SY-30 | new SY-39 / amend SY-30 only | **New SY-39** (SY-30 is about the envelope; the store obligation needs its own rule list and falsifier) | — | open |
-| D-6 | Decision record | write an atom in PR 1 (number after ADR-0104, assigned at merge) / none | **Write it** — four published adapters change schema; the repo records such changes as ADRs | — | open |
-| D-7 | Changing `a_page_travels_as_one_group_without_a_guard`'s expectation in `store_sync_conformance.rs` and removing the runner's "Known gap" text | — | Implied by D-0; listed so the change is explicitly signed off (H-12) | — | open |
+| D-1 | Compatibility of a migrated store with an **older build** | (a) SQLite raises its marker to 2 on first open by this build, so older builds refuse the file (`UnsupportedSchemaVersion`); DO and Postgres/Neon have no marker and keep accepting old builds, which write `NULL` groups (singletons). (b) SQLite adds the columns without raising the marker, so older builds keep running everywhere. (c) (a) plus a new `schema_version` row in the DO's `store_meta` | **(a)**. An older build running a *runner or pull* against a store a newer build writes groups into can tear a new group exactly as today; refusing the file is the cheap guarantee where a marker exists. Old **writers** are harmless everywhere (singletons). Document "deploy this build to every writer and peer of a store before it serves sync" | Ryan, 2026-11-08 | **Decided (a)**: marker raised; migrate-then-deploy documented |
+| D-2 | A head group larger than a `StoreSyncPeer`'s declared page budget | (a) documented stall: empty page, `Waiting::Unknown`, same token (the port's existing rule for an oversized event, extended to a group). (b) a new `StorePeerError::GroupTooLarge` (`Park`) returned by `pull` — loud, but makes a lone oversized event loud too, changing a documented behaviour and an existing test | **(a)** now, with a follow-up issue to make both loud together | Ryan, 2026-11-08 | **Decided (a)**: the documented stall |
+| D-3 | Postgres/Neon rollout: a **new** build against a schema without migration 3 fails its first append with an undefined-column driver error | (a) document "apply migration 3 (re-run `migration::apply`) before deploying"; CHANGELOG **Upgrading** entry; index may be pre-built `CONCURRENTLY`. (b) a store_meta schema row checked on first use with a typed error. (c) runtime column probe with a legacy fallback | **(a)**. (c) silently disables grouping; (b) adds a connect-time round trip to a crate with no connect step. Also confirm the non-concurrent index build inside `apply` is acceptable for existing deployments | Ryan, 2026-11-08 | **Decided (a)**: migrate-then-deploy documented |
+| D-4 | Class of a **single** group over a peer's batch limits on push | (a) unchanged: peers say `Split`; what part 2 does with an unsplittable `Split` is #244's. (b) add `GroupTooLarge` (`Park`) to `StorePeerError::admit` and `MemorySyncPeer` — changes `oversized_push_refusal`'s declared class for its one-group batch and two runner test expectations | **(a)**; note the interaction on #244 | Ryan, 2026-11-08 | **Decided (a)**: `Split` unchanged |
+| D-5 | Spec: a new provisional clause SY-39 for the store-side obligation, vs folding it into SY-30 | new SY-39 / amend SY-30 only | **New SY-39** (SY-30 is about the envelope; the store obligation needs its own rule list and falsifier) | Ryan, 2026-11-08 | **Decided**: new SY-39 |
+| D-6 | Decision record | write an atom in PR 1 (number after ADR-0104, assigned at merge) / none | **Write it** — four published adapters change schema; the repo records such changes as ADRs | Ryan, 2026-11-08 | **Decided**: ADR-0105, written as proposed |
+| D-7 | Changing `a_page_travels_as_one_group_without_a_guard`'s expectation in `store_sync_conformance.rs` and removing the runner's "Known gap" text | — | Implied by D-0; listed so the change is explicitly signed off (H-12) | Ryan, 2026-11-08 | **Decided**: expectation changed, "Known gap" removed |
+| D-8 | `remote_sync_conformance`'s token expectation moves from "3" to "1" | — | Implied by the cursor being the `first` of the last group forwarded (§3), not the last position | Ryan, 2026-11-08 (design-implied expectation changes) | **Approved** |
+
+Ryan, 2026-11-08, on the reviewer's F1: `SqliteEventStore::new` refusing a schema-1 file with a
+typed `SchemaNeedsMigration { found, required }` (Stop), rather than failing its first append with
+an untyped driver error, is a design-implied additive change and pre-authorised.
 
 Architect decisions recorded for review (not H-16, but worth a glance):
 - **D-A1** Compensation joins its ingested group's write group, and the group keeps the origin's
@@ -697,6 +702,10 @@ Architect decisions recorded for review (not H-16, but worth a glance):
 - **D-A3** One `EventGroup` per write group on the wire; the runner never merges groups even
   where merging would be safe, because merging is what loses the guard and the boundary on a
   relay.
+- **D-A4** `read_write_groups` (SQLite) runs synchronously under the connection mutex, as
+  `ingest` and `watermark` do, rather than on `spawn_blocking`. It is one bounded indexed read
+  (`LIMIT` probe rows), the same shape and cost as those two calls, and a store that mixes the
+  two disciplines on one mutex is harder to reason about than one that uses either throughout.
 
 ## Risks
 
@@ -751,3 +760,23 @@ Architect decisions recorded for review (not H-16, but worth a glance):
   Deviations: `remote_sync_conformance`'s token expectation moved from "3" to "1"
   (the token now names a group's first, D-8); the SY-2 flattener and paging mutants in
   `wrong_peers.rs` now fail SY-30 as well as SY-2. Next: PR 2 (Postgres, Neon).
+- 2026-11-08: review follow-up (F1–F7), on top of the merge of `origin/phase-13` (#428's
+  responder stamping kept beside the group reads in `store_peer.rs`). Red runs:
+  - F1 `new_refuses_a_version_1_file_until_it_is_migrated` (tests/migration.rs): E0599 no
+    variant `SchemaNeedsMigration`; green after `read_identity` refuses `version <
+    SCHEMA_VERSION`. Classified `Stop`; README and CHANGELOG Upgrading note corrected.
+  - F6 `a_group_offered_after_a_later_one_closed_is_refused` (write_group/page.rs): E0599/E0308
+    against the infallible `finish`; green with a poisoned builder and `finish -> Result<_,
+    GroupOrderError>`. `MemoryIngestStore`'s `WriteGroupStore::Error` is `GroupOrderError`
+    (it was the uninhabited `MemoryStoreError`, which cannot carry the refusal);
+    `SqliteEventStoreError::GroupOrder` (behind `sync`, `Stop`) carries it for SQLite, pinned
+    by `a_row_naming_a_group_already_passed_stops_the_group_read`.
+  - F2 `a_group_after_a_redelivery_is_named_by_its_first_landed_row` (SY-39, sixth rule): the
+    new rule turned the three existing whole-set pins red (`EveryRowItsOwnGroup`,
+    `MergesAdjacentGroups`, `DropsGuard` now also fail it), which is the pin doing its job;
+    their sets grow by the rule. New wrong store `NamesByFirstAllocated` fails exactly it.
+  - F3: spec `event_store.rs` continuations at the VT-21/22/24 discharge and VT-30's marker
+    repointed to `MAX_*` (342/349/358) and `check_ceilings` (767/773/760); every other
+    citation into the files this branch changed re-derived by a line mapping from the merge
+    base, spec, standards, runbook and `.kb/open-questions` (not `_governance`, a record).
+  - F4 CHANGELOG SY-30 entry describes the three pushed groups. F5/F7 recorded above.

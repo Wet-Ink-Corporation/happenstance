@@ -21,13 +21,14 @@
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::num::NonZeroUsize;
+use std::sync::{Arc, Mutex};
 
 use happenstance_core::futures_core::Stream;
 use happenstance_core::{
     AppendCondition, AppendError, Event, EventId, MemoryStoreError, Query, ReadOptions,
     SendEventStore, SequencePosition, SequencedEvent, StoreId, collect,
 };
-use happenstance_sync::write_group::GroupPageBuilder;
+use happenstance_sync::write_group::{GroupOrderError, GroupPageBuilder};
 use happenstance_sync::{
     EventGroup, GroupPage, IngestError, IngestGroup, Ingested, ReplicatedEvent, SendIngestStore,
     SendWriteGroupStore, Waiting, Watermark,
@@ -62,13 +63,27 @@ enum Mistake {
     ResumesByRowPosition,
     /// Says nothing is waiting on every page, including one its budget cut.
     SaysNothingWhenCut,
+    /// Names an ingested group by the first position it **allocated** rather
+    /// than the first row it wrote: a sequence that burns one value per
+    /// skipped re-delivery, as Postgres's does, so a group whose head was
+    /// already held is named that many positions below its first row.
+    NamesByFirstAllocated,
 }
+
+/// For [`Mistake::NamesByFirstAllocated`]: each group's first new event, and
+/// how many re-delivered events ahead of it burnt a position.
+///
+/// Shared by every handle onto one fixture, as the sequence would be, and
+/// mutated by ingests through `&self`: `Arc<Mutex<_>>` because the handles are
+/// `Send` and cloned, and the lock is never held across an await (OWN-11).
+type Burnt = Arc<Mutex<BTreeMap<EventId, u64>>>;
 
 /// A fixture over a fresh oracle, whose handles make one mistake.
 #[derive(Debug)]
 struct WrongFixture {
     inner: MemoryIngestFixture,
     mistake: Mistake,
+    burnt: Burnt,
 }
 
 impl WrongFixture {
@@ -76,6 +91,7 @@ impl WrongFixture {
         Self {
             inner: MemoryIngestFixture::new(),
             mistake,
+            burnt: Burnt::default(),
         }
     }
 }
@@ -87,6 +103,7 @@ impl IngestFixture for WrongFixture {
         WrongHandle {
             inner: self.inner.connect().await,
             mistake: self.mistake,
+            burnt: Arc::clone(&self.burnt),
         }
     }
 }
@@ -96,6 +113,7 @@ impl IngestFixture for WrongFixture {
 struct WrongHandle {
     inner: MemoryIngestHandle,
     mistake: Mistake,
+    burnt: Burnt,
 }
 
 impl SendEventStore for WrongHandle {
@@ -140,6 +158,26 @@ impl SendIngestStore for WrongHandle {
         &self,
         groups: &[IngestGroup<'_>],
     ) -> Result<Ingested, IngestError<Self::Error>> {
+        if self.mistake == Mistake::NamesByFirstAllocated {
+            for group in groups {
+                // The re-delivered events ahead of the first new one: each
+                // would have drawn, and burnt, a value from the sequence.
+                for (skipped, event) in (0_u64..).zip(group.events) {
+                    let held = SendEventStore::contains_event_id(&self.inner, event.id)
+                        .await
+                        .map_err(IngestError::Store)?;
+                    if !held {
+                        if skipped > 0 {
+                            self.burnt
+                                .lock()
+                                .expect("no ingest panics holding the lock")
+                                .insert(event.id, skipped);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
         SendIngestStore::ingest(&self.inner, groups).await
     }
 
@@ -157,28 +195,36 @@ struct Row {
 }
 
 impl SendWriteGroupStore for WrongHandle {
-    type Error = MemoryStoreError;
+    type Error = GroupOrderError;
 
     async fn read_groups(
         &self,
         after: Option<SequencePosition>,
         max_events: NonZeroUsize,
     ) -> Result<GroupPage, Self::Error> {
-        let rows = self.mistake.bend(self.rows().await?);
-        Ok(self.mistake.page(rows, after, max_events))
+        let rows = self.rows().await?;
+        let rows = {
+            let burnt = self
+                .burnt
+                .lock()
+                .expect("no ingest panics holding the lock");
+            self.mistake.bend(rows, &burnt)
+        };
+        self.mistake.page(rows, after, max_events)
     }
 }
 
 impl WrongHandle {
     /// The oracle's whole log, each row knowing its group's first position,
     /// and the group's head carrying its guard.
-    async fn rows(&self) -> Result<Vec<Row>, MemoryStoreError> {
+    async fn rows(&self) -> Result<Vec<Row>, GroupOrderError> {
         let log = collect(SendEventStore::read(
             &self.inner,
             &Query::all(),
             ReadOptions::new(),
         ))
-        .await?;
+        .await
+        .map_err(|never: MemoryStoreError| match never {})?;
         let truth = SendWriteGroupStore::read_groups(&self.inner, None, NonZeroUsize::MAX).await?;
         // The guards are moved out of the oracle's page, not copied.
         let mut guards: BTreeMap<SequencePosition, AppendCondition> = BTreeMap::new();
@@ -212,9 +258,28 @@ impl WrongHandle {
 }
 
 impl Mistake {
-    /// The rows as a store with this mistake recorded them.
-    fn bend(self, mut rows: Vec<Row>) -> Vec<Row> {
+    /// The rows as a store with this mistake recorded them. `burnt` is what
+    /// [`Mistake::NamesByFirstAllocated`]'s ingests recorded.
+    fn bend(self, mut rows: Vec<Row>, burnt: &BTreeMap<EventId, u64>) -> Vec<Row> {
         match self {
+            Self::NamesByFirstAllocated => {
+                // (the group's true first, the position it is named by)
+                let mut renamed: Option<(SequencePosition, SequencePosition)> = None;
+                for row in &mut rows {
+                    if row.position == row.first {
+                        renamed = burnt
+                            .get(&row.event.id)
+                            .and_then(|&skipped| row.position.get().checked_sub(skipped))
+                            .and_then(SequencePosition::new)
+                            .map(|named| (row.first, named));
+                    }
+                    if let Some((truth, named)) = renamed
+                        && truth == row.first
+                    {
+                        row.first = named;
+                    }
+                }
+            }
             Self::EveryRowItsOwnGroup => {
                 for row in &mut rows {
                     row.first = row.position;
@@ -264,7 +329,12 @@ impl Mistake {
     }
 
     /// One page of `rows` above `after`, as a store with this mistake pages.
-    fn page(self, rows: Vec<Row>, after: Option<SequencePosition>, max: NonZeroUsize) -> GroupPage {
+    fn page(
+        self,
+        rows: Vec<Row>,
+        after: Option<SequencePosition>,
+        max: NonZeroUsize,
+    ) -> Result<GroupPage, GroupOrderError> {
         let mut above: Vec<Row> = rows
             .into_iter()
             .filter(|row| {
@@ -293,18 +363,22 @@ impl Mistake {
                 above.retain(|row| row.first != head);
             }
         }
-        let page = offer_all(above, max, Waiting::Nothing);
+        let page = offer_all(above, max, Waiting::Nothing)?;
         if self == Self::SaysNothingWhenCut {
             // The builder says `Unknown` for a page it cut; this store
             // overrules it.
-            return GroupPage::new(page.groups, Waiting::Nothing);
+            return Ok(GroupPage::new(page.groups, Waiting::Nothing));
         }
-        page
+        Ok(page)
     }
 }
 
 /// Every row in one page, finished with `waiting`.
-fn offer_all(rows: Vec<Row>, max: NonZeroUsize, waiting: Waiting) -> GroupPage {
+fn offer_all(
+    rows: Vec<Row>,
+    max: NonZeroUsize,
+    waiting: Waiting,
+) -> Result<GroupPage, GroupOrderError> {
     let mut page = GroupPageBuilder::new(max);
     for row in rows {
         if page.offer(row.first, row.guard, row.event).is_break() {
@@ -354,6 +428,7 @@ fn fails_exactly(mistake: Mistake, failing: &[&str]) {
 const APPEND: &str = "an_append_reads_back_as_one_group";
 const INGEST: &str = "an_ingested_group_keeps_its_boundary_and_guard";
 const COMPENSATION: &str = "compensation_joins_its_group";
+const REDELIVERY: &str = "a_group_after_a_redelivery_is_named_by_its_first_landed_row";
 const NEVER_CUTS: &str = "a_read_never_cuts_a_group";
 const CHAIN: &str = "pages_chain_on_first_and_end_with_nothing";
 
@@ -366,7 +441,7 @@ fn the_faithful_store_passes_every_rule() {
 fn a_store_that_records_no_groups_fails_every_rule() {
     fails_exactly(
         Mistake::EveryRowItsOwnGroup,
-        &[APPEND, INGEST, COMPENSATION, NEVER_CUTS, CHAIN],
+        &[APPEND, INGEST, COMPENSATION, REDELIVERY, NEVER_CUTS, CHAIN],
     );
 }
 
@@ -374,13 +449,13 @@ fn a_store_that_records_no_groups_fails_every_rule() {
 fn a_store_that_merges_its_writes_fails_the_boundary_and_paging_rules() {
     fails_exactly(
         Mistake::MergesAdjacentGroups,
-        &[APPEND, INGEST, NEVER_CUTS, CHAIN],
+        &[APPEND, INGEST, REDELIVERY, NEVER_CUTS, CHAIN],
     );
 }
 
 #[test]
-fn a_store_that_drops_the_guard_fails_the_ingest_rule() {
-    fails_exactly(Mistake::DropsGuard, &[INGEST]);
+fn a_store_that_drops_the_guard_fails_both_guard_rules() {
+    fails_exactly(Mistake::DropsGuard, &[INGEST, REDELIVERY]);
 }
 
 #[test]
@@ -406,4 +481,9 @@ fn a_store_that_resumes_by_row_position_fails_both_paging_rules() {
 #[test]
 fn a_store_that_says_nothing_on_a_cut_page_fails_the_chain_rule() {
     fails_exactly(Mistake::SaysNothingWhenCut, &[CHAIN]);
+}
+
+#[test]
+fn a_store_that_names_a_group_by_its_first_allocated_position_fails_the_redelivery_rule() {
+    fails_exactly(Mistake::NamesByFirstAllocated, &[REDELIVERY]);
 }

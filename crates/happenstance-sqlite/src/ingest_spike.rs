@@ -126,11 +126,13 @@ impl Classify for SqliteEventStoreError {
             | Self::StoredEventType(_)
             | Self::StoredTag(_)
             | Self::UnsupportedSchemaVersion { .. }
+            | Self::SchemaNeedsMigration { .. }
             | Self::MissingIdentity
             | Self::MalformedIdentity { .. }
             | Self::IdentityMoved { .. }
             | Self::UnstampedEvent { .. }
             | Self::StoredGuard { .. }
+            | Self::GroupOrder(_)
             | Self::CorruptTags => FailureClass::Stop,
         }
     }

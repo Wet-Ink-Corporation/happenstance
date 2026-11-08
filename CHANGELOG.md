@@ -123,30 +123,41 @@ not the same as what a user needed to be told.
   ingested group arrived under, at most `max_events` events of them except
   that a first group is whole however large, and `Waiting::Nothing` only when
   the read reached the end. A group's name is the cursor. `GroupPageBuilder`
-  is the paging every adapter shares; `encode_guard` and `decode_guard` the
-  stored form of a guard, one format byte and postcard. `IngestGroup` gains a
-  `guard` field and `with_guard`, so an ingest records the guard a group
-  arrived under. `MemoryIngestStore` implements the trait; it is additive, and
-  the ingest port is unchanged.
+  is the paging every adapter shares, and checks the order it is fed rather
+  than trusting it: a row naming a group at or below one already passed stops
+  the builder, and its `finish` returns `GroupOrderError` (class `Stop`)
+  instead of a page with a group torn in two. `encode_guard` and
+  `decode_guard` are the stored form of a guard, one format byte and postcard.
+  `IngestGroup` gains a `guard` field and `with_guard`, so an ingest records
+  the guard a group arrived under. `MemoryIngestStore` implements the trait,
+  with `GroupOrderError` as its error; it is additive, and the ingest port is
+  unchanged.
 - `happenstance-sqlite`: `SqliteEventStore` implements `WriteGroupStore`
   behind `sync`, over migration 2's columns, and stores an ingested group's
   guard. `SqliteEventStoreError::StoredGuard`, behind `sync`, is a guard the
-  codec cannot write or read back, classed `Stop`.
+  codec cannot write or read back, and `SqliteEventStoreError::GroupOrder`,
+  behind `sync`, a stored `write_group` naming a group the read had already
+  passed, which only a damaged file holds; both are classed `Stop`.
 - `happenstance-sync-testkit`: SY-30's rule, `push_envelope_preserves_group_boundaries`,
-  in the peer family. It pushes two groups, one of three events with no guard
-  and one of one event under a guard, and pulls them back: it fails a peer
+  in the peer family. It pushes three groups in one batch, two events under
+  one guard, one event with no guard, and two events under a second guard, and
+  pulls them back expecting the same three: it fails a peer
   that serves a page as one group, merging writes a store kept apart, and one
   that drops the guard a group was pushed with, so a relay forwards it
   without the evidence SY-6 makes travel.
 - `happenstance-sync-testkit`: the write-group family (SY-39),
   `write_group_store_conformance!`, mounted on an `IngestFixture` whose store
-  also implements `WriteGroupStore`, with its five rules:
+  also implements `WriteGroupStore`, with its six rules:
   `an_append_reads_back_as_one_group`, which fails a store that records no
   groups or merges adjacent appends; `an_ingested_group_keeps_its_boundary_and_guard`,
   which fails one that drops an ingested guard or merges one call's groups;
   `compensation_joins_its_group`, which fails one that records a compensation
   as a group of its own, which a relay would forward apart from its losing
-  event (SY-2); `a_read_never_cuts_a_group`, which fails a page filled by
+  event (SY-2); `a_group_after_a_redelivery_is_named_by_its_first_landed_row`,
+  which fails one that names a group by the first position it allocated
+  rather than the first row it wrote, which a sequence that burns a value per
+  skipped re-delivery makes a position no row of the group holds;
+  `a_read_never_cuts_a_group`, which fails a page filled by
   event, a first group skipped for being larger than the page, and a resume
   above a row position; and `pages_chain_on_first_and_end_with_nothing`, which
   fails a page its budget cut that says nothing is waiting. Each is pinned
@@ -188,16 +199,23 @@ not the same as what a user needed to be told.
   `WireError::UnsupportedFormatVersion`: **every peer in a deployment upgrades
   together**. The key is required: a JSON pulled or ack without `responder`
   is refused as a missing field, rather than read as naming none.
-- `happenstance-sqlite`: migration 2 (#420). Every open adds `write_group`
-  and `group_guard` to `event` on a file whose marker reads 1, and raises the
-  marker to 2 in the same transaction; `SCHEMA_VERSION` is `2`. Every row an
-  append or an ingested group writes records the write's first position, so a
-  runner and a store peer read the log back in whole writes. A row written
+- `happenstance-sqlite`: migration 2 (#420). `open`, `open_on` and
+  `open_in_memory` add `write_group` and `group_guard` to `event` on a file
+  whose marker reads 1, and raise the marker to 2 in the same transaction;
+  `SCHEMA_VERSION` is `2`. Every row an append or an ingested group writes
+  records the write's first position, so a runner and a store peer read the
+  log back in whole writes. A row written
   before the migration reads as a group of its own; there is no backfill.
   **Upgrading:** a build before this one refuses a file this one has opened,
   with `UnsupportedSchemaVersion`, so deploy it to every process that opens a
   store before any of them opens it. The migration is two `ALTER TABLE … ADD
-  COLUMN`s, which do not rewrite the table.
+  COLUMN`s, which do not rewrite the table. `SqliteEventStore::new` never
+  migrates, and now refuses a file still at 1 with the new
+  `SqliteEventStoreError::SchemaNeedsMigration { found, required }` (class
+  `Stop`; additive, the enum is `#[non_exhaustive]`), where it would otherwise
+  wrap the file and fail its first append with `no such column`: a caller that
+  wraps its own connection with `new` opens the file once through `open_on`
+  first.
 
 ## [0.5.1] — 2026-11-08
 

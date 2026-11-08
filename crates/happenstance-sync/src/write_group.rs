@@ -59,7 +59,7 @@ mod guard;
 mod page;
 
 pub use guard::{GuardCodecError, STORED_GUARD_FORMAT, decode_guard, encode_guard};
-pub use page::GroupPageBuilder;
+pub use page::{GroupOrderError, GroupPageBuilder};
 
 /// A store that can read its log back in the write groups it wrote.
 ///

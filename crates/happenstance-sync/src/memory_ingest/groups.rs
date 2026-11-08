@@ -3,17 +3,22 @@
 
 use core::num::NonZeroUsize;
 
-use happenstance_core::{MemoryStoreError, SequencePosition};
+use happenstance_core::SequencePosition;
 
 use super::MemoryIngestStore;
 use crate::identity::ReplicatedEvent;
 use crate::peer::Waiting;
-use crate::write_group::{GroupPage, GroupPageBuilder, SendWriteGroupStore};
+use crate::write_group::{GroupOrderError, GroupPage, GroupPageBuilder, SendWriteGroupStore};
 
-/// Never fails. Writers are serialised under the lock, so a group's rows are
-/// contiguous and a scan in position order meets each group whole.
+/// Writers are serialised under the lock, so a group's rows are contiguous and
+/// a scan in position order meets each group whole, in ascending order of
+/// their first positions.
+///
+/// Its error is the one the shared [`GroupPageBuilder`] can raise, and the
+/// only one: the builder checks the order rather than trusting it, and this
+/// store states that check in its type rather than claiming it never fails.
 impl SendWriteGroupStore for MemoryIngestStore {
-    type Error = MemoryStoreError;
+    type Error = GroupOrderError;
 
     async fn read_groups(
         &self,
@@ -38,10 +43,10 @@ impl SendWriteGroupStore for MemoryIngestStore {
             };
             let event = ReplicatedEvent::new(row.id, row.recorded_at, row.event.clone());
             if page.offer(first, guard, event).is_break() {
-                return Ok(page.finish(Waiting::Unknown));
+                return page.finish(Waiting::Unknown);
             }
         }
-        Ok(page.finish(Waiting::Nothing))
+        page.finish(Waiting::Nothing)
     }
 }
 
@@ -95,8 +100,10 @@ mod tests {
         after: Option<SequencePosition>,
         events: usize,
     ) -> GroupPage {
-        let Ok(page) = store.read_groups(after, max(events)).await;
-        page
+        store
+            .read_groups(after, max(events))
+            .await
+            .expect("the oracle's scan is in group order")
     }
 
     /// The payloads of each group, in order.
