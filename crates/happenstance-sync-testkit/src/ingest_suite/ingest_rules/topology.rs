@@ -11,6 +11,17 @@
 //! into every direction of every edge it sits on, and the runner cannot then
 //! permit a different one.
 //!
+//! # Which claims travel with a guard
+//!
+//! The ones a real runner would send one with. A store records no guard for a
+//! local append, because its condition is position-relative (SY-6), so a claim
+//! an end appended itself travels unguarded, pushed or pulled. A claim an end
+//! ingested keeps the guard it arrived under (SY-30): here, the other spoke's
+//! claim, which reached the hub with its origin's position-free guard and is
+//! pulled on to the spoke with it. The hub's rule never reads a guard; it
+//! judges by fact family (SY-35), as `happenstance-sync`'s
+//! `tests/runner/directions.rs` hub does.
+//!
 //! # The two topologies are two configurations, not two runners
 //!
 //! [`HUB_AND_SPOKE`] and [`PEER_TO_PEER`] are values of one type, played by the
@@ -46,12 +57,15 @@ const CLAIM_REVERSED: EventType = EventType::from_static("ClaimReversed");
 /// The fact family the conflict belongs to: the tag key `seat` (SY-35).
 const SEAT: &str = "seat:s10";
 
+/// One event by type and bytes: how this module compares facts.
+type Fact = (String, Vec<u8>);
+
 /// What one direction of an edge does with a claim it carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum MergeRule {
-    /// Read the travelling guard as evidence against what the receiving store
-    /// holds, and hand it a reversal where the guard is broken: the hub's rule
-    /// for what spokes push (SY-7).
+    /// Judge the claim by its fact family against what the receiving store
+    /// holds, and hand it a reversal where another claim on the seat is
+    /// already there: the hub's rule for what spokes push (SY-7).
     Adjudicate,
     /// Take the claim as sent, judged by nobody: a spoke's rule for what the
     /// hub sends, and both directions of an edge whose family has no
@@ -109,20 +123,20 @@ enum Answer {
 }
 
 /// The hub-and-spoke walk, under `directions`. The hub holds another spoke's
-/// claim on the seat. The spoke appends its own under the guard "no claim on
-/// this seat". Its push is refused, which writes nothing anywhere (SY-34).
-/// It pulls the other spoke's claim, then re-pushes and is taken, and pulls
-/// whatever the hub answered with.
+/// claim on the seat, ingested under its origin's guard. The spoke appends
+/// its own under the guard "no claim on this seat". Its push is refused, and
+/// neither log may change (SY-34). It pulls the other spoke's claim, guard and
+/// all, then re-pushes and is taken, and pulls whatever the hub answered with.
 ///
 /// Each step's counts are checked against what the runner handed the
 /// receiving store: one claim, and a reversal only where that direction
-/// adjudicated and found its guard broken.
+/// adjudicated and found the seat already claimed.
 ///
 /// # Errors
 ///
 /// A [`Violation`] of SY-10 if the fixture gives both stores one identity, if
-/// either cannot say who it is, or if an ingest or an append is refused or
-/// miscounted.
+/// either cannot say who it is, if an ingest or an append is refused or
+/// miscounted, or if the refused push changed either log.
 pub(super) async fn hub_and_spoke<F: IngestFixture>(
     open: &impl AsyncFn() -> F,
     directions: Directions,
@@ -138,22 +152,22 @@ pub(super) async fn hub_and_spoke<F: IngestFixture>(
         MergeRule::Adjudicate,
         &edge.far,
         &first,
-        &guard,
+        Some(&guard),
         "the first claim to the hub",
     )
     .await?;
 
     let own = own_claim(&mut edge.near, b"claimed-by-the-spoke", &guard).await?;
-    push(directions.push, &edge.far, &own, &guard, Answer::Refused).await?;
+    push(directions.push, &edge, &own, Answer::Refused).await?;
     pull(directions.pull, &edge, &guard).await?;
-    push(directions.push, &edge.far, &own, &guard, Answer::Taken).await?;
+    push(directions.push, &edge, &own, Answer::Taken).await?;
     pull(directions.pull, &edge, &guard).await?;
     Ok(edge)
 }
 
 /// The peer-to-peer walk, under `directions`: each peer appends its own claim
 /// under the guard, the first pushes its claim to the second, and pulls the
-/// second's back.
+/// second's back. Both claims are local appends, so both travel unguarded.
 ///
 /// # Errors
 ///
@@ -166,7 +180,7 @@ pub(super) async fn peer_to_peer<F: IngestFixture>(
     let mut edge = open_edge(open, b"reversed-by-the-first", b"reversed-by-the-second").await?;
     let near = own_claim(&mut edge.near, b"claimed-by-the-first", &guard).await?;
     own_claim(&mut edge.far, b"claimed-by-the-second", &guard).await?;
-    push(directions.push, &edge.far, &near, &guard, Answer::Taken).await?;
+    push(directions.push, &edge, &near, Answer::Taken).await?;
     pull(directions.pull, &edge, &guard).await?;
     Ok(edge)
 }
@@ -182,7 +196,7 @@ pub(super) async fn judge<S: EventStore + IngestStore>(
     edge: &Edge<S>,
     expected: &[(EventType, &[u8])],
 ) -> Result<(), Violation> {
-    let mut expected: Vec<(String, Vec<u8>)> = expected
+    let mut expected: Vec<Fact> = expected
         .iter()
         .map(|(event_type, data)| (String::from(event_type.as_str()), data.to_vec()))
         .collect();
@@ -280,7 +294,7 @@ async fn end<F: IngestFixture>(
 
 /// `end` appends its own claim, decided under `guard` against its own log,
 /// and the claim is read back as it would travel: its identity and recorded
-/// time as the store assigned them.
+/// time as the store assigned them, and no guard.
 async fn own_claim<S: EventStore + IngestStore>(
     end: &mut End<S>,
     data: &[u8],
@@ -293,7 +307,10 @@ async fn own_claim<S: EventStore + IngestStore>(
         .map_err(|error| {
             Violation::new(
                 SY_10,
-                format!("the store refused its own claim under a guard it holds nothing against: {error}"),
+                format!(
+                    "the store refused its own claim under a guard it holds nothing against: \
+                     {error}"
+                ),
             )
         })?;
     let log = read_all(&end.store, SY_10).await?;
@@ -310,25 +327,42 @@ async fn own_claim<S: EventStore + IngestStore>(
     Ok(ReplicatedEvent::new(row.id, row.recorded_at, row.event))
 }
 
-/// The near end pushes `claim` to the far end, which takes it under `rule`
-/// or refuses it. A refusal writes nothing on either end: the runner leaves
-/// the near log alone (SY-34) and the far end took nothing.
+/// The near end pushes its own `claim` to the far end, unguarded, which takes
+/// it under `rule` or refuses it (SY-33). A refusal must leave both logs
+/// holding exactly the facts they held before it: the runner leaves the near
+/// log alone (SY-34), and the far end took nothing.
 async fn push<S: EventStore + IngestStore>(
     rule: MergeRule,
-    far: &End<S>,
+    edge: &Edge<S>,
     claim: &ReplicatedEvent,
-    guard: &AppendCondition,
     answer: Answer,
 ) -> Result<(), Violation> {
-    if answer == Answer::Refused {
-        return Ok(());
+    if answer == Answer::Taken {
+        return carry(rule, &edge.far, claim, None, "the near end's pushed claim").await;
     }
-    carry(rule, far, claim, guard, "the near end's pushed claim").await
+    let before = both_facts(edge).await?;
+    // The far end declines, so the runner hands neither store anything.
+    let after = both_facts(edge).await?;
+    ensure(after == before, SY_10, || {
+        format!(
+            "a refused push changed the logs: near then far, they held {before:?} by type and \
+             bytes before it and {after:?} after"
+        )
+    })
+}
+
+/// Both ends' facts, near then far.
+async fn both_facts<S: EventStore>(edge: &Edge<S>) -> Result<[Vec<Fact>; 2], Violation> {
+    Ok([
+        facts(&read_all(&edge.near.store, SY_10).await?),
+        facts(&read_all(&edge.far.store, SY_10).await?),
+    ])
 }
 
 /// The near end pulls every fact the far end holds and it does not, one group
-/// each, and takes each under `rule`. A claim carries `guard`; a reversal
-/// travels alone and unguarded.
+/// each, and takes each under `rule`. A claim the far end ingested travels
+/// with `guard`, the one it arrived under; a claim the far end appended
+/// itself travels unguarded; a reversal travels alone and unguarded.
 ///
 /// What the near end lacks is found by type and bytes, which every fact here
 /// carries uniquely, and not by identity. An identity-keyed runner sends the
@@ -344,13 +378,14 @@ async fn pull<S: EventStore + IngestStore>(
         if held.contains(&fact(&row)) {
             continue;
         }
+        let travelling = (row.id.store() != edge.far.id).then_some(guard);
         let event = ReplicatedEvent::new(row.id, row.recorded_at, row.event);
         if *event.event.event_type() == SEAT_CLAIMED {
             carry(
                 rule,
                 &edge.near,
                 &event,
-                guard,
+                travelling,
                 "a claim pulled from the far end",
             )
             .await?;
@@ -367,48 +402,55 @@ async fn pull<S: EventStore + IngestStore>(
     Ok(())
 }
 
-/// The runner's step for one claim crossing into `to` under `rule`. The guard
-/// travels with the claim (SY-30) and is evidence, never an instruction
-/// (SY-6): under [`MergeRule::Adjudicate`] the runner reads it against what
-/// `to` holds and hands a reversal where it is broken; under
-/// [`MergeRule::Accept`] it hands nothing. The store evaluates nothing (SY-1)
-/// and must count exactly what it was handed.
+/// The runner's step for one claim crossing into `to` under `rule`. The
+/// `guard` the claim travels with, if any, rides on its group (SY-30) as
+/// evidence, never an instruction (SY-6). Under [`MergeRule::Adjudicate`]
+/// the runner judges by fact family (SY-35), from what `to` holds: another
+/// claim on the seat earns a reversal. Under [`MergeRule::Accept`] it hands
+/// nothing. The store evaluates nothing (SY-1) and must count exactly what it
+/// was handed.
 async fn carry<S: EventStore + IngestStore>(
     rule: MergeRule,
     to: &End<S>,
     claim: &ReplicatedEvent,
-    guard: &AppendCondition,
+    guard: Option<&AppendCondition>,
     what: &str,
 ) -> Result<(), Violation> {
-    let broken = rule == MergeRule::Adjudicate && breaks(&to.store, guard).await?;
-    let compensation = if broken {
+    let contested = rule == MergeRule::Adjudicate && contested(&to.store, claim).await?;
+    let compensation = if contested {
         slice::from_ref(&to.reversal)
     } else {
         &[]
     };
-    let group = IngestGroup::new(slice::from_ref(claim), compensation).with_guard(Some(guard));
+    let group = IngestGroup::new(slice::from_ref(claim), compensation).with_guard(guard);
     let took: Ingested = ingest(&to.store, &[group], SY_10).await?;
-    ensure_counts(took, (1, 0, usize::from(broken)), what, SY_10)
+    ensure_counts(took, (1, 0, usize::from(contested)), what, SY_10)
 }
 
-/// Whether `store` holds an event that breaks `guard`.
-async fn breaks<S: EventStore>(store: &S, guard: &AppendCondition) -> Result<bool, Violation> {
+/// Whether `store` holds a claim on the seat other than `claim`, by type,
+/// tags and bytes, never decoded.
+async fn contested<S: EventStore>(store: &S, claim: &ReplicatedEvent) -> Result<bool, Violation> {
+    let family = seat_family()?;
+    let incoming: Fact = (
+        String::from(claim.event.event_type().as_str()),
+        claim.event.data().to_vec(),
+    );
     Ok(read_all(store, SY_10)
         .await?
         .iter()
-        .any(|row| guard.is_violated_by(row.position, row.event_type(), row.tags())))
+        .any(|row| family.matches(row.event_type(), row.tags()) && fact(row) != incoming))
 }
 
 /// `log`'s events by type and bytes, sorted, so two logs that hold the same
 /// facts in different orders compare equal.
-fn facts(log: &[SequencedEvent]) -> Vec<(String, Vec<u8>)> {
-    let mut facts: Vec<(String, Vec<u8>)> = log.iter().map(fact).collect();
+fn facts(log: &[SequencedEvent]) -> Vec<Fact> {
+    let mut facts: Vec<Fact> = log.iter().map(fact).collect();
     facts.sort();
     facts
 }
 
 /// One event by type and bytes.
-fn fact(row: &SequencedEvent) -> (String, Vec<u8>) {
+fn fact(row: &SequencedEvent) -> Fact {
     (
         String::from(row.event_type().as_str()),
         row.event.data().to_vec(),
@@ -420,12 +462,17 @@ fn claim(data: &[u8]) -> Result<Event, Violation> {
     Ok(opaque(SEAT_CLAIMED, data, SY_10)?.with_tags(seat()))
 }
 
-/// The condition every claim is decided under: no claim on this seat yet.
-fn seat_guard() -> Result<AppendCondition, Violation> {
+/// Every claim on the seat: the fact family the hub adjudicates.
+fn seat_family() -> Result<Query, Violation> {
     let item = QueryItem::new([SEAT_CLAIMED], seat()).map_err(|error| {
         Violation::new(SY_10, format!("the rule's own query is invalid: {error}"))
     })?;
-    Ok(AppendCondition::new(Query::from_item(item)))
+    Ok(Query::from_item(item))
+}
+
+/// The condition every claim is decided under: no claim on this seat yet.
+fn seat_guard() -> Result<AppendCondition, Violation> {
+    Ok(AppendCondition::new(seat_family()?))
 }
 
 fn seat() -> Tags {

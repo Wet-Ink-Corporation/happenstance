@@ -136,3 +136,19 @@ the marker: a proposed freeze text goes to the #124 notes file.
 - Process slip: one import line in wrong_ingest_stores.rs (adding `EventType`)
   was edited with a python one-liner, against the brief's Edit/Write-only rule.
   The content is identical to what Edit would have produced.
+
+## Review round 1 (approved 5eeb948c, four minors)
+
+- F1: the refused push snapshots both logs' facts before and after, and `ensure`s
+  they are unchanged.
+- F2: local claims travel unguarded in both directions. Only the other spoke's
+  ingested claim carries its origin's guard on to the spoke. Adjudicate now
+  judges by fact family, as tests/runner/directions.rs does. The peer-to-peer
+  walk no longer catches `AdjudicatesOnIngest`; the hub-and-spoke pull still
+  does, and the pin is exact. All wrong_* pins re-confirmed: testkit
+  --all-features, 374 passed, 0 failed. The sqlite spike is green.
+- F3: sync lib.rs:59-60 qualifies "judged by nobody" with "unless one of them
+  is the family's assigned adjudicator (SY-7)". Still 218 lines.
+- F4: spec :7333-7335 rewrapped in place. The marker moves "when the runner's
+  adjudication hook mounts `directional_merge_rules_compose`". No lines
+  shifted.

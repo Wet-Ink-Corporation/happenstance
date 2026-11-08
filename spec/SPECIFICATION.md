@@ -7330,9 +7330,9 @@ The rationale changed at [ADR-0027](../.kb/decisions/0027-whole-log-replication-
 be Kestrel Cold Chain's edge tier, strictly hub-and-spoke for a *commercial*
 reason: a spoke's slice was a confidentiality boundary, and Scottish
 subcontractors must not hold Yorkshire's parts pricing. Under SY-27's whole-log
-answer that slice is its own store rather than a filtered replica, so
-confidentiality no longer argues for the topology, and adjudication carries the
-clause alone. The marker moves when `directional_merge_rules_compose` lands.
+answer that slice is its own store rather than a filtered replica, so confidentiality
+no longer argues for the topology, and adjudication carries the clause alone. The marker
+moves when the runner's adjudication hook mounts `directional_merge_rules_compose`.
 
 ---
 

@@ -1326,15 +1326,19 @@ pub mod ingest_rules {
     /// itself.
     ///
     /// Two walks over two stores each, both played by one runner that holds a
-    /// merge rule per direction, and each claim carries the guard it was
-    /// decided under: "no claim on this seat".
+    /// merge rule per direction. Every claim is decided under the guard "no
+    /// claim on this seat", and travels with it only where a real runner would
+    /// send it: a local append records no guard (SY-6), so an end's own claim
+    /// travels unguarded, and an ingested claim keeps the guard it arrived
+    /// under (SY-30). The hub adjudicates by fact family (SY-35), never by a
+    /// guard.
     ///
-    /// * **Hub and spoke.** The hub holds another spoke's claim. The spoke
-    ///   appends its own, and its push is refused (SY-33), which writes
-    ///   nothing anywhere. It pulls the other claim, which its own log breaks
-    ///   the guard of, and takes it unjudged: one event, no reversal. Its
-    ///   push is re-offered and the hub adjudicates it, writing the claim
-    ///   with its reversal (SY-7). The spoke pulls the reversal. Both logs
+    /// * **Hub and spoke.** The hub holds another spoke's claim, ingested
+    ///   under its origin's guard. The spoke appends its own, and its push is
+    ///   refused (SY-33): neither log may change. It pulls the other claim,
+    ///   whose guard its own log breaks, and takes it unjudged: one event, no
+    ///   reversal. Its push is re-offered and the hub adjudicates it, writing
+    ///   the claim with its reversal (SY-7). The spoke pulls the reversal. Both logs
     ///   end with the two claims and the hub's one reversal, and the spoke
     ///   still holds its own claim under its own identity (SY-34, E2E-45).
     /// * **Peer to peer.** Each peer appends its own claim. Neither
@@ -1348,9 +1352,9 @@ pub mod ingest_rules {
     ///
     /// A store with the merge rule built in: it answers a group whose
     /// travelling guard its log breaks with a reversal of its own, in the
-    /// same write. As a spoke it judges what the hub sends, which is SY-10's
-    /// falsifier, and on either topology it writes a reversal no direction
-    /// asked for. `tests/wrong_ingest_stores.rs` carries it.
+    /// same write. As a spoke it judges the guarded claim the hub sends,
+    /// which is SY-10's falsifier, and writes a reversal no direction asked
+    /// for. `tests/wrong_ingest_stores.rs` carries it.
     ///
     /// # Does not reject
     ///

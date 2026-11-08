@@ -54,10 +54,10 @@
 //! # The target topologies — plural
 //!
 //! **Peer-to-peer.** A local-first application holds its own event store on the
-//! device and syncs with a shared instance — the motivating deployment being
-//! SQLite inside a Cloudflare Durable Object, reached through a Rust Worker.
-//! Both peers are happenstance instances, neither is privileged in the protocol,
-//! and each direction of their edge takes what it is sent, judged by nobody.
+//! device and syncs with a shared instance, such as SQLite inside a Durable
+//! Object. Both are happenstance instances, neither is privileged in the
+//! protocol, and each direction of their edge takes what it is sent, judged by
+//! nobody unless one of them is the family's assigned adjudicator (SY-7).
 //!
 //! **Hub and spoke.** Many devices sync to one authoritative store, and never to
 //! each other. This is at least as common as the symmetric case and it is not a
