@@ -1314,6 +1314,27 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::write_group::tests::a_half_applied_migration_is_completed_by_the_next",
     "event_store::write_group::read::tests::a_row_from_before_the_columns_reads_as_its_own_group",
     "event_store::ingest::tests::groups::an_ingested_group_is_named_by_its_first_landed_row_and_holds_its_guard_there",
+    // The object as a sync peer over HTTP (#130): the request path, and the
+    // sync family mounted through it.
+    "sync_http::tests::sync_route_names_exactly_the_two_paths",
+    "sync_http::tests::every_class_round_trips_through_its_status",
+    "sync_http::tests::a_status_no_class_maps_to_reads_as_transient_or_stop",
+    "sync_http::tests::the_request_cap_is_the_batch_plus_the_allowance_and_saturates",
+    "event_store::ingest::tests::served::a_push_and_a_pull_through_requests_round_trip_byte_identical",
+    "event_store::ingest::tests::served::a_request_that_is_not_a_post_is_refused_with_405",
+    "event_store::ingest::tests::served::a_body_over_the_cap_is_refused_as_split_before_the_store",
+    "event_store::ingest::tests::served::a_post_with_no_body_answers_400",
+    "event_store::ingest::tests::served::a_foreign_token_answers_400_and_reads_back_as_stop",
+    "event_store::ingest::tests::served::sync_conformance::ingest_never_rejects",
+    "event_store::ingest::tests::served::sync_conformance::compensation_is_atomic_with_the_losing_event",
+    "event_store::ingest::tests::served::sync_conformance::event_id_order_is_identical_on_every_peer",
+    "event_store::ingest::tests::served::sync_conformance::peer_declares_its_own_limits",
+    "event_store::ingest::tests::served::sync_conformance::peer_takes_a_batch_at_its_declared_limits",
+    "event_store::ingest::tests::served::sync_conformance::every_refusal_states_its_class",
+    "event_store::ingest::tests::served::sync_conformance::nothing_waiting_means_the_next_pull_is_empty",
+    "event_store::ingest::tests::served::sync_conformance::ack_never_confirms_a_non_durable_event",
+    "event_store::ingest::tests::served::sync_conformance::push_envelope_preserves_group_boundaries",
+    "event_store::ingest::tests::served::sync_conformance::round_trip_preserves_the_whole_log",
 ];
 
 /// The runner that executes a `wasm-bindgen-test` harness.

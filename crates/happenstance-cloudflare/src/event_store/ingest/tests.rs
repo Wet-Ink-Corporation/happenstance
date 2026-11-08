@@ -358,3 +358,7 @@ mod reads;
 mod support;
 #[cfg(target_arch = "wasm32")]
 mod writes;
+// The object as a sync peer over HTTP (#130), below the others so no line
+// above moves.
+#[cfg(target_arch = "wasm32")]
+mod served;
