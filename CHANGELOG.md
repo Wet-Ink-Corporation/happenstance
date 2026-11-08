@@ -163,6 +163,19 @@ not the same as what a user needed to be told.
   codec cannot write or read back, and `SqliteEventStoreError::GroupOrder`,
   behind `sync`, a stored `write_group` naming a group the read had already
   passed, which only a damaged file holds; both are classed `Stop`.
+- `happenstance-postgres`: `PostgresEventStore` implements
+  `SendWriteGroupStore` behind `sync`, over migration 3's columns, in one
+  statement that orders rows by group so writers whose positions interleave
+  still read back whole; an ingested group's guard is stored on its first row.
+  `PostgresEventStoreError::StoredGuard` and `PostgresEventStoreError::GroupOrder`,
+  both behind `sync` and classed `Stop`. Additive: the enum is
+  `#[non_exhaustive]`.
+- `happenstance-neon`: `NeonEventStore` implements the bare `WriteGroupStore`
+  behind `sync`, in one read-only round trip, and stores an ingested group's
+  guard. `NeonError::StoredGuard` (a stored guard that does not decode),
+  `NeonError::UnstorableGuard` (one that does not encode, refused before the
+  request is sent) and `NeonError::GroupOrder`, all behind `sync` and classed
+  `Stop`; additive.
 - `happenstance-sync-testkit`: SY-30's rule, `push_envelope_preserves_group_boundaries`,
   in the peer family. It pushes three groups in one batch, two events under
   one guard, one event with no guard, and two events under a second guard, and
@@ -187,7 +200,8 @@ not the same as what a user needed to be told.
   above a row position; and `pages_chain_on_first_and_end_with_nothing`, which
   fails a page its budget cut that says nothing is waiting. Each is pinned
   against its wrong stores in `tests/wrong_write_group_stores.rs`.
-  `MemoryIngestFixture` and `happenstance-sqlite` mount it.
+  `MemoryIngestFixture`, `happenstance-sqlite`, `happenstance-postgres` and
+  `happenstance-neon` mount it.
 - `happenstance-sync-testkit`: a sync conformance rule,
   **`round_trip_preserves_the_whole_log`** (SY-28, SY-27, #140). The defect it
   detects is a peer that replicates a slice: it stores and acknowledges every
@@ -292,6 +306,33 @@ not the same as what a user needed to be told.
   wrap the file and fail its first append with `no such column`: a caller that
   wraps its own connection with `new` opens the file once through `open_on`
   first.
+- `happenstance-postgres`: migration 3 (#420), `migration::MIGRATION_3`
+  (`migrations/0003_write_group.sql`): `write_group` and `group_guard` on
+  `event`, both nullable, and the partial index `event_write_group_idx`.
+  `migration::apply` now sends migrations 1 and 3 in one batch, and
+  `SCHEMA_VERSION` is `2`. Every `INSERT` names `write_group`: an append
+  binds its lowest position on every row; an ingested group's rows are stamped
+  with the lowest position it landed, a re-delivered row's burnt position never
+  naming a group, and its compensation joins it. A row written before the
+  migration reads as a group of its own; there is no backfill. **Upgrading:
+  migrate, then deploy.** Run `migration::apply` against every schema before
+  deploying this build to any process that writes to it: this build fails its
+  first append with an undefined-column error against a schema without
+  migration 3. The `ALTER TABLE`s rewrite no row but take a brief exclusive
+  lock; the index build blocks writes while it runs, and on a large table can
+  be made first with `CREATE INDEX CONCURRENTLY` under the same name. An older
+  build keeps working against a migrated schema, writing rows that read as
+  groups of one.
+- `happenstance-neon`: migration 3 (#420), `migration::MIGRATION_3`, with the
+  new `@write_group_idx@` placeholder `migration::render` fills: the same two
+  columns and partial index as `happenstance-postgres`'s. An append computes
+  its group inside its one `INSERT`; an ingest writes a provisional negative
+  tag per group and replaces it with the lowest position the group landed in a
+  third statement of the same request, so the request is now the write, the
+  refusal and the stamp, and no tag outlives the commit. **Upgrading: migrate,
+  then deploy**, as for `happenstance-postgres`: send
+  `migration::request(MIGRATION_3, &config)` after migration 1 before this build
+  writes to the schema.
 
 ## [0.5.1] — 2026-11-08
 

@@ -139,9 +139,32 @@ re-exports the port as `happenstance_neon::happenstance_sync`. The bare
 flavour only, as the event store is, so it builds for `wasm32`. The identity
 an ingest checks claims against is read from the schema's meta row on every
 call, never cached on the handle. It turns on `event-store`, and
-`happenstance-core`'s `serde` feature through `happenstance-sync`. There is
-no runner (issue #244) and no network peer yet, so this is the port, not
-replication.
+`happenstance-core`'s `serde` feature through `happenstance-sync`. It also
+implements `WriteGroupStore`, the bare flavour again, which reads the log back
+in the writes that made it (#420), and stores the guard an ingested group
+arrived under. The runner is unfinished (issue #244) and there is no network
+transport yet, so this is the port, not replication.
+
+## Upgrading to the write-group schema: migrate, then deploy
+
+This release adds `migration::MIGRATION_3` (`migrations/0003_write_group.sql`):
+two nullable columns on the event table, `write_group` and `group_guard`, and a
+partial index on the first. They record which rows one append, or one ingested
+group with its compensation, wrote together, so a runner and a store peer
+forward the log in whole writes (#420). Every `INSERT` this build sends names
+`write_group`, so **apply migration 3 to the schema before deploying this build
+to any process that writes to it**: send `migration::request(MIGRATION_3,
+&config)` after migration 1, as you send migration 1. A build that runs against
+a schema without the column fails its first append with an undefined-column
+error from the endpoint.
+
+The migration is idempotent. Its `ALTER TABLE … ADD COLUMN`s rewrite no row but
+take a brief exclusive lock; its index build blocks writes while it runs, so on a
+large table create `<event table>_write_group_idx` with `CREATE INDEX
+CONCURRENTLY` first, and the migration then leaves it alone. Rows written before
+it read back as groups of one, with no guard; nothing is backfilled. An older
+build keeps working against a migrated schema, and writes rows that read as
+groups of one.
 
 ## Re-mint every branch before its first append
 

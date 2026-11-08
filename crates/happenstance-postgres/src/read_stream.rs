@@ -619,8 +619,8 @@ fn as_i64(position: SequencePosition) -> i64 {
 /// type — a `bigint` position that is zero or negative against a `NonZeroU64`, a
 /// `text` event type or tag carrying something validation now rejects. Each gets
 /// a named variant rather than a panic, because the alternative to a variant is
-/// a panic in a library.
-fn decode_row(row: &PgRow) -> Result<SequencedEvent, PostgresEventStoreError> {
+/// a panic in a library. Crate-visible: the write-group read decodes with it.
+pub(crate) fn decode_row(row: &PgRow) -> Result<SequencedEvent, PostgresEventStoreError> {
     let position = position_from_row(row.try_get::<i64, _>("position")?)?;
 
     let event_type: String = row.try_get("event_type")?;

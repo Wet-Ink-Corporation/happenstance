@@ -42,10 +42,28 @@ pub const MIGRATION_1: &str = include_str!("../migrations/0001_neon_log.sql");
 /// The projection checkpoint, before its identifiers are filled in.
 pub const MIGRATION_2: &str = include_str!("../migrations/0002_projection_checkpoint.sql");
 
+/// The event log's write-group columns and their index (#420), before their
+/// identifiers are filled in.
+///
+/// `write_group`, on every row, the lowest position the write that put the
+/// row in gave out, and `group_guard`, on that first row only, the guard an
+/// ingested group arrived under. A runner and a store peer read the log back
+/// in whole writes through them (SY-39). Both nullable with no default, so
+/// adding them rewrites no row, and a row from before this migration reads as
+/// a group of its own.
+///
+/// **Apply it after [`MIGRATION_1`], before deploying this build**, with
+/// [`request`]: every `INSERT` this build sends names `write_group`, and fails
+/// against a table without it. Idempotent, as [`MIGRATION_1`] is, so applying
+/// both to any schema, fresh or migrated by an older build, brings it to what
+/// this build expects. Numbered 3 because that is the directory's sequence;
+/// [`MIGRATION_2`] belongs to the projection store.
+pub const MIGRATION_3: &str = include_str!("../migrations/0003_write_group.sql");
+
 /// Renders `template` against `config` and splits it into statements.
 ///
 /// The placeholders are `@schema@`, `@event@`, `@sequence@`, `@meta@`,
-/// `@checkpoint@` and the three index names — spelled `@…@` rather than `{…}`
+/// `@checkpoint@` and the index names — spelled `@…@` rather than `{…}`
 /// so that a `format!`-shaped brace appearing in SQL some day is not a rendering
 /// bug, and so that an unsubstituted placeholder is a syntax error at the server
 /// rather than a plausible identifier.
@@ -60,7 +78,8 @@ pub fn render(template: &str, config: &NeonConfig) -> Vec<String> {
         .replace("@tags_idx@", &index_name(config, "tags_idx"))
         .replace("@type_idx@", &index_name(config, "type_idx"))
         .replace("@origin_idx@", &index_name(config, "origin_idx"))
-        .replace("@xact_idx@", &index_name(config, "xact_idx"));
+        .replace("@xact_idx@", &index_name(config, "xact_idx"))
+        .replace("@write_group_idx@", &index_name(config, "write_group_idx"));
     split(&rendered)
 }
 
@@ -142,7 +161,7 @@ fn split(sql: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{MIGRATION_1, MIGRATION_2, render, split};
+    use super::{MIGRATION_1, MIGRATION_2, MIGRATION_3, render, split};
     use crate::config::NeonConfig;
 
     /// The splitter's own precondition, asserted rather than assumed.
@@ -153,7 +172,11 @@ mod tests {
     /// one.
     #[test]
     fn no_migration_contains_what_the_splitter_cannot_see() {
-        for (name, sql) in [("0001", MIGRATION_1), ("0002", MIGRATION_2)] {
+        for (name, sql) in [
+            ("0001", MIGRATION_1),
+            ("0002", MIGRATION_2),
+            ("0003", MIGRATION_3),
+        ] {
             // Comments are stripped before the split, so only executable lines
             // constrain it — which is why migration 1's own header may say
             // `"$user"` and `bigserial` without tripping this.
@@ -237,6 +260,26 @@ mod tests {
             statements
                 .iter()
                 .any(|s| s.contains(r#""hsp_1"."projection_checkpoint""#))
+        );
+    }
+
+    /// Migration 3 renders into exactly its three statements, both columns and
+    /// the partial index, into the configured schema, with no placeholder left:
+    /// an unsubstituted `@write_group_idx@` is a syntax error at the server,
+    /// which this finds without one.
+    #[test]
+    fn the_write_group_migration_renders_into_three_statements() {
+        let config = NeonConfig::default().with_schema("hs_3");
+        let statements = render(MIGRATION_3, &config);
+
+        assert_eq!(
+            statements,
+            [
+                r#"ALTER TABLE "hs_3"."event" ADD COLUMN IF NOT EXISTS write_group bigint"#,
+                r#"ALTER TABLE "hs_3"."event" ADD COLUMN IF NOT EXISTS group_guard bytea"#,
+                "CREATE INDEX IF NOT EXISTS \"event_write_group_idx\"\n    ON \"hs_3\".\"event\" \
+                 (write_group)\n    WHERE write_group IS NOT NULL",
+            ]
         );
     }
 

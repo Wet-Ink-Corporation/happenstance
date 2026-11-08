@@ -25,6 +25,7 @@ use crate::event_store::{NewRow, Origin, PostgresEventStore, insert_statement};
 
 mod claims;
 mod family;
+mod groups;
 mod live;
 mod server;
 
@@ -355,6 +356,7 @@ fn ingest_sends_appends_insert_plus_the_conflict_clause() {
             recorded_at,
         }),
         &positions,
+        positions.iter().copied().min(),
     );
     let foreign = foreign_statement(own, &owned.events, &positions);
 
@@ -430,8 +432,36 @@ async fn postgres_errors_state_their_class() {
         ),
         (E::NoRuntime, Stop),
         (E::UnreadableTransactionId, Stop),
+        (
+            E::StoredGuard {
+                first: SequencePosition::FIRST,
+                source: happenstance_sync::write_group::decode_guard(&[])
+                    .expect_err("no bytes are no guard"),
+            },
+            Stop,
+        ),
+        (E::GroupOrder(misordered()), Stop),
     ];
     for (error, class) in cases {
         assert_eq!(error.class(), class, "{error:?}");
     }
+}
+
+/// A [`GroupOrderError`](happenstance_sync::write_group::GroupOrderError), from
+/// a page builder offered two groups in the wrong order, which is the only way
+/// one is made outside its crate.
+fn misordered() -> happenstance_sync::write_group::GroupOrderError {
+    let at = |raw: u64| SequencePosition::new(raw).expect("non-zero");
+    let row = |raw: u64| shipped(id(peer(0x60), raw), 0, event("Shipped", "row"));
+    let mut builder = happenstance_sync::write_group::GroupPageBuilder::new(
+        core::num::NonZeroUsize::new(8).expect("non-zero"),
+    );
+    for (group, position) in [(2, 2), (1, 3)] {
+        if builder.offer(at(group), None, row(position)).is_break() {
+            break;
+        }
+    }
+    builder
+        .finish(happenstance_sync::Waiting::Nothing)
+        .expect_err("group 1 was offered after group 2")
 }

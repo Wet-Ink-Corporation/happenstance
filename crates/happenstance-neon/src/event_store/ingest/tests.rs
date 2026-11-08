@@ -37,6 +37,7 @@ use crate::wire::ResultSet;
 mod claims;
 mod endpoint;
 mod family;
+mod groups;
 mod live;
 
 /// A store another peer runs.
@@ -541,7 +542,9 @@ async fn a_refusal_answer_names_the_claim_it_carries() {
     );
     assert_eq!(refused.class(), FailureClass::Stop);
     assert_eq!(transport.round_trips.get(), 1);
-    assert_eq!(transport.sent.borrow()[0].statements.len(), 2);
+    // The write, the refusal and, since #420, the write-group stamp: one
+    // request, so the refusal takes all three with it.
+    assert_eq!(transport.sent.borrow()[0].statements.len(), 3);
 
     for body in NO_INDEX {
         let transport = Scripted::answering(400, body);

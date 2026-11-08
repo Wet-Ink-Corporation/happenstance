@@ -2,11 +2,14 @@
 //!
 //! # Why a file rather than a `sqlx::migrate!`
 //!
-//! The manifest carries the argument in full. The short form: the schema is one
-//! migration applied to a schema created seconds earlier, so a migrator's
-//! version tracking has no history to track, and its `_sqlx_migrations`
-//! bookkeeping table is *per schema* — one row of bookkeeping per fixture
-//! instance, about a history that is one row long by construction.
+//! The manifest carries the argument in full. The short form: a migrator's
+//! `_sqlx_migrations` bookkeeping table is *per schema*, so one per fixture
+//! instance, about a history this crate keeps idempotent instead. Every
+//! migration here is `IF NOT EXISTS` throughout, so `apply` brings any schema,
+//! fresh or migrated by an older build, to what this build expects by running
+//! them all, and needs no record of which already ran. The event log has two
+//! since #420: `MIGRATION_1` and `MIGRATION_3`. (Named rather than linked: both
+//! are behind `event-store`, and this module is not.)
 //!
 //! # Why the SQL is `include_str!`d rather than written inline
 //!
@@ -24,29 +27,66 @@ use sqlx::PgExecutor;
 #[cfg(feature = "event-store")]
 use crate::error::PostgresEventStoreError;
 
-/// The schema this crate expects, as SQL.
+/// The event log's first migration, as SQL: the table, its sequence and
+/// indexes, and the store's identity.
 ///
 /// Exposed rather than private because a consumer running their own migration
 /// tooling needs the text, and the alternative is that they copy it out of the
-/// repository and it drifts. Applying it is [`apply`].
+/// repository and it drifts. It is not the whole schema this build expects:
+/// [`MIGRATION_3`] follows it. Applying both is [`apply`].
 ///
 /// It is idempotent: every object is created `IF NOT EXISTS`, so applying it to
-/// a schema that already has it is a no-op rather than an error.
+/// a schema that already has it is a no-op rather than an error. Its text is
+/// frozen since this crate's first publish; a change to the log is a new
+/// migration.
 #[cfg(feature = "event-store")]
 pub const MIGRATION_1: &str = include_str!("../migrations/0001_event_log.sql");
 
+/// The event log's second migration, as SQL: the write-group columns and
+/// their index (#420).
+///
+/// `write_group`, on every row, the lowest position the write that put the row
+/// in gave out, and `group_guard`, on that first row only, the guard an
+/// ingested group arrived under. A runner and a store peer read the log back
+/// in whole writes through them (SY-39). Both nullable with no default, so
+/// adding them rewrites no row; a row from before this migration reads as a
+/// group of its own.
+///
+/// **Apply it before deploying this build**: every `INSERT` this build sends
+/// names `write_group`, and fails against a table without it. Idempotent, as
+/// [`MIGRATION_1`] is. The index is built in the migration's transaction; the
+/// file says how to build it `CONCURRENTLY` first on a large table.
+///
+/// Numbered 3 because that is the directory's sequence:
+/// `migrations/0002_projection_checkpoint.sql` belongs to the other role.
+#[cfg(feature = "event-store")]
+pub const MIGRATION_3: &str = include_str!("../migrations/0003_write_group.sql");
+
+/// What [`apply`] sends: [`MIGRATION_1`], then [`MIGRATION_3`], as one batch.
+///
+/// `concat!` over the two `include_str!`s, so the batch is one constant
+/// compiled in and not a string assembled per call.
+#[cfg(feature = "event-store")]
+const EVENT_LOG: &str = concat!(
+    include_str!("../migrations/0001_event_log.sql"),
+    "\n",
+    include_str!("../migrations/0003_write_group.sql"),
+);
+
 /// The **event log's** schema version.
 ///
-/// One, and it stays one at first publish. The slice that wired ADR-0024's
-/// mechanism added its column to [`MIGRATION_1`] rather than opening a second
-/// migration, because nothing had ever shipped this schema to a consumer — both
-/// `publish = false` — so there was no deployed table to alter and "migration"
-/// was a schema-authoring concern rather than a data-movement one. It still is:
-/// this crate is not in the `0.2.0` release set, so no deployed table exists to
-/// alter. The licence to edit [`MIGRATION_1`] in place ends at *this crate's*
-/// first publish, not at the workspace's.
+/// Two: [`MIGRATION_1`] and [`MIGRATION_3`]. It was one through first
+/// publish, while the slice that wired ADR-0024's mechanism could still add
+/// its column to [`MIGRATION_1`] in place, because no deployed table existed to
+/// alter. That licence ended at this crate's first publish, so write groups,
+/// the first change to the log after it, are a migration of their own and a
+/// version of their own.
 ///
-/// `migrations/0002_projection_checkpoint.sql` is not a counter-example. It adds
+/// Nothing stores this number in the database: a schema carries no marker, and
+/// [`apply`] is idempotent, so bringing a schema up to this version is running
+/// [`apply`] against it.
+///
+/// `migrations/0002_projection_checkpoint.sql` is not part of it. It adds
 /// no object to the event log and belongs to the other role's lineage, which
 /// carries its own `PROJECTION_SCHEMA_VERSION` — named in code rather than
 /// linked, because that constant is behind the `projection-store` feature and
@@ -54,9 +94,10 @@ pub const MIGRATION_1: &str = include_str!("../migrations/0001_event_log.sql");
 /// that a DBA applying the files in order gets a working database for whichever
 /// roles they use.
 #[cfg(feature = "event-store")]
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
-/// Applies [`MIGRATION_1`] to whatever schema `executor` resolves against.
+/// Applies [`MIGRATION_1`] and then [`MIGRATION_3`] to whatever schema
+/// `executor` resolves against.
 ///
 /// Which schema that is depends on the connection's `search_path`, and this
 /// function deliberately does not set it: a caller pointing a pool at one schema
@@ -64,6 +105,14 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// that silently rewrites `search_path` breaks the first one. The test fixture
 /// creates a schema per instance and sets the path on the pool; a consumer does
 /// whatever their deployment does.
+///
+/// # Upgrading a schema an older build migrated
+///
+/// Run this against it, then deploy. Both migrations are idempotent, so on
+/// such a schema only [`MIGRATION_3`] does anything. Its `ALTER TABLE`s take
+/// a brief exclusive lock on `event`, and its index build blocks writes while
+/// it runs; `migrations/0003_write_group.sql` says how to build the index
+/// beforehand without blocking them.
 ///
 /// # Errors
 ///
@@ -77,8 +126,9 @@ where
     // `execute` rather than a prepared query: this is multiple statements, and
     // the extended protocol admits exactly one. Postgres runs a multi-statement
     // simple-protocol batch in an implicit transaction, so a failure part-way
-    // leaves no half-built table behind.
-    sqlx::raw_sql(MIGRATION_1).execute(executor).await?;
+    // leaves no half-built table behind, and a schema it reaches has both
+    // migrations or neither.
+    sqlx::raw_sql(EVENT_LOG).execute(executor).await?;
     Ok(())
 }
 
@@ -231,9 +281,88 @@ mod tests {
     }
 
     #[cfg(feature = "event-store")]
+    /// The event log's lineage is at two once migration 3 is on it (#420).
+    ///
+    /// This read `the_schema_version_is_one_until_first_publish` and asserted
+    /// one, under the licence to edit [`MIGRATION_1`] in place that ended at
+    /// this crate's first publish. Write groups are the first change to the
+    /// log after it, so they are a second migration and a second version,
+    /// which is what the expectation now pins.
     #[test]
-    fn the_schema_version_is_one_until_first_publish() {
-        assert_eq!(SCHEMA_VERSION, 1);
+    fn the_schema_version_counts_the_write_group_migration() {
+        assert_eq!(SCHEMA_VERSION, 2);
+    }
+
+    #[cfg(feature = "event-store")]
+    /// [`MIGRATION_3`](super::MIGRATION_3) with its `--` line comments
+    /// removed, as [`statements`] strips migration 1.
+    fn migration_3_statements() -> String {
+        super::MIGRATION_3
+            .lines()
+            .map(|line| line.split_once("--").map_or(line, |(code, _)| code))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[cfg(feature = "event-store")]
+    /// Migration 3 adds both write-group columns and the partial index the
+    /// group read looks rows up through, each `IF NOT EXISTS`, so applying it
+    /// twice is a no-op as applying migration 1 twice is.
+    #[test]
+    fn migration_3_adds_the_write_group_columns_and_their_index() {
+        let statements = migration_3_statements();
+        assert!(
+            !statements.contains("#420"),
+            "prose survived the strip, so the assertions below are scanning comments"
+        );
+        for expected in [
+            "ALTER TABLE event ADD COLUMN IF NOT EXISTS write_group bigint",
+            "ALTER TABLE event ADD COLUMN IF NOT EXISTS group_guard bytea",
+            "CREATE INDEX IF NOT EXISTS event_write_group_idx",
+            "WHERE write_group IS NOT NULL",
+        ] {
+            assert!(
+                statements.contains(expected),
+                "migration 3 has lost `{expected}`"
+            );
+        }
+        assert!(
+            !statements.contains("DEFAULT")
+                && !statements.contains("bigint NOT NULL")
+                && !statements.contains("bytea NOT NULL"),
+            "a default or a NOT NULL on a write-group column rewrites every row of an \
+             existing table, and the legacy rule needs NULL"
+        );
+    }
+
+    #[cfg(feature = "event-store")]
+    /// The guards that scan migration 1 for a sequence default hold for
+    /// migration 3 too: it never touches `position`.
+    #[test]
+    fn migration_3_puts_no_sequence_default_on_position() {
+        let statements = migration_3_statements();
+        for forbidden in ["bigserial", "serial", "AS IDENTITY", "position"] {
+            assert!(
+                !statements.contains(forbidden),
+                "migration 3 mentions `{forbidden}`; it adds two columns and an index, \
+                 and touches nothing migration 1 owns"
+            );
+        }
+    }
+
+    #[cfg(feature = "event-store")]
+    /// `apply` sends migration 1 and then migration 3, in one batch, so one
+    /// implicit transaction: a schema it reaches has both or neither.
+    #[test]
+    fn apply_sends_migration_1_then_migration_3() {
+        let batch = super::EVENT_LOG;
+        assert!(batch.starts_with(MIGRATION_1), "migration 1 goes first");
+        assert!(batch.ends_with(super::MIGRATION_3), "migration 3 goes last");
+        assert_eq!(
+            batch.len(),
+            MIGRATION_1.len() + 1 + super::MIGRATION_3.len(),
+            "the batch is the two migrations and the line between them, nothing else"
+        );
     }
 
     /// Migration 2 stores the authority rather than inferring it, and constrains

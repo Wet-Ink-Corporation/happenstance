@@ -1069,9 +1069,17 @@ async fn evaluate(
 ///
 /// # Why one statement rather than a row at a time
 ///
-/// The batch ceiling is 256 events at eight columns — 2,048 bound parameters,
+/// The batch ceiling is 256 events at nine columns — 2,304 bound parameters,
 /// comfortably inside the extended protocol's `int16` limit of 65,535, and one
 /// round trip instead of 256.
+///
+/// # The write group
+///
+/// Every row binds the batch's lowest position as its `write_group` (#420,
+/// I-2). An append has no conflict clause, so every position it drew is a
+/// row it wrote, and the lowest is the group's name. The lowest rather than
+/// the first drawn, though the sequence draws them in order: the name is
+/// defined as a minimum, so it is computed as one.
 async fn insert_batch(
     transaction: &mut Transaction<'static, Postgres>,
     events: &[Event],
@@ -1084,7 +1092,8 @@ async fn insert_batch(
         origin: Origin::Local,
         recorded_at,
     });
-    insert_statement(store_id, rows, &positions)
+    let group = positions.iter().copied().min();
+    insert_statement(store_id, rows, &positions, group)
         .build()
         .execute(&mut **transaction)
         .await?;
@@ -1164,21 +1173,29 @@ async fn allocate_positions(
     Ok(positions)
 }
 
+/// Binds per row in [`insert_statement`].
+const ROW_PARAMETERS: usize = 9;
+
 /// The one multi-row `INSERT INTO event` that append and ingest both send.
 ///
-/// Eight binds per row. A [`Origin::Local`] row binds `store_id` and its own
+/// Nine binds per row. A [`Origin::Local`] row binds `store_id` and its own
 /// position as its origin; a foreign row binds the origin it carries. Rows are
-/// paired with `positions` in order. No I/O, so the text is testable without a
-/// server. The builder owns its binds (ADR-0080 (b)), which is why it is
-/// `'static`.
+/// paired with `positions` in order. Every row binds `group` as its
+/// `write_group` (#420): an append's lowest position, an ingested group's
+/// first landed row for its compensation, and `None` for foreign rows, whose
+/// group is known only once the conflict clause has said which landed, and is
+/// stamped then. No I/O, so the text is testable without a server. The builder
+/// owns its binds (ADR-0080 (b)), which is why it is `'static`.
 fn insert_statement<'r>(
     store_id: StoreId,
     rows: impl IntoIterator<Item = NewRow<'r>>,
     positions: &[i64],
+    group: Option<i64>,
 ) -> sqlx::QueryBuilder<'static, Postgres> {
     let mut builder = sqlx::QueryBuilder::<Postgres>::new(
         "INSERT INTO event \
-         (position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at) ",
+         (position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at, \
+         write_group) ",
     );
     builder.push_values(
         rows.into_iter().zip(positions),
@@ -1205,7 +1222,8 @@ fn insert_statement<'r>(
                 .push_bind(tags)
                 .push_bind(origin_store.to_bytes().to_vec())
                 .push_bind(origin_position)
-                .push_bind(recorded_at.as_millis());
+                .push_bind(recorded_at.as_millis())
+                .push_bind(group);
         },
     );
     builder
@@ -1306,10 +1324,11 @@ fn now() -> RecordedAt {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppendOutcome, PostgresEventStore, PostgresEventStoreError, SERIALISATION_ATTEMPTS,
-        SERIALIZATION_FAILURE, is_serialisation_failure, retry_serialisation,
+        AppendOutcome, NewRow, Origin, PostgresEventStore, PostgresEventStoreError, ROW_PARAMETERS,
+        SERIALISATION_ATTEMPTS, SERIALIZATION_FAILURE, insert_statement, is_serialisation_failure,
+        retry_serialisation,
     };
-    use happenstance_core::{EventStore, SequencePosition};
+    use happenstance_core::{Event, EventStore, RecordedAt, SequencePosition, StoreId};
 
     /// Constraint 4: generic code binds the *bare* flavour, and a `Send`
     /// implementer must satisfy it. Instantiating the bound at this concrete
@@ -1432,6 +1451,43 @@ mod tests {
         assert_eq!(calls, 1);
         assert!(matches!(outcome, Err(ref error) if !is_serialisation_failure(error)));
     }
+
+    /// #420: the one `INSERT` names `write_group` as its ninth column and
+    /// binds it on every row, so a write records its group in the statement
+    /// that writes it and no follow-up `UPDATE` can be forgotten.
+    ///
+    /// **Named wrong statement:** the eight-column `INSERT` this crate sent
+    /// before migration 3, which leaves every appended row `NULL` and so a
+    /// group of one; both assertions fail on it.
+    #[test]
+    fn the_insert_binds_a_write_group_on_every_row() {
+        let events = [
+            Event::new("Grouped", b"a".to_vec()).expect("a valid event type"),
+            Event::new("Grouped", b"b".to_vec()).expect("a valid event type"),
+            Event::new("Grouped", b"c".to_vec()).expect("a valid event type"),
+        ];
+        let rows = events.iter().map(|event| NewRow {
+            event,
+            origin: Origin::Local,
+            recorded_at: RecordedAt::from_millis(1),
+        });
+
+        let statement = insert_statement(StoreId::from_bytes([1; 16]), rows, &[7, 8, 9], Some(7));
+        let sql = statement.sql();
+
+        assert!(
+            sql.starts_with(
+                "INSERT INTO event (position, event_type, data, metadata, tags, origin_store, \
+                 origin_position, recorded_at, write_group) "
+            ),
+            "{sql}"
+        );
+        assert_eq!(
+            sql.matches('$').count(),
+            events.len() * ROW_PARAMETERS,
+            "every row binds all nine columns: {sql}"
+        );
+    }
 }
 
 // `happenstance-sync`'s ingest port over the writer above (#108). A child
@@ -1439,3 +1495,10 @@ mod tests {
 // behind `sync`, off by default: see its module docs.
 #[cfg(feature = "sync")]
 mod ingest;
+
+// The write-group port (#420, SY-39): the log read back in the writes that
+// made it, and the stamp an ingested group's rows take. A child for the
+// reason `ingest` is one, and behind `sync` with it; the column it reads is
+// written unconditionally, by `insert_statement`.
+#[cfg(feature = "sync")]
+mod write_group;

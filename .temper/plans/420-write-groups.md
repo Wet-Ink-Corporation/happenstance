@@ -639,25 +639,25 @@ SQLite (`happenstance-sqlite`):
 
 ### PR 2 — Postgres and Neon
 
-- [ ] 34. Postgres `migration.rs` unit: `MIGRATION_3` adds both columns and the partial index;
+- [x] 34. Postgres `migration.rs` unit: `MIGRATION_3` adds both columns and the partial index;
       the comment-stripper guard tests cover it; `apply` sends 1 then 3.
-- [ ] 35. Postgres `insert_statement` text test: nine columns, `write_group` bound.
-- [ ] 36. Postgres live: an append's rows share `write_group = min(position)`; an ingest group
+- [x] 35. Postgres `insert_statement` text test: nine columns, `write_group` bound.
+- [x] 36. Postgres live: an append's rows share `write_group = min(position)`; an ingest group
       whose first foreign event is a re-delivery takes `first` from the lowest **landed** row
       (I-2); compensation joins.
-- [ ] 37. Postgres live: two concurrent 3-event appends (interleaved positions forced by a
+- [x] 37. Postgres live: two concurrent 3-event appends (interleaved positions forced by a
       shared sequence and a barrier, as the concurrency family does) read back as two whole
       groups in `first` order, and paging with `max_events = 3` returns each exactly once
       (the interleaving case §3 exists for).
-- [ ] 38. Postgres live: a schema with migration 1 only and pre-existing rows, then
+- [x] 38. Postgres live: a schema with migration 1 only and pre-existing rows, then
       `apply`: rows read as singletons; new appends group.
-- [ ] 39. Neon: `render(MIGRATION_3)` splits into three statements with no placeholder left;
+- [x] 39. Neon: `render(MIGRATION_3)` splits into three statements with no placeholder left;
       the ingest request carries the stamp statement after the refusal statement (request
       shape unit test, CF-33 permits adapter-local shape checks).
-- [ ] 40. Neon live (`live-neon` CI job): the negative tags never survive a commit
+- [x] 40. Neon live (`live-neon` CI job): the negative tags never survive a commit
       (`SELECT count(*) WHERE write_group < 0` = 0 after an ingest of three groups); guards
       round-trip.
-- [ ] 41. Both: `write_group_store_conformance!` mounted in `family.rs`, green; both
+- [x] 41. Both: `write_group_store_conformance!` mounted in `family.rs`, green; both
       `StoredGuard` variants classify `Stop`.
 
 ### PR 3 — Durable Object and the workerd harness
@@ -780,3 +780,33 @@ Architect decisions recorded for review (not H-16, but worth a glance):
     citation into the files this branch changed re-derived by a line mapping from the merge
     base, spec, standards, runbook and `.kb/open-questions` (not `_governance`, a record).
   - F4 CHANGELOG SY-30 entry describes the three pushed groups. F5/F7 recorded above.
+- 2026-11-08: PR 2 (items 34-41), Postgres and Neon, on `claude/p13-420b`. Red runs:
+  - 34: `migration_3_adds_the_write_group_columns_and_their_index` and
+    `apply_sends_migration_1_then_migration_3`: E0425, no `MIGRATION_3` / `EVENT_LOG`.
+  - 35: `the_insert_binds_a_write_group_on_every_row`: E0432 no `ROW_PARAMETERS`, E0061
+    `insert_statement` takes three arguments.
+  - 39: Neon `the_write_group_migration_renders_into_three_statements`: E0432 no
+    `MIGRATION_3`.
+  - 37 as a mutant: `GROUPS_SQL` ordered by `position` alone fails
+    `interleaved_writers_read_back_as_whole_groups_in_first_order` with
+    `GroupOrder { first: 1, after: 2 }`; the conformance family alone did not catch it.
+  Live: Postgres 17.10 in Docker. The lib `--ignored` run passed 39/39 (six write-group
+  rules, four `groups.rs` tests); `postgres_conformance` passed 110/110; the other live
+  binaries passed. The naive-arm cfg targets were not run (they need `RUSTFLAGS`) and are
+  left to CI. Neon: the unit and shape tests pass. Its rendered SQL (migrations 1+3, an
+  append, two ingests including a whole re-delivery, the group read) was executed by hand
+  against the local Postgres: 0 negative tags left, the guard on each first row only, the
+  read in group order. The live leg (`groups.rs`, the mounted family) is `live-neon`'s; the
+  existing lib `--ignored` invocation already runs it, so CI is unchanged.
+  Expectations moved, each implied by the design:
+  - Postgres `SCHEMA_VERSION` 1 -> 2 (migration 3).
+  - Both conformance files' settled column set and index list gain migration 3's two columns
+    and its index (line-neutral; ADR-0066 cites the Postgres lines).
+  - Neon ingest request: 2 -> 3 statements in two tests (the stamp joins the batch).
+  - Neon ingest SQL: `b.recorded_at FROM` becomes `b.recorded_at, -(b.grp + 1) FROM`.
+  Deviations: 37 forces the interleaving deterministically (two open transactions drawing
+  `nextval` alternately) rather than racing with a barrier. Neon refuses an unencodable guard
+  before sending, through `NeonError::UnstorableGuard { group }`, a variant §12 did not list.
+  Citations into Neon `event_store.rs` and the Postgres `insert_statement` were repointed in
+  the spec, standards, `.kb/open-questions` and the experiment README. Accepted `.kb/decisions`
+  bodies were not touched; see the report.
