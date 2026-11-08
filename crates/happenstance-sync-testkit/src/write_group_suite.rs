@@ -217,10 +217,10 @@ pub mod write_group_rules {
     ///
     /// A store that names a group by the first position it **allocated** for
     /// it rather than the first row it wrote. On a store whose sequence burns
-    /// a value for each skipped re-delivery, as a Postgres sequence does, that
-    /// position belongs to no row of the group. SQLite and the in-memory
-    /// stores burn nothing and cannot make the mistake; this rule is for the
-    /// stores that can. The wrong store is in
+    /// a value for each skipped re-delivery, as a Postgres sequence and
+    /// SQLite's `AUTOINCREMENT` both do, that position belongs to no row of
+    /// the group. Only the in-memory stores burn nothing and cannot make the
+    /// mistake. The wrong store is in
     /// `tests/wrong_write_group_stores.rs`.
     ///
     /// # Errors
