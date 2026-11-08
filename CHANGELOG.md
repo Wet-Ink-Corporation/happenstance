@@ -170,6 +170,24 @@ not the same as what a user needed to be told.
   compensation used to commit with a NULL origin.
   `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
   is `#[non_exhaustive]`).
+- **`happenstance-sync`: every pull and push answer names its responder, and
+  the wire format is version 3** (#244, ADR-0104). **Breaking, for `0.6.0`.**
+  `Pulled` and `Ack` gain a last field, `responder: Option<StoreId>`: the
+  store incarnation that answered, so a runner can tell that a peer was
+  restored or re-minted under a new `StoreId` (VT-6). `Pulled::new` and
+  `Ack::default()` say `None`; `Pulled::with_responder` and
+  `Ack::with_responder` say more. Code that builds either type through its
+  constructor compiles unchanged; both were already `#[non_exhaustive]`.
+  `StoreSyncPeer` stamps its store's `store_id()` on every answer, read on each
+  call and never cached, which costs one more store read per pull and per push
+  (on Neon, one more read-only round trip to the database; none on the sync
+  wire). `StorePeerError` gains `Identity`, for an identity that could not be
+  read, classed by the store's error. `serve_sync` and `RemoteSyncPeer` carry
+  the field through the envelope. The field is a shape change, so
+  `wire::FORMAT_VERSION` is now 3, and a version-2 buffer is refused as
+  `WireError::UnsupportedFormatVersion`: **every peer in a deployment upgrades
+  together**. The key is required: a JSON pulled or ack without `responder`
+  is refused as a missing field, rather than read as naming none.
 - `happenstance-sqlite`: migration 2 (#420). Every open adds `write_group`
   and `group_guard` to `event` on a file whose marker reads 1, and raises the
   marker to 2 in the same transaction; `SCHEMA_VERSION` is `2`. Every row an

@@ -15,8 +15,8 @@ use happenstance_core::{
 };
 use happenstance_sync::wire::{CodecError, FORMAT_VERSION, ResumeToken, Route, WireError};
 use happenstance_sync::{
-    Classify, EventGroup, FailureClass, PeerLimits, PushBatch, RemoteError, RemoteSyncPeer,
-    ReplicatedEvent, SendExchange, ServeError, StoreSyncPeer, SyncPeer, serve_sync,
+    Classify, EventGroup, FailureClass, IngestStore, PeerLimits, PushBatch, RemoteError,
+    RemoteSyncPeer, ReplicatedEvent, SendExchange, ServeError, StoreSyncPeer, SyncPeer, serve_sync,
 };
 use happenstance_sync_testkit::{
     IngestFixture, MemoryIngestFixture, MemoryIngestHandle, RefusalsOf, SyncFixture,
@@ -148,6 +148,25 @@ async fn the_remote_token_resumes_where_the_far_side_left_off() {
 
     assert_eq!(first.resume, ResumeToken::new("1"));
     assert_eq!(second.batch, PushBatch::empty());
+}
+
+/// The far store's identity crosses the envelope on both replies (ADR-0104).
+///
+/// **Wrong implementation it rejects:** a `serve_sync` that rebuilds the
+/// pulled reply through `Pulled::new` and so drops the responder on the way
+/// onto the wire, which no in-process test of `StoreSyncPeer` can see.
+#[tokio::test]
+async fn the_responder_survives_the_envelope_on_pull_and_push() {
+    let (peer, store) = remote().await;
+    let named = IngestStore::store_id(&store)
+        .await
+        .expect("the in-memory store's error is uninhabited");
+
+    let ack = peer.push(&awkward_batch()).await.expect("a push");
+    let pulled = peer.pull(None).await.expect("a pull");
+
+    assert_eq!(ack.responder, Some(named), "the ack");
+    assert_eq!(pulled.responder, Some(named), "the pulled reply");
 }
 
 /// Over a `Send` exchange the pull's future is `Send`: a runner can hand it to

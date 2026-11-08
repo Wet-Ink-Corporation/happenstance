@@ -200,7 +200,7 @@ mod tests {
 
     /// `FORMAT_VERSION` as its one-byte postcard varint, for building buffers
     /// by hand. Pinned by `the_version_byte_is_the_format_version`.
-    const FORMAT_VERSION_BYTE: u8 = 0x02;
+    const FORMAT_VERSION_BYTE: u8 = 0x03;
 
     #[test]
     fn the_version_byte_is_the_format_version() {
