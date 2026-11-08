@@ -166,8 +166,9 @@ async fn the_push_stops_at_the_first_event_over_the_per_event_limit() {
 /// refusal states the class (SY-36); the runner neither skips it nor infers a
 /// class. The peer here refuses through its batch budget, the one limit
 /// `MemorySyncPeer` polices on a push. Rejects a runner that pushes nothing
-/// and reports success, which stalls the edge with no failure anyone sees,
-/// and one that sends the event after it in the same push.
+/// and reports success, which stalls the edge with no failure anyone sees.
+/// It cannot tell whether the event after rides along, because the batch
+/// budget would shut that one out anyway: the next test pins that.
 #[tokio::test]
 async fn a_first_event_over_the_per_event_limit_is_offered_alone_and_refused() {
     let mut limits = PeerLimits::minimum();
@@ -195,6 +196,67 @@ async fn a_first_event_over_the_per_event_limit_is_offered_alone_and_refused() {
     );
     assert_eq!(edge.status().confirmed, None);
     assert_eq!(edge.status().pending, Pending::Exactly(2));
+}
+
+/// A first event over the per-event limit goes alone even when the batch has
+/// room for the next. Rejects a gather that, having taken the oversized
+/// event, keeps the run open: it would push the 1-byte event behind it in the
+/// same group, past the point the peer can be expected to refuse. The peer
+/// accepts the lone event here, since `MemorySyncPeer` does not police
+/// `max_event_bytes` on a push.
+#[tokio::test]
+async fn a_first_event_over_the_per_event_limit_closes_the_run() {
+    let mut limits = PeerLimits::minimum();
+    limits.max_event_bytes = 5;
+    limits.max_batch_bytes = 100;
+    let peer = MemorySyncPeer::with_limits(FAR, limits);
+    let store = MemoryIngestStore::with_store_id(LOCAL);
+    let positions = append_sized(&store, &[9, 1]).await;
+    let mut edge = Edge::new();
+
+    let stepped = edge.step(&peer, &store).await.expect("an in-memory step");
+
+    assert_eq!(stepped.pushed, 1, "the oversized event went alone");
+    assert_eq!(edge.status().confirmed, positions.first().copied());
+    assert_eq!(edge.status().pending, Pending::Exactly(1));
+}
+
+/// An event of exactly `max_event_bytes` fits. Rejects a gather that reads
+/// the limit as exclusive, which would cut the run after the first event.
+#[tokio::test]
+async fn an_event_of_exactly_the_per_event_limit_fits() {
+    let mut limits = PeerLimits::minimum();
+    limits.max_event_bytes = 5;
+    limits.max_batch_bytes = 100;
+    let peer = MemorySyncPeer::with_limits(FAR, limits);
+    let store = MemoryIngestStore::with_store_id(LOCAL);
+    let positions = append_sized(&store, &[5, 5]).await;
+    let mut edge = Edge::new();
+
+    let stepped = edge.step(&peer, &store).await.expect("an in-memory step");
+
+    assert_eq!(stepped.pushed, 2);
+    assert_eq!(edge.status().confirmed, positions.get(1).copied());
+    assert_eq!(edge.status().pending, Pending::Exactly(0));
+}
+
+/// A run summing to exactly `max_batch_bytes` fits. Rejects a gather that
+/// reads the batch budget as exclusive, which would leave the last event out.
+#[tokio::test]
+async fn a_run_of_exactly_the_batch_budget_fits() {
+    let mut limits = PeerLimits::minimum();
+    limits.max_event_bytes = 10;
+    limits.max_batch_bytes = 10;
+    let peer = MemorySyncPeer::with_limits(FAR, limits);
+    let store = MemoryIngestStore::with_store_id(LOCAL);
+    let positions = append_sized(&store, &[4, 6]).await;
+    let mut edge = Edge::new();
+
+    let stepped = edge.step(&peer, &store).await.expect("an in-memory step");
+
+    assert_eq!(stepped.pushed, 2);
+    assert_eq!(edge.status().confirmed, positions.get(1).copied());
+    assert_eq!(edge.status().pending, Pending::Exactly(0));
 }
 
 /// The byte budget ends the run at the first event that does not fit. Rejects
