@@ -30,6 +30,14 @@ use crate::wire::{CodecError, PullRequest, ResumeToken, Route, decode, encode};
 ///   [`Error`](Self::Error) stating its own [class](Classify) (SY-36). An HTTP
 ///   transport reads that class back from the status `serve_sync`'s error was
 ///   mapped to.
+/// * The reply is bounded. A transport caps the reply body it will read at
+///   about the declared [`max_batch_bytes`](PeerLimits::max_batch_bytes) plus
+///   the envelope's overhead, and refuses a longer one rather than buffering
+///   it: the bytes come from a peer, and [`RemoteSyncPeer`] decodes whatever
+///   it is handed.
+/// * The round trip is bounded in time. A transport puts a timeout on the
+///   request and returns a failure when it expires, so a far side that never
+///   answers cannot hold a pull or a push open forever.
 #[trait_variant::make(SendExchange: Send)]
 pub trait Exchange {
     /// How the transport fails, each failure stating its class. No `Send`
@@ -54,7 +62,12 @@ pub trait Exchange {
 /// back verbatim to the far side that minted it.
 ///
 /// Implements the bare [`SyncPeer`], so a `!Send` exchange is a valid
-/// transport; over a concrete `Send` exchange its futures are `Send` too.
+/// transport. Over a concrete `Send` exchange its futures are `Send` too, but
+/// the type does not implement [`SendSyncPeer`](crate::SendSyncPeer), and
+/// coherence forbids adding it beside the bare impl: `trait_variant`'s
+/// blanket impl already gives every `SendSyncPeer` the bare trait. A runner that spawns and binds
+/// `SendSyncPeer` needs a separate Send-flavour type, which can be added later
+/// without a break (#421).
 #[derive(Debug, Clone)]
 pub struct RemoteSyncPeer<X> {
     exchange: X,

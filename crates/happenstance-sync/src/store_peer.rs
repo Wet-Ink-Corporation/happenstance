@@ -28,17 +28,16 @@
 //! [`SequencedEvent`](happenstance_core::SequencedEvent)s, and nothing on one
 //! says which `append` or [`ingest`](IngestStore::ingest) group it was written
 //! in: **the boundaries the far store wrote are not recoverable through the
-//! port.** So a pull hands back its whole page as **one** [`EventGroup`]. That
-//! is never finer than what the origin wrote — every origin group inside the
-//! page arrives whole, and the reader ingests the page atomically — and it is
-//! what keeps SY-2's losing event beside its compensation.
+//! port** (#420). So a pull hands back its whole page as **one** [`EventGroup`].
+//! Every origin group that fits inside one page arrives whole, and the reader
+//! ingests the page atomically.
 //!
-//! What it cannot do is keep an origin group whole across a page cut. When the
-//! budget ends inside a group the far store wrote, the page carries its head
-//! and the next pull its tail. The alternative that lost, one group per event,
-//! splits *every* group and fails `compensation_is_atomic_with_the_losing_event`
-//! by name; a store that can expose its write boundaries would need a read
-//! capability the port does not have.
+//! **A group that crosses a page boundary is split.** When the budget ends
+//! inside a group the far store wrote, the page carries its head and the next
+//! pull its tail. That includes a losing event and the compensation written
+//! beside it (SY-2): a relay that pulls from this peer can deliver the two in
+//! separate pages. Keeping such a group whole needs the far store to expose its
+//! write boundaries, which is #420.
 //!
 //! The pulled group's [`guard`](EventGroup::guard) is `None`. No store keeps
 //! the condition an event was appended under, so there is nothing to forward;
@@ -74,9 +73,13 @@ use crate::peer::{
 /// same store**. A peer whose pushes land somewhere its pulls never read
 /// acknowledges events it will never forward.
 ///
-/// Implements the bare [`SyncPeer`], so a `!Send` store — the Durable Object's
-/// — is a valid far side. Bind it as `SyncPeer` in generic code (RS-20-2); for
-/// concrete `Send` stores its futures are `Send` too.
+/// # It never adjudicates
+///
+/// A push ingests with **no compensation**: the store peer only replicates.
+/// A hub served by this peer, directly or behind
+/// [`serve_sync`](crate::serve_sync), therefore cannot author a compensation,
+/// and cannot be the peer SY-7 makes the adjudicator. An adjudication hook is
+/// planned with SY-7 (#136).
 ///
 /// # Limits
 ///
@@ -84,6 +87,26 @@ use crate::peer::{
 /// a pull to. Declare no more than the store accepts: an event the declaration
 /// admits and the store's ingest refuses is the failure SY-18 exists to move
 /// ahead of the push.
+///
+/// The declaration binds pulls too, and that includes events the far store
+/// appended locally, which no push limit checked. An event at the head of the
+/// unread log whose payload is over the declared
+/// [`max_event_bytes`](PeerLimits::max_event_bytes) cannot travel in any page:
+/// every pull from there on returns an empty page, [`Waiting::Unknown`] and the
+/// token it was given, and replication **stalls at that event** until the far
+/// side declares a larger limit. Declare at least the largest payload the
+/// store's own writers accept.
+///
+/// # Send
+///
+/// Implements the bare [`SyncPeer`], so a `!Send` store, such as the Durable
+/// Object's, is a valid far side. Bind it as `SyncPeer` in generic code
+/// (RS-20-2). For concrete `Send` stores its futures are `Send` too, but the
+/// type does not implement [`SendSyncPeer`](crate::SendSyncPeer), and
+/// coherence forbids adding it beside the bare impl: `trait_variant`'s
+/// blanket impl already gives every `SendSyncPeer` the bare trait. A runner that spawns and binds
+/// `SendSyncPeer` needs a separate Send-flavour type, which can be added later
+/// without a break (#421).
 ///
 /// # Examples
 ///
@@ -291,7 +314,9 @@ where
     /// acknowledges with the store's watermark after the write.
     ///
     /// The travelling guards are not evaluated (SY-1) and not stored: no store
-    /// keeps one.
+    /// keeps one. Nothing here detects a conflict or writes a compensation, so
+    /// this peer cannot be SY-7's adjudicator; the hook for that is planned
+    /// with SY-7 (#136).
     ///
     /// # Errors
     ///

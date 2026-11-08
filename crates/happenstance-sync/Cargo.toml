@@ -40,11 +40,9 @@ happenstance-core = { workspace = true, features = ["std", "serde"] }
 # carries a `Serialize` derive and a hand-written `Deserialize`. The message types
 # carry derives since #114, when the message set was decided — see `lib.rs`.
 serde.workspace = true
-# The bytes `serve_sync` and `RemoteSyncPeer` exchange (#117). No longer
-# dev-only, as `happenstance` moved it before: the workspace entry's comment
-# says why its default features are off. Unconditional rather than behind a
-# feature, because the Durable Object side mounts `serve_sync` on wasm32 with
-# no features at all, and postcard builds there.
+# The bytes `serve_sync` and `RemoteSyncPeer` exchange (#117). The workspace
+# entry's comment says why its default features are off. Unconditional: the
+# Durable Object side mounts `serve_sync` on wasm32 with no features at all.
 postcard.workspace = true
 thiserror.workspace = true
 trait-variant.workspace = true

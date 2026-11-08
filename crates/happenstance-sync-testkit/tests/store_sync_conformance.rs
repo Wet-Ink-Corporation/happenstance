@@ -158,6 +158,41 @@ async fn a_page_cut_by_count_does_not_say_nothing_and_the_last_page_does() {
     assert_eq!(second.waiting, Waiting::Nothing);
 }
 
+/// An event the far store's own writer accepted, over the declared
+/// `max_event_bytes`, fits no page: replication stalls at it rather than
+/// skipping it or sending it over the limit.
+#[tokio::test]
+async fn an_oversized_local_event_at_the_head_stalls_the_pull_on_one_token() {
+    let (peer, store) = peer_over(PeerLimits::minimum()).await;
+    let declared = peer.limits().max_event_bytes;
+    let append = |payload: Vec<u8>| {
+        let store = &store;
+        async move {
+            EventStore::append(
+                store,
+                &[Event::new("Local", payload).expect("a valid event")],
+                None,
+            )
+            .await
+            .expect("the far store's own writer has no declared limit")
+        }
+    };
+    append(b"before".to_vec()).await;
+    let first = peer.pull(None).await.expect("a first pull");
+    append(vec![0; declared + 1]).await;
+    append(b"after".to_vec()).await;
+
+    let stalled = peer.pull(Some(&first.resume)).await.expect("a pull");
+    let again = peer.pull(Some(&stalled.resume)).await.expect("a pull");
+
+    assert_eq!(first.batch.events().count(), 1);
+    for pulled in [&stalled, &again] {
+        assert_eq!(pulled.batch, PushBatch::empty());
+        assert_eq!(pulled.waiting, Waiting::Unknown, "the log goes on");
+        assert_eq!(pulled.resume, first.resume, "the token never moves");
+    }
+}
+
 /// No group boundary is recoverable from `EventStore::read`, so a page is one
 /// group: never finer than what the origin wrote.
 #[tokio::test]

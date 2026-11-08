@@ -11,9 +11,12 @@
 //! [`Envelope`]'s `Deserialize` reaches a postcard caller as a bare
 //! `SerdeDeCustom`, indistinguishable from any other malformed buffer. Reading
 //! the `u16` off the front with `take_from_bytes` and handing it to
-//! [`check_format_version`] is the route that keeps "a peer one version ahead,
-//! park this" apart from "garbage, drop this", which is the whole reason the two
-//! are separate errors.
+//! [`check_format_version`] is the route that keeps a peer one version ahead
+//! apart from garbage. Both are class [`Stop`](FailureClass::Stop): the same
+//! bytes fail the same way on every retry. They are separate variants because
+//! the remedy differs, and the variant is what tells the operator which one to
+//! apply: [`CodecError::UnsupportedVersion`] asks for an upgrade on one side,
+//! [`CodecError::Malformed`] for a fix to whatever mangled the buffer.
 
 use alloc::vec::Vec;
 

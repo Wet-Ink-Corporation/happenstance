@@ -49,8 +49,10 @@ not the same as what a user needed to be told.
   is `ForeignToken`, `Stop`; a transport failure keeps the `Exchange` error's
   own class. `postcard` becomes a normal dependency of the crate. A pull hands
   its page back as one group, because `EventStore::read` does not say which
-  write an event came in: every origin group inside a page arrives whole, and
-  one that straddles a page cut is split. Both peers pass
+  write an event came in (#420): every origin group inside a page arrives
+  whole, and one that straddles a page cut is split. `StoreSyncPeer` ingests
+  with no compensation, so it cannot be SY-7's adjudicator; that hook is
+  planned with SY-7 (#136). Both peers pass
   `sync_peer_conformance!`, and `StoreSyncPeer` the model family too.
 
 ## [0.5.1] — 2026-11-08

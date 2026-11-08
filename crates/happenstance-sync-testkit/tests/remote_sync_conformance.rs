@@ -146,6 +146,21 @@ async fn the_remote_token_resumes_where_the_far_side_left_off() {
     assert_eq!(second.batch, PushBatch::empty());
 }
 
+/// Over a `Send` exchange the pull's future is `Send`: a runner can hand it to
+/// `tokio::spawn`, which refuses anything else at compile time (#421).
+#[tokio::test]
+async fn a_remote_pull_over_a_send_exchange_can_be_spawned() {
+    let (peer, _) = remote().await;
+    peer.push(&awkward_batch()).await.expect("a push");
+
+    let pulled = tokio::spawn(async move { peer.pull(None).await })
+        .await
+        .expect("the spawned pull ran to completion")
+        .expect("a pull");
+
+    assert_eq!(pulled.batch, awkward_batch());
+}
+
 #[tokio::test]
 async fn a_token_the_far_side_never_minted_is_stop_through_the_exchange() {
     let (peer, _) = remote().await;
