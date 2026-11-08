@@ -382,7 +382,8 @@ build of `happenstance-core` (three configurations in all with the workspace
 item is broken at neither end of that range and only in the middle, which is
 where a consumer stands), a default-features doc build of `happenstance` for
 the same reason, a layer up (#91: a link into an `unstable-projection` item),
-and a `cargo package --list` assertion that each of the **nine** publishable
+and one of `happenstance-testkit` (#396: a link into a `proptest` item), and a
+`cargo package --list` assertion that each of the **nine** publishable
 crates — `happenstance-core`, `happenstance`, `happenstance-testkit`,
 `happenstance-sqlite`, `happenstance-cloudflare`, `happenstance-postgres`,
 `happenstance-neon`, `happenstance-sync` and `happenstance-sync-testkit` — carries both licence files
@@ -437,10 +438,10 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   [ADR-0074](.kb/decisions/0074-projection-apply-is-async.md) makes the typed
   layer's `Projection::apply` async, handed a `Delivered<E>` and a batch it can
   issue statements through, on `experiments/apply-shape`'s evidence against a
-  live Postgres. Phase 18 builds it; until then the shipped `apply` is still
-  synchronous, which is why `happenstance`'s `unstable-projection` still gates
-  the *runner*, while `happenstance-core`'s feature of the same name, retained
-  empty for `0.2.0` manifests after ADR-0063, is removed in `0.4.0`.
+  live Postgres. Phase 18 built it and `0.5.0` shipped it: the runner left
+  `happenstance`'s `unstable-projection` feature, which `0.5.0` removed, as
+  `happenstance-core`'s feature of the same name, retained empty for `0.2.0`
+  manifests after ADR-0063, was removed in `0.4.0`.
 - ~~**SQLite driver** (`rusqlite` vs `sqlx`).~~ Settled at phase 2 by building
   both: `happenstance-sqlite` is `rusqlite`, `happenstance-postgres` is `sqlx`,
   and the two are in the tree for different reasons rather than as candidates.

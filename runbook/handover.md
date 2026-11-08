@@ -20,8 +20,8 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.5.1` is prepared, not yet tagged.** Its release PR, for `main`, moves `[Unreleased]`
-to `[0.5.1] — 2026-11-08` and all nine crates to `0.5.1`. It changes no public API: the
+**`0.5.1` is released** (2026-11-08; tag `v0.5.1` on `68baaecc`, all nine crates on
+crates.io and docs.rs). It changes no public API: the
 testkit's rustdoc builds under its default features again (#396) and neon's with
 `--no-default-features` (#409), the gate builds the testkit's docs that way (#412), and
 the rest is documentation, tests and an experiment (#381, #389, #397, #398, #400, #401).
