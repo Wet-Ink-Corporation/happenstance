@@ -71,7 +71,7 @@ pub(super) struct Side<S> {
 #[derive(Debug)]
 pub(super) struct Conflict<S> {
     /// The assigned adjudicator, then the side the assignment did not name
-    /// (or, under [`Assignment::EverySide`], named as well).
+    /// (or, under the test-only `Assignment::EverySide`, named as well).
     pub(super) sides: [Side<S>; 2],
 }
 
