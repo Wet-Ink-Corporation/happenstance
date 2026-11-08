@@ -10,7 +10,9 @@
 //! The write-group family (#420) runs through the same opener, because its
 //! rules take the same `IngestFixture`: [`crate::write_group`] lists its names
 //! and calls this module's crate-private `run_family` with
-//! `Family::WriteGroup`.
+//! `Family::WriteGroup`. So does the sync family (#130), with
+//! `Family::SyncPeer`: [`crate::sync_peer`] lists its names, and each peer
+//! fixture a rule opens wraps one ingest fixture from this opener.
 //!
 //! # The guard against a bespoke emitter dropping rules
 //!
@@ -30,6 +32,7 @@ use happenstance_testkit::RuleOutcome;
 use crate::dispatch::{Dispatched, namespace_pool};
 use crate::fixture::HarnessFaults;
 use crate::ingest::fixture::WorkerdIngestFixture;
+use crate::sync_peer::fixture::WorkerdSyncFixture;
 
 /// CF-18's machine-checked half for the ingest family, which
 /// `ingest_store_conformance!` emits around every harness.
@@ -72,6 +75,10 @@ pub(crate) enum Family {
     /// `for_each_write_group_rule!` (#420), which emits no declension check:
     /// see [`crate::write_group`].
     WriteGroup,
+    /// `for_each_sync_peer_rule!` (#130), each rule handed
+    /// [`WorkerdSyncFixture`]s built over this opener's ingest fixtures, and
+    /// no declension check either: see [`crate::sync_peer`].
+    SyncPeer,
 }
 
 /// [`run`]'s body, for the rule called `rule` of `family`.
@@ -148,12 +155,32 @@ pub(crate) async fn run_family(
         };
     }
 
+    // The sync family's twin: the testkit's public `rules`, which answer a
+    // violation as a value too, each handed a peer fixture over an ingest
+    // fixture from the same opener, so a failed `open` is recorded the same way.
+    let open_peer = async || WorkerdSyncFixture::new(open().await);
+    macro_rules! emit_sync_peer_dispatch {
+        ($($name:ident),* $(,)?) => {
+            match rule {
+                $(
+                    ::core::stringify!($name) => Some(
+                        happenstance_sync_testkit::rules::$name(open_peer).await,
+                    ),
+                )*
+                _ => None,
+            }
+        };
+    }
+
     let outcome = match family {
         Family::Ingest => {
             happenstance_sync_testkit::for_each_ingest_store_rule!(emit_ingest_dispatch)
         }
         Family::WriteGroup => {
             happenstance_sync_testkit::for_each_write_group_rule!(emit_write_group_dispatch)
+        }
+        Family::SyncPeer => {
+            happenstance_sync_testkit::for_each_sync_peer_rule!(emit_sync_peer_dispatch)
         }
     };
 

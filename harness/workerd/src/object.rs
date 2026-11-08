@@ -15,6 +15,7 @@ mod idling;
 mod ingesting;
 mod reminting;
 mod restarts;
+mod syncing;
 
 use core::cell::{OnceCell, RefCell};
 
@@ -127,10 +128,15 @@ impl DurableObject for ConformanceObject {
             (Some("write-group-rules"), None) => {
                 Response::ok(crate::write_group::rule_names().join("\n"))
             }
+            (Some("sync-peer-rules"), None) => {
+                Response::ok(crate::sync_peer::rule_names().join("\n"))
+            }
+            (Some("sync"), Some(_)) => self.syncing().serve(req).await,
+            (Some("sync-reset"), None) => self.syncing().reset().await,
             (
                 Some(
-                    route
-                    @ ("ingest-rule" | "ingest-ceiling" | "ingest-class" | "write-group-rule"),
+                    route @ ("ingest-rule" | "ingest-ceiling" | "ingest-class" | "write-group-rule"
+                    | "sync-peer-rule"),
                 ),
                 Some(arg),
             ) => {
@@ -225,6 +231,14 @@ impl DurableObject for ConformanceObject {
 }
 
 impl ConformanceObject {
+    /// The context `/sync/...` and `/sync-reset` run in.
+    const fn syncing(&self) -> syncing::Syncing<'_> {
+        syncing::Syncing {
+            state: &self.state,
+            object_state: &self.object_state,
+        }
+    }
+
     /// `instance=<nonce> wasm=<nonce>`: which construction answered, and in
     /// which wasm instance.
     fn witness(&self) -> String {

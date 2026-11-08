@@ -25,7 +25,10 @@
 //! The other direction is checked here too. [`spawns_from_generic`] drives every
 //! `SendIngestStore` method inside `tokio::spawn` from a function bound only on
 //! that flavour, so the `Send` the flavour promises is checked against the
-//! trait's declaration, not against a concrete store's future (#341).
+//! trait's declaration, not against a concrete store's future (#341). The
+//! network peer's two halves, `StoreSyncPeer` and `RemoteSyncPeer`, go through
+//! the same generic spawns wrapped in `SendPeer`: without it each call is
+//! `error[E0277]`, "`SendSyncPeer` is not implemented" (#421).
 //!
 //! One flavour name is imported per trait, the bare one, and the `Send` flavour
 //! is reached by full path where a delegation needs it (CLAUDE.md rule 4).
@@ -40,11 +43,13 @@ use happenstance_core::{
     AppendCondition, AppendError, Event, EventId, EventStore, MemoryEventStore, MemoryStoreError,
     Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
+use happenstance_sync::wire::Route;
 use happenstance_sync::write_group::{GroupOrderError, GroupPageBuilder};
 use happenstance_sync::{
     Classify, EventGroup, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
     MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
-    PushBatch, ReplicatedEvent, SyncPeer, Waiting, Watermark, WriteGroupStore,
+    PushBatch, RemoteSyncPeer, ReplicatedEvent, SendPeer, ServeError, StoreSyncPeer, SyncPeer,
+    Waiting, Watermark, WriteGroupStore, serve_sync,
 };
 
 /// The failure [`exchange`] reports: any of the three ports' own errors.
@@ -758,4 +763,165 @@ async fn a_spawned_edge_runs_from_generic_code() {
         .expect("the spawned task does not panic");
 
     assert_eq!(synced, Ok(true), "the run synced in the task");
+}
+
+// ---------------------------------------------------------------------------
+// The network peer's halves cross threads from generic code (#421)
+// ---------------------------------------------------------------------------
+
+/// A far store a [`StoreSyncPeer`] can own: a cheap handle onto one shared
+/// [`MemoryIngestStore`], of the `Send` flavour, so the far side is `Send`
+/// all the way down and only the peer's own flavour is in question.
+#[derive(Debug, Clone)]
+struct Shared(Arc<MemoryIngestStore>);
+
+impl happenstance_sync::SendWriteGroupStore for Shared {
+    type Error = GroupOrderError;
+
+    async fn read_groups(
+        &self,
+        after: Option<SequencePosition>,
+        max_events: NonZeroUsize,
+    ) -> Result<GroupPage, Self::Error> {
+        happenstance_sync::SendWriteGroupStore::read_groups(&*self.0, after, max_events).await
+    }
+}
+
+impl happenstance_sync::SendIngestStore for Shared {
+    type Error = MemoryStoreError;
+
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        happenstance_sync::SendIngestStore::store_id(&*self.0).await
+    }
+
+    async fn ingest(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<Ingested, IngestError<Self::Error>> {
+        happenstance_sync::SendIngestStore::ingest(&*self.0, groups).await
+    }
+
+    async fn watermark(&self) -> Result<Watermark, Self::Error> {
+        happenstance_sync::SendIngestStore::watermark(&*self.0).await
+    }
+}
+
+/// The transport: a function call into [`serve_sync`], bytes in and bytes
+/// out, so a [`RemoteSyncPeer`] over it walks the whole envelope path.
+#[derive(Debug, Clone)]
+struct Loopback {
+    far: StoreSyncPeer<Shared, Shared>,
+}
+
+impl happenstance_sync::SendExchange for Loopback {
+    type Error = ServeError<GroupOrderError, MemoryStoreError>;
+
+    async fn exchange(&self, route: Route, request: Vec<u8>) -> Result<Vec<u8>, Self::Error> {
+        serve_sync(&self.far, route, &request).await
+    }
+}
+
+/// A hub holding one event of its own, and a device holding one of its own:
+/// what a run between them must exchange in both directions.
+struct TwoSides {
+    hub: Arc<MemoryIngestStore>,
+    hub_event: EventId,
+    device: Arc<MemoryIngestStore>,
+    device_event: EventId,
+}
+
+impl TwoSides {
+    async fn new() -> Self {
+        let hub_id = StoreId::from_bytes([7; 16]);
+        let device_id = StoreId::from_bytes([9; 16]);
+        let hub = Arc::new(MemoryIngestStore::with_store_id(hub_id));
+        let device = Arc::new(MemoryIngestStore::with_store_id(device_id));
+        let event = || Event::new("CourseCapacityChanged", "{}").expect("a valid event type");
+        let on_hub = EventStore::append(&*hub, &[event()], None)
+            .await
+            .expect("an in-memory append does not fail");
+        let on_device = EventStore::append(&*device, &[event()], None)
+            .await
+            .expect("an in-memory append does not fail");
+        Self {
+            hub,
+            hub_event: EventId::new(hub_id, on_hub),
+            device,
+            device_event: EventId::new(device_id, on_device),
+        }
+    }
+
+    /// The hub's side of a network peer, over handles onto the shared hub.
+    fn far(&self) -> StoreSyncPeer<Shared, Shared> {
+        let handle = Shared(Arc::clone(&self.hub));
+        StoreSyncPeer::new(handle.clone(), handle)
+    }
+
+    /// Whether each side now holds the other's event.
+    async fn both_crossed(&self) -> (bool, bool) {
+        let to_device = EventStore::contains_event_id(&*self.device, self.hub_event)
+            .await
+            .expect("an in-memory probe does not fail");
+        let to_hub = EventStore::contains_event_id(&*self.hub, self.device_event)
+            .await
+            .expect("an in-memory probe does not fail");
+        (to_device, to_hub)
+    }
+}
+
+/// A [`StoreSyncPeer`] run by [`edge_runs_from_generic`], which knows it only
+/// as a [`SendSyncPeer`](happenstance_sync::SendSyncPeer), on a multi-threaded
+/// runtime: the in-process replication of two `Send` stores, spawned.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_spawned_edge_runs_a_store_peer_from_generic_code() {
+    let sides = TwoSides::new().await;
+    let peer = Arc::new(SendPeer::new(sides.far()));
+
+    let synced = edge_runs_from_generic(peer, Arc::clone(&sides.device), Arc::new(Immediate))
+        .await
+        .expect("the spawned task does not panic");
+
+    assert_eq!(synced, Ok(true), "the run synced in the task");
+    assert_eq!(sides.both_crossed().await, (true, true));
+}
+
+/// A [`RemoteSyncPeer`] stepped by [`edge_spawns_from_generic`]: the client
+/// half of a network peer over a `Send` transport, spawned from code that
+/// knows only the `Send` flavour.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_spawned_edge_steps_a_remote_peer_from_generic_code() {
+    let sides = TwoSides::new().await;
+    let far = sides.far();
+    let limits = far.limits();
+    let peer = Arc::new(SendPeer::new(RemoteSyncPeer::new(Loopback { far }, limits)));
+
+    let stepped = edge_spawns_from_generic(peer, Arc::clone(&sides.device))
+        .await
+        .expect("the spawned task does not panic");
+
+    // The step pulls first, so the hub's event is on the device before the
+    // push, and the push confirms the device's whole log up to its head.
+    let head = EventStore::head(&*sides.device)
+        .await
+        .expect("an in-memory head does not fail");
+    let (_, confirmed) = stepped.expect("an in-memory step does not fail");
+    assert_eq!(confirmed, head, "the step confirmed the device's head");
+    assert_eq!(sides.both_crossed().await, (true, true));
+}
+
+/// A [`RemoteSyncPeer`] run by [`edge_runs_from_generic`], the loop's
+/// counterpart of the step above.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_spawned_edge_runs_a_remote_peer_from_generic_code() {
+    let sides = TwoSides::new().await;
+    let far = sides.far();
+    let limits = far.limits();
+    let peer = Arc::new(SendPeer::new(RemoteSyncPeer::new(Loopback { far }, limits)));
+
+    let synced = edge_runs_from_generic(peer, Arc::clone(&sides.device), Arc::new(Immediate))
+        .await
+        .expect("the spawned task does not panic");
+
+    assert_eq!(synced, Ok(true), "the run synced in the task");
+    assert_eq!(sides.both_crossed().await, (true, true));
 }

@@ -65,9 +65,10 @@ pub trait Exchange {
 /// transport. Over a concrete `Send` exchange its futures are `Send` too, but
 /// the type does not implement [`SendSyncPeer`](crate::SendSyncPeer), and
 /// coherence forbids adding it beside the bare impl: `trait_variant`'s
-/// blanket impl already gives every `SendSyncPeer` the bare trait. A runner that spawns and binds
-/// `SendSyncPeer` needs a separate Send-flavour type, which can be added later
-/// without a break (#421).
+/// blanket impl already gives every `SendSyncPeer` the bare trait. Code that
+/// spawns and binds `SendSyncPeer` takes
+/// [`SendPeer::new(peer)`](crate::SendPeer) instead, over a
+/// [`SendExchange`]` + Sync` (#421).
 #[derive(Debug, Clone)]
 pub struct RemoteSyncPeer<X> {
     exchange: X,
