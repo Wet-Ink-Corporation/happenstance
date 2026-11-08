@@ -181,7 +181,7 @@ impl<T: SqlTransport> SyncPeer for NeonSyncPeer<T> {
             .map_err(|error| NeonPeerError::Read(NeonError::Transport(error)))?;
         let body = decode_body::<T::Error>(&response, self.store.config().max_response_bytes)
             .map_err(NeonPeerError::Read)?;
-        let [page, identity] = two_sets(body.result_sets()).map_err(NeonPeerError::Read)?;
+        let [page, identity] = last_two(body.result_sets(), 2).map_err(NeonPeerError::Read)?;
         let page = decode_group_page(page, probe).map_err(NeonPeerError::Read)?;
         let responder = identity_from(identity).map_err(NeonPeerError::Read)?;
 
@@ -267,9 +267,13 @@ impl<T: SqlTransport> SyncPeer for NeonSyncPeer<T> {
             })?;
         let body = ingest_body(&response, self.store.config().max_response_bytes, &groups)
             .map_err(NeonPeerError::Ingest)?;
+        // The request committed, so an answer that cannot be read from here
+        // on is `Answer`: re-delivery is a skip.
         let sets = body.result_sets();
-        // A count the answer lacks is an answer that cannot be read: the
-        // request committed, so it is `Answer`, not the ingest's `Store`.
+        let [watermark, identity] =
+            last_two(sets, written.saturating_add(2)).map_err(NeonPeerError::Answer)?;
+        // A count the answer lacks is such an answer, not the ingest's
+        // `Store`, whose outcome is unknown.
         let ingested = match sets.first() {
             Some(counts) if written > 0 => ingested_from(counts).map_err(|error| match error {
                 IngestError::Store(error) => NeonPeerError::Answer(error),
@@ -277,8 +281,6 @@ impl<T: SqlTransport> SyncPeer for NeonSyncPeer<T> {
             })?,
             _ => Ingested::default(),
         };
-        let [watermark, identity] =
-            two_sets(sets.get(written..).unwrap_or_default()).map_err(NeonPeerError::Answer)?;
         let mut ack = Ack::default();
         ack.appended = saturating_u64(ingested.appended);
         ack.skipped = saturating_u64(ingested.skipped);
@@ -291,12 +293,24 @@ impl<T: SqlTransport> SyncPeer for NeonSyncPeer<T> {
     }
 }
 
-/// The two result sets a request ending in two reads answers with, or the
-/// shape complaint.
-fn two_sets<E>(sets: &[ResultSet]) -> Result<[&ResultSet; 2], NeonError<E>> {
+/// The last two of exactly `expected` result sets, which is how a request of
+/// `expected` statements ending in two reads is answered.
+///
+/// # Errors
+///
+/// [`NeonError::ResultSets`] for any other count, naming both: never a
+/// lenient read of whatever sets sit at the end.
+fn last_two<E>(sets: &[ResultSet], expected: usize) -> Result<[&ResultSet; 2], NeonError<E>> {
+    let shape = || NeonError::ResultSets {
+        expected,
+        actual: sets.len(),
+    };
+    if sets.len() != expected {
+        return Err(shape());
+    }
     match sets {
-        [first, second] => Ok([first, second]),
-        _ => Err(NeonError::MissingColumn { column: "results" }),
+        [.., second_last, last] => Ok([second_last, last]),
+        _ => Err(shape()),
     }
 }
 
@@ -316,9 +330,12 @@ fn saturating_u64(count: usize) -> u64 {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum NeonPeerError<E> {
-    /// The pull's request failed or its answer could not be read. Nothing was
-    /// forwarded.
-    #[error("the Neon store's group read failed")]
+    /// The pull's one request, the group read and the identity read together,
+    /// failed, or its answer could not be read: the page, `waiting` or the
+    /// responder. One arm for both reads, where `StorePeerError` has `Read`
+    /// and `Identity`, because here they are one request and fail together.
+    /// Nothing was forwarded.
+    #[error("the Neon store's pull request, or its answer, failed")]
     Read(#[source] NeonError<E>),
 
     /// The push's request was refused or failed. Nothing in the push was

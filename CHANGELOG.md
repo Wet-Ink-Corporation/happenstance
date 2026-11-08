@@ -48,7 +48,9 @@ not the same as what a user needed to be told.
   groups, a push writes no compensation, and `new` declares
   `PeerLimits::minimum`. Its own error type because `StorePeerError`'s limit
   variants cannot be built outside `happenstance-sync`; the classes match
-  (SY-36). `sync_peer_conformance!`, a replay, and a byte-identical round trip
+  (SY-36). `NeonError` gains `ResultSets { expected, actual }`, class `Stop`,
+  for a batch answered with a different number of result sets than it sent
+  statements. `sync_peer_conformance!`, a replay, and a byte-identical round trip
   against an in-memory near store are mounted in the library target, which
   `live-neon` already runs. No new SQL: the store's group read, ingest,
   watermark and identity statements, shared with its ports.
@@ -66,7 +68,6 @@ not the same as what a user needed to be told.
   adapter depends on another; `harness/workerd` is the precedent (#130).
   `live-neon` runs its `neon::` cases and `live-postgres` its `postgres::`
   cases, each as a strict list/run/assert trio.
-
 - `happenstance-sync-testkit`: the convergence family (#141), and with it a
   dependency on `happenstance`, the typed layer, with its `postcard` codec.
   `convergence_rules::convergent_projection_is_interleaving_independent`

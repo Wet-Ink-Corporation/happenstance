@@ -15,6 +15,7 @@ use super::{
     Classify as _, FailureClass, HttpResponse, IngestError, IngestGroup, IsolationLevel, OWN,
     Scripted, SequencePosition, event, id, peer, shipped,
 };
+use crate::error::NeonError;
 use crate::event_store::{BASE64, NeonPeerError, NeonSyncPeer};
 
 /// One result set as the endpoint renders it in the batch form.
@@ -339,4 +340,137 @@ async fn a_refused_push_is_the_ingest_refusal() {
     );
     assert_eq!(refused.class(), FailureClass::Stop);
     assert_eq!(transport.round_trips.get(), 1);
+}
+
+/// The five result sets a landed one-group push is answered with: counts,
+/// the refusal's `DO`, the stamp's `UPDATE`, the watermark, the identity.
+fn landed_push(counts: serde_json::Value) -> Vec<serde_json::Value> {
+    vec![
+        set(&[counts]),
+        serde_json::json!({ "command": "DO", "rowCount": null, "fields": [], "rows": [] }),
+        serde_json::json!({ "command": "UPDATE", "rowCount": 1, "fields": [], "rows": [] }),
+        set(&[]),
+        identity(OWN),
+    ]
+}
+
+/// The counts row of one landed event.
+fn one_landed() -> serde_json::Value {
+    serde_json::json!({ "appended": "1", "skipped": "0", "compensated": "0", "unheld": "" })
+}
+
+/// A one-group push from `peer(0x47)`.
+fn one_group() -> PushBatch {
+    PushBatch::new(vec![EventGroup::new(
+        None,
+        vec![shipped(id(peer(0x47), 1), 1, event("Shipped", "a"))],
+    )])
+}
+
+/// A push answered with one result set too few, or one too many, committed
+/// and cannot be read: `Answer`, naming both counts, class `Stop`.
+///
+/// Rejects lenient indexing, which reads the watermark and the identity from
+/// whatever sets sit at or past the write's, and the old
+/// `MissingColumn { "results" }`, which named neither count.
+#[tokio::test]
+async fn a_push_answered_with_the_wrong_number_of_result_sets_is_answer() {
+    let mut too_few = landed_push(one_landed());
+    too_few.remove(3);
+    let mut too_many = landed_push(one_landed());
+    too_many.push(identity(OWN));
+
+    for (sets, actual) in [(too_few, 4), (too_many, 6)] {
+        let transport = Scripted::default();
+        transport.answer_batch(&sets);
+        let peer = NeonSyncPeer::new(transport.store());
+
+        let refused = peer
+            .push(&one_group())
+            .await
+            .expect_err("an answer shaped unlike its request");
+
+        assert!(
+            matches!(
+                &refused,
+                NeonPeerError::Answer(NeonError::ResultSets { expected: 5, actual: a }) if *a == actual
+            ),
+            "{refused:?}"
+        );
+        assert_eq!(refused.class(), FailureClass::Stop);
+    }
+}
+
+/// A pull answered with a set too many is refused the same way, as `Read`.
+#[tokio::test]
+async fn a_pull_answered_with_the_wrong_number_of_result_sets_is_read() {
+    let transport = Scripted::default();
+    transport.answer_batch(&[set(&[]), identity(OWN), identity(OWN)]);
+    let peer = NeonSyncPeer::new(transport.store());
+
+    let refused = peer.pull(None).await.expect_err("three sets for two reads");
+
+    assert!(
+        matches!(
+            refused,
+            NeonPeerError::Read(NeonError::ResultSets {
+                expected: 2,
+                actual: 3
+            })
+        ),
+        "{refused:?}"
+    );
+}
+
+/// A counts row without `appended`, in an answer that committed, is
+/// `Answer`, not the ingest's `Store`: the write landed and re-delivery is a
+/// skip, which `Ingest(Store)`'s unknown outcome does not promise.
+#[tokio::test]
+async fn a_push_whose_counts_lack_a_column_is_answer_not_ingest() {
+    let transport = Scripted::default();
+    transport.answer_batch(&landed_push(serde_json::json!({
+        "skipped": "0", "compensated": "0", "unheld": "",
+    })));
+    let peer = NeonSyncPeer::new(transport.store());
+
+    let refused = peer
+        .push(&one_group())
+        .await
+        .expect_err("a counts row without `appended`");
+
+    assert!(
+        matches!(
+            refused,
+            NeonPeerError::Answer(NeonError::MissingColumn { column: "appended" })
+        ),
+        "{refused:?}"
+    );
+}
+
+/// SY-36: a store arm states the store error's class, not one fixed by the
+/// arm. A pull that got no answer is `Transient`, one the endpoint refused as
+/// too large is `Split`, and each equals its `NeonError`'s class. Mirrors
+/// `store_peer.rs`'s `an_unread_identity_states_the_store_errors_class`.
+///
+/// Rejects a `Read` arm fixed at one class.
+#[tokio::test]
+async fn a_failed_pull_states_the_store_errors_class() {
+    let unanswered = Scripted::default();
+    let too_large = Scripted::answering(413, b"request too large");
+
+    for (transport, class) in [
+        (&unanswered, FailureClass::Transient),
+        (&too_large, FailureClass::Split),
+    ] {
+        let refused = NeonSyncPeer::new(transport.store())
+            .pull(None)
+            .await
+            .expect_err("the pull failed");
+
+        let NeonPeerError::Read(store) = &refused else {
+            panic!("a failed pull is `Read`: {refused:?}");
+        };
+        assert_eq!(store.class(), class);
+        assert_eq!(refused.class(), class);
+    }
 }

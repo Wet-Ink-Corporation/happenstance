@@ -254,4 +254,17 @@ pub enum NeonError<E> {
     #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
     #[error("the stored write groups are out of order")]
     GroupOrder(#[from] happenstance_sync::write_group::GroupOrderError),
+
+    /// A batch answered with a different number of result sets than it sent
+    /// statements (#131). The endpoint answers one result set per statement,
+    /// so this is this crate and the endpoint disagreeing about the shape of
+    /// an answer, and the same request fails the same way again. Declared
+    /// last, so the lines above keep the numbers they are cited by.
+    #[error("the /sql batch answered {actual} result set(s) where this adapter sent {expected}")]
+    ResultSets {
+        /// How many statements the request carried.
+        expected: usize,
+        /// How many result sets came back.
+        actual: usize,
+    },
 }

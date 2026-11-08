@@ -329,7 +329,10 @@ impl<E> Classify for NeonError<E> {
             // page builder refuses: the same read or write fails the same way.
             | Self::StoredGuard { .. }
             | Self::UnstorableGuard { .. }
-            | Self::GroupOrder(_) => FailureClass::Stop,
+            | Self::GroupOrder(_)
+            // An answer shaped unlike its request: the same request is
+            // answered the same way again.
+            | Self::ResultSets { .. } => FailureClass::Stop,
         }
     }
 }

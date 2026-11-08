@@ -22,8 +22,10 @@ A `SyncPeer` whose far side is a Neon store reached over its HTTP endpoint, behi
   `ingest.rs` and `write_group.rs` are cited by no line, so their private builders and
   decoders are split and widened to `pub(super)` there.
 - Don't touch `happenstance-cloudflare` or `harness/workerd` (#130's lane).
-- CI: no change if the existing `--lib -- --ignored` step of `live-neon` picks the new
-  live tests up. It does, if they are unit tests in the library target.
+- CI: the adapter-local live tests need no change, because the existing
+  `--lib -- --ignored` steps of `live-neon` and `live-postgres` pick them up. The SQLite
+  round trip (`harness/sync-round-trip`, added later) did gain one strict
+  list/run/assert trio in each of those two jobs, owner-approved; no other job changed.
 - Non-goals: a `Send` flavour (#421); `Waiting::Events` counting; bulk-ingest cost (#139).
 
 ## Invariants
@@ -65,7 +67,7 @@ A `SyncPeer` whose far side is a Neon store reached over its HTTP endpoint, behi
   - `write_group.rs`: `groups_statement(after, max) -> SqlStatement` and
     `decode_group_page(rows, max_events) -> Result<GroupPage, NeonError<E>>`, both
     `pub(super)`; `read_write_groups` composes them.
-  - `ingest.rs`: `ingest_write(&self, groups) -> Result<Option<Vec<SqlStatement>>,
+  - `ingest.rs`: `ingest_write(&self, groups) -> Result<Option<SqlRequest>,
     IngestError<..>>` (the ceilings, then the three statements; `None` for nothing
     foreign); `identity_statement`, `watermark_statement`, `ingest_body`,
     `ingested_from`, `identity_from(&ResultSet)`, `watermark_from(&ResultSet)`, all
@@ -111,6 +113,23 @@ Live (`#[ignore]`, `live-neon`'s `--lib -- --ignored`), in `ingest/tests/peer_fa
 | Decision | Options | Recommendation | Decided by | Outcome |
 |---|---|---|---|---|
 | Where the **SQLite**↔Neon round trip lives | (a) path-only dev-dep `happenstance-sqlite` in `happenstance-neon`; (b) a non-published harness crate; (c) an existing example | (a) | coordinator, under the owner's standing AFK authority | (b), shaped like #130's `harness/workerd`: (a) would rewrite the binding adapter-dependency rule |
+
+## Review round 1 (F1-F3, F5, F6)
+
+- F1 red: the four new scripted tests were written against the old code;
+  `a_push_answered_with_the_wrong_number_of_result_sets_is_answer` (`peer_requests.rs:393`)
+  and `a_pull_answered_with_the_wrong_number_of_result_sets_is_read` (`:416`) failed (the
+  old code answered `MissingColumn { "results" }`); the other two passed already and are
+  held by mutants. Mutants, each restored: lenient `last_two(sets.get(written..)..., 2)`
+  fails the push-shape test (`:393`); the count failure mapped to `Ingest` fails
+  `a_push_whose_counts_lack_a_column_is_answer_not_ingest` (`:444`); `Read` fixed at
+  `Stop` fails `a_failed_pull_states_the_store_errors_class` (`:479`).
+- F2: `NeonError::ResultSets { expected, actual }`, additive on the `#[non_exhaustive]`
+  enum, declared last in `error.rs`, classed `Stop`; `last_two(sets, expected)` replaces
+  `two_sets` and the `unwrap_or_default`. The push checks the answer's shape before it
+  reads the counts.
+- F3: `Read`'s message and docs cover the whole pull request and its answer; no
+  `Identity` arm, because the identity read is in the same request and fails with it.
 
 ## Risks
 
