@@ -45,7 +45,7 @@ so they are repaired first.
       line numbers above are as `5afcca1` had them.
 - [x] `CLAUDE.md` stops calling "does ingest re-check append conditions" the
       central unanswered question; SY-1 – SY-7 settled it. Same correction in
-      `crates/happenstance-sync/src/lib.rs:116-119`.
+      `crates/happenstance-sync/src/lib.rs:118-121`.
       Done: SY-1 – SY-6 are frozen and SY-7 is provisional, and `CLAUDE.md` now
       says so. The same claim was also in `peer.rs`'s `EventGroup` doc and in two
       sentences of the specification's SY-1 and SY-6 prose that quoted it; all of
