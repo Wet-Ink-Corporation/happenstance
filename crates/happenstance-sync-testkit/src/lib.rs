@@ -43,11 +43,13 @@
 //! | [`every_refusal_states_its_class`](rules::every_refusal_states_its_class) | SY-36 | a peer whose errors all state one failure class, whatever the failure |
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
+//! | [`round_trip_preserves_the_whole_log`](rules::round_trip_preserves_the_whole_log) | SY-28, SY-27 | a peer that withholds from its counterpart the events a type or tag filter matches, among those the rule's log carries |
 //!
 //! Each rule names a wrong implementation, and that implementation lives in
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
-//! over [`KvCappedFixture`], and its batch rule's in `tests/wrong_peers.rs` —
-//! where the rule is shown to fail it. A rule no peer can fail is decorative.
+//! over [`KvCappedFixture`], its batch rule's in `tests/wrong_peers.rs`, and
+//! SY-28's in `tests/wrong_scopes.rs` — where the rule is shown to fail it. A
+//! rule no peer can fail is decorative.
 //!
 //! **No peer or ingest rule decodes a payload** (SY-35), and **no rule in
 //! [`rules`] holds two peers** (SY-8). [`rules`] says how the rules keep both. The model family
@@ -106,7 +108,8 @@
 //!
 //! | Rule | Clause | What it rejects |
 //! |---|---|---|
-//! | [`ingest_preserves_origin_identity`](ingest_rules::ingest_preserves_origin_identity) | VT-5, VT-9 | a store that re-mints an ingested event, or restamps its recorded time |
+//! | [`ingest_preserves_origin_identity`](ingest_rules::ingest_preserves_origin_identity) | VT-5 | a store that re-mints an ingested event |
+//! | [`ingest_preserves_the_recorded_time`](ingest_rules::ingest_preserves_the_recorded_time) | VT-9 | a store that restamps an ingested event with its arrival time, keeps whole seconds, holds a time before 1970 as the epoch, holds times non-decreasing with position, binds one time per group, or clamps a future time to its own clock |
 //! | [`ingested_events_land_above_the_local_head`](ingest_rules::ingested_events_land_above_the_local_head) | SY-5 | an order-preserving merge, which hides an event below a checkpoint already read past |
 //! | [`dedupe_reaches_identity_without_decoding`](ingest_rules::dedupe_reaches_identity_without_decoding) | SY-12, SY-11 | content-keyed dedupe, and a compensation written again on redelivery |
 //! | [`an_unheld_own_identity_stops_the_ingest`](ingest_rules::an_unheld_own_identity_stops_the_ingest) | SY-38 | a dropped claim, a check of the batch's head only, a group-by-group commit, a claim hidden by the call's own compensation, and a refused held echo |
