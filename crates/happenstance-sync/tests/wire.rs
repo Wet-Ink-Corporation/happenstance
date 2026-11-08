@@ -1123,12 +1123,6 @@ mod wire {
     /// A version-2 peer's pulled message is refused whole, by number, in both
     /// formats (WF-8), so a runner never reads a missing responder as "the far
     /// side has no identity".
-    ///
-    /// **The control is why the bump is needed.** In JSON the same version-2
-    /// body stamped with the current version decodes `Ok`, with `responder`
-    /// defaulted to `None`: a derive treats a missing `Option` key as `None`.
-    /// Without the bump, a version-2 peer would be read as a peer that names no
-    /// responder, and nothing would say so.
     #[test]
     fn a_version_2_pulled_is_refused_as_an_unsupported_version() {
         let old = PulledAtVersion2 {
@@ -1159,14 +1153,56 @@ mod wire {
                 supported: FORMAT_VERSION,
             })
         );
+    }
 
-        // The control: the version-2 shape under the current number.
-        let restamped = serde_json::from_str::<Envelope<Pulled<ResumeToken>>>(&foreign_json(
+    /// An ack as format version 2 shaped it: no `responder`.
+    #[derive(Serialize)]
+    struct AckAtVersion2 {
+        appended: u64,
+        skipped: u64,
+        confirmed: Watermark,
+    }
+
+    /// A version-3 body with no `responder` key is refused in JSON, on pulled
+    /// and on ack: the key is required, `null` when there is no responder
+    /// (ADR-0104). Postcard needs no rule of its own, because it is positional
+    /// and a body one field short runs out of bytes.
+    ///
+    /// **Wrong implementation it rejects:** a derived `Deserialize`, which reads
+    /// a missing `Option` key as `None` — so a body from a peer that left the
+    /// field out, under the current number, would read as a peer that names no
+    /// responder, and nothing would say so.
+    #[test]
+    fn a_current_version_body_without_a_responder_key_is_refused_in_json() {
+        let pulled = PulledAtVersion2 {
+            batch: two_groups(),
+            resume: ResumeToken::new("group:2"),
+            waiting: Waiting::Nothing,
+        };
+        let ack = AckAtVersion2 {
+            appended: 2,
+            skipped: 1,
+            confirmed: Watermark::new(),
+        };
+
+        let refused_pulled = serde_json::from_str::<Envelope<Pulled<ResumeToken>>>(&foreign_json(
             FORMAT_VERSION,
-            &old,
+            &pulled,
         ))
-        .unwrap()
-        .into_message();
-        assert_eq!(restamped.responder, None, "only the number refuses it");
+        .unwrap_err()
+        .to_string();
+        let refused_ack =
+            serde_json::from_str::<Envelope<Ack>>(&foreign_json(FORMAT_VERSION, &ack))
+                .unwrap_err()
+                .to_string();
+
+        assert!(
+            refused_pulled.contains("missing field `responder`"),
+            "{refused_pulled}"
+        );
+        assert!(
+            refused_ack.contains("missing field `responder`"),
+            "{refused_ack}"
+        );
     }
 }

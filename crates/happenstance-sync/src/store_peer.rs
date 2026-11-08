@@ -59,6 +59,12 @@
 //! after the page or after the watermark. A runner that sees it change between
 //! two answers knows the far store was restored or re-minted (VT-6).
 //!
+//! Read after, not before: a re-mint that lands between the page and the read
+//! labels an old incarnation's page with the new identity. That errs toward
+//! stopping the edge, which is the safe direction for SY-34; read first, the
+//! same race would label the new incarnation's page with the old identity, and
+//! the edge would carry on.
+//!
 //! **It is read on every call, and never cached.** A cached identity is the
 //! one a re-mint does not reach, which is the change the field exists to
 //! report. The cost is one more read of the store per pull and per push. On a

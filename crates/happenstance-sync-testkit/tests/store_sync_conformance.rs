@@ -11,14 +11,17 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
+use core::cell::Cell;
+
 use happenstance_core::{
-    Event, EventId, EventStore, Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent,
-    StoreId, collect,
+    Event, EventId, EventStore, MemoryStoreError, Query, ReadOptions, RecordedAt, SequencePosition,
+    SequencedEvent, StoreId, collect,
 };
 use happenstance_sync::wire::ResumeToken;
 use happenstance_sync::{
-    Classify, EventGroup, FailureClass, IngestStore, PeerLimits, PushBatch, ReplicatedEvent,
-    StorePeerError, StoreResume, StoreSyncPeer, SyncPeer, Waiting,
+    Classify, EventGroup, FailureClass, IngestError, IngestGroup, IngestStore, Ingested,
+    PeerLimits, PushBatch, ReplicatedEvent, StorePeerError, StoreResume, StoreSyncPeer, SyncPeer,
+    Waiting, Watermark,
 };
 use happenstance_sync_testkit::{
     IngestFixture, MemoryIngestFixture, MemoryIngestHandle, RefusalsOf, SyncFixture,
@@ -143,6 +146,88 @@ async fn every_answer_names_the_far_store_as_its_responder() {
     assert_eq!(empty.responder, Some(named), "the empty pull");
     assert_eq!(past.responder, Some(named), "the pull past the end");
     assert_eq!(elsewhere.responder, Some(other), "the other store's pull");
+}
+
+/// The store [`StoreSyncPeer`] stands in front of when it is re-minted between
+/// two answers: [`MemoryIngestHandle`], whose identity answers the store's own
+/// id on the first read and [`REMINTED`] on every read after it.
+///
+/// A hand-written fake (TST-09) because nothing in the reference store changes
+/// its identity; `Cell` because the port takes `&self`.
+#[derive(Debug)]
+struct RemintedAfterFirstRead {
+    inner: MemoryIngestHandle,
+    reads: Cell<usize>,
+}
+
+/// The identity a [`RemintedAfterFirstRead`] answers from its second read on.
+const REMINTED: StoreId = StoreId::from_bytes([0x9e; 16]);
+
+impl IngestStore for RemintedAfterFirstRead {
+    type Error = MemoryStoreError;
+
+    async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        let reads = self.reads.get();
+        self.reads.set(reads + 1);
+        if reads == 0 {
+            IngestStore::store_id(&self.inner).await
+        } else {
+            Ok(REMINTED)
+        }
+    }
+
+    async fn ingest(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<Ingested, IngestError<Self::Error>> {
+        IngestStore::ingest(&self.inner, groups).await
+    }
+
+    async fn watermark(&self) -> Result<Watermark, Self::Error> {
+        IngestStore::watermark(&self.inner).await
+    }
+}
+
+/// A store peer whose ingest half is re-minted after its first identity read,
+/// and the store's id before the re-mint.
+async fn remints_after_first_read() -> (
+    StoreSyncPeer<MemoryIngestHandle, RemintedAfterFirstRead>,
+    StoreId,
+) {
+    let store = MemoryIngestFixture::new();
+    let before = IngestStore::store_id(&store.connect().await)
+        .await
+        .expect("the in-memory store's error is uninhabited");
+    assert_ne!(before, REMINTED, "the re-mint must be observable");
+    let ingest = RemintedAfterFirstRead {
+        inner: store.connect().await,
+        reads: Cell::new(0),
+    };
+    (StoreSyncPeer::new(store.connect().await, ingest), before)
+}
+
+/// The responder is read on every call (ADR-0104): a far store re-minted
+/// between two pulls, or two pushes, is named by its new identity on the
+/// second answer.
+///
+/// **Wrong implementation it rejects:** a peer that reads the identity once —
+/// at construction, or into a `OnceCell` on the first call — and stamps that
+/// copy on every answer after it. The re-mint the field exists to report is
+/// exactly the change such a cache never sees.
+#[tokio::test]
+async fn a_far_store_re_minted_between_two_answers_is_named_anew_on_the_second() {
+    let (pulling, before) = remints_after_first_read().await;
+    let first = pulling.pull(None).await.expect("the first pull");
+    let second = pulling.pull(None).await.expect("the second pull");
+
+    let (pushing, pushed_before) = remints_after_first_read().await;
+    let first_ack = pushing.push(&singles(1)).await.expect("the first push");
+    let second_ack = pushing.push(&singles(1)).await.expect("the second push");
+
+    assert_eq!(first.responder, Some(before), "the first pull");
+    assert_eq!(second.responder, Some(REMINTED), "the second pull");
+    assert_eq!(first_ack.responder, Some(pushed_before), "the first push");
+    assert_eq!(second_ack.responder, Some(REMINTED), "the second push");
 }
 
 #[tokio::test]

@@ -105,9 +105,6 @@ not the same as what a user needed to be told.
   compensation used to commit with a NULL origin.
   `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
   is `#[non_exhaustive]`).
-
-### Changed
-
 - **`happenstance-sync`: every pull and push answer names its responder, and
   the wire format is version 3** (#244, ADR-0104). **Breaking, for `0.6.0`.**
   `Pulled` and `Ack` gain a last field, `responder: Option<StoreId>`: the
@@ -124,7 +121,8 @@ not the same as what a user needed to be told.
   the field through the envelope. The field is a shape change, so
   `wire::FORMAT_VERSION` is now 3, and a version-2 buffer is refused as
   `WireError::UnsupportedFormatVersion`: **every peer in a deployment upgrades
-  together**.
+  together**. The key is required: a JSON pulled or ack without `responder`
+  is refused as a missing field, rather than read as naming none.
 
 ## [0.5.1] — 2026-11-08
 

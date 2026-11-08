@@ -90,6 +90,20 @@ an identity, and an invented identity is the false positive the runner check exi
 With `Option`, `None` means "this peer does not say", and a runner treats it as no evidence either
 way.
 
+The **value** is optional; the **key** is not. A JSON pulled or ack without `responder` is refused
+as a missing field, rather than read as `None`. A derived `Deserialize` would read it as `None`,
+because serde routes an absent `Option` through `missing_field`, so `Pulled` and `Ack` deserialize
+through private shadow structs whose `responder` names a `deserialize_with` function, which turns
+that fallback off. Postcard is positional and refuses a body one field short already.
+
+This is the opposite of WF-2's read-side asymmetry at `Guard::after`, and on purpose. A missing
+`after` decodes to `None`, which checks the whole log: the default is the strict reading, so it
+fails closed. A missing `responder` decoding to `None` would read as "this peer does not say",
+which is the lenient reading. A runner would treat a peer that dropped the key as offering no
+evidence, and so would never see the re-mint the field exists to report. Here the fallback fails
+open, so it is refused. WF-2 binds the encoder and permits either read side, so this needs no
+clause change.
+
 ### 3. `StoreSyncPeer` stamps its store, read per call
 
 `StoreSyncPeer` answers from a store, so it says which one. It reads its ingest half's
@@ -97,6 +111,11 @@ way.
 on the answer. It does this on every call and never caches the value. A cached identity is the one
 a re-mint does not reach, and the re-mint is the change this field exists to report. The Neon
 store makes the same choice for the same reason (ADR-0086: nothing is cached).
+
+It reads the identity after the page, not before. If a re-mint lands between the two, an old
+incarnation's page is labelled with the new identity. That errs toward stopping the edge, which is
+the safe direction for SY-34. Read first, the same race would label the new incarnation's page with
+the old identity, and the edge would carry on.
 
 The cost is one more store read per pull and per push. On a store that holds its identity in memory,
 that is a field load. On SQLite and Postgres it is an indexed read of a one-row table. On Neon it is
@@ -120,11 +139,11 @@ it") and WF-8 ("The version MUST be bumped whenever the shape of any wire type c
 this. A version-2 buffer is refused whole as `WireError::UnsupportedFormatVersion { found: 2,
 supported: 3 }`, and its message is never decoded.
 
-The bump is not a formality, and the measurement in the evidence shows why. In JSON, a version-2
-pulled body stamped with the current number decodes `Ok`, because a derive defaults a missing
-`Option` key to `None`. Without the bump, a version-2 peer would be read as a peer that names no
-responder, which is a quiet "no evidence" where the truth is "an older peer". With the bump, a
-mixed deployment gets the distinguishable refusal WF-8 exists to give.
+The bump is not a formality. Without it, a version-2 body would reach the message decoder, and the
+only thing between a version-2 peer and a quiet "no evidence" would be the required key in §2,
+which is a missing-field error rather than a refusal that names the version. With the bump, a
+mixed deployment gets the distinguishable refusal WF-8 exists to give, before the message is
+decoded at all.
 
 `happenstance-sync` has been published since `0.4.4`, so this is a wire break for any deployment
 that runs two builds. Every peer must move to version 3 together. It ships in the next breaking
@@ -153,8 +172,12 @@ release (`0.6.0`), and the CHANGELOG says so.
   `00`, or by `01` and the sixteen raw bytes. They reject the field declared earlier, and
   `skip_serializing_if`.
 - `wire::a_version_2_pulled_is_refused_as_an_unsupported_version` checks that a version-2 pulled
-  message is refused by number in both formats. Its control is the same body stamped with the
-  current number, which decodes `Ok` in JSON with `responder: None`.
+  message is refused by number in both formats.
+- `wire::a_current_version_body_without_a_responder_key_is_refused_in_json` checks that a pulled
+  and an ack in the version-2 shape, stamped with the current number, are refused as ``missing
+  field `responder` ``. It rejects a derived `Deserialize`: with the `deserialize_with` removed
+  from either shadow struct, that half decodes `Ok` with `responder: None`, which was checked by
+  mutant on each.
 - `wire::pulled_carries_waiting_in_both_formats` moves its pins to include the trailing `null` and
   `00`. `wire/codec.rs`'s version byte, and the two doc examples that print an envelope, move to
   `3`.
@@ -162,6 +185,11 @@ release (`0.6.0`), and the CHANGELOG says so.
   ack, a page, an empty pull, and a pull past the last numberable position (the early return) all
   name the far store, and that a second store's peer names the second store. It rejects a peer that
   forgets the early return, which was checked by applying that mutant locally.
+- `a_far_store_re_minted_between_two_answers_is_named_anew_on_the_second`
+  (`store_sync_conformance.rs`) puts an ingest half in front of the store whose identity changes
+  after its first read, and checks that two pulls, and two pushes, name the two identities. It
+  rejects a peer that caches the identity. With a `OnceCell` cache applied as a mutant, it failed
+  at the second pull, which named the first identity.
 - `the_responder_survives_the_envelope_on_pull_and_push` (`remote_sync_conformance.rs`) rejects a
   `serve_sync` that rebuilds the reply through `Pulled::new`, which was also checked by mutant.
 

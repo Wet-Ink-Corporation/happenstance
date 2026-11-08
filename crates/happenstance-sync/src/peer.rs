@@ -166,7 +166,7 @@ pub trait SyncPeer {
 ///
 /// [`new`](Self::new) says [`Waiting::Unknown`] and names no responder, neither a lie;
 /// [`with_waiting`](Self::with_waiting) and [`with_responder`](Self::with_responder) say more.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
 pub struct Pulled<R> {
     /// The events, in the far side's forwarding order.
@@ -251,7 +251,7 @@ impl EventGroup {
 }
 
 /// What the far side did with a [`push`](SyncPeer::push).
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
 pub struct Ack {
     /// How many events the far side appended, excluding ones it already held.
@@ -576,6 +576,86 @@ impl Ack {
     pub const fn with_responder(mut self, responder: StoreId) -> Self {
         self.responder = Some(responder);
         self
+    }
+}
+
+// The read side of `Pulled` and `Ack`, written out rather than derived, for
+// one field and below the lines the specification cites.
+//
+// A derived `Deserialize` reads a missing `Option` key as `None`. For
+// `responder` that would read a body with no key, in JSON, as "the far side
+// has no store of its own" — a claim nobody made — so the key is required:
+// `null` when there is no responder, present always (ADR-0104). Postcard is
+// positional and requires the trailing bytes already. Each shadow struct keeps
+// its type's field order, which postcard reads by, and its name, which errors
+// report.
+
+/// Reads `responder` as an ordinary `Option`. Naming a function at all is the
+/// point: a field with `deserialize_with` and no `default` is a missing-field
+/// error when its key is absent, rather than `None`.
+fn required_responder<'de, D>(deserializer: D) -> Result<Option<StoreId>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    <Option<StoreId> as serde::Deserialize>::deserialize(deserializer)
+}
+
+/// [`Pulled`]'s fields as the wire carries them.
+#[derive(serde::Deserialize)]
+#[serde(rename = "Pulled")]
+struct PulledFields<R> {
+    batch: PushBatch,
+    resume: R,
+    waiting: Waiting,
+    #[serde(deserialize_with = "required_responder")]
+    responder: Option<StoreId>,
+}
+
+impl<'de, R> serde::Deserialize<'de> for Pulled<R>
+where
+    R: serde::Deserialize<'de>,
+{
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let PulledFields {
+            batch,
+            resume,
+            waiting,
+            responder,
+        } = PulledFields::deserialize(deserializer)?;
+        Ok(Self {
+            batch,
+            resume,
+            waiting,
+            responder,
+        })
+    }
+}
+
+/// [`Ack`]'s fields as the wire carries them.
+#[derive(serde::Deserialize)]
+#[serde(rename = "Ack")]
+struct AckFields {
+    appended: u64,
+    skipped: u64,
+    confirmed: Watermark,
+    #[serde(deserialize_with = "required_responder")]
+    responder: Option<StoreId>,
+}
+
+impl<'de> serde::Deserialize<'de> for Ack {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let AckFields {
+            appended,
+            skipped,
+            confirmed,
+            responder,
+        } = AckFields::deserialize(deserializer)?;
+        Ok(Self {
+            appended,
+            skipped,
+            confirmed,
+            responder,
+        })
     }
 }
 
