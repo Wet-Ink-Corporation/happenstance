@@ -135,6 +135,8 @@ pub mod rules {
     use crate::violation::{Violation, ensure};
     use crate::{MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, SyncFixture};
 
+    mod whole_log;
+
     /// The most pulls a rule makes before it decides the peer will never say
     /// it has caught up. Far above what two or three tiny groups need under the
     /// minimum conformant limits; its job is to turn a peer that loops into a
@@ -164,6 +166,12 @@ pub mod rules {
     /// SY-31's two origins, whose events the rule pushes in one batch.
     const DURABLE_ORIGIN: StoreId = StoreId::from_bytes([0x81; 16]);
     const DURABLE_TWIN: StoreId = StoreId::from_bytes([0x82; 16]);
+
+    /// SY-23's three origins, in `EventId` order: the derive sorts a
+    /// [`StoreId`] by its bytes.
+    const ORDER_LOW: StoreId = StoreId::from_bytes([0xA1; 16]);
+    const ORDER_MID: StoreId = StoreId::from_bytes([0xA2; 16]);
+    const ORDER_HIGH: StoreId = StoreId::from_bytes([0xA3; 16]);
 
     /// The type of every event SY-18's batch rule pushes.
     const BATCH_FILLED: EventType = EventType::from_static("BatchFilled");
@@ -955,6 +963,66 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-28, and SY-27 beneath it: a round trip preserves the whole log. Once
+    /// the two sides have pushed and pulled to quiescence, each holds the same
+    /// set of `EventId`s, each event with byte-identical type, tags, data and
+    /// metadata, and the recorded time it was pushed with (VT-9).
+    ///
+    /// The rule plays one side (SY-8). It pushes a log spread over both axes
+    /// a filter on `Query`'s surface cuts along, types and tags — two origins,
+    /// three event types, two regions, a confidential pricing slice in a
+    /// two-event group, an untagged event and one with metadata — pulls from
+    /// the start until the peer hands back an empty batch, and holds what came
+    /// back to what went: every identity, every byte. It compares no position
+    /// (SY-19): an identity is the origin's, compared whole, and the origin
+    /// positions leave gaps, as a conformant origin may.
+    ///
+    /// # Rejects
+    ///
+    /// A peer that replicates a slice: one that withholds from its
+    /// counterpart the events a type or tag filter matches, among the types
+    /// and tags the rule's own log carries — the scoped hub or filtered spoke
+    /// ADR-0027 kept off the 1.0 port. It stores and acknowledges every
+    /// push truthfully, so no other rule sees it. `tests/wrong_scopes.rs`
+    /// carries it with three filters, by tag, by type, and by type and tag.
+    ///
+    /// # Does not reject
+    ///
+    /// An identity the rule never pushed: on a far side that holds more, the
+    /// rule's side would hold it too once it had pulled, and the two sets would
+    /// still agree. Nor a peer that hands an event back twice, byte-identical:
+    /// redelivery is SY-11's, and the model family judges it. Nor a filter that
+    /// matches none of the rule's events, such as one on a tag its log never
+    /// carries: the rule sees only what it pushed.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-28 if the peer refuses the push or a pull, keeps
+    /// handing back groups past the suite's pull bound, withholds a pushed
+    /// event, hands one back changed, or hands one identity back as two
+    /// different events.
+    pub async fn round_trip_preserves_the_whole_log<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-28";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+        let log = whole_log::sliced_log(CLAUSE)?;
+        peer.push(&log).await.map_err(|error| {
+            Violation::new(
+                CLAUSE,
+                format!("the peer refused a batch well inside the minimum limits: {error}"),
+            )
+        })?;
+        let handed_back = pull_everything(&peer, CLAUSE).await?;
+        whole_log::holds_the_whole_log(
+            &log,
+            handed_back.into_iter().flat_map(|group| group.events),
+            CLAUSE,
+        )?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What one log SY-37's rule wrote showed it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Log {
@@ -1082,6 +1150,93 @@ pub mod rules {
         ))
     }
 
+    /// SY-23: the order a deployment may rely on peer-independently,
+    /// [`EventId`] order, is the same on this peer as on every other, whatever
+    /// order the events arrived in.
+    ///
+    /// The rule plays the other peer, which holds the events as their origins
+    /// wrote them. Three origins number their events with gaps, which the
+    /// contract allows, and the rule pushes them one to a push in an arrival
+    /// order unlike their `EventId` order, in which an origin's higher position
+    /// arrives before its lower one, as a delayed page lands after a later one.
+    /// It then pulls the peer's whole log, sorts it by `EventId` and compares
+    /// it with its own copy, sorted the same way, event by event and byte for
+    /// byte. Nothing is decoded (SY-35), and the rule never asks the peer for
+    /// an order: where it hands events back in arrival order, SY-25's subject,
+    /// the sort makes that irrelevant.
+    ///
+    /// # Rejects
+    ///
+    /// A peer that dedupes by the highest origin position it has seen from
+    /// each origin rather than by identity: the cheap shortcut its own
+    /// [`Ack::confirmed`] watermark invites. It drops an origin's lower event
+    /// when it arrives after a higher one, so its `EventId` order is missing
+    /// an event every other peer's has, and a deployment sorting by it
+    /// produces different output there. `tests/wrong_orders.rs` carries it,
+    /// beside its faithful control.
+    ///
+    /// # Does not reject
+    ///
+    /// An `Ord` on [`EventId`] other than `(origin, origin_position)`, sorted
+    /// with the origin first, which is the other half of SY-23. That order is
+    /// `happenstance-core`'s derive (`identity.rs`, VT-5), and no peer can
+    /// supply its own. The rule sorts with it, so a change there would move
+    /// the order on every peer together, which this rule cannot see.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-23 if the peer refuses a push or a pull, or if
+    /// its log, sorted by `EventId`, is not the pushed events sorted the same
+    /// way.
+    pub async fn event_id_order_is_identical_on_every_peer<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-23";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+        let arriving = arrival_order(CLAUSE)?;
+        for event in &arriving {
+            peer.push(&one_event(event.clone()))
+                .await
+                .map_err(|error| {
+                    Violation::new(
+                        CLAUSE,
+                        format!("the peer refused a one-event push of {}: {error}", event.id),
+                    )
+                })?;
+        }
+
+        let mut held: Vec<ReplicatedEvent> = pull_everything(&peer, CLAUSE)
+            .await?
+            .into_iter()
+            .flat_map(|group| group.events)
+            .collect();
+        held.sort_by_key(|event| event.id);
+        let mut origins = arriving;
+        origins.sort_by_key(|event| event.id);
+        let ids = |events: &[ReplicatedEvent]| -> Vec<EventId> {
+            events.iter().map(|event| event.id).collect()
+        };
+        ensure(ids(&held) == ids(&origins), CLAUSE, || {
+            format!(
+                "sorted by EventId, the peer holds {:?} and its origins wrote {:?}; a \
+                 deployment that sorts by EventId gets different output on this peer",
+                ids(&held),
+                ids(&origins)
+            )
+        })?;
+        for (kept, written) in held.iter().zip(&origins) {
+            ensure(kept == written, CLAUSE, || {
+                format!(
+                    "{} is held with a recorded time or bytes other than its origin's; sorted \
+                     by EventId, the two logs agree on identities and not on content",
+                    kept.id
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// Pushes `fill.groups` single-event groups from [`ORIGIN_A`], at most
     /// `fill.per_push` to a push. Answers whether the peer took them all.
     async fn fill_with_readings<P: SyncPeer>(
@@ -1169,6 +1324,28 @@ pub mod rules {
             clause,
             format!("the peer was still handing back groups after {max_pulls} pulls"),
         ))
+    }
+
+    /// SY-23's log, in the order it arrives: three origins, each numbering
+    /// its events with gaps, interleaved unlike their `EventId` order, and the
+    /// low origin's and the high origin's higher position each arriving before
+    /// its lower one. The positions are what the origins chose to send, never
+    /// a claim about what a peer assigns.
+    fn arrival_order(clause: &'static str) -> Result<Vec<ReplicatedEvent>, Violation> {
+        [
+            (ORDER_LOW, 5),
+            (ORDER_MID, 3),
+            (ORDER_HIGH, 4),
+            (ORDER_LOW, 2),
+            (ORDER_HIGH, 1),
+            (ORDER_MID, 8),
+        ]
+        .into_iter()
+        .map(|(origin, position)| {
+            let data = format!("sy23 {origin} {position}");
+            durable_reading(origin, position, data.as_bytes(), clause)
+        })
+        .collect()
     }
 
     /// `event` as a batch of one group.
@@ -1556,6 +1733,9 @@ macro_rules! for_each_sync_peer_rule {
             // --- A group travels whole (SY-2) -------------------------------
             compensation_is_atomic_with_the_losing_event,
 
+            // --- EventId order is the same on every peer (SY-23) ------------
+            event_id_order_is_identical_on_every_peer,
+
             // --- A peer declares its own limits (SY-18) ---------------------
             peer_declares_its_own_limits,
             peer_takes_a_batch_at_its_declared_limits,
@@ -1571,6 +1751,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- The group decomposition survives the peer (SY-30) ----------
             push_envelope_preserves_group_boundaries,
+
+            // --- A round trip preserves the whole log (SY-27, SY-28) --------
+            round_trip_preserves_the_whole_log,
         }
     };
 }

@@ -1909,7 +1909,7 @@ fn guard_rules_not_vacuous(atoms: &[Atom]) -> Result<()> {
 ///
 /// The tree is [`crate::lint_narrative::TREE`] and **no second constant names
 /// it**: moving the tree is one edit, and a `PAGE_DIR` declared here would be
-/// the *three lists that must agree* defect `xtask/src/spec_trace.rs:122-160`
+/// the *three lists that must agree* defect `xtask/src/spec_trace.rs:124-162`
 /// records, with the second copy drifting silently the day the tree moves.
 ///
 /// The tree's index is not a page. That is not this module's judgement: the

@@ -20,10 +20,10 @@ with programs you can run.
 > The version moves in lockstep with the rest of the workspace until 1.0. Each
 > rule names the clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
-> it checks; several of those are still `[PROVISIONAL]` (SY-7, SY-10, SY-27 –
-> SY-31, SY-36 – SY-39 among the ones a rule here checks), and a rule over a
-> provisional clause moves when its clause does. There is no runner yet (issue
-> #244), so nothing here checks one.
+> it checks; several of those are still `[PROVISIONAL]` (SY-7, SY-10, SY-20,
+> SY-22, SY-23, SY-27 – SY-31, SY-36 – SY-39 among the ones a rule here checks),
+> and a rule over a provisional clause moves when its clause does. There is no
+> runner yet (issue #244), so nothing here checks one.
 >
 > Every rule returns `happenstance_testkit::RuleOutcome`, so that crate's type
 > is part of this one's public API.
@@ -31,7 +31,9 @@ with programs you can run.
 ## Use
 
 A store adapter that implements `IngestStore` mounts the ingest family beside
-the event-store suite, over a fixture that builds one isolated store per call:
+the event-store suite, over a fixture that builds one isolated store, with a
+fresh incarnation, per call (SY-7's rule opens two and fails a fixture that
+hands it one store twice):
 
 ```rust,ignore
 happenstance_sync_testkit::ingest_store_conformance!(MyIngestFixture::new());
@@ -56,6 +58,22 @@ each rule is shown to fail a named wrong implementation in this crate's own
 `tests/` before it is trusted to fail yours. A rule that needs your fixture's
 co-operation, such as a fault between two rows of one group, reports itself
 skipped with your fixture's stated reason rather than passing.
+
+A projection that declares itself convergent, by implementing
+`happenstance::ConvergentProjection`, is checked by calling one rule over a
+`ConvergenceFixture`: your projection, its store, and events from two origins
+whose order your fold could depend on. It runs the projection under two
+interleavings and compares the read models byte for byte (SY-20). A projection
+that does not declare it cannot be handed to the rule, which is how a fold such
+as FIFO cost layers is left out rather than failed (SY-22):
+
+```rust,ignore
+let outcome = happenstance_testkit::block_on(
+    happenstance_sync_testkit::convergence_rules::convergent_projection_is_interleaving_independent(
+        async || MyConvergenceFixture::new(),
+    ),
+)?;
+```
 
 The harness is a parameter: `emit_ingest_tokio!` (the default),
 `emit_ingest_blocking!` for a `!Send` store, and `emit_ingest_wasm!` for

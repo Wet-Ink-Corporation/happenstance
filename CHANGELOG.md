@@ -35,6 +35,31 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance-sync-testkit`: the convergence family (#141), and with it a
+  dependency on `happenstance`, the typed layer, with its `postcard` codec.
+  `convergence_rules::convergent_projection_is_interleaving_independent`
+  (SY-20) runs a projection declared `happenstance::ConvergentProjection`
+  under two interleavings of one set of events from two origins — origin
+  one's first, then origin two's — and fails it when the two read models are
+  not byte-identical. The defect it detects is a declared fold whose answer
+  depends on arrival order: `unit-ledger`, which keeps whatever arrived last
+  per serial, a first-arrival-wins fold, an arrival rank kept as an order,
+  and FIFO cost layers declared convergent, each failed in
+  `tests/wrong_projections.rs` beside a control ordered by `EventId`. It also
+  refuses, rather than passes, a case with one origin empty and a run that
+  applied fewer events than it was handed, because either makes the two
+  interleavings one log.
+  `convergence_rules::non_convergent_projections_are_excluded_not_failed`
+  (SY-22) is the cost-layers test: FIFO cost layers, which does not declare
+  convergence, must commit two read models under those interleavings where
+  stock-on-hand over the same events commits one, and handing it to the
+  SY-20 rule is a `compile_fail` fence beside a compiling control. The defect
+  it detects is a convergence check with no exclusion, which fails an honest
+  projection, and a check that replays one interleaving twice, which passes
+  every projection. A projection author writes a `ConvergenceFixture` (the
+  projection, its store, the two origins' events, and its read model as
+  bytes); `StockOnHandFixture` and `CostLayersFixture` are the reference
+  cases. SY-20 and SY-22 stay `[PROVISIONAL]`.
 - `happenstance-sync`: the `runner` module, the first half of the runner
   (#244). `runner::Edge` drives one edge — a local store that is both
   `EventStore` and `IngestStore`, against one `SyncPeer` — one caller-driven
@@ -163,6 +188,57 @@ not the same as what a user needed to be told.
   fails a page its budget cut that says nothing is waiting. Each is pinned
   against its wrong stores in `tests/wrong_write_group_stores.rs`.
   `MemoryIngestFixture` and `happenstance-sqlite` mount it.
+- `happenstance-sync-testkit`: a sync conformance rule,
+  **`round_trip_preserves_the_whole_log`** (SY-28, SY-27, #140). The defect it
+  detects is a peer that replicates a slice: it stores and acknowledges every
+  push, and withholds from its counterpart the events a type or tag filter
+  matches, by tag, by type, or both (a filter on something the rule's log never
+  carries passes) — the scoped hub, or the filtered spoke, that ADR-0027
+  kept off the 1.0 port. Every other sync rule passed such a peer. The rule
+  pushes a log spanning origins, types, regions, an untagged event and
+  metadata, pulls it back to an empty batch, and holds every `EventId` to its
+  push byte for byte, comparing no position. A new rule is a minor of this
+  crate, and it can turn a passing peer adapter's CI red.
+- `happenstance-sync-testkit`: an ingest rule of VT-9's own,
+  `ingest_preserves_the_recorded_time` (#134). After one local append, it
+  ingests two groups whose events were recorded before 1970, off a whole
+  second, earlier than the event their origin numbered before them, and in
+  2200, and
+  requires each held event to carry exactly the `RecordedAt` its origin sent.
+  It compares a held time with the sent one and nothing else: never two held
+  times, never a time with a position, never the harness's clock. It fails a
+  store that restamps an ingested event with its arrival time, one that keeps
+  whole seconds, one that holds a time before 1970 as the epoch, one that
+  holds recorded times non-decreasing with position, one that binds one
+  time per group, and one that clamps a future time to its own clock;
+  `tests/wrong_ingest_stores.rs` carries all six, each
+  failing this rule alone. `ingest_preserves_origin_identity` no longer
+  compares the recorded time, which was VT-9's half of it, so the restamping
+  store fails VT-9's rule rather than VT-5's. Every adapter that mounts
+  `ingest_store_conformance!` runs it with no edit. **This can turn a passing
+  ingest adapter's CI red** without a code change in the adapter, as any new
+  rule can.
+
+- `happenstance-sync-testkit`: two rules (#136). `only_the_adjudicator_compensates`
+  (SY-7) joins the ingest family: two stores take one conflicting pair in
+  opposite orders, the rule plays the runner and holds a one-adjudicator
+  assignment, and the adjudicator's log must hold one reversal filed under its
+  own identity and the other store's none. It fails a store that mints a
+  compensation under an incarnation it never read. It opens **two** stores, so
+  **this can turn a passing adapter's CI red without a code change in the
+  adapter**: an `IngestFixture` must give every store it opens a fresh
+  incarnation, and the rule fails one that hands it the same store twice.
+  `event_id_order_is_identical_on_every_peer` (SY-23) joins the peer family:
+  events from three origins, numbered with gaps and arriving out of `EventId`
+  order, must come back from the peer in the same `EventId` order, byte for
+  byte, as their origins wrote them. It fails a peer that dedupes by the highest
+  origin position it has seen from each origin. SY-7's falsification test runs
+  beside the rule with two adjudicator configurations and records the
+  divergence ADR-0027 predicted: after two adjudicators meet, their logs hold
+  the same events, two reversals with two identities for one conflict,
+  reversing opposite claims. No runner in `happenstance-sync` authors a
+  compensation yet, so the rule cannot be handed one; the configuration SY-7
+  forbids is that test's, not a mount's.
 
 ### Changed
 

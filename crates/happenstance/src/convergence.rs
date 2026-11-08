@@ -23,7 +23,7 @@
 /// outside the events, such as a clock, a count of arrivals kept as an
 /// order, or a field of `self` read as if it were history. Nothing here
 /// checks the claim; `happenstance-sync-testkit`'s
-/// `convergent_projection_is_interleaving_independent` will (phase 13).
+/// `convergent_projection_is_interleaving_independent` does (#141).
 ///
 /// # Not declaring is the non-convergent declaration (SY-22)
 ///

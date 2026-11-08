@@ -85,7 +85,7 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 ///
 /// It lives here rather than in `lints` because [`collect_rules`] does, and a
 /// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 8] = [
+pub(crate) const RULE_FILES: [&str; 9] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
@@ -95,6 +95,8 @@ pub(crate) const RULE_FILES: [&str; 8] = [
     "crates/happenstance-sync-testkit/src/sync_model.rs",
     "crates/happenstance-sync-testkit/src/ingest_suite.rs",
     "crates/happenstance-sync-testkit/src/write_group_suite.rs",
+    // The convergence family (#141), joined in the change that creates it.
+    "crates/happenstance-sync-testkit/src/convergence_suite.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.
@@ -1013,16 +1015,11 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 69] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 68] = [
     // ---- VT: value types -------------------------------------------------
     (
         "VT-6",
         "restored_peer_does_not_reissue_identities",
-        Unresolvable::Scheduled("the replication suite, with VT-5"),
-    ),
-    (
-        "VT-9",
-        "convergent_projection_is_interleaving_independent",
         Unresolvable::Scheduled("the replication suite, with VT-5"),
     ),
     (

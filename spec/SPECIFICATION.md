@@ -978,12 +978,12 @@ and the contract MUST NOT state any relationship between `RecordedAt` order and
 unchanged through the phase-13 envelope (ADR-0066 §2). The frozen-clock falsifier
 this marker used to name has fired on wasm32 with no effect, and is retired]`
 `Rule:` `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`;
+the ingest half by `happenstance-sync-testkit`'s `ingest_preserves_the_recorded_time`;
 the "not an ordering key" half by §5's new
 `convergent_projection_is_interleaving_independent` (SY-20), which fails any fold
-that reads either the position or the time. Neither of the first two rules may
-compare two `RecordedAt` values in either direction, compare a `RecordedAt`
-against a `SequencePosition`, or check a value for plausibility against the
-harness's own clock — which CF-33 forbids independently.
+that reads either the position or the time. None of the first three rules may order
+two `RecordedAt` values, compare one against a `SequencePosition`, or check one for
+plausibility against the harness's own clock — which CF-33 forbids independently.
 `Cases:` E2E-41, E2E-43
 `Rejects:` a receiving store that overwrites an ingested event's `RecordedAt`
 with its own arrival time. That destroys the only audit answer the field exists
@@ -7216,7 +7216,20 @@ able to adjudicate the same fact family and their compensations can be made
 convergent. Falsification test: two adjudicators for one family, disconnected
 from each other, each ingesting the same conflicting pair; assert the two logs
 converge after they meet.]`
-Rule: `only_the_adjudicator_compensates` (new, `happenstance-sync-testkit`).
+Rule: `only_the_adjudicator_compensates` (`happenstance-sync-testkit`, #136), in the
+ingest family: two stores take one conflicting pair in opposite orders, the rule plays
+the runner and holds a one-adjudicator assignment, and the adjudicator's log must hold
+one reversal, filed under its own identity, and the other store's none. It fails the
+wrong store `FilesCompensationUnderAPlaceholder`, which mints a compensation under an
+incarnation it never read. Every peer adjudicating is a runner configuration, and no
+runner in `happenstance-sync` authors a compensation yet, so the rule cannot be handed
+one; the falsification test runs it beside the rule instead, on `MemoryIngestStore`
+with two adjudicator configurations, and records the divergence: after the two stores
+meet they hold the same events, and under two adjudicators that is two reversals with
+two identities, reversing opposite claims, so no claim to the seat stands. The
+rule's teeth are the store half (a compensation is minted under the identity the store
+holds); the runner half, that a non-adjudicator writes none, binds the adjudication hook
+when it is built, and the marker stays provisional until that hook mounts the rule.
 Cases: E2E-39, E2E-42, E2E-45.
 
 *Rejects:* every-peer-adjudicates, which is the reading SY-1 through SY-3 invite
@@ -7764,10 +7777,13 @@ everywhere else.**
 written as a commutative fold, and cannot be excluded under SY-22. Falsification
 test: express it as a commutative fold over `EventId`-ordered events, or show
 why it cannot be.]`
-Rule: `convergent_projection_is_interleaving_independent` (new,
-`happenstance-sync-testkit`) — takes a projection and a set of events from two
-origins, applies them under two interleavings, asserts byte-identical read
-models.
+Rule: `convergent_projection_is_interleaving_independent`
+(`happenstance-sync-testkit`, #141) — takes a projection and a set of events from two
+origins, applies them under two interleavings, asserts byte-identical read models. The
+interleavings are origin one's events first and origin two's first, and a case with one
+origin empty, or a run that applied fewer events than it was handed, is refused rather
+than passed. The crate's wrong-projection tests fail unit-ledger and three more
+arrival-order folds against it, beside a control ordered by origin identity.
 Cases: E2E-41, E2E-22.
 
 *Rejects:* `unit-ledger` — a per-serial state machine folded over
@@ -7842,8 +7858,11 @@ convergence check MUST exclude it rather than fail it.**
 `[PROVISIONAL — falsified if every non-convergent projection in the catalogue
 turns out to be repairable, making the escape hatch a licence rather than a
 necessity. Falsification test: express `cost-layers` convergently.]`
-Rule: `non_convergent_projections_are_excluded_not_failed` (new,
-`happenstance-sync-testkit`).
+Rule: `non_convergent_projections_are_excluded_not_failed`
+(`happenstance-sync-testkit`, #141) — the cost-layers test: FIFO cost layers, undeclared,
+must commit two read models under SY-20's two interleavings where stock-on-hand over the
+same events commits one, and handing it to SY-20's rule is a compile-fail fence beside a
+compiling control.
 Cases: E2E-41.
 
 *Rejects:* a blanket convergence obligation on every projection, which would be a
@@ -7872,8 +7891,14 @@ order MUST be `EventId` order — the `(origin, origin_position)` pair, sorted.*
 `[PROVISIONAL — falsified if a domain needs a peer-independent order that also
 reflects real-world time or causality. Falsification test: name a requirement
 that `EventId` order fails and a store-assigned timestamp satisfies.]`
-Rule: `event_id_order_is_identical_on_every_peer` (new,
-`happenstance-sync-testkit`).
+Rule: `event_id_order_is_identical_on_every_peer` (`happenstance-sync-testkit`, #136),
+in the peer family: three origins' events, numbered with gaps, are pushed one to a push
+in an order unlike their `EventId` order, an origin's higher position arriving before
+its lower one; the peer's whole log, sorted by `EventId`, must be the pushed events
+sorted the same way, byte for byte. It fails a peer that dedupes by the highest origin
+position it has seen from each origin. The order itself is `happenstance-core`'s derived
+`Ord` on `EventId`, which no peer supplies, so a change to it would move every peer
+together, and no conformance rule can see that half.
 Cases: E2E-41, E2E-43.
 
 *Rejects:* the hybrid-logical-clock proposal, and it rejects it using the
@@ -8020,8 +8045,11 @@ show either that a fact it must hold in two slices cannot be written to two
 stores, or that its adjudicator must see across slices. A firing is answered by
 scoped replication as an additive opt-in with its own ADR, never by changing what
 a whole-log peer does.]`
-Rule: `round_trip_preserves_the_whole_log` (new, `happenstance-sync-testkit`) —
-SY-28's rule, which rejects a peer that withholds the events matching a filter.
+Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
+SY-28's rule, which rejects a peer that withholds the events a type or tag filter matches,
+among the types and tags its own log carries, and compares recorded time too (VT-9):
+`tests/wrong_scopes.rs` withholds a slice by tag, by type, and by type and tag,
+and each fails this rule and no other.
 Cases: E2E-33, E2E-36, E2E-44, E2E-46.
 
 Decided by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). The clause read *"Whether
@@ -8062,7 +8090,11 @@ compare positions.**
 scoped replication arrives as an opt-in, a scoped edge needs its own round-trip
 rule over the scope its peers agreed. Falsification test: SY-27's. A firing adds
 a rule for the opt-in and leaves this one binding on whole-log edges.]`
-Rule: `round_trip_preserves_the_whole_log` (new, `happenstance-sync-testkit`).
+Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
+the rule plays one side, pushes a log spanning two origins, three types, two
+regions, a pricing slice in a two-event group, an untagged event and metadata,
+pulls to an empty batch, and holds every `EventId` to its push byte for byte. It
+compares no position, and its origin positions leave gaps.
 Cases: E2E-44, E2E-46.
 
 Decided with SY-27 by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). The clause
@@ -10388,7 +10420,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-6 | PROVISIONAL | `reopened_store_does_not_reissue_an_event_id`, `restored_peer_does_not_reissue… | E2E-34, E2E-42 |
 | VT-7 | FROZEN | `event_id_is_not_matchable_by_query`, `contains_event_id_reports_membership` | E2E-32, E2E-34, E2E-36 |
 | VT-8 | FROZEN | `event_ids_are_unique_within_a_store` | E2E-33, E2E-36 |
-| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `convergen… | E2E-41, E2E-43 |
+| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `ingest_pr… | E2E-41, E2E-43 |
 | VT-10 | FROZEN | the spike's unit tests in `crates/happenstance-sqlite/src/ingest_spike.rs` unt… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
 | VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic`, `positions_are_uni… | E2E-10, E2E-46 |
 | VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
@@ -10536,7 +10568,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
 | SY-6 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56, E2E-14 |
-| SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` † | E2E-39, E2E-42, E2E-45 |
+| SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` | E2E-39, E2E-42, E2E-45 |
 | SY-8 | FROZEN | the whole of `happenstance-sync-testkit` — every rule in it takes exactly one … | E2E-33, E2E-35, E2E-36, E2E-42 |
 | SY-9 | FROZEN | `one_adapter_serves_both_roles` † | E2E-42, E2E-45 |
 | SY-10 | PROVISIONAL | `directional_merge_rules_compose` † | E2E-42, E2E-44, E2E-45 |
@@ -10549,15 +10581,15 @@ between them because its *shape* does not wait on a transport but its
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
 | SY-18 | DEFERRED | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head`, `… | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
-| SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-22 |
+| SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` | E2E-41, E2E-22 |
 | SY-21 | FROZEN | `apply_is_handed_the_origin_identity_not_the_local_position` †, `convergent_pr… | E2E-41 |
-| SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` † | E2E-41 |
-| SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` † | E2E-41, E2E-43 |
+| SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` | E2E-41 |
+| SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` | E2E-41, E2E-43 |
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-25 | FROZEN | `forwarding_order_is_arrival_order` | E2E-42 |
 | SY-26 | FROZEN | `causality_is_expressible_without_a_contract_change` † | E2E-42, E2E-41 |
-| SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-33, E2E-36, E2E-44, E2E-46 |
-| SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-44, E2E-46 |
+| SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-33, E2E-36, E2E-44, E2E-46 |
+| SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-44, E2E-46 |
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
 | SY-30 | PROVISIONAL | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
 | SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model` †, `ack_never_confirms_… | E2E-33, E2E-44 |

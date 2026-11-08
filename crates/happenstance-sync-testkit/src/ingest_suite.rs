@@ -127,6 +127,9 @@ pub mod ingest_rules {
     // enough. A child module, so it reaches the helpers below through `super`
     // without widening any of them.
     mod batch_scope;
+    // SY-7's arrangement and the runner the rule plays, beside VT-36's for the
+    // same reason.
+    mod adjudication;
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -134,6 +137,8 @@ pub mod ingest_rules {
 
     /// VT-5's origin.
     const IDENTITY_ORIGIN: StoreId = StoreId::from_bytes([0x71; 16]);
+    /// VT-9's origin.
+    const RECORDED_ORIGIN: StoreId = StoreId::from_bytes([0x76; 16]);
     /// SY-5's origin.
     const TAIL_ORIGIN: StoreId = StoreId::from_bytes([0x72; 16]);
     /// SY-12's two origins, which record one byte-identical fact each.
@@ -154,25 +159,26 @@ pub mod ingest_rules {
     /// SY-18's origin, for the events held to the declared ceilings.
     const CEILING_ORIGIN: StoreId = StoreId::from_bytes([0x78; 16]);
 
-    /// VT-5: an ingested event keeps the [`EventId`] its origin minted, and
-    /// VT-9's [`RecordedAt`] with it.
+    /// VT-5: an ingested event keeps the [`EventId`] its origin minted.
     ///
-    /// One group of two foreign events, at origin positions 4 and 9, one
-    /// recorded before 1970 and one after. Read back, exactly one held event
-    /// carries each identity, with the recorded time and the bytes that were
-    /// sent; the store answers `contains_event_id` for both, and its
+    /// One group of two foreign events, at origin positions 4 and 9. Read
+    /// back, exactly one held event carries each identity, with the bytes
+    /// that were sent; the store answers `contains_event_id` for both, and its
     /// watermark for the origin is the higher of the two origin positions.
+    /// The recorded time is not compared here: it is VT-9's, and
+    /// [`ingest_preserves_the_recorded_time`] owns it, so a store that
+    /// restamps fails that rule and not this one.
     ///
     /// # Rejects
     ///
     /// A store that re-mints an ingested event under its own identity, keeping
-    /// the origin's only for its own bookkeeping, and one that restamps it
-    /// with the arrival time. `tests/wrong_ingest_stores.rs` carries both.
+    /// the origin's only for its own bookkeeping.
+    /// `tests/wrong_ingest_stores.rs` carries it.
     ///
     /// # Errors
     ///
     /// A [`Violation`] of VT-5 if the store refuses the ingest, miscounts it,
-    /// or holds anything but the sent identity, time and bytes.
+    /// or holds anything but the sent identity and bytes.
     pub async fn ingest_preserves_origin_identity<F: IngestFixture>(
         open: impl AsyncFn() -> F,
     ) -> Result<RuleOutcome, Violation> {
@@ -205,12 +211,6 @@ pub mod ingest_rules {
                     ),
                 ));
             };
-            ensure(landed.recorded_at == event.recorded_at, CLAUSE, || {
-                format!(
-                    "{} was recorded at {} by its origin and is held as recorded at {}",
-                    event.id, event.recorded_at, landed.recorded_at
-                )
-            })?;
             ensure(landed.event == event.event, CLAUSE, || {
                 format!("{} is held with bytes other than the ones sent", event.id)
             })?;
@@ -230,6 +230,101 @@ pub mod ingest_rules {
                 watermark.get(IDENTITY_ORIGIN)
             )
         })?;
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// VT-9: an ingested event keeps the [`RecordedAt`] its origin carried,
+    /// unchanged; a store stamps only what it accepts from a local append.
+    ///
+    /// One local event first, stamped by the store with whatever its clock
+    /// reads. Then one call of two groups from one origin: three events at
+    /// origin positions 2, 3 and 5, recorded before 1970, off a whole second,
+    /// and earlier than the event the origin numbered before it; and two at
+    /// positions 8 and 9, the second recorded in 2200, later than any store's
+    /// clock will read. Read back, each sent event is held with the recorded time
+    /// it was sent with. Events are found by their distinct bytes, never by
+    /// identity, so a store that re-mints fails VT-5's rule and not this one.
+    ///
+    /// Each held time is compared with the one its origin sent and with
+    /// nothing else: never with another held time, with a position, or with
+    /// the harness's clock, which VT-9 and CF-33 both forbid.
+    ///
+    /// # Rejects
+    ///
+    /// A store that restamps an ingested event with its arrival time, the one
+    /// VT-9's `Rejects:` names; one that keeps whole seconds; one that keeps
+    /// the time unsigned and holds a time before 1970 as the epoch; one that
+    /// holds recorded times non-decreasing with position; one that binds
+    /// one time per group, its head's; and one that clamps a time from the
+    /// future to its own clock. `tests/wrong_ingest_stores.rs` carries all
+    /// six.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of VT-9 if the store refuses a write, miscounts the
+    /// ingest, holds a sent event other than once, or holds one with a
+    /// recorded time other than the one sent.
+    pub async fn ingest_preserves_the_recorded_time<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "VT-9";
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        ensure_foreign(&store, &[RECORDED_ORIGIN], CLAUSE).await?;
+        append(&store, &[opaque(LOCAL, b"vt9-local", CLAUSE)?], CLAUSE).await?;
+        let first = [
+            shipped(RECORDED_ORIGIN, 2, -1_234, b"vt9-before-1970", CLAUSE)?,
+            shipped(
+                RECORDED_ORIGIN,
+                3,
+                1_700_000_000_123,
+                b"vt9-off-a-second",
+                CLAUSE,
+            )?,
+            shipped(
+                RECORDED_ORIGIN,
+                5,
+                1_600_000_000_456,
+                b"vt9-earlier",
+                CLAUSE,
+            )?,
+        ];
+        let second = [
+            shipped(
+                RECORDED_ORIGIN,
+                8,
+                1_650_000_000_789,
+                b"vt9-second-group",
+                CLAUSE,
+            )?,
+            // 2200-01-01, inside the ±2^53 a JavaScript number carries exactly.
+            shipped(
+                RECORDED_ORIGIN,
+                9,
+                7_258_118_400_123,
+                b"vt9-far-future",
+                CLAUSE,
+            )?,
+        ];
+        let groups = [
+            IngestGroup::new(&first, &[]),
+            IngestGroup::new(&second, &[]),
+        ];
+
+        let ingested = ingest(&store, &groups, CLAUSE).await?;
+
+        ensure_counts(ingested, (5, 0, 0), "five new foreign events", CLAUSE)?;
+        let log = read_all(&store, CLAUSE).await?;
+        for sent in first.iter().chain(&second) {
+            let held = held_once(&log, &sent.event, CLAUSE)?;
+            ensure(held.recorded_at == sent.recorded_at, CLAUSE, || {
+                format!(
+                    "{} was recorded at {} by its origin and is held as recorded at {}; an \
+                     ingested event keeps the time its origin recorded",
+                    sent.id, sent.recorded_at, held.recorded_at
+                )
+            })?;
+        }
         Ok(RuleOutcome::Ran)
     }
 
@@ -1173,6 +1268,57 @@ pub mod ingest_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-7: a compensation is written only by the store the assignment names
+    /// the fact family's adjudicator, and filed under that store's own
+    /// identity, which is how a log records who authored it.
+    ///
+    /// Two stores each take the same pair of conflicting claims on one seat,
+    /// from two foreign origins, in opposite orders. The rule plays the runner
+    /// above them and holds the assignment: the first store adjudicates the
+    /// seat family and the second does not. Where the runner finds the pulled
+    /// claim's guard matched by what the store holds (SY-6's evidence), it
+    /// hands the adjudicator a reversal to write with the claim, in one group,
+    /// and hands the other store the claim alone. Read back, the adjudicator's
+    /// log holds one reversal, carrying the adjudicator's identity, and the
+    /// other store's holds none. Reversals are found by type, never decoded.
+    ///
+    /// # Rejects
+    ///
+    /// A store that mints a compensation under an incarnation it never read,
+    /// a placeholder, rather than its own identity: its log then says a store
+    /// nobody assigned authored the reversal, and every such store files every
+    /// compensation under that one identity, so two stores' reversals at one
+    /// position collapse into one when they meet, which is SY-7's marker's
+    /// escape reached by losing an event. `tests/wrong_ingest_stores.rs`
+    /// carries it, and asserts SY-38's rule reports its compensation-hidden
+    /// half skipped against it, since the compensation is not where its own
+    /// identity would put it.
+    ///
+    /// # Does not reject
+    ///
+    /// **Every peer adjudicating**, the wrong implementation SY-7 names. That
+    /// is a runner configuration, and no runner in `happenstance-sync` authors
+    /// a compensation yet, so the rule plays the runner and always honours the
+    /// assignment. The configuration SY-7 forbids is run by the clause's
+    /// falsification test, in this crate's own tests, where two adjudicators
+    /// answer one conflict twice and reverse opposite claims.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-7 if the fixture gives both stores one identity,
+    /// if a store refuses or miscounts an ingest, or if either log holds a
+    /// reversal its store was not assigned, lacks the one it was, or files it
+    /// under another identity.
+    pub async fn only_the_adjudicator_compensates<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let conflict =
+            adjudication::take_the_conflicting_pair(&open, adjudication::Assignment::Adjudicator)
+                .await?;
+        adjudication::judge(&conflict).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What a refused or skipped ingest must leave as it found it.
     #[derive(Debug, PartialEq)]
     struct Observed {
@@ -1450,6 +1596,9 @@ macro_rules! for_each_ingest_store_rule {
             // --- An ingested event keeps its origin's identity (VT-5) -------
             ingest_preserves_origin_identity,
 
+            // --- An ingested event keeps its origin's recorded time (VT-9) --
+            ingest_preserves_the_recorded_time,
+
             // --- An ingested event lands at the tail (SY-5) -----------------
             ingested_events_land_above_the_local_head,
 
@@ -1467,6 +1616,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- A call is held to its tags-per-batch ceiling (VT-36, SY-18) -
             ingest_holds_the_call_to_its_tags_per_batch_ceiling,
+
+            // --- Only the assigned adjudicator compensates (SY-7) ------------
+            only_the_adjudicator_compensates,
         }
     };
 }
