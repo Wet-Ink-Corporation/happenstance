@@ -22,9 +22,9 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 **`0.5.1` is prepared, not yet tagged.** Its release PR, for `main`, moves `[Unreleased]`
 to `[0.5.1] — 2026-11-08` and all nine crates to `0.5.1`. It changes no public API: the
-testkit's and neon's rustdoc build under their default features again (#396, #409), the
-gate builds the testkit's docs that way (#412), and the rest is documentation, tests and
-an experiment (#381, #389, #397, #398, #400, #401).
+testkit's rustdoc builds under its default features again (#396) and neon's with
+`--no-default-features` (#409), the gate builds the testkit's docs that way (#412), and
+the rest is documentation, tests and an experiment (#381, #389, #397, #398, #400, #401).
 
 **`0.5.0` is released** (2026-11-07; all nine crates on crates.io and docs.rs). Phases
 0–12, 15–17b and 18 are done. [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md)
