@@ -639,37 +639,37 @@ SQLite (`happenstance-sqlite`):
 
 ### PR 2 — Postgres and Neon
 
-- [ ] 34. Postgres `migration.rs` unit: `MIGRATION_3` adds both columns and the partial index;
+- [x] 34. Postgres `migration.rs` unit: `MIGRATION_3` adds both columns and the partial index;
       the comment-stripper guard tests cover it; `apply` sends 1 then 3.
-- [ ] 35. Postgres `insert_statement` text test: nine columns, `write_group` bound.
-- [ ] 36. Postgres live: an append's rows share `write_group = min(position)`; an ingest group
+- [x] 35. Postgres `insert_statement` text test: nine columns, `write_group` bound.
+- [x] 36. Postgres live: an append's rows share `write_group = min(position)`; an ingest group
       whose first foreign event is a re-delivery takes `first` from the lowest **landed** row
       (I-2); compensation joins.
-- [ ] 37. Postgres live: two concurrent 3-event appends (interleaved positions forced by a
+- [x] 37. Postgres live: two concurrent 3-event appends (interleaved positions forced by a
       shared sequence and a barrier, as the concurrency family does) read back as two whole
       groups in `first` order, and paging with `max_events = 3` returns each exactly once
       (the interleaving case §3 exists for).
-- [ ] 38. Postgres live: a schema with migration 1 only and pre-existing rows, then
+- [x] 38. Postgres live: a schema with migration 1 only and pre-existing rows, then
       `apply`: rows read as singletons; new appends group.
-- [ ] 39. Neon: `render(MIGRATION_3)` splits into three statements with no placeholder left;
+- [x] 39. Neon: `render(MIGRATION_3)` splits into three statements with no placeholder left;
       the ingest request carries the stamp statement after the refusal statement (request
       shape unit test, CF-33 permits adapter-local shape checks).
-- [ ] 40. Neon live (`live-neon` CI job): the negative tags never survive a commit
+- [x] 40. Neon live (`live-neon` CI job): the negative tags never survive a commit
       (`SELECT count(*) WHERE write_group < 0` = 0 after an ingest of three groups); guards
       round-trip.
-- [ ] 41. Both: `write_group_store_conformance!` mounted in `family.rs`, green; both
+- [x] 41. Both: `write_group_store_conformance!` mounted in `family.rs`, green; both
       `StoredGuard` variants classify `Stop`.
 
 ### PR 3 — Durable Object and the workerd harness
 
-- [ ] 42. `migrate` on an object with the pre-#420 tables adds both columns once; a second
+- [x] 42. `migrate` on an object with the pre-#420 tables adds both columns once; a second
       `migrate` is a no-op (extend `migrate_is_idempotent`); namespaced logs migrate per
       namespace.
-- [ ] 43. Pre-existing rows read as singletons; appends and ingested groups stamp; the stamp is
+- [x] 43. Pre-existing rows read as singletons; appends and ingested groups stamp; the stamp is
       a rowid seek.
-- [ ] 44. `write_group_store_conformance!` with `emit_write_group_wasm!` in the crate's
+- [x] 44. `write_group_store_conformance!` with `emit_write_group_wasm!` in the crate's
       `family.rs`, green under `wasm-bindgen-test`.
-- [ ] 45. `harness/workerd`: dispatch by name over `for_each_write_group_rule!` (mirroring
+- [x] 45. `harness/workerd`: dispatch by name over `for_each_write_group_rule!` (mirroring
       `src/ingest/dispatch.rs`), a vitest entry per rule, run locally and against the
       deployed object in the `workerd` job.
 
@@ -780,3 +780,66 @@ Architect decisions recorded for review (not H-16, but worth a glance):
     citation into the files this branch changed re-derived by a line mapping from the merge
     base, spec, standards, runbook and `.kb/open-questions` (not `_governance`, a record).
   - F4 CHANGELOG SY-30 entry describes the three pushed groups. F5/F7 recorded above.
+- 2026-11-08: PR 2 (items 34-41), Postgres and Neon, on `claude/p13-420b`. Red runs:
+  - 34: `migration_3_adds_the_write_group_columns_and_their_index` and
+    `apply_sends_migration_1_then_migration_3`: E0425, no `MIGRATION_3` / `EVENT_LOG`.
+  - 35: `the_insert_binds_a_write_group_on_every_row`: E0432 no `ROW_PARAMETERS`, E0061
+    `insert_statement` takes three arguments.
+  - 39: Neon `the_write_group_migration_renders_into_three_statements`: E0432 no
+    `MIGRATION_3`.
+  - 37 as a mutant: `GROUPS_SQL` ordered by `position` alone fails
+    `interleaved_writers_read_back_as_whole_groups_in_first_order` with
+    `GroupOrder { first: 1, after: 2 }`; the conformance family alone did not catch it.
+  Live: Postgres 17.10 in Docker. The lib `--ignored` run passed 39/39 (six write-group
+  rules, four `groups.rs` tests); `postgres_conformance` passed 110/110; the other live
+  binaries passed. The naive-arm cfg targets were not run (they need `RUSTFLAGS`) and are
+  left to CI. Neon: the unit and shape tests pass. Its rendered SQL (migrations 1+3, an
+  append, two ingests including a whole re-delivery, the group read) was executed by hand
+  against the local Postgres: 0 negative tags left, the guard on each first row only, the
+  read in group order. The live leg (`groups.rs`, the mounted family) is `live-neon`'s; the
+  existing lib `--ignored` invocation already runs it, so CI is unchanged.
+  Expectations moved, each implied by the design:
+  - Postgres `SCHEMA_VERSION` 1 -> 2 (migration 3).
+  - Both conformance files' settled column set and index list gain migration 3's two columns
+    and its index (line-neutral; ADR-0066 cites the Postgres lines).
+  - Neon ingest request: 2 -> 3 statements in two tests (the stamp joins the batch).
+  - Neon ingest SQL: `b.recorded_at FROM` becomes `b.recorded_at, -(b.grp + 1) FROM`.
+  Deviations: 37 forces the interleaving deterministically (two open transactions drawing
+  `nextval` alternately) rather than racing with a barrier. Neon refuses an unencodable guard
+  before sending, through `NeonError::UnstorableGuard { group }`, a variant §12 did not list.
+  Citations into Neon `event_store.rs` and the Postgres `insert_statement` were repointed in
+  the spec, standards, `.kb/open-questions` and the experiment README. Accepted `.kb/decisions`
+  bodies were not touched; see the report.
+- 2026-11-08: PR 3 (items 42-45), Durable Object and the workerd harness, on
+  `claude/p13-420c` (based on 6681c129; PR 2 is not in this base). Red runs:
+  - Host, before any adapter code: `ingest_store_satisfies_the_bare_bounds` and the class
+    table failed to compile, E0277 `CloudflareIngestStore: WriteGroupStore` and E0599 no
+    `StoredGuard` / `GroupOrder` variants.
+  - The wasm tests were written with the code, so red was taken by mutation, each reverted:
+    - A (append stamp `write_group = position + 0 * ?`, probe for `write_group` only, group
+      read without `position > ?`): 11 failures, among them
+      `an_append_names_every_row_by_its_first_position`,
+      `a_half_applied_migration_is_completed_by_the_next`,
+      `a_row_from_before_the_columns_reads_as_its_own_group`,
+      `the_group_read_seeks_on_the_position_without_a_sort` and the mounted family.
+    - B (guard stored on every candidate row; append stamp bounded by `? IS NOT NULL`):
+      `the_append_stamp_is_a_rowid_seek`,
+      `an_ingested_group_is_named_by_its_first_landed_row_and_holds_its_guard_there`,
+      `a_replay_across_a_refused_append`.
+    - C (compensation stamped as a group of its own; foreign stamp unbound from the
+      position): `the_foreign_stamp_is_a_rowid_seek`, the groups test above,
+      `compensation_joins_its_group`.
+  Green: wasm lib 171 passed (17 new), host lib 45, harness host 64. Local workerd:
+  write-group warm and cold 15/15; conformance, ingest, classes, transaction and remint
+  236/236 (restart and idle not run); the CI step scripts report collected 8 / passed 8 and
+  collected 7 / passed 7. `deployed.mjs` against `wrangler dev`: 98/98, 10/10, 6/6, 0 failed.
+  Deviations from §6/§8:
+  - No separate stamp `UPDATE`: the append's identity stamp and ingest's per-row foreign
+    stamp carry `write_group` (and the guard on the first landed row). An append has no
+    transaction here, so a second statement could leave a batch of events with no group,
+    and a Durable Object bills every row an `UPDATE` writes.
+  - `migrate_is_idempotent` was not extended; a dedicated test migrates twice.
+  - The harness reuses the ingest dispatcher through a `Family` enum rather than a copy.
+  - `deployed.mjs` gives every family a floor, not only the new one.
+  Expectations moved: additions only (two class-table rows, one bound, two exhaustive-match
+  arms, and a signature-mechanical argument in `writes.rs`).

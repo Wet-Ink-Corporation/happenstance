@@ -219,7 +219,11 @@
 //! [`emit_sync_wasm!`](crate::emit_sync_wasm). The ingest family has
 //! [`emit_ingest_tokio!`](crate::emit_ingest_tokio) (the default),
 //! [`emit_ingest_blocking!`](crate::emit_ingest_blocking) and
-//! [`emit_ingest_wasm!`](crate::emit_ingest_wasm), the Durable Object's.
+//! [`emit_ingest_wasm!`](crate::emit_ingest_wasm), the Durable Object's. The
+//! write-group family has
+//! [`emit_write_group_tokio!`](crate::emit_write_group_tokio) (the default),
+//! [`emit_write_group_blocking!`](crate::emit_write_group_blocking) and
+//! [`emit_write_group_wasm!`](crate::emit_write_group_wasm).
 //!
 //! # Failure is a value
 //!

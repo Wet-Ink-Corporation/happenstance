@@ -1,7 +1,7 @@
 # happenstance-workerd-harness
 
 Runs every event-store conformance rule, and every rule of `happenstance-sync`'s
-ingest family, against `happenstance-cloudflare` inside `workerd`, through a real
+ingest and write-group families, against `happenstance-cloudflare` inside `workerd`, through a real
 Durable Object. The gate runs the same rules against a
 `node:sqlite` shim, which takes `workerd`'s four statement limits but none of the
 platform's other properties, so this harness checks conformance on the real
@@ -33,6 +33,7 @@ $ npx vitest run test/idle.test.ts --reporter=verbose     # idle eviction (~15 s
 $ npx vitest run test/remint.test.ts --reporter=verbose   # the re-mint leg's local half
 $ npx vitest run test/transaction.test.ts --reporter=verbose  # transactionSync's properties
 $ npx vitest run test/ingest.test.ts test/ingest-cold.test.ts --reporter=verbose  # the ingest family, warm and cold
+$ npx vitest run test/write-group.test.ts test/write-group-cold.test.ts --reporter=verbose  # the write-group family, warm and cold
 $ npx vitest run test/ingest-classes.test.ts --reporter=verbose    # F's D7 classes, by an identical retry
 $ npx vitest run test/ingest-ceiling-bisect.test.ts               # the bisection, without a runtime
 $ npx vitest run test/ingest-ceiling.test.ts --reporter=verbose    # the ingest ceiling (~2 min)
@@ -77,10 +78,12 @@ $ HARNESS_TOKEN=local node deployed-ingest.mjs http://127.0.0.1:8799 local-1
 | `test/transaction.test.ts` | The `transactionSync` properties the `cfg(test)` ingest store's `node:sqlite` model assumes: a throw rolls back rows and `sqlite_sequence` and is rethrown, a return commits, `UPDATE OR IGNORE … RETURNING` answers no row on a conflict, and `exec` refuses `SAVEPOINT` and `BEGIN`. The routes are `/transaction-probe/<case>` in `worker.mjs`. |
 | `test/idle.test.ts` | Idle objects holding the adapter, left alone for 12 s and for 8 s, and the timer control (`/idle-control/` in `worker.mjs`). |
 | `test/ingest.test.ts`, `test/ingest-cold.test.ts` | One `it()` per ingest rule, each on its own object, warm and on a primed and evicted object. Every rule must answer `ran`. |
+| `src/write_group.rs` | The write-group family (#420, SY-39): its names from `for_each_write_group_rule!`, run through the ingest dispatcher's opener on the same ingest fixtures, routed `/write-group-rules` and `/write-group-rule/<name>`. No declension check: no write-group rule is gated on a capability. |
+| `test/write-group.test.ts`, `test/write-group-cold.test.ts` | One `it()` per write-group rule, each on its own object, warm and on a primed and evicted object, where a second instance's `migrate` must find both write-group columns and add neither. Every rule must answer `ran`. |
 | `test/ingest-classes.test.ts` | The D7 census, strict: `trigger-abort` and `missing-schema` must hold, `storage-full` must hold or be unreachable. |
 | `test/ingest-ceiling.test.ts`, `test/ingest-ceiling-bisect.test.ts` | The ingest ceiling, strict on the `minimal` axis only, and the bisection pinned without a runtime. |
 | `test/limits.test.ts`, `test/platform-miss.test.ts` | The probe, and what the deployed leg retries. |
-| `deployed.mjs` | The deployed leg's runner: both families, each strict. |
+| `deployed.mjs` | The deployed leg's runner: all three families, each strict. |
 | `ingest-ceiling.mjs` | The ingest ceiling's bisection, shared by the local test and the deployed script. One object per attempt, because a call near the top can trap the object. |
 | `deployed-ingest.mjs` | The deployed leg's ingest ceiling and D7 census. Record-only. |
 | `deployed-restart.mjs` | The deployed leg's hibernation cells, over `wss://`, and its idle cells. Record-only. |
