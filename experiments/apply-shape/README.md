@@ -119,8 +119,18 @@ cargo check --lib --features demonstrate-refusals                # expected to F
 rustc --edition 2024 --crate-type lib --out-dir target/rtn-probe probes/rtn.rs       # expected to FAIL: E0658
 cargo test --features demonstrate-spawn-minimal-bounds --test spawn --no-run         # expected to FAIL: 9 E0277s
 cargo test --features demonstrate-spawn-store-as-projection --test spawn --no-run    # expected to FAIL: 5 E0277s (F1)
-cargo test --features demonstrate-shipped-f1 --test shipped_spawn --no-run           # expected to FAIL: 6 E0277s (F1, shipped)
+cargo test --features demonstrate-shipped-f1 --test shipped_spawn --no-run           # at e40a5e5 only: 6 E0277s (F1, shipped)
 ```
+
+**`tests/shipped_spawn.rs` is pinned to the trait it measured.** It spawns the
+`happenstance::Projection` that shipped before `0.5.0`, whose `apply` was
+synchronous and which had no `Error`. `0.5.0` changed both (#98, #101), so the
+file cannot compile at HEAD. It sits behind the opt-in `shipped-0-4` feature,
+which `demonstrate-shipped-f1` implies, so the rest of the experiment still
+builds. To run either of its two lines above as recorded, check out `e40a5e5`,
+the last `main` commit with the 0.4.6 surface. It is not ported, because a port
+would test 0.5.0's answer to F1 (`SendProjection`) rather than the claim this
+file and its transcript record (#398).
 
 `native` is the default feature and carries the two database adapters. The wasm32
 check turns it off, so it builds the trait, the runner and the edge store, and

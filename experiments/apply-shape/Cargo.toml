@@ -37,7 +37,13 @@ demonstrate-refusals = []
 # Builds `tests/shipped_spawn.rs`'s second spawner, which writes the store as
 # `P::Store` on the SHIPPED `happenstance::Projection`. Expected to FAIL with
 # E0277s: F1's evidence that the cause is the item bound, not `trait_variant`.
-demonstrate-shipped-f1 = []
+demonstrate-shipped-f1 = ["shipped-0-4"]
+# `tests/shipped_spawn.rs` is evidence about the trait `happenstance` shipped
+# before `0.5.0`: synchronous `apply`, no `Projection::Error`. It compiled at
+# `e40a5e5` (the 0.4.6 surface) and cannot compile against the trait 0.5.0
+# ships, so it builds only when asked for, and never resolves at HEAD. It is
+# kept as the record README §4.2 and ADR-0074 cite, not ported (#398).
+shipped-0-4 = []
 # The two weakened spawners in `tests/spawn.rs` (README §3). Each is expected to
 # FAIL; `run.sh` writes their transcripts. They were hand edits of
 # `tests/common/mod.rs` until the transcripts had to be re-run against the final
@@ -72,6 +78,10 @@ futures-core = { version = "0.3", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+
+[[test]]
+name = "shipped_spawn"
+required-features = ["shipped-0-4"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

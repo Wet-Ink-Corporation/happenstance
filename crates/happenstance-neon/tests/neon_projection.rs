@@ -10,8 +10,8 @@
 //!
 //! The `#![cfg(…)]` above is a different mechanism doing a different job. It is
 //! not a gate against the *endpoint*; it is the two features the impl under test
-//! lives behind. `projection-store` forwards `happenstance-core`'s own
-//! `unstable-projection`, and `conformance` is what compiles
+//! lives behind. `projection-store` compiles the store itself, and
+//! `conformance` is what compiles
 //! `impl ProjectionProbe for NeonProjectionStore`. With either off there is no
 //! store to mount a suite over, and the target compiles to nothing rather than
 //! failing to compile.

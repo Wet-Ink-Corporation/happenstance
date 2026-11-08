@@ -35,6 +35,14 @@ not the same as what a user needed to be told.
 
 ### Fixed
 
+- `happenstance-sqlite` (documentation only): the `projection_store` module's
+  rustdoc no longer says the module is exempt from semver or that it forwards
+  `happenstance-core`'s `unstable-projection`. Neither has been true since
+  `0.3.0` (#398).
+- `happenstance-neon` (documentation only): `NeonError::ForeignBatch`
+  links `CommitError::ForeignBatch` and `ResetError::ForeignBatch` instead of
+  explaining that they could not be linked behind a feature that no longer
+  exists (#398).
 - `happenstance-testkit` (documentation only): the crate's rustdoc builds
   under its default features again (#396). `Fixture::READ_YOUR_OWN_WRITES`
   linked the `model` module, which exists only behind `proptest`, so

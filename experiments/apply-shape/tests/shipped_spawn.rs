@@ -7,7 +7,7 @@
 //! shipped trait, which `trait_variant` does not generate: the cause is the
 //! associated type's item bound, `type Store: ProjectionStore`, and not the macro.
 //!
-//! - By default it builds `spawn_shipped`, written with `Store = St`, and runs it.
+//! - Under `shipped-0-4` it builds `spawn_shipped` (`Store = St`) and runs it.
 //! - Under `--features demonstrate-shipped-f1` it also builds
 //!   `spawn_shipped_store_as_projection`, the same spawner with the store written
 //!   as `P::Store`. That build is **expected to fail** with `E0277`s, and
