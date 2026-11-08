@@ -12,10 +12,12 @@ with programs you can run.
 > store adapter can implement `IngestStore` behind an optional `sync` feature,
 > and so that an outside adapter can be measured by
 > [`happenstance-sync-testkit`](https://docs.rs/happenstance-sync-testkit).
-> Two things a replicating application needs do not exist yet:
+> Two things a replicating application needs are not finished yet:
 >
-> - **a runner**, the loop that pulls from a peer, ingests, and acknowledges
->   (issue #244), and
+> - **the runner**, the loop that pulls from a peer, ingests, and acknowledges
+>   (issue #244): `runner::Edge` drives one edge a step at a time and reports
+>   its status, and the backoff, bounded buffer, owned tasks and
+>   peer-incarnation check are still to come, and
 > - **a network peer**: the only `SyncPeer` is `MemorySyncPeer`, which lives in
 >   one process.
 >
