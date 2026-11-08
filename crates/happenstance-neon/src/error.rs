@@ -212,4 +212,46 @@ pub enum NeonError<E> {
     /// build.
     #[error("the store's meta table holds no store_id row; was migration 1 applied?")]
     MissingIdentity,
+
+    /// A stored write-group guard is not one this build's codec reads (#420):
+    /// the bytes in `group_guard` on the group's first row, which only a
+    /// damaged schema or a newer build's format holds. The group is not
+    /// forwarded without it. Behind `sync`, for the reason
+    /// [`OriginPositionOutOfRange`](Self::OriginPositionOutOfRange) is.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the stored guard of write group {first} could not be read back")]
+    StoredGuard {
+        /// The write group the guard belongs to.
+        first: happenstance_core::SequencePosition,
+        /// Why the codec refused it.
+        #[source]
+        source: happenstance_sync::write_group::GuardCodecError,
+    },
+
+    /// An ingested group's guard could not be encoded for storage (#420).
+    /// Refused before the request is built, so nothing in the call was sent;
+    /// the group has no position yet, so it is named by its index in the
+    /// call. Behind `sync`, for the reason
+    /// [`OriginPositionOutOfRange`](Self::OriginPositionOutOfRange) is.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the guard of ingested group {group} could not be encoded for storage")]
+    UnstorableGuard {
+        /// The group's index in the call.
+        group: usize,
+        /// Why the codec refused it.
+        #[source]
+        source: happenstance_sync::write_group::GuardCodecError,
+    },
+
+    /// The group read handed its page builder a row naming a write group it
+    /// had already passed, so the log cannot be paged in whole groups. The read
+    /// orders its rows by group, so no schema this adapter wrote produces one;
+    /// a hand-edited `write_group` can. Behind `sync`, for the reason
+    /// [`OriginPositionOutOfRange`](Self::OriginPositionOutOfRange) is.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the stored write groups are out of order")]
+    GroupOrder(#[from] happenstance_sync::write_group::GroupOrderError),
 }

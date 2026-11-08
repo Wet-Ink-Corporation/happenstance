@@ -161,11 +161,9 @@ happenstance_testkit::event_store_model_conformance!(
 // This adapter's own tests: the things no borrowed rule can see.
 // ---------------------------------------------------------------------------
 
-/// The columns migration 1 is allowed to have, and their shapes.
-///
-/// Held as data rather than as a sequence of assertions so that the "exactly
-/// these" check below can be a set comparison: a tenth column added in passing
-/// must fail a test rather than pass review.
+/// The columns migrations 1 and 3 are allowed to give `event`, and their shapes,
+/// as data so the check below, which keeps its name but covers migration 3 since
+/// #420, is a set comparison: a column added in passing must fail a test.
 const SETTLED_COLUMNS: &[(&str, &str, bool)] = &[
     // (name, data_type, is_nullable)
     ("position", "bigint", false),
@@ -177,6 +175,8 @@ const SETTLED_COLUMNS: &[(&str, &str, bool)] = &[
     ("origin_position", "bigint", true),
     ("recorded_at", "bigint", false),
     ("xact_id", "xid8", false),
+    ("write_group", "bigint", true),
+    ("group_guard", "bytea", true),
 ];
 
 #[tokio::test]
@@ -209,8 +209,7 @@ async fn migration_1_creates_the_settled_column_set() {
 
     assert_eq!(
         found, expected,
-        "migration 1's column set drifted from the settled nine. A tenth column is not \
-         a formality: it is where the visibility mechanism gets answered by accident."
+        "the event table's column set drifted: a new column is a decision, not a formality"
     );
 
     let indexes = query(
@@ -224,6 +223,7 @@ async fn migration_1_creates_the_settled_column_set() {
         "event_type_idx",
         "event_origin_idx",
         "event_xact_idx",
+        "event_write_group_idx",
     ] {
         assert!(
             names.iter().any(|name| name == expected),

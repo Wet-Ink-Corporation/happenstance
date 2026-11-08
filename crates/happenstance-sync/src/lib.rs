@@ -209,3 +209,10 @@ pub mod runner;
 // reason `runner` is: the lines above keep the numbers the specification cites.
 pub mod write_group;
 pub use write_group::{GroupPage, SendWriteGroupStore, WriteGroup, WriteGroupStore};
+
+// The `Send` flavour of the network peer's two halves (#421): a second type,
+// because coherence refuses a second impl on the first (RS-20-4). Last, for the
+// reason `write_group` is: the lines above keep the numbers the specification
+// cites.
+pub mod send_peer;
+pub use send_peer::SendPeer;

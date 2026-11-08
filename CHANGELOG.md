@@ -191,6 +191,19 @@ not the same as what a user needed to be told.
   codec cannot write or read back, and `SqliteEventStoreError::GroupOrder`,
   behind `sync`, a stored `write_group` naming a group the read had already
   passed, which only a damaged file holds; both are classed `Stop`.
+- `happenstance-postgres`: `PostgresEventStore` implements
+  `SendWriteGroupStore` behind `sync`, over migration 3's columns, in one
+  statement that orders rows by group so writers whose positions interleave
+  still read back whole; an ingested group's guard is stored on its first row.
+  `PostgresEventStoreError::StoredGuard` and `PostgresEventStoreError::GroupOrder`,
+  both behind `sync` and classed `Stop`. Additive: the enum is
+  `#[non_exhaustive]`.
+- `happenstance-neon`: `NeonEventStore` implements the bare `WriteGroupStore`
+  behind `sync`, in one read-only round trip, and stores an ingested group's
+  guard. `NeonError::StoredGuard` (a stored guard that does not decode),
+  `NeonError::UnstorableGuard` (one that does not encode, refused before the
+  request is sent) and `NeonError::GroupOrder`, all behind `sync` and classed
+  `Stop`; additive.
 - `happenstance-cloudflare`: `CloudflareIngestStore` implements
   `WriteGroupStore` behind `sync`, the bare flavour, over the two columns
   `migrate` now adds, and stores an ingested group's guard on the group's
@@ -224,9 +237,10 @@ not the same as what a user needed to be told.
   above a row position; and `pages_chain_on_first_and_end_with_nothing`, which
   fails a page its budget cut that says nothing is waiting. Each is pinned
   against its wrong stores in `tests/wrong_write_group_stores.rs`.
-  `MemoryIngestFixture`, `happenstance-sqlite` and `happenstance-cloudflare`
-  mount it; `emit_write_group_wasm!` is the Durable Object's emitter, the twin
-  of `emit_ingest_wasm!`.
+  `MemoryIngestFixture`, `happenstance-sqlite`, `happenstance-postgres`,
+  `happenstance-neon` and `happenstance-cloudflare` mount it;
+  `emit_write_group_wasm!` is the Durable Object's emitter, the twin of
+  `emit_ingest_wasm!`.
 - `happenstance-sync-testkit`: a sync conformance rule,
   **`round_trip_preserves_the_whole_log`** (SY-28, SY-27, #140). The defect it
   detects is a peer that replicates a slice: it stores and acknowledges every
@@ -278,6 +292,18 @@ not the same as what a user needed to be told.
   reversing opposite claims. No runner in `happenstance-sync` authors a
   compensation yet, so the rule cannot be handed one; the configuration SY-7
   forbids is that test's, not a mount's.
+- `happenstance-sync`: `SendPeer`, the `Send` flavour of the network peer's
+  two halves (#421). `StoreSyncPeer` and `RemoteSyncPeer` implement only the
+  bare `SyncPeer`, so a `!Send` store or transport stays a valid half, and
+  coherence refuses them a `SendSyncPeer` impl beside it (RS-20-4).
+  `SendPeer::new(peer)` wraps either one and implements `SendSyncPeer` (and so
+  `SyncPeer`) by delegation: `SendPeer<StoreSyncPeer<S, I>>` for
+  `S: SendWriteGroupStore + Sync` and `I: SendIngestStore + Sync`, and
+  `SendPeer<RemoteSyncPeer<X>>` for `X: SendExchange + Sync`. Code generic over
+  `SendSyncPeer` — `runner::Edge::step` or `Edge::run` inside `tokio::spawn` —
+  now takes them. It is not a wrapper for any peer: a bare peer's futures
+  promise nothing about `Send`, so the impl is written per peer. Additive; the
+  two peers' own types and impls are unchanged.
 
 - `happenstance-cloudflare`: the Durable Object as a sync peer over HTTP
   (#130), the `sync_http` module behind `sync` (additive).
@@ -359,6 +385,33 @@ not the same as what a user needed to be told.
   wrap the file and fail its first append with `no such column`: a caller that
   wraps its own connection with `new` opens the file once through `open_on`
   first.
+- `happenstance-postgres`: migration 3 (#420), `migration::MIGRATION_3`
+  (`migrations/0003_write_group.sql`): `write_group` and `group_guard` on
+  `event`, both nullable, and the partial index `event_write_group_idx`.
+  `migration::apply` now sends migrations 1 and 3 in one batch, and
+  `SCHEMA_VERSION` is `2`. Every `INSERT` names `write_group`: an append
+  binds its lowest position on every row; an ingested group's rows are stamped
+  with the lowest position it landed, a re-delivered row's burnt position never
+  naming a group, and its compensation joins it. A row written before the
+  migration reads as a group of its own; there is no backfill. **Upgrading:
+  migrate, then deploy.** Run `migration::apply` against every schema before
+  deploying this build to any process that writes to it: this build fails its
+  first append with an undefined-column error against a schema without
+  migration 3. The `ALTER TABLE`s rewrite no row but take a brief exclusive
+  lock; the index build blocks writes while it runs, and on a large table can
+  be made first with `CREATE INDEX CONCURRENTLY` under the same name. An older
+  build keeps working against a migrated schema, writing rows that read as
+  groups of one.
+- `happenstance-neon`: migration 3 (#420), `migration::MIGRATION_3`, with the
+  new `@write_group_idx@` placeholder `migration::render` fills: the same two
+  columns and partial index as `happenstance-postgres`'s. An append computes
+  its group inside its one `INSERT`; an ingest writes a provisional negative
+  tag per group and replaces it with the lowest position the group landed in a
+  third statement of the same request, so the request is now the write, the
+  refusal and the stamp, and no tag outlives the commit. **Upgrading: migrate,
+  then deploy**, as for `happenstance-postgres`: send
+  `migration::request(MIGRATION_3, &config)` after migration 1 before this build
+  writes to the schema.
 - `happenstance-cloudflare`: write groups (#420). `migrate` asks `PRAGMA
   table_info` for the log's event table and adds `write_group INTEGER` and
   `group_guard BLOB` where they are missing, each on its own, per namespace;

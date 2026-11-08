@@ -143,6 +143,37 @@ pub enum PostgresEventStoreError {
         /// The origin position as the peer sent it.
         position: happenstance_core::SequencePosition,
     },
+
+    /// The guard of a write group could not be put into `group_guard` on its
+    /// way in, or read back out of it (#420).
+    ///
+    /// On the way in the ingest's transaction is rolled back, so nothing in
+    /// the call was written. On the way out the stored bytes are not a guard
+    /// this build's codec reads, which only a damaged schema or a newer
+    /// build's format holds; the group is not forwarded without it. Behind
+    /// `sync`, for the reason [`OriginPositionOutOfRange`](Self::OriginPositionOutOfRange)
+    /// is.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the guard of write group {first} could not be stored or read back")]
+    StoredGuard {
+        /// The write group the guard belongs to.
+        first: happenstance_core::SequencePosition,
+        /// Why the codec refused it.
+        #[source]
+        source: happenstance_sync::write_group::GuardCodecError,
+    },
+
+    /// The group read handed its page builder a row naming a write group it
+    /// had already passed, so the log cannot be paged in whole groups.
+    ///
+    /// The read orders its rows by group, so no schema this adapter wrote
+    /// produces one; a hand-edited `write_group` can. Behind `sync`, for the
+    /// reason [`OriginPositionOutOfRange`](Self::OriginPositionOutOfRange) is.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the stored write groups are out of order")]
+    GroupOrder(#[from] happenstance_sync::write_group::GroupOrderError),
 }
 
 /// How [`PostgresProjectionStore`](crate::projection_store::PostgresProjectionStore)

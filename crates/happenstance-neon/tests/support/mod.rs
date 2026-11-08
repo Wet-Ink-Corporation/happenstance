@@ -98,14 +98,14 @@ impl NeonFixture {
         &self.config
     }
 
-    /// Applies migration 1 into this instance's schema. Idempotent, and run once.
+    /// Applies migrations 1 and 3 into this instance's schema. Idempotent, once.
     async fn migrate(&self) {
         self.migrated
             .get_or_init(|| async {
                 sweep_once().await;
                 execute(
-                    migration::request(migration::MIGRATION_1, &self.config),
-                    "migration 1",
+                    migration::request(&event_log_migrations(), &self.config),
+                    "migrations 1 and 3",
                     self.schema(),
                 )
                 .await;
@@ -725,4 +725,12 @@ async fn settle_probe(probe: &str) -> bool {
         .first()
         .and_then(|result| result.text(0, "visible"))
         == Some("true")
+}
+
+/// The event log's migrations, 1 then 3, as one template: what this build
+/// expects of a schema, applied in one batch so a schema has both or neither.
+///
+/// Defined last, so the lines above keep the numbers the knowledge base cites.
+fn event_log_migrations() -> String {
+    format!("{}\n{}", migration::MIGRATION_1, migration::MIGRATION_3)
 }

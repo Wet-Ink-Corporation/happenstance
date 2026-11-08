@@ -291,7 +291,12 @@ impl<E> Classify for NeonError<E> {
             | Self::MalformedIdentity { .. }
             | Self::MalformedPayload
             | Self::ForeignBatch
-            | Self::MissingIdentity => FailureClass::Stop,
+            | Self::MissingIdentity
+            // A guard the codec refuses either way, or stored write groups the
+            // page builder refuses: the same read or write fails the same way.
+            | Self::StoredGuard { .. }
+            | Self::UnstorableGuard { .. }
+            | Self::GroupOrder(_) => FailureClass::Stop,
         }
     }
 }

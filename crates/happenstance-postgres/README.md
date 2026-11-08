@@ -84,8 +84,11 @@ so generic code bound on `IngestStore` accepts it, and re-exports the port as
 `happenstance_postgres::happenstance_sync`. The identity an ingest checks
 claims against is the one `append` stamps from, read from `store_meta` on a
 handle's first use. It turns on `event-store`, and `happenstance-core`'s
-`serde` feature through `happenstance-sync`. There is no runner (issue #244)
-and no network peer yet, so this is the port, not replication.
+`serde` feature through `happenstance-sync`. It also implements
+`SendWriteGroupStore`, which reads the log back in the writes that made it
+(#420), and stores the guard an ingested group arrived under. The runner is
+unfinished (issue #244) and there is no network transport yet, so this is the
+port, not replication.
 
 ## The problem this crate is here to solve
 
@@ -126,8 +129,9 @@ let views  = PostgresProjectionStore::new(pool);
 Sharing one pool is the expected deployment, which is why neither type builds
 its own. The schema lives in `migrations/` as SQL and is compiled in, so a
 consumer needs nothing from the repository to apply it — `migration::MIGRATION_1`
-for the event log, applied by `migration::apply`, and `migration::MIGRATION_2` for
-the projection checkpoint, applied by `migration::apply_projection`.
+and `migration::MIGRATION_3` for the event log, both applied by `migration::apply`,
+and `migration::MIGRATION_2` for the projection checkpoint, applied by
+`migration::apply_projection`.
 They are applied separately on purpose: an application using only the event store
 gets no `projection_checkpoint` table.
 
@@ -170,6 +174,26 @@ writes back on either store. The trade for the live store: a pooled connection
 held for a whole chunk, and a statement the server refuses aborts the
 transaction, unless `apply` rolled back to a savepoint it set (#103). The
 buffered store stays the default.
+
+## Upgrading to schema version 2: migrate, then deploy
+
+This release adds migration 3 (`migrations/0003_write_group.sql`): two nullable
+columns on `event`, `write_group` and `group_guard`, and a partial index on the
+first. They record which rows one append, or one ingested group with its
+compensation, wrote together, so a runner and a store peer forward the log in
+whole writes (#420). Every `INSERT` this build sends names `write_group`, so
+**run `migration::apply` against the schema before deploying this build to
+any process that writes to it**. A build that runs against a schema without the
+column fails its first append with an undefined-column error from the server.
+
+`apply` is idempotent, so on a schema an older build migrated only migration 3
+does anything. Its two `ALTER TABLE … ADD COLUMN`s rewrite no row, but take a
+brief exclusive lock on `event`; its index build blocks writes while it runs. On
+a large table, build the index first with
+`CREATE INDEX CONCURRENTLY event_write_group_idx ON event (write_group) WHERE write_group IS NOT NULL`,
+and `apply` then leaves it alone. Rows written before the migration read back as
+groups of one, with no guard; nothing is backfilled. An older build keeps
+working against a migrated schema, and writes rows that read as groups of one.
 
 ## After a restore, re-mint before the first append
 
