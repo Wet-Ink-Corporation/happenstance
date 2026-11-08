@@ -99,7 +99,7 @@ change to the runner is now a violation of this table like any other.
 | Version | Supported |
 |---|---|
 | `0.5.1` | ✅ current |
-| `0.5.0` | ❌ superseded by `0.5.1`, a documentation and tooling release with no API change: rustdoc that builds under each crate's default features again (`happenstance-testkit`, `happenstance-neon`), stale feature comments corrected, and a rebuild how-to that drives the runner |
+| `0.5.0` | ❌ superseded by `0.5.1`, a documentation and tooling release with no API change: rustdoc that builds again (`happenstance-testkit` under its default features, `happenstance-neon` with `--no-default-features`), stale feature comments corrected, and a rebuild how-to that drives the runner |
 | `0.4.6` | ❌ superseded by `0.5.0`, a breaking release: the typed projection runner leaves `happenstance`'s `unstable-projection` feature, which is removed, with an `async` `apply`, its own `type Error`, a `Chunk` and a derived checkpoint id; [`docs/upgrading-to-0-5.md`](docs/upgrading-to-0-5.md) is the way across |
 | `0.4.5` | ❌ superseded by `0.4.6`, an additive release with one narrowing: `happenstance-core` gains `StoreLimit::TagsPerBatch` and `MIN_SUPPORTED_TAGS_PER_BATCH`, `happenstance-testkit` gains `Fixture::settle_frontier` and `Fixture::MAX_TAGS_PER_BATCH`, and `happenstance-cloudflare` now refuses a call carrying more than 262,144 tags |
 | `0.4.4` | ❌ superseded by `0.4.5`, an additive release: `happenstance-sqlite` gains `SqliteEventStore::open_on` and `remint_identity_on` for a caller-configured connection, and an ingest that lands nothing no longer advances positions |

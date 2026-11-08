@@ -36,10 +36,10 @@ not the same as what a user needed to be told.
 ## [0.5.1] — 2026-11-08
 
 Documentation and tooling only: no public API changes, and nothing a `0.5.0`
-caller has to do. The rustdoc of two crates builds under their default
-features again, comments that described features which no longer exist are
-corrected, and `cargo xtask ci` gains a step so the testkit's case cannot
-come back unseen.
+caller has to do. The rustdoc of two crates builds again, the testkit's under
+its default features and neon's with `--no-default-features`, comments that
+described features which no longer exist are corrected, and `cargo xtask ci`
+gains a step so the testkit's case cannot come back unseen.
 
 ### Fixed
 
