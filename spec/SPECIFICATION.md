@@ -365,7 +365,7 @@ everything else; ADR-0006 gave it the bare name, not the root of the graph.
 One deliberate exception, and it is a port relationship rather than a dependency
 between adapters. `happenstance-sync` is itself a port crate: peer adapters depend
 on it the way store adapters depend on `happenstance-core`
-(`crates/happenstance-sync/Cargo.toml:27-32`), and its conformance suite will live
+(`crates/happenstance-sync/Cargo.toml:28-33`), and its conformance suite will live
 in `happenstance-sync-testkit`. It stays out of the contract crate so that
 publishing `happenstance-core` never waits on replication.
 
@@ -390,7 +390,7 @@ build enable different feature sets of a shared dependency, Cargo unifies them a
 every consumer gets the union. That is why ADR-0003's guarantee — `serde` is never
 in `happenstance-core`'s default features — is only enforceable while nothing in
 the graph turns it on for someone who did not ask. `happenstance-sync` turns it on
-non-optionally and deliberately (`crates/happenstance-sync/Cargo.toml:28-30`:
+non-optionally and deliberately (`crates/happenstance-sync/Cargo.toml:29-31`:
 *"`serde` is non-optional here: replication is the reason `happenstance-core`'s
 serde feature exists"*), which is sound because sync is a leaf that an
 application opts into. An adapter-to-adapter dependency would make that opt-in
@@ -1070,11 +1070,11 @@ on mechanics. Ingest is meaningless without the rest of the replication design �
 the compensation, the peer watermark, the condition policy — and putting its
 entry point in the contract crate puts `happenstance-core`'s publish schedule behind
 `happenstance-sync`'s design, which is precisely what
-`crates/happenstance-sync/src/lib.rs:37-40` says the crate exists to avoid.
+`crates/happenstance-sync/src/lib.rs:39-42` says the crate exists to avoid.
 
 *A trait in `happenstance-sync`.* Chosen. It is the posture that crate already
 adopts for itself — "this crate defines the third [port]"
-(`crates/happenstance-sync/src/lib.rs:19-23`) — and the coherence question resolves cleanly: the adapter
+(`crates/happenstance-sync/src/lib.rs:21-25`) — and the coherence question resolves cleanly: the adapter
 crate depends on both `happenstance-core` and `happenstance-sync`, so
 `impl IngestStore for SqliteEventStore` has a local type in the trait reference
 and the orphan rule permits it. What is *not* possible, and is worth saying
@@ -1085,7 +1085,7 @@ impossible for an adapter to supply a better one, because coherence forbids the
 overlap.
 
 The feature gate matters for a mundane reason: `happenstance-sync` depends on
-`happenstance-core/serde` non-optionally (`crates/happenstance-sync/Cargo.toml:28-30`),
+`happenstance-core/serde` non-optionally (`crates/happenstance-sync/Cargo.toml:29-31`),
 so an adapter that implements `IngestStore` unconditionally drags `serde` into
 every build of that adapter. `sqlite/sync` and its siblings keep the default
 build free of it.
@@ -4447,7 +4447,7 @@ the private format nothing.
 
 - **Rule:** `wire_condition_with_after_is_refused` **(new)**, in
   `happenstance-sync-testkit` — SY-6's rule, named once there and cited here; the
-  crate is named at `crates/happenstance-sync/src/lib.rs:23-24` and does not exist.
+  crate is named at `crates/happenstance-sync/src/lib.rs:25-26` and does not exist.
 - **Cases:** E2E-37, E2E-38, E2E-56.
 - **Rejects:** a hub that deserialises a peer's condition and evaluates it
   verbatim. The readable-but-not-constructible property is `Guard`'s rather than
@@ -6893,7 +6893,7 @@ ports in two flavours each — `SyncPeer`/`SendSyncPeer`
 three-variant `SyncError` (`peer.rs:393`), and two stand-in peers in the
 crate's own `tests/` chosen to be as unlike each other as the deployment
 allows. The prose that used to end *"None of this is settled"* was replaced by
-a per-question ledger (`crates/happenstance-sync/src/lib.rs:106-132`) recording
+a per-question ledger (`crates/happenstance-sync/src/lib.rs:108-134`) recording
 which of the six questions the sketch answered and which it left alone. None of
 it is the protocol; it was built to be falsified by a type checker. This
 section is still what settles the shape, and what changed is that several of
@@ -7176,7 +7176,7 @@ an implementer, and until phase 13 builds the refusal this clause's rule names,
 nothing else does. Two independent defects, either fatal:
 
 - `after` is a `SequencePosition`, meaningful only inside the store that
-  assigned it (`crates/happenstance-sync/src/lib.rs:100-104`), and it serialises
+  assigned it (`crates/happenstance-sync/src/lib.rs:102-106`), and it serialises
   as a naked integer (`append.rs:286-291`). `is_violated_by` compares raw
   position values (`append.rs:239-253`), so `after: 288455` interpreted in the
   receiver's numbering names an unrelated recent event and the check runs over
@@ -7242,7 +7242,7 @@ falsification test with two adjudicator configurations, not before.
 
 ### 5.2 One peer, and a runner above it
 
-`crates/happenstance-sync/src/lib.rs:40-48` already states this and states it correctly. It is promoted
+`crates/happenstance-sync/src/lib.rs:42-50` already states this and states it correctly. It is promoted
 to a clause because the pressure test's own finding about the projection port —
 that the *suite*, not the runner, is what forces a port's shape
 (`PRESSURE-TEST.md:220-234`) — applies here identically, and because Kestrel
@@ -7301,7 +7301,7 @@ Rule: `directional_merge_rules_compose` (new, `happenstance-sync-testkit`).
 Cases: E2E-42, E2E-44, E2E-45.
 
 *Rejects:* treating hub-and-spoke as peer-to-peer with one side declining to
-push. `crates/happenstance-sync/src/lib.rs:57-63` already says why and the scenarios confirm it: the hub
+push. `crates/happenstance-sync/src/lib.rs:59-65` already says why and the scenarios confirm it: the hub
 sees every log and can therefore adjudicate; a spoke sees one and cannot. The
 asymmetry is **adjudication**, and the scenarios' merge rule states it: *first to
 the hub, not first to decide* (`references/scenarios/README.md:436`). The hub sees
@@ -7548,7 +7548,7 @@ prevents that.
 
 ### 5.4 The transport floor
 
-`crates/happenstance-sync/src/lib.rs:125-132` calls this the constraint the
+`crates/happenstance-sync/src/lib.rs:127-134` calls this the constraint the
 sketch "bites hardest on", and settles `SyncPeer::pull` on a bounded batch and
 an owned resume token rather than a stream because of it. It stays a normative
 constraint on the port's shape rather than an adapter's choice, and phase 2
@@ -7623,7 +7623,7 @@ peer holding a `!Send` store behind an `Rc`.
 Cases: E2E-52, E2E-30.
 
 *Rejects:* any runner that reaches for `SendEventStore` in order to
-`tokio::spawn` a per-peer task. `crates/happenstance-sync/src/lib.rs:122-124` states the wasm32
+`tokio::spawn` a per-peer task. `crates/happenstance-sync/src/lib.rs:124-126` states the wasm32
 requirement, but understates it: in Kestrel Cold Chain the `!Send` peer — SQLite
 inside a Cloudflare Durable Object — sits in the **middle** of the chain, not at
 a leaf. It is a spoke to the Neon estate store and a hub to 138 tablets. A runner
@@ -7749,7 +7749,7 @@ this belief holding: the same fourteen events sit at vessel position 38,102 and
 depot position 3,918,442, each store internally correct, each peer's total order
 naming the other as the loser. There is no expression relating the two numbers
 and none can be constructed, because `SequencePosition` carries no origin
-(`crates/happenstance-sync/src/lib.rs:100-104`).
+(`crates/happenstance-sync/src/lib.rs:102-106`).
 
 ---
 
@@ -10092,7 +10092,7 @@ vocabulary, or a running deployment. Such a rule cannot be run by an adapter
 author against their own crate, which is the one thing the suite is for; it
 belongs in the e2e crate, or — for a contract-level case that cannot be expressed
 against a single store handle — in `happenstance-sync-testkit`, named at
-`crates/happenstance-sync/src/lib.rs:23-24` and not yet existing.
+`crates/happenstance-sync/src/lib.rs:25-26` and not yet existing.
 
 **CF-37.** Every E2E case MUST name the clause or clauses it exercises. `[FROZEN]`
 Rule: `cargo xtask spec-trace` (CF-38).
