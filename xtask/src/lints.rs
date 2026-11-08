@@ -2369,7 +2369,13 @@ struct Enumeration {
 /// `spec-trace`, `lints`, `lint-changelog`, clippy and the testkit's own tests.
 /// Including it is a decision recorded here; leaving it out silently is the
 /// shape RS-80-2 forbids.
-const ENUMERATIONS: [Enumeration; 8] = [
+const ENUMERATIONS: [Enumeration; 9] = [
+    Enumeration {
+        // The write-group family (#420), joined in the change that creates it.
+        file: "crates/happenstance-sync-testkit/src/write_group_suite.rs",
+        macro_name: "for_each_write_group_rule",
+        macro_file: "crates/happenstance-sync-testkit/src/write_group_suite.rs",
+    },
     Enumeration {
         // The sync family (#111): the first rule file outside
         // `happenstance-testkit`, joined in the change that creates it.

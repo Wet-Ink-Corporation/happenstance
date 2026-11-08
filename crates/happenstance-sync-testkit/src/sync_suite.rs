@@ -173,6 +173,16 @@ pub mod rules {
     const COUNT_CORNER_ORIGIN: StoreId = StoreId::from_bytes([0x91; 16]);
     const BYTE_CORNER_ORIGIN: StoreId = StoreId::from_bytes([0x92; 16]);
 
+    /// SY-30's origin, whose three groups the envelope rule pushes in one batch.
+    const GROUPS_ORIGIN: StoreId = StoreId::from_bytes([0x93; 16]);
+    /// The type of every event SY-30's rule pushes.
+    const GROUP_WRITTEN: EventType = EventType::from_static("GroupWritten");
+    /// The types SY-30's two guards name. Nothing the suite writes carries
+    /// either, so a peer that evaluated the guards would find nothing to refuse
+    /// and only SY-1's rule judges that mistake.
+    const GUARDED_FIRST: EventType = EventType::from_static("GroupGuardedFirst");
+    const GUARDED_LAST: EventType = EventType::from_static("GroupGuardedLast");
+
     /// SY-1: a peer appends every replicated event it does not already hold,
     /// and never evaluates an append condition — the origin's or its own — as a
     /// precondition.
@@ -875,6 +885,76 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-30: the decomposition into independently conditioned groups is kept
+    /// end to end. What a peer is pushed as three groups it hands back as
+    /// those three groups: the same boundaries, the same events in order, and
+    /// the same guards.
+    ///
+    /// One push of `[a1, a2]` under a guard, `[b1]` under none, and `[c1, c2]`
+    /// under a second guard, all from one origin, well inside the minimum
+    /// limits; then a pull of the whole log. Both guards are position-free, so
+    /// SY-6's refusal of a guard carrying `after` never reaches them, and they
+    /// name types nothing in the suite writes, so a peer that evaluated them
+    /// would refuse nothing here.
+    ///
+    /// A peer that relays is what makes this the transport's obligation and not
+    /// only the envelope's: a hub that forwards a spoke's group merged with its
+    /// neighbours, or without its guard, publishes a decomposition the origin
+    /// never made, and the next hop can no longer tell which events were
+    /// decided together, or under what (SY-39 is the store's half).
+    ///
+    /// # Rejects
+    ///
+    /// The page-as-one-group peer #420 replaced, which hands a pull back as one
+    /// unguarded group, and a peer that keeps every boundary and drops the
+    /// guard. `tests/wrong_peers.rs` carries both, and SY-2's two mutants, the
+    /// flattener and the peer that pages by event, fail this rule too.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-30 if the peer refuses the push or a pull, or hands
+    /// back anything but the groups it was pushed.
+    pub async fn push_envelope_preserves_group_boundaries<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-30";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+
+        let first = guard_on(GUARDED_FIRST, CLAUSE)?;
+        let last = guard_on(GUARDED_LAST, CLAUSE)?;
+        let pushed = vec![
+            EventGroup::new(Some(first), vec![grouped(1, CLAUSE)?, grouped(2, CLAUSE)?]),
+            EventGroup::new(None, vec![grouped(3, CLAUSE)?]),
+            EventGroup::new(Some(last), vec![grouped(4, CLAUSE)?, grouped(5, CLAUSE)?]),
+        ];
+        let batch = PushBatch::new(pushed);
+        peer.push(&batch).await.map_err(|error| {
+            Violation::new(
+                CLAUSE,
+                format!("the peer refused three groups well inside the minimum limits: {error}"),
+            )
+        })?;
+
+        let held = pull_everything(&peer, CLAUSE).await?;
+        let shape = |groups: &[EventGroup]| -> Vec<(usize, bool)> {
+            groups
+                .iter()
+                .map(|group| (group.events.len(), group.guard.is_some()))
+                .collect()
+        };
+        ensure(held == batch.groups, CLAUSE, || {
+            format!(
+                "the peer was pushed groups of (events, guarded) {:?} and handed back {:?}; a \
+                 reader of that log cannot tell which events were decided together, or under \
+                 what",
+                shape(&batch.groups),
+                shape(&held)
+            )
+        })?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What one log SY-37's rule wrote showed it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Log {
@@ -1310,6 +1390,29 @@ pub mod rules {
         [Tag::from_static("seat:s1")].into_iter().collect()
     }
 
+    /// A position-free guard naming `event_type`, for SY-30's groups.
+    fn guard_on(event_type: EventType, clause: &'static str) -> Result<AppendCondition, Violation> {
+        let item = QueryItem::of_types([event_type]).map_err(|error| {
+            Violation::new(clause, format!("the rule's own query is invalid: {error}"))
+        })?;
+        Ok(AppendCondition::new(Query::from_item(item)))
+    }
+
+    /// The SY-30 origin's event at its own `position`, with a payload of its
+    /// own so "the same events" means byte for byte (SY-35).
+    fn grouped(position: u64, clause: &'static str) -> Result<ReplicatedEvent, Violation> {
+        let at = SequencePosition::new(position)
+            .ok_or_else(|| Violation::new(clause, "the rule's origin position is zero"))?;
+        let event = Event::new(GROUP_WRITTEN, format!("group-{position}").into_bytes()).map_err(
+            |error| Violation::new(clause, format!("the rule's own event is invalid: {error}")),
+        )?;
+        Ok(ReplicatedEvent::new(
+            EventId::new(GROUPS_ORIGIN, at),
+            RecordedAt::from_millis(1_800_000_000_000),
+            event,
+        ))
+    }
+
     /// `origin`'s claim on the seat, the first event in its log.
     fn claim(origin: StoreId, clause: &'static str) -> Result<ReplicatedEvent, Violation> {
         replicated(origin, SEAT_CLAIMED, clause)
@@ -1465,6 +1568,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- An ack confirms only what is durable (SY-31) ---------------
             ack_never_confirms_a_non_durable_event,
+
+            // --- The group decomposition survives the peer (SY-30) ----------
+            push_envelope_preserves_group_boundaries,
         }
     };
 }

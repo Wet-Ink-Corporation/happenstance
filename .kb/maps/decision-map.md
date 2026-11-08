@@ -952,6 +952,18 @@ adapter clears with `TRUNCATE`. It supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0102 | [`kb-decision-0102`](../decisions/0102-phase-18s-clauses-are-frozen.md) | Phase 18's eight clauses are frozen, and PS-9's and PS-24's evidence is repaired | accepted | 18 | — |
 
+## 2026-11-08: write groups are recorded per row (#420), proposed
+
+ADR-0105 is written straight here with no intake step, and is **proposed**: the owner approved
+the shape (option A) on 2026-11-08, and the SQLite marker and the Postgres rollout questions are
+still open on #420. Every row records the lowest position its write put in and an ingested
+group's guard; `WriteGroupStore` reads them back, and SY-39 is minted provisional. It
+supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0105 | [`kb-decision-0105`](../decisions/0105-write-groups-are-recorded-per-row.md) | A store records each write's group on its rows, and a peer reads and pushes in those groups | proposed | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

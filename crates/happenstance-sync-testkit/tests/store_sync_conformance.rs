@@ -12,8 +12,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use happenstance_core::{
-    Event, EventId, EventStore, Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent,
-    StoreId, collect,
+    AppendCondition, Event, EventId, EventStore, Query, QueryItem, ReadOptions, RecordedAt,
+    SequencePosition, SequencedEvent, StoreId, collect,
 };
 use happenstance_sync::wire::ResumeToken;
 use happenstance_sync::{
@@ -63,6 +63,13 @@ fn singles(count: u64) -> PushBatch {
             .map(|position| EventGroup::new(None, vec![replicated(position, b"x")]))
             .collect(),
     )
+}
+
+/// A position-free guard: evidence that travels, never a refusal (SY-6).
+fn guard() -> AppendCondition {
+    AppendCondition::new(Query::from_item(
+        QueryItem::of_types(["Replicated"]).expect("a valid item"),
+    ))
 }
 
 fn limits_of(events: usize) -> PeerLimits {
@@ -193,22 +200,75 @@ async fn an_oversized_local_event_at_the_head_stalls_the_pull_on_one_token() {
     }
 }
 
-/// No group boundary is recoverable from `EventStore::read`, so a page is one
-/// group: never finer than what the origin wrote.
+/// A pull hands back the groups the far store wrote, one for one, with an
+/// ingested group's guard (SY-30, SY-39). Rejects the page-as-one-group peer
+/// #420 replaced, which merged the four into one unguarded group.
 #[tokio::test]
-async fn a_page_travels_as_one_group_without_a_guard() {
+async fn a_page_carries_the_groups_the_store_wrote() {
     let (peer, _) = peer_over(PeerLimits::minimum()).await;
-    peer.push(&singles(3)).await.expect("a push");
+    let guarded = EventGroup::new(
+        Some(guard()),
+        vec![replicated(4, b"pair"), replicated(5, b"pair")],
+    );
+    let mut groups = singles(3).groups;
+    groups.push(guarded);
+    let batch = PushBatch::new(groups);
+    peer.push(&batch).await.expect("a push");
 
     let pulled = peer.pull(None).await.expect("a pull");
 
-    let guards: Vec<_> = pulled
-        .batch
-        .groups
-        .iter()
-        .map(|group| &group.guard)
+    assert_eq!(pulled.batch, batch);
+    assert_eq!(pulled.waiting, Waiting::Nothing);
+}
+
+/// A group that would take a page past its budget moves to the next page
+/// whole. Rejects a pull that fills the page by event and cuts the group.
+#[tokio::test]
+async fn a_group_crossing_the_page_budget_moves_to_the_next_page_whole() {
+    let (peer, _) = peer_over(limits_of(3)).await;
+    let pair =
+        |at: u64| EventGroup::new(None, vec![replicated(at, b"x"), replicated(at + 1, b"x")]);
+    peer.push(&PushBatch::new(vec![pair(1)]))
+        .await
+        .expect("a push inside the limits");
+    peer.push(&PushBatch::new(vec![pair(3)]))
+        .await
+        .expect("a push inside the limits");
+
+    let first = peer.pull(None).await.expect("a first pull");
+    let second = peer.pull(Some(&first.resume)).await.expect("a second pull");
+
+    assert_eq!(first.batch, PushBatch::new(vec![pair(1)]));
+    assert_eq!(
+        first.waiting,
+        Waiting::Unknown,
+        "the page ran out, not the log"
+    );
+    assert_eq!(second.batch, PushBatch::new(vec![pair(3)]));
+    assert_eq!(second.waiting, Waiting::Nothing);
+}
+
+/// A group the far store wrote that no page under the declared budget can
+/// carry stalls the pull at it, token unmoved, rather than being cut or
+/// skipped: the oversized event's rule, extended to a group (D-2).
+#[tokio::test]
+async fn an_oversized_group_at_the_head_stalls_the_pull_on_one_token() {
+    let (peer, store) = peer_over(limits_of(2)).await;
+    let events: Vec<Event> = (0..3)
+        .map(|_| Event::new("Local", &b"x"[..]).expect("a valid event"))
         .collect();
-    assert_eq!(guards, vec![&None]);
+    EventStore::append(&store, &events, None)
+        .await
+        .expect("the far store's own writer has no declared limit");
+
+    let stalled = peer.pull(None).await.expect("a pull");
+    let again = peer.pull(Some(&stalled.resume)).await.expect("a pull");
+
+    for pulled in [&stalled, &again] {
+        assert_eq!(pulled.batch, PushBatch::empty());
+        assert_eq!(pulled.waiting, Waiting::Unknown, "the log goes on");
+        assert_eq!(pulled.resume, StoreResume::start(), "the token never moves");
+    }
 }
 
 #[tokio::test]

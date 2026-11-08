@@ -52,8 +52,13 @@ not the same as what a user needed to be told.
   I/O. A refused push leaves the local log as it was (SY-34).
   `Edge::resuming` takes back a watermark and a resume token a caller kept,
   since where they are stored is SY-31's; one edge belongs to one peer for
-  its whole life. **Known gap:** a push sends its batch as one atomic group,
-  so it can tear a multi-event local append across two pushes (SY-30, #420).
+  its whole life. A push carries the local log in the writes it was made of
+  (SY-30, SY-39, #420): one group per local append, one per ingested group
+  with its guard and compensation, never a group split across two pushes; a
+  first group larger than the peer's limits is offered alone, so the peer's
+  refusal states its class. The confirmed watermark is the first position of
+  the last group acknowledged. The local store is bound on `IngestStore` and
+  `WriteGroupStore`, not `EventStore`.
   Not yet built: backoff, the bounded outbound buffer, owned tasks, what
   `Split` and `Park` call for, and the far side's incarnation check.
 - `happenstance-sync`: a network peer's transport-free halves (#117), with no
@@ -69,9 +74,12 @@ not the same as what a user needed to be told.
   undecodable bytes is `wire::CodecError`, `Stop`; a token no store peer minted
   is `ForeignToken`, `Stop`; a transport failure keeps the `Exchange` error's
   own class. `postcard` becomes a normal dependency of the crate. A pull hands
-  its page back as one group, because `EventStore::read` does not say which
-  write an event came in (#420): every origin group inside a page arrives
-  whole, and one that straddles a page cut is split. `StoreSyncPeer` ingests
+  its page back in the store's write groups (#420), each with the guard it was
+  ingested under, and never cuts one; the token names the first position of
+  the last group served. A head group larger than the page budget stalls the
+  pull on one token, the rule an oversized event already had. The store is
+  bound on `WriteGroupStore`, and a push stores each group's guard with it.
+  `StoreSyncPeer` ingests
   with no compensation, so it cannot be SY-7's adjudicator; that hook is
   planned with SY-7 (#136). Both peers pass
   `sync_peer_conformance!`, and `StoreSyncPeer` the model family too.
@@ -107,6 +115,43 @@ not the same as what a user needed to be told.
   fixture that inherits `REOPEN`'s default reason, so a projection fixture
   written against `0.5.1` states `REOPEN` — declined with its own reason, or
   supported with an override of `reopen` that answers `Reopened::Discarded`.
+- `happenstance-sync`: write groups (#420, SY-39, ADR-0105, proposed). The
+  `write_group` module's `WriteGroupStore` (and its `Send` flavour
+  `SendWriteGroupStore`) reads a store's log back in the writes that made it:
+  `read_groups(after, max_events)` returns whole `WriteGroup`s above `after`,
+  each named by the lowest position it wrote and carrying the guard an
+  ingested group arrived under, at most `max_events` events of them except
+  that a first group is whole however large, and `Waiting::Nothing` only when
+  the read reached the end. A group's name is the cursor. `GroupPageBuilder`
+  is the paging every adapter shares; `encode_guard` and `decode_guard` the
+  stored form of a guard, one format byte and postcard. `IngestGroup` gains a
+  `guard` field and `with_guard`, so an ingest records the guard a group
+  arrived under. `MemoryIngestStore` implements the trait; it is additive, and
+  the ingest port is unchanged.
+- `happenstance-sqlite`: `SqliteEventStore` implements `WriteGroupStore`
+  behind `sync`, over migration 2's columns, and stores an ingested group's
+  guard. `SqliteEventStoreError::StoredGuard`, behind `sync`, is a guard the
+  codec cannot write or read back, classed `Stop`.
+- `happenstance-sync-testkit`: SY-30's rule, `push_envelope_preserves_group_boundaries`,
+  in the peer family. It pushes two groups, one of three events with no guard
+  and one of one event under a guard, and pulls them back: it fails a peer
+  that serves a page as one group, merging writes a store kept apart, and one
+  that drops the guard a group was pushed with, so a relay forwards it
+  without the evidence SY-6 makes travel.
+- `happenstance-sync-testkit`: the write-group family (SY-39),
+  `write_group_store_conformance!`, mounted on an `IngestFixture` whose store
+  also implements `WriteGroupStore`, with its five rules:
+  `an_append_reads_back_as_one_group`, which fails a store that records no
+  groups or merges adjacent appends; `an_ingested_group_keeps_its_boundary_and_guard`,
+  which fails one that drops an ingested guard or merges one call's groups;
+  `compensation_joins_its_group`, which fails one that records a compensation
+  as a group of its own, which a relay would forward apart from its losing
+  event (SY-2); `a_read_never_cuts_a_group`, which fails a page filled by
+  event, a first group skipped for being larger than the page, and a resume
+  above a row position; and `pages_chain_on_first_and_end_with_nothing`, which
+  fails a page its budget cut that says nothing is waiting. Each is pinned
+  against its wrong stores in `tests/wrong_write_group_stores.rs`.
+  `MemoryIngestFixture` and `happenstance-sqlite` mount it.
 
 ### Changed
 
@@ -125,6 +170,16 @@ not the same as what a user needed to be told.
   compensation used to commit with a NULL origin.
   `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
   is `#[non_exhaustive]`).
+- `happenstance-sqlite`: migration 2 (#420). Every open adds `write_group`
+  and `group_guard` to `event` on a file whose marker reads 1, and raises the
+  marker to 2 in the same transaction; `SCHEMA_VERSION` is `2`. Every row an
+  append or an ingested group writes records the write's first position, so a
+  runner and a store peer read the log back in whole writes. A row written
+  before the migration reads as a group of its own; there is no backfill.
+  **Upgrading:** a build before this one refuses a file this one has opened,
+  with `UnsupportedSchemaVersion`, so deploy it to every process that opens a
+  store before any of them opens it. The migration is two `ALTER TABLE … ADD
+  COLUMN`s, which do not rewrite the table.
 
 ## [0.5.1] — 2026-11-08
 

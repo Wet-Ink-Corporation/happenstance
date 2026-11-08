@@ -54,14 +54,18 @@ pub enum Pending {
 pub struct SyncStatus {
     /// Running, or stopped and why.
     pub state: EdgeState,
-    /// The local position the far side has acknowledged everything up to.
+    /// The [`first`](crate::WriteGroup::first) position of the last local
+    /// write group the far side acknowledged. Every local event at or below
+    /// it, and every event of that group, has been acknowledged.
     ///
-    /// A local [`SequencePosition`], meaningful only in the local store: it is
+    /// For a single-event append it is the position `append` returned. A
+    /// local [`SequencePosition`], meaningful only in the local store: it is
     /// the watermark SY-31 says is kept through the projection port, and it is
     /// never sent to the far side.
     pub confirmed: Option<SequencePosition>,
-    /// How many local events sit above [`confirmed`](Self::confirmed), as of
-    /// the last step's read.
+    /// How many local events, in write groups above
+    /// [`confirmed`](Self::confirmed), are unacknowledged, as of the last
+    /// step's read.
     ///
     /// Every local event counts, including ones this edge ingested from the far
     /// side, which a push hands back and the far side skips.

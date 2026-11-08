@@ -5,6 +5,7 @@
 //! side, or the fakes in `probe` over them where a test needs to count calls
 //! or provoke a failure. Each names the wrong runner it rejects.
 
+mod groups;
 mod probe;
 
 use happenstance_core::{

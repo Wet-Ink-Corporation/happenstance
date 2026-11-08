@@ -5,16 +5,15 @@
 
 use core::fmt;
 
-use happenstance_core::EventStore;
-
 use crate::classify::{Classify, FailureClass};
 use crate::ingest::{IngestError, IngestStore};
 use crate::peer::SyncPeer;
+use crate::write_group::WriteGroupStore;
 
 /// The error [`Edge::step`](super::Edge::step) returns for a peer `P` and a
 /// store `S`.
 pub type StepFailure<P, S> =
-    StepError<<P as SyncPeer>::Error, <S as EventStore>::Error, <S as IngestStore>::Error>;
+    StepError<<P as SyncPeer>::Error, <S as WriteGroupStore>::Error, <S as IngestStore>::Error>;
 
 /// Which part of a step failed, and the class the failure stated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -74,9 +73,9 @@ impl fmt::Display for Phase {
 /// Why [`Edge::step`](super::Edge::step) failed: the phase, and the failure it
 /// met.
 ///
-/// `P` is the peer's error, `R` the local store's read error and `I` its
+/// `P` is the peer's error, `R` the local store's group-read error and `I` its
 /// ingest error. They are separate because a store may implement
-/// [`EventStore`] and [`IngestStore`] with different error types. No bounds sit
+/// [`WriteGroupStore`] and [`IngestStore`] with different error types. No bounds sit
 /// on the enum, so it is `Send` exactly when the three are, and a `!Send`
 /// adapter's error stays legal (ADR-0009).
 #[derive(Debug, thiserror::Error)]

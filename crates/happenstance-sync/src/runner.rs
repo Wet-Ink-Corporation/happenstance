@@ -3,11 +3,11 @@
 //! # What is here, and what is not yet
 //!
 //! An [`Edge`] is one replication relationship as the local side sees it: a
-//! local store that both reads ([`EventStore`]) and ingests ([`IngestStore`]),
-//! exchanging with one [`SyncPeer`]. [`Edge::step`] does one exchange — pull
-//! from the far side and ingest locally, then read the local log above the
-//! confirmed watermark and push it — and updates the edge's [`SyncStatus`],
-//! which [`Edge::status`] hands back without a round trip.
+//! local store that reads its write groups ([`WriteGroupStore`]) and ingests
+//! ([`IngestStore`]), exchanging with one [`SyncPeer`]. [`Edge::step`] does one
+//! exchange — pull from the far side and ingest locally, then read the local
+//! log above the confirmed watermark and push it — and updates the edge's
+//! [`SyncStatus`], which [`Edge::status`] hands back without a round trip.
 //!
 //! **Part 1 of #244.** The edge reacts to a failure's class minimally: it
 //! records the class, and a [`Stop`](crate::FailureClass::Stop) stops the edge. What
@@ -17,15 +17,22 @@
 //! [`Park`](crate::FailureClass::Park) — a bounded outbound buffer, and tasks the
 //! runner owns are part 2's.
 //!
-//! # A known gap: the push does not keep the origin's append groups
+//! # Groups: a push carries the writes the local log was written in
 //!
-//! A push sends the batch it read as **one** [`EventGroup`], because
-//! [`EventStore::read`] does not say which events one append wrote together.
-//! That merges independent local appends into one atomic unit on the far side,
-//! which is safe, and it can cut one multi-event append across two pushes at a
-//! batch boundary, which is not: between the two, the far side holds half of a
-//! decision the origin made whole, a state the origin never had (SY-30).
-//! Tracked by #420.
+//! A push reads the local log through
+//! [`read_groups`](WriteGroupStore::read_groups) and sends **one**
+//! [`EventGroup`](crate::EventGroup) per local write group, each whole, with an
+//! ingested group's guard back on it (SY-30, SY-39). So a multi-event append is
+//! never cut across two pushes, independent appends are never merged into one
+//! atomic unit, and
+//! a foreign group this edge relays keeps its boundary and its guard. After an
+//! acknowledged push, every local event at or below
+//! [`SyncStatus::confirmed`] has been pushed.
+//!
+//! A group the peer's limits cannot carry is offered **alone**, never split,
+//! and the peer's refusal states its class (SY-36). What part 2 does with a
+//! [`Split`](crate::FailureClass::Split) that one group cannot satisfy is
+//! #244's.
 //!
 //! # Caller-driven, and nothing spawned
 //!
@@ -34,7 +41,7 @@
 //! resume token and the status. That is what lets the same edge be driven by a
 //! test, by a Durable Object's alarm, or by a task part 2 spawns and owns.
 //!
-//! The bounds are the bare flavours ([`SyncPeer`], [`EventStore`],
+//! The bounds are the bare flavours ([`SyncPeer`], [`WriteGroupStore`],
 //! [`IngestStore`]), the weaker requirement both flavours meet, so the Durable
 //! Object's `!Send` store and peer drive an edge unchanged (SY-17). For a peer
 //! and store of the `Send` flavours the step's future is `Send` too, given a
@@ -49,19 +56,20 @@
 //! ([`SyncStatus::confirmed`], [`Edge::resume_token`]), and takes them back
 //! through [`Edge::resuming`], so a caller can persist them wherever it must.
 
-use alloc::vec;
 use alloc::vec::Vec;
+use core::num::NonZeroUsize;
 
-use happenstance_core::futures_core::Stream;
-use happenstance_core::{EventStore, Query, ReadOptions, SequencePosition, SequencedEvent};
+use happenstance_core::SequencePosition;
 
-use crate::classify::Classify;
-use crate::identity::ReplicatedEvent;
 use crate::ingest::{IngestGroup, IngestStore, Ingested};
-use crate::peer::{EventGroup, PeerLimits, PushBatch, SyncPeer};
+use crate::peer::{PushBatch, SyncPeer};
+use crate::write_group::WriteGroupStore;
 
 mod error;
+mod run;
 mod status;
+
+use run::Run;
 
 pub use error::{Failure, Phase, StepError, StepFailure};
 pub use status::{EdgeState, Pending, Stepped, SyncStatus};
@@ -137,8 +145,8 @@ impl<R> Edge<R> {
 
     /// An edge resuming from a watermark and a token a caller kept.
     ///
-    /// `confirmed` is the local position the far side last acknowledged
-    /// everything up to, as [`SyncStatus::confirmed`] reported it; `resume` is
+    /// `confirmed` is the first position of the last local write group the far
+    /// side acknowledged, as [`SyncStatus::confirmed`] reported it; `resume` is
     /// the token [`resume_token`](Self::resume_token) reported. Both are about
     /// this link only, and where they are stored is SY-31's.
     #[must_use]
@@ -169,17 +177,14 @@ impl<R> Edge<R> {
     /// events on the next step and loses none. The only local write is the
     /// ingest: a refused push leaves the local log as it was (SY-34).
     ///
-    /// Local events are read from the position after
-    /// [`SyncStatus::confirmed`], at most one more than the peer's
-    /// [`limits`](SyncPeer::limits) let a batch carry. The contiguous run the
-    /// limits admit is pushed; the run stops at the first event that does not
-    /// fit rather than skipping it, because the watermark is a prefix. If not
-    /// even the first fits, it is offered alone, and the peer's refusal states
-    /// its class: the runner reads a class and never infers one (SY-36).
-    ///
-    /// The run goes as **one** atomic group, which can tear a multi-event
-    /// local append across two pushes; see the module's known gap (SY-30,
-    /// #420).
+    /// Local events are read in their write groups above
+    /// [`SyncStatus::confirmed`], one event more than the peer's
+    /// [`limits`](SyncPeer::limits) let a batch carry. The groups the limits
+    /// admit are pushed, one [`EventGroup`](crate::EventGroup) each; the run stops at the first
+    /// group that does not fit rather than skipping it, because the watermark
+    /// is a prefix. If not even the first fits, it is offered alone, and the
+    /// peer's refusal states its class: the runner reads a class and never
+    /// infers one (SY-36).
     ///
     /// # Errors
     ///
@@ -190,8 +195,7 @@ impl<R> Edge<R> {
     pub async fn step<P, S>(&mut self, peer: &P, store: &S) -> Result<Stepped, StepFailure<P, S>>
     where
         P: SyncPeer<Resume = R>,
-        S: EventStore + IngestStore,
-        <S as EventStore>::Error: Classify,
+        S: WriteGroupStore + IngestStore,
     {
         if let EdgeState::Stopped(cause) = self.status.state {
             return Err(StepError::Stopped(cause));
@@ -206,7 +210,7 @@ impl<R> Edge<R> {
     async fn exchange<P, S>(&mut self, peer: &P, store: &S) -> Result<Stepped, StepFailure<P, S>>
     where
         P: SyncPeer<Resume = R>,
-        S: EventStore + IngestStore,
+        S: WriteGroupStore + IngestStore,
     {
         let ingested = self.pull_and_ingest(peer, store).await?;
         let pushed = self.push_local(peer, store).await?;
@@ -220,19 +224,20 @@ impl<R> Edge<R> {
     ) -> Result<Ingested, StepFailure<P, S>>
     where
         P: SyncPeer<Resume = R>,
-        S: EventStore + IngestStore,
+        S: WriteGroupStore + IngestStore,
     {
         let pulled = peer
             .pull(self.resume.as_ref())
             .await
             .map_err(StepError::Pull)?;
         // One ingest group per pulled group: the far side's atomic units land
-        // as atomic units (SY-30). No compensation: adjudication is SY-7's.
+        // as atomic units (SY-30), each with its guard, which the store keeps
+        // so a relay forwards it. No compensation: adjudication is SY-7's.
         let groups: Vec<IngestGroup<'_>> = pulled
             .batch
             .groups
             .iter()
-            .map(|group| IngestGroup::new(&group.events, &[]))
+            .map(|group| IngestGroup::new(&group.events, &[]).with_guard(group.guard.as_ref()))
             .collect();
         let ingested = if groups.is_empty() {
             Ingested::default()
@@ -249,102 +254,29 @@ impl<R> Edge<R> {
     async fn push_local<P, S>(&mut self, peer: &P, store: &S) -> Result<usize, StepFailure<P, S>>
     where
         P: SyncPeer<Resume = R>,
-        S: EventStore + IngestStore,
+        S: WriteGroupStore + IngestStore,
     {
         let limits = peer.limits();
         // One past a full batch: enough to tell "this is all of it" from
-        // "there is more", without reading the whole unconfirmed tail.
-        let limit = limits.max_batch_events.saturating_add(1);
-        let options = match self.status.confirmed.map(SequencePosition::next) {
-            None => ReadOptions::new(),
-            Some(Some(next)) => ReadOptions::new().from(next),
-            // The far side confirmed the last position there is.
-            Some(None) => {
-                self.status.pending = Pending::Exactly(0);
-                return Ok(0);
-            }
-        }
-        .limit(limit);
-        let tail = Tail::gather(EventStore::read(store, &Query::all(), options), &limits)
+        // "there is more", without reading the whole unconfirmed tail. Total:
+        // a peer declaring `usize::MAX` saturates rather than wraps.
+        let read_limit = NonZeroUsize::MIN.saturating_add(limits.max_batch_events);
+        let page = WriteGroupStore::read_groups(store, self.status.confirmed, read_limit)
             .await
             .map_err(StepError::Read)?;
-        self.status.pending = tail.pending(tail.events.len().saturating_add(tail.beyond), limit);
-        let Some(last) = tail.last else {
+        let run = Run::gather(page, &limits, read_limit);
+        self.status.pending = run.pending(run.events.saturating_add(run.left));
+        let Some(last_first) = run.last_first else {
             return Ok(0);
         };
 
-        let pushed = tail.events.len();
-        let left_after_push = tail.pending(tail.beyond, limit);
-        let batch = PushBatch::new(vec![EventGroup::new(None, tail.events)]);
+        let pushed = run.events;
+        let left_after_push = run.pending(run.left);
+        let batch = PushBatch::new(run.groups);
         let ack = peer.push(&batch).await.map_err(StepError::Push)?;
-        self.status.confirmed = Some(last);
+        self.status.confirmed = Some(last_first);
         self.status.pending = left_after_push;
         self.status.far_side = ack.confirmed;
         Ok(pushed)
-    }
-}
-
-/// The local events one step offers, and how many it read past them.
-struct Tail {
-    /// The contiguous run from the read's start that the peer's limits admit.
-    events: Vec<ReplicatedEvent>,
-    /// The local position of the last event in `events`.
-    last: Option<SequencePosition>,
-    /// How many events the read yielded past `events`.
-    beyond: usize,
-}
-
-impl Tail {
-    /// Reads the (limited) stream once: the admitted prefix is kept, the rest
-    /// is counted and dropped.
-    ///
-    /// The run stops at the first event that does not fit rather than skipping
-    /// it, because the watermark is a prefix: an event left behind with a later
-    /// one pushed could never be confirmed. If the first event does not fit at
-    /// all it is taken alone, so the peer refuses it and says why.
-    async fn gather<T, E>(stream: T, limits: &PeerLimits) -> Result<Self, E>
-    where
-        T: Stream<Item = Result<SequencedEvent, E>>,
-    {
-        let mut stream = core::pin::pin!(stream);
-        let mut tail = Self {
-            events: Vec::new(),
-            last: None,
-            beyond: 0,
-        };
-        let mut bytes = 0_usize;
-        let mut open = true;
-        while let Some(row) = core::future::poll_fn(|cx| stream.as_mut().poll_next(cx)).await {
-            let row = row?;
-            let event = ReplicatedEvent::new(row.id, row.recorded_at, row.event);
-            let size = event.payload_len();
-            let fits = tail.events.len() < limits.max_batch_events
-                && size <= limits.max_event_bytes
-                && bytes.saturating_add(size) <= limits.max_batch_bytes;
-            if open && (fits || tail.events.is_empty()) {
-                bytes = bytes.saturating_add(size);
-                tail.last = Some(row.position);
-                tail.events.push(event);
-                open = fits;
-            } else {
-                open = false;
-                tail.beyond = tail.beyond.saturating_add(1);
-            }
-        }
-        Ok(tail)
-    }
-
-    /// Whether the read stopped at `limit` rather than at the end of the log.
-    fn truncated(&self, limit: usize) -> bool {
-        self.events.len().saturating_add(self.beyond) >= limit
-    }
-
-    /// `count` as exact, or as a lower bound when the read was cut at `limit`.
-    fn pending(&self, count: usize, limit: usize) -> Pending {
-        if self.truncated(limit) {
-            Pending::AtLeast(count)
-        } else {
-            Pending::Exactly(count)
-        }
     }
 }

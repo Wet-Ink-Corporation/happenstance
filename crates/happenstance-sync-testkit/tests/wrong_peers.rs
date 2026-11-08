@@ -120,6 +120,14 @@ enum Mistake {
     /// rule's pull-back can see it, so it is the mutant that isolates that
     /// check.
     KeepsOnlyTheHeadOfALargePush,
+    /// SY-30's first wrong implementation, the page-as-one-group peer #420
+    /// replaced: hand each pull back as one unguarded group, merging every
+    /// group the page carries. It never splits a group, so SY-2 holds.
+    MergesAPage,
+    /// SY-30's second: keep every boundary and drop the guard each group
+    /// arrived under, so a relay forwards the events without the origin's
+    /// evidence (SY-6).
+    DropsTheGuard,
 }
 
 /// How many events a push to [`Mistake::TakesFewerEventsThanItDeclares`] may
@@ -214,6 +222,8 @@ impl Classify for WrongError {
             | Mistake::AcksOnAdmission
             | Mistake::ConfirmsNothing
             | Mistake::RefusesAtTheDeclaredBatchEvents
+            | Mistake::MergesAPage
+            | Mistake::DropsTheGuard
             | Mistake::RefusesAtTheDeclaredBatchBytes
             | Mistake::KeepsOnlyTheHeadOfALargePush => self.cause.class(),
         }
@@ -432,6 +442,16 @@ impl SendSyncPeer for WrongPeer {
         Ok(match self.mistake {
             Mistake::AlwaysSaysNothingWaiting => pulled.with_waiting(Waiting::Nothing),
             Mistake::SaysNothingOnAShortPage if short_page => pulled.with_waiting(Waiting::Nothing),
+            Mistake::MergesAPage => {
+                let mut merged = pulled;
+                let events: Vec<ReplicatedEvent> = merged.batch.events().cloned().collect();
+                merged.batch = if events.is_empty() {
+                    PushBatch::empty()
+                } else {
+                    PushBatch::new(vec![EventGroup::new(None, events)])
+                };
+                merged
+            }
             _ => pulled,
         })
     }
@@ -445,11 +465,25 @@ impl SendSyncPeer for WrongPeer {
             | Mistake::ClassChangesBetweenReads
             | Mistake::AlwaysSaysNothingWaiting
             | Mistake::SaysNothingOnAShortPage
-            | Mistake::DeclaresMoreBatchBytesThanItTakes => self
+            | Mistake::DeclaresMoreBatchBytesThanItTakes
+            | Mistake::MergesAPage => self
                 .inner
                 .push(batch)
                 .await
                 .map_err(|error| self.wrap(error)),
+            Mistake::DropsTheGuard => {
+                // The peer keeps its own copy of what it stores, as the
+                // reference peer does; the batch stays the caller's.
+                let unguarded = batch
+                    .groups
+                    .iter()
+                    .map(|group| EventGroup::new(None, group.events.clone()))
+                    .collect();
+                self.inner
+                    .push(&PushBatch::new(unguarded))
+                    .await
+                    .map_err(|error| self.wrap(error))
+            }
             Mistake::FlattensGroups => {
                 let singletons = batch
                     .events()
@@ -687,19 +721,30 @@ fn fails_exactly(
     rule: &str,
     clause: &'static str,
 ) {
-    assert!(
-        verdicts.iter().any(|(name, _)| *name == rule),
-        "`{rule}` is not in the enumeration: {verdicts:?}"
-    );
+    fails_exactly_these(verdicts, &[(rule, clause)]);
+}
+
+/// Each `(rule, clause)` reports its clause, and every other rule passes: for
+/// a mutant two rules are written against, from two sides.
+fn fails_exactly_these(
+    verdicts: &[(&'static str, Result<RuleOutcome, &'static str>)],
+    expected: &[(&str, &'static str)],
+) {
+    for (rule, _) in expected {
+        assert!(
+            verdicts.iter().any(|(name, _)| name == rule),
+            "`{rule}` is not in the enumeration: {verdicts:?}"
+        );
+    }
     for (name, verdict) in verdicts {
-        if *name == rule {
-            assert_eq!(*verdict, Err(clause), "`{name}` must reject its mutant");
+        if let Some((_, clause)) = expected.iter().find(|(rule, _)| rule == name) {
+            assert_eq!(*verdict, Err(*clause), "`{name}` must reject its mutant");
         } else {
             assert_eq!(
                 *verdict,
                 Ok(RuleOutcome::Ran),
-                "`{name}` failed `{rule}`'s mutant, so that mutant proves nothing about \
-                 `{rule}` alone"
+                "`{name}` failed a mutant written against {expected:?}, so that mutant \
+                 proves nothing about them alone"
             );
         }
     }
@@ -734,23 +779,51 @@ fn ingest_never_rejects_fails_a_peer_that_acks_and_then_drops() {
     );
 }
 
+/// A flattener splits SY-2's losing event from its reversal, and SY-30's
+/// multi-event groups from themselves: both rules reject it.
 #[test]
 fn compensation_is_atomic_fails_a_peer_that_flattens_groups() {
-    fails_exactly(
+    fails_exactly_these(
         &verdicts(async || WrongFixture::new(Mistake::FlattensGroups)),
-        "compensation_is_atomic_with_the_losing_event",
-        "SY-2",
+        &[
+            ("compensation_is_atomic_with_the_losing_event", "SY-2"),
+            ("push_envelope_preserves_group_boundaries", "SY-30"),
+        ],
+    );
+}
+
+/// A pull that ends inside a group splits it on the wire, which both SY-2's
+/// rule and SY-30's see.
+#[test]
+fn compensation_is_atomic_fails_a_peer_that_ends_a_pull_inside_a_group() {
+    fails_exactly_these(
+        &verdicts(async || PagingFixture {
+            inner: Arc::new(MemorySyncPeer::new(StoreId::from_bytes([0x78; 16]))),
+        }),
+        &[
+            ("compensation_is_atomic_with_the_losing_event", "SY-2"),
+            ("push_envelope_preserves_group_boundaries", "SY-30"),
+        ],
+    );
+}
+
+/// The page-as-one-group peer #420 replaced. Merging never splits a group, so
+/// SY-2's rule cannot see it; only the boundary rule can.
+#[test]
+fn push_envelope_preserves_group_boundaries_fails_a_peer_that_merges_a_page() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::MergesAPage)),
+        "push_envelope_preserves_group_boundaries",
+        "SY-30",
     );
 }
 
 #[test]
-fn compensation_is_atomic_fails_a_peer_that_ends_a_pull_inside_a_group() {
+fn push_envelope_preserves_group_boundaries_fails_a_peer_that_drops_the_guard() {
     fails_exactly(
-        &verdicts(async || PagingFixture {
-            inner: Arc::new(MemorySyncPeer::new(StoreId::from_bytes([0x78; 16]))),
-        }),
-        "compensation_is_atomic_with_the_losing_event",
-        "SY-2",
+        &verdicts(async || WrongFixture::new(Mistake::DropsTheGuard)),
+        "push_envelope_preserves_group_boundaries",
+        "SY-30",
     );
 }
 

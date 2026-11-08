@@ -100,7 +100,7 @@
 //! the origin pair (VT-8), and a probe-then-write would be the race that clause
 //! forbids.
 
-use happenstance_core::{Event, StoreId};
+use happenstance_core::{AppendCondition, Event, StoreId};
 
 use crate::identity::{ReplicatedEvent, Watermark};
 
@@ -223,9 +223,9 @@ pub trait IngestStore {
 /// over for the length of one call.
 ///
 /// `#[non_exhaustive]`, so a group is built with [`IngestGroup::new`] outside
-/// this crate. What travels beside a group is phase 13's to finish — the
-/// origin's guard is evidence (SY-6) that has nowhere to go here yet — and a
-/// field added then must not break every literal written before it.
+/// this crate, and [`guard`](Self::guard) joined it without breaking a literal.
+/// The guard is evidence (SY-6): stored with the group, never evaluated, and
+/// handed back by [`read_groups`](crate::WriteGroupStore::read_groups).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct IngestGroup<'a> {
@@ -238,16 +238,31 @@ pub struct IngestGroup<'a> {
     /// only when at least one of those was new (SY-11). Empty for a group that
     /// needs no answer, which is most of them.
     pub compensation: &'a [Event],
+    /// The condition the origin wrote [`events`](Self::events) under: evidence
+    /// only, never evaluated (SY-1, SY-6).
+    ///
+    /// A store that implements [`WriteGroupStore`](crate::WriteGroupStore)
+    /// keeps it with the group, so a relay forwards it with the events (SY-30).
+    pub guard: Option<&'a AppendCondition>,
 }
 
 impl<'a> IngestGroup<'a> {
-    /// A group of foreign `events`, answered by `compensation`.
+    /// A group of foreign `events`, answered by `compensation`, carrying no
+    /// guard.
     #[must_use]
     pub const fn new(events: &'a [ReplicatedEvent], compensation: &'a [Event]) -> Self {
         Self {
             events,
             compensation,
+            guard: None,
         }
+    }
+
+    /// The same group, carrying the origin's `guard`.
+    #[must_use]
+    pub const fn with_guard(mut self, guard: Option<&'a AppendCondition>) -> Self {
+        self.guard = guard;
+        self
     }
 }
 
@@ -273,3 +288,23 @@ pub struct Ingested {
 // file keep the numbers the specification cites.
 mod error;
 pub use error::IngestError;
+
+#[cfg(test)]
+mod tests {
+    use happenstance_core::{AppendCondition, Query, QueryItem};
+
+    use super::IngestGroup;
+
+    #[test]
+    fn a_new_group_carries_no_guard_until_one_is_given() {
+        let guard = AppendCondition::new(Query::from_item(
+            QueryItem::of_types(["Shipped"]).expect("a valid item"),
+        ));
+
+        let bare = IngestGroup::new(&[], &[]);
+        let guarded = bare.with_guard(Some(&guard));
+
+        assert_eq!(bare.guard, None);
+        assert_eq!(guarded.guard, Some(&guard));
+    }
+}

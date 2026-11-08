@@ -5,6 +5,7 @@ use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future::Future;
+use core::num::NonZeroUsize;
 
 use happenstance_testkit::Capability;
 
@@ -16,7 +17,8 @@ use happenstance_core::{
     SendEventStore, SequencePosition, SequencedEvent, StoreId,
 };
 use happenstance_sync::{
-    IngestError, IngestGroup, Ingested, MemoryIngestStore, SendIngestStore, Watermark,
+    GroupPage, IngestError, IngestGroup, Ingested, MemoryIngestStore, SendIngestStore,
+    SendWriteGroupStore, Watermark,
 };
 
 /// One isolated backing store that both appends and ingests, and a way to
@@ -283,6 +285,18 @@ impl SendIngestStore for MemoryIngestHandle {
 
     async fn watermark(&self) -> Result<Watermark, Self::Error> {
         SendIngestStore::watermark(&*self.store).await
+    }
+}
+
+impl SendWriteGroupStore for MemoryIngestHandle {
+    type Error = MemoryStoreError;
+
+    async fn read_groups(
+        &self,
+        after: Option<SequencePosition>,
+        max_events: NonZeroUsize,
+    ) -> Result<GroupPage, Self::Error> {
+        SendWriteGroupStore::read_groups(&*self.store, after, max_events).await
     }
 }
 

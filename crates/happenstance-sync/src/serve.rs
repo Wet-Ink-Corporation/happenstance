@@ -8,13 +8,12 @@
 
 use alloc::vec::Vec;
 
-use happenstance_core::EventStore;
-
 use crate::classify::{Classify, FailureClass};
 use crate::ingest::IngestStore;
 use crate::peer::{Pulled, PushBatch, SyncPeer};
 use crate::store_peer::{ForeignToken, StorePeerError, StoreResume, StoreSyncPeer};
 use crate::wire::{CodecError, PullRequest, ResumeToken, Route, decode, encode};
+use crate::write_group::WriteGroupStore;
 
 /// Answers one request through `peer`, and returns the reply's bytes.
 ///
@@ -55,8 +54,7 @@ pub async fn serve_sync<S, I>(
     request: &[u8],
 ) -> Result<Vec<u8>, ServeError<S::Error, I::Error>>
 where
-    S: EventStore,
-    S::Error: Classify,
+    S: WriteGroupStore,
     I: IngestStore,
 {
     match route {

@@ -13,7 +13,7 @@
 //! a bounded buffer, owned tasks or the incarnation check (#244 part 2); and no
 //! [`Exchange`] runs over a real network for [`RemoteSyncPeer`]. A `[FROZEN]` `SY` clause binds this
 //! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-7, SY-10,
-//! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-38 are `[PROVISIONAL]`, binding
+//! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-39 are `[PROVISIONAL]`, binding
 //! until the falsifier each names, and SY-14, SY-18 and SY-32 `[DEFERRED]`.
 //!
 //! # This is a port, not a protocol
@@ -203,3 +203,9 @@ pub use store_peer::{ForeignToken, StorePeerError, StoreResume, StoreSyncPeer};
 // stay module-qualified, as `wire`'s do: `runner::Edge` and `runner::StepError`
 // say at the call site which layer they belong to.
 pub mod runner;
+
+// The write-group port (#420): a store's log read back in the writes that made
+// it, so a push and a pull never split one write or merge two. Last, for the
+// reason `runner` is: the lines above keep the numbers the specification cites.
+pub mod write_group;
+pub use write_group::{GroupPage, SendWriteGroupStore, WriteGroup, WriteGroupStore};

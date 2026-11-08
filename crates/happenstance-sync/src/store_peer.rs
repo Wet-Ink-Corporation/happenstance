@@ -12,9 +12,10 @@
 //!
 //! # The token is the far store's own position
 //!
-//! [`StoreResume`] carries the last
-//! [`SequencePosition`](happenstance_core::SequencePosition) a pull forwarded,
-//! and the next pull reads above it. A position is meaningful only inside the
+//! [`StoreResume`] carries the [`first`](crate::WriteGroup::first)
+//! [`SequencePosition`](happenstance_core::SequencePosition) of the last group a
+//! pull forwarded, and the next pull reads the groups above it. A position is
+//! meaningful only inside the
 //! store that assigned it, which is exactly where it goes: a token is handed
 //! back only to the peer that minted it (SY-15), and that peer reads the store
 //! that numbered it. Nothing here can tell a token minted by a *different*
@@ -22,49 +23,37 @@
 //! swaps the far side under a saved token resumes at the wrong place. That is
 //! the caller's to prevent, the same way it is for any opaque token.
 //!
-//! # Groups: one page is one group
+//! # Groups: one write is one group
 //!
-//! [`EventStore::read`] yields
-//! [`SequencedEvent`](happenstance_core::SequencedEvent)s, and nothing on one
-//! says which `append` or [`ingest`](IngestStore::ingest) group it was written
-//! in: **the boundaries the far store wrote are not recoverable through the
-//! port** (#420). So a pull hands back its whole page as **one** [`EventGroup`].
-//! Every origin group that fits inside one page arrives whole, and the reader
-//! ingests the page atomically.
-//!
-//! **A group that crosses a page boundary is split.** When the budget ends
-//! inside a group the far store wrote, the page carries its head and the next
-//! pull its tail. That includes a losing event and the compensation written
-//! beside it (SY-2): a relay that pulls from this peer can deliver the two in
-//! separate pages. Keeping such a group whole needs the far store to expose its
-//! write boundaries, which is #420.
-//!
-//! The pulled group's [`guard`](EventGroup::guard) is `None`. No store keeps
-//! the condition an event was appended under, so there is nothing to forward;
-//! the guard is evidence (SY-6), and its absence costs an adjudicator that
-//! evidence and nothing else.
+//! A pull reads the far store through
+//! [`read_groups`](WriteGroupStore::read_groups) and hands back **one**
+//! [`EventGroup`] per write group the store wrote: an `append`, or an ingested
+//! group with the compensation written beside it (SY-2). Each arrives whole,
+//! and an ingested group carries the [`guard`](EventGroup::guard) it was pushed
+//! with, so a relay forwards the origin's evidence (SY-6, SY-30). A page never
+//! splits a group and never merges two: a group that would take the page past
+//! its budget waits, whole, for the next pull. Rows the store wrote before it
+//! recorded groups come back one group each, without a guard.
 //!
 //! # Waiting
 //!
 //! A pull reads one event past what its budget can carry, so it knows in the
 //! same call whether it reached the end of the far log. It says
-//! [`Waiting::Nothing`] only when the read ended with every event sent, and
+//! [`Waiting::Nothing`] only when the read ended with every group sent, and
 //! [`Waiting::Unknown`] otherwise. It never counts: an exact count is a scan of
 //! the rest of the log on every pull.
 
-use alloc::vec;
 use alloc::vec::Vec;
-use core::pin::Pin;
+use core::num::NonZeroUsize;
 
-use happenstance_core::futures_core::Stream;
-use happenstance_core::{EventId, EventStore, Query, ReadOptions};
+use happenstance_core::EventId;
 
 use crate::classify::{Classify, FailureClass};
-use crate::identity::ReplicatedEvent;
 use crate::ingest::{IngestError, IngestGroup, IngestStore};
 use crate::peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SyncPeer, Waiting,
 };
+use crate::write_group::WriteGroupStore;
 
 /// A peer over a store the caller holds: `events` to read, `ingest` to write.
 ///
@@ -88,14 +77,17 @@ use crate::peer::{
 /// admits and the store's ingest refuses is the failure SY-18 exists to move
 /// ahead of the push.
 ///
-/// The declaration binds pulls too, and that includes events the far store
-/// appended locally, which no push limit checked. An event at the head of the
-/// unread log whose payload is over the declared
-/// [`max_event_bytes`](PeerLimits::max_event_bytes) cannot travel in any page:
-/// every pull from there on returns an empty page, [`Waiting::Unknown`] and the
-/// token it was given, and replication **stalls at that event** until the far
-/// side declares a larger limit. Declare at least the largest payload the
-/// store's own writers accept.
+/// The declaration binds pulls too, and that includes groups the far store
+/// appended locally, which no push limit checked. A group at the head of the
+/// unread log that the declaration cannot carry whole — an event over the
+/// declared [`max_event_bytes`](PeerLimits::max_event_bytes), or more events or
+/// bytes than one batch takes — cannot travel in any page, because a group is
+/// never split: every pull from there on returns an empty page,
+/// [`Waiting::Unknown`] and the token it was given, and replication **stalls at
+/// that group** until the far side declares larger limits. Declare
+/// `max_batch_events` at least the store's per-call ceiling, and
+/// `max_event_bytes` and `max_batch_bytes` at least the largest payload and the
+/// largest write the store's own writers accept.
 ///
 /// # Send
 ///
@@ -147,23 +139,12 @@ use crate::peer::{
 /// # #[cfg(feature = "memory")]
 /// # mod shared {
 /// #     use happenstance_core::*;
-/// #     use happenstance_core::futures_core::Stream;
 /// #     use happenstance_sync::*;
-/// #     impl SendEventStore for super::Shared {
+/// #     impl SendWriteGroupStore for super::Shared {
 /// #         type Error = MemoryStoreError;
-/// #         fn read(&self, query: &Query, options: ReadOptions)
-/// #             -> impl Stream<Item = Result<SequencedEvent, Self::Error>> + Send {
-/// #             SendEventStore::read(&*self.0, query, options)
-/// #         }
-/// #         async fn append(&self, events: &[Event], condition: Option<&AppendCondition>)
-/// #             -> Result<SequencePosition, AppendError<Self::Error>> {
-/// #             SendEventStore::append(&*self.0, events, condition).await
-/// #         }
-/// #         async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
-/// #             SendEventStore::head(&*self.0).await
-/// #         }
-/// #         async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
-/// #             SendEventStore::contains_event_id(&*self.0, id).await
+/// #         async fn read_groups(&self, after: Option<SequencePosition>,
+/// #             max_events: core::num::NonZeroUsize) -> Result<GroupPage, Self::Error> {
+/// #             SendWriteGroupStore::read_groups(&*self.0, after, max_events).await
 /// #         }
 /// #     }
 /// #     impl SendIngestStore for super::Shared {
@@ -209,7 +190,7 @@ impl<S, I> StoreSyncPeer<S, I> {
 
 impl<S, I> StoreSyncPeer<S, I>
 where
-    S: EventStore,
+    S: WriteGroupStore,
     I: IngestStore,
 {
     /// Refuses a push the declared limits do not admit, before anything is
@@ -247,65 +228,51 @@ where
 
 impl<S, I> SyncPeer for StoreSyncPeer<S, I>
 where
-    S: EventStore,
-    S::Error: Classify,
+    S: WriteGroupStore,
     I: IngestStore,
 {
     type Error = StorePeerError<S::Error, I::Error>;
     type Resume = StoreResume;
 
-    /// Reads the far store above `from`, one event at a time, until the
+    /// Reads the far store's write groups above `from`, each whole, until the
     /// declared budget is spent or the log ends.
     ///
     /// # Errors
     ///
-    /// [`StorePeerError::Read`] if the store's read fails.
+    /// [`StorePeerError::Read`] if the store's group read fails.
     async fn pull(&self, from: Option<&StoreResume>) -> Result<Pulled<StoreResume>, Self::Error> {
         let from = from.copied().unwrap_or_default();
-        let Some(start) = from.next_position() else {
-            // The token names the last position a store can number, so nothing
-            // can lie above it.
-            return Ok(Pulled::new(PushBatch::empty(), from).with_waiting(Waiting::Nothing));
-        };
-
-        // One past the most events a page can carry: the event that does not
+        // One past the most events a page can carry: the group that does not
         // fit is the proof the log goes on, read in the same call (SY-37).
-        let probe = self.limits.max_batch_events.saturating_add(1);
-        let query = Query::all();
-        let mut stream = core::pin::pin!(
-            self.events
-                .read(&query, ReadOptions::new().from(start).limit(probe))
-        );
+        // Total: a declared `usize::MAX` saturates rather than wraps.
+        let probe = NonZeroUsize::MIN.saturating_add(self.limits.max_batch_events);
+        let page = self
+            .events
+            .read_groups(from.last_forwarded(), probe)
+            .await
+            .map_err(StorePeerError::Read)?;
+
         let mut budget = PullBatchLimit::from(&self.limits);
-        let mut page = Vec::new();
+        let mut groups = Vec::with_capacity(page.groups.len());
         let mut resume = from;
-
-        let waiting = loop {
-            let Some(next) = next_item(stream.as_mut()).await else {
-                break Waiting::Nothing;
-            };
-            let sequenced = next.map_err(StorePeerError::Read)?;
-            let position = sequenced.position;
-            let single = EventGroup::new(
-                None,
-                vec![ReplicatedEvent::new(
-                    sequenced.id,
-                    sequenced.recorded_at,
-                    sequenced.event,
-                )],
-            );
-            if !budget.admits(&single) {
-                break Waiting::Unknown;
+        let mut stalled = false;
+        for group in page.groups {
+            let first = group.first();
+            let group = EventGroup::from(group);
+            // Never split and never skipped: a group the budget cannot admit
+            // ends the page, and one at the head stalls it (D-2).
+            if !budget.admits(&group) {
+                stalled = true;
+                break;
             }
-            budget.charge(&single);
-            page.extend(single.events);
-            resume = StoreResume::after(position);
-        };
-
-        let groups = if page.is_empty() {
-            Vec::new()
+            budget.charge(&group);
+            groups.push(group);
+            resume = StoreResume::after(first);
+        }
+        let waiting = if stalled {
+            Waiting::Unknown
         } else {
-            vec![EventGroup::new(None, page)]
+            page.waiting
         };
         Ok(Pulled::new(PushBatch::new(groups), resume).with_waiting(waiting))
     }
@@ -313,10 +280,10 @@ where
     /// Ingests each pushed group as one atomic group with no compensation, and
     /// acknowledges with the store's watermark after the write.
     ///
-    /// The travelling guards are not evaluated (SY-1) and not stored: no store
-    /// keeps one. Nothing here detects a conflict or writes a compensation, so
-    /// this peer cannot be SY-7's adjudicator; the hook for that is planned
-    /// with SY-7 (#136).
+    /// The travelling guards are not evaluated (SY-1): each is stored with its
+    /// group and forwarded on pull (SY-30). Nothing here detects a conflict or
+    /// writes a compensation, so this peer cannot be SY-7's adjudicator; the
+    /// hook for that is planned with SY-7 (#136).
     ///
     /// # Errors
     ///
@@ -331,7 +298,7 @@ where
         let groups: Vec<IngestGroup<'_>> = batch
             .groups
             .iter()
-            .map(|group| IngestGroup::new(&group.events, &[]))
+            .map(|group| IngestGroup::new(&group.events, &[]).with_guard(group.guard.as_ref()))
             .collect();
         let ingested = self
             .ingest
@@ -355,11 +322,6 @@ where
     }
 }
 
-/// The next item of `stream`, without a `StreamExt` dependency.
-async fn next_item<St: Stream>(mut stream: Pin<&mut St>) -> Option<St::Item> {
-    core::future::poll_fn(|cx| stream.as_mut().poll_next(cx)).await
-}
-
 /// A count for the wire, which carries `u64`. Saturating, and only in theory:
 /// no target this crate builds for has a `usize` wider than 64 bits.
 fn saturating_u64(count: usize) -> u64 {
@@ -369,7 +331,7 @@ fn saturating_u64(count: usize) -> u64 {
 mod resume;
 pub use resume::{ForeignToken, StoreResume};
 
-/// How a [`StoreSyncPeer`] fails: its store's read error `R`, its ingest
+/// How a [`StoreSyncPeer`] fails: its store's group-read error `R`, its ingest
 /// error `W`, or a push over the limits it declared.
 ///
 /// The store's errors are type parameters, never strings (RS-30-2), and each
@@ -378,8 +340,8 @@ pub use resume::{ForeignToken, StoreResume};
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum StorePeerError<R, W> {
-    /// The far store's read failed; the store's error states the class.
-    #[error("the far store's read failed")]
+    /// The far store's group read failed; the store's error states the class.
+    #[error("the far store's group read failed")]
     Read(#[source] R),
 
     /// The far store refused or failed the ingest. Nothing in the push was

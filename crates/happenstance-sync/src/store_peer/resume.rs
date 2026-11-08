@@ -5,8 +5,9 @@ use happenstance_core::SequencePosition;
 use crate::classify::{Classify, FailureClass};
 use crate::wire::ResumeToken;
 
-/// Where a [`StoreSyncPeer`](crate::StoreSyncPeer) pull left off: the last
-/// far-store position it forwarded, or the start.
+/// Where a [`StoreSyncPeer`](crate::StoreSyncPeer) pull left off: the
+/// [`first`](crate::WriteGroup::first) far-store position of the last group it
+/// forwarded, or the start.
 ///
 /// Owned and `Copy`, so it outlives the peer and the store handle (SY-16), and
 /// its text form is a [`ResumeToken`] for the wire: the decimal position, and
@@ -24,7 +25,8 @@ impl StoreResume {
         Self { after: None }
     }
 
-    /// The token that reads the far store above `position`.
+    /// The token that reads the far store's groups above the group whose first
+    /// position is `position`.
     #[must_use]
     pub const fn after(position: SequencePosition) -> Self {
         Self {
@@ -32,19 +34,11 @@ impl StoreResume {
         }
     }
 
-    /// The last position forwarded, or `None` from the start.
+    /// The first position of the last group forwarded, or `None` from the
+    /// start.
     #[must_use]
     pub const fn last_forwarded(self) -> Option<SequencePosition> {
         self.after
-    }
-
-    /// The first position the next pull reads, or `None` if this token
-    /// already names the last position a store can number.
-    pub(super) const fn next_position(self) -> Option<SequencePosition> {
-        match self.after {
-            Some(position) => position.next(),
-            None => Some(SequencePosition::FIRST),
-        }
     }
 }
 

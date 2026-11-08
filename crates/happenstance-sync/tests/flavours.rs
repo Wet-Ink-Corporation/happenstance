@@ -31,6 +31,7 @@
 //! is reached by full path where a delegation needs it (CLAUDE.md rule 4).
 
 use core::cell::RefCell;
+use core::num::NonZeroUsize;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -39,10 +40,11 @@ use happenstance_core::{
     AppendCondition, AppendError, Event, EventId, EventStore, MemoryEventStore, MemoryStoreError,
     Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
+use happenstance_sync::write_group::GroupPageBuilder;
 use happenstance_sync::{
-    Classify, EventGroup, FailureClass, IngestError, IngestGroup, IngestStore, Ingested,
+    Classify, EventGroup, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
     MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
-    PushBatch, ReplicatedEvent, SyncPeer, Watermark,
+    PushBatch, ReplicatedEvent, SyncPeer, Waiting, Watermark, WriteGroupStore,
 };
 
 /// The failure [`exchange`] reports: any of the three ports' own errors.
@@ -247,6 +249,36 @@ impl IngestStore for LocalStore {
             watermark.advance(row.id.store(), row.id.position());
         }
         Ok(watermark)
+    }
+}
+
+/// The local log as one group per event: this store records no write
+/// boundaries, which is the legacy rule a store follows for rows written before
+/// it recorded groups (#420). Its foreign rows hold no local position, so a
+/// push never forwards them, which is all the runner tests here need.
+impl WriteGroupStore for LocalStore {
+    type Error = MemoryStoreError;
+
+    async fn read_groups(
+        &self,
+        after: Option<SequencePosition>,
+        max_events: NonZeroUsize,
+    ) -> Result<GroupPage, Self::Error> {
+        let options = match after.map(SequencePosition::next) {
+            None => ReadOptions::new(),
+            Some(Some(next)) => ReadOptions::new().from(next),
+            Some(None) => return Ok(GroupPage::new(Vec::new(), Waiting::Nothing)),
+        };
+        let rows =
+            happenstance_core::collect(EventStore::read(self, &Query::all(), options)).await?;
+        let mut page = GroupPageBuilder::new(max_events);
+        for row in rows {
+            let event = ReplicatedEvent::new(row.id, row.recorded_at, row.event);
+            if page.offer(row.position, None, event).is_break() {
+                return Ok(page.finish(Waiting::Unknown));
+            }
+        }
+        Ok(page.finish(Waiting::Nothing))
     }
 }
 
@@ -576,12 +608,11 @@ fn edge_spawns_from_generic<P, S>(
 where
     P: happenstance_sync::SendSyncPeer + Send + Sync + 'static,
     P::Resume: Send + Sync,
-    S: happenstance_core::SendEventStore
+    S: happenstance_sync::SendWriteGroupStore
         + happenstance_sync::SendIngestStore
         + Send
         + Sync
         + 'static,
-    <S as happenstance_core::SendEventStore>::Error: Classify,
 {
     tokio::spawn(async move {
         let mut edge = happenstance_sync::runner::Edge::new();

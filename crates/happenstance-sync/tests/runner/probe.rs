@@ -1,24 +1,19 @@
 //! Hand-written fakes over the in-memory reference types (TST-09): a peer that
-//! counts its calls and fails a pull on request, and a store whose read fails
-//! on request.
+//! counts its calls and fails a pull on request, and a store whose group read
+//! fails on request.
 //!
 //! Interior mutability through `Cell`, because the ports take `&self` and the
 //! tests flip a switch between steps. `Cell` makes both types `!Sync`, which
 //! the bare flavours the runner binds do not mind.
 
 use core::cell::Cell;
-use core::pin::Pin;
-use core::task::{Context, Poll};
+use core::num::NonZeroUsize;
 
-use futures_core::Stream;
-use happenstance_core::{
-    AppendCondition, AppendError, Event, EventId, EventStore, MemoryStoreError, Query, ReadOptions,
-    SequencePosition, SequencedEvent, StoreId,
-};
+use happenstance_core::{MemoryStoreError, SequencePosition, StoreId};
 use happenstance_sync::{
-    Ack, Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested,
+    Ack, Classify, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
     MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
-    PushBatch, SyncPeer, Watermark,
+    PushBatch, SyncPeer, Watermark, WriteGroupStore,
 };
 
 /// How a [`ProbePeer`] fails: the reference peer's own failure, or one a test
@@ -84,29 +79,24 @@ impl SyncPeer for ProbePeer {
     }
 }
 
-/// How a [`ProbeStore`]'s event-store half fails.
+/// How a [`ProbeStore`]'s group read fails.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ProbeStoreError {
     /// A read a test asked to fail, transiently.
     #[error("the probe store's read failed")]
     ReadFailed,
-    /// An append through the fake. The runner never appends (its only local
-    /// write is the ingest), and tests seed through `inner`, so this arm is a
-    /// bug in a test, never an outcome one asserts on.
-    #[error("an append reached the probe store; seed it through `inner`")]
-    AppendThroughFake,
 }
 
 impl Classify for ProbeStoreError {
     fn class(&self) -> FailureClass {
         match self {
             Self::ReadFailed => FailureClass::Transient,
-            Self::AppendThroughFake => FailureClass::Stop,
         }
     }
 }
 
-/// [`MemoryIngestStore`], counting every call and failing reads on request.
+/// [`MemoryIngestStore`], counting every call and failing group reads on
+/// request.
 ///
 /// Its read error differs from its ingest error, which is the case
 /// `StepError`'s separate `R` and `I` exist for. It does not append: seed it
@@ -132,64 +122,19 @@ impl ProbeStore {
     }
 }
 
-/// The reference store's rows, or one [`ProbeStoreError::ReadFailed`] first.
-struct ProbeRows<T> {
-    inner: Pin<Box<T>>,
-    fail: bool,
-}
-
-impl<T> Stream for ProbeRows<T>
-where
-    T: Stream<Item = Result<SequencedEvent, MemoryStoreError>>,
-{
-    type Item = Result<SequencedEvent, ProbeStoreError>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-        if this.fail {
-            this.fail = false;
-            return Poll::Ready(Some(Err(ProbeStoreError::ReadFailed)));
-        }
-        this.inner
-            .as_mut()
-            .poll_next(cx)
-            .map(|row| row.map(|row| row.map_err(|never| match never {})))
-    }
-}
-
-impl EventStore for ProbeStore {
+impl WriteGroupStore for ProbeStore {
     type Error = ProbeStoreError;
 
-    fn read(
+    async fn read_groups(
         &self,
-        query: &Query,
-        options: ReadOptions,
-    ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        after: Option<SequencePosition>,
+        max_events: NonZeroUsize,
+    ) -> Result<GroupPage, Self::Error> {
         self.count();
-        ProbeRows {
-            inner: Box::pin(EventStore::read(&self.inner, query, options)),
-            fail: self.fail_read.get(),
+        if self.fail_read.get() {
+            return Err(ProbeStoreError::ReadFailed);
         }
-    }
-
-    async fn append(
-        &self,
-        _events: &[Event],
-        _condition: Option<&AppendCondition>,
-    ) -> Result<SequencePosition, AppendError<Self::Error>> {
-        Err(AppendError::Store(ProbeStoreError::AppendThroughFake))
-    }
-
-    async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
-        self.count();
-        EventStore::head(&self.inner)
-            .await
-            .map_err(|never| match never {})
-    }
-
-    async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
-        self.count();
-        EventStore::contains_event_id(&self.inner, id)
+        WriteGroupStore::read_groups(&self.inner, after, max_events)
             .await
             .map_err(|never| match never {})
     }

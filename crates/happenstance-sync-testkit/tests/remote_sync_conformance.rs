@@ -134,6 +134,10 @@ async fn replaying_a_pushed_batch_changes_nothing() {
 
 /// The token the client holds is the far side's text, and resuming from it
 /// sends nothing twice.
+///
+/// The text names the first position of the last group forwarded (#420): the
+/// batch is one group of three, which the dense in-memory store wrote from
+/// position 1, so the group's first is 1 and not its last row's 3.
 #[tokio::test]
 async fn the_remote_token_resumes_where_the_far_side_left_off() {
     let (peer, _) = remote().await;
@@ -142,7 +146,7 @@ async fn the_remote_token_resumes_where_the_far_side_left_off() {
     let first = peer.pull(None).await.expect("a first pull");
     let second = peer.pull(Some(&first.resume)).await.expect("a second pull");
 
-    assert_eq!(first.resume, ResumeToken::new("3"));
+    assert_eq!(first.resume, ResumeToken::new("1"));
     assert_eq!(second.batch, PushBatch::empty());
 }
 

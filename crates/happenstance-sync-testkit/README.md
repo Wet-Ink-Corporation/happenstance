@@ -21,7 +21,7 @@ with programs you can run.
 > rule names the clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > it checks; several of those are still `[PROVISIONAL]` (SY-7, SY-10, SY-27 –
-> SY-31, SY-36 – SY-38 among the ones a rule here checks), and a rule over a
+> SY-31, SY-36 – SY-39 among the ones a rule here checks), and a rule over a
 > provisional clause moves when its clause does. There is no runner yet (issue
 > #244), so nothing here checks one.
 >
@@ -35,6 +35,14 @@ the event-store suite, over a fixture that builds one isolated store per call:
 
 ```rust,ignore
 happenstance_sync_testkit::ingest_store_conformance!(MyIngestFixture::new());
+```
+
+A store a runner pushes from or a peer serves also implements
+`WriteGroupStore`, and mounts the write-group family (SY-39) on the same
+fixture:
+
+```rust,ignore
+happenstance_sync_testkit::write_group_store_conformance!(MyIngestFixture::new());
 ```
 
 A peer adapter mounts the peer family the same way:
@@ -51,7 +59,9 @@ skipped with your fixture's stated reason rather than passing.
 
 The harness is a parameter: `emit_ingest_tokio!` (the default),
 `emit_ingest_blocking!` for a `!Send` store, and `emit_ingest_wasm!` for
-`wasm32-unknown-unknown`; the peer family has the same three.
+`wasm32-unknown-unknown`; the peer family has the same three, and the
+write-group family has `emit_write_group_tokio!` and
+`emit_write_group_blocking!`.
 
 ## Features
 

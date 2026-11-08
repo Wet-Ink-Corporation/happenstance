@@ -94,7 +94,7 @@ impl Classify for CodecError {
 /// here. The text is what a log wants, and it is all this exposes.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{0}")]
-pub struct PostcardError(postcard::Error);
+pub struct PostcardError(pub(crate) postcard::Error);
 
 /// `message` in an envelope stamped [`FORMAT_VERSION`](super::FORMAT_VERSION),
 /// as postcard bytes.

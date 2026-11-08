@@ -40,6 +40,7 @@
 //! | [`compensation_is_atomic_with_the_losing_event`](rules::compensation_is_atomic_with_the_losing_event) | SY-2 | a peer that splits a losing event from the compensation that rode with it |
 //! | [`peer_declares_its_own_limits`](rules::peer_declares_its_own_limits) | SY-18 | a peer whose declared limits admit an event its ingest then refuses, or that declares below VT-21's floor |
 //! | [`peer_takes_a_batch_at_its_declared_limits`](rules::peer_takes_a_batch_at_its_declared_limits) | SY-18 | a peer that refuses a push its own batch limits admit: more events, or more bytes, than it really takes |
+//! | [`push_envelope_preserves_group_boundaries`](rules::push_envelope_preserves_group_boundaries) | SY-30 | a peer that merges the groups of a page into one, or strips the guard a group was pushed with |
 //! | [`every_refusal_states_its_class`](rules::every_refusal_states_its_class) | SY-36 | a peer whose errors all state one failure class, whatever the failure |
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
@@ -140,6 +141,34 @@
 //! fixture whose declension is this crate's default
 //! ([`ingest_declensions_are_stated`]).
 //!
+//! # The write-group family
+//!
+//! A store that a runner or a [`StoreSyncPeer`](happenstance_sync::StoreSyncPeer)
+//! reads from must hand its log back in the writes that made it (SY-39), so a
+//! relay forwards each write as one group with its guard (SY-30). The family
+//! mounts on the same [`IngestFixture`], whose store must also implement
+//! [`WriteGroupStore`](happenstance_sync::WriteGroupStore):
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! happenstance_sync_testkit::write_group_store_conformance!(
+//!     happenstance_sync_testkit::MemoryIngestFixture::new()
+//! );
+//! # }
+//! ```
+//!
+//! | Rule | Clause | What it rejects |
+//! |---|---|---|
+//! | [`an_append_reads_back_as_one_group`](write_group_rules::an_append_reads_back_as_one_group) | SY-39 | a store that records no groups, and one that merges adjacent appends |
+//! | [`an_ingested_group_keeps_its_boundary_and_guard`](write_group_rules::an_ingested_group_keeps_its_boundary_and_guard) | SY-39, SY-30 | a store that drops an ingested group's guard, or merges what one call ingested |
+//! | [`compensation_joins_its_group`](write_group_rules::compensation_joins_its_group) | SY-39, SY-2 | a store that records a compensation as a group of its own |
+//! | [`a_read_never_cuts_a_group`](write_group_rules::a_read_never_cuts_a_group) | SY-39 | a page filled by event, a first group skipped for being too large, and a resume above a row position |
+//! | [`pages_chain_on_first_and_end_with_nothing`](write_group_rules::pages_chain_on_first_and_end_with_nothing) | SY-39, SY-37 | a page its budget cut that says nothing is waiting |
+//!
+//! Each wrong store lives in `tests/wrong_write_group_stores.rs`, where a test
+//! runs the whole family against it and asserts the exact set it fails.
+//!
 //! # Harnesses
 //!
 //! The emitter is a parameter, as in the event-store family, so the suite never
@@ -210,6 +239,11 @@ pub use ingest_suite::{
     NO_TAGS_PER_BATCH_LIMIT_REASON, ingest_rules,
 };
 
+// The write-group family (#420), declared after the ingest family for the
+// same reason, and mounted on its fixture.
+mod write_group_suite;
+pub use write_group_suite::write_group_rules;
+
 /// Generates the ingest conformance suite for a store adapter.
 ///
 /// Takes an expression that produces an [`IngestFixture`]. The rule list is
@@ -279,6 +313,67 @@ macro_rules! ingest_store_conformance {
         $crate::ingest_store_conformance!(
             mod_name = ingest_conformance,
             emit = $crate::emit_ingest_tokio,
+            fixture = $fixture
+        );
+    };
+}
+
+/// Generates the write-group conformance suite for a store adapter.
+///
+/// Takes an expression that produces an [`IngestFixture`] whose store also
+/// implements [`WriteGroupStore`](happenstance_sync::WriteGroupStore). The
+/// rule list comes from
+/// [`for_each_write_group_rule!`](crate::for_each_write_group_rule).
+///
+/// # Examples
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_sync_testkit::write_group_store_conformance!(
+///     happenstance_sync_testkit::MemoryIngestFixture::new()
+/// );
+/// # }
+/// ```
+///
+/// A different harness, and a module name of your own:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_sync_testkit::write_group_store_conformance!(
+///     mod_name = blocking_write_group_conformance,
+///     emit = happenstance_sync_testkit::emit_write_group_blocking,
+///     fixture = super::MyFixture::new()
+/// );
+/// # }
+/// ```
+#[macro_export]
+macro_rules! write_group_store_conformance {
+    (mod_name = $mod_name:ident, emit = $emit:path, fixture = $fixture:expr) => {
+        mod $mod_name {
+            // Hoisted as in the ingest family; the opaque type names the one
+            // extra bound every rule here needs.
+            async fn __write_group_fixture()
+            -> impl $crate::__private::IngestFixture<Store: $crate::__private::WriteGroupStore>
+            {
+                $fixture
+            }
+
+            $crate::for_each_write_group_rule!($emit);
+        }
+    };
+    (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
+        $crate::write_group_store_conformance!(
+            mod_name = $mod_name,
+            emit = $crate::emit_write_group_tokio,
+            fixture = $fixture
+        );
+    };
+    ($fixture:expr) => {
+        $crate::write_group_store_conformance!(
+            mod_name = write_group_conformance,
+            emit = $crate::emit_write_group_tokio,
             fixture = $fixture
         );
     };
@@ -358,5 +453,7 @@ pub mod __private {
     #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
     pub use crate::sync_model::rules as model_rules;
     pub use crate::sync_suite::rules;
+    pub use crate::write_group_suite::write_group_rules;
+    pub use happenstance_sync::WriteGroupStore;
     pub use happenstance_testkit::block_on;
 }
