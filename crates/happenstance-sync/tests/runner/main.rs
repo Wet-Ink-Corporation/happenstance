@@ -1,17 +1,23 @@
-//! The runner's single edge, driven one step at a time (#244, part 1).
+//! The runner's single edge, driven one step at a time and by its run loop
+//! (#244).
 //!
 //! Every test drives an [`Edge`] over the in-memory reference types: a
 //! [`MemoryIngestStore`] as the local store and a [`MemorySyncPeer`] as the far
-//! side, or the fakes in `probe` over them where a test needs to count calls
-//! or provoke a failure. Each names the wrong runner it rejects.
+//! side, or the fakes in `probe` over them where a test needs to count calls,
+//! provoke a failure or name a responder. Each names the wrong runner it
+//! rejects. Nothing sleeps: the run loop's waits go to a recording fake.
 
+mod backoff;
+mod classes;
+mod drive;
 mod groups;
+mod incarnation;
 mod probe;
 
 use happenstance_core::{
     Event, EventId, EventStore, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
-use happenstance_sync::runner::{Edge, EdgeState, Failure, Pending, Phase, StepError};
+use happenstance_sync::runner::{Edge, EdgeState, Failure, Pending, Phase, StepError, StopCause};
 use happenstance_sync::{
     EventGroup, FailureClass, IngestError, MemoryIngestStore, MemorySyncPeer, PeerLimits,
     ReplicatedEvent, SyncPeer, Waiting,
@@ -300,7 +306,9 @@ async fn a_second_step_pushes_nothing_already_confirmed() {
 }
 
 /// SY-34. Rejects the tidy wrong runner that rolls the spoke back on refusal,
-/// and one that advances the watermark past a push that did not land.
+/// and one that advances the watermark past a push that did not land. The
+/// refusal is a `Split` of one group, which the runner cannot halve, so the
+/// edge parks (#244 part 2) rather than offering the same group for ever.
 #[tokio::test]
 async fn a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class() {
     let mut limits = PeerLimits::minimum();
@@ -321,11 +329,9 @@ async fn a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class() 
     assert_eq!(store.snapshot(), before, "the local log is unchanged");
     assert_eq!(edge.status().confirmed, None);
     assert_eq!(edge.status().pending, Pending::Exactly(2));
-    assert_eq!(
-        edge.status().last_failure,
-        Some(Failure::new(Phase::Push, FailureClass::Split))
-    );
-    assert_eq!(edge.status().state, EdgeState::Running);
+    let cause = Failure::new(Phase::Push, FailureClass::Split);
+    assert_eq!(edge.status().last_failure, Some(cause));
+    assert_eq!(edge.status().state, EdgeState::Parked(cause));
 }
 
 /// SY-38 meets the runner: the far side offers an event under the local
@@ -358,7 +364,7 @@ async fn a_stop_class_failure_stops_the_edge_and_the_next_step_does_no_io() {
         "the ingest refused the claim: {stopped:?}"
     );
     assert!(
-        matches!(refused, Err(StepError::Stopped(failure)) if failure == cause),
+        matches!(refused, Err(StepError::Stopped(StopCause::Failure(failure))) if failure == cause),
         "a stopped edge refuses: {refused:?}"
     );
     assert_eq!(calls_before, 1, "the first step pulled once and stopped");
@@ -372,7 +378,10 @@ async fn a_stop_class_failure_stops_the_edge_and_the_next_step_does_no_io() {
         1,
         "the stopped step neither read nor ingested"
     );
-    assert_eq!(edge.status().state, EdgeState::Stopped(cause));
+    assert_eq!(
+        edge.status().state,
+        EdgeState::Stopped(StopCause::Failure(cause))
+    );
     assert_eq!(edge.resume_token(), None, "the token did not advance");
     assert_eq!(
         edge.status().waiting,

@@ -471,6 +471,49 @@ async fn an_edge_steps_over_a_not_send_store_and_peer() {
     assert_eq!(edge.status().confirmed, Some(local));
 }
 
+/// A sleep that holds an `Rc`, as a Durable Object's alarm handle would: the
+/// third `!Send` party to a run.
+struct LocalSleep(Rc<RefCell<Vec<core::time::Duration>>>);
+
+impl happenstance_sync::runner::Sleep for LocalSleep {
+    async fn sleep(&self, duration: core::time::Duration) {
+        self.0.borrow_mut().push(duration);
+    }
+}
+
+/// The runner's own loop over a store, a peer and a sleep that each hold an
+/// `Rc`. Tighten `Edge::run`'s bounds to a `Send` flavour and this stops
+/// compiling, with `error[E0277]`.
+#[tokio::test]
+async fn an_edge_runs_over_a_not_send_store_peer_and_sleep() {
+    let origin = StoreId::from_bytes([7; 16]);
+    let peer = LocalPeer {
+        inner: Rc::new(MemorySyncPeer::new(origin)),
+    };
+    peer.inner
+        .seed(EventGroup::new(None, vec![replicated(origin, 1)]))
+        .expect("an unpoisoned peer accepts a seed");
+    let store = LocalStore::new(StoreId::from_bytes([9; 16]));
+    let sleep = LocalSleep(Rc::new(RefCell::new(Vec::new())));
+    let mut backoff = happenstance_sync::runner::Backoff::new(
+        core::time::Duration::from_millis(1),
+        core::time::Duration::from_millis(8),
+        1,
+    )
+    .expect("the base is below the cap");
+    let mut edge = happenstance_sync::runner::Edge::new();
+
+    edge.run(&peer, &store, &mut backoff, &sleep)
+        .await
+        .expect("an in-memory run does not fail");
+
+    assert!(edge.status().is_synced(), "{:?}", edge.status());
+    assert!(
+        sleep.0.borrow().is_empty(),
+        "nothing failed, so nothing waited"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The `Send` flavour crosses threads from generic code
 // ---------------------------------------------------------------------------

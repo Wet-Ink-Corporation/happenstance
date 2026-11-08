@@ -190,8 +190,10 @@ async fn a_relayed_foreign_group_keeps_its_boundary_and_guard() {
 }
 
 /// A group larger than the far side's batch is offered alone, so the peer's
-/// refusal states the class; it is neither skipped nor split, and the next
-/// step offers it again. `MemorySyncPeer` polices `max_batch_bytes`.
+/// refusal states the class; it is neither skipped nor split. The refusal is a
+/// `Split` of one group, which the runner cannot halve, so the edge parks and
+/// the next step offers nothing (#244 part 2). `MemorySyncPeer` polices
+/// `max_batch_bytes`.
 #[tokio::test]
 async fn a_group_over_the_batch_limit_is_offered_alone_and_refused() {
     let mut limits = PeerLimits::minimum();
@@ -201,22 +203,25 @@ async fn a_group_over_the_batch_limit_is_offered_alone_and_refused() {
     append_groups(&store, &[3]).await;
     let mut edge = Edge::new();
 
-    for attempt in 0..2 {
-        let refused = edge.step(&peer, &store).await;
+    let refused = edge.step(&peer, &store).await;
+    let parked = edge.step(&peer, &store).await;
 
-        assert!(
-            matches!(
-                refused,
-                Err(StepError::Push(MemoryPeerError::BatchTooLarge {
-                    actual: 3,
-                    ..
-                }))
-            ),
-            "attempt {attempt}: the whole group went alone and was refused: {refused:?}"
-        );
-        assert_eq!(edge.status().confirmed, None);
-        assert_eq!(edge.status().pending, Pending::Exactly(3));
-    }
+    assert!(
+        matches!(
+            refused,
+            Err(StepError::Push(MemoryPeerError::BatchTooLarge {
+                actual: 3,
+                ..
+            }))
+        ),
+        "the whole group went alone and was refused: {refused:?}"
+    );
+    assert!(
+        matches!(parked, Err(StepError::Parked(_))),
+        "the parked edge offered nothing more: {parked:?}"
+    );
+    assert_eq!(edge.status().confirmed, None);
+    assert_eq!(edge.status().pending, Pending::Exactly(3));
     assert!(
         held_groups(&peer).await.is_empty(),
         "nothing was split off and landed"

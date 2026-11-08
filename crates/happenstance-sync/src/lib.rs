@@ -8,10 +8,10 @@
 //! type checker is the instrument there, not the runtime.
 //!
 //! Published since #108 part E, so that a store adapter can implement
-//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: the runner
-//! drives one edge a step at a time ([`runner`], #244 part 1), without backoff,
-//! a bounded buffer, owned tasks or the incarnation check (#244 part 2); and no
-//! [`Exchange`] runs over a real network for [`RemoteSyncPeer`]. A `[FROZEN]` `SY` clause binds this
+//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: the [`runner`]
+//! drives one edge (#244), by step or by a caller-owned backoff loop, and stops it on a
+//! new far-side incarnation, but holds no peer set and keeps its watermark in memory
+//! (SY-31); no [`Exchange`] runs over a real network for [`RemoteSyncPeer`]. A `[FROZEN]` `SY` clause binds this
 //! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-7, SY-10,
 //! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-39 are `[PROVISIONAL]`, binding
 //! until the falsifier each names, and SY-14, SY-18 and SY-32 `[DEFERRED]`.

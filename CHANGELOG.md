@@ -84,8 +84,36 @@ not the same as what a user needed to be told.
   refusal states its class. The confirmed watermark is the first position of
   the last group acknowledged. The local store is bound on `IngestStore` and
   `WriteGroupStore`, not `EventStore`.
-  Not yet built: backoff, the bounded outbound buffer, owned tasks, what
-  `Split` and `Park` call for, and the far side's incarnation check.
+  The next entry is the runner's second half.
+- `happenstance-sync`: the runner's second half (#244). **The incarnation
+  check** (ADR-0104): an edge pins the far side's store from the first
+  `Pulled::responder` or `Ack::responder` whose answer took effect, and an
+  answer naming another store stops the edge before it is acted on — a pulled
+  batch is not ingested, an ack does not move the watermark — and leaves the
+  local log alone (SY-34). The step returns `runner::StepError::Incarnation`
+  and the status reads `EdgeState::Stopped(StopCause::Incarnation(_))`; both
+  carry a `runner::IncarnationChanged` naming the phase, the store the edge
+  knew and the one that answered. An answer naming no store is no evidence.
+  `SyncStatus::responder` exposes the pin and `Edge::with_responder` restores
+  it on a resumed edge. **The four classes** (SY-36): `Transient` changes
+  nothing; a `Split` of a push of several write groups halves the events the
+  edge offers per push, for the rest of its life; a `Split` of one group, or
+  outside the push, and any `Park`, park the edge (`EdgeState::Parked`, and
+  `StepError::Parked` on every later step, without I/O); `Stop` stops it.
+  **A bounded outbound buffer**: a push carries at most `Edge::with_buffer`
+  events (`Edge::DEFAULT_BUFFER`, 1,024), whatever the peer's `limits()`
+  declare, so a step reads at most one more than that. **A caller-owned
+  loop**: `Edge::run` steps until the edge is synced, quiet or halted, and
+  waits out each transient failure through a `runner::Sleep` (with a
+  `SendSleep` flavour) the caller supplies, paced by `runner::Backoff` —
+  seeded, equal-jittered, exponential, capped, and spent after a number of
+  attempts (`BackoffError` refuses a base above the cap). A spent backoff
+  returns the error with the edge still running; a Durable Object reset is
+  `Transient`, and stops the edge only through the incarnation check once it
+  answers under a new `StoreId`. Nothing is spawned and no runtime is named.
+  Changed within the unreleased runner: `EdgeState::Stopped` and
+  `StepError::Stopped` carry a `StopCause` rather than a `Failure`, and a
+  single-group `Split` now parks the edge where it left it running.
 - `happenstance-sync`: a network peer's transport-free halves (#117), with no
   feature and on wasm32. `StoreSyncPeer` is a `SyncPeer` over a store the
   caller holds — pull reads it above a `StoreResume` token (the store's own
