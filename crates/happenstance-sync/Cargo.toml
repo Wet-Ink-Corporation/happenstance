@@ -2,8 +2,8 @@
 name = "happenstance-sync"
 # The placeholder's words, held to them by `xtask/src/reserve.rs`'s
 # `a_crate_with_a_readme_carries_what_the_placeholder_carries`: the reservation
-# and the release describe the same crate. The runner it names is #244's, not
-# written yet, and the README's status says so.
+# and the release describe the same crate. The runner it names is #244's, half
+# written, and the README's status says so.
 description = "Instance-to-instance event replication for happenstance: the peer port and its runner."
 # The workspace's number, in lockstep with the adapters whose optional `sync`
 # feature names this crate (#108 part E). An independent number would still
@@ -20,9 +20,10 @@ authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
 readme = "README.md"
-# Published since #108 part E, and still unfinished: the port, the wire messages,
-# the reference peer and a network peer's transport-free halves (#117) ship; the
-# runner (#244) and a real transport do not. The crate root's `# Status` names the provisional clauses.
+# Published since #108 part E, and still unfinished: the port, the wire
+# messages, the reference peer, the runner's single edge (#244 part 1) and a
+# network peer's transport-free halves (#117) ship; the rest of the runner and a
+# real transport do not. The crate root's `# Status` says which clauses are provisional.
 
 [dependencies]
 # `serde` is non-optional here: replication is the reason `happenstance-core`'s
@@ -85,6 +86,10 @@ required-features = ["memory"]
 
 [[test]]
 name = "real_peer_shapes"
+required-features = ["memory"]
+
+[[test]]
+name = "runner"
 required-features = ["memory"]
 
 [package.metadata.docs.rs]

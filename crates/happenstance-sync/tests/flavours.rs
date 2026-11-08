@@ -1,6 +1,7 @@
 //! SY-17: the sync port composes over a store and a peer that are not `Send`.
 //!
-//! The runner is not built yet, but its bound is already decided: it is written
+//! The runner's single edge is built (#244, part 1), and its bound was decided
+//! before it: it is written
 //! against [`EventStore`], [`IngestStore`] and [`SyncPeer`] — the bare flavours,
 //! the weaker requirement both flavours meet — never against `SendEventStore`,
 //! `SendIngestStore` or `SendSyncPeer`. The reason is a deployment rather than a
@@ -10,9 +11,9 @@
 //!
 //! A generic body type-checks against its declared bounds whether or not
 //! anything instantiates it, so a bound read off the source proves nothing. The
-//! proof here is the **instantiation**: [`exchange`] is written the way the
-//! runner's step will be written, and it is called with a store and a peer that
-//! each hold an `Rc`. Tighten any bound in its `where` clause to the `Send`
+//! proof here is the **instantiation**: [`exchange`], written before the runner
+//! the way its step was to be written, and the runner's own `Edge::step`, are
+//! each called with a store and a peer that hold an `Rc`. Tighten any bound in its `where` clause to the `Send`
 //! flavour and this file stops compiling, with `error[E0277]`: the local types
 //! implement only the bare flavour, because with an `Rc` inside they cannot
 //! implement the other.
@@ -403,6 +404,40 @@ async fn the_runner_step_runs_over_a_not_send_store_and_peer() {
     );
 }
 
+/// The runner's own step, not a copy of it: [`Edge::step`] instantiated with a
+/// store and a peer that each hold an `Rc`. Tighten its bounds to a `Send`
+/// flavour and this stops compiling, with `error[E0277]`.
+///
+/// [`Edge::step`]: happenstance_sync::runner::Edge::step
+#[tokio::test]
+async fn an_edge_steps_over_a_not_send_store_and_peer() {
+    let origin = StoreId::from_bytes([7; 16]);
+    let peer = LocalPeer {
+        inner: Rc::new(MemorySyncPeer::new(origin)),
+    };
+    peer.inner
+        .seed(EventGroup::new(None, vec![replicated(origin, 1)]))
+        .expect("an unpoisoned peer accepts a seed");
+    let store = LocalStore::new(StoreId::from_bytes([9; 16]));
+    let local = EventStore::append(
+        &store,
+        &[Event::new("CourseCapacityChanged", "{}").expect("a valid event type")],
+        None,
+    )
+    .await
+    .expect("an in-memory append does not fail");
+    let mut edge = happenstance_sync::runner::Edge::new();
+
+    let stepped = edge
+        .step(&peer, &store)
+        .await
+        .expect("an in-memory step does not fail");
+
+    assert_eq!(stepped.ingested.appended, 1, "the far side's event landed");
+    assert_eq!(stepped.pushed, 1, "the local event went out");
+    assert_eq!(edge.status().confirmed, Some(local));
+}
+
 // ---------------------------------------------------------------------------
 // The `Send` flavour crosses threads from generic code
 // ---------------------------------------------------------------------------
@@ -509,4 +544,72 @@ async fn the_send_flavour_spawns_from_generic_code() {
             .expect("an in-memory probe does not fail"),
         "the spawned ingest did not reach the shared store"
     );
+}
+
+/// What [`edge_spawns_from_generic`]'s task saw: the step's error rendered
+/// before the task ends, for the reason [`Spawned`] renders its errors.
+type EdgeSpawned = Result<(usize, Option<SequencePosition>), String>;
+
+/// [`Edge::step`] inside `tokio::spawn`, from a function that knows the peer
+/// and the store only by their `Send` flavours.
+///
+/// `step` is written against the bare flavours, so whether its future is
+/// `Send` for a `Send`-flavour peer and store is a question about how the
+/// bare methods' futures resolve through `trait_variant`'s blanket impls in
+/// generic code. This answers it at the definition, before any concrete type
+/// can leak `Send` from a hidden future. **The wrong implementation it
+/// rejects** is a step that holds a `!Send` value across an `.await` (an
+/// `Rc`, a `RefCell` borrow), which compiles for the bare flavour and would
+/// make the runner impossible to spawn on a multi-threaded runtime.
+///
+/// `P::Resume: Send + Sync` is the one bound beyond the flavours': the edge
+/// holds the token across every await, and lends `&Resume` to `pull` across
+/// that call's await, so the compiler asks for both (`error[E0277]`, "cannot
+/// be shared between threads safely", without `Sync`). The port leaves
+/// `Resume` without either on purpose (see [`SyncPeer::Resume`]).
+///
+/// [`Edge::step`]: happenstance_sync::runner::Edge::step
+fn edge_spawns_from_generic<P, S>(
+    peer: Arc<P>,
+    store: Arc<S>,
+) -> tokio::task::JoinHandle<EdgeSpawned>
+where
+    P: happenstance_sync::SendSyncPeer + Send + Sync + 'static,
+    P::Resume: Send + Sync,
+    S: happenstance_core::SendEventStore
+        + happenstance_sync::SendIngestStore
+        + Send
+        + Sync
+        + 'static,
+    <S as happenstance_core::SendEventStore>::Error: Classify,
+{
+    tokio::spawn(async move {
+        let mut edge = happenstance_sync::runner::Edge::new();
+        let stepped = edge
+            .step(&*peer, &*store)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok((stepped.pushed, edge.status().confirmed))
+    })
+}
+
+#[tokio::test]
+async fn a_spawned_edge_steps_from_generic_code() {
+    let peer = Arc::new(MemorySyncPeer::new(StoreId::from_bytes([7; 16])));
+    let store = Arc::new(MemoryIngestStore::with_store_id(StoreId::from_bytes(
+        [9; 16],
+    )));
+    let local = EventStore::append(
+        &*store,
+        &[Event::new("CourseCapacityChanged", "{}").expect("a valid event type")],
+        None,
+    )
+    .await
+    .expect("an in-memory append does not fail");
+
+    let spawned = edge_spawns_from_generic(Arc::clone(&peer), Arc::clone(&store))
+        .await
+        .expect("the spawned task does not panic");
+
+    assert_eq!(spawned, Ok((1, Some(local))), "the step ran in the task");
 }

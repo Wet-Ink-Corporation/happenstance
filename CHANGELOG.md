@@ -35,6 +35,27 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance-sync`: the `runner` module, the first half of the runner
+  (#244). `runner::Edge` drives one edge — a local store that is both
+  `EventStore` and `IngestStore`, against one `SyncPeer` — one caller-driven
+  `step` at a time: pull and ingest, then push the local log above the
+  confirmed watermark, as much as the peer's `limits()` admit. Nothing is
+  spawned, and the bounds are the bare flavours, so a `!Send` Durable Object
+  store and peer drive an edge unchanged; for `Send`-flavour ports with a
+  `Send + Sync` resume token the step's future is `Send`, so it spawns.
+  `Edge::status` returns a `SyncStatus` without a round trip: the confirmed
+  local position, how many local events sit above it (`runner::Pending`,
+  exact or a lower bound, because a step reads at most one batch plus one),
+  what the last pull said is waiting, the far side's last acknowledged
+  watermark, and the phase and class of the last failure. A `Stop`-class
+  failure stops the edge, and later steps return `StepError::Stopped` without
+  I/O. A refused push leaves the local log as it was (SY-34).
+  `Edge::resuming` takes back a watermark and a resume token a caller kept,
+  since where they are stored is SY-31's; one edge belongs to one peer for
+  its whole life. **Known gap:** a push sends its batch as one atomic group,
+  so it can tear a multi-event local append across two pushes (SY-30, #420).
+  Not yet built: backoff, the bounded outbound buffer, owned tasks, what
+  `Split` and `Park` call for, and the far side's incarnation check.
 - `happenstance-sync`: a network peer's transport-free halves (#117), with no
   feature and on wasm32. `StoreSyncPeer` is a `SyncPeer` over a store the
   caller holds — pull reads it above a `StoreResume` token (the store's own
