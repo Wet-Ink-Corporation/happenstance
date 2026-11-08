@@ -19,7 +19,7 @@ use happenstance_sync::write_group::GroupOrderError;
 use happenstance_sync::{
     Ack, Classify, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
     MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
-    PushBatch, SyncPeer, Watermark, WriteGroupStore,
+    PushBatch, SyncPeer, Waiting, Watermark, WriteGroupStore,
 };
 
 /// How a [`ProbePeer`] fails: the reference peer's own failure, or one a test
@@ -60,6 +60,9 @@ pub(crate) struct ProbePeer {
     pub(crate) offered: RefCell<Vec<usize>>,
     /// Declared in place of the inner peer's limits, when set.
     pub(crate) limits: RefCell<Option<PeerLimits>>,
+    /// When set, every pull ignores its token, answers the inner peer's first
+    /// page, and claims this is still waiting: a peer stuck on one batch.
+    pub(crate) stuck_waiting: Cell<Option<Waiting>>,
 }
 
 impl ProbePeer {
@@ -73,6 +76,7 @@ impl ProbePeer {
             ack_responder: Cell::new(None),
             offered: RefCell::new(Vec::new()),
             limits: RefCell::new(None),
+            stuck_waiting: Cell::new(None),
         }
     }
 
@@ -103,7 +107,12 @@ impl SyncPeer for ProbePeer {
         if let Some(class) = self.fail_pull.get() {
             return Err(ProbePeerError::Injected(class));
         }
-        let pulled = happenstance_sync::SendSyncPeer::pull(&self.inner, from).await?;
+        let pulled = match self.stuck_waiting.get() {
+            Some(waiting) => happenstance_sync::SendSyncPeer::pull(&self.inner, None)
+                .await?
+                .with_waiting(waiting),
+            None => happenstance_sync::SendSyncPeer::pull(&self.inner, from).await?,
+        };
         Ok(match self.pull_responder.get() {
             Some(responder) => pulled.with_responder(responder),
             None => pulled,

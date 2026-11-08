@@ -8,8 +8,11 @@
 //! exchange — pull from the far side and ingest locally, then read the local
 //! log above the confirmed watermark and push it — and updates the edge's
 //! [`SyncStatus`], which [`Edge::status`] hands back without a round trip.
-//! [`Edge::run`] steps until the edge is synced or halts, waiting out each
-//! transient failure through a [`Backoff`] and a [`Sleep`] the caller supplies.
+//! [`Edge::run`] steps until the edge is synced, quiet or halted, waiting out
+//! each transient failure through a [`Backoff`] and a [`Sleep`] the caller
+//! supplies. Quiet means a step moved nothing new and the far side's count of
+//! what is waiting did not fall, so a far side that never says nothing is
+//! waiting still lets a run end.
 //!
 //! # What each failure class does
 //!

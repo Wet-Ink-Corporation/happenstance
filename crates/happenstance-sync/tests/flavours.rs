@@ -688,3 +688,74 @@ async fn a_spawned_edge_steps_from_generic_code() {
 
     assert_eq!(spawned, Ok((1, Some(local))), "the step ran in the task");
 }
+
+/// A sleep of the `Send` flavour that returns at once: nothing in
+/// [`a_spawned_edge_runs_from_generic_code`] fails, so it is never awaited.
+struct Immediate;
+
+impl happenstance_sync::runner::SendSleep for Immediate {
+    async fn sleep(&self, _duration: core::time::Duration) {}
+}
+
+/// [`Edge::run`] inside `tokio::spawn`, from a function that knows the peer,
+/// the store and the sleep only by their `Send` flavours: the loop's
+/// counterpart of [`edge_spawns_from_generic`], for the same reason. **The
+/// wrong implementation it rejects** is a run that holds a `!Send` value
+/// across an await, such as the step's error kept across the backoff's sleep
+/// (ADR-0009 leaves the error without `Send`), which compiles for the bare
+/// flavours and could not be spawned on a multi-threaded runtime.
+///
+/// `Z: Sync` because the run lends `&Z` across the sleep's await;
+/// `P::Resume: Send + Sync` for the reason [`edge_spawns_from_generic`] gives.
+///
+/// [`Edge::run`]: happenstance_sync::runner::Edge::run
+fn edge_runs_from_generic<P, S, Z>(
+    peer: Arc<P>,
+    store: Arc<S>,
+    sleep: Arc<Z>,
+) -> tokio::task::JoinHandle<Result<bool, String>>
+where
+    P: happenstance_sync::SendSyncPeer + Send + Sync + 'static,
+    P::Resume: Send + Sync,
+    S: happenstance_sync::SendWriteGroupStore
+        + happenstance_sync::SendIngestStore
+        + Send
+        + Sync
+        + 'static,
+    Z: happenstance_sync::runner::SendSleep + Send + Sync + 'static,
+{
+    tokio::spawn(async move {
+        let mut backoff = happenstance_sync::runner::Backoff::new(
+            core::time::Duration::from_millis(1),
+            core::time::Duration::from_millis(8),
+            1,
+        )
+        .map_err(|error| error.to_string())?;
+        let mut edge = happenstance_sync::runner::Edge::new();
+        edge.run(&*peer, &*store, &mut backoff, &*sleep)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(edge.status().is_synced())
+    })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_spawned_edge_runs_from_generic_code() {
+    let peer = Arc::new(MemorySyncPeer::new(StoreId::from_bytes([7; 16])));
+    let store = Arc::new(MemoryIngestStore::with_store_id(StoreId::from_bytes(
+        [9; 16],
+    )));
+    EventStore::append(
+        &*store,
+        &[Event::new("CourseCapacityChanged", "{}").expect("a valid event type")],
+        None,
+    )
+    .await
+    .expect("an in-memory append does not fail");
+
+    let synced = edge_runs_from_generic(peer, store, Arc::new(Immediate))
+        .await
+        .expect("the spawned task does not panic");
+
+    assert_eq!(synced, Ok(true), "the run synced in the task");
+}

@@ -12,10 +12,12 @@ use happenstance_core::StoreId;
 use happenstance_sync::runner::{
     Backoff, Edge, EdgeState, IncarnationChanged, Phase, StepError, StopCause,
 };
-use happenstance_sync::{FailureClass, MemoryIngestStore, MemorySyncPeer, PeerLimits};
+use happenstance_sync::{
+    EventGroup, FailureClass, MemoryIngestStore, MemorySyncPeer, PeerLimits, Waiting,
+};
 
 use super::probe::{ProbePeer, Recorded};
-use super::{FAR, LOCAL, append_local, batches_of};
+use super::{FAR, LOCAL, ORIGIN, append_local, batches_of, foreign};
 
 const BEFORE: StoreId = StoreId::from_bytes([0xB0; 16]);
 const AFTER: StoreId = StoreId::from_bytes([0xAF; 16]);
@@ -172,4 +174,67 @@ async fn a_halvable_split_is_retried_at_once_and_the_run_syncs() {
     assert_eq!(*peer.offered.borrow(), vec![4, 2, 2]);
     assert!(sleep.slept.borrow().is_empty(), "a split is not waited out");
     assert!(edge.status().is_synced());
+}
+
+/// An edge resumed from a watermark but no token pulls the far side from the
+/// start, and the first pages are its own events coming back. They are
+/// skipped, but the far side's count of what is waiting falls with each, so
+/// the run carries on through them to the foreign event behind and ends
+/// synced, in one call. Rejects a run that reads a page of echoes as quiet,
+/// which crawls one batch per call while the far side says more is waiting.
+#[tokio::test]
+async fn a_run_reads_through_echoes_while_the_waiting_count_falls() {
+    let hub = MemorySyncPeer::with_limits(FAR, batches_of(2));
+    let store = MemoryIngestStore::with_store_id(LOCAL);
+    append_local(&store, 4).await;
+    let mut first = Edge::new();
+    first
+        .run(&hub, &store, &mut backoff(3), &Recorded::new())
+        .await
+        .expect("a first run syncs");
+    let confirmed = first.status().confirmed;
+    hub.seed(EventGroup::new(None, vec![foreign(ORIGIN, 1)]))
+        .expect("an unpoisoned peer");
+    let mut resumed = Edge::resuming(confirmed, None);
+
+    resumed
+        .run(&hub, &store, &mut backoff(3), &Recorded::new())
+        .await
+        .expect("an in-memory run");
+
+    assert!(resumed.status().is_synced(), "{:?}", resumed.status());
+    assert!(
+        store
+            .snapshot()
+            .iter()
+            .any(|row| row.id == foreign(ORIGIN, 1).id),
+        "the foreign event behind the echoes landed"
+    );
+}
+
+/// A far side stuck on one page of echoes, claiming the same count waiting on
+/// every answer, does not hold the run for ever: a count that does not fall is
+/// no progress. Rejects a run that counts every skipped page as progress.
+#[tokio::test]
+async fn a_run_ends_against_a_far_side_stuck_on_one_page_of_echoes() {
+    let peer = ProbePeer::new(MemorySyncPeer::new(FAR));
+    peer.inner
+        .seed(EventGroup::new(None, vec![foreign(ORIGIN, 1)]))
+        .expect("an unpoisoned peer");
+    let store = MemoryIngestStore::with_store_id(LOCAL);
+    let mut edge = Edge::new();
+    edge.step(&peer, &store).await.expect("the page lands once");
+    peer.stuck_waiting.set(Some(Waiting::counted(5)));
+    let calls = peer.calls.get();
+
+    edge.run(&peer, &store, &mut backoff(3), &Recorded::new())
+        .await
+        .expect("the run ends");
+
+    assert!(
+        peer.calls.get() - calls <= 4,
+        "the run gave up on the stuck count: {} calls",
+        peer.calls.get() - calls
+    );
+    assert_eq!(edge.status().waiting, Waiting::counted(5));
 }

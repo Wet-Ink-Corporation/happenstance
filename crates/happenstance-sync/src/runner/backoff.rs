@@ -117,6 +117,11 @@ impl Backoff {
     /// A backoff whose first delay is at most `base`, doubling to at most `cap`,
     /// jittered from `seed`, spent after [`DEFAULT_ATTEMPTS`](Self::DEFAULT_ATTEMPTS).
     ///
+    /// A zero `cap` (and so a zero `base`) is accepted: every delay is zero,
+    /// and a run retries without waiting until the attempts are spent. That
+    /// suits a test or a caller that paces retries itself; a deployment wants
+    /// a cap above zero.
+    ///
     /// # Errors
     ///
     /// [`BackoffError::BaseAboveCap`] if `base` exceeds `cap`.
