@@ -22,8 +22,9 @@ summary: >-
   It fails a row discharged neither by an adapter at the far end, nor by an accepted record naming
   the axis and the port, nor by an open clause of the port. Sub-question 1: a ledger table, not a
   column. Sub-question 2: CF-26 lands with CF-25, not alone, and the summary line names what the
-  walk does not read. Sub-question 3 stays moot. The check does not pass yet: five rows of
-  ProjectionStore and SyncPeer have no honest discharge and are recorded as undischarged.
+  walk does not read. Sub-question 3 stays moot. ADR-0103 accepts ProjectionStore's async-flavour row. The check
+  does not pass yet: four rows have no honest discharge and are recorded as undischarged, one
+  waiting on #422 and three on the network peers #130 and #131.
 depends_on:
   - kb-decision-0039
 related:
@@ -150,12 +151,13 @@ port.
 on the verdict as written. Because the check does not read the near end, the stale *near end
 no* in that cell does not decide anything. ADR-0062 built that end.
 
-**What the check finds today: five gaps, recorded rather than hidden.** `EventStore`'s six rows
+**What the check finds today: four gaps, recorded rather than hidden.** `EventStore`'s six rows
 discharge: an adapter at the far end of transport, handle multiplicity and durability; ADR-0013 for
 position allocation and async flavour; ES-40's `[PROVISIONAL]` marker for completeness.
-`SyncPeer`'s transport row is carried by SY-14 and its completeness row by SY-32. Five rows have no
-adapter, no accepting record and no open clause, and are written `undischarged`, so `spec-trace`
-fails on exactly them: `ProjectionStore` on async flavour and durability, and `SyncPeer` on async
-flavour, durability and position allocation. Discharging them is the owner's call: an ADR
-accepting each risk by axis and port, an adapter at the far end, or a reclassification of which
-axes the port sits on.
+`ProjectionStore`'s transport and batch-shape rows have an adapter at the far end, and its
+async-flavour row is accepted by ADR-0103, the owner's decision of 2026-11-08. `SyncPeer`'s
+transport row is carried by SY-14 and its completeness row by SY-32. Four rows have no adapter, no
+accepting record and no open clause, and are written `undischarged`, so `spec-trace` fails on
+exactly them. `ProjectionStore` on durability waits on #422, a projection-suite reopen rule.
+`SyncPeer` on async flavour, durability and position allocation waits on the network peers, #130
+and #131, which this branch merges after.

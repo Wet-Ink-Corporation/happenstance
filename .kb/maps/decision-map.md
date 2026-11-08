@@ -952,6 +952,17 @@ adapter clears with `TRUNCATE`. It supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0102 | [`kb-decision-0102`](../decisions/0102-phase-18s-clauses-are-frozen.md) | Phase 18's eight clauses are frozen, and PS-9's and PS-24's evidence is repaired | accepted | 18 | — |
 
+## 2026-11-08: the `ProjectionStore` freeze accepts the async-flavour axis (#125), accepted
+
+ADR-0103 is written straight here with no intake step, and is **accepted** (owner, 2026-11-08,
+project thread). CF-25's portfolio check found `ProjectionStore`'s async-flavour row undischarged.
+This record accepts the risk by axis and port until a `!Send` projection adapter passes the
+projection suite. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0103 | [`kb-decision-0103`](../decisions/0103-projection-store-async-flavour-risk-accepted.md) | The ProjectionStore freeze accepts the Async flavour axis with no !Send adapter at its far end | accepted | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

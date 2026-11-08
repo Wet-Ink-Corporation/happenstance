@@ -9912,14 +9912,14 @@ than it does.
 | Transport | `ProjectionStore` | far end | `NeonProjectionStore` passes the projection suite over one-shot HTTP against a live endpoint |
 | Transport | `SyncPeer` | carried by SY-14 | SY-14 is `[DEFERRED]` on the one-shot-HTTP peer this phase builds. No network peer exists yet |
 | Async flavour | `EventStore` | ADR-0013 | Accepted by name at phase 4's freeze. The verdict is stale: since phase 9 a real `!Send` adapter, `happenstance-cloudflare`, runs the event-store suite under `workerd` |
-| Async flavour | `ProjectionStore` | undischarged | `trait_variant` derives `SendProjectionStore`, so the port has both flavours. No `!Send` projection adapter has run the suite, ADR-0063 names no axis, and no open `PS` clause carries it |
+| Async flavour | `ProjectionStore` | ADR-0103 | Accepted by name on 2026-11-08: no `!Send` projection adapter exists or is planned before 1.0, and `trait_variant` derives the `Send` flavour as for `EventStore`. A `!Send` projection adapter passing the suite retires it |
 | Async flavour | `SyncPeer` | undischarged | Both ports in `happenstance-sync` have both flavours, and only the memory and stand-in peers implement `SyncPeer`. No record or open `SY` clause carries it |
 | Batch shape | `ProjectionStore` | far end | The replay-at-commit adapters pass. The live-transaction end is `LivePostgresProjectionStore` (ADR-0062); the verdict's *near end no* predates it, and the check does not read the near end |
 | Completeness | `EventStore` | carried by ES-40 | Carried, not accepted: ADR-0013 left this axis to ES-40's marker. Freezing ES-40 fails this row |
 | Completeness | `SyncPeer` | carried by SY-32 | SY-32 is `[DEFERRED]` to phase 14, which builds CF-27's completeness instrument |
 | Handle multiplicity | `EventStore` | far end | `SqliteFixture` opens a second `rusqlite::Connection` onto one file. A pool is still unbuilt |
 | Durability | `EventStore` | far end | `SqliteFixture` reopens a real file. The fault half is ES-35's, which is `[PROVISIONAL]` for it |
-| Durability | `ProjectionStore` | undischarged | PS-1 requires a durable commit, and the projection suite has no reopen rule, so no adapter has been shown to survive one at this port |
+| Durability | `ProjectionStore` | undischarged | PS-1 requires a durable commit, and the projection suite has no reopen rule, so no adapter has been shown to survive one at this port. #422 adds that rule |
 | Durability | `SyncPeer` | undischarged | No durable peer adapter exists. The sync suite's durability rule passes a peer that buffers in fixture-wide memory until the fixture contract gains a reopen capability |
 
 ---

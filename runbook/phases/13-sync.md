@@ -304,7 +304,8 @@ of E2E-07 (ES-24).
   ledger*. Each row of such a port must be discharged by an adapter at the far end (only a verdict
   saying *adapter yes* counts, CF-26), by an accepted ADR naming the axis and the port, or by an
   open clause of that port, which fails as soon as the clause freezes. The open question's
-  sub-questions 1 and 2 are answered and it is closed. **The bar is not met**: five rows have no
-  honest discharge and fail the gate — `ProjectionStore` on async flavour and durability, and
-  `SyncPeer` on async flavour, durability and position allocation. They wait on the owner, so
-  #125 stays open.
+  sub-questions 1 and 2 are answered and it is closed. **The bar is not met yet.** ADR-0103 accepts `ProjectionStore`'s
+  async-flavour row (owner, 2026-11-08). Four rows still fail the gate: `ProjectionStore` on
+  durability, which #422's reopen rule discharges, and `SyncPeer` on async flavour, durability and
+  position allocation, which the network peers #130 and #131 discharge. This branch merges after
+  them, so #125 stays open.
