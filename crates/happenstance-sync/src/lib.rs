@@ -8,8 +8,8 @@
 //! type checker is the instrument there, not the runtime.
 //!
 //! Published since #108 part E, so that a store adapter can implement
-//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: there is no
-//! runner (#244) and no network peer. A `[FROZEN]` `SY` clause binds this
+//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: no runner (#244),
+//! and no [`Exchange`] over a real network for [`RemoteSyncPeer`]. A `[FROZEN]` `SY` clause binds this
 //! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-7, SY-10,
 //! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-38 are `[PROVISIONAL]`, binding
 //! until the falsifier each names, and SY-14, SY-18 and SY-32 `[DEFERRED]`.
@@ -184,3 +184,14 @@ pub mod memory_ingest;
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory_ingest::MemoryIngestStore;
+
+// The network peer's transport-free pieces (#117): a peer over a store, the
+// server half that answers envelope bytes through it, the transport trait, and
+// the client peer over that. After the rest, for the reason above. No feature:
+// the Durable Object mounts `serve_sync` on wasm32 with none.
+pub mod remote;
+pub mod serve;
+pub mod store_peer;
+pub use remote::{Exchange, RemoteError, RemoteSyncPeer, SendExchange};
+pub use serve::{ServeError, serve_sync};
+pub use store_peer::{ForeignToken, StorePeerError, StoreResume, StoreSyncPeer};

@@ -16,8 +16,9 @@ with programs you can run.
 >
 > - **a runner**, the loop that pulls from a peer, ingests, and acknowledges
 >   (issue #244), and
-> - **a network peer**: the only `SyncPeer` is `MemorySyncPeer`, which lives in
->   one process.
+> - **a network transport**: `StoreSyncPeer`, `serve_sync` and
+>   `RemoteSyncPeer` are a network peer's transport-free halves (#117), and
+>   no crate yet supplies an `Exchange` over a real network.
 >
 > A `[FROZEN]` `SY` clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)

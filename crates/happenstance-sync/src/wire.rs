@@ -476,3 +476,51 @@ impl PullRequest {
         Self { from: Some(token) }
     }
 }
+
+// ===========================================================================
+// Routes, and the codec the network peers share (#117)
+//
+// Below the message set, so every line above keeps its number.
+// ===========================================================================
+
+/// Which of [`SyncPeer`](crate::SyncPeer)'s two exchanges a buffer belongs to.
+///
+/// A buffer does not say which message it holds (ADR-0097), so the transport
+/// says it: an HTTP path, a Durable Object method name, or a header. This is
+/// that statement, typed. A request on [`Pull`](Self::Pull) holds a
+/// [`PullRequest`] and its reply a [`Pulled<ResumeToken>`](crate::Pulled); a
+/// request on [`Push`](Self::Push) holds a [`PushBatch`](crate::PushBatch) and
+/// its reply an [`Ack`](crate::Ack).
+///
+/// `#[non_exhaustive]`, because a fifth message is additive (ADR-0097) and a
+/// route for it must not break a transport's `match`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Route {
+    /// [`SyncPeer::pull`](crate::SyncPeer::pull)'s exchange.
+    Pull,
+    /// [`SyncPeer::push`](crate::SyncPeer::push)'s exchange.
+    Push,
+}
+
+impl Route {
+    /// The route's name, lower case: `"pull"` or `"push"`. Stable, so a
+    /// transport may use it as a path segment.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pull => "pull",
+            Self::Push => "push",
+        }
+    }
+}
+
+impl fmt::Display for Route {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+mod codec;
+pub use codec::{CodecError, PostcardError};
+pub(crate) use codec::{decode, encode};
