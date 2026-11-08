@@ -33,7 +33,20 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-11-08
+
+Documentation and tooling only: no public API changes, and nothing a `0.5.0`
+caller has to do. The rustdoc of two crates builds under their default
+features again, comments that described features which no longer exist are
+corrected, and `cargo xtask ci` gains a step so the testkit's case cannot
+come back unseen.
+
 ### Fixed
+
+- `happenstance-neon` (documentation only): the crate root's rustdoc builds
+  with `--no-default-features` again (#409). It linked the `event_store`
+  module, which exists only behind `event-store`; the page now names it
+  without linking it. docs.rs builds with every feature and was not affected.
 
 - `happenstance-sqlite` (documentation only): the `projection_store` module's
   rustdoc no longer says the module is exempt from semver or that it forwards
@@ -5356,7 +5369,8 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.4...v0.4.5

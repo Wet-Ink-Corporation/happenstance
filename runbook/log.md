@@ -10,6 +10,21 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-08 — `0.5.1`, documentation and tooling
+
+*Committed on `claude/project-thread-m9xoqd`, cut from `origin/main` at `301d8213`.*
+Nine PRs merged first, one per issue: #405 (#396) and #412, the testkit's rustdoc under
+default features and a gate step for it; #407 (#381); #408 (#389); #410 (#398); #411 (#397);
+#413 (#401); #414 (#409); #415 (#400, `pass-002` and `pass-003`). Then `[Unreleased]`
+becomes `[0.5.1] — 2026-11-08` with a summary and #409's entry, all nine crates move to
+`0.5.1` with the workspace requirements, the sync-testkit's pin, the testkit's recipe pin
+and the examples, and `Cargo.lock` moves only the workspace members. Status lines,
+SECURITY's table, the status row and the handover follow.
+
+**Verified.** See the release PR body.
+
+---
+
 ## 2026-11-07 — `0.5.0`, the typed runner leaves its gate
 
 *Committed on `claude/project-thread-u1dtdj-050`, cut from `origin/phase-18` at `0f0e3c3`.*
