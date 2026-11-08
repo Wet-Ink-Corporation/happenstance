@@ -569,10 +569,10 @@ impl CloudflareEventStore {
     /// if it has none.
     ///
     /// Idempotent, and called once per instance by a fixture and once at startup
-    /// by a host. There is no schema-version table and none is proposed: no
-    /// store has ever written a row with this crate, so there is no deployed
-    /// shape to be compatible with, and inventing a migration story for a store
-    /// with no users is a decision for a later phase.
+    /// by a host. A log from before write groups (#420) gains `write_group` and
+    /// `group_guard` here, each only when `PRAGMA table_info` lacks it, and with
+    /// no schema marker (D-1): an older build ignores the columns and its rows
+    /// read as groups of one, and a half-applied run is finished by the next.
     ///
     /// Stays a non-`async` inherent method, because [`SqlStorage::exec`] is
     /// synchronous and there is nothing to await.
@@ -580,9 +580,9 @@ impl CloudflareEventStore {
     /// # Errors
     ///
     /// Returns [`CloudflareEventStoreError::Sql`] if any statement fails, and
-    /// reports rather than mints if the incarnation row cannot be read back —
-    /// a store whose identity is guessed answers `contains_event_id` wrongly
-    /// about its own past.
+    /// [`CloudflareEventStoreError::ColumnType`] if the column probe's answer is
+    /// malformed. Reports rather than mints if the incarnation row cannot be read
+    /// back — a store whose identity is guessed answers `contains_event_id` wrongly.
     pub fn migrate(&self) -> Result<(), CloudflareEventStoreError> {
         for statement in migration(&self.tables) {
             self.sql.exec(&statement, &[])?;
@@ -1304,7 +1304,7 @@ pub enum CloudflareEventStoreError {
     #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
     #[error("the guard of write group {first} could not be stored or read back")]
     StoredGuard {
-        /// The write group the guard belongs to.
+        /// The write group the guard belongs to; on a write, the first candidate's staged row, which may never land.
         first: SequencePosition,
         /// Why the codec refused it.
         #[source]
